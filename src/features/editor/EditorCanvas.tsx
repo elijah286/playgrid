@@ -49,7 +49,7 @@ const SIMPLIFY_EPSILON = 0.012;
 /*  Visual constants                                                  */
 /* ------------------------------------------------------------------ */
 
-const NODE_RADIUS = 0.012;
+const NODE_RADIUS = 0.009;
 
 // Background colors per mode
 const BG_COLORS: Record<string, { main: string; dark: string }> = {
@@ -658,15 +658,20 @@ export function EditorCanvas({
               {isActive &&
                 route.nodes.map((node) => {
                   const isSelectedNode = node.id === selectedNodeId;
+                  // Nodes live inside the scale(fieldAspect, 1) group, which
+                  // would stretch a <circle> into a horizontal ellipse. Use
+                  // <ellipse> with rx pre-compensated so the rendered shape is
+                  // a perfect circle of radius NODE_RADIUS in field-units.
                   return (
-                    <circle
+                    <ellipse
                       key={node.id}
                       cx={node.position.x}
                       cy={1 - node.position.y}
-                      r={NODE_RADIUS}
+                      rx={NODE_RADIUS / fieldAspect}
+                      ry={NODE_RADIUS}
                       fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
-                      stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.5)"}
-                      strokeWidth={0.002}
+                      stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
+                      strokeWidth={0.0015}
                       vectorEffect="non-scaling-stroke"
                       style={{ cursor: "grab" }}
                       onPointerDown={(e) => {
