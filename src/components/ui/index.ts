@@ -9,3 +9,5 @@ export { ToastProvider, useToast } from "./Toast";
 export { Tooltip } from "./Tooltip";
 export { EmptyState } from "./EmptyState";
 export { Kbd } from "./Kbd";
+export { ActionMenu } from "./ActionMenu";
+export type { ActionMenuItem } from "./ActionMenu";

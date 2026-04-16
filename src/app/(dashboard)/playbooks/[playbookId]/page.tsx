@@ -28,7 +28,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   if (error || !book) notFound();
 
-  const plays = await listPlaysAction(playbookId);
+  const plays = await listPlaysAction(playbookId, { includeArchived: true });
 
   return (
     <div className="space-y-6">

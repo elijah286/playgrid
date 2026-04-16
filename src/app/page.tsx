@@ -10,7 +10,7 @@ export default async function HomePage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (user) redirect("/playbooks");
+    if (user) redirect("/home");
   }
 
   return (
@@ -55,10 +55,10 @@ export default async function HomePage() {
             <ArrowRight className="size-5" />
           </Link>
           <Link
-            href="/playbooks"
+            href="/home"
             className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-6 py-3 text-base font-medium text-white ring-1 ring-white/20 transition-colors hover:bg-white/20"
           >
-            Open playbooks
+            Open dashboard
           </Link>
         </div>
       </div>

@@ -34,9 +34,23 @@ export default async function DashboardLayout({
     <div className="min-h-full">
       <header className="sticky top-0 z-30 border-b border-border bg-surface-raised/80 backdrop-blur-lg">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-          <Link href="/playbooks" className="text-lg font-extrabold tracking-tight text-primary">
+          <Link href="/home" className="text-lg font-extrabold tracking-tight text-primary">
             PlayGrid
           </Link>
+          <nav className="hidden gap-1 sm:flex">
+            <Link
+              href="/home"
+              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+            >
+              Home
+            </Link>
+            <Link
+              href="/playbooks"
+              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+            >
+              Playbooks
+            </Link>
+          </nav>
           <form action={signOutAction}>
             <button
               type="submit"

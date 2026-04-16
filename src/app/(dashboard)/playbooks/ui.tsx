@@ -3,20 +3,69 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { BookOpen, Plus, Search } from "lucide-react";
-import { createPlaybookAction } from "@/app/actions/playbooks";
-import { Button, Input, Card, EmptyState, useToast } from "@/components/ui";
+import {
+  Archive,
+  ArchiveRestore,
+  BookOpen,
+  Copy,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import {
+  archivePlaybookAction,
+  createPlaybookAction,
+  deletePlaybookAction,
+  duplicatePlaybookAction,
+  listPlaybooksAction,
+  renamePlaybookAction,
+  type PlaybookRow,
+} from "@/app/actions/playbooks";
+import {
+  ActionMenu,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  SegmentedControl,
+  useToast,
+  type ActionMenuItem,
+} from "@/components/ui";
 
-type Row = { id: string; name: string; created_at: string | null };
-
-export function PlaybooksClient({ initial }: { initial: Row[] }) {
+export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [rows, setRows] = useState<PlaybookRow[]>(initial);
 
-  const filtered = initial.filter((p) => {
+  function reload(nextView: "active" | "archived" = view) {
+    startTransition(async () => {
+      const res = await listPlaybooksAction({
+        includeArchived: nextView === "archived",
+      });
+      if (res.ok) {
+        setRows(
+          nextView === "archived"
+            ? res.playbooks.filter((b) => b.is_archived)
+            : res.playbooks,
+        );
+      } else {
+        toast(res.error, "error");
+      }
+    });
+  }
+
+  function setViewAndReload(v: "active" | "archived") {
+    setView(v);
+    reload(v);
+  }
+
+  const filtered = rows.filter((p) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
     return p.name.toLowerCase().includes(s);
@@ -34,6 +83,31 @@ export function PlaybooksClient({ initial }: { initial: Row[] }) {
     });
   }
 
+  function handle<T>(fn: () => Promise<T>, onOk?: (r: T) => void) {
+    startTransition(async () => {
+      const res = await fn();
+      if (res && typeof res === "object" && "ok" in res) {
+        const r = res as { ok: boolean; error?: string };
+        if (!r.ok) {
+          toast(r.error ?? "Something went wrong.", "error");
+          return;
+        }
+      }
+      onOk?.(res);
+      reload();
+    });
+  }
+
+  function onRename(id: string, current: string) {
+    const next = window.prompt("Rename playbook", current);
+    if (next == null) return;
+    handle(() => renamePlaybookAction(id, next));
+  }
+
+  function confirmAnd(msg: string, fn: () => void) {
+    if (window.confirm(msg)) fn();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
@@ -45,6 +119,14 @@ export function PlaybooksClient({ initial }: { initial: Row[] }) {
             placeholder="Search playbooks..."
           />
         </div>
+        <SegmentedControl
+          value={view}
+          onChange={(v) => setViewAndReload(v as "active" | "archived")}
+          options={[
+            { value: "active", label: "Active" },
+            { value: "archived", label: "Archived" },
+          ]}
+        />
         <div className="flex gap-2">
           <Input
             value={name}
@@ -66,28 +148,92 @@ export function PlaybooksClient({ initial }: { initial: Row[] }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={BookOpen}
-          heading="No playbooks yet"
-          description="Create your first playbook to start designing plays."
+          heading={
+            view === "archived" ? "No archived playbooks" : "No playbooks yet"
+          }
+          description={
+            view === "archived"
+              ? "Archived playbooks show up here."
+              : "Create your first playbook to group plays by game plan, opponent, or season."
+          }
           action={
-            <Button variant="primary" leftIcon={Plus} onClick={create} loading={pending}>
-              Create playbook
-            </Button>
+            view === "active" ? (
+              <Button
+                variant="primary"
+                leftIcon={Plus}
+                onClick={create}
+                loading={pending}
+              >
+                Create playbook
+              </Button>
+            ) : undefined
           }
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => (
-            <Link key={p.id} href={`/playbooks/${p.id}`}>
-              <Card hover className="p-5 transition-colors hover:border-primary/30">
-                <h3 className="font-semibold text-foreground">{p.name}</h3>
-                {p.created_at && (
-                  <p className="mt-1 text-xs text-muted">
-                    Created {new Date(p.created_at).toLocaleDateString()}
-                  </p>
-                )}
+          {filtered.map((p) => {
+            const items: ActionMenuItem[] = [
+              {
+                label: "Rename",
+                icon: Pencil,
+                onSelect: () => onRename(p.id, p.name),
+              },
+              {
+                label: "Duplicate",
+                icon: Copy,
+                onSelect: () =>
+                  handle(
+                    () => duplicatePlaybookAction(p.id),
+                    (res) => {
+                      if (res.ok) router.push(`/playbooks/${res.id}`);
+                    },
+                  ),
+              },
+              p.is_archived
+                ? {
+                    label: "Restore",
+                    icon: ArchiveRestore,
+                    onSelect: () =>
+                      handle(() => archivePlaybookAction(p.id, false)),
+                  }
+                : {
+                    label: "Archive",
+                    icon: Archive,
+                    onSelect: () =>
+                      handle(() => archivePlaybookAction(p.id, true)),
+                  },
+              {
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () =>
+                  confirmAnd(
+                    `Delete "${p.name}" and all its plays? This can't be undone.`,
+                    () => handle(() => deletePlaybookAction(p.id)),
+                  ),
+              },
+            ];
+            return (
+              <Card key={p.id} hover className="relative p-5">
+                <div className="absolute right-3 top-3">
+                  <ActionMenu items={items} />
+                </div>
+                <Link href={`/playbooks/${p.id}`}>
+                  <div className="flex items-center gap-2 pr-10">
+                    <h3 className="truncate font-semibold text-foreground">
+                      {p.name}
+                    </h3>
+                    {p.is_archived && <Badge>Archived</Badge>}
+                  </div>
+                  {p.created_at && (
+                    <p className="mt-1 text-xs text-muted">
+                      Created {new Date(p.created_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </Link>
               </Card>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

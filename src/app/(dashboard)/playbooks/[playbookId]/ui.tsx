@@ -3,12 +3,39 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Plus, Search, Pencil, Smartphone, FileText, X } from "lucide-react";
-import { createPlayAction } from "@/app/actions/plays";
+import {
+  Archive,
+  ArchiveRestore,
+  Copy,
+  FileText,
+  Pencil,
+  Plus,
+  Search,
+  Smartphone,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  archivePlayAction,
+  createPlayAction,
+  deletePlayAction,
+  duplicatePlayAction,
+  renamePlayAction,
+} from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { Player } from "@/domain/play/types";
-import { Button, Input, Card, Badge, EmptyState, useToast } from "@/components/ui";
+import {
+  ActionMenu,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  SegmentedControl,
+  useToast,
+  type ActionMenuItem,
+} from "@/components/ui";
 
 type PlayRow = {
   id: string;
@@ -17,6 +44,7 @@ type PlayRow = {
   shorthand: string | null;
   concept: string | null;
   updated_at: string | null;
+  is_archived?: boolean;
 };
 
 export function PlaybookDetailClient({
@@ -30,13 +58,17 @@ export function PlaybookDetailClient({
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"active" | "archived">("active");
 
   // Formation picker state
   const [showFormationPicker, setShowFormationPicker] = useState(false);
   const [availableFormations, setAvailableFormations] = useState<SavedFormation[]>([]);
   const [loadingFormations, setLoadingFormations] = useState(false);
 
-  const filtered = initialPlays.filter((p) => {
+  const viewed = initialPlays.filter((p) =>
+    view === "archived" ? p.is_archived : !p.is_archived,
+  );
+  const filtered = viewed.filter((p) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
     return (
@@ -71,6 +103,31 @@ export function PlaybookDetailClient({
     });
   }
 
+  function handle<T>(fn: () => Promise<T>, onOk?: (r: T) => void) {
+    startTransition(async () => {
+      const res = await fn();
+      if (res && typeof res === "object" && "ok" in res) {
+        const r = res as { ok: boolean; error?: string };
+        if (!r.ok) {
+          toast(r.error ?? "Something went wrong.", "error");
+          return;
+        }
+      }
+      onOk?.(res);
+      router.refresh();
+    });
+  }
+
+  function onRenamePlay(id: string, current: string) {
+    const next = window.prompt("Rename play", current);
+    if (next == null) return;
+    handle(() => renamePlayAction(id, next));
+  }
+
+  function confirmAnd(msg: string, fn: () => void) {
+    if (window.confirm(msg)) fn();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
@@ -82,6 +139,14 @@ export function PlaybookDetailClient({
             placeholder="Search by code, name, or concept..."
           />
         </div>
+        <SegmentedControl
+          value={view}
+          onChange={(v) => setView(v as "active" | "archived")}
+          options={[
+            { value: "active", label: "Active" },
+            { value: "archived", label: "Archived" },
+          ]}
+        />
         <Button
           variant="primary"
           leftIcon={Plus}
@@ -105,33 +170,79 @@ export function PlaybookDetailClient({
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => (
-            <Card key={p.id} hover className="flex flex-col justify-between p-5">
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-foreground">{p.name}</h3>
-                  {p.wristband_code && (
-                    <Badge variant="primary">{p.wristband_code}</Badge>
-                  )}
+          {filtered.map((p) => {
+            const items: ActionMenuItem[] = [
+              {
+                label: "Rename",
+                icon: Pencil,
+                onSelect: () => onRenamePlay(p.id, p.name),
+              },
+              {
+                label: "Duplicate",
+                icon: Copy,
+                onSelect: () =>
+                  handle(
+                    () => duplicatePlayAction(p.id),
+                    (res) => {
+                      if (res.ok) router.push(`/plays/${res.playId}/edit`);
+                    },
+                  ),
+              },
+              p.is_archived
+                ? {
+                    label: "Restore",
+                    icon: ArchiveRestore,
+                    onSelect: () => handle(() => archivePlayAction(p.id, false)),
+                  }
+                : {
+                    label: "Archive",
+                    icon: Archive,
+                    onSelect: () => handle(() => archivePlayAction(p.id, true)),
+                  },
+              {
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () =>
+                  confirmAnd(
+                    `Delete "${p.name}"? This can't be undone.`,
+                    () => handle(() => deletePlayAction(p.id)),
+                  ),
+              },
+            ];
+            return (
+              <Card key={p.id} hover className="flex flex-col justify-between p-5">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                      {p.name}
+                    </h3>
+                    <div className="flex items-center gap-1">
+                      {p.wristband_code && (
+                        <Badge variant="primary">{p.wristband_code}</Badge>
+                      )}
+                      <ActionMenu items={items} />
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">
+                    {p.concept || p.shorthand || "No concept set"}
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-muted">
-                  {p.concept || p.shorthand || "No concept set"}
-                </p>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <Link href={`/plays/${p.id}/edit`} className="flex-1">
-                  <Button variant="primary" size="sm" leftIcon={Pencil} className="w-full">
-                    Edit
-                  </Button>
-                </Link>
-                <Link href={`/m/play/${p.id}?playbookId=${playbookId}`}>
-                  <Button variant="secondary" size="sm" leftIcon={Smartphone}>
-                    Mobile
-                  </Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
+                <div className="mt-4 flex gap-2">
+                  <Link href={`/plays/${p.id}/edit`} className="flex-1">
+                    <Button variant="primary" size="sm" leftIcon={Pencil} className="w-full">
+                      Edit
+                    </Button>
+                  </Link>
+                  <Link href={`/m/play/${p.id}?playbookId=${playbookId}`}>
+                    <Button variant="secondary" size="sm" leftIcon={Smartphone}>
+                      Mobile
+                    </Button>
+                  </Link>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 

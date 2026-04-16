@@ -50,12 +50,42 @@ export async function ensureDefaultWorkspace(supabase: SupabaseClient, userId: s
   if (!playbookId) {
     const { data: book, error } = await supabase
       .from("playbooks")
-      .insert({ team_id: teamId, name: "Main playbook" })
+      .insert({ team_id: teamId, name: "Inbox", is_default: true })
       .select("id")
       .single();
     if (error) throw error;
     playbookId = book.id;
   }
 
+  if (!orgId || !teamId || !playbookId) {
+    throw new Error("Failed to bootstrap workspace.");
+  }
   return { orgId, teamId, playbookId };
+}
+
+/**
+ * Returns the team's default ("Inbox") playbook id, creating one if the team
+ * somehow has no default yet. Used for quick-create flows where the user
+ * hasn't chosen a playbook.
+ */
+export async function getOrCreateInboxPlaybook(
+  supabase: SupabaseClient,
+  teamId: string,
+): Promise<string> {
+  const { data: existing, error: selErr } = await supabase
+    .from("playbooks")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("is_default", true)
+    .limit(1);
+  if (selErr) throw selErr;
+  if (existing?.[0]?.id) return existing[0].id as string;
+
+  const { data: created, error: insErr } = await supabase
+    .from("playbooks")
+    .insert({ team_id: teamId, name: "Inbox", is_default: true })
+    .select("id")
+    .single();
+  if (insErr) throw insErr;
+  return created.id as string;
 }

@@ -1,12 +1,15 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureDefaultWorkspace } from "@/lib/data/workspace";
+import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument } from "@/domain/play/factory";
 import type { PlayDocument, Player } from "@/domain/play/types";
 
-export async function listPlaysAction(playbookId: string) {
+export async function listPlaysAction(
+  playbookId: string,
+  opts?: { includeArchived?: boolean },
+) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured.", plays: [] };
   }
@@ -16,11 +19,17 @@ export async function listPlaysAction(playbookId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in.", plays: [] };
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("plays")
-    .select("id, name, wristband_code, shorthand, concept, updated_at, current_version_id")
+    .select(
+      "id, name, wristband_code, shorthand, concept, updated_at, current_version_id, is_archived",
+    )
     .eq("playbook_id", playbookId)
     .order("updated_at", { ascending: false });
+
+  if (!opts?.includeArchived) query = query.eq("is_archived", false);
+
+  const { data, error } = await query;
 
   if (error) return { ok: false as const, error: error.message, plays: [] };
   return { ok: true as const, plays: data ?? [] };
@@ -228,6 +237,179 @@ export async function duplicatePlayAction(playId: string) {
   await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
 
   return { ok: true as const, playId: play.id };
+}
+
+export async function renamePlayAction(playId: string, name: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false as const, error: "Name can't be empty." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase.from("plays").update({ name: trimmed }).eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function archivePlayAction(playId: string, archived: boolean) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("plays")
+    .update({ is_archived: archived })
+    .eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function deletePlayAction(playId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase.from("plays").delete().eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+/**
+ * Create a play in the user's Inbox playbook and return its id.
+ * Used by the "just start editing" flow for new users and the dashboard's
+ * quick-create button.
+ */
+export async function quickCreatePlayAction(initialPlayers?: Player[]) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { teamId } = await ensureDefaultWorkspace(supabase, user.id);
+  const inboxId = await getOrCreateInboxPlaybook(supabase, teamId);
+  return createPlayAction(inboxId, initialPlayers);
+}
+
+export type DashboardSummary = {
+  recentPlays: {
+    id: string;
+    name: string;
+    concept: string | null;
+    shorthand: string | null;
+    wristband_code: string | null;
+    updated_at: string | null;
+    playbook_id: string;
+    playbook_name: string;
+  }[];
+  playbooks: {
+    id: string;
+    name: string;
+    is_default: boolean;
+    updated_at: string | null;
+    play_count: number;
+  }[];
+  totalPlays: number;
+};
+
+/** One-shot dashboard fetch. Non-archived plays and non-archived playbooks only. */
+export async function getDashboardSummaryAction(): Promise<
+  { ok: true; data: DashboardSummary } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  await ensureDefaultWorkspace(supabase, user.id);
+
+  const [playsRes, booksRes, countRes] = await Promise.all([
+    supabase
+      .from("plays")
+      .select(
+        "id, name, concept, shorthand, wristband_code, updated_at, playbook_id, playbooks!inner(name, is_archived)",
+      )
+      .eq("is_archived", false)
+      .eq("playbooks.is_archived", false)
+      .order("updated_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("playbooks")
+      .select("id, name, is_default, updated_at")
+      .eq("is_archived", false)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("plays")
+      .select("id", { count: "exact", head: true })
+      .eq("is_archived", false),
+  ]);
+
+  if (playsRes.error) return { ok: false, error: playsRes.error.message };
+  if (booksRes.error) return { ok: false, error: booksRes.error.message };
+
+  // Per-playbook counts (single query, group client-side)
+  const { data: allPlays } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("is_archived", false);
+  const counts = new Map<string, number>();
+  for (const row of allPlays ?? []) {
+    counts.set(row.playbook_id, (counts.get(row.playbook_id) ?? 0) + 1);
+  }
+
+  type PlayJoin = {
+    id: string;
+    name: string;
+    concept: string | null;
+    shorthand: string | null;
+    wristband_code: string | null;
+    updated_at: string | null;
+    playbook_id: string;
+    playbooks: { name: string } | { name: string }[] | null;
+  };
+
+  const recentPlays = ((playsRes.data ?? []) as PlayJoin[]).map((r) => {
+    const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+    return {
+      id: r.id,
+      name: r.name,
+      concept: r.concept,
+      shorthand: r.shorthand,
+      wristband_code: r.wristband_code,
+      updated_at: r.updated_at,
+      playbook_id: r.playbook_id,
+      playbook_name: pb?.name ?? "",
+    };
+  });
+
+  const playbooks = (booksRes.data ?? []).map((b) => ({
+    id: b.id as string,
+    name: b.name as string,
+    is_default: b.is_default as boolean,
+    updated_at: b.updated_at as string | null,
+    play_count: counts.get(b.id as string) ?? 0,
+  }));
+
+  return {
+    ok: true,
+    data: {
+      recentPlays,
+      playbooks,
+      totalPlays: countRes.count ?? 0,
+    },
+  };
 }
 
 /** Ensure workspace for actions that need team context */

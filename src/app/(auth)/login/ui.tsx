@@ -31,7 +31,7 @@ export function LoginForm() {
         const { error: err } = await supabase.auth.signUp({ email, password });
         if (err) throw err;
       }
-      router.push("/playbooks");
+      router.push("/home");
       router.refresh();
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : "Something went wrong", "error");
