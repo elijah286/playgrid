@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Plus, Search, Pencil, Smartphone, FileText } from "lucide-react";
 import { createPlayAction } from "@/app/actions/plays";
-import { Button, Input, Card, Badge, EmptyState } from "@/components/ui";
+import { Button, Input, Card, Badge, EmptyState, useToast } from "@/components/ui";
 
 type PlayRow = {
   id: string;
@@ -24,6 +24,7 @@ export function PlaybookDetailClient({
   initialPlays: PlayRow[];
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
 
@@ -44,6 +45,8 @@ export function PlaybookDetailClient({
       if (res.ok) {
         router.push(`/plays/${res.playId}/edit`);
         router.refresh();
+      } else {
+        toast(res.error, "error");
       }
     });
   }

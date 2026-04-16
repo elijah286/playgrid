@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { BookOpen, Plus, Search } from "lucide-react";
 import { createPlaybookAction } from "@/app/actions/playbooks";
-import { Button, Input, Card, EmptyState } from "@/components/ui";
+import { Button, Input, Card, EmptyState, useToast } from "@/components/ui";
 
 type Row = { id: string; name: string; created_at: string | null };
 
 export function PlaybooksClient({ initial }: { initial: Row[] }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [q, setQ] = useState("");
@@ -27,6 +28,8 @@ export function PlaybooksClient({ initial }: { initial: Row[] }) {
       if (res.ok) {
         router.push(`/playbooks/${res.id}`);
         router.refresh();
+      } else {
+        toast(res.error, "error");
       }
     });
   }
