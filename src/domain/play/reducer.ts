@@ -30,10 +30,31 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         layers: { ...doc.layers, players: [...doc.layers.players, cmd.player] },
       };
     case "player.move": {
+      // Find the player's current position to compute delta
+      const movingPlayer = doc.layers.players.find((p) => p.id === cmd.playerId);
+      const dx = movingPlayer ? cmd.position.x - movingPlayer.position.x : 0;
+      const dy = movingPlayer ? cmd.position.y - movingPlayer.position.y : 0;
+
       const players = doc.layers.players.map((p) =>
         p.id === cmd.playerId ? { ...p, position: cmd.position } : p,
       );
-      return { ...doc, layers: { ...doc.layers, players } };
+
+      // Translate all nodes in routes owned by this player
+      const routes = doc.layers.routes.map((r) => {
+        if (r.carrierPlayerId !== cmd.playerId) return r;
+        return {
+          ...r,
+          nodes: r.nodes.map((n) => ({
+            ...n,
+            position: {
+              x: Math.min(1, Math.max(0, n.position.x + dx)),
+              y: Math.min(1, Math.max(0, n.position.y + dy)),
+            },
+          })),
+        };
+      });
+
+      return { ...doc, layers: { ...doc.layers, players, routes } };
     }
     case "player.remove":
       return {
@@ -224,6 +245,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return { ...doc, sportProfile: { ...doc.sportProfile, ...cmd.patch } };
     case "document.setTimeline":
       return { ...doc, timeline: cmd.timeline };
+
+    case "document.setFieldBackground":
+      return { ...doc, fieldBackground: cmd.background };
 
     case "document.flip": {
       const axis = cmd.axis;

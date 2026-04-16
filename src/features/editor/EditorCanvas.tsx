@@ -49,10 +49,22 @@ const SIMPLIFY_EPSILON = 0.012;
 /*  Visual constants                                                  */
 /* ------------------------------------------------------------------ */
 
-const FIELD_BG = "#2D8B4E";
-const FIELD_DARK = "#247540";
-const LINE_COLOR = "rgba(255,255,255,0.15)";
 const NODE_RADIUS = 0.012;
+
+// Background colors per mode
+const BG_COLORS: Record<string, { main: string; dark: string }> = {
+  green: { main: "#2D8B4E", dark: "#247540" },
+  white: { main: "#F8FAFC", dark: "#E2E8F0" },
+  black: { main: "#0A0A0A", dark: "#141414" },
+  gray:  { main: "#1E1E2E", dark: "#16161E" },
+};
+
+const LINE_COLORS: Record<string, string> = {
+  green: "rgba(255,255,255,0.15)",
+  white: "rgba(0,0,0,0.08)",
+  black: "rgba(255,255,255,0.10)",
+  gray:  "rgba(255,255,255,0.10)",
+};
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -79,6 +91,8 @@ type Props = {
   mode?: "routes" | "formation";
   /** Called when user clicks empty canvas in formation mode */
   onAddPlayer?: (position: import("@/domain/play/types").Point2) => void;
+  /** Field background color theme */
+  fieldBackground?: "green" | "white" | "black" | "gray";
 };
 
 export function EditorCanvas({
@@ -99,6 +113,7 @@ export function EditorCanvas({
   fieldAspect = 1,
   mode = "routes",
   onAddPlayer,
+  fieldBackground,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
@@ -531,6 +546,11 @@ export function EditorCanvas({
   const fx = (x: number) => x * fieldAspect;
   const fy = (y: number) => 1 - y;
 
+  /* ---------- Dynamic field colors ---------- */
+
+  const bg = BG_COLORS[fieldBackground ?? "green"];
+  const lineColor = LINE_COLORS[fieldBackground ?? "green"];
+
   /* ---------- Yard lines ---------- */
 
   const yardLines = [];
@@ -543,7 +563,7 @@ export function EditorCanvas({
         y1={y}
         x2={fieldAspect}
         y2={y}
-        stroke={LINE_COLOR}
+        stroke={lineColor}
         strokeWidth={0.002}
       />,
     );
@@ -581,8 +601,8 @@ export function EditorCanvas({
     >
       <defs>
         <linearGradient id="fieldGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={FIELD_BG} />
-          <stop offset="100%" stopColor={FIELD_DARK} />
+          <stop offset="0%" stopColor={bg.main} />
+          <stop offset="100%" stopColor={bg.dark} />
         </linearGradient>
       </defs>
       <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />

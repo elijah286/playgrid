@@ -329,6 +329,24 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
           <IconButton icon={Copy} tooltip="Duplicate play" onClick={duplicate} />
           <IconButton icon={Share2} tooltip="Copy share link" onClick={share} />
 
+          {/* Field background */}
+          <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
+            {(["green","white","black","gray"] as const).map((bg) => {
+              const colors = { green:"#2D8B4E", white:"#F8FAFC", black:"#0A0A0A", gray:"#374151" };
+              const active = (doc.fieldBackground ?? "green") === bg;
+              return (
+                <button
+                  key={bg}
+                  type="button"
+                  title={bg.charAt(0).toUpperCase() + bg.slice(1)}
+                  onClick={() => dispatch({ type: "document.setFieldBackground", background: bg })}
+                  className={`size-6 rounded-md border-2 transition-all ${active ? "border-primary scale-110" : "border-transparent hover:scale-105"}`}
+                  style={{ backgroundColor: colors[bg] }}
+                />
+              );
+            })}
+          </div>
+
           <div className="mx-1 h-6 w-px bg-border" />
 
           <Tooltip content={<span className="flex items-center gap-2">Save <Kbd keys="Ctrl+S" /></span>}>
@@ -396,6 +414,7 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
                 activeColor={activeColor}
                 activeWidth={activeWidth}
                 fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
+                fieldBackground={doc.fieldBackground}
               />
               <div className="pointer-events-none absolute bottom-3 right-3 opacity-40">
                 <RouteAnimation doc={doc} />
@@ -498,6 +517,7 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
                 activeColor={activeColor}
                 activeWidth={activeWidth}
                 fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
+                fieldBackground={doc.fieldBackground}
               />
             </div>
 

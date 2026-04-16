@@ -73,7 +73,8 @@ export type PlayCommand =
   | { type: "document.setMetadata"; patch: Partial<PlayMetadata> }
   | { type: "document.flip"; axis: "horizontal" | "vertical" }
   | { type: "document.setSportProfile"; patch: Partial<SportProfile> }
-  | { type: "document.setTimeline"; timeline: PlayTimeline };
+  | { type: "document.setTimeline"; timeline: PlayTimeline }
+  | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" };
 
 export type CommandMeta = {
   id: string;

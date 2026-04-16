@@ -195,4 +195,5 @@ export type PlayDocument = {
   layers: PlayLayers;
   printProfile: PrintProfile;
   timeline?: PlayTimeline;
+  fieldBackground?: "green" | "white" | "black" | "gray";
 };
