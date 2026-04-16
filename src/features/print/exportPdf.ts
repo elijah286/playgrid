@@ -1,0 +1,21 @@
+"use client";
+
+import { jsPDF } from "jspdf";
+import { svg2pdf } from "svg2pdf.js";
+
+export async function exportSvgToPdf(svgMarkup: string, filename: string) {
+  const parser = new DOMParser();
+  const parsed = parser.parseFromString(svgMarkup, "image/svg+xml");
+  const svg = parsed.documentElement;
+  const width = Number(svg.getAttribute("width")?.replace("mm", "") ?? 216);
+  const height = Number(svg.getAttribute("height")?.replace("mm", "") ?? 279);
+
+  const pdf = new jsPDF({
+    orientation: width > height ? "landscape" : "portrait",
+    unit: "mm",
+    format: [Math.max(width, 10), Math.max(height, 10)],
+  });
+
+  await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
+  pdf.save(filename);
+}
