@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Plus, Search, Pencil, Smartphone, FileText } from "lucide-react";
+import { Plus, Search, Pencil, Smartphone, FileText, X } from "lucide-react";
 import { createPlayAction } from "@/app/actions/plays";
+import { listFormationsAction } from "@/app/actions/formations";
+import type { SavedFormation } from "@/app/actions/formations";
+import type { Player } from "@/domain/play/types";
 import { Button, Input, Card, Badge, EmptyState, useToast } from "@/components/ui";
 
 type PlayRow = {
@@ -28,6 +31,11 @@ export function PlaybookDetailClient({
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
 
+  // Formation picker state
+  const [showFormationPicker, setShowFormationPicker] = useState(false);
+  const [availableFormations, setAvailableFormations] = useState<SavedFormation[]>([]);
+  const [loadingFormations, setLoadingFormations] = useState(false);
+
   const filtered = initialPlays.filter((p) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
@@ -39,9 +47,21 @@ export function PlaybookDetailClient({
     );
   });
 
-  function addPlay() {
+  function openFormationPicker() {
+    setShowFormationPicker(true);
+    setLoadingFormations(true);
+    listFormationsAction().then((res) => {
+      if (res.ok) {
+        setAvailableFormations(res.formations);
+      }
+      setLoadingFormations(false);
+    });
+  }
+
+  function createWithFormation(players?: Player[]) {
+    setShowFormationPicker(false);
     startTransition(async () => {
-      const res = await createPlayAction(playbookId);
+      const res = await createPlayAction(playbookId, players);
       if (res.ok) {
         router.push(`/plays/${res.playId}/edit`);
         router.refresh();
@@ -66,7 +86,7 @@ export function PlaybookDetailClient({
           variant="primary"
           leftIcon={Plus}
           loading={pending}
-          onClick={addPlay}
+          onClick={openFormationPicker}
         >
           New play
         </Button>
@@ -78,7 +98,7 @@ export function PlaybookDetailClient({
           heading="No plays yet"
           description="Create your first play to start designing routes and formations."
           action={
-            <Button variant="primary" leftIcon={Plus} onClick={addPlay} loading={pending}>
+            <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={pending}>
               New play
             </Button>
           }
@@ -114,6 +134,118 @@ export function PlaybookDetailClient({
           ))}
         </div>
       )}
+
+      {/* Formation picker overlay */}
+      {showFormationPicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowFormationPicker(false);
+          }}
+        >
+          <div className="w-full max-w-2xl rounded-2xl border border-border bg-surface-raised shadow-elevated">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <div>
+                <h2 className="text-base font-bold text-foreground">
+                  Choose a starting formation
+                </h2>
+                <p className="mt-0.5 text-xs text-muted">
+                  Pick a saved formation or start with the default.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+                onClick={() => setShowFormationPicker(false)}
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {loadingFormations ? (
+                <p className="text-center text-sm text-muted">Loading formations…</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {/* Default card */}
+                  <button
+                    type="button"
+                    className="flex flex-col items-center gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
+                    onClick={() => createWithFormation()}
+                  >
+                    <MiniPlayerDiagram players={null} />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Default (7v7)</p>
+                      <p className="text-xs text-muted">Standard formation</p>
+                    </div>
+                  </button>
+
+                  {/* Saved formations */}
+                  {availableFormations.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                      onClick={() => createWithFormation(f.players)}
+                    >
+                      <MiniPlayerDiagram players={f.players} />
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                        <p className="text-xs text-muted">
+                          {f.players.length} players
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Small SVG diagram showing player dots at their normalized positions */
+function MiniPlayerDiagram({ players }: { players: Player[] | null }) {
+  const SIZE = 80;
+  const DOT_R = 4;
+
+  // Default placeholder dots if no players
+  if (!players) {
+    // Show a simple 7v7 icon grid
+    return (
+      <svg width={SIZE} height={SIZE} viewBox="0 0 80 80" className="opacity-60">
+        <rect width={80} height={80} rx={6} fill="#2D8B4E" />
+        {[
+          [40, 68], [40, 58], [22, 48], [40, 48], [58, 48], [12, 36], [68, 36],
+        ].map(([cx, cy], i) => (
+          <circle key={i} cx={cx} cy={cy} r={DOT_R} fill="#FFFFFF" />
+        ))}
+      </svg>
+    );
+  }
+
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 80 80">
+      <rect width={80} height={80} rx={6} fill="#2D8B4E" />
+      {players.map((pl) => {
+        // Normalized position: x in 0–1 (left→right), y in 0–1 (bottom→top)
+        const cx = pl.position.x * SIZE;
+        const cy = (1 - pl.position.y) * SIZE;
+        return (
+          <circle
+            key={pl.id}
+            cx={cx}
+            cy={cy}
+            r={DOT_R}
+            fill={pl.style.fill}
+            stroke={pl.style.stroke}
+            strokeWidth={1}
+          />
+        );
+      })}
+    </svg>
   );
 }

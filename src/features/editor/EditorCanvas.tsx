@@ -75,6 +75,10 @@ type Props = {
   activeWidth: number;
   /** Field aspect ratio (width / length) for the SVG viewBox */
   fieldAspect?: number;
+  /** Editor mode: routes (default) or formation */
+  mode?: "routes" | "formation";
+  /** Called when user clicks empty canvas in formation mode */
+  onAddPlayer?: (position: import("@/domain/play/types").Point2) => void;
 };
 
 export function EditorCanvas({
@@ -93,6 +97,8 @@ export function EditorCanvas({
   activeColor,
   activeWidth,
   fieldAspect = 1,
+  mode = "routes",
+  onAddPlayer,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
@@ -323,6 +329,9 @@ export function EditorCanvas({
 
         // Canvas drag: start freehand from anchor (node/last-node) or player
         if (state.target.kind === "canvas") {
+          // In formation mode, canvas drag does nothing (no route drawing)
+          if (mode === "formation") return;
+
           const anchor = getAnchor();
           let startPos: Point2;
           let extendingRouteId: string | null = null;
@@ -405,7 +414,7 @@ export function EditorCanvas({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode],
   );
 
   const finishInteraction = useCallback(
@@ -425,32 +434,42 @@ export function EditorCanvas({
           onSelectNode(null);
           onSelectPlayer(null);
         } else if (target.kind === "canvas") {
-          // Canvas click (no drag)
-          const anchor = getAnchor();
-          if (anchor) {
-            // Extend existing route: add a node connected to anchor
-            const newNode: RouteNode = { id: uid("node"), position: state.origin };
-            dispatch({
-              type: "route.addNode",
-              routeId: anchor.routeId,
-              node: newNode,
-              afterNodeId: anchor.nodeId,
-              shape: activeShape,
-              strokePattern: activeStrokePattern,
-            });
-            onSelectNode(newNode.id);
-          } else if (selectedPlayerId) {
-            // Start new route from player
-            const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
-            if (player) {
-              commitClickRoute(selectedPlayerId, player.position, state.origin);
+          if (mode === "formation") {
+            // Formation mode: clicking canvas adds a player
+            if (onAddPlayer) {
+              onAddPlayer(state.origin);
+            } else {
+              // Deselect if no handler
+              onSelectPlayer(null);
             }
           } else {
-            // Nothing selected → deselect all
-            onSelectPlayer(null);
-            onSelectRoute(null);
-            onSelectNode(null);
-            onSelectSegment(null);
+            // Canvas click (no drag) — route mode
+            const anchor = getAnchor();
+            if (anchor) {
+              // Extend existing route: add a node connected to anchor
+              const newNode: RouteNode = { id: uid("node"), position: state.origin };
+              dispatch({
+                type: "route.addNode",
+                routeId: anchor.routeId,
+                node: newNode,
+                afterNodeId: anchor.nodeId,
+                shape: activeShape,
+                strokePattern: activeStrokePattern,
+              });
+              onSelectNode(newNode.id);
+            } else if (selectedPlayerId) {
+              // Start new route from player
+              const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
+              if (player) {
+                commitClickRoute(selectedPlayerId, player.position, state.origin);
+              }
+            } else {
+              // Nothing selected → deselect all
+              onSelectPlayer(null);
+              onSelectRoute(null);
+              onSelectNode(null);
+              onSelectSegment(null);
+            }
           }
         }
       }
@@ -471,7 +490,7 @@ export function EditorCanvas({
     [
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
-      getAnchor, dispatch, activeShape, activeStrokePattern,
+      getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer,
     ],
   );
 
@@ -572,7 +591,7 @@ export function EditorCanvas({
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>
         {doc.layers.routes.map((route) => {
-          const isActive = route.id === selectedRouteId;
+          const isActive = route.id === selectedRouteId && mode !== "formation";
           const rendered = routeToRenderedSegments(route);
 
           return (
@@ -581,25 +600,27 @@ export function EditorCanvas({
                 const isSelectedSeg = rs.segmentId === selectedSegmentId && isActive;
                 return (
                   <g key={rs.segmentId}>
-                    <path
-                      d={rs.d}
-                      fill="none"
-                      stroke="transparent"
-                      strokeWidth={0.025}
-                      vectorEffect="non-scaling-stroke"
-                      style={{ cursor: "pointer" }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        startInteraction(e, {
-                          kind: "route_segment",
-                          routeId: route.id,
-                          segmentId: rs.segmentId,
-                        });
-                      }}
-                      onDoubleClick={(e) =>
-                        handleSegmentDoubleClick(route.id, rs.segmentId, e)
-                      }
-                    />
+                    {mode !== "formation" && (
+                      <path
+                        d={rs.d}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={0.025}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: "pointer" }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          startInteraction(e, {
+                            kind: "route_segment",
+                            routeId: route.id,
+                            segmentId: rs.segmentId,
+                          });
+                        }}
+                        onDoubleClick={(e) =>
+                          handleSegmentDoubleClick(route.id, rs.segmentId, e)
+                        }
+                      />
+                    )}
                     <path
                       d={rs.d}
                       fill="none"
@@ -663,13 +684,86 @@ export function EditorCanvas({
         const sel = pl.id === selectedPlayerId;
         const isDragging =
           interaction.type === "dragging_player" && interaction.playerId === pl.id;
+        const px = fx(pl.position.x);
+        const py = fy(pl.position.y);
+        const r = 0.028;
+        const fillColor = sel ? "#F26522" : (pl.style?.fill ?? "#FFFFFF");
+        const strokeColor = sel ? "#F26522" : (pl.style?.stroke ?? "rgba(0,0,0,0.3)");
+        const strokeW = sel ? 0.004 : 0.003;
+        const labelColor = sel ? "#FFFFFF" : (pl.style?.labelColor ?? "#1C1C1E");
+        const shape = pl.shape ?? "circle";
+
+        const pointerHandlers = {
+          style: { cursor: isDragging ? "grabbing" : "grab" } as React.CSSProperties,
+          onPointerDown: (e: React.PointerEvent) => {
+            e.stopPropagation();
+            startInteraction(e, { kind: "player", playerId: pl.id });
+          },
+        };
+
+        let shapeEl: React.ReactNode;
+        if (shape === "circle") {
+          shapeEl = (
+            <circle
+              cx={px}
+              cy={py}
+              r={r}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              vectorEffect="non-scaling-stroke"
+              {...pointerHandlers}
+            />
+          );
+        } else if (shape === "square") {
+          const half = r;
+          shapeEl = (
+            <rect
+              x={px - half}
+              y={py - half}
+              width={half * 2}
+              height={half * 2}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              vectorEffect="non-scaling-stroke"
+              {...pointerHandlers}
+            />
+          );
+        } else if (shape === "diamond") {
+          const pts = `${px},${py - r} ${px + r},${py} ${px},${py + r} ${px - r},${py}`;
+          shapeEl = (
+            <polygon
+              points={pts}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              vectorEffect="non-scaling-stroke"
+              {...pointerHandlers}
+            />
+          );
+        } else {
+          // triangle
+          const pts = `${px},${py - r} ${px + r},${py + r} ${px - r},${py + r}`;
+          shapeEl = (
+            <polygon
+              points={pts}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              vectorEffect="non-scaling-stroke"
+              {...pointerHandlers}
+            />
+          );
+        }
+
         return (
           <g key={pl.id}>
             {sel && (
               <circle
-                cx={fx(pl.position.x)}
-                cy={fy(pl.position.y)}
-                r={0.038}
+                cx={px}
+                cy={py}
+                r={0.042}
                 fill="none"
                 stroke="#F26522"
                 strokeWidth={0.003}
@@ -678,27 +772,14 @@ export function EditorCanvas({
                 pointerEvents="none"
               />
             )}
-            <circle
-              cx={fx(pl.position.x)}
-              cy={fy(pl.position.y)}
-              r={0.028}
-              fill={sel ? "#F26522" : "#FFFFFF"}
-              stroke={sel ? "#F26522" : "rgba(0,0,0,0.3)"}
-              strokeWidth={sel ? 0.004 : 0.003}
-              vectorEffect="non-scaling-stroke"
-              style={{ cursor: isDragging ? "grabbing" : "grab" }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                startInteraction(e, { kind: "player", playerId: pl.id });
-              }}
-            />
+            {shapeEl}
             <text
-              x={fx(pl.position.x)}
-              y={fy(pl.position.y) + 0.01}
+              x={px}
+              y={py + 0.01}
               textAnchor="middle"
-              fontSize={0.024}
+              fontSize={0.022}
               fontWeight={700}
-              fill={sel ? "#FFFFFF" : "#1C1C1E"}
+              fill={labelColor}
               pointerEvents="none"
               style={{ fontFamily: "Inter, system-ui, sans-serif" }}
             >

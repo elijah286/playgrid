@@ -44,6 +44,30 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
           routes: doc.layers.routes.filter((r) => r.carrierPlayerId !== cmd.playerId),
         },
       };
+    case "player.setLabel": {
+      const players = doc.layers.players.map((p) =>
+        p.id === cmd.playerId ? { ...p, label: cmd.label } : p,
+      );
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
+    case "player.setShape": {
+      const players = doc.layers.players.map((p) =>
+        p.id === cmd.playerId ? { ...p, shape: cmd.shape } : p,
+      );
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
+    case "player.setStyle": {
+      const players = doc.layers.players.map((p) =>
+        p.id === cmd.playerId ? { ...p, style: cmd.style } : p,
+      );
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
+    case "player.setRole": {
+      const players = doc.layers.players.map((p) =>
+        p.id === cmd.playerId ? { ...p, role: cmd.role } : p,
+      );
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
 
     /* ---- Route-level ---- */
     case "route.add":

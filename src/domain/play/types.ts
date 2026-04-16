@@ -10,6 +10,8 @@ export type SportVariant =
 
 export type PlayerRole = "QB" | "RB" | "WR" | "TE" | "C" | "OTHER";
 
+export type PlayerShape = "circle" | "square" | "diamond" | "triangle";
+
 export type Point2 = { x: number; y: number };
 
 export type PathSegmentKind =
@@ -107,6 +109,7 @@ export type Player = {
   position: Point2;
   eligible: boolean;
   style: PlayerStyle;
+  shape?: PlayerShape;
 };
 
 export type Annotation = {

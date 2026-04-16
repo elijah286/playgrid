@@ -2,6 +2,9 @@ import type {
   Annotation,
   FormationSemantic,
   Player,
+  PlayerRole,
+  PlayerShape,
+  PlayerStyle,
   PlayMetadata,
   PlayTimeline,
   Point2,
@@ -19,6 +22,10 @@ export type PlayCommand =
   | { type: "player.add"; player: Player }
   | { type: "player.move"; playerId: string; position: Point2 }
   | { type: "player.remove"; playerId: string }
+  | { type: "player.setLabel"; playerId: string; label: string }
+  | { type: "player.setShape"; playerId: string; shape: PlayerShape }
+  | { type: "player.setStyle"; playerId: string; style: PlayerStyle }
+  | { type: "player.setRole"; playerId: string; role: PlayerRole }
   /* ---- Route-level ---- */
   | { type: "route.add"; route: Route }
   | { type: "route.remove"; routeId: string }

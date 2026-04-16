@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument } from "@/domain/play/factory";
-import type { PlayDocument } from "@/domain/play/types";
+import type { PlayDocument, Player } from "@/domain/play/types";
 
 export async function listPlaysAction(playbookId: string) {
   if (!hasSupabaseEnv()) {
@@ -26,7 +26,7 @@ export async function listPlaysAction(playbookId: string) {
   return { ok: true as const, plays: data ?? [] };
 }
 
-export async function createPlayAction(playbookId: string) {
+export async function createPlayAction(playbookId: string, initialPlayers?: Player[]) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
@@ -36,7 +36,9 @@ export async function createPlayAction(playbookId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const doc = createEmptyPlayDocument();
+  const doc = initialPlayers
+    ? createEmptyPlayDocument({ layers: { players: initialPlayers, routes: [], annotations: [] } })
+    : createEmptyPlayDocument();
   const { data: play, error: playErr } = await supabase
     .from("plays")
     .insert({

@@ -13,24 +13,29 @@ import {
   Save,
   Smartphone,
   FileDown,
+  UserPlus,
+  BookmarkPlus,
 } from "lucide-react";
-import type { PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { PlayDocument, Player, Point2, SegmentShape, StrokePattern } from "@/domain/play/types";
 import {
   duplicatePlayAction,
   savePlayVersionAction,
 } from "@/app/actions/plays";
+import { saveFormationAction } from "@/app/actions/formations";
 import { createShareLinkForPlayAction } from "@/app/actions/share";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
 import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
+import { FormationInspector } from "./FormationInspector";
 import { PrintPreview } from "@/features/print/PrintPreview";
 import { exportSvgToPdf } from "@/features/print/exportPdf";
 import { compilePlayToSvg } from "@/domain/print/templates";
 import { RouteAnimation } from "@/features/viewer/RouteAnimation";
-import { Button, IconButton, SegmentedControl, Kbd, useToast } from "@/components/ui";
+import { Button, IconButton, Input, SegmentedControl, Kbd, useToast } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { uid } from "@/domain/play/factory";
 
 type Props = {
   playId: string;
@@ -55,8 +60,13 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
   const [activeColor, setActiveColor] = useState("#FFFFFF");
   const [activeWidth, setActiveWidth] = useState(2.5);
 
-  const [tab, setTab] = useState<"editor" | "print">("editor");
+  const [tab, setTab] = useState<"routes" | "formation" | "print">("routes");
   const [pending, startTransition] = useTransition();
+
+  // Formation mode state
+  const [showSaveFormation, setShowSaveFormation] = useState(false);
+  const [formationName, setFormationName] = useState("");
+  const [savingFormation, startSavingFormation] = useTransition();
 
   // Show toolbar when a player OR route is selected
   const showToolbar = selectedPlayerId != null || selectedRouteId != null;
@@ -112,6 +122,42 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
       toast("PDF exported", "success");
     });
   }, [doc, toast]);
+
+  /* ---------- Formation mode handlers ---------- */
+
+  const handleAddPlayer = useCallback(
+    (position: Point2) => {
+      const newPlayer: Player = {
+        id: uid("player"),
+        role: "WR",
+        label: "?",
+        position,
+        eligible: true,
+        style: { fill: "#FFFFFF", stroke: "#1C1C1E", labelColor: "#1C1C1E" },
+      };
+      dispatch({ type: "player.add", player: newPlayer });
+      setSelectedPlayerId(newPlayer.id);
+    },
+    [dispatch],
+  );
+
+  const handleSaveFormation = useCallback(() => {
+    const name = formationName.trim();
+    if (!name) {
+      toast("Enter a formation name", "error");
+      return;
+    }
+    startSavingFormation(async () => {
+      const res = await saveFormationAction(name, doc.layers.players, doc.sportProfile);
+      if (!res.ok) {
+        toast(res.error, "error");
+      } else {
+        toast("Formation saved", "success");
+        setShowSaveFormation(false);
+        setFormationName("");
+      }
+    });
+  }, [formationName, doc.layers.players, doc.sportProfile, toast]);
 
   /* ---------- Toolbar handlers ---------- */
 
@@ -297,7 +343,8 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
       <div className="flex items-center gap-3">
         <SegmentedControl
           options={[
-            { value: "editor" as const, label: "Field" },
+            { value: "routes" as const, label: "Routes" },
+            { value: "formation" as const, label: "Formation" },
             { value: "print" as const, label: "Print preview" },
           ]}
           value={tab}
@@ -310,8 +357,8 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
         </Link>
       </div>
 
-      {/* Editor content */}
-      {tab === "editor" && (
+      {/* Routes tab */}
+      {tab === "routes" && (
         <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
             {showToolbar && (
@@ -366,6 +413,102 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
               selectedRouteId={selectedRouteId}
               selectedSegmentId={selectedSegmentId}
               activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
+            />
+          </aside>
+        </div>
+      )}
+
+      {/* Formation tab */}
+      {tab === "formation" && (
+        <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="flex min-h-[420px] flex-col gap-3">
+            {/* Formation toolbar row */}
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+                Formation
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                leftIcon={UserPlus}
+                onClick={() => {
+                  // Center of field
+                  handleAddPlayer({ x: 0.5, y: 0.5 });
+                }}
+              >
+                Add player
+              </Button>
+              <div className="ml-auto" />
+              <Button
+                size="sm"
+                variant="primary"
+                leftIcon={BookmarkPlus}
+                onClick={() => setShowSaveFormation(true)}
+              >
+                Save formation
+              </Button>
+            </div>
+
+            {/* Save formation panel */}
+            {showSaveFormation && (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-surface-raised px-3 py-2">
+                <Input
+                  placeholder="Formation name…"
+                  value={formationName}
+                  onChange={(e) => setFormationName(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={savingFormation}
+                  onClick={handleSaveFormation}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowSaveFormation(false);
+                    setFormationName("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+
+            <div className="relative min-h-[360px] flex-1">
+              <EditorCanvas
+                doc={doc}
+                dispatch={dispatch}
+                mode="formation"
+                selectedPlayerId={selectedPlayerId}
+                selectedRouteId={null}
+                selectedNodeId={null}
+                selectedSegmentId={null}
+                onSelectPlayer={setSelectedPlayerId}
+                onSelectRoute={() => {}}
+                onSelectNode={() => {}}
+                onSelectSegment={() => {}}
+                onAddPlayer={handleAddPlayer}
+                activeShape={activeShape}
+                activeStrokePattern={activeStrokePattern}
+                activeColor={activeColor}
+                activeWidth={activeWidth}
+                fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
+              />
+            </div>
+
+            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} />
+          </div>
+          <aside className="rounded-xl border border-border bg-surface-raised p-4">
+            <FormationInspector
+              doc={doc}
+              dispatch={dispatch}
+              selectedPlayerId={selectedPlayerId}
+              onSelectPlayer={setSelectedPlayerId}
             />
           </aside>
         </div>
