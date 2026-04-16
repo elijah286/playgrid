@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
+import type { Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import {
   routeToRenderedSegments,
   simplifyPolyline,
@@ -31,11 +31,14 @@ type Interaction =
   | { type: "dragging_player"; playerId: string }
   | { type: "dragging_node"; routeId: string; nodeId: string }
   | { type: "dragging_segment"; routeId: string; segmentId: string }
-  /** User is drawing freehand from a selected player */
+  /** User is drawing freehand from an anchor (player or existing node) */
   | {
       type: "drawing_route";
       playerId: string;
-      /** Points captured during drag (includes player position as first point) */
+      /** If set, extend this existing route instead of creating new */
+      extendingRouteId: string | null;
+      extendFromNodeId: string | null;
+      /** Points captured during drag (first point = anchor position) */
       points: Point2[];
     };
 
@@ -66,11 +69,12 @@ type Props = {
   onSelectRoute: (id: string | null) => void;
   onSelectNode: (id: string | null) => void;
   onSelectSegment: (id: string | null) => void;
-  /** Active settings for the next route that will be drawn */
   activeShape: import("@/domain/play/types").SegmentShape;
   activeStrokePattern: import("@/domain/play/types").StrokePattern;
   activeColor: string;
   activeWidth: number;
+  /** Field aspect ratio (width / length) for the SVG viewBox */
+  fieldAspect?: number;
 };
 
 export function EditorCanvas({
@@ -88,6 +92,7 @@ export function EditorCanvas({
   activeStrokePattern,
   activeColor,
   activeWidth,
+  fieldAspect = 1,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
@@ -107,12 +112,13 @@ export function EditorCanvas({
       const inv = ctm.inverse();
       const svgX = inv.a * e.clientX + inv.c * e.clientY + inv.e;
       const svgY = inv.b * e.clientX + inv.d * e.clientY + inv.f;
+      // Normalize to 0-1 regardless of viewBox aspect
       return {
-        x: Math.min(1, Math.max(0, svgX)),
+        x: Math.min(1, Math.max(0, svgX / fieldAspect)),
         y: Math.min(1, Math.max(0, 1 - svgY)),
       };
     },
-    [],
+    [fieldAspect],
   );
 
   /* ---------- Active style builder ---------- */
@@ -122,15 +128,61 @@ export function EditorCanvas({
     [activeColor, activeWidth],
   );
 
-  /* ---------- Create a route from a list of points (freehand release) ---------- */
+  /* ---------- Anchor resolution ---------- */
+  /** Where should the next stroke/node connect from? */
+  const getAnchor = useCallback((): { routeId: string; nodeId: string; position: Point2 } | null => {
+    // Priority 1: explicitly selected node
+    if (selectedNodeId && selectedRouteId) {
+      const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
+      const node = route?.nodes.find((n) => n.id === selectedNodeId);
+      if (route && node) {
+        return { routeId: route.id, nodeId: node.id, position: node.position };
+      }
+    }
+    // Priority 2: selected route belongs to selected player → use last node
+    if (selectedPlayerId && selectedRouteId) {
+      const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
+      if (route && route.carrierPlayerId === selectedPlayerId && route.nodes.length > 0) {
+        const last = route.nodes[route.nodes.length - 1];
+        return { routeId: route.id, nodeId: last.id, position: last.position };
+      }
+    }
+    return null;
+  }, [selectedNodeId, selectedRouteId, selectedPlayerId, doc.layers.routes]);
+
+  /* ---------- Create a route from a freehand path ---------- */
 
   const commitFreehandRoute = useCallback(
-    (playerId: string, rawPoints: Point2[]) => {
-      // Need at least player pos + 1 more point
-      if (rawPoints.length < 2) return;
-      const simplified = simplifyPolyline(rawPoints, SIMPLIFY_EPSILON);
+    (state: Extract<Interaction, { type: "drawing_route" }>) => {
+      const { playerId, extendingRouteId, extendFromNodeId, points } = state;
+      if (points.length < 2) return;
+      const simplified = simplifyPolyline(points, SIMPLIFY_EPSILON);
       if (simplified.length < 2) return;
 
+      if (extendingRouteId && extendFromNodeId) {
+        // Append new nodes onto existing route (skip index 0 = anchor position)
+        let prevNodeId = extendFromNodeId;
+        let lastAddedId = prevNodeId;
+        for (let i = 1; i < simplified.length; i++) {
+          const newNode: RouteNode = { id: uid("node"), position: simplified[i] };
+          dispatch({
+            type: "route.addNode",
+            routeId: extendingRouteId,
+            node: newNode,
+            afterNodeId: prevNodeId,
+            shape: activeShape,
+            strokePattern: activeStrokePattern,
+          });
+          prevNodeId = newNode.id;
+          lastAddedId = newNode.id;
+        }
+        onSelectRoute(extendingRouteId);
+        onSelectNode(lastAddedId);
+        onSelectSegment(null);
+        return;
+      }
+
+      // Create new route
       const nodes: RouteNode[] = simplified.map((pt) => ({
         id: uid("node"),
         position: pt,
@@ -156,13 +208,13 @@ export function EditorCanvas({
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
-      onSelectNode(null);
+      onSelectNode(nodes[nodes.length - 1].id);
       onSelectSegment(null);
     },
     [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
   );
 
-  /* ---------- Create a 2-node line route (single click) ---------- */
+  /* ---------- Create a 2-node line route (single click, no existing route) ---------- */
 
   const commitClickRoute = useCallback(
     (playerId: string, playerPos: Point2, clickPos: Point2) => {
@@ -186,7 +238,7 @@ export function EditorCanvas({
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
-      onSelectNode(null);
+      onSelectNode(endNode.id); // so next click extends from here
       onSelectSegment(null);
     },
     [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
@@ -221,7 +273,6 @@ export function EditorCanvas({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      // Canvas click — always start as pending; intent (click vs drag) decided on move/up
       startInteraction(e, { kind: "canvas" });
     },
     [startInteraction],
@@ -270,20 +321,43 @@ export function EditorCanvas({
           return;
         }
 
-        // Canvas drag + player selected → start freehand drawing from player pos
-        if (state.target.kind === "canvas" && selectedPlayerId) {
-          const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
-          if (!player) return;
+        // Canvas drag: start freehand from anchor (node/last-node) or player
+        if (state.target.kind === "canvas") {
+          const anchor = getAnchor();
+          let startPos: Point2;
+          let extendingRouteId: string | null = null;
+          let extendFromNodeId: string | null = null;
+          let playerId: string | null = null;
+
+          if (anchor) {
+            startPos = anchor.position;
+            extendingRouteId = anchor.routeId;
+            extendFromNodeId = anchor.nodeId;
+            const route = doc.layers.routes.find((r) => r.id === anchor.routeId);
+            playerId = route?.carrierPlayerId ?? selectedPlayerId ?? null;
+          } else if (selectedPlayerId) {
+            const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
+            if (!player) return;
+            startPos = player.position;
+            playerId = selectedPlayerId;
+          } else {
+            return;
+          }
+
+          if (!playerId) return;
+
           const next: Interaction = {
             type: "drawing_route",
-            playerId: selectedPlayerId,
-            points: [player.position, state.origin, toNorm(e)],
+            playerId,
+            extendingRouteId,
+            extendFromNodeId,
+            points: [startPos, state.origin, toNorm(e)],
           };
           setInteraction(next);
           interactionRef.current = next;
           return;
         }
-        // Canvas drag without player selection = just deselect on release
+
         return;
       }
 
@@ -331,7 +405,7 @@ export function EditorCanvas({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor],
   );
 
   const finishInteraction = useCallback(
@@ -352,14 +426,27 @@ export function EditorCanvas({
           onSelectPlayer(null);
         } else if (target.kind === "canvas") {
           // Canvas click (no drag)
-          if (selectedPlayerId) {
-            // Player was selected → create a 2-node line route
+          const anchor = getAnchor();
+          if (anchor) {
+            // Extend existing route: add a node connected to anchor
+            const newNode: RouteNode = { id: uid("node"), position: state.origin };
+            dispatch({
+              type: "route.addNode",
+              routeId: anchor.routeId,
+              node: newNode,
+              afterNodeId: anchor.nodeId,
+              shape: activeShape,
+              strokePattern: activeStrokePattern,
+            });
+            onSelectNode(newNode.id);
+          } else if (selectedPlayerId) {
+            // Start new route from player
             const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
             if (player) {
               commitClickRoute(selectedPlayerId, player.position, state.origin);
             }
           } else {
-            // Nothing selected, nothing to create; deselect all
+            // Nothing selected → deselect all
             onSelectPlayer(null);
             onSelectRoute(null);
             onSelectNode(null);
@@ -369,7 +456,7 @@ export function EditorCanvas({
       }
 
       if (state.type === "drawing_route") {
-        commitFreehandRoute(state.playerId, state.points);
+        commitFreehandRoute(state);
       }
 
       try {
@@ -384,6 +471,7 @@ export function EditorCanvas({
     [
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
+      getAnchor, dispatch, activeShape, activeStrokePattern,
     ],
   );
 
@@ -410,11 +498,19 @@ export function EditorCanvas({
 
   /* ---------- Dynamic cursor ---------- */
 
-  let svgCursor = selectedPlayerId ? "crosshair" : "default";
+  let svgCursor = selectedPlayerId || selectedRouteId ? "crosshair" : "default";
   if (interaction.type === "dragging_player") svgCursor = "grabbing";
   if (interaction.type === "dragging_node") svgCursor = "grabbing";
   if (interaction.type === "dragging_segment") svgCursor = "grabbing";
   if (interaction.type === "drawing_route") svgCursor = "crosshair";
+
+  /* ---------- ViewBox + coordinate helpers  ---------- */
+
+  // ViewBox: width = fieldAspect, height = 1 (so x in 0..fieldAspect, y in 0..1)
+  // Field x (0..1) → SVG x = x * fieldAspect
+  // Field y (0..1, up) → SVG y = 1 - y
+  const fx = (x: number) => x * fieldAspect;
+  const fy = (y: number) => 1 - y;
 
   /* ---------- Yard lines ---------- */
 
@@ -422,7 +518,15 @@ export function EditorCanvas({
   for (let i = 1; i < 10; i++) {
     const y = i / 10;
     yardLines.push(
-      <line key={`h${i}`} x1={0} y1={y} x2={1} y2={y} stroke={LINE_COLOR} strokeWidth={0.002} />,
+      <line
+        key={`h${i}`}
+        x1={0}
+        y1={y}
+        x2={fieldAspect}
+        y2={y}
+        stroke={LINE_COLOR}
+        strokeWidth={0.002}
+      />,
     );
   }
 
@@ -434,17 +538,20 @@ export function EditorCanvas({
     if (pts.length < 2) return null;
     const parts: string[] = [];
     pts.forEach((p, i) => {
-      const x = p.x;
-      const y = 1 - p.y;
-      parts.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
+      parts.push(i === 0 ? `M ${fx(p.x)} ${fy(p.y)}` : `L ${fx(p.x)} ${fy(p.y)}`);
     });
     return parts.join(" ");
   })();
 
+  /* ---------- Route rendering helper ---------- */
+  // We need to re-render segment `d` strings with the fieldAspect scaling.
+  // Easiest: scale the SVG content by wrapping in a <g transform>. The routes
+  // stored positions are still in normalized 0-1 field coords.
+
   return (
     <svg
       ref={svgRef}
-      viewBox="0 0 1 1"
+      viewBox={`0 0 ${fieldAspect} 1`}
       preserveAspectRatio="xMidYMid meet"
       className="h-full w-full touch-none rounded-xl shadow-card"
       style={{ cursor: svgCursor }}
@@ -459,93 +566,94 @@ export function EditorCanvas({
           <stop offset="100%" stopColor={FIELD_DARK} />
         </linearGradient>
       </defs>
-      <rect width={1} height={1} fill="url(#fieldGrad)" />
+      <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />
       {yardLines}
 
-      {/* Routes */}
-      {doc.layers.routes.map((route) => {
-        const isActive = route.id === selectedRouteId;
-        const rendered = routeToRenderedSegments(route);
+      {/* Routes — wrap in a group scaled by fieldAspect on x */}
+      <g transform={`scale(${fieldAspect}, 1)`}>
+        {doc.layers.routes.map((route) => {
+          const isActive = route.id === selectedRouteId;
+          const rendered = routeToRenderedSegments(route);
 
-        return (
-          <g key={route.id}>
-            {/* Segments */}
-            {rendered.map((rs) => {
-              const isSelectedSeg = rs.segmentId === selectedSegmentId && isActive;
-              return (
-                <g key={rs.segmentId}>
-                  {/* Invisible wider hit area */}
-                  <path
-                    d={rs.d}
-                    fill="none"
-                    stroke="transparent"
-                    strokeWidth={0.025}
-                    style={{ cursor: "pointer" }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      startInteraction(e, {
-                        kind: "route_segment",
-                        routeId: route.id,
-                        segmentId: rs.segmentId,
-                      });
-                    }}
-                    onDoubleClick={(e) =>
-                      handleSegmentDoubleClick(route.id, rs.segmentId, e)
-                    }
-                  />
-                  {/* Visible path */}
-                  <path
-                    d={rs.d}
-                    fill="none"
-                    stroke={isSelectedSeg ? "#F26522" : route.style.stroke}
-                    strokeWidth={isSelectedSeg ? 0.006 : route.style.strokeWidth * 0.002}
-                    strokeDasharray={rs.dash}
-                    strokeLinecap="round"
-                    pointerEvents="none"
-                  />
-                </g>
-              );
-            })}
-
-            {/* Nodes (only shown when route is active/selected) */}
-            {isActive &&
-              route.nodes.map((node) => {
-                const isSelectedNode = node.id === selectedNodeId;
-                const svgY = 1 - node.position.y;
+          return (
+            <g key={route.id}>
+              {rendered.map((rs) => {
+                const isSelectedSeg = rs.segmentId === selectedSegmentId && isActive;
                 return (
-                  <circle
-                    key={node.id}
-                    cx={node.position.x}
-                    cy={svgY}
-                    r={NODE_RADIUS}
-                    fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
-                    stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.5)"}
-                    strokeWidth={0.002}
-                    style={{ cursor: "grab" }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      startInteraction(e, {
-                        kind: "route_node",
-                        routeId: route.id,
-                        nodeId: node.id,
-                      });
-                    }}
-                  />
+                  <g key={rs.segmentId}>
+                    <path
+                      d={rs.d}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={0.025}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ cursor: "pointer" }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        startInteraction(e, {
+                          kind: "route_segment",
+                          routeId: route.id,
+                          segmentId: rs.segmentId,
+                        });
+                      }}
+                      onDoubleClick={(e) =>
+                        handleSegmentDoubleClick(route.id, rs.segmentId, e)
+                      }
+                    />
+                    <path
+                      d={rs.d}
+                      fill="none"
+                      stroke={isSelectedSeg ? "#F26522" : route.style.stroke}
+                      strokeWidth={isSelectedSeg ? 3 : route.style.strokeWidth}
+                      strokeDasharray={rs.dash}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                      pointerEvents="none"
+                    />
+                  </g>
                 );
               })}
-          </g>
-        );
-      })}
 
-      {/* Draft freehand preview */}
+              {isActive &&
+                route.nodes.map((node) => {
+                  const isSelectedNode = node.id === selectedNodeId;
+                  return (
+                    <circle
+                      key={node.id}
+                      cx={node.position.x}
+                      cy={1 - node.position.y}
+                      r={NODE_RADIUS}
+                      fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
+                      stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.5)"}
+                      strokeWidth={0.002}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ cursor: "grab" }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        startInteraction(e, {
+                          kind: "route_node",
+                          routeId: route.id,
+                          nodeId: node.id,
+                        });
+                      }}
+                    />
+                  );
+                })}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* Draft freehand preview (already in scaled coords via fx/fy) */}
       {draftPath && (
         <path
           d={draftPath}
           fill="none"
           stroke="rgba(255,255,255,0.7)"
-          strokeWidth={0.004}
+          strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
           pointerEvents="none"
         />
       )}
@@ -559,23 +667,25 @@ export function EditorCanvas({
           <g key={pl.id}>
             {sel && (
               <circle
-                cx={pl.position.x}
-                cy={1 - pl.position.y}
+                cx={fx(pl.position.x)}
+                cy={fy(pl.position.y)}
                 r={0.038}
                 fill="none"
                 stroke="#F26522"
                 strokeWidth={0.003}
+                vectorEffect="non-scaling-stroke"
                 opacity={0.5}
                 pointerEvents="none"
               />
             )}
             <circle
-              cx={pl.position.x}
-              cy={1 - pl.position.y}
+              cx={fx(pl.position.x)}
+              cy={fy(pl.position.y)}
               r={0.028}
               fill={sel ? "#F26522" : "#FFFFFF"}
               stroke={sel ? "#F26522" : "rgba(0,0,0,0.3)"}
               strokeWidth={sel ? 0.004 : 0.003}
+              vectorEffect="non-scaling-stroke"
               style={{ cursor: isDragging ? "grabbing" : "grab" }}
               onPointerDown={(e) => {
                 e.stopPropagation();
@@ -583,8 +693,8 @@ export function EditorCanvas({
               }}
             />
             <text
-              x={pl.position.x}
-              y={1 - pl.position.y + 0.01}
+              x={fx(pl.position.x)}
+              y={fy(pl.position.y) + 0.01}
               textAnchor="middle"
               fontSize={0.024}
               fontWeight={700}

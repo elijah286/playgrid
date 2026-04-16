@@ -196,6 +196,8 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return { ...doc, printProfile: cmd.printProfile };
     case "document.setMetadata":
       return { ...doc, metadata: { ...doc.metadata, ...cmd.patch } };
+    case "document.setSportProfile":
+      return { ...doc, sportProfile: { ...doc.sportProfile, ...cmd.patch } };
     case "document.setTimeline":
       return { ...doc, timeline: cmd.timeline };
 

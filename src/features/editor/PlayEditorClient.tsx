@@ -23,6 +23,7 @@ import { createShareLinkForPlayAction } from "@/app/actions/share";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
+import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
 import { PrintPreview } from "@/features/print/PrintPreview";
 import { exportSvgToPdf } from "@/features/print/exportPdf";
@@ -347,11 +348,15 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
+                fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
               />
               <div className="pointer-events-none absolute bottom-3 right-3 opacity-40">
                 <RouteAnimation doc={doc} />
               </div>
             </div>
+
+            {/* Field size controls (below canvas) */}
+            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} />
           </div>
           <aside className="rounded-xl border border-border bg-surface-raised p-4">
             <Inspector

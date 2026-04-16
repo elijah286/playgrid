@@ -11,6 +11,7 @@ import type {
   RouteSemantic,
   RouteStyle,
   SegmentShape,
+  SportProfile,
   StrokePattern,
 } from "./types";
 
@@ -64,6 +65,7 @@ export type PlayCommand =
   | { type: "document.setPrintProfile"; printProfile: PrintProfile }
   | { type: "document.setMetadata"; patch: Partial<PlayMetadata> }
   | { type: "document.flip"; axis: "horizontal" | "vertical" }
+  | { type: "document.setSportProfile"; patch: Partial<SportProfile> }
   | { type: "document.setTimeline"; timeline: PlayTimeline };
 
 export type CommandMeta = {

@@ -48,8 +48,8 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
     sportProfile: {
       variant: "flag_7v7",
       offensePlayerCount: 7,
-      fieldWidthYds: 40,
-      fieldLengthYds: 25,
+      fieldWidthYds: 30,
+      fieldLengthYds: 30,
       motionMustNotAdvanceTowardGoal: true,
     },
     metadata: {
