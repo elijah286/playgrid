@@ -2,15 +2,18 @@
 
 import { Trash2 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { PlayDocument } from "@/domain/play/types";
+import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
 import { Input, Select, Badge, Button } from "@/components/ui";
+import { QuickRoutes } from "./QuickRoutes";
 
 type Props = {
   doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
   selectedPlayerId: string | null;
   selectedRouteId: string | null;
+  selectedSegmentId: string | null;
+  activeStyle?: Partial<RouteStyle>;
 };
 
 const routeOptions = [
@@ -23,7 +26,14 @@ const routeOptions = [
   { value: "out", label: "Out" },
 ];
 
-export function Inspector({ doc, dispatch, selectedPlayerId, selectedRouteId }: Props) {
+export function Inspector({
+  doc,
+  dispatch,
+  selectedPlayerId,
+  selectedRouteId,
+  selectedSegmentId,
+  activeStyle,
+}: Props) {
   const warnings = evaluateSportWarnings(doc);
   const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
   const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
@@ -79,11 +89,21 @@ export function Inspector({ doc, dispatch, selectedPlayerId, selectedRouteId }: 
         </section>
       )}
 
+      {/* Quick routes: shown when a player is selected and no route is being edited */}
+      {player && !route && (
+        <QuickRoutes player={player} dispatch={dispatch} activeStyle={activeStyle} />
+      )}
+
       {route && (
         <section className="space-y-3">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             Route
           </h3>
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span>{route.nodes.length} nodes</span>
+            <span className="text-border">&middot;</span>
+            <span>{route.segments.length} segments</span>
+          </div>
           <div>
             <span className="mb-1.5 block text-xs font-medium text-foreground">Semantic family</span>
             <Select

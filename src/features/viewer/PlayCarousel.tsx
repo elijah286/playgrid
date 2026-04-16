@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Search, Monitor } from "lucide-react";
 import type { PlayDocument } from "@/domain/play/types";
-import { pathGeometryToSvgD } from "@/domain/play/geometry";
+import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
 import { Button, Input } from "@/components/ui";
 
 type PlayRow = {
@@ -92,7 +92,7 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
             {document.layers.routes.map((r) => (
               <path
                 key={r.id}
-                d={pathGeometryToSvgD(r.geometry)}
+                d={pathGeometryToSvgD(routeToPathGeometry(r))}
                 fill="none"
                 stroke={r.style.stroke}
                 strokeWidth={0.004}

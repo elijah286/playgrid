@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -14,15 +14,15 @@ import {
   Smartphone,
   FileDown,
 } from "lucide-react";
-import type { PlayDocument } from "@/domain/play/types";
+import type { PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import {
   duplicatePlayAction,
   savePlayVersionAction,
 } from "@/app/actions/plays";
 import { createShareLinkForPlayAction } from "@/app/actions/share";
 import { usePlayEditor } from "./usePlayEditor";
-import { EditorCanvas, type EditorCanvasHandle, type Tool } from "./EditorCanvas";
-import { ToolPalette } from "./ToolPalette";
+import { EditorCanvas } from "./EditorCanvas";
+import { RouteToolbar } from "./RouteToolbar";
 import { Inspector } from "./Inspector";
 import { PrintPreview } from "@/features/print/PrintPreview";
 import { exportSvgToPdf } from "@/features/print/exportPdf";
@@ -41,13 +41,33 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
   const router = useRouter();
   const { toast } = useToast();
   const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
-  const [tool, setTool] = useState<Tool>("select");
+
+  // Selection state
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
-  const [polyDraft, setPolyDraft] = useState(0);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [placingRoute, setPlacingRoute] = useState(false);
+
+  // Route toolbar state
+  const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
+  const [activeStrokePattern, setActiveStrokePattern] = useState<StrokePattern>("solid");
+  const [activeColor, setActiveColor] = useState("#FFFFFF");
+
   const [tab, setTab] = useState<"editor" | "print">("editor");
   const [pending, startTransition] = useTransition();
-  const canvasRef = useRef<EditorCanvasHandle>(null);
+
+  // Show toolbar when a route is selected or we're placing
+  const showToolbar = selectedRouteId != null || placingRoute;
+
+  // Find the selected segment for toolbar state sync
+  const selectedRoute = doc.layers.routes.find((r) => r.id === selectedRouteId);
+  const selectedSeg = selectedRoute?.segments.find((s) => s.id === selectedSegmentId);
+
+  // Sync toolbar to selected segment
+  const displayShape = selectedSeg?.shape ?? activeShape;
+  const displayStroke = selectedSeg?.strokePattern ?? activeStrokePattern;
+  const displayColor = selectedRoute?.style.stroke ?? activeColor;
 
   const save = useCallback(() => {
     startTransition(async () => {
@@ -92,6 +112,53 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
     });
   }, [doc, toast]);
 
+  // Toolbar handlers
+  const handleShapeChange = useCallback(
+    (shape: SegmentShape) => {
+      setActiveShape(shape);
+      if (selectedSegmentId && selectedRouteId) {
+        dispatch({ type: "route.setSegmentShape", routeId: selectedRouteId, segmentId: selectedSegmentId, shape });
+      }
+    },
+    [dispatch, selectedRouteId, selectedSegmentId],
+  );
+
+  const handleStrokeChange = useCallback(
+    (strokePattern: StrokePattern) => {
+      setActiveStrokePattern(strokePattern);
+      if (selectedSegmentId && selectedRouteId) {
+        dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: selectedSegmentId, strokePattern });
+      }
+    },
+    [dispatch, selectedRouteId, selectedSegmentId],
+  );
+
+  const handleColorChange = useCallback(
+    (color: string) => {
+      setActiveColor(color);
+      if (selectedRouteId) {
+        const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
+        if (route) {
+          dispatch({ type: "route.setStyle", routeId: selectedRouteId, style: { ...route.style, stroke: color } });
+        }
+      }
+    },
+    [dispatch, selectedRouteId, doc.layers.routes],
+  );
+
+  const handleSmooth = useCallback(() => {
+    if (selectedSegmentId && selectedRouteId) {
+      dispatch({ type: "route.setSegmentControl", routeId: selectedRouteId, segmentId: selectedSegmentId, controlOffset: null });
+    }
+  }, [dispatch, selectedRouteId, selectedSegmentId]);
+
+  const handleDone = useCallback(() => {
+    setPlacingRoute(false);
+    setSelectedNodeId(null);
+    setSelectedSegmentId(null);
+    setSelectedRouteId(null);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -120,21 +187,43 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
         return;
       }
 
-      // Single-key shortcuts only when not in an input
       if (isInput) return;
 
-      if (e.key === "1") setTool("select");
-      if (e.key === "2") setTool("sketch");
-      if (e.key === "3") setTool("polyline");
       if (e.key === "Escape") {
+        if (placingRoute) {
+          // Handled by EditorCanvas
+          return;
+        }
         setSelectedPlayerId(null);
         setSelectedRouteId(null);
+        setSelectedNodeId(null);
+        setSelectedSegmentId(null);
+      }
+
+      if ((e.key === "Delete" || e.key === "Backspace") && !placingRoute) {
+        e.preventDefault();
+        if (selectedNodeId && selectedRouteId) {
+          dispatch({ type: "route.removeNode", routeId: selectedRouteId, nodeId: selectedNodeId });
+          setSelectedNodeId(null);
+        } else if (selectedSegmentId && selectedRouteId) {
+          // Remove just the segment, keep nodes
+          const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
+          if (route) {
+            dispatch({ type: "route.remove", routeId: selectedRouteId });
+            // If only removing the segment leaves orphan structure, remove entire route for simplicity
+          }
+          setSelectedSegmentId(null);
+          setSelectedRouteId(null);
+        } else if (selectedRouteId) {
+          dispatch({ type: "route.remove", routeId: selectedRouteId });
+          setSelectedRouteId(null);
+        }
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [save, undo, redo]);
+  }, [save, undo, redo, selectedRouteId, selectedNodeId, selectedSegmentId, placingRoute, dispatch, doc.layers.routes]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -155,7 +244,6 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {/* Edit group */}
           <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
             <Tooltip content={<span className="flex items-center gap-2">Undo <Kbd keys="Ctrl+Z" /></span>}>
               <IconButton icon={Undo2} variant="ghost" disabled={!canUndo} onClick={undo} />
@@ -167,26 +255,16 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
 
           <div className="mx-1 h-6 w-px bg-border" />
 
-          {/* Document actions */}
           <IconButton
             icon={FlipHorizontal}
             tooltip="Flip horizontal"
             onClick={() => dispatch({ type: "document.flip", axis: "horizontal" })}
           />
-          <IconButton
-            icon={Copy}
-            tooltip="Duplicate play"
-            onClick={duplicate}
-          />
-          <IconButton
-            icon={Share2}
-            tooltip="Copy share link"
-            onClick={share}
-          />
+          <IconButton icon={Copy} tooltip="Duplicate play" onClick={duplicate} />
+          <IconButton icon={Share2} tooltip="Copy share link" onClick={share} />
 
           <div className="mx-1 h-6 w-px bg-border" />
 
-          {/* Primary */}
           <Tooltip content={<span className="flex items-center gap-2">Save <Kbd keys="Ctrl+S" /></span>}>
             <Button variant="primary" size="sm" leftIcon={Save} loading={pending} onClick={save}>
               Save
@@ -216,23 +294,40 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
       {tab === "editor" && (
         <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
-            <ToolPalette
-              tool={tool}
-              onToolChange={setTool}
-              polylineActive={polyDraft > 0}
-              onFinishPolyline={() => canvasRef.current?.commitPolyline()}
-            />
+            {/* Route toolbar (contextual) */}
+            {showToolbar && (
+              <RouteToolbar
+                shape={displayShape}
+                onShapeChange={handleShapeChange}
+                strokePattern={displayStroke}
+                onStrokePatternChange={handleStrokeChange}
+                color={displayColor}
+                onColorChange={handleColorChange}
+                canSmooth={selectedSeg?.controlOffset != null}
+                onSmooth={handleSmooth}
+                onUndo={undo}
+                canUndo={canUndo}
+                onDone={handleDone}
+                doneLabel={placingRoute ? "Finish route" : "Done"}
+              />
+            )}
+
             <div className="relative min-h-[360px] flex-1">
               <EditorCanvas
-                ref={canvasRef}
                 doc={doc}
                 dispatch={dispatch}
-                tool={tool}
                 selectedPlayerId={selectedPlayerId}
                 selectedRouteId={selectedRouteId}
+                selectedNodeId={selectedNodeId}
+                selectedSegmentId={selectedSegmentId}
                 onSelectPlayer={setSelectedPlayerId}
                 onSelectRoute={setSelectedRouteId}
-                onPolylineDraftChange={setPolyDraft}
+                onSelectNode={setSelectedNodeId}
+                onSelectSegment={setSelectedSegmentId}
+                placingRoute={placingRoute}
+                onPlacingRouteChange={setPlacingRoute}
+                activeShape={activeShape}
+                activeStrokePattern={activeStrokePattern}
               />
               <div className="pointer-events-none absolute bottom-3 right-3 opacity-40">
                 <RouteAnimation doc={doc} />
@@ -245,6 +340,8 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
               dispatch={dispatch}
               selectedPlayerId={selectedPlayerId}
               selectedRouteId={selectedRouteId}
+              selectedSegmentId={selectedSegmentId}
+              activeStyle={{ stroke: activeColor }}
             />
           </aside>
         </div>

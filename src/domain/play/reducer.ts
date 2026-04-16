@@ -1,20 +1,33 @@
 import type { PlayCommand } from "./commands";
-import type { PlayDocument, Point2 } from "./types";
+import type { PlayDocument, Point2, RouteSegment } from "./types";
+import { uid } from "./factory";
 
 function flipPoint(p: Point2, axis: "horizontal" | "vertical"): Point2 {
   if (axis === "horizontal") return { x: 1 - p.x, y: p.y };
   return { x: p.x, y: 1 - p.y };
 }
 
+function mapRoute(
+  doc: PlayDocument,
+  routeId: string,
+  fn: (r: (typeof doc.layers.routes)[number]) => (typeof doc.layers.routes)[number],
+): PlayDocument {
+  return {
+    ...doc,
+    layers: {
+      ...doc.layers,
+      routes: doc.layers.routes.map((r) => (r.id === routeId ? fn(r) : r)),
+    },
+  };
+}
+
 export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument {
   switch (cmd.type) {
+    /* ---- Players ---- */
     case "player.add":
       return {
         ...doc,
-        layers: {
-          ...doc.layers,
-          players: [...doc.layers.players, cmd.player],
-        },
+        layers: { ...doc.layers, players: [...doc.layers.players, cmd.player] },
       };
     case "player.move": {
       const players = doc.layers.players.map((p) =>
@@ -31,26 +44,13 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
           routes: doc.layers.routes.filter((r) => r.carrierPlayerId !== cmd.playerId),
         },
       };
+
+    /* ---- Route-level ---- */
     case "route.add":
       return {
         ...doc,
-        layers: {
-          ...doc.layers,
-          routes: [...doc.layers.routes, cmd.route],
-        },
+        layers: { ...doc.layers, routes: [...doc.layers.routes, cmd.route] },
       };
-    case "route.setGeometry": {
-      const routes = doc.layers.routes.map((r) =>
-        r.id === cmd.routeId ? { ...r, geometry: cmd.geometry } : r,
-      );
-      return { ...doc, layers: { ...doc.layers, routes } };
-    }
-    case "route.setSemantic": {
-      const routes = doc.layers.routes.map((r) =>
-        r.id === cmd.routeId ? { ...r, semantic: cmd.semantic } : r,
-      );
-      return { ...doc, layers: { ...doc.layers, routes } };
-    }
     case "route.remove":
       return {
         ...doc,
@@ -59,14 +59,123 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
           routes: doc.layers.routes.filter((r) => r.id !== cmd.routeId),
         },
       };
+    case "route.setSemantic":
+      return mapRoute(doc, cmd.routeId, (r) => ({ ...r, semantic: cmd.semantic }));
+    case "route.setStyle":
+      return mapRoute(doc, cmd.routeId, (r) => ({ ...r, style: cmd.style }));
+
+    /* ---- Node-level ---- */
+    case "route.addNode":
+      return mapRoute(doc, cmd.routeId, (r) => {
+        const nodes = [...r.nodes, cmd.node];
+        let segments = r.segments;
+        if (cmd.afterNodeId) {
+          const seg: RouteSegment = {
+            id: uid("seg"),
+            fromNodeId: cmd.afterNodeId,
+            toNodeId: cmd.node.id,
+            shape: cmd.shape ?? "straight",
+            strokePattern: cmd.strokePattern ?? "solid",
+            controlOffset: null,
+          };
+          segments = [...segments, seg];
+        }
+        return { ...r, nodes, segments };
+      });
+
+    case "route.moveNode":
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        nodes: r.nodes.map((n) =>
+          n.id === cmd.nodeId ? { ...n, position: cmd.position } : n,
+        ),
+      }));
+
+    case "route.removeNode":
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        nodes: r.nodes.filter((n) => n.id !== cmd.nodeId),
+        segments: r.segments.filter(
+          (s) => s.fromNodeId !== cmd.nodeId && s.toNodeId !== cmd.nodeId,
+        ),
+      }));
+
+    case "route.insertNode":
+      return mapRoute(doc, cmd.routeId, (r) => {
+        const oldSeg = r.segments.find((s) => s.id === cmd.segmentId);
+        if (!oldSeg) return r;
+        const seg1: RouteSegment = {
+          id: uid("seg"),
+          fromNodeId: oldSeg.fromNodeId,
+          toNodeId: cmd.node.id,
+          shape: oldSeg.shape,
+          strokePattern: oldSeg.strokePattern,
+          controlOffset: null,
+        };
+        const seg2: RouteSegment = {
+          id: uid("seg"),
+          fromNodeId: cmd.node.id,
+          toNodeId: oldSeg.toNodeId,
+          shape: oldSeg.shape,
+          strokePattern: oldSeg.strokePattern,
+          controlOffset: null,
+        };
+        return {
+          ...r,
+          nodes: [...r.nodes, cmd.node],
+          segments: [...r.segments.filter((s) => s.id !== cmd.segmentId), seg1, seg2],
+        };
+      });
+
+    /* ---- Branch ---- */
+    case "route.addBranch":
+      return mapRoute(doc, cmd.routeId, (r) => {
+        const seg: RouteSegment = {
+          id: uid("seg"),
+          fromNodeId: cmd.fromNodeId,
+          toNodeId: cmd.toNode.id,
+          shape: cmd.shape ?? "straight",
+          strokePattern: cmd.strokePattern ?? "solid",
+          controlOffset: null,
+        };
+        return {
+          ...r,
+          nodes: [...r.nodes, cmd.toNode],
+          segments: [...r.segments, seg],
+        };
+      });
+
+    /* ---- Segment-level ---- */
+    case "route.setSegmentShape":
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        segments: r.segments.map((s) =>
+          s.id === cmd.segmentId ? { ...s, shape: cmd.shape, controlOffset: null } : s,
+        ),
+      }));
+
+    case "route.setSegmentStroke":
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        segments: r.segments.map((s) =>
+          s.id === cmd.segmentId ? { ...s, strokePattern: cmd.strokePattern } : s,
+        ),
+      }));
+
+    case "route.setSegmentControl":
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        segments: r.segments.map((s) =>
+          s.id === cmd.segmentId ? { ...s, controlOffset: cmd.controlOffset } : s,
+        ),
+      }));
+
+    /* ---- Annotations ---- */
     case "annotation.upsert": {
       const others = doc.layers.annotations.filter((a) => a.id !== cmd.annotation.id);
       return {
         ...doc,
-        layers: {
-          ...doc.layers,
-          annotations: [...others, cmd.annotation],
-        },
+        layers: { ...doc.layers, annotations: [...others, cmd.annotation] },
       };
     }
     case "annotation.remove":
@@ -77,20 +186,19 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
           annotations: doc.layers.annotations.filter((a) => a.id !== cmd.annotationId),
         },
       };
+
+    /* ---- Formation ---- */
     case "formation.set":
-      return {
-        ...doc,
-        formation: {
-          ...doc.formation,
-          semantic: cmd.semantic,
-        },
-      };
+      return { ...doc, formation: { ...doc.formation, semantic: cmd.semantic } };
+
+    /* ---- Document ---- */
     case "document.setPrintProfile":
       return { ...doc, printProfile: cmd.printProfile };
     case "document.setMetadata":
       return { ...doc, metadata: { ...doc.metadata, ...cmd.patch } };
     case "document.setTimeline":
       return { ...doc, timeline: cmd.timeline };
+
     case "document.flip": {
       const axis = cmd.axis;
       return {
@@ -114,24 +222,16 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
           })),
           routes: doc.layers.routes.map((r) => ({
             ...r,
-            geometry: {
-              ...r.geometry,
-              segments: r.geometry.segments.map((s) => {
-                if (s.type === "line") {
-                  return {
-                    ...s,
-                    from: flipPoint(s.from, axis),
-                    to: flipPoint(s.to, axis),
-                  };
-                }
-                return {
-                  ...s,
-                  from: flipPoint(s.from, axis),
-                  control: flipPoint(s.control, axis),
-                  to: flipPoint(s.to, axis),
-                };
-              }),
-            },
+            nodes: r.nodes.map((n) => ({
+              ...n,
+              position: flipPoint(n.position, axis),
+            })),
+            segments: r.segments.map((s) => ({
+              ...s,
+              controlOffset: s.controlOffset
+                ? flipPoint(s.controlOffset, axis)
+                : null,
+            })),
           })),
           annotations: doc.layers.annotations.map((a) => ({
             ...a,

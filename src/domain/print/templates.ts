@@ -1,4 +1,5 @@
 import type { PlayDocument } from "../play/types";
+import { pathGeometryToSvgD, routeToPathGeometry } from "../play/geometry";
 
 export type PrintTemplateKind = "wristband" | "full_sheet";
 
@@ -75,7 +76,10 @@ export function compilePlayToSvg(
 
   let routePaths = "";
   for (const r of doc.layers.routes) {
-    const d = r.geometry.segments
+    // Convert node-based route to PathGeometry for rendering
+    const geometry = routeToPathGeometry(r);
+    const segments = geometry.segments;
+    const d = segments
       .map((seg, i) => {
         if (seg.type === "line") {
           const fx = fieldX + seg.from.x * fieldW;

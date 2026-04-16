@@ -39,6 +39,28 @@ export type PathGeometry = {
   closed?: boolean;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Node-based route model                                            */
+/* ------------------------------------------------------------------ */
+
+export type RouteNode = {
+  id: string;
+  position: Point2;
+};
+
+export type SegmentShape = "straight" | "curve" | "zigzag";
+export type StrokePattern = "solid" | "dashed" | "dotted";
+
+export type RouteSegment = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  shape: SegmentShape;
+  strokePattern: StrokePattern;
+  /** Manual curve control offset (null = auto-computed) */
+  controlOffset: Point2 | null;
+};
+
 export type RouteSemantic = {
   family:
     | "slant"
@@ -66,7 +88,8 @@ export type Route = {
   id: string;
   carrierPlayerId: string;
   semantic: RouteSemantic | null;
-  geometry: PathGeometry;
+  nodes: RouteNode[];
+  segments: RouteSegment[];
   style: RouteStyle;
   motion?: boolean;
 };

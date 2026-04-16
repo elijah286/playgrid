@@ -1,6 +1,6 @@
 "use client";
 
-import { pathGeometryToSvgD } from "@/domain/play/geometry";
+import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
 import type { PlayDocument } from "@/domain/play/types";
 
 /** Compact preview — tap-to-animate style using SVG SMIL */
@@ -15,7 +15,8 @@ export function RouteAnimation({ doc }: { doc: PlayDocument }) {
       </defs>
       <rect width={1} height={1} fill="url(#animFieldGrad)" opacity={0.9} />
       {doc.layers.routes.map((r) => {
-        const d = pathGeometryToSvgD(r.geometry);
+        const geometry = routeToPathGeometry(r);
+        const d = pathGeometryToSvgD(geometry);
         return (
           <path
             key={r.id}
