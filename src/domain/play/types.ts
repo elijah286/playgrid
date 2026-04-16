@@ -49,7 +49,7 @@ export type RouteNode = {
 };
 
 export type SegmentShape = "straight" | "curve" | "zigzag";
-export type StrokePattern = "solid" | "dashed" | "dotted";
+export type StrokePattern = "solid" | "dashed" | "dotted" | "motion";
 
 export type RouteSegment = {
   id: string;

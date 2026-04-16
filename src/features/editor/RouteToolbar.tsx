@@ -7,31 +7,26 @@ import {
   Undo2,
   Check,
   Sparkles,
+  Waves,
 } from "lucide-react";
-import type { PlayCommand } from "@/domain/play/commands";
 import type { SegmentShape, StrokePattern } from "@/domain/play/types";
 import { SegmentedControl, IconButton, Button } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 type Props = {
-  /** Currently active/selected shape */
   shape: SegmentShape;
   onShapeChange: (s: SegmentShape) => void;
-  /** Currently active/selected stroke pattern */
   strokePattern: StrokePattern;
   onStrokePatternChange: (p: StrokePattern) => void;
-  /** Currently active color */
   color: string;
   onColorChange: (c: string) => void;
-  /** Is a segment with a manual control offset selected? */
+  width: number;
+  onWidthChange: (w: number) => void;
   canSmooth: boolean;
   onSmooth: () => void;
-  /** Undo callback */
   onUndo: () => void;
   canUndo: boolean;
-  /** Done / finish placing */
   onDone: () => void;
-  /** Label for the done button */
   doneLabel?: string;
 };
 
@@ -41,10 +36,11 @@ const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[
   { value: "zigzag", label: "Zigzag", icon: ZapOff },
 ];
 
-const STROKE_OPTIONS: { value: StrokePattern; label: string }[] = [
+const STROKE_OPTIONS: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
   { value: "solid", label: "Solid" },
   { value: "dashed", label: "Dashed" },
   { value: "dotted", label: "Dotted" },
+  { value: "motion", label: "Motion", icon: Waves },
 ];
 
 const COLOR_PRESETS = [
@@ -56,6 +52,12 @@ const COLOR_PRESETS = [
   "#22C55E",
 ];
 
+const WIDTH_OPTIONS: { value: number; label: string; px: number }[] = [
+  { value: 1.5, label: "Thin", px: 1 },
+  { value: 2.5, label: "Med", px: 2 },
+  { value: 4.0, label: "Thick", px: 3 },
+];
+
 export function RouteToolbar({
   shape,
   onShapeChange,
@@ -63,6 +65,8 @@ export function RouteToolbar({
   onStrokePatternChange,
   color,
   onColorChange,
+  width,
+  onWidthChange,
   canSmooth,
   onSmooth,
   onUndo,
@@ -92,6 +96,33 @@ export function RouteToolbar({
 
       <div className="h-5 w-px bg-border" />
 
+      {/* Line width */}
+      <div className="flex items-center gap-1">
+        {WIDTH_OPTIONS.map((w) => {
+          const active = w.value === width;
+          return (
+            <button
+              key={w.value}
+              type="button"
+              onClick={() => onWidthChange(w.value)}
+              title={w.label}
+              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                active
+                  ? "bg-surface-inset text-foreground shadow-sm"
+                  : "text-muted hover:bg-surface-inset/50 hover:text-foreground"
+              }`}
+            >
+              <div
+                className="rounded-full bg-current"
+                style={{ width: 14, height: w.px }}
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="h-5 w-px bg-border" />
+
       {/* Color swatches */}
       <div className="flex items-center gap-1">
         {COLOR_PRESETS.map((c) => (
@@ -110,7 +141,6 @@ export function RouteToolbar({
 
       <div className="h-5 w-px bg-border" />
 
-      {/* Smooth button */}
       <Tooltip content="Smooth curve">
         <IconButton
           icon={Sparkles}
@@ -120,7 +150,6 @@ export function RouteToolbar({
         />
       </Tooltip>
 
-      {/* Undo */}
       <Tooltip content="Undo">
         <IconButton
           icon={Undo2}
@@ -132,7 +161,6 @@ export function RouteToolbar({
 
       <div className="ml-auto" />
 
-      {/* Done */}
       <Button variant="primary" size="sm" leftIcon={Check} onClick={onDone}>
         {doneLabel}
       </Button>

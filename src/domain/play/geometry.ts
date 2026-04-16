@@ -28,6 +28,9 @@ export function strokePatternToDash(pattern: RouteSegmentType["strokePattern"]):
       return "0.015 0.008";
     case "dotted":
       return "0.003 0.008";
+    case "motion":
+      // Long-short-short rhythm (classic "motion" indicator)
+      return "0.018 0.006 0.004 0.006";
   }
 }
 

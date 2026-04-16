@@ -5,8 +5,7 @@ import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import {
   routeToRenderedSegments,
-  closestPointOnLine,
-  strokePatternToDash,
+  simplifyPolyline,
 } from "@/domain/play/geometry";
 import { uid } from "@/domain/play/factory";
 
@@ -31,10 +30,17 @@ type Interaction =
     }
   | { type: "dragging_player"; playerId: string }
   | { type: "dragging_node"; routeId: string; nodeId: string }
-  | { type: "dragging_segment"; routeId: string; segmentId: string; origin: Point2 }
-  | { type: "placing_route"; routeId: string; lastNodeId: string; cursorPos: Point2 | null };
+  | { type: "dragging_segment"; routeId: string; segmentId: string }
+  /** User is drawing freehand from a selected player */
+  | {
+      type: "drawing_route";
+      playerId: string;
+      /** Points captured during drag (includes player position as first point) */
+      points: Point2[];
+    };
 
 const DRAG_THRESHOLD_PX = 5;
+const SIMPLIFY_EPSILON = 0.012;
 
 /* ------------------------------------------------------------------ */
 /*  Visual constants                                                  */
@@ -44,7 +50,6 @@ const FIELD_BG = "#2D8B4E";
 const FIELD_DARK = "#247540";
 const LINE_COLOR = "rgba(255,255,255,0.15)";
 const NODE_RADIUS = 0.012;
-const NODE_HIT_RADIUS = 0.02;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -61,11 +66,11 @@ type Props = {
   onSelectRoute: (id: string | null) => void;
   onSelectNode: (id: string | null) => void;
   onSelectSegment: (id: string | null) => void;
-  placingRoute: boolean;
-  onPlacingRouteChange: (placing: boolean) => void;
-  /** Active shape/stroke for new segments */
+  /** Active settings for the next route that will be drawn */
   activeShape: import("@/domain/play/types").SegmentShape;
   activeStrokePattern: import("@/domain/play/types").StrokePattern;
+  activeColor: string;
+  activeWidth: number;
 };
 
 export function EditorCanvas({
@@ -79,10 +84,10 @@ export function EditorCanvas({
   onSelectRoute,
   onSelectNode,
   onSelectSegment,
-  placingRoute,
-  onPlacingRouteChange,
   activeShape,
   activeStrokePattern,
+  activeColor,
+  activeWidth,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
@@ -110,10 +115,82 @@ export function EditorCanvas({
     [],
   );
 
-  /* ---------- Helper: find the route being placed ---------- */
+  /* ---------- Active style builder ---------- */
 
-  const placingState =
-    interaction.type === "placing_route" ? interaction : null;
+  const buildRouteStyle = useCallback(
+    () => ({ stroke: activeColor, strokeWidth: activeWidth }),
+    [activeColor, activeWidth],
+  );
+
+  /* ---------- Create a route from a list of points (freehand release) ---------- */
+
+  const commitFreehandRoute = useCallback(
+    (playerId: string, rawPoints: Point2[]) => {
+      // Need at least player pos + 1 more point
+      if (rawPoints.length < 2) return;
+      const simplified = simplifyPolyline(rawPoints, SIMPLIFY_EPSILON);
+      if (simplified.length < 2) return;
+
+      const nodes: RouteNode[] = simplified.map((pt) => ({
+        id: uid("node"),
+        position: pt,
+      }));
+      const segments: RouteSegment[] = [];
+      for (let i = 0; i < nodes.length - 1; i++) {
+        segments.push({
+          id: uid("seg"),
+          fromNodeId: nodes[i].id,
+          toNodeId: nodes[i + 1].id,
+          shape: activeShape,
+          strokePattern: activeStrokePattern,
+          controlOffset: null,
+        });
+      }
+      const route: Route = {
+        id: uid("route"),
+        carrierPlayerId: playerId,
+        semantic: null,
+        nodes,
+        segments,
+        style: buildRouteStyle(),
+      };
+      dispatch({ type: "route.add", route });
+      onSelectRoute(route.id);
+      onSelectNode(null);
+      onSelectSegment(null);
+    },
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
+  );
+
+  /* ---------- Create a 2-node line route (single click) ---------- */
+
+  const commitClickRoute = useCallback(
+    (playerId: string, playerPos: Point2, clickPos: Point2) => {
+      const startNode: RouteNode = { id: uid("node"), position: playerPos };
+      const endNode: RouteNode = { id: uid("node"), position: clickPos };
+      const seg: RouteSegment = {
+        id: uid("seg"),
+        fromNodeId: startNode.id,
+        toNodeId: endNode.id,
+        shape: activeShape,
+        strokePattern: activeStrokePattern,
+        controlOffset: null,
+      };
+      const route: Route = {
+        id: uid("route"),
+        carrierPlayerId: playerId,
+        semantic: null,
+        nodes: [startNode, endNode],
+        segments: [seg],
+        style: buildRouteStyle(),
+      };
+      dispatch({ type: "route.add", route });
+      onSelectRoute(route.id);
+      onSelectNode(null);
+      onSelectSegment(null);
+    },
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
+  );
 
   /* ---------- Pointer handlers ---------- */
 
@@ -144,95 +221,15 @@ export function EditorCanvas({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      const p = toNorm(e);
-
-      // If we're in placing mode, add a new node
-      if (placingState) {
-        const newNode: RouteNode = { id: uid("node"), position: p };
-        dispatch({
-          type: "route.addNode",
-          routeId: placingState.routeId,
-          node: newNode,
-          afterNodeId: placingState.lastNodeId,
-          shape: activeShape,
-          strokePattern: activeStrokePattern,
-        });
-        const next: Interaction = {
-          type: "placing_route",
-          routeId: placingState.routeId,
-          lastNodeId: newNode.id,
-          cursorPos: p,
-        };
-        setInteraction(next);
-        interactionRef.current = next;
-        return;
-      }
-
-      // If a player is selected and we click canvas (not on any element),
-      // and we have a selected node on a route → branch
-      if (selectedNodeId && selectedRouteId) {
-        const newNode: RouteNode = { id: uid("node"), position: p };
-        dispatch({
-          type: "route.addBranch",
-          routeId: selectedRouteId,
-          fromNodeId: selectedNodeId,
-          toNode: newNode,
-          shape: activeShape,
-          strokePattern: activeStrokePattern,
-        });
-        onSelectNode(newNode.id);
-        return;
-      }
-
-      // If a player is selected but no route is selected, start placing a new route
-      if (selectedPlayerId && !selectedRouteId) {
-        const firstNode: RouteNode = { id: uid("node"), position: p };
-        const routeId = uid("route");
-        const route: Route = {
-          id: routeId,
-          carrierPlayerId: selectedPlayerId,
-          semantic: null,
-          nodes: [firstNode],
-          segments: [],
-          style: { stroke: "#FFFFFF", strokeWidth: 2.5 },
-        };
-        dispatch({ type: "route.add", route });
-        onSelectRoute(routeId);
-        onSelectNode(firstNode.id);
-        const next: Interaction = {
-          type: "placing_route",
-          routeId,
-          lastNodeId: firstNode.id,
-          cursorPos: p,
-        };
-        setInteraction(next);
-        interactionRef.current = next;
-        onPlacingRouteChange(true);
-        return;
-      }
-
-      // Default: canvas click for deselect
+      // Canvas click — always start as pending; intent (click vs drag) decided on move/up
       startInteraction(e, { kind: "canvas" });
     },
-    [
-      toNorm, placingState, selectedNodeId, selectedRouteId, selectedPlayerId,
-      dispatch, activeShape, activeStrokePattern, onSelectRoute, onSelectNode,
-      onPlacingRouteChange, startInteraction,
-    ],
+    [startInteraction],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const state = interactionRef.current;
-
-      // Update cursor position during placing
-      if (state.type === "placing_route") {
-        const p = toNorm(e);
-        const next: Interaction = { ...state, cursorPos: p };
-        setInteraction(next);
-        interactionRef.current = next;
-        return;
-      }
 
       if (state.type === "idle") return;
 
@@ -267,13 +264,26 @@ export function EditorCanvas({
             type: "dragging_segment",
             routeId: state.target.routeId,
             segmentId: state.target.segmentId,
-            origin: state.origin,
           };
           setInteraction(next);
           interactionRef.current = next;
           return;
         }
 
+        // Canvas drag + player selected → start freehand drawing from player pos
+        if (state.target.kind === "canvas" && selectedPlayerId) {
+          const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
+          if (!player) return;
+          const next: Interaction = {
+            type: "drawing_route",
+            playerId: selectedPlayerId,
+            points: [player.position, state.origin, toNorm(e)],
+          };
+          setInteraction(next);
+          interactionRef.current = next;
+          return;
+        }
+        // Canvas drag without player selection = just deselect on release
         return;
       }
 
@@ -297,33 +307,36 @@ export function EditorCanvas({
       }
 
       if (state.type === "dragging_segment") {
-        // Dragging a segment sets a manual control offset for curve reshaping
         const p = toNorm(e);
-        dispatch({
-          type: "route.setSegmentControl",
-          routeId: state.routeId,
-          segmentId: state.segmentId,
-          controlOffset: p,
-        });
-        // Also switch the segment to curve if it isn't already
         dispatch({
           type: "route.setSegmentShape",
           routeId: state.routeId,
           segmentId: state.segmentId,
           shape: "curve",
         });
+        dispatch({
+          type: "route.setSegmentControl",
+          routeId: state.routeId,
+          segmentId: state.segmentId,
+          controlOffset: p,
+        });
+        return;
+      }
+
+      if (state.type === "drawing_route") {
+        const p = toNorm(e);
+        const next: Interaction = { ...state, points: [...state.points, p] };
+        setInteraction(next);
+        interactionRef.current = next;
         return;
       }
     },
-    [toNorm, dispatch],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players],
   );
 
   const finishInteraction = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const state = interactionRef.current;
-
-      // Don't finish if we're placing
-      if (state.type === "placing_route") return;
 
       if (state.type === "pending") {
         const { target } = state;
@@ -338,12 +351,25 @@ export function EditorCanvas({
           onSelectNode(null);
           onSelectPlayer(null);
         } else if (target.kind === "canvas") {
-          onSelectPlayer(null);
-          onSelectRoute(null);
-          onSelectNode(null);
-          onSelectSegment(null);
+          // Canvas click (no drag)
+          if (selectedPlayerId) {
+            // Player was selected → create a 2-node line route
+            const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
+            if (player) {
+              commitClickRoute(selectedPlayerId, player.position, state.origin);
+            }
+          } else {
+            // Nothing selected, nothing to create; deselect all
+            onSelectPlayer(null);
+            onSelectRoute(null);
+            onSelectNode(null);
+            onSelectSegment(null);
+          }
         }
-        // player: already selected on pointerdown
+      }
+
+      if (state.type === "drawing_route") {
+        commitFreehandRoute(state.playerId, state.points);
       }
 
       try {
@@ -355,48 +381,15 @@ export function EditorCanvas({
       setInteraction(next);
       interactionRef.current = next;
     },
-    [onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment],
+    [
+      onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
+      selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
+    ],
   );
-
-  /** Called externally (Done button, Escape, Enter) to finish placing */
-  const finishPlacing = useCallback(() => {
-    // If the route has only one node and no segments, remove it
-    if (placingState) {
-      const route = doc.layers.routes.find((r) => r.id === placingState.routeId);
-      if (route && route.nodes.length <= 1) {
-        dispatch({ type: "route.remove", routeId: placingState.routeId });
-        onSelectRoute(null);
-      }
-    }
-    const next: Interaction = { type: "idle" };
-    setInteraction(next);
-    interactionRef.current = next;
-    onPlacingRouteChange(false);
-    onSelectNode(null);
-  }, [placingState, doc.layers.routes, dispatch, onSelectRoute, onSelectNode, onPlacingRouteChange]);
-
-  // Expose finishPlacing via keyboard
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if ((e.key === "Escape" || e.key === "Enter") && placingState) {
-        e.preventDefault();
-        finishPlacing();
-      }
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [placingState, finishPlacing]);
-
-  // Expose finishPlacing to parent
-  useEffect(() => {
-    // Store on the SVG element for parent access
-    const el = svgRef.current;
-    if (el) (el as unknown as Record<string, unknown>).__finishPlacing = finishPlacing;
-  }, [finishPlacing]);
 
   /* ---------- Double-click: insert node on segment ---------- */
 
-  const handleDoubleClick = useCallback(
+  const handleSegmentDoubleClick = useCallback(
     (routeId: string, segmentId: string, e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
@@ -417,10 +410,11 @@ export function EditorCanvas({
 
   /* ---------- Dynamic cursor ---------- */
 
-  let svgCursor = "crosshair";
+  let svgCursor = selectedPlayerId ? "crosshair" : "default";
   if (interaction.type === "dragging_player") svgCursor = "grabbing";
   if (interaction.type === "dragging_node") svgCursor = "grabbing";
   if (interaction.type === "dragging_segment") svgCursor = "grabbing";
+  if (interaction.type === "drawing_route") svgCursor = "crosshair";
 
   /* ---------- Yard lines ---------- */
 
@@ -432,9 +426,20 @@ export function EditorCanvas({
     );
   }
 
-  /* ---------- Determine which route is "active" (selected or being placed) ---------- */
+  /* ---------- Draft drawing path ---------- */
 
-  const activeRouteId = placingState?.routeId ?? selectedRouteId;
+  const draftPath = (() => {
+    if (interaction.type !== "drawing_route") return null;
+    const pts = interaction.points;
+    if (pts.length < 2) return null;
+    const parts: string[] = [];
+    pts.forEach((p, i) => {
+      const x = p.x;
+      const y = 1 - p.y;
+      parts.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
+    });
+    return parts.join(" ");
+  })();
 
   return (
     <svg
@@ -459,15 +464,13 @@ export function EditorCanvas({
 
       {/* Routes */}
       {doc.layers.routes.map((route) => {
-        const isActive = route.id === activeRouteId;
+        const isActive = route.id === selectedRouteId;
         const rendered = routeToRenderedSegments(route);
-        const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
 
         return (
           <g key={route.id}>
             {/* Segments */}
             {rendered.map((rs) => {
-              const seg = route.segments.find((s) => s.id === rs.segmentId);
               const isSelectedSeg = rs.segmentId === selectedSegmentId && isActive;
               return (
                 <g key={rs.segmentId}>
@@ -487,7 +490,7 @@ export function EditorCanvas({
                       });
                     }}
                     onDoubleClick={(e) =>
-                      handleDoubleClick(route.id, rs.segmentId, e)
+                      handleSegmentDoubleClick(route.id, rs.segmentId, e)
                     }
                   />
                   {/* Visible path */}
@@ -534,28 +537,18 @@ export function EditorCanvas({
         );
       })}
 
-      {/* Placing preview line: from last node to cursor */}
-      {placingState?.cursorPos && (() => {
-        const route = doc.layers.routes.find((r) => r.id === placingState.routeId);
-        const lastNode = route?.nodes.find((n) => n.id === placingState.lastNodeId);
-        if (!lastNode) return null;
-        const fx = lastNode.position.x;
-        const fy = 1 - lastNode.position.y;
-        const tx = placingState.cursorPos.x;
-        const ty = 1 - placingState.cursorPos.y;
-        return (
-          <line
-            x1={fx}
-            y1={fy}
-            x2={tx}
-            y2={ty}
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth={0.003}
-            strokeDasharray="0.008 0.005"
-            pointerEvents="none"
-          />
-        );
-      })()}
+      {/* Draft freehand preview */}
+      {draftPath && (
+        <path
+          d={draftPath}
+          fill="none"
+          stroke="rgba(255,255,255,0.7)"
+          strokeWidth={0.004}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pointerEvents="none"
+        />
+      )}
 
       {/* Players */}
       {doc.layers.players.map((pl) => {
@@ -586,10 +579,6 @@ export function EditorCanvas({
               style={{ cursor: isDragging ? "grabbing" : "grab" }}
               onPointerDown={(e) => {
                 e.stopPropagation();
-                // If placing, finish first
-                if (placingState) {
-                  finishPlacing();
-                }
                 startInteraction(e, { kind: "player", playerId: pl.id });
               }}
             />
