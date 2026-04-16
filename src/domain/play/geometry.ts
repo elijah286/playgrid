@@ -45,10 +45,63 @@ function autoControlPoint(from: Point2, to: Point2): Point2 {
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy);
   const offset = len * 0.2;
-  // Perpendicular offset (rotate 90° CCW)
+  // Perpendicular offset (rotate 90° CCW) — fallback only; prefer catmullRomD when route context available
   const nx = -dy / (len || 1);
   const ny = dx / (len || 1);
   return { x: mx + nx * offset, y: my + ny * offset };
+}
+
+/**
+ * Catmull-Rom → cubic bezier (SVG `C` command).
+ * p0/p3 are the previous and next nodes (for tangent computation).
+ * When absent, the tangent is extrapolated from p1→p2.
+ */
+function catmullRomD(
+  p0: Point2 | null,
+  p1: Point2,
+  p2: Point2,
+  p3: Point2 | null,
+): string {
+  // Ghost endpoints when neighbours are missing (extend the tangent linearly)
+  const g0x = p0 ? p0.x : p1.x - (p2.x - p1.x);
+  const g0y = p0 ? p0.y : p1.y - (p2.y - p1.y);
+  const g3x = p3 ? p3.x : p2.x + (p2.x - p1.x);
+  const g3y = p3 ? p3.y : p2.y + (p2.y - p1.y);
+
+  // Cubic bezier control points (Catmull-Rom formula, tension = 1/6)
+  const cp1x = p1.x + (p2.x - g0x) / 6;
+  const cp1y = p1.y + (p2.y - g0y) / 6;
+  const cp2x = p2.x - (g3x - p1.x) / 6;
+  const cp2y = p2.y - (g3y - p1.y) / 6;
+
+  return (
+    `M ${p1.x} ${toSvgY(p1.y)} ` +
+    `C ${cp1x} ${toSvgY(cp1y)} ${cp2x} ${toSvgY(cp2y)} ${p2.x} ${toSvgY(p2.y)}`
+  );
+}
+
+/**
+ * Catmull-Rom → single quadratic bezier approximation (for the PathGeometry bridge).
+ * Returns the quadratic control point.
+ */
+function catmullRomQuadControl(
+  p0: Point2 | null,
+  p1: Point2,
+  p2: Point2,
+  p3: Point2 | null,
+): Point2 {
+  const g0x = p0 ? p0.x : p1.x - (p2.x - p1.x);
+  const g0y = p0 ? p0.y : p1.y - (p2.y - p1.y);
+  const g3x = p3 ? p3.x : p2.x + (p2.x - p1.x);
+  const g3y = p3 ? p3.y : p2.y + (p2.y - p1.y);
+
+  const cp1x = p1.x + (p2.x - g0x) / 6;
+  const cp1y = p1.y + (p2.y - g0y) / 6;
+  const cp2x = p2.x - (g3x - p1.x) / 6;
+  const cp2y = p2.y - (g3y - p1.y) / 6;
+
+  // Mid-point of the two cubic CPs ≈ quadratic CP
+  return { x: (cp1x + cp2x) / 2, y: (cp1y + cp2y) / 2 };
 }
 
 function zigzagPoints(from: Point2, to: Point2, zigCount = 5): Point2[] {
@@ -123,17 +176,62 @@ export type RenderedSegment = {
 
 export function routeToRenderedSegments(route: Route): RenderedSegment[] {
   const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
+
+  // Build adjacency for Catmull-Rom neighbour lookup.
+  // segTo[nodeId]   = the segment whose toNodeId === nodeId (its predecessor)
+  // segFrom[nodeId] = the segment whose fromNodeId === nodeId (its successor)
+  // Note: in branching routes multiple segs can share a fromNodeId; we just pick
+  // the first match — good enough for visual smoothing.
+  const segTo = new Map<string, RouteSegmentType>();
+  const segFrom = new Map<string, RouteSegmentType>();
+  for (const s of route.segments) {
+    if (!segTo.has(s.toNodeId)) segTo.set(s.toNodeId, s);
+    if (!segFrom.has(s.fromNodeId)) segFrom.set(s.fromNodeId, s);
+  }
+
   const result: RenderedSegment[] = [];
+
   for (const seg of route.segments) {
-    const from = nodeMap.get(seg.fromNodeId);
-    const to = nodeMap.get(seg.toNodeId);
-    if (!from || !to) continue;
+    const fromNode = nodeMap.get(seg.fromNodeId);
+    const toNode = nodeMap.get(seg.toNodeId);
+    if (!fromNode || !toNode) continue;
+
+    let d: string;
+
+    if (seg.shape === "curve") {
+      if (seg.controlOffset) {
+        // Manual override — keep quadratic bezier
+        const fx = fromNode.position.x;
+        const fy = toSvgY(fromNode.position.y);
+        const tx = toNode.position.x;
+        const ty = toSvgY(toNode.position.y);
+        const cx = seg.controlOffset.x;
+        const cy = toSvgY(seg.controlOffset.y);
+        d = `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
+      } else {
+        // Auto — use Catmull-Rom with neighbouring nodes for natural flow
+        const prevSeg = segTo.get(seg.fromNodeId);
+        const nextSeg = segFrom.get(seg.toNodeId);
+        const prevNode = prevSeg ? nodeMap.get(prevSeg.fromNodeId) : undefined;
+        const nextNode = nextSeg ? nodeMap.get(nextSeg.toNodeId) : undefined;
+        d = catmullRomD(
+          prevNode?.position ?? null,
+          fromNode.position,
+          toNode.position,
+          nextNode?.position ?? null,
+        );
+      }
+    } else {
+      d = segmentToSvgD(seg, fromNode.position, toNode.position);
+    }
+
     result.push({
       segmentId: seg.id,
-      d: segmentToSvgD(seg, from.position, to.position),
+      d,
       dash: strokePatternToDash(seg.strokePattern),
     });
   }
+
   return result;
 }
 
@@ -143,6 +241,15 @@ export function routeToRenderedSegments(route: Route): RenderedSegment[] {
 
 export function routeToPathGeometry(route: Route): PathGeometry {
   const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
+
+  // Same adjacency lookup as routeToRenderedSegments for consistent curves
+  const segTo = new Map<string, RouteSegmentType>();
+  const segFrom = new Map<string, RouteSegmentType>();
+  for (const s of route.segments) {
+    if (!segTo.has(s.toNodeId)) segTo.set(s.toNodeId, s);
+    if (!segFrom.has(s.fromNodeId)) segFrom.set(s.fromNodeId, s);
+  }
+
   const segments: PathGeometry["segments"] = [];
 
   for (const seg of route.segments) {
@@ -151,7 +258,21 @@ export function routeToPathGeometry(route: Route): PathGeometry {
     if (!from || !to) continue;
 
     if (seg.shape === "curve") {
-      const ctrl = seg.controlOffset ?? autoControlPoint(from.position, to.position);
+      let ctrl: Point2;
+      if (seg.controlOffset) {
+        ctrl = seg.controlOffset;
+      } else {
+        const prevSeg = segTo.get(seg.fromNodeId);
+        const nextSeg = segFrom.get(seg.toNodeId);
+        const prevNode = prevSeg ? nodeMap.get(prevSeg.fromNodeId) : undefined;
+        const nextNode = nextSeg ? nodeMap.get(nextSeg.toNodeId) : undefined;
+        ctrl = catmullRomQuadControl(
+          prevNode?.position ?? null,
+          from.position,
+          to.position,
+          nextNode?.position ?? null,
+        );
+      }
       segments.push({
         type: "quadratic",
         from: from.position,
