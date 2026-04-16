@@ -20,17 +20,26 @@ function toSvgY(fieldY: number) {
 /*  Stroke pattern → SVG dash array                                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Dash array values for use with SVG `strokeDasharray` when the path has
+ * `vectorEffect="non-scaling-stroke"`.  Per the SVG spec, non-scaling-stroke
+ * causes both stroke-width AND stroke-dasharray to be interpreted in display
+ * (screen-pixel) units rather than user-coordinate units, so values here are
+ * in pixels — not SVG viewport fractions.
+ */
 export function strokePatternToDash(pattern: RouteSegmentType["strokePattern"]): string | undefined {
   switch (pattern) {
     case "solid":
       return undefined;
     case "dashed":
-      return "0.015 0.008";
+      // 10px dash, 6px gap — visible at any stroke width
+      return "10 6";
     case "dotted":
-      return "0.003 0.008";
+      // Near-zero dash + round linecap = circular dot; 7px gap between dots
+      return "1 7";
     case "motion":
-      // Long-short-short rhythm (classic "motion" indicator)
-      return "0.018 0.006 0.004 0.006";
+      // Long-short-short rhythm (classic motion indicator)
+      return "14 5 3 5";
   }
 }
 
