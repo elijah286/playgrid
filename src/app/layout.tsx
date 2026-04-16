@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
+import { ToastProvider } from "@/components/ui/Toast";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   title: "PlayGrid",
-  description: "Youth football play designer — offense, print, and field viewing.",
+  description: "Football play designer for coaches and athletes — design, print, and carry your playbook.",
 };
 
 export default function RootLayout({
@@ -13,10 +21,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-slate-50 text-slate-900">
-        <ConfigBanner />
-        {children}
+    <html lang="en" className={`h-full antialiased ${inter.variable}`}>
+      <body className="min-h-full bg-surface text-foreground font-sans">
+        <ToastProvider>
+          <ConfigBanner />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

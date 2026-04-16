@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { signOutAction } from "@/app/actions/auth";
@@ -17,22 +18,23 @@ export default async function EditorLayout({ children }: { children: React.React
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-slate-200/80 bg-white/80 px-6 py-3 backdrop-blur">
+      <header className="border-b border-border bg-surface-dark px-6 py-2.5">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link href="/playbooks" className="text-sm font-semibold text-slate-900">
+          <Link href="/playbooks" className="text-sm font-extrabold tracking-tight text-primary">
             PlayGrid
           </Link>
           <form action={signOutAction}>
             <button
               type="submit"
-              className="text-sm text-slate-600 hover:text-slate-900"
+              className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
             >
+              <LogOut className="size-3.5" />
               Sign out
             </button>
           </form>
         </div>
       </header>
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-5">
         {children}
       </div>
     </div>

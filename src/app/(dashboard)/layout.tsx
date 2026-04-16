@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { signOutAction } from "@/app/actions/auth";
@@ -12,7 +13,7 @@ export default async function DashboardLayout({
   if (!hasSupabaseEnv()) {
     return (
       <div className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           Add Supabase environment variables to use authenticated playbooks.
         </p>
         <div className="mt-6">{children}</div>
@@ -30,21 +31,26 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col px-6 py-8">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <Link href="/playbooks" className="text-lg font-semibold tracking-tight text-slate-900">
-          PlayGrid
-        </Link>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="rounded-lg px-3 py-1.5 text-sm text-slate-600 ring-1 ring-slate-200 hover:bg-white"
-          >
-            Sign out
-          </button>
-        </form>
+    <div className="min-h-full">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface-raised/80 backdrop-blur-lg">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
+          <Link href="/playbooks" className="text-lg font-extrabold tracking-tight text-primary">
+            PlayGrid
+          </Link>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted hover:text-foreground hover:bg-surface-inset transition-colors"
+            >
+              <LogOut className="size-4" />
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
-      {children}
+      <main className="mx-auto max-w-6xl px-6 py-8">
+        {children}
+      </main>
     </div>
   );
 }

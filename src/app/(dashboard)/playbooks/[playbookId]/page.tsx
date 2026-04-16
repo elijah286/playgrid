@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { listPlaysAction } from "@/app/actions/plays";
@@ -13,7 +14,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   if (!hasSupabaseEnv()) {
     return (
       <div>
-        <p className="text-sm text-slate-600">Configure Supabase to load this playbook.</p>
+        <p className="text-sm text-muted">Configure Supabase to load this playbook.</p>
       </div>
     );
   }
@@ -30,12 +31,16 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const plays = await listPlaysAction(playbookId);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <Link href="/playbooks" className="text-sm text-slate-500 hover:text-slate-800">
-          ← Playbooks
+        <Link
+          href="/playbooks"
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="size-4" />
+          Playbooks
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{book.name}</h1>
+        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">{book.name}</h1>
       </div>
       <PlaybookDetailClient playbookId={playbookId} initialPlays={plays.ok ? plays.plays : []} />
     </div>

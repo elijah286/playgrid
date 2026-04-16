@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { Plus, Search, Pencil, Smartphone, FileText } from "lucide-react";
 import { createPlayAction } from "@/app/actions/plays";
+import { Button, Input, Card, Badge, EmptyState } from "@/components/ui";
 
 type PlayRow = {
   id: string;
@@ -50,57 +52,65 @@ export function PlaybookDetailClient({
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Search plays
-          </label>
-          <input
+          <Input
+            leftIcon={Search}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Code, name, concept"
-            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+            placeholder="Search by code, name, or concept..."
           />
         </div>
-        <button
-          type="button"
-          disabled={pending}
+        <Button
+          variant="primary"
+          leftIcon={Plus}
+          loading={pending}
           onClick={addPlay}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
         >
           New play
-        </button>
+        </Button>
       </div>
 
-      <ul className="divide-y divide-slate-200/80 rounded-2xl bg-white ring-1 ring-slate-200/80">
-        {filtered.length === 0 && (
-          <li className="px-4 py-6 text-sm text-slate-500">No plays match.</li>
-        )}
-        {filtered.map((p) => (
-          <li key={p.id}>
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          heading="No plays yet"
+          description="Create your first play to start designing routes and formations."
+          action={
+            <Button variant="primary" leftIcon={Plus} onClick={addPlay} loading={pending}>
+              New play
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p) => (
+            <Card key={p.id} hover className="flex flex-col justify-between p-5">
               <div>
-                <p className="font-medium text-slate-900">{p.name}</p>
-                <p className="text-xs text-slate-500">
-                  {p.wristband_code} · {p.concept || "—"}
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-foreground">{p.name}</h3>
+                  {p.wristband_code && (
+                    <Badge variant="primary">{p.wristband_code}</Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {p.concept || p.shorthand || "No concept set"}
                 </p>
               </div>
-              <div className="flex gap-2">
-                <Link
-                  href={`/plays/${p.id}/edit`}
-                  className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
-                >
-                  Edit
+              <div className="mt-4 flex gap-2">
+                <Link href={`/plays/${p.id}/edit`} className="flex-1">
+                  <Button variant="primary" size="sm" leftIcon={Pencil} className="w-full">
+                    Edit
+                  </Button>
                 </Link>
-                <Link
-                  href={`/m/play/${p.id}?playbookId=${playbookId}`}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50"
-                >
-                  Mobile
+                <Link href={`/m/play/${p.id}?playbookId=${playbookId}`}>
+                  <Button variant="secondary" size="sm" leftIcon={Smartphone}>
+                    Mobile
+                  </Button>
                 </Link>
               </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

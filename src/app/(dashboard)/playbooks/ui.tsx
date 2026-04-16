@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { BookOpen, Plus, Search } from "lucide-react";
 import { createPlaybookAction } from "@/app/actions/playbooks";
+import { Button, Input, Card, EmptyState } from "@/components/ui";
 
 type Row = { id: string; name: string; created_at: string | null };
 
@@ -11,6 +13,13 @@ export function PlaybooksClient({ initial }: { initial: Row[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
+  const [q, setQ] = useState("");
+
+  const filtered = initial.filter((p) => {
+    const s = q.trim().toLowerCase();
+    if (!s) return true;
+    return p.name.toLowerCase().includes(s);
+  });
 
   function create() {
     startTransition(async () => {
@@ -24,38 +33,60 @@ export function PlaybooksClient({ initial }: { initial: Row[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="New playbook name"
-          className="min-w-[200px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
-        />
-        <button
-          type="button"
-          disabled={pending}
-          onClick={create}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-        >
-          Create playbook
-        </button>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[200px] flex-1">
+          <Input
+            leftIcon={Search}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search playbooks..."
+          />
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Playbook name"
+            className="w-48"
+          />
+          <Button
+            variant="primary"
+            leftIcon={Plus}
+            loading={pending}
+            onClick={create}
+          >
+            Create
+          </Button>
+        </div>
       </div>
-      <ul className="divide-y divide-slate-200/80 rounded-2xl bg-white ring-1 ring-slate-200/80">
-        {initial.length === 0 && (
-          <li className="px-4 py-6 text-sm text-slate-500">No playbooks yet.</li>
-        )}
-        {initial.map((p) => (
-          <li key={p.id}>
-            <Link
-              href={`/playbooks/${p.id}`}
-              className="flex items-center justify-between px-4 py-4 hover:bg-slate-50/80"
-            >
-              <span className="font-medium text-slate-900">{p.name}</span>
-              <span className="text-xs text-slate-400">Open</span>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          heading="No playbooks yet"
+          description="Create your first playbook to start designing plays."
+          action={
+            <Button variant="primary" leftIcon={Plus} onClick={create} loading={pending}>
+              Create playbook
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p) => (
+            <Link key={p.id} href={`/playbooks/${p.id}`}>
+              <Card hover className="p-5 transition-colors hover:border-primary/30">
+                <h3 className="font-semibold text-foreground">{p.name}</h3>
+                {p.created_at && (
+                  <p className="mt-1 text-xs text-muted">
+                    Created {new Date(p.created_at).toLocaleDateString()}
+                  </p>
+                )}
+              </Card>
             </Link>
-          </li>
-        ))}
-      </ul>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

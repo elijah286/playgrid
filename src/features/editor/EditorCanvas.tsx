@@ -31,6 +31,9 @@ type Props = {
 };
 
 const FIELD = { w: 1, h: 1 };
+const FIELD_BG = "#2D8B4E";
+const FIELD_DARK = "#247540";
+const LINE_COLOR = "rgba(255,255,255,0.15)";
 
 export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function EditorCanvas(
   {
@@ -79,7 +82,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
       carrierPlayerId: carrier,
       semantic: null,
       geometry,
-      style: { stroke: "#7c3aed", strokeWidth: 2.2, dash: "4 3" },
+      style: { stroke: "#F26522", strokeWidth: 2.2, dash: "4 3" },
     };
     dispatch({ type: "route.add", route });
     setPolyPoints([]);
@@ -123,7 +126,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
       carrierPlayerId: carrier,
       semantic: null,
       geometry,
-      style: { stroke: "#2563eb", strokeWidth: 2.5 },
+      style: { stroke: "#FFFFFF", strokeWidth: 2.5 },
     };
     dispatch({ type: "route.add", route });
   };
@@ -146,11 +149,20 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
     draggingPlayer.current = null;
   };
 
+  // Yard lines
+  const yardLines = [];
+  for (let i = 1; i < 10; i++) {
+    const y = i / 10;
+    yardLines.push(
+      <line key={`h${i}`} x1={0} y1={y} x2={1} y2={y} stroke={LINE_COLOR} strokeWidth={0.002} />,
+    );
+  }
+
   return (
     <svg
       ref={svgRef}
       viewBox={`0 0 ${FIELD.w} ${FIELD.h}`}
-      className="h-full w-full cursor-crosshair touch-none rounded-xl bg-emerald-50/90 ring-1 ring-slate-200/80"
+      className="h-full w-full cursor-crosshair touch-none rounded-xl shadow-card"
       onMouseDown={handleDown}
       onMouseMove={(e) => {
         handleMove(e);
@@ -171,7 +183,17 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
         }
       }}
     >
-      <rect width={FIELD.w} height={FIELD.h} fill="#ecfdf5" stroke="#94a3b8" strokeWidth={0.004} />
+      {/* Field background with gradient */}
+      <defs>
+        <linearGradient id="fieldGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={FIELD_BG} />
+          <stop offset="100%" stopColor={FIELD_DARK} />
+        </linearGradient>
+      </defs>
+      <rect width={FIELD.w} height={FIELD.h} fill="url(#fieldGrad)" />
+      {yardLines}
+
+      {/* Routes */}
       {doc.layers.routes.map((r) => {
         const d = pathGeometryToSvgD(r.geometry);
         const selected = r.id === selectedRouteId;
@@ -180,7 +202,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
             key={r.id}
             d={d}
             fill="none"
-            stroke={selected ? "#ea580c" : r.style.stroke}
+            stroke={selected ? "#F26522" : r.style.stroke}
             strokeWidth={selected ? 0.006 : r.style.strokeWidth * 0.002}
             strokeDasharray={r.style.dash}
             vectorEffect="non-scaling-stroke"
@@ -194,47 +216,67 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
           />
         );
       })}
+
+      {/* Polyline draft */}
       {polyPoints.length > 0 && (
         <path
           d={pathGeometryToSvgD({ segments: polylineToSegments(polyPoints, "clicked") })}
           fill="none"
-          stroke="#64748b"
+          stroke="rgba(255,255,255,0.5)"
           strokeWidth={0.004}
           strokeDasharray="2 2"
         />
       )}
+
+      {/* Sketch draft */}
       {sketchPoints.length > 1 && (
         <path
           d={pathGeometryToSvgD({
             segments: polylineToSegments(sketchPoints, "freehand_simplified"),
           })}
           fill="none"
-          stroke="#2563eb"
+          stroke="rgba(255,255,255,0.6)"
           strokeWidth={0.003}
-          opacity={0.5}
+          opacity={0.7}
         />
       )}
+
+      {/* Players */}
       {doc.layers.players.map((pl) => {
         const sel = pl.id === selectedPlayerId;
         return (
           <g key={pl.id}>
+            {/* Outer glow for selected */}
+            {sel && (
+              <circle
+                cx={pl.position.x}
+                cy={1 - pl.position.y}
+                r={0.038}
+                fill="none"
+                stroke="#F26522"
+                strokeWidth={0.003}
+                opacity={0.5}
+              />
+            )}
             <circle
               cx={pl.position.x}
               cy={1 - pl.position.y}
               r={0.028}
-              fill={pl.style.fill}
-              stroke={sel ? "#ea580c" : pl.style.stroke}
-              strokeWidth={sel ? 0.005 : 0.003}
+              fill={sel ? "#F26522" : "#FFFFFF"}
+              stroke={sel ? "#F26522" : "rgba(0,0,0,0.3)"}
+              strokeWidth={sel ? 0.004 : 0.003}
               onMouseDown={(e) => onPlayerPointerDown(e, pl)}
+              style={{ cursor: tool === "select" ? "grab" : "crosshair" }}
             />
             <text
               x={pl.position.x}
               y={1 - pl.position.y + 0.01}
               textAnchor="middle"
-              fontSize={0.028}
-              fill={pl.style.labelColor}
+              fontSize={0.024}
+              fontWeight={700}
+              fill={sel ? "#FFFFFF" : "#1C1C1E"}
               pointerEvents="none"
-              style={{ fontFamily: "system-ui" }}
+              style={{ fontFamily: "Inter, system-ui, sans-serif" }}
             >
               {pl.label}
             </text>

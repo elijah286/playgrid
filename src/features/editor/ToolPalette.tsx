@@ -1,6 +1,7 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { MousePointer, Pencil, Waypoints, Check } from "lucide-react";
+import { SegmentedControl, Button } from "@/components/ui";
 import type { Tool } from "./EditorCanvas";
 
 type Props = {
@@ -10,36 +11,20 @@ type Props = {
   polylineActive: boolean;
 };
 
-export function ToolPalette({ tool, onToolChange, onFinishPolyline, polylineActive }: Props) {
-  const btn = (t: Tool, label: string) => (
-    <button
-      type="button"
-      key={t}
-      onClick={() => onToolChange(t)}
-      className={cn(
-        "rounded-lg px-3 py-1.5 text-sm font-medium transition",
-        tool === t
-          ? "bg-slate-900 text-white shadow-sm"
-          : "bg-white/80 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
-      )}
-    >
-      {label}
-    </button>
-  );
+const toolOptions: { value: Tool; label: string; icon: typeof MousePointer }[] = [
+  { value: "select", label: "Select", icon: MousePointer },
+  { value: "sketch", label: "Sketch", icon: Pencil },
+  { value: "polyline", label: "Points", icon: Waypoints },
+];
 
+export function ToolPalette({ tool, onToolChange, onFinishPolyline, polylineActive }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {btn("select", "Select")}
-      {btn("sketch", "Sketch")}
-      {btn("polyline", "Points")}
+    <div className="flex flex-wrap items-center gap-3">
+      <SegmentedControl options={toolOptions} value={tool} onChange={onToolChange} />
       {polylineActive && tool === "polyline" && (
-        <button
-          type="button"
-          onClick={onFinishPolyline}
-          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-500"
-        >
+        <Button variant="primary" size="sm" leftIcon={Check} onClick={onFinishPolyline}>
           Finish route
-        </button>
+        </Button>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowRight, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
@@ -13,30 +14,53 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center gap-10 px-6 py-16">
-      <div>
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">PlayGrid</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
-          Calm play design. Serious printing.
-        </h1>
-        <p className="mt-4 text-lg leading-relaxed text-slate-600">
-          Design flag and 7v7 offense, preview wristbands and sheets, and carry plays on the field
-          — with a structured document model built for AI-assisted edits later.
-        </p>
+    <div className="relative min-h-[100dvh] overflow-hidden bg-surface-dark">
+      {/* Yard-line pattern */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.03]">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute left-0 right-0 h-px bg-white"
+            style={{ top: `${(i + 1) * 8}%` }}
+          />
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/login"
-          className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
-        >
-          Sign in
-        </Link>
-        <Link
-          href="/playbooks"
-          className="rounded-xl bg-white px-5 py-2.5 text-sm font-medium text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50"
-        >
-          Go to playbooks
-        </Link>
+
+      {/* Diagonal accent stripe */}
+      <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rotate-12 rounded-full bg-primary/10 blur-3xl" />
+      <div className="pointer-events-none absolute -left-32 bottom-0 h-96 w-96 -rotate-12 rounded-full bg-field/10 blur-3xl" />
+
+      <div className="relative mx-auto flex min-h-[100dvh] max-w-4xl flex-col justify-center gap-12 px-6 py-20">
+        <div>
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-semibold text-primary">
+            <Zap className="size-4" />
+            Built for gameday
+          </div>
+          <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-white sm:text-6xl">
+            Design plays.
+            <br />
+            <span className="text-primary">Win games.</span>
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/60">
+            Create offense, preview wristbands, and carry your playbook to the field. Built for
+            flag football, 7v7, and tackle coaches who take their game seriously.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-4">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-primary-hover"
+          >
+            Get started
+            <ArrowRight className="size-5" />
+          </Link>
+          <Link
+            href="/playbooks"
+            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-6 py-3 text-base font-medium text-white ring-1 ring-white/20 transition-colors hover:bg-white/20"
+          >
+            Open playbooks
+          </Link>
+        </div>
       </div>
     </div>
   );

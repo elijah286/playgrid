@@ -2,19 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Mail, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { Button, Input, SegmentedControl } from "@/components/ui";
+import { Card, CardBody } from "@/components/ui";
+import { useToast } from "@/components/ui";
 
 export function LoginForm() {
   const router = useRouter();
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function submit() {
-    setError(null);
     setPending(true);
     try {
       if (!hasSupabaseEnv()) {
@@ -31,7 +34,7 @@ export function LoginForm() {
       router.push("/playbooks");
       router.refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      toast(e instanceof Error ? e.message : "Something went wrong", "error");
     } finally {
       setPending(false);
     }
@@ -39,65 +42,64 @@ export function LoginForm() {
 
   if (!hasSupabaseEnv()) {
     return (
-      <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200">
-        Add <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-        <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
-        <code className="font-mono">.env.local</code>, then restart the dev server.
-      </p>
+      <Card>
+        <CardBody>
+          <p className="text-sm text-warning">
+            Add <code className="rounded bg-warning-light px-1.5 py-0.5 font-mono text-xs">NEXT_PUBLIC_SUPABASE_URL</code>{" "}
+            and{" "}
+            <code className="rounded bg-warning-light px-1.5 py-0.5 font-mono text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
+            to <code className="rounded bg-warning-light px-1.5 py-0.5 font-mono text-xs">.env.local</code>, then restart.
+          </p>
+        </CardBody>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-4 rounded-2xl bg-white p-6 ring-1 ring-slate-200/80">
-      <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
-        <button
-          type="button"
-          className={`flex-1 rounded-lg py-2 text-sm font-medium ${
-            mode === "signin" ? "bg-white shadow-sm" : "text-slate-600"
-          }`}
-          onClick={() => setMode("signin")}
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          className={`flex-1 rounded-lg py-2 text-sm font-medium ${
-            mode === "signup" ? "bg-white shadow-sm" : "text-slate-600"
-          }`}
-          onClick={() => setMode("signup")}
-        >
-          Create account
-        </button>
-      </div>
-      <label className="block text-sm">
-        <span className="text-slate-600">Email</span>
-        <input
-          className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+    <Card>
+      <CardBody className="space-y-5">
+        <SegmentedControl
+          options={[
+            { value: "signin" as const, label: "Sign in" },
+            { value: "signup" as const, label: "Create account" },
+          ]}
+          value={mode}
+          onChange={setMode}
+          className="w-full [&>button]:flex-1"
         />
-      </label>
-      <label className="block text-sm">
-        <span className="text-slate-600">Password</span>
-        <input
-          className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-          type="password"
-          autoComplete={mode === "signin" ? "current-password" : "new-password"}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        type="button"
-        disabled={pending}
-        onClick={submit}
-        className="w-full rounded-xl bg-slate-900 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-      >
-        {pending ? "Working…" : mode === "signin" ? "Sign in" : "Sign up"}
-      </button>
-    </div>
+        <div className="space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1.5 block font-medium text-foreground">Email</span>
+            <Input
+              type="email"
+              autoComplete="email"
+              leftIcon={Mail}
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1.5 block font-medium text-foreground">Password</span>
+            <Input
+              type="password"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              leftIcon={Lock}
+              placeholder="Your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+        </div>
+        <Button
+          variant="primary"
+          className="w-full"
+          loading={pending}
+          onClick={submit}
+        >
+          {mode === "signin" ? "Sign in" : "Create account"}
+        </Button>
+      </CardBody>
+    </Card>
   );
 }
