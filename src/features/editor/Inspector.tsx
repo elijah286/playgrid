@@ -86,6 +86,30 @@ export function Inspector({
             <Badge variant="primary">{player.role}</Badge>
             <span className="font-semibold text-foreground">{player.label}</span>
           </div>
+          {/* Show the count of routes for this player */}
+          {(() => {
+            const playerRoutes = doc.layers.routes.filter((r) => r.carrierPlayerId === player.id);
+            return playerRoutes.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                <div className="text-xs text-muted">
+                  {playerRoutes.length} route{playerRoutes.length !== 1 ? "s" : ""}
+                </div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  leftIcon={Trash2}
+                  className="w-full"
+                  onClick={() => {
+                    for (const route of playerRoutes) {
+                      dispatch({ type: "route.remove", routeId: route.id });
+                    }
+                  }}
+                >
+                  Clear routes for {player.label}
+                </Button>
+              </div>
+            ) : null;
+          })()}
         </section>
       )}
 
