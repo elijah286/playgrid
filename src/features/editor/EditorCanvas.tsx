@@ -72,6 +72,15 @@ const LINE_COLORS: Record<string, string> = {
   gray:  "rgba(255,255,255,0.10)",
 };
 
+/** Hash marks render a touch brighter than yard lines so they read clearly
+ *  as on-field markings rather than blending into the background gradient. */
+const HASH_COLORS: Record<string, string> = {
+  green: "rgba(255,255,255,0.55)",
+  white: "rgba(0,0,0,0.45)",
+  black: "rgba(255,255,255,0.45)",
+  gray:  "rgba(255,255,255,0.45)",
+};
+
 /** Thin outline around the whole field so it visually separates from the
  *  page background (important on the white field theme, which otherwise
  *  blends into the app surface). */
@@ -713,6 +722,7 @@ export function EditorCanvas({
 
   const bg = BG_COLORS[fieldBackground ?? "green"];
   const lineColor = LINE_COLORS[fieldBackground ?? "green"];
+  const hashColor = HASH_COLORS[fieldBackground ?? "green"];
   const borderColor = BORDER_COLORS[fieldBackground ?? "green"];
   const losColor = LOS_COLORS[fieldBackground ?? "green"];
 
@@ -748,7 +758,7 @@ export function EditorCanvas({
   if (showHash) {
     const HASH_X_LEFT = 0.38 * fieldAspect;
     const HASH_X_RIGHT = 0.62 * fieldAspect;
-    const TICK_HALF = 0.006; // half-length of each tick in field-units
+    const TICK_HALF = 0.010; // half-length of each tick in field-units
     const N_TICKS = 20; // 20 ticks along the length ≈ every 5%
     for (let i = 1; i < N_TICKS; i++) {
       const y = i / N_TICKS;
@@ -759,8 +769,10 @@ export function EditorCanvas({
           y1={y - TICK_HALF}
           x2={HASH_X_LEFT}
           y2={y + TICK_HALF}
-          stroke={lineColor}
-          strokeWidth={0.0018}
+          stroke={hashColor}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
         />,
         <line
           key={`hmr${i}`}
@@ -768,8 +780,10 @@ export function EditorCanvas({
           y1={y - TICK_HALF}
           x2={HASH_X_RIGHT}
           y2={y + TICK_HALF}
-          stroke={lineColor}
-          strokeWidth={0.0018}
+          stroke={hashColor}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
         />,
       );
     }
