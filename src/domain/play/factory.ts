@@ -1,4 +1,23 @@
-import { PLAY_DOCUMENT_SCHEMA_VERSION, type PlayDocument, type Player } from "./types";
+import {
+  PLAY_DOCUMENT_SCHEMA_VERSION,
+  type PlayDocument,
+  type Player,
+  type SportVariant,
+} from "./types";
+
+/** Whether hash marks should render by default for a given sport variant.
+ *  Flag football plays a smaller, cleaner field — hash marks are noise.
+ *  Tackle/6-man plays on a real field — hash marks are expected. */
+export function shouldShowHashMarksDefault(variant: SportVariant): boolean {
+  return variant === "tackle_11" || variant === "six_man";
+}
+
+/** Resolve the effective hash-mark setting: explicit override wins,
+ *  otherwise derive from sport variant. */
+export function resolveShowHashMarks(doc: PlayDocument): boolean {
+  if (typeof doc.showHashMarks === "boolean") return doc.showHashMarks;
+  return shouldShowHashMarksDefault(doc.sportProfile.variant);
+}
 
 let idCounter = 0;
 function uid(prefix: string) {

@@ -7,7 +7,7 @@ import {
   routeToRenderedSegments,
   simplifyPolyline,
 } from "@/domain/play/geometry";
-import { uid } from "@/domain/play/factory";
+import { resolveShowHashMarks, uid } from "@/domain/play/factory";
 
 /* ------------------------------------------------------------------ */
 /*  Interaction state machine                                         */
@@ -115,12 +115,54 @@ export function EditorCanvas({
   onAddPlayer,
   fieldBackground,
 }: Props) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
   const interactionRef = useRef(interaction);
   useEffect(() => {
     interactionRef.current = interaction;
   }, [interaction]);
+
+  /* ---------- Right-click context menu state ---------- */
+  type SegmentMenu = {
+    /** Position in wrapper-relative CSS pixels (for absolute overlay) */
+    screenX: number;
+    screenY: number;
+    routeId: string;
+    segmentId: string;
+    /** Click position in normalized field coords */
+    position: Point2;
+  };
+  const [segmentMenu, setSegmentMenu] = useState<SegmentMenu | null>(null);
+
+  // Dismiss the menu on any outside click / Escape
+  useEffect(() => {
+    if (!segmentMenu) return;
+    function onDocPointer(e: PointerEvent) {
+      const target = e.target as Node | null;
+      const wrap = wrapperRef.current;
+      // Keep the menu open if the click is on the menu itself (the menu
+      // renders inside the wrapper, but we check via data attribute).
+      if (target instanceof HTMLElement && target.closest("[data-segment-menu]")) {
+        return;
+      }
+      // Any other click closes the menu.
+      setSegmentMenu(null);
+      // Avoid double-handling: if the click was on the SVG we still want
+      // our normal pointer logic to run, but we need to stop the menu
+      // from blocking it.
+      void wrap;
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setSegmentMenu(null);
+    }
+    document.addEventListener("pointerdown", onDocPointer, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDocPointer, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [segmentMenu]);
 
   /* ---------- Coordinate conversion (resize-safe) ---------- */
 
@@ -269,6 +311,11 @@ export function EditorCanvas({
 
   const startInteraction = useCallback(
     (e: React.PointerEvent, target: HitTarget) => {
+      // Primary-button only. Right-clicks are handled by the context-menu
+      // path (onContextMenu) and should not start a drag / selection.
+      if (e.button !== 0) return;
+      // Any interaction cancels the context menu.
+      setSegmentMenu(null);
       const svg = svgRef.current;
       if (svg) svg.setPointerCapture(e.pointerId);
       const origin = toNorm(e);
@@ -509,26 +556,105 @@ export function EditorCanvas({
     ],
   );
 
-  /* ---------- Double-click: insert node on segment ---------- */
+  /* ---------- Double-click: select the whole route (marching ants) ---------- */
 
   const handleSegmentDoubleClick = useCallback(
-    (routeId: string, segmentId: string, e: React.MouseEvent) => {
+    (routeId: string, _segmentId: string, e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
+      // Whole-route selection = route selected but no specific segment.
+      onSelectRoute(routeId);
+      onSelectSegment(null);
+      onSelectNode(null);
+      onSelectPlayer(null);
+    },
+    [onSelectRoute, onSelectSegment, onSelectNode, onSelectPlayer],
+  );
+
+  /* ---------- Right-click on segment: context menu ---------- */
+
+  const handleSegmentContextMenu = useCallback(
+    (routeId: string, segmentId: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = wrapperRef.current;
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
       const p = toNorm(e as unknown as { clientX: number; clientY: number });
-      const newNode: RouteNode = { id: uid("node"), position: p };
-      dispatch({
-        type: "route.insertNode",
+      // Clamp the menu inside the wrapper so we never need to read the ref
+      // during render. ~180px wide, ~100px tall with a 6px safe margin.
+      const MENU_W = 180;
+      const MENU_H = 100;
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      const clampedX = Math.max(6, Math.min(localX, rect.width - MENU_W - 6));
+      const clampedY = Math.max(6, Math.min(localY, rect.height - MENU_H - 6));
+      setSegmentMenu({
+        screenX: clampedX,
+        screenY: clampedY,
         routeId,
         segmentId,
-        node: newNode,
+        position: p,
       });
+      // Select the route so the user knows which one the menu targets.
       onSelectRoute(routeId);
-      onSelectNode(newNode.id);
-      onSelectSegment(null);
+      onSelectSegment(segmentId);
+      onSelectNode(null);
+      onSelectPlayer(null);
     },
-    [toNorm, dispatch, onSelectRoute, onSelectNode, onSelectSegment],
+    [toNorm, onSelectRoute, onSelectSegment, onSelectNode, onSelectPlayer],
   );
+
+  const handleMenuAddAnchor = useCallback(() => {
+    if (!segmentMenu) return;
+    const newNode: RouteNode = { id: uid("node"), position: segmentMenu.position };
+    dispatch({
+      type: "route.insertNode",
+      routeId: segmentMenu.routeId,
+      segmentId: segmentMenu.segmentId,
+      node: newNode,
+    });
+    onSelectRoute(segmentMenu.routeId);
+    onSelectNode(newNode.id);
+    onSelectSegment(null);
+    setSegmentMenu(null);
+  }, [segmentMenu, dispatch, onSelectRoute, onSelectNode, onSelectSegment]);
+
+  const handleMenuCreateBranch = useCallback(() => {
+    if (!segmentMenu) return;
+    const { routeId, segmentId, position } = segmentMenu;
+    const route = doc.layers.routes.find((r) => r.id === routeId);
+    const seg = route?.segments.find((s) => s.id === segmentId);
+    if (!route || !seg) {
+      setSegmentMenu(null);
+      return;
+    }
+    // Branch from the segment's "from" node so the user sees a fork starting
+    // at an existing anchor. The new node lands at the click position, and
+    // we select it so the user can immediately drag or extend it.
+    const newNode: RouteNode = { id: uid("node"), position };
+    dispatch({
+      type: "route.addBranch",
+      routeId,
+      fromNodeId: seg.fromNodeId,
+      toNode: newNode,
+      shape: activeShape,
+      strokePattern: activeStrokePattern,
+    });
+    onSelectRoute(routeId);
+    onSelectNode(newNode.id);
+    onSelectSegment(null);
+    setSegmentMenu(null);
+  }, [
+    segmentMenu,
+    doc.layers.routes,
+    dispatch,
+    activeShape,
+    activeStrokePattern,
+    onSelectRoute,
+    onSelectNode,
+    onSelectSegment,
+  ]);
 
   /* ---------- Dynamic cursor ---------- */
 
@@ -569,6 +695,42 @@ export function EditorCanvas({
     );
   }
 
+  /* ---------- Hash marks ---------- */
+  // Two columns of short vertical ticks at ~38% / 62% of width — the
+  // standard college-ish hash geometry. Ticks run parallel to the
+  // length axis (y), perpendicular to yard lines.
+  const showHash = resolveShowHashMarks(doc);
+  const hashMarks: React.ReactNode[] = [];
+  if (showHash) {
+    const HASH_X_LEFT = 0.38 * fieldAspect;
+    const HASH_X_RIGHT = 0.62 * fieldAspect;
+    const TICK_HALF = 0.006; // half-length of each tick in field-units
+    const N_TICKS = 20; // 20 ticks along the length ≈ every 5%
+    for (let i = 1; i < N_TICKS; i++) {
+      const y = i / N_TICKS;
+      hashMarks.push(
+        <line
+          key={`hml${i}`}
+          x1={HASH_X_LEFT}
+          y1={y - TICK_HALF}
+          x2={HASH_X_LEFT}
+          y2={y + TICK_HALF}
+          stroke={lineColor}
+          strokeWidth={0.0018}
+        />,
+        <line
+          key={`hmr${i}`}
+          x1={HASH_X_RIGHT}
+          y1={y - TICK_HALF}
+          x2={HASH_X_RIGHT}
+          y2={y + TICK_HALF}
+          stroke={lineColor}
+          strokeWidth={0.0018}
+        />,
+      );
+    }
+  }
+
   /* ---------- Draft drawing path ---------- */
 
   const draftPath = (() => {
@@ -588,6 +750,7 @@ export function EditorCanvas({
   // stored positions are still in normalized 0-1 field coords.
 
   return (
+    <div ref={wrapperRef} className="relative h-full w-full">
     <svg
       ref={svgRef}
       viewBox={`0 0 ${fieldAspect} 1`}
@@ -598,6 +761,11 @@ export function EditorCanvas({
       onPointerMove={handlePointerMove}
       onPointerUp={finishInteraction}
       onPointerLeave={finishInteraction}
+      onContextMenu={(e) => {
+        // Prevent the browser menu anywhere on the canvas; segment-specific
+        // menu is wired on the hit-path onContextMenu above.
+        e.preventDefault();
+      }}
     >
       <defs>
         <linearGradient id="fieldGrad" x1="0" y1="0" x2="0" y2="1">
@@ -607,17 +775,21 @@ export function EditorCanvas({
       </defs>
       <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />
       {yardLines}
+      {hashMarks}
 
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>
         {doc.layers.routes.map((route) => {
           const isActive = route.id === selectedRouteId && mode !== "formation";
+          // "Whole-route" selection = route selected but no specific segment.
+          const isWholeRouteSelected = isActive && selectedSegmentId == null;
           const rendered = routeToRenderedSegments(route);
 
           return (
             <g key={route.id}>
               {rendered.map((rs) => {
                 const isSelectedSeg = rs.segmentId === selectedSegmentId && isActive;
+                const showAnts = isSelectedSeg || isWholeRouteSelected;
                 return (
                   <g key={rs.segmentId}>
                     {mode !== "formation" && (
@@ -639,6 +811,9 @@ export function EditorCanvas({
                         onDoubleClick={(e) =>
                           handleSegmentDoubleClick(route.id, rs.segmentId, e)
                         }
+                        onContextMenu={(e) =>
+                          handleSegmentContextMenu(route.id, rs.segmentId, e)
+                        }
                       />
                     )}
                     <path
@@ -651,6 +826,20 @@ export function EditorCanvas({
                       vectorEffect="non-scaling-stroke"
                       pointerEvents="none"
                     />
+                    {/* Marching-ants selection overlay */}
+                    {showAnts && (
+                      <path
+                        className="marching-ants"
+                        d={rs.d}
+                        fill="none"
+                        stroke="#F26522"
+                        strokeWidth={isSelectedSeg ? 4 : 3}
+                        strokeDasharray="4 3"
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                        pointerEvents="none"
+                      />
+                    )}
                   </g>
                 );
               })}
@@ -814,5 +1003,34 @@ export function EditorCanvas({
         );
       })}
     </svg>
+
+      {/* Segment context menu */}
+      {segmentMenu && (
+        <div
+          data-segment-menu
+          className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          style={{
+            left: segmentMenu.screenX,
+            top: segmentMenu.screenY,
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+            onClick={handleMenuAddAnchor}
+          >
+            Add anchor here
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+            onClick={handleMenuCreateBranch}
+          >
+            Create branch here
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

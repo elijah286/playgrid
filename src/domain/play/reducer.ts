@@ -249,6 +249,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setFieldBackground":
       return { ...doc, fieldBackground: cmd.background };
 
+    case "document.setShowHashMarks":
+      return { ...doc, showHashMarks: cmd.showHashMarks };
+
     case "document.flip": {
       const axis = cmd.axis;
       return {

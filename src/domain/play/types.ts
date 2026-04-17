@@ -196,4 +196,10 @@ export type PlayDocument = {
   printProfile: PrintProfile;
   timeline?: PlayTimeline;
   fieldBackground?: "green" | "white" | "black" | "gray";
+  /**
+   * Whether to render yard hash marks on the field. When `undefined`, the
+   * default is derived from sportProfile.variant (flag variants off, tackle
+   * variants on) — see `shouldShowHashMarksDefault`.
+   */
+  showHashMarks?: boolean;
 };

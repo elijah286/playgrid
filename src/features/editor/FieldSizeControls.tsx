@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { SportProfile, SportVariant } from "@/domain/play/types";
+import type { PlayDocument, SportProfile, SportVariant } from "@/domain/play/types";
+import { resolveShowHashMarks } from "@/domain/play/factory";
 import { Button, Input } from "@/components/ui";
 
 type Props = {
   profile: SportProfile;
   dispatch: (c: PlayCommand) => void;
+  /** Full document — lets us read/toggle hash-marks state. Optional so older
+   *  callsites keep compiling. */
+  doc?: PlayDocument;
 };
 
 type Preset = {
@@ -54,7 +58,7 @@ const PRESETS: Preset[] = [
   },
 ];
 
-export function FieldSizeControls({ profile, dispatch }: Props) {
+export function FieldSizeControls({ profile, dispatch, doc }: Props) {
   const [showCustom, setShowCustom] = useState(false);
   const [customLen, setCustomLen] = useState(String(profile.fieldLengthYds));
   const [customWid, setCustomWid] = useState(String(profile.fieldWidthYds));
@@ -125,6 +129,23 @@ export function FieldSizeControls({ profile, dispatch }: Props) {
           Custom
         </button>
       </div>
+
+      {doc && (
+        <label className="ml-2 flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+          <input
+            type="checkbox"
+            className="size-3.5 cursor-pointer accent-primary"
+            checked={resolveShowHashMarks(doc)}
+            onChange={(e) =>
+              dispatch({
+                type: "document.setShowHashMarks",
+                showHashMarks: e.target.checked,
+              })
+            }
+          />
+          <span>Hash marks</span>
+        </label>
+      )}
 
       <div className="ml-auto text-xs text-muted">
         {profile.fieldLengthYds}L × {profile.fieldWidthYds}W yd

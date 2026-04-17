@@ -74,7 +74,8 @@ export type PlayCommand =
   | { type: "document.flip"; axis: "horizontal" | "vertical" }
   | { type: "document.setSportProfile"; patch: Partial<SportProfile> }
   | { type: "document.setTimeline"; timeline: PlayTimeline }
-  | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" };
+  | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" }
+  | { type: "document.setShowHashMarks"; showHashMarks: boolean };
 
 export type CommandMeta = {
   id: string;

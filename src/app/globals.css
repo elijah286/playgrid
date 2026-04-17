@@ -56,6 +56,18 @@ body {
   outline-offset: 2px;
 }
 
+/* Marching-ants animation used for selected route segments in the editor.
+   Applied via className="marching-ants" on an SVG <path>. Relies on
+   strokeDasharray being set on the element. */
+@keyframes marching-ants {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -8; }
+}
+
+.marching-ants {
+  animation: marching-ants 0.6s linear infinite;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

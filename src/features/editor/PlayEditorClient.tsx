@@ -32,7 +32,6 @@ import { FormationInspector } from "./FormationInspector";
 import { PrintPreview } from "@/features/print/PrintPreview";
 import { exportSvgToPdf } from "@/features/print/exportPdf";
 import { compilePlayToSvg } from "@/domain/print/templates";
-import { RouteAnimation } from "@/features/viewer/RouteAnimation";
 import { Button, IconButton, Input, SegmentedControl, Kbd, useToast } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { uid } from "@/domain/play/factory";
@@ -379,7 +378,12 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
       {tab === "routes" && (
         <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
-            {showToolbar && (
+            {/* Always reserve toolbar space so the canvas doesn't shift when
+                selection toggles the toolbar's visibility. */}
+            <div
+              aria-hidden={!showToolbar}
+              className={showToolbar ? "" : "invisible pointer-events-none"}
+            >
               <RouteToolbar
                 shape={displayShape}
                 onShapeChange={handleShapeChange}
@@ -395,7 +399,7 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
                 canUndo={canUndo}
                 onDone={handleDone}
               />
-            )}
+            </div>
 
             <div className="relative min-h-[360px] flex-1">
               <EditorCanvas
@@ -416,13 +420,10 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
                 fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
                 fieldBackground={doc.fieldBackground}
               />
-              <div className="pointer-events-none absolute bottom-3 right-3 opacity-40">
-                <RouteAnimation doc={doc} />
-              </div>
             </div>
 
             {/* Field size controls (below canvas) */}
-            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} />
+            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
           </div>
           <aside className="rounded-xl border border-border bg-surface-raised p-4">
             <Inspector
@@ -521,7 +522,7 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
               />
             </div>
 
-            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} />
+            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
           </div>
           <aside className="rounded-xl border border-border bg-surface-raised p-4">
             <FormationInspector
