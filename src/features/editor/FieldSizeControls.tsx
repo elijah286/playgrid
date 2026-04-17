@@ -3,8 +3,8 @@
 import { useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, SportProfile, SportVariant } from "@/domain/play/types";
-import { resolveShowHashMarks } from "@/domain/play/factory";
-import { Button, Input } from "@/components/ui";
+import { resolveLineOfScrimmage, resolveShowHashMarks } from "@/domain/play/factory";
+import { Button, Input, SegmentedControl } from "@/components/ui";
 
 type Props = {
   profile: SportProfile;
@@ -145,6 +145,24 @@ export function FieldSizeControls({ profile, dispatch, doc }: Props) {
           />
           <span>Hash marks</span>
         </label>
+      )}
+
+      {doc && (
+        <div className="ml-2 flex items-center gap-1.5">
+          <span className="text-xs text-muted">LOS</span>
+          <SegmentedControl
+            size="sm"
+            options={[
+              { value: "line" as const, label: "Line" },
+              { value: "football" as const, label: "Ball" },
+              { value: "none" as const, label: "None" },
+            ]}
+            value={resolveLineOfScrimmage(doc)}
+            onChange={(v) =>
+              dispatch({ type: "document.setLineOfScrimmage", lineOfScrimmage: v })
+            }
+          />
+        </div>
       )}
 
       <div className="ml-auto text-xs text-muted">

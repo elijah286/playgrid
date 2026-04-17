@@ -38,9 +38,21 @@ export function strokePatternToDash(pattern: RouteSegmentType["strokePattern"]):
       // Near-zero dash + round linecap = circular dot; 7px gap between dots
       return "1 7";
     case "motion":
-      // Long-short-short rhythm (classic motion indicator)
-      return "14 5 3 5";
+      // Motion is rendered as a zig-zag SHAPE (see routeToRenderedSegments),
+      // so the stroke itself stays solid.
+      return undefined;
   }
+}
+
+/** Helper: build an SVG `d` string for a zig-zag between two points. */
+function zigzagSvgD(from: Point2, to: Point2): string {
+  const pts = zigzagPoints(from, to);
+  const parts = pts.map((p, i) => {
+    const px = p.x;
+    const py = toSvgY(p.y);
+    return i === 0 ? `M ${px} ${py}` : `L ${px} ${py}`;
+  });
+  return parts.join(" ");
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,7 +219,11 @@ export function routeToRenderedSegments(route: Route): RenderedSegment[] {
 
     let d: string;
 
-    if (seg.shape === "curve") {
+    if (seg.strokePattern === "motion") {
+      // Motion is a visual zig-zag (classic pre-snap motion symbol),
+      // regardless of the segment's declared shape.
+      d = zigzagSvgD(fromNode.position, toNode.position);
+    } else if (seg.shape === "curve") {
       if (seg.controlOffset) {
         // Manual override — keep quadratic bezier
         const fx = fromNode.position.x;
@@ -265,6 +281,20 @@ export function routeToPathGeometry(route: Route): PathGeometry {
     const from = nodeMap.get(seg.fromNodeId);
     const to = nodeMap.get(seg.toNodeId);
     if (!from || !to) continue;
+
+    if (seg.strokePattern === "motion") {
+      // Motion renders as a zig-zag regardless of declared shape
+      const pts = zigzagPoints(from.position, to.position);
+      for (let i = 0; i < pts.length - 1; i++) {
+        segments.push({
+          type: "line",
+          from: pts[i],
+          to: pts[i + 1],
+          kind: "clicked",
+        });
+      }
+      continue;
+    }
 
     if (seg.shape === "curve") {
       let ctrl: Point2;

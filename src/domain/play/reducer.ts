@@ -108,6 +108,8 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return mapRoute(doc, cmd.routeId, (r) => ({ ...r, semantic: cmd.semantic }));
     case "route.setStyle":
       return mapRoute(doc, cmd.routeId, (r) => ({ ...r, style: cmd.style }));
+    case "route.setEndDecoration":
+      return mapRoute(doc, cmd.routeId, (r) => ({ ...r, endDecoration: cmd.endDecoration }));
 
     /* ---- Node-level ---- */
     case "route.addNode":
@@ -251,6 +253,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
 
     case "document.setShowHashMarks":
       return { ...doc, showHashMarks: cmd.showHashMarks };
+
+    case "document.setLineOfScrimmage":
+      return { ...doc, lineOfScrimmage: cmd.lineOfScrimmage };
 
     case "document.flip": {
       const axis = cmd.axis;

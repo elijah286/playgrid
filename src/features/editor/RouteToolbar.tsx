@@ -3,13 +3,14 @@
 import {
   Minus,
   Spline,
-  ZapOff,
   Undo2,
   Check,
   Sparkles,
   Waves,
+  ArrowRight,
+  Ban,
 } from "lucide-react";
-import type { SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { SegmentedControl, IconButton, Button } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 
@@ -28,12 +29,14 @@ type Props = {
   canUndo: boolean;
   onDone: () => void;
   doneLabel?: string;
+  /** End-of-route decoration (arrow/T/none). Disabled when no route selected. */
+  endDecoration: EndDecoration;
+  onEndDecorationChange: (d: EndDecoration) => void;
 };
 
 const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
   { value: "straight", label: "Straight", icon: Minus },
   { value: "curve", label: "Curve", icon: Spline },
-  { value: "zigzag", label: "Zigzag", icon: ZapOff },
 ];
 
 const STROKE_OPTIONS: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
@@ -41,6 +44,12 @@ const STROKE_OPTIONS: { value: StrokePattern; label: string; icon?: typeof Waves
   { value: "dashed", label: "Dashed" },
   { value: "dotted", label: "Dotted" },
   { value: "motion", label: "Motion", icon: Waves },
+];
+
+const END_OPTIONS: { value: EndDecoration; label: string; icon: typeof ArrowRight }[] = [
+  { value: "arrow", label: "Arrow", icon: ArrowRight },
+  { value: "t", label: "T", icon: Minus },
+  { value: "none", label: "None", icon: Ban },
 ];
 
 const COLOR_PRESETS = [
@@ -73,6 +82,8 @@ export function RouteToolbar({
   canUndo,
   onDone,
   doneLabel = "Done",
+  endDecoration,
+  onEndDecorationChange,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
@@ -138,6 +149,16 @@ export function RouteToolbar({
           />
         ))}
       </div>
+
+      <div className="h-5 w-px bg-border" />
+
+      {/* End-of-route decoration */}
+      <SegmentedControl
+        options={END_OPTIONS}
+        value={endDecoration}
+        onChange={onEndDecorationChange}
+        size="sm"
+      />
 
       <div className="h-5 w-px bg-border" />
 

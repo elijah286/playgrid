@@ -1,5 +1,6 @@
 import type {
   Annotation,
+  EndDecoration,
   FormationSemantic,
   Player,
   PlayerRole,
@@ -31,6 +32,7 @@ export type PlayCommand =
   | { type: "route.remove"; routeId: string }
   | { type: "route.setSemantic"; routeId: string; semantic: RouteSemantic | null }
   | { type: "route.setStyle"; routeId: string; style: RouteStyle }
+  | { type: "route.setEndDecoration"; routeId: string; endDecoration: EndDecoration }
   /* ---- Node-level ---- */
   | {
       type: "route.addNode";
@@ -75,7 +77,8 @@ export type PlayCommand =
   | { type: "document.setSportProfile"; patch: Partial<SportProfile> }
   | { type: "document.setTimeline"; timeline: PlayTimeline }
   | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" }
-  | { type: "document.setShowHashMarks"; showHashMarks: boolean };
+  | { type: "document.setShowHashMarks"; showHashMarks: boolean }
+  | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" };
 
 export type CommandMeta = {
   id: string;

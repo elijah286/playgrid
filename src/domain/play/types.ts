@@ -86,6 +86,9 @@ export type RouteStyle = {
   dash?: string;
 };
 
+/** How the tip of a route is decorated at its terminal node. */
+export type EndDecoration = "arrow" | "t" | "none";
+
 export type Route = {
   id: string;
   carrierPlayerId: string;
@@ -94,6 +97,8 @@ export type Route = {
   segments: RouteSegment[];
   style: RouteStyle;
   motion?: boolean;
+  /** End-of-route decoration (arrow/T/none). Defaults to "arrow" when unset. */
+  endDecoration?: EndDecoration;
 };
 
 export type PlayerStyle = {
@@ -202,4 +207,15 @@ export type PlayDocument = {
    * variants on) — see `shouldShowHashMarksDefault`.
    */
   showHashMarks?: boolean;
+  /**
+   * Line-of-scrimmage marker style. Drawn at `lineOfScrimmageY`.
+   * Defaults to "line".
+   */
+  lineOfScrimmage?: "line" | "football" | "none";
+  /**
+   * Normalized y of the LOS (0 = back of offense's backfield, 1 = far end
+   * zone). Defaults to 0.5 (mid-field). Offensive players are clamped so
+   * they cannot be dragged past this line.
+   */
+  lineOfScrimmageY?: number;
 };

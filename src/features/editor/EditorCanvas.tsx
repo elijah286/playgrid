@@ -7,7 +7,13 @@ import {
   routeToRenderedSegments,
   simplifyPolyline,
 } from "@/domain/play/geometry";
-import { resolveShowHashMarks, uid } from "@/domain/play/factory";
+import {
+  resolveEndDecoration,
+  resolveLineOfScrimmage,
+  resolveLineOfScrimmageY,
+  resolveShowHashMarks,
+  uid,
+} from "@/domain/play/factory";
 
 /* ------------------------------------------------------------------ */
 /*  Interaction state machine                                         */
@@ -64,6 +70,24 @@ const LINE_COLORS: Record<string, string> = {
   white: "rgba(0,0,0,0.08)",
   black: "rgba(255,255,255,0.10)",
   gray:  "rgba(255,255,255,0.10)",
+};
+
+/** Thin outline around the whole field so it visually separates from the
+ *  page background (important on the white field theme, which otherwise
+ *  blends into the app surface). */
+const BORDER_COLORS: Record<string, string> = {
+  green: "rgba(255,255,255,0.35)",
+  white: "rgba(0,0,0,0.35)",
+  black: "rgba(255,255,255,0.30)",
+  gray:  "rgba(255,255,255,0.25)",
+};
+
+/** Contrasting accent color per-background for the LOS marker and ball. */
+const LOS_COLORS: Record<string, string> = {
+  green: "rgba(255,255,255,0.55)",
+  white: "rgba(0,0,0,0.40)",
+  black: "rgba(255,255,255,0.50)",
+  gray:  "rgba(255,255,255,0.45)",
 };
 
 /* ------------------------------------------------------------------ */
@@ -163,6 +187,11 @@ export function EditorCanvas({
       document.removeEventListener("keydown", onKey);
     };
   }, [segmentMenu]);
+
+  /* ---------- Line of scrimmage (hoisted early; callbacks depend on losY) ---------- */
+
+  const losY = resolveLineOfScrimmageY(doc);
+  const losStyle = resolveLineOfScrimmage(doc);
 
   /* ---------- Coordinate conversion (resize-safe) ---------- */
 
@@ -433,10 +462,14 @@ export function EditorCanvas({
       }
 
       if (state.type === "dragging_player") {
+        // Offensive players are not allowed past the line of scrimmage —
+        // clamp the drag y to the LOS.
+        const raw = toNorm(e);
+        const clamped: Point2 = { x: raw.x, y: Math.min(raw.y, losY) };
         dispatch({
           type: "player.move",
           playerId: state.playerId,
-          position: toNorm(e),
+          position: clamped,
         });
         return;
       }
@@ -476,7 +509,7 @@ export function EditorCanvas({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY],
   );
 
   const finishInteraction = useCallback(
@@ -497,9 +530,13 @@ export function EditorCanvas({
           onSelectPlayer(null);
         } else if (target.kind === "canvas") {
           if (mode === "formation") {
-            // Formation mode: clicking canvas adds a player
+            // Formation mode: clicking canvas adds a player. Clamp to LOS
+            // so offensive players can't be spawned past the line.
             if (onAddPlayer) {
-              onAddPlayer(state.origin);
+              onAddPlayer({
+                x: state.origin.x,
+                y: Math.min(state.origin.y, losY),
+              });
             } else {
               // Deselect if no handler
               onSelectPlayer(null);
@@ -552,7 +589,7 @@ export function EditorCanvas({
     [
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
-      getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer,
+      getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
     ],
   );
 
@@ -676,6 +713,13 @@ export function EditorCanvas({
 
   const bg = BG_COLORS[fieldBackground ?? "green"];
   const lineColor = LINE_COLORS[fieldBackground ?? "green"];
+  const borderColor = BORDER_COLORS[fieldBackground ?? "green"];
+  const losColor = LOS_COLORS[fieldBackground ?? "green"];
+
+  /* ---------- Line of scrimmage ---------- */
+
+  // SVG-y for the LOS line (flipped because y=0 is bottom).
+  const losSvgY = fy(losY);
 
   /* ---------- Yard lines ---------- */
 
@@ -777,6 +821,65 @@ export function EditorCanvas({
       {yardLines}
       {hashMarks}
 
+      {/* Line of scrimmage */}
+      {losStyle === "line" && (
+        <line
+          x1={0}
+          y1={losSvgY}
+          x2={fieldAspect}
+          y2={losSvgY}
+          stroke={losColor}
+          strokeWidth={2}
+          strokeDasharray="6 4"
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      )}
+      {losStyle === "football" && (() => {
+        const cx = fieldAspect / 2;
+        const cy = losSvgY;
+        // Football oriented along the direction of play (along y-axis).
+        // rx across width, ry along length; ry > rx so the ball is upright.
+        const rx = 0.014;
+        const ry = 0.028;
+        return (
+          <g pointerEvents="none">
+            <ellipse
+              cx={cx}
+              cy={cy}
+              rx={rx}
+              ry={ry}
+              fill="#8B4513"
+              stroke="#FFFFFF"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+            {/* White laces: one central stripe + four cross-ties */}
+            <line
+              x1={cx}
+              y1={cy - ry * 0.55}
+              x2={cx}
+              y2={cy + ry * 0.55}
+              stroke="#FFFFFF"
+              strokeWidth={1.25}
+              vectorEffect="non-scaling-stroke"
+            />
+            {[-0.35, -0.15, 0.05, 0.25].map((t, i) => (
+              <line
+                key={i}
+                x1={cx - rx * 0.35}
+                y1={cy + ry * t}
+                x2={cx + rx * 0.35}
+                y2={cy + ry * t}
+                stroke="#FFFFFF"
+                strokeWidth={1.25}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </g>
+        );
+      })()}
+
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>
         {doc.layers.routes.map((route) => {
@@ -844,7 +947,10 @@ export function EditorCanvas({
                 );
               })}
 
-              {isActive &&
+              {/* Anchor dots: only render when the user is actively editing
+                  the route (a specific segment or node is selected).
+                  Whole-route view (marching-ants only) stays clean. */}
+              {isActive && (selectedSegmentId != null || selectedNodeId != null) &&
                 route.nodes.map((node) => {
                   const isSelectedNode = node.id === selectedNodeId;
                   // Nodes live inside the scale(fieldAspect, 1) group, which
@@ -893,6 +999,117 @@ export function EditorCanvas({
         />
       )}
 
+      {/* End-of-route decorations (arrow / T / none). Rendered outside the
+          fieldAspect scale group so angles stay isotropic. */}
+      {doc.layers.routes.map((route) => {
+        const decoration = resolveEndDecoration(route);
+        if (decoration === "none") return null;
+
+        // Terminal nodes: appear as `toNodeId` but never as `fromNodeId`.
+        const fromIds = new Set(route.segments.map((s) => s.fromNodeId));
+        const terminals = route.segments.filter(
+          (s) => !fromIds.has(s.toNodeId),
+        );
+        if (terminals.length === 0) return null;
+
+        return (
+          <g key={`deco-${route.id}`} pointerEvents="none">
+            {terminals.map((seg) => {
+              const fromNode = route.nodes.find((n) => n.id === seg.fromNodeId);
+              const toNode = route.nodes.find((n) => n.id === seg.toNodeId);
+              if (!fromNode || !toNode) return null;
+
+              // For a curved segment with a controlOffset, approximate the
+              // tangent at the tip as the vector from the control to the end.
+              let dirFromX: number;
+              let dirFromY: number;
+              if (seg.shape === "curve" && seg.controlOffset) {
+                dirFromX = seg.controlOffset.x;
+                dirFromY = seg.controlOffset.y;
+              } else {
+                dirFromX = fromNode.position.x;
+                dirFromY = fromNode.position.y;
+              }
+
+              // Work in SVG-space so 1 unit is isotropic (viewBox preserves
+              // aspect ratio). fx scales x by fieldAspect, fy flips y.
+              const tipX = fx(toNode.position.x);
+              const tipY = fy(toNode.position.y);
+              const fromX = fx(dirFromX);
+              const fromY = fy(dirFromY);
+              const dxS = tipX - fromX;
+              const dyS = tipY - fromY;
+              const len = Math.hypot(dxS, dyS);
+              if (len < 1e-4) return null;
+              const ux = dxS / len;
+              const uy = dyS / len;
+
+              const stroke = route.style.stroke;
+              const strokeW = route.style.strokeWidth;
+
+              if (decoration === "arrow") {
+                const arrowLen = 0.028;
+                const cosA = Math.cos(Math.PI / 6); // 30°
+                const sinA = Math.sin(Math.PI / 6);
+                // Back-direction, rotated ±30°
+                const bx = -ux;
+                const by = -uy;
+                const r1x = cosA * bx - sinA * by;
+                const r1y = sinA * bx + cosA * by;
+                const r2x = cosA * bx + sinA * by;
+                const r2y = -sinA * bx + cosA * by;
+                return (
+                  <g key={seg.id}>
+                    <line
+                      x1={tipX}
+                      y1={tipY}
+                      x2={tipX + arrowLen * r1x}
+                      y2={tipY + arrowLen * r1y}
+                      stroke={stroke}
+                      strokeWidth={strokeW}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <line
+                      x1={tipX}
+                      y1={tipY}
+                      x2={tipX + arrowLen * r2x}
+                      y2={tipY + arrowLen * r2y}
+                      stroke={stroke}
+                      strokeWidth={strokeW}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </g>
+                );
+              }
+
+              if (decoration === "t") {
+                const halfLen = 0.022;
+                // Perpendicular to direction
+                const perpX = -uy;
+                const perpY = ux;
+                return (
+                  <line
+                    key={seg.id}
+                    x1={tipX + perpX * halfLen}
+                    y1={tipY + perpY * halfLen}
+                    x2={tipX - perpX * halfLen}
+                    y2={tipY - perpY * halfLen}
+                    stroke={stroke}
+                    strokeWidth={strokeW}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              }
+
+              return null;
+            })}
+          </g>
+        );
+      })}
+
       {/* Players */}
       {doc.layers.players.map((pl) => {
         const sel = pl.id === selectedPlayerId;
@@ -902,8 +1119,11 @@ export function EditorCanvas({
         const py = fy(pl.position.y);
         const r = 0.028;
         const fillColor = sel ? "#F26522" : (pl.style?.fill ?? "#FFFFFF");
-        const strokeColor = sel ? "#F26522" : (pl.style?.stroke ?? "rgba(0,0,0,0.3)");
-        const strokeW = sel ? 0.004 : 0.003;
+        const strokeColor = sel
+          ? "#F26522"
+          : (pl.style?.stroke ?? "rgba(0,0,0,0.6)");
+        // With vectorEffect=non-scaling-stroke these widths are in CSS pixels.
+        const strokeW = sel ? 2 : 1.5;
         const labelColor = sel ? "#FFFFFF" : (pl.style?.labelColor ?? "#1C1C1E");
         const shape = pl.shape ?? "circle";
 
@@ -980,7 +1200,7 @@ export function EditorCanvas({
                 r={0.042}
                 fill="none"
                 stroke="#F26522"
-                strokeWidth={0.003}
+                strokeWidth={2}
                 vectorEffect="non-scaling-stroke"
                 opacity={0.5}
                 pointerEvents="none"
@@ -1002,6 +1222,19 @@ export function EditorCanvas({
           </g>
         );
       })}
+
+      {/* Field border — drawn last so it sits on top of the field content. */}
+      <rect
+        x={0}
+        y={0}
+        width={fieldAspect}
+        height={1}
+        fill="none"
+        stroke={borderColor}
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
+        pointerEvents="none"
+      />
     </svg>
 
       {/* Segment context menu */}

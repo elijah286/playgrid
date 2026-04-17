@@ -16,7 +16,8 @@ import {
   UserPlus,
   BookmarkPlus,
 } from "lucide-react";
-import type { PlayDocument, Player, Point2, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, Player, Point2, SegmentShape, StrokePattern } from "@/domain/play/types";
+import { resolveEndDecoration } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
   savePlayVersionAction,
@@ -74,10 +75,15 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
   const selectedSeg = selectedRoute?.segments.find((s) => s.id === selectedSegmentId);
 
   // Toolbar display values: reflect current selection if one exists, else active defaults
-  const displayShape = selectedSeg?.shape ?? activeShape;
+  // If a segment's stored shape is "zigzag" (legacy — the shape option has been
+  // removed in favour of the motion stroke pattern), fall back to "straight"
+  // so the SegmentedControl has a valid selection.
+  const rawShape = selectedSeg?.shape ?? activeShape;
+  const displayShape: SegmentShape = rawShape === "zigzag" ? "straight" : rawShape;
   const displayStroke = selectedSeg?.strokePattern ?? activeStrokePattern;
   const displayColor = selectedRoute?.style.stroke ?? activeColor;
   const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
+  const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
 
   const save = useCallback(() => {
     startTransition(async () => {
@@ -178,15 +184,49 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
   const handleStrokeChange = useCallback(
     (strokePattern: StrokePattern) => {
       setActiveStrokePattern(strokePattern);
-      if (selectedSegmentId && selectedRouteId) {
+      if (!selectedRouteId || !selectedRoute) return;
+
+      // "Motion" is a whole-route concept: only the first segment from the
+      // player gets the zig-zag motion mark; everything else becomes solid.
+      if (strokePattern === "motion") {
+        if (selectedRoute.segments.length === 0) return;
+        const [first, ...rest] = selectedRoute.segments;
+        dispatch({
+          type: "route.setSegmentStroke",
+          routeId: selectedRouteId,
+          segmentId: first.id,
+          strokePattern: "motion",
+        });
+        for (const s of rest) {
+          if (s.strokePattern === "motion") {
+            dispatch({
+              type: "route.setSegmentStroke",
+              routeId: selectedRouteId,
+              segmentId: s.id,
+              strokePattern: "solid",
+            });
+          }
+        }
+        return;
+      }
+
+      if (selectedSegmentId) {
         dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: selectedSegmentId, strokePattern });
-      } else if (selectedRouteId && selectedRoute) {
+      } else {
         for (const s of selectedRoute.segments) {
           dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: s.id, strokePattern });
         }
       }
     },
     [dispatch, selectedRouteId, selectedSegmentId, selectedRoute],
+  );
+
+  const handleEndDecorationChange = useCallback(
+    (endDecoration: EndDecoration) => {
+      if (!selectedRouteId) return;
+      dispatch({ type: "route.setEndDecoration", routeId: selectedRouteId, endDecoration });
+    },
+    [dispatch, selectedRouteId],
   );
 
   const handleColorChange = useCallback(
@@ -398,6 +438,8 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
                 onUndo={undo}
                 canUndo={canUndo}
                 onDone={handleDone}
+                endDecoration={displayEndDecoration}
+                onEndDecorationChange={handleEndDecorationChange}
               />
             </div>
 
