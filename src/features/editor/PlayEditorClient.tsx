@@ -585,7 +585,7 @@ export function PlayEditorClient({
               />
             </div>
 
-            <div className="relative min-h-[360px] flex-1">
+            <div className="relative min-h-[360px] flex-1 overflow-hidden">
               <EditorCanvas
                 doc={doc}
                 dispatch={dispatch}
@@ -683,7 +683,7 @@ export function PlayEditorClient({
               </div>
             )}
 
-            <div className="relative min-h-[360px] flex-1">
+            <div className="relative min-h-[360px] flex-1 overflow-hidden">
               <EditorCanvas
                 doc={doc}
                 dispatch={dispatch}

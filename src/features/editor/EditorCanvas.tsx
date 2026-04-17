@@ -808,12 +808,12 @@ export function EditorCanvas({
   // stored positions are still in normalized 0-1 field coords.
 
   return (
-    <div ref={wrapperRef} className="relative h-full w-full">
+    <div ref={wrapperRef} className="relative h-full min-h-0 w-full overflow-hidden">
     <svg
       ref={svgRef}
       viewBox={`0 0 ${fieldAspect} 1`}
       preserveAspectRatio="xMidYMin meet"
-      className="h-full w-full touch-none rounded-xl shadow-card"
+      className="block h-full w-full touch-none rounded-xl shadow-card"
       style={{ cursor: svgCursor }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
