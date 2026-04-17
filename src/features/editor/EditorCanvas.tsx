@@ -156,6 +156,9 @@ export function EditorCanvas({
     interactionRef.current = interaction;
   }, [interaction]);
 
+  /** Which route is the pointer currently hovering over (if any). */
+  const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
+
   /* ---------- Right-click context menu state ---------- */
   type SegmentMenu = {
     /** Position in wrapper-relative CSS pixels (for absolute overlay) */
@@ -356,8 +359,9 @@ export function EditorCanvas({
       // Primary-button only. Right-clicks are handled by the context-menu
       // path (onContextMenu) and should not start a drag / selection.
       if (e.button !== 0) return;
-      // Any interaction cancels the context menu.
+      // Any interaction cancels the context menu and hover highlight.
       setSegmentMenu(null);
+      setHoveredRouteId(null);
       const svg = svgRef.current;
       if (svg) svg.setPointerCapture(e.pointerId);
       const origin = toNorm(e);
@@ -902,6 +906,7 @@ export function EditorCanvas({
       <g transform={`scale(${fieldAspect}, 1)`}>
         {doc.layers.routes.map((route) => {
           const isActive = route.id === selectedRouteId && mode !== "formation";
+          const isHovered = route.id === hoveredRouteId && !isActive && mode !== "formation";
           // "Whole-route" selection = route selected but no specific segment.
           const isWholeRouteSelected = isActive && selectedSegmentId == null;
           const rendered = routeToRenderedSegments(route);
@@ -913,28 +918,17 @@ export function EditorCanvas({
                 const showAnts = isSelectedSeg || isWholeRouteSelected;
                 return (
                   <g key={rs.segmentId}>
-                    {mode !== "formation" && (
+                    {/* Hover glow — rendered beneath the route line so it
+                        shows as a soft halo without obscuring the stroke. */}
+                    {isHovered && (
                       <path
                         d={rs.d}
                         fill="none"
-                        stroke="transparent"
-                        strokeWidth={0.025}
+                        stroke="rgba(255,255,255,0.35)"
+                        strokeWidth={10}
+                        strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
-                        style={{ cursor: "pointer" }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          startInteraction(e, {
-                            kind: "route_segment",
-                            routeId: route.id,
-                            segmentId: rs.segmentId,
-                          });
-                        }}
-                        onDoubleClick={(e) =>
-                          handleSegmentDoubleClick(route.id, rs.segmentId, e)
-                        }
-                        onContextMenu={(e) =>
-                          handleSegmentContextMenu(route.id, rs.segmentId, e)
-                        }
+                        pointerEvents="none"
                       />
                     )}
                     <path
@@ -959,6 +953,38 @@ export function EditorCanvas({
                         strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
                         pointerEvents="none"
+                      />
+                    )}
+                    {/* Transparent hit-path — sits on top of everything so
+                        pointer events land reliably. 18 px CSS-pixel target
+                        (non-scaling) makes it easy to click narrow routes.
+                        Previous value was 0.025 with non-scaling-stroke which
+                        rendered sub-pixel and was effectively unclickable. */}
+                    {mode !== "formation" && (
+                      <path
+                        d={rs.d}
+                        fill="none"
+                        stroke="transparent"
+                        strokeWidth={18}
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: isHovered ? "pointer" : "default" }}
+                        onPointerEnter={() => setHoveredRouteId(route.id)}
+                        onPointerLeave={() => setHoveredRouteId(null)}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          startInteraction(e, {
+                            kind: "route_segment",
+                            routeId: route.id,
+                            segmentId: rs.segmentId,
+                          });
+                        }}
+                        onDoubleClick={(e) =>
+                          handleSegmentDoubleClick(route.id, rs.segmentId, e)
+                        }
+                        onContextMenu={(e) =>
+                          handleSegmentContextMenu(route.id, rs.segmentId, e)
+                        }
                       />
                     )}
                   </g>
