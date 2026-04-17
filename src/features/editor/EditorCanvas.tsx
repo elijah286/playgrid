@@ -240,16 +240,20 @@ export function EditorCanvas({
         return { routeId: route.id, nodeId: node.id, position: node.position };
       }
     }
-    // Priority 2: selected route belongs to selected player → use last node
-    if (selectedPlayerId && selectedRouteId) {
+    // Priority 2: any selected route → use its last node.
+    // This covers both the "player + route selected" case AND the
+    // "whole-route double-click" case where selectedPlayerId is null.
+    // The playerId needed for new drawing is recovered from
+    // route.carrierPlayerId inside the drawing handlers.
+    if (selectedRouteId) {
       const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
-      if (route && route.carrierPlayerId === selectedPlayerId && route.nodes.length > 0) {
+      if (route && route.nodes.length > 0) {
         const last = route.nodes[route.nodes.length - 1];
         return { routeId: route.id, nodeId: last.id, position: last.position };
       }
     }
     return null;
-  }, [selectedNodeId, selectedRouteId, selectedPlayerId, doc.layers.routes]);
+  }, [selectedNodeId, selectedRouteId, doc.layers.routes]);
 
   /* ---------- Create a route from a freehand path ---------- */
 
