@@ -1,10 +1,21 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureDefaultWorkspace } from "@/lib/data/workspace";
+import { ensureDefaultWorkspace, profileDisplayNameFromUser } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument } from "@/domain/play/factory";
 import type { PlayDocument } from "@/domain/play/types";
+import type { TeamTheme } from "@/domain/team/theme";
+import { DEFAULT_TEAM_THEME, parseTeamTheme } from "@/domain/team/theme";
+import type { PlaybookRoster } from "@/domain/team/roster";
+import { parsePlaybookRoster } from "@/domain/team/roster";
+
+export type PlayPrintContext = {
+  playbookName: string;
+  teamName: string;
+  roster: PlaybookRoster;
+  theme: TeamTheme;
+};
 
 export async function listPlaysAction(playbookId: string) {
   if (!hasSupabaseEnv()) {
@@ -68,7 +79,11 @@ export async function createPlayAction(playbookId: string) {
 
   if (verErr) return { ok: false as const, error: verErr.message };
 
-  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
+  const { error: updErr } = await supabase
+    .from("plays")
+    .update({ current_version_id: ver.id })
+    .eq("id", play.id);
+  if (updErr) return { ok: false as const, error: updErr.message };
 
   return { ok: true as const, playId: play.id, versionId: ver.id };
 }
@@ -86,7 +101,23 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tag, formation_name, current_version_id",
+      `
+      id,
+      playbook_id,
+      name,
+      wristband_code,
+      shorthand,
+      concept,
+      tag,
+      formation_name,
+      current_version_id,
+      playbooks (
+        id,
+        name,
+        roster,
+        teams ( name, theme )
+      )
+    `,
     )
     .eq("id", playId)
     .single();
@@ -105,11 +136,34 @@ export async function getPlayForEditorAction(playId: string) {
 
   if (vErr || !ver) return { ok: false as const, error: vErr?.message ?? "Version missing" };
 
+  type PbRow = {
+    id: string;
+    name: string;
+    roster: unknown;
+    teams: { name: string; theme: unknown } | null;
+  };
+  const pbRaw = (play as unknown as { playbooks: PbRow | PbRow[] | null }).playbooks;
+  const pb = Array.isArray(pbRaw) ? pbRaw[0] : pbRaw;
+  const printContext: PlayPrintContext = pb
+    ? {
+        playbookName: pb.name,
+        teamName: pb.teams?.name ?? "Team",
+        roster: parsePlaybookRoster(pb.roster),
+        theme: parseTeamTheme(pb.teams?.theme),
+      }
+    : {
+        playbookName: "Playbook",
+        teamName: "Team",
+        roster: { staff: [], players: [] },
+        theme: DEFAULT_TEAM_THEME,
+      };
+
   return {
     ok: true as const,
     play,
     version: ver,
     document: ver.document as PlayDocument,
+    printContext,
   };
 }
 
@@ -238,6 +292,6 @@ export async function ensureUserWorkspaceAction() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
-  const ws = await ensureDefaultWorkspace(supabase, user.id);
+  const ws = await ensureDefaultWorkspace(supabase, user.id, profileDisplayNameFromUser(user));
   return { ok: true as const, ...ws };
 }

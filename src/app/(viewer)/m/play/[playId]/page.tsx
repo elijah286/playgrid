@@ -15,7 +15,7 @@ export default async function MobilePlayPage({ params, searchParams }: Props) {
 
   if (!hasSupabaseEnv()) {
     return (
-      <p className="text-sm text-slate-600">Configure Supabase for mobile viewing.</p>
+      <p className="text-sm text-pg-muted">Configure Supabase for mobile viewing.</p>
     );
   }
 
@@ -37,9 +37,9 @@ export default async function MobilePlayPage({ params, searchParams }: Props) {
   return (
     <div className="flex min-h-[80vh] flex-col gap-4">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Play</p>
-        <h1 className="text-xl font-semibold text-slate-900">{res.play.name}</h1>
-        <p className="text-sm text-slate-500">{res.play.wristband_code}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-pg-subtle">Play</p>
+        <h1 className="text-xl font-semibold text-pg-ink">{res.play.name}</h1>
+        <p className="text-sm text-pg-subtle">{res.play.wristband_code}</p>
       </div>
       <PlayCarousel
         plays={plays.map((p) => ({

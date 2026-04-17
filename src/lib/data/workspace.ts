@@ -1,6 +1,37 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 
-export async function ensureDefaultWorkspace(supabase: SupabaseClient, userId: string) {
+export function profileDisplayNameFromUser(user: User): string {
+  const meta = user.user_metadata?.full_name;
+  if (typeof meta === "string" && meta.trim()) return meta.trim();
+  const part = user.email?.split("@")[0];
+  if (part) return part;
+  return "Coach";
+}
+
+/** Ensures public.profiles has a row for this user (FK target for organizations.owner_id). */
+async function ensureProfileRow(
+  supabase: SupabaseClient,
+  userId: string,
+  displayName: string,
+) {
+  const { error } = await supabase.from("profiles").upsert(
+    { id: userId, display_name: displayName },
+    { onConflict: "id" },
+  );
+  if (error) throw error;
+}
+
+type WorkspaceIds = { orgId: string; teamId: string; playbookId: string };
+
+const workspaceInflight = new Map<string, Promise<WorkspaceIds>>();
+
+async function ensureDefaultWorkspaceOnce(
+  supabase: SupabaseClient,
+  userId: string,
+  displayName: string,
+): Promise<WorkspaceIds> {
+  await ensureProfileRow(supabase, userId, displayName);
+
   const { data: orgs, error: orgErr } = await supabase
     .from("organizations")
     .select("id")
@@ -50,12 +81,35 @@ export async function ensureDefaultWorkspace(supabase: SupabaseClient, userId: s
   if (!playbookId) {
     const { data: book, error } = await supabase
       .from("playbooks")
-      .insert({ team_id: teamId, name: "Main playbook" })
+      .insert({
+        team_id: teamId,
+        name: "Main playbook",
+        roster: { staff: [], players: [] },
+      })
       .select("id")
       .single();
     if (error) throw error;
     playbookId = book.id;
   }
 
+  if (!orgId || !teamId || !playbookId) {
+    throw new Error("ensureDefaultWorkspace: incomplete workspace");
+  }
   return { orgId, teamId, playbookId };
+}
+
+/** Serializes concurrent bootstraps for the same user (e.g. parallel server actions on /playbooks). */
+export async function ensureDefaultWorkspace(
+  supabase: SupabaseClient,
+  userId: string,
+  displayName = "Coach",
+): Promise<WorkspaceIds> {
+  let p = workspaceInflight.get(userId);
+  if (!p) {
+    p = ensureDefaultWorkspaceOnce(supabase, userId, displayName).finally(() => {
+      workspaceInflight.delete(userId);
+    });
+    workspaceInflight.set(userId, p);
+  }
+  return p;
 }

@@ -6,7 +6,7 @@ import type { PlayDocument } from "@/domain/play/types";
 /** Compact preview — tap-to-animate style using SVG SMIL */
 export function RouteAnimation({ doc }: { doc: PlayDocument }) {
   return (
-    <svg viewBox="0 0 1 1" className="h-28 w-44 overflow-visible rounded-lg bg-white/80 ring-1 ring-slate-200/80">
+    <svg viewBox="0 0 1 1" className="h-28 w-44 overflow-visible rounded-lg bg-white/80 ring-1 ring-pg-line/80">
       <rect width={1} height={1} fill="#f8fafc" opacity={0.9} />
       {doc.layers.routes.map((r) => {
         const d = pathGeometryToSvgD(r.geometry);

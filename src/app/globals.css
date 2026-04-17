@@ -1,12 +1,88 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --accent: #4f46e5;
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Youth-football field palette: turf, chalk cards, sideline mist, signal orange */
+@theme {
+  --color-pg-ink: #07140f;
+  --color-pg-body: #1c2e24;
+  --color-pg-muted: #3d5346;
+  --color-pg-subtle: #5a6e61;
+  --color-pg-faint: #889889;
+  --color-pg-mist: #edf5ef;
+  --color-pg-surface: #dfeae2;
+  --color-pg-hover: #d4e3d8;
+  --color-pg-line: #b8cbbf;
+  --color-pg-turf: #134e2a;
+  --color-pg-turf-deep: #0d3a1f;
+  --color-pg-field: #c8ecd4;
+  --color-pg-signal: #c2410c;
+  --color-pg-signal-deep: #9a3412;
+  --color-pg-signal-bright: #ea580c;
+  --color-pg-signal-soft: #fff7ed;
+  --color-pg-signal-ring: #fdba74;
+  --color-pg-chalk: #fefcf6;
+  --color-pg-leather: #7c4a21;
 }
 
+:root {
+  --background: var(--color-pg-mist);
+  --foreground: var(--color-pg-ink);
+  --accent: var(--color-pg-turf);
+}
+
+/* Dark mode: same tokens, inverted for readable night sideline */
+html.dark {
+  color-scheme: dark;
+  --color-pg-ink: #e8f4ec;
+  --color-pg-body: #c9e0d2;
+  --color-pg-muted: #9cb8a8;
+  --color-pg-subtle: #7d9a89;
+  --color-pg-faint: #5c7568;
+  --color-pg-mist: #0c1410;
+  --color-pg-surface: #15221a;
+  --color-pg-hover: #1c2e24;
+  --color-pg-line: #2a3d32;
+  --color-pg-turf: #3d8f5a;
+  --color-pg-turf-deep: #2d6b44;
+  --color-pg-field: #1a3d28;
+  --color-pg-signal: #fb923c;
+  --color-pg-signal-deep: #ea580c;
+  --color-pg-signal-bright: #fdba74;
+  --color-pg-signal-soft: #292218;
+  --color-pg-signal-ring: #9a3412;
+  --color-pg-chalk: #121c17;
+  --color-pg-leather: #c4a574;
+  --background: var(--color-pg-mist);
+  --foreground: var(--color-pg-ink);
+  --accent: var(--color-pg-turf);
+}
+
+/* Subtle sideline: cool mist with faint horizontal “yard” rhythm */
 body {
   color: var(--foreground);
-  background: var(--background);
+  background-color: var(--background);
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 11px,
+    rgb(61 143 90 / 6%) 11px,
+    rgb(61 143 90 / 6%) 12px
+  );
+}
+
+html.dark body {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 11px,
+    rgb(61 143 90 / 8%) 11px,
+    rgb(61 143 90 / 8%) 12px
+  );
+}
+
+/* Stadium board / jersey stencil for display lines */
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+  letter-spacing: 0.02em;
 }

@@ -19,8 +19,8 @@ export function ToolPalette({ tool, onToolChange, onFinishPolyline, polylineActi
       className={cn(
         "rounded-lg px-3 py-1.5 text-sm font-medium transition",
         tool === t
-          ? "bg-slate-900 text-white shadow-sm"
-          : "bg-white/80 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
+          ? "bg-pg-turf text-white shadow-sm"
+          : "bg-white/80 text-pg-body ring-1 ring-pg-line hover:bg-pg-mist",
       )}
     >
       {label}
@@ -36,7 +36,7 @@ export function ToolPalette({ tool, onToolChange, onFinishPolyline, polylineActi
         <button
           type="button"
           onClick={onFinishPolyline}
-          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-500"
+          className="rounded-lg bg-pg-signal px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-pg-signal-soft0"
         >
           Finish route
         </button>

@@ -13,7 +13,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   if (!hasSupabaseEnv()) {
     return (
       <div>
-        <p className="text-sm text-slate-600">Configure Supabase to load this playbook.</p>
+        <p className="text-sm text-pg-muted">Configure Supabase to load this playbook.</p>
       </div>
     );
   }
@@ -21,7 +21,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name")
+    .select("id, name, teams ( name )")
     .eq("id", playbookId)
     .single();
 
@@ -32,10 +32,15 @@ export default async function PlaybookDetailPage({ params }: Props) {
   return (
     <div className="space-y-8">
       <div>
-        <Link href="/playbooks" className="text-sm text-slate-500 hover:text-slate-800">
+        <Link href="/playbooks" className="text-sm text-pg-subtle hover:text-pg-ink">
           ← Playbooks
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{book.name}</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-pg-ink">{book.name}</h1>
+        {(() => {
+          const t = book.teams as { name: string } | { name: string }[] | null | undefined;
+          const teamName = Array.isArray(t) ? t[0]?.name : t?.name;
+          return teamName ? <p className="mt-1 text-sm text-pg-muted">{teamName}</p> : null;
+        })()}
       </div>
       <PlaybookDetailClient playbookId={playbookId} initialPlays={plays.ok ? plays.plays : []} />
     </div>

@@ -1,0 +1,40 @@
+---
+description: LLM-retrieval-first storage for plays, playbooks, and in-app assistants
+alwaysApply: true
+---
+
+# LLM-first data (hard requirement)
+
+All persisted coach or playbook content MUST be stored so an integrated LLM can **retrieve accurate facts** and **apply structured, reviewable edits** to plays and playbooks.
+
+## Canonical model and mirrors
+
+- **Canonical state** lives in `play_versions.document` as a typed `PlayDocument` (`src/domain/play/types.ts`, `schema.ts`, `factory.ts`). The JSON shape is the source of truth for full play state.
+- **Denormalized row** on `public.plays` (`name`, `shorthand`, `wristband_code`, `formation_name`, `concept`, `tag`, etc.) MUST stay in sync whenever a new `play_versions` row is written or the current version is updated, so SQL, lists, and filters stay truthful for retrieval and UI.
+- Do **not** store coach-meaningful information only in ephemeral client state, opaque blobs, or fields that never round-trip through the domain schema.
+
+## Semantics over raw geometry
+
+- Routes MUST preserve `semantic` (`family`, `tags`) when the app knows them; do not drop semantics to “simplify” persistence.
+- Formations MUST preserve `formation.semantic` (`key`, `strength`, `params`) where the product sets them.
+- Prefer clear natural-language strings in `metadata`, `annotations`, and labels where coaches will ask questions in plain language. Codes and abbreviations are fine if they are consistent and mirrored on `plays` where applicable.
+
+## RAG and embeddings (plan or ship together with data changes)
+
+When adding or changing fields that users will ask about in natural language:
+
+- Tie retrieval to **stable IDs**: at minimum `plays.id`, `play_versions.id`, `playbook_id`, `team_id` as appropriate.
+- Provide a **deterministic text projection** of each version for search (generate from `PlayDocument` + mirrored columns, not hand-maintained prose that can drift). Acceptable patterns: a `text` column on `play_versions` maintained by trigger/application on insert/update; or a normalized `play_version_chunks` table (`play_version_id`, `chunk_index`, `content`) with optional `pgvector` / `embedding` column later.
+- Chunk text at **coherent boundaries** (e.g. progression steps, major annotations) so answers map to citeable spans.
+- Any migration that adds narrative or chunk tables MUST document how they stay in sync on version insert and on play mirror updates.
+
+## Mutations and safety
+
+- Prefer **command-shaped** updates via `PlayCommand` in `src/domain/play/commands.ts` (or the project’s established reducer) over ad-hoc deep merges into `document` from random call sites.
+- Bump `schema_version` / `PLAY_DOCUMENT_SCHEMA_VERSION` and handle migrations explicitly when the document shape changes; avoid silent incompatible JSON.
+
+## Anti-patterns
+
+- Meaning only in coordinates with no `semantic`, labels, or annotations.
+- Saving a version without updating denormalized `plays` header fields used in UI and search.
+- Large unstructured text with no FK to `play_id` / `play_version_id` / `playbook_id`.

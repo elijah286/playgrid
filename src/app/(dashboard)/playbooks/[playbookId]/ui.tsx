@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { createPlayAction } from "@/app/actions/plays";
 
 type PlayRow = {
@@ -22,7 +22,8 @@ export function PlaybookDetailClient({
   initialPlays: PlayRow[];
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
   const filtered = initialPlays.filter((p) => {
@@ -36,63 +37,75 @@ export function PlaybookDetailClient({
     );
   });
 
-  function addPlay() {
-    startTransition(async () => {
+  async function addPlay() {
+    setActionError(null);
+    setCreating(true);
+    try {
       const res = await createPlayAction(playbookId);
       if (res.ok) {
         router.push(`/plays/${res.playId}/edit`);
-        router.refresh();
+        return;
       }
-    });
+      setActionError(res.error);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not create play.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <label className="text-xs font-medium uppercase tracking-wide text-pg-subtle">
             Search plays
           </label>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Code, name, concept"
-            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+            className="mt-1 w-full rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 text-sm shadow-sm dark:bg-pg-chalk/10"
           />
         </div>
         <button
           type="button"
-          disabled={pending}
-          onClick={addPlay}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          disabled={creating}
+          onClick={() => void addPlay()}
+          className="rounded-xl bg-pg-turf px-4 py-2 text-sm font-medium text-white hover:bg-pg-turf-deep disabled:opacity-60"
         >
-          New play
+          {creating ? "Creating…" : "New play"}
         </button>
       </div>
+      {actionError ? (
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
-      <ul className="divide-y divide-slate-200/80 rounded-2xl bg-white ring-1 ring-slate-200/80">
+      <ul className="divide-y divide-pg-line/80 rounded-2xl bg-pg-chalk/95 ring-1 ring-pg-line/80 dark:bg-pg-turf-deep/25">
         {filtered.length === 0 && (
-          <li className="px-4 py-6 text-sm text-slate-500">No plays match.</li>
+          <li className="px-4 py-6 text-sm text-pg-subtle">No plays match.</li>
         )}
         {filtered.map((p) => (
           <li key={p.id}>
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-pg-mist/60 dark:hover:bg-pg-surface/40">
               <div>
-                <p className="font-medium text-slate-900">{p.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className="font-medium text-pg-ink">{p.name}</p>
+                <p className="text-xs text-pg-subtle">
                   {p.wristband_code} · {p.concept || "—"}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Link
                   href={`/plays/${p.id}/edit`}
-                  className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
+                  className="rounded-lg bg-pg-turf px-3 py-1.5 text-xs font-medium text-white"
                 >
                   Edit
                 </Link>
                 <Link
                   href={`/m/play/${p.id}?playbookId=${playbookId}`}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50"
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-pg-signal ring-1 ring-pg-signal-ring hover:bg-pg-signal-soft"
                 >
                   Mobile
                 </Link>

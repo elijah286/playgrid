@@ -3,3 +3,7 @@
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+
+## LLM-first data (required)
+
+All play and playbook persistence MUST stay **retrieval- and edit-friendly** for an integrated LLM: canonical typed `PlayDocument` in `play_versions.document`, denormalized truth on `public.plays`, preserved route/formation semantics, deterministic text for future RAG, and command-shaped mutations. Full checklist: `.cursor/rules/llm-first-data.mdc`. Workflow skill: `.cursor/skills/playbook-llm-data/SKILL.md`.

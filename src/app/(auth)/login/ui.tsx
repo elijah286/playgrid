@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 export function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -28,8 +26,8 @@ export function LoginForm() {
         const { error: err } = await supabase.auth.signUp({ email, password });
         if (err) throw err;
       }
-      router.push("/playbooks");
-      router.refresh();
+      await supabase.auth.getSession();
+      window.location.assign("/playbooks");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -39,7 +37,7 @@ export function LoginForm() {
 
   if (!hasSupabaseEnv()) {
     return (
-      <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200">
+      <p className="rounded-xl bg-pg-signal-soft px-4 py-3 text-sm text-pg-signal-deep ring-1 ring-pg-signal-ring/80">
         Add <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
         <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
         <code className="font-mono">.env.local</code>, then restart the dev server.
@@ -48,12 +46,12 @@ export function LoginForm() {
   }
 
   return (
-    <div className="space-y-4 rounded-2xl bg-white p-6 ring-1 ring-slate-200/80">
-      <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
+    <div className="space-y-4 rounded-2xl bg-pg-chalk p-6 ring-1 ring-pg-line/80 dark:bg-pg-turf-deep/30">
+      <div className="flex gap-2 rounded-xl bg-pg-surface p-1 dark:bg-pg-chalk/20">
         <button
           type="button"
           className={`flex-1 rounded-lg py-2 text-sm font-medium ${
-            mode === "signin" ? "bg-white shadow-sm" : "text-slate-600"
+            mode === "signin" ? "bg-pg-chalk shadow-sm dark:bg-pg-mist" : "text-pg-muted"
           }`}
           onClick={() => setMode("signin")}
         >
@@ -62,7 +60,7 @@ export function LoginForm() {
         <button
           type="button"
           className={`flex-1 rounded-lg py-2 text-sm font-medium ${
-            mode === "signup" ? "bg-white shadow-sm" : "text-slate-600"
+            mode === "signup" ? "bg-pg-chalk shadow-sm dark:bg-pg-mist" : "text-pg-muted"
           }`}
           onClick={() => setMode("signup")}
         >
@@ -70,9 +68,9 @@ export function LoginForm() {
         </button>
       </div>
       <label className="block text-sm">
-        <span className="text-slate-600">Email</span>
+        <span className="text-pg-muted">Email</span>
         <input
-          className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+          className="mt-1 w-full rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 dark:bg-pg-chalk/10"
           type="email"
           autoComplete="email"
           value={email}
@@ -80,9 +78,9 @@ export function LoginForm() {
         />
       </label>
       <label className="block text-sm">
-        <span className="text-slate-600">Password</span>
+        <span className="text-pg-muted">Password</span>
         <input
-          className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
+          className="mt-1 w-full rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 dark:bg-pg-chalk/10"
           type="password"
           autoComplete={mode === "signin" ? "current-password" : "new-password"}
           value={password}
@@ -94,7 +92,7 @@ export function LoginForm() {
         type="button"
         disabled={pending}
         onClick={submit}
-        className="w-full rounded-xl bg-slate-900 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+        className="w-full rounded-xl bg-pg-turf py-2.5 text-sm font-medium text-white hover:bg-pg-turf-deep disabled:opacity-60"
       >
         {pending ? "Working…" : mode === "signin" ? "Sign in" : "Sign up"}
       </button>

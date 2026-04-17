@@ -150,7 +150,8 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, Props>(function Edito
     <svg
       ref={svgRef}
       viewBox={`0 0 ${FIELD.w} ${FIELD.h}`}
-      className="h-full w-full cursor-crosshair touch-none rounded-xl bg-emerald-50/90 ring-1 ring-slate-200/80"
+      preserveAspectRatio="xMidYMin meet"
+      className="h-full w-full cursor-crosshair touch-none rounded-xl bg-pg-field/90 ring-1 ring-pg-line/80"
       onMouseDown={handleDown}
       onMouseMove={(e) => {
         handleMove(e);

@@ -46,18 +46,18 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search code or name"
-          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base shadow-sm"
+          className="flex-1 rounded-xl border border-pg-line bg-white px-3 py-2 text-base shadow-sm"
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl bg-white p-3 ring-1 ring-slate-200/80">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl bg-white p-3 ring-1 ring-pg-line/80">
         <ul className="space-y-1">
           {filtered.map((p) => (
             <li key={p.id}>
               <Link
                 href={`/m/play/${p.id}?playbookId=${playbookId}`}
                 className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${
-                  p.id === currentId ? "bg-slate-900 text-white" : "hover:bg-slate-50"
+                  p.id === currentId ? "bg-pg-turf text-white" : "hover:bg-pg-mist"
                 }`}
               >
                 <span className="font-medium">{p.name}</span>
@@ -73,11 +73,11 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
           type="button"
           disabled={!prev}
           onClick={() => prev && router.push(`/m/play/${prev.id}?playbookId=${playbookId}`)}
-          className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-800 ring-1 ring-slate-200 disabled:opacity-40"
+          className="rounded-xl bg-pg-surface px-4 py-3 text-sm font-medium text-pg-ink ring-1 ring-pg-line disabled:opacity-40"
         >
           Previous
         </button>
-        <div className="aspect-[4/3] w-full max-w-[280px] justify-self-center rounded-2xl bg-emerald-50 ring-1 ring-slate-200/80">
+        <div className="aspect-[4/3] w-full max-w-[280px] justify-self-center rounded-2xl bg-pg-field ring-1 ring-pg-line/80">
           <svg viewBox="0 0 1 1" className="h-full w-full">
             <rect width={1} height={1} fill="#ecfdf5" />
             {document.layers.routes.map((r) => (
@@ -106,7 +106,7 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
           type="button"
           disabled={!next}
           onClick={() => next && router.push(`/m/play/${next.id}?playbookId=${playbookId}`)}
-          className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-800 ring-1 ring-slate-200 disabled:opacity-40"
+          className="rounded-xl bg-pg-surface px-4 py-3 text-sm font-medium text-pg-ink ring-1 ring-pg-line disabled:opacity-40"
         >
           Next
         </button>
@@ -114,7 +114,7 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
 
       <Link
         href={`/plays/${currentId}/edit`}
-        className="block rounded-xl bg-slate-900 py-3 text-center text-sm font-medium text-white"
+        className="block rounded-xl bg-pg-turf py-3 text-center text-sm font-medium text-white"
       >
         Edit on desktop
       </Link>

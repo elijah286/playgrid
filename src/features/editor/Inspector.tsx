@@ -17,15 +17,15 @@ export function Inspector({ doc, dispatch, selectedPlayerId, selectedRouteId }: 
   const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
 
   return (
-    <div className="space-y-4 text-sm text-slate-700">
+    <div className="space-y-4 text-sm text-pg-body">
       <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-pg-subtle">
           Play naming
         </h3>
         <label className="mt-2 block">
-          <span className="text-xs text-slate-500">Coach name</span>
+          <span className="text-xs text-pg-subtle">Coach name</span>
           <input
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            className="mt-1 w-full rounded-lg border border-pg-line bg-white px-2 py-1.5 text-sm"
             value={doc.metadata.coachName}
             onChange={(e) =>
               dispatch({ type: "document.setMetadata", patch: { coachName: e.target.value } })
@@ -33,9 +33,9 @@ export function Inspector({ doc, dispatch, selectedPlayerId, selectedRouteId }: 
           />
         </label>
         <label className="mt-2 block">
-          <span className="text-xs text-slate-500">Wristband code</span>
+          <span className="text-xs text-pg-subtle">Wristband code</span>
           <input
-            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            className="mt-1 w-full rounded-lg border border-pg-line bg-white px-2 py-1.5 text-sm"
             value={doc.metadata.wristbandCode}
             onChange={(e) =>
               dispatch({ type: "document.setMetadata", patch: { wristbandCode: e.target.value } })
@@ -57,19 +57,19 @@ export function Inspector({ doc, dispatch, selectedPlayerId, selectedRouteId }: 
 
       {player && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Player</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-pg-subtle">Player</h3>
           <p className="mt-1 font-medium">{player.label}</p>
-          <p className="text-xs text-slate-500">{player.role}</p>
+          <p className="text-xs text-pg-subtle">{player.role}</p>
         </section>
       )}
 
       {route && (
         <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Route</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-pg-subtle">Route</h3>
           <label className="block">
-            <span className="text-xs text-slate-500">Semantic family</span>
+            <span className="text-xs text-pg-subtle">Semantic family</span>
             <select
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded-lg border border-pg-line bg-white px-2 py-1.5 text-sm"
               value={route.semantic?.family ?? ""}
               onChange={(e) => {
                 const v = e.target.value;
@@ -95,7 +95,7 @@ export function Inspector({ doc, dispatch, selectedPlayerId, selectedRouteId }: 
           </label>
           <button
             type="button"
-            className="w-full rounded-lg bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-800 ring-1 ring-slate-200 hover:bg-slate-200/80"
+            className="w-full rounded-lg bg-pg-surface px-2 py-1.5 text-xs font-medium text-pg-ink ring-1 ring-pg-line hover:bg-pg-line/80"
             onClick={() => dispatch({ type: "route.remove", routeId: route.id })}
           >
             Delete route

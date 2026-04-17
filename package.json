@@ -8,7 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:link": "supabase link --project-ref hxbjkezyecahhieymbxn",
+    "db:push": "supabase db push",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "seed:admin": "node scripts/seed-admin.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

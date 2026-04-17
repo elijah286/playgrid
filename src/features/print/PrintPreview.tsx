@@ -1,41 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
+import type { TeamTheme } from "@/domain/team/theme";
 import { compilePlayToSvg } from "@/domain/print/templates";
+import type { PrintTemplateKind } from "@/domain/print/templates";
 
 type Props = {
   doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
+  kind: PrintTemplateKind;
+  onKindChange: (k: PrintTemplateKind) => void;
+  teamTheme?: TeamTheme;
 };
 
-export function PrintPreview({ doc, dispatch }: Props) {
-  const [kind, setKind] = useState<"wristband" | "full_sheet">("wristband");
-
-  const compiled = useMemo(() => compilePlayToSvg(doc, kind), [doc, kind]);
+export function PrintPreview({ doc, dispatch, kind, onKindChange, teamTheme }: Props) {
+  const compiled = useMemo(
+    () => compilePlayToSvg(doc, kind, teamTheme),
+    [doc, kind, teamTheme],
+  );
 
   return (
     <div className="space-y-3">
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setKind("wristband")}
+          onClick={() => onKindChange("wristband")}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
             kind === "wristband"
-              ? "bg-slate-900 text-white"
-              : "bg-white ring-1 ring-slate-200"
+              ? "bg-pg-turf text-white"
+              : "bg-pg-chalk ring-1 ring-pg-line dark:bg-pg-turf-deep/40"
           }`}
         >
           Wristband
         </button>
         <button
           type="button"
-          onClick={() => setKind("full_sheet")}
+          onClick={() => onKindChange("full_sheet")}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
             kind === "full_sheet"
-              ? "bg-slate-900 text-white"
-              : "bg-white ring-1 ring-slate-200"
+              ? "bg-pg-turf text-white"
+              : "bg-pg-chalk ring-1 ring-pg-line dark:bg-pg-turf-deep/40"
           }`}
         >
           Full sheet
@@ -44,15 +50,15 @@ export function PrintPreview({ doc, dispatch }: Props) {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div>
-          <p className="text-xs font-medium text-slate-500">Live preview</p>
+          <p className="text-xs font-medium text-pg-subtle">Live preview</p>
           <div
-            className="mt-2 overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-200"
+            className="mt-2 overflow-hidden rounded-xl bg-pg-chalk p-2 ring-1 ring-pg-line dark:bg-pg-turf-deep/30"
             dangerouslySetInnerHTML={{ __html: compiled.svgMarkup }}
           />
         </div>
         <div className="space-y-3 text-xs">
           <label className="flex flex-col gap-1">
-            <span className="text-slate-500">Diagram scale</span>
+            <span className="text-pg-subtle">Diagram scale</span>
             <input
               type="range"
               min={0.6}

@@ -1,4 +1,6 @@
 import type { PlayDocument } from "../play/types";
+import type { TeamTheme } from "../team/theme";
+import { DEFAULT_TEAM_THEME } from "../team/theme";
 
 export type PrintTemplateKind = "wristband" | "full_sheet";
 
@@ -38,10 +40,35 @@ export type CompiledPrintSvg = {
   height: number;
 };
 
+export type PrintBrandTheme = Pick<
+  TeamTheme,
+  "field" | "pageBg" | "ink" | "primary" | "accent"
+>;
+
+function escSvgText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function brandOrDefault(theme?: Partial<TeamTheme>): PrintBrandTheme {
+  const t = { ...DEFAULT_TEAM_THEME, ...theme };
+  return {
+    field: t.field,
+    pageBg: t.pageBg,
+    ink: t.ink,
+    primary: t.primary,
+    accent: t.accent,
+  };
+}
+
 /** Shared print compiler: structured play → SVG (not a screenshot) */
 export function compilePlayToSvg(
   doc: PlayDocument,
   kind: PrintTemplateKind,
+  teamTheme?: Partial<TeamTheme>,
 ): CompiledPrintSvg {
   const def =
     kind === "wristband" ? defaultWristbandTemplate : defaultFullSheetTemplate;
@@ -51,8 +78,8 @@ export function compilePlayToSvg(
   const scale = doc.printProfile.wristband.diagramScale * doc.printProfile.fontScale;
   const vis = doc.printProfile.visibility;
 
-  const title = doc.metadata.coachName;
-  const code = vis.showWristbandCode ? doc.metadata.wristbandCode : "";
+  const title = escSvgText(doc.metadata.coachName);
+  const code = vis.showWristbandCode ? escSvgText(doc.metadata.wristbandCode) : "";
   const box = diagramBox;
   const fieldX = w * box.x;
   const fieldY = h * box.y;
@@ -69,7 +96,7 @@ export function compilePlayToSvg(
     const pr = Math.max(1.8, 2.2 * doc.printProfile.fontScale);
     playerCircles += `<circle cx="${px}" cy="${py}" r="${pr}" fill="${p.style.fill}" stroke="${p.style.stroke}" stroke-width="0.35"/>`;
     if (vis.showPlayerLabels) {
-      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif">${p.label}</text>`;
+      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -100,18 +127,22 @@ export function compilePlayToSvg(
 
   const notes =
     vis.showNotes && doc.layers.annotations.length
-      ? doc.layers.annotations.map((a) => a.text).join(" · ")
+      ? doc.layers.annotations.map((a) => escSvgText(a.text)).join(" · ")
       : "";
+
+  const b = brandOrDefault(teamTheme);
+  const fieldStroke = b.accent;
+  const metaMuted = b.primary;
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
-  <rect width="100%" height="100%" fill="#fafafa"/>
-  <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="system-ui,sans-serif" fill="#111827">${title}</text>
-  ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#64748b">${code}</text>` : ""}
-  <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ecfdf5" stroke="#94a3b8" stroke-width="0.4"/>
+  <rect width="100%" height="100%" fill="${b.pageBg}"/>
+  <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="system-ui,sans-serif" fill="${b.ink}">${title}</text>
+  ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="${metaMuted}">${code}</text>` : ""}
+  <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="${b.field}" stroke="${fieldStroke}" stroke-opacity="0.45" stroke-width="0.4"/>
   ${playerCircles}
   ${routePaths}
-  ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#334155">${notes}</text>` : ""}
+  ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="${b.ink}" fill-opacity="0.75">${notes}</text>` : ""}
 </svg>`;
 
   return { templateKind: kind, svgMarkup: svg, width: w, height: h };
