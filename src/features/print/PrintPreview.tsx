@@ -10,10 +10,14 @@ import { useState } from "react";
 type Props = {
   doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
+  kind?: "wristband" | "full_sheet";
+  onKindChange?: (k: "wristband" | "full_sheet") => void;
 };
 
-export function PrintPreview({ doc, dispatch }: Props) {
-  const [kind, setKind] = useState<"wristband" | "full_sheet">("wristband");
+export function PrintPreview({ doc, dispatch, kind: kindProp, onKindChange }: Props) {
+  const [internalKind, setInternalKind] = useState<"wristband" | "full_sheet">("wristband");
+  const kind = kindProp ?? internalKind;
+  const setKind = onKindChange ?? setInternalKind;
 
   const compiled = useMemo(() => compilePlayToSvg(doc, kind), [doc, kind]);
 

@@ -7,6 +7,7 @@ import { createEmptyPlayDocument } from "@/domain/play/factory";
 import type { PlayDocument, Player } from "@/domain/play/types";
 import {
   compareNavPlays,
+  type PlaybookGroupRow,
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 
@@ -209,7 +210,7 @@ export async function duplicatePlayAction(playId: string) {
 
   const { data: srcPlay, error: srcPlayErr } = await supabase
     .from("plays")
-    .select("playbook_id, group_id, sort_order")
+    .select("playbook_id, group_id")
     .eq("id", playId)
     .single();
   if (srcPlayErr || !srcPlay) return { ok: false as const, error: "Not found" };
@@ -230,7 +231,7 @@ export async function duplicatePlayAction(playId: string) {
   const { data: play, error: playErr } = await supabase
     .from("plays")
     .insert({
-      playbook_id: src.playbook_id,
+      playbook_id: srcPlay.playbook_id,
       name: doc.metadata.coachName,
       shorthand: doc.metadata.shorthand,
       wristband_code: doc.metadata.wristbandCode,
@@ -437,6 +438,158 @@ export async function getDashboardSummaryAction(): Promise<
       totalPlays: countRes.count ?? 0,
     },
   };
+}
+
+export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured.", plays: [], groups: [] };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in.", plays: [], groups: [] };
+
+  const [{ data: groups, error: gErr }, { data: rows, error: pErr }] = await Promise.all([
+    supabase
+      .from("playbook_groups")
+      .select("id, name, sort_order")
+      .eq("playbook_id", playbookId)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("plays")
+      .select(
+        "id, name, wristband_code, shorthand, formation_name, concept, tag, group_id, sort_order, current_version_id",
+      )
+      .eq("playbook_id", playbookId)
+      .eq("is_archived", false),
+  ]);
+
+  if (gErr) return { ok: false as const, error: gErr.message, plays: [], groups: [] };
+  if (pErr) return { ok: false as const, error: pErr.message, plays: [], groups: [] };
+
+  const gMap = new Map((groups ?? []).map((g) => [g.id as string, g as PlaybookGroupRow]));
+  const items: PlaybookPlayNavItem[] = (rows ?? []).map((row) => {
+    const gid = (row.group_id as string | null) ?? null;
+    const g = gid ? gMap.get(gid) : undefined;
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      wristband_code: (row.wristband_code as string) ?? "",
+      shorthand: (row.shorthand as string) ?? "",
+      formation_name: (row.formation_name as string) ?? "",
+      concept: (row.concept as string) ?? "",
+      tag: (row.tag as string) ?? "",
+      group_id: gid,
+      sort_order: (row.sort_order as number) ?? 0,
+      group_name: g?.name ?? null,
+      group_sort_order: g?.sort_order ?? null,
+      current_version_id: (row.current_version_id as string) ?? null,
+    };
+  });
+  items.sort(compareNavPlays);
+
+  return {
+    ok: true as const,
+    plays: items,
+    groups: (groups ?? []) as PlaybookGroupRow[],
+  };
+}
+
+export type PlaybookPrintPackRow = {
+  id: string;
+  nav: PlaybookPlayNavItem;
+  document: PlayDocument;
+};
+
+export async function loadPlaybookPrintPackAction(playbookId: string) {
+  const listed = await listPlaybookPlaysForNavigationAction(playbookId);
+  if (!listed.ok) {
+    return {
+      ok: false as const,
+      error: listed.error,
+      pack: [] as PlaybookPrintPackRow[],
+      groups: [] as PlaybookGroupRow[],
+    };
+  }
+
+  const versionIds = listed.plays
+    .map((p) => p.current_version_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (versionIds.length === 0) {
+    return { ok: true as const, pack: [] as PlaybookPrintPackRow[], groups: listed.groups };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false as const, error: "Not signed in.", pack: [], groups: listed.groups };
+  }
+
+  const { data: versions, error: vErr } = await supabase
+    .from("play_versions")
+    .select("id, document")
+    .in("id", versionIds);
+  if (vErr) {
+    return { ok: false as const, error: vErr.message, pack: [], groups: listed.groups };
+  }
+
+  const byVer = new Map(
+    (versions ?? []).map((v) => [v.id as string, v.document as PlayDocument]),
+  );
+
+  const pack: PlaybookPrintPackRow[] = [];
+  for (const nav of listed.plays) {
+    const vid = nav.current_version_id;
+    if (!vid) continue;
+    const document = byVer.get(vid);
+    if (!document) continue;
+    pack.push({ id: nav.id, nav, document });
+  }
+
+  return { ok: true as const, pack, groups: listed.groups };
+}
+
+export async function createPlaybookGroupAction(playbookId: string, name: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const label = name.trim() || "Group";
+  const { data: maxRow } = await supabase
+    .from("playbook_groups")
+    .select("sort_order")
+    .eq("playbook_id", playbookId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextOrder = (maxRow?.sort_order ?? -1) + 1;
+
+  const { data: row, error } = await supabase
+    .from("playbook_groups")
+    .insert({ playbook_id: playbookId, name: label, sort_order: nextOrder })
+    .select("id, name, sort_order")
+    .single();
+  if (error || !row) return { ok: false as const, error: error?.message ?? "Insert failed" };
+  return { ok: true as const, group: row as PlaybookGroupRow };
+}
+
+export async function setPlayGroupAction(playId: string, groupId: string | null) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase.from("plays").update({ group_id: groupId }).eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
 }
 
 /** Ensure workspace for actions that need team context */

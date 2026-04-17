@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,7 +8,6 @@ import {
   Undo2,
   Redo2,
   FlipHorizontal,
-  Copy,
   Share2,
   Save,
   Smartphone,
@@ -20,7 +19,9 @@ import type { EndDecoration, PlayDocument, Player, Point2, SegmentShape, StrokeP
 import { resolveEndDecoration } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
+  loadPlaybookPrintPackAction,
   savePlayVersionAction,
+  type PlaybookPrintPackRow,
 } from "@/app/actions/plays";
 import { saveFormationAction } from "@/app/actions/formations";
 import { createShareLinkForPlayAction } from "@/app/actions/share";
@@ -31,8 +32,23 @@ import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
 import { FormationInspector } from "./FormationInspector";
 import { PrintPreview } from "@/features/print/PrintPreview";
-import { exportSvgToPdf } from "@/features/print/exportPdf";
-import { compilePlayToSvg } from "@/domain/print/templates";
+import { PlaybookPrintRunControls } from "@/features/print/PlaybookPrintRunControls";
+import { exportSvgToPdf, exportSvgsToMultiPagePdf } from "@/features/print/exportPdf";
+import {
+  compilePlayToSvg,
+  compilePlaysheetPdfPages,
+  compileWristbandPdfPages,
+} from "@/domain/print/templates";
+import {
+  applyExportPresentation,
+  defaultPlaybookPrintRunConfig,
+  sortNavPlaysForPrint,
+  wristbandWidthMm,
+  type PlaybookGroupRow,
+  type PlaybookPlayNavItem,
+} from "@/domain/print/playbookPrint";
+import { EditorPlayContextBar } from "./EditorPlayContextBar";
+import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
 import { Button, IconButton, Input, SegmentedControl, Kbd, useToast } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { uid } from "@/domain/play/factory";
@@ -41,9 +57,17 @@ type Props = {
   playId: string;
   playbookId: string;
   initialDocument: PlayDocument;
+  initialNav: PlaybookPlayNavItem[];
+  initialGroups: PlaybookGroupRow[];
 };
 
-export function PlayEditorClient({ playId, playbookId, initialDocument }: Props) {
+export function PlayEditorClient({
+  playId,
+  playbookId,
+  initialDocument,
+  initialNav,
+  initialGroups,
+}: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
@@ -62,6 +86,14 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
 
   const [tab, setTab] = useState<"routes" | "formation" | "print">("routes");
   const [pending, startTransition] = useTransition();
+
+  const [printPack, setPrintPack] = useState<PlaybookPrintPackRow[] | null>(null);
+  const [printGroups, setPrintGroups] = useState<PlaybookGroupRow[]>(initialGroups);
+  const [printLoading, setPrintLoading] = useState(false);
+  const [selectedPrintIds, setSelectedPrintIds] = useState<Set<string>>(new Set());
+  const [printRun, setPrintRun] = useState(defaultPlaybookPrintRunConfig);
+
+  const previewKind = printRun.product === "wristband" ? "wristband" : "full_sheet";
 
   // Formation mode state
   const [showSaveFormation, setShowSaveFormation] = useState(false);
@@ -121,12 +153,103 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
   }, [playId, toast]);
 
   const exportPdf = useCallback(() => {
-    const compiled = compilePlayToSvg(doc, "full_sheet");
+    const compiled = compilePlayToSvg(doc, previewKind);
     startTransition(async () => {
-      await exportSvgToPdf(compiled.svgMarkup, `play-${doc.metadata.wristbandCode}.pdf`);
+      const safe = (doc.metadata.wristbandCode || "play").replace(/[^\w.-]+/g, "-");
+      await exportSvgToPdf(compiled.svgMarkup, `${safe}.pdf`);
       toast("PDF exported", "success");
     });
-  }, [doc, toast]);
+  }, [doc, previewKind, toast]);
+
+  const exportPlaybookPdf = useCallback(() => {
+    startTransition(async () => {
+      const rows = (printPack ?? []).filter((r) => selectedPrintIds.has(r.id));
+      if (rows.length === 0) {
+        toast("Select at least one play to print", "error");
+        return;
+      }
+      const grouping =
+        printRun.product === "playsheet" ? printRun.playsheetGrouping : printRun.wristbandGrouping;
+      const navOrder = sortNavPlaysForPrint(
+        rows.map((r) => r.nav),
+        grouping,
+      );
+      const ordered = navOrder
+        .map((n) => rows.find((r) => r.id === n.id))
+        .filter((x): x is PlaybookPrintPackRow => x != null);
+      const docs = ordered.map((r) => applyExportPresentation(r.document, printRun));
+
+      let pages: string[];
+      if (printRun.product === "playsheet") {
+        pages = compilePlaysheetPdfPages(docs, {
+          playsPerSheet: printRun.playsPerSheet,
+          orientation: printRun.sheetOrientation,
+        });
+      } else {
+        pages = compileWristbandPdfPages(docs, {
+          orientation: printRun.sheetOrientation,
+          wristbandWidthMm: wristbandWidthMm(printRun.wristbandSize),
+        });
+      }
+
+      const name = `playbook-${playbookId.slice(0, 8)}.pdf`;
+      await exportSvgsToMultiPagePdf(pages, name);
+      toast("Playbook PDF exported", "success");
+    });
+  }, [printPack, playbookId, printRun, selectedPrintIds, toast]);
+
+  useEffect(() => {
+    if (tab !== "print") return;
+    let cancelled = false;
+    setPrintLoading(true);
+    void (async () => {
+      const res = await loadPlaybookPrintPackAction(playbookId);
+      if (cancelled) return;
+      if (res.ok) {
+        setPrintPack(res.pack);
+        setPrintGroups(res.groups);
+        setSelectedPrintIds(new Set(res.pack.map((p) => p.id)));
+      } else {
+        toast(res.error, "error");
+        setPrintPack([]);
+      }
+      setPrintLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, playbookId, toast]);
+
+  const printNavItems = useMemo((): PlaybookPlayNavItem[] => {
+    return (printPack ?? []).map((r) => r.nav);
+  }, [printPack]);
+
+  const togglePrintPlay = useCallback((id: string, on: boolean) => {
+    setSelectedPrintIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const togglePrintGroup = useCallback(
+    (groupId: string | null, turnOn: boolean) => {
+      setSelectedPrintIds((prev) => {
+        const next = new Set(prev);
+        for (const row of printPack ?? []) {
+          const match =
+            groupId === null ? row.nav.group_id == null : row.nav.group_id === groupId;
+          if (match) {
+            if (turnOn) next.add(row.id);
+            else next.delete(row.id);
+          }
+        }
+        return next;
+      });
+    },
+    [printPack],
+  );
 
   /* ---------- Formation mode handlers ---------- */
 
@@ -365,7 +488,6 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
             tooltip="Flip horizontal"
             onClick={() => dispatch({ type: "document.flip", axis: "horizontal" })}
           />
-          <IconButton icon={Copy} tooltip="Duplicate play" onClick={duplicate} />
           <IconButton icon={Share2} tooltip="Copy share link" onClick={share} />
 
           {/* Field background */}
@@ -396,22 +518,33 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
         </div>
       </header>
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-3">
-        <SegmentedControl
-          options={[
-            { value: "routes" as const, label: "Routes" },
-            { value: "formation" as const, label: "Formation" },
-            { value: "print" as const, label: "Print preview" },
-          ]}
-          value={tab}
-          onChange={setTab}
+      {/* Tab bar + play context */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <SegmentedControl
+            options={[
+              { value: "routes" as const, label: "Routes" },
+              { value: "formation" as const, label: "Formation" },
+              { value: "print" as const, label: "Print preview" },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+          <Link href={`/m/play/${playId}?playbookId=${playbookId}`} className="ml-auto">
+            <Button variant="ghost" size="sm" leftIcon={Smartphone}>
+              Mobile view
+            </Button>
+          </Link>
+        </div>
+        <EditorPlayContextBar
+          playId={playId}
+          playbookId={playbookId}
+          doc={doc}
+          dispatch={dispatch}
+          initialNav={initialNav}
+          initialGroups={initialGroups}
+          onDuplicate={duplicate}
         />
-        <Link href={`/m/play/${playId}?playbookId=${playbookId}`} className="ml-auto">
-          <Button variant="ghost" size="sm" leftIcon={Smartphone}>
-            Mobile view
-          </Button>
-        </Link>
       </div>
 
       {/* Routes tab */}
@@ -588,10 +721,44 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
 
       {tab === "print" && (
         <div className="space-y-4">
-          <PrintPreview doc={doc} dispatch={dispatch} />
-          <Button variant="primary" leftIcon={FileDown} onClick={exportPdf}>
-            Export PDF
-          </Button>
+          <PlaybookPrintRunControls config={printRun} onChange={setPrintRun} />
+          {printLoading ? (
+            <p className="text-sm text-muted">Loading playbook plays for print…</p>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted">
+                Choose which plays to include. The preview below is still the current play only.
+              </p>
+              <PlaybookPlaySearchMenu
+                plays={printNavItems}
+                groups={printGroups}
+                currentPlayId={playId}
+                printMode
+                printSelectedIds={selectedPrintIds}
+                onPrintToggle={togglePrintPlay}
+                onToggleGroup={togglePrintGroup}
+              />
+            </div>
+          )}
+          <PrintPreview
+            doc={doc}
+            dispatch={dispatch}
+            kind={previewKind}
+            onKindChange={(k) =>
+              setPrintRun((r) => ({
+                ...r,
+                product: k === "wristband" ? "wristband" : "playsheet",
+              }))
+            }
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" leftIcon={FileDown} onClick={exportPdf}>
+              Export this play (PDF)
+            </Button>
+            <Button variant="primary" leftIcon={FileDown} onClick={exportPlaybookPdf}>
+              Export playbook (PDF)
+            </Button>
+          </div>
         </div>
       )}
     </div>

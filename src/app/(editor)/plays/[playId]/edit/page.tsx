@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPlayForEditorAction } from "@/app/actions/plays";
+import { getPlayForEditorAction, listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 
@@ -23,11 +23,15 @@ export default async function PlayEditPage({ params }: Props) {
   const res = await getPlayForEditorAction(playId);
   if (!res.ok) notFound();
 
+  const nav = await listPlaybookPlaysForNavigationAction(res.play.playbook_id);
+
   return (
     <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}
       initialDocument={res.document}
+      initialNav={nav.ok ? nav.plays : []}
+      initialGroups={nav.ok ? nav.groups : []}
     />
   );
 }
