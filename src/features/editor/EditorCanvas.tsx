@@ -961,10 +961,10 @@ export function EditorCanvas({
                 );
               })}
 
-              {/* Anchor dots: only render when the user is actively editing
-                  the route (a specific segment or node is selected).
-                  Whole-route view (marching-ants only) stays clean. */}
-              {isActive && (selectedSegmentId != null || selectedNodeId != null) &&
+              {/* Anchor dots: render whenever the route is selected (segment,
+                  node, or whole-route view), so users can tap anchors to move
+                  them or click segments to edit them. */}
+              {isActive &&
                 route.nodes.map((node) => {
                   const isSelectedNode = node.id === selectedNodeId;
                   // Nodes live inside the scale(fieldAspect, 1) group, which

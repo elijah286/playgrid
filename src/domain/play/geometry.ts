@@ -125,7 +125,7 @@ function catmullRomQuadControl(
   return { x: (cp1x + cp2x) / 2, y: (cp1y + cp2y) / 2 };
 }
 
-function zigzagPoints(from: Point2, to: Point2, zigCount = 5): Point2[] {
+function zigzagPoints(from: Point2, to: Point2, zigCount = 12): Point2[] {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy);
