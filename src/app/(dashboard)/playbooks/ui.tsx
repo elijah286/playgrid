@@ -2,250 +2,240 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
-  createPlaybookWithTeamAction,
-  type PlaybookListRow,
+  Archive,
+  ArchiveRestore,
+  BookOpen,
+  Copy,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import {
+  archivePlaybookAction,
+  createPlaybookAction,
+  deletePlaybookAction,
+  duplicatePlaybookAction,
+  listPlaybooksAction,
+  renamePlaybookAction,
+  type PlaybookRow,
 } from "@/app/actions/playbooks";
-import type { TeamRow } from "@/app/actions/teams";
-import { TEAM_THEME_PRESETS, type TeamTheme } from "@/domain/team/theme";
-import { rosterFromLines } from "@/domain/team/roster";
+import {
+  ActionMenu,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  SegmentedControl,
+  useToast,
+  type ActionMenuItem,
+} from "@/components/ui";
 
-type Props = {
-  initial: PlaybookListRow[];
-  teams: TeamRow[];
-};
-
-export function PlaybooksClient({ initial, teams }: Props) {
+export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [playbookName, setPlaybookName] = useState("");
-  const [teamMode, setTeamMode] = useState<"existing" | "new">("existing");
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
-  const [newTeamName, setNewTeamName] = useState("");
-  const [presetId, setPresetId] = useState(TEAM_THEME_PRESETS[0]!.id);
-  const [staffText, setStaffText] = useState("");
-  const [playersText, setPlayersText] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [q, setQ] = useState("");
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [rows, setRows] = useState<PlaybookRow[]>(initial);
 
-  const selectedPreset = useMemo(
-    () => TEAM_THEME_PRESETS.find((p) => p.id === presetId) ?? TEAM_THEME_PRESETS[0]!,
-    [presetId],
-  );
-
-  const newTeamTheme: TeamTheme = selectedPreset.theme;
-
-  function create() {
-    setFormError(null);
-    const name = playbookName.trim() || "New playbook";
-    const roster = rosterFromLines(staffText, playersText);
-
+  function reload(nextView: "active" | "archived" = view) {
     startTransition(async () => {
-      const res =
-        teamMode === "existing"
-          ? await createPlaybookWithTeamAction({
-              playbookName: name,
-              roster,
-              teamChoice: { mode: "existing", teamId },
-            })
-          : await createPlaybookWithTeamAction({
-              playbookName: name,
-              roster,
-              teamChoice: {
-                mode: "new",
-                teamName: newTeamName.trim() || "New team",
-                theme: newTeamTheme,
-              },
-            });
-
-      if (!res.ok) {
-        setFormError(res.error);
-        return;
+      const res = await listPlaybooksAction({
+        includeArchived: nextView === "archived",
+      });
+      if (res.ok) {
+        setRows(
+          nextView === "archived"
+            ? res.playbooks.filter((b) => b.is_archived)
+            : res.playbooks,
+        );
+      } else {
+        toast(res.error, "error");
       }
-      router.push(`/playbooks/${res.id}`);
-      router.refresh();
     });
   }
 
+  function setViewAndReload(v: "active" | "archived") {
+    setView(v);
+    reload(v);
+  }
+
+  const filtered = rows.filter((p) => {
+    const s = q.trim().toLowerCase();
+    if (!s) return true;
+    return p.name.toLowerCase().includes(s);
+  });
+
+  function create() {
+    startTransition(async () => {
+      const res = await createPlaybookAction(name || "New playbook");
+      if (res.ok) {
+        router.push(`/playbooks/${res.id}`);
+        router.refresh();
+      } else {
+        toast(res.error, "error");
+      }
+    });
+  }
+
+  function handle<T>(fn: () => Promise<T>, onOk?: (r: T) => void) {
+    startTransition(async () => {
+      const res = await fn();
+      if (res && typeof res === "object" && "ok" in res) {
+        const r = res as { ok: boolean; error?: string };
+        if (!r.ok) {
+          toast(r.error ?? "Something went wrong.", "error");
+          return;
+        }
+      }
+      onOk?.(res);
+      reload();
+    });
+  }
+
+  function onRename(id: string, current: string) {
+    const next = window.prompt("Rename playbook", current);
+    if (next == null) return;
+    handle(() => renamePlaybookAction(id, next));
+  }
+
+  function confirmAnd(msg: string, fn: () => void) {
+    if (window.confirm(msg)) fn();
+  }
+
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl bg-pg-chalk/90 p-5 ring-1 ring-pg-line/80 dark:bg-pg-turf-deep/30">
-        <h2 className="text-sm font-semibold text-pg-ink">Create playbook</h2>
-        <p className="mt-1 text-xs text-pg-muted">
-          Tie each playbook to a team palette and sideline roster. Switch teams when you coach
-          multiple squads.
-        </p>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="block text-sm">
-            <span className="text-pg-muted">Playbook name</span>
-            <input
-              value={playbookName}
-              onChange={(e) => setPlaybookName(e.target.value)}
-              placeholder="e.g. Spring 7v7 — Red zone"
-              className="mt-1 w-full rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 text-sm shadow-sm dark:bg-pg-chalk/10"
-            />
-          </label>
-
-          <div className="text-sm">
-            <span className="text-pg-muted">Team</span>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setTeamMode("existing")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  teamMode === "existing"
-                    ? "bg-pg-turf text-white"
-                    : "ring-1 ring-pg-line hover:bg-pg-mist dark:hover:bg-pg-surface"
-                }`}
-              >
-                Use existing team
-              </button>
-              <button
-                type="button"
-                onClick={() => setTeamMode("new")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  teamMode === "new"
-                    ? "bg-pg-turf text-white"
-                    : "ring-1 ring-pg-line hover:bg-pg-mist dark:hover:bg-pg-surface"
-                }`}
-              >
-                Create new team
-              </button>
-            </div>
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[200px] flex-1">
+          <Input
+            leftIcon={Search}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search playbooks..."
+          />
         </div>
-
-        {teamMode === "existing" ? (
-          <label className="mt-4 block text-sm">
-            <span className="text-pg-muted">Team</span>
-            <select
-              value={teamId}
-              onChange={(e) => setTeamId(e.target.value)}
-              className="mt-1 w-full max-w-md rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 text-sm dark:bg-pg-chalk/10"
-            >
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <div className="mt-4 space-y-3">
-            <label className="block text-sm">
-              <span className="text-pg-muted">New team name</span>
-              <input
-                value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                placeholder="e.g. JV Gold"
-                className="mt-1 w-full max-w-md rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 text-sm dark:bg-pg-chalk/10"
-              />
-            </label>
-            <div>
-              <p className="text-xs font-medium text-pg-subtle">Color palette</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {TEAM_THEME_PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPresetId(p.id)}
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ring-1 ${
-                      presetId === p.id
-                        ? "ring-pg-turf ring-offset-2 ring-offset-pg-mist"
-                        : "ring-pg-line hover:bg-pg-mist dark:hover:bg-pg-surface"
-                    }`}
-                  >
-                    <span
-                      className="h-6 w-6 rounded-md ring-1 ring-black/10"
-                      style={{
-                        background: `linear-gradient(135deg, ${p.theme.primary}, ${p.theme.accent})`,
-                      }}
-                      aria-hidden
-                    />
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="block text-sm">
-            <span className="text-pg-muted">Staff (one per line or comma-separated)</span>
-            <textarea
-              value={staffText}
-              onChange={(e) => setStaffText(e.target.value)}
-              rows={4}
-              className="mt-1 w-full rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 text-sm dark:bg-pg-chalk/10"
-              placeholder={"Head coach\nOC\nTeam parent"}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-pg-muted">Players (one per line or comma-separated)</span>
-            <textarea
-              value={playersText}
-              onChange={(e) => setPlayersText(e.target.value)}
-              rows={4}
-              className="mt-1 w-full rounded-xl border border-pg-line bg-pg-chalk px-3 py-2 text-sm dark:bg-pg-chalk/10"
-              placeholder={"QB1\nSlot\nX receiver"}
-            />
-          </label>
+        <SegmentedControl
+          value={view}
+          onChange={(v) => setViewAndReload(v as "active" | "archived")}
+          options={[
+            { value: "active", label: "Active" },
+            { value: "archived", label: "Archived" },
+          ]}
+        />
+        <div className="flex gap-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Playbook name"
+            className="w-48"
+          />
+          <Button
+            variant="primary"
+            leftIcon={Plus}
+            loading={pending}
+            onClick={create}
+          >
+            Create
+          </Button>
         </div>
-
-        {formError && (
-          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200">
-            {formError}
-          </p>
-        )}
-
-        <button
-          type="button"
-          disabled={pending || (teamMode === "existing" && !teamId)}
-          onClick={create}
-          className="mt-4 rounded-xl bg-pg-turf px-4 py-2.5 text-sm font-medium text-white hover:bg-pg-turf-deep disabled:opacity-60"
-        >
-          {pending ? "Creating…" : "Create playbook"}
-        </button>
-      </section>
-
-      <div>
-        <h2 className="text-sm font-semibold text-pg-ink">Your playbooks</h2>
-        <ul className="mt-3 divide-y divide-pg-line/80 rounded-2xl bg-pg-chalk/90 ring-1 ring-pg-line/80 dark:bg-pg-turf-deep/25">
-          {initial.length === 0 && (
-            <li className="px-4 py-6 text-sm text-pg-subtle">No playbooks yet.</li>
-          )}
-          {initial.map((p) => (
-            <li key={p.id}>
-              <Link
-                href={`/playbooks/${p.id}`}
-                className="flex items-center justify-between gap-3 px-4 py-4 hover:bg-pg-mist/80 dark:hover:bg-pg-surface/50"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  {p.team && (
-                    <span
-                      className="h-9 w-2 shrink-0 rounded-full ring-1 ring-black/10"
-                      style={{
-                        background: `linear-gradient(180deg, ${p.team.theme.primary}, ${p.team.theme.accent})`,
-                      }}
-                      title={p.team.name}
-                      aria-hidden
-                    />
-                  )}
-                  <div className="min-w-0">
-                    <span className="block truncate font-medium text-pg-ink">{p.name}</span>
-                    {p.team && (
-                      <span className="text-xs text-pg-subtle">{p.team.name}</span>
-                    )}
-                  </div>
-                </div>
-                <span className="shrink-0 text-xs text-pg-faint">Open</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
       </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          heading={
+            view === "archived" ? "No archived playbooks" : "No playbooks yet"
+          }
+          description={
+            view === "archived"
+              ? "Archived playbooks show up here."
+              : "Create your first playbook to group plays by game plan, opponent, or season."
+          }
+          action={
+            view === "active" ? (
+              <Button
+                variant="primary"
+                leftIcon={Plus}
+                onClick={create}
+                loading={pending}
+              >
+                Create playbook
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p) => {
+            const items: ActionMenuItem[] = [
+              {
+                label: "Rename",
+                icon: Pencil,
+                onSelect: () => onRename(p.id, p.name),
+              },
+              {
+                label: "Duplicate",
+                icon: Copy,
+                onSelect: () =>
+                  handle(
+                    () => duplicatePlaybookAction(p.id),
+                    (res) => {
+                      if (res.ok) router.push(`/playbooks/${res.id}`);
+                    },
+                  ),
+              },
+              p.is_archived
+                ? {
+                    label: "Restore",
+                    icon: ArchiveRestore,
+                    onSelect: () =>
+                      handle(() => archivePlaybookAction(p.id, false)),
+                  }
+                : {
+                    label: "Archive",
+                    icon: Archive,
+                    onSelect: () =>
+                      handle(() => archivePlaybookAction(p.id, true)),
+                  },
+              {
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () =>
+                  confirmAnd(
+                    `Delete "${p.name}" and all its plays? This can't be undone.`,
+                    () => handle(() => deletePlaybookAction(p.id)),
+                  ),
+              },
+            ];
+            return (
+              <Card key={p.id} hover className="relative p-5">
+                <div className="absolute right-3 top-3">
+                  <ActionMenu items={items} />
+                </div>
+                <Link href={`/playbooks/${p.id}`}>
+                  <div className="flex items-center gap-2 pr-10">
+                    <h3 className="truncate font-semibold text-foreground">
+                      {p.name}
+                    </h3>
+                    {p.is_archived && <Badge>Archived</Badge>}
+                  </div>
+                  {p.created_at && (
+                    <p className="mt-1 text-xs text-muted">
+                      Created {new Date(p.created_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </Link>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

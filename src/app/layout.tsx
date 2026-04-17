@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Source_Sans_3 } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
-import { ColorModeScript } from "@/components/theme/ColorModeScript";
-import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { ToastProvider } from "@/components/ui/Toast";
 
-const display = Bebas_Neue({ weight: "400", subsets: ["latin"], variable: "--font-display" });
-const sans = Source_Sans_3({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   title: "PlayGrid",
-  description: "Youth football play designer — offense, print, and field viewing.",
+  description: "Football play designer for coaches and athletes — design, print, and carry your playbook.",
 };
 
 export default function RootLayout({
@@ -19,13 +21,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`h-full antialiased ${display.variable}`} suppressHydrationWarning>
-      <body className={`min-h-full bg-pg-mist text-pg-ink ${sans.className}`}>
-        <ColorModeScript />
-        <ThemeProvider>
+    <html lang="en" className={`h-full antialiased ${inter.variable}`}>
+      <body className="min-h-full bg-surface text-foreground font-sans">
+        <ToastProvider>
           <ConfigBanner />
           {children}
-        </ThemeProvider>
+        </ToastProvider>
       </body>
     </html>
   );

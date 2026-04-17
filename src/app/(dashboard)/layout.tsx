@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { FootballIcon } from "@/components/brand/FootballMarks";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { signOutAction } from "@/app/actions/auth";
-import { ColorModeToggle } from "@/components/theme/ColorModeToggle";
 
 export default async function DashboardLayout({
   children,
@@ -14,7 +13,7 @@ export default async function DashboardLayout({
   if (!hasSupabaseEnv()) {
     return (
       <div className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-sm text-pg-muted">
+        <p className="text-sm text-muted">
           Add Supabase environment variables to use authenticated playbooks.
         </p>
         <div className="mt-6">{children}</div>
@@ -39,44 +38,56 @@ export default async function DashboardLayout({
   const isAdmin = profile?.role === "admin";
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col px-6 py-8">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <Link
-          href="/playbooks"
-          className="flex items-center gap-2 text-lg font-semibold tracking-tight text-pg-ink"
-        >
-          <FootballIcon className="h-8 w-8 shrink-0" />
-          <span className="font-display text-xl tracking-[0.08em] text-pg-turf">PLAYGRID</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <ColorModeToggle />
-          {isAdmin && (
-            <span className="flex items-center gap-3">
-              <Link
-                href="/admin/users"
-                className="text-sm font-medium text-pg-signal hover:text-pg-signal-deep"
-              >
-                Admin
-              </Link>
-              <Link
-                href="/admin/integrations"
-                className="text-sm font-medium text-pg-signal hover:text-pg-signal-deep"
-              >
-                Integrations
-              </Link>
-            </span>
-          )}
+    <div className="min-h-full">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface-raised/80 backdrop-blur-lg">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
+          <Link href="/home" className="text-lg font-extrabold tracking-tight text-primary">
+            PlayGrid
+          </Link>
+          <nav className="hidden gap-1 sm:flex">
+            <Link
+              href="/home"
+              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+            >
+              Home
+            </Link>
+            <Link
+              href="/playbooks"
+              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+            >
+              Playbooks
+            </Link>
+            {isAdmin && (
+              <>
+                <Link
+                  href="/admin/users"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+                >
+                  Admin
+                </Link>
+                <Link
+                  href="/admin/integrations"
+                  className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+                >
+                  Integrations
+                </Link>
+              </>
+            )}
+          </nav>
           <form action={signOutAction}>
             <button
               type="submit"
-              className="rounded-lg px-3 py-1.5 text-sm text-pg-muted ring-1 ring-pg-line hover:bg-pg-chalk dark:hover:bg-pg-surface"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted hover:text-foreground hover:bg-surface-inset transition-colors"
             >
+              <LogOut className="size-4" />
               Sign out
             </button>
           </form>
         </div>
       </header>
-      {children}
+      <main className="mx-auto max-w-6xl px-6 py-8">
+        {children}
+      </main>
     </div>
   );
 }

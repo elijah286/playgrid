@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureDefaultWorkspace, profileDisplayNameFromUser } from "@/lib/data/workspace";
+import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 export async function bootstrapWorkspaceAction() {
@@ -14,6 +14,6 @@ export async function bootstrapWorkspaceAction() {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const ws = await ensureDefaultWorkspace(supabase, user.id, profileDisplayNameFromUser(user));
+  const ws = await ensureDefaultWorkspace(supabase, user.id);
   return { ok: true as const, ...ws };
 }

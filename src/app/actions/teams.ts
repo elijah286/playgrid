@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureDefaultWorkspace, profileDisplayNameFromUser } from "@/lib/data/workspace";
+import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { TeamTheme } from "@/domain/team/theme";
 import { parseTeamTheme, teamThemeSchema } from "@/domain/team/theme";
@@ -23,7 +23,7 @@ export async function listTeamsAction() {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in.", teams: [] };
 
-  await ensureDefaultWorkspace(supabase, user.id, profileDisplayNameFromUser(user));
+  await ensureDefaultWorkspace(supabase, user.id);
 
   const { data: orgs, error: orgErr } = await supabase
     .from("organizations")
@@ -68,7 +68,7 @@ export async function createTeamAction(name: string, theme: TeamTheme) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  await ensureDefaultWorkspace(supabase, user.id, profileDisplayNameFromUser(user));
+  await ensureDefaultWorkspace(supabase, user.id);
 
   const { data: orgs, error: orgErr } = await supabase
     .from("organizations")

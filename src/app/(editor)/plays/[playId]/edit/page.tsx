@@ -11,9 +11,9 @@ export default async function PlayEditPage({ params }: Props) {
 
   if (!hasSupabaseEnv()) {
     return (
-      <div className="rounded-xl bg-white p-6 ring-1 ring-pg-line">
-        <p className="text-sm text-pg-muted">Configure Supabase to edit plays.</p>
-        <Link href="/playbooks" className="mt-4 inline-block text-sm text-pg-signal">
+      <div className="rounded-xl bg-white p-6 ring-1 ring-slate-200">
+        <p className="text-sm text-slate-600">Configure Supabase to edit plays.</p>
+        <Link href="/playbooks" className="mt-4 inline-block text-sm text-indigo-600">
           Back to playbooks
         </Link>
       </div>
@@ -28,7 +28,6 @@ export default async function PlayEditPage({ params }: Props) {
       playId={res.play.id}
       playbookId={res.play.playbook_id}
       initialDocument={res.document}
-      printContext={res.printContext}
     />
   );
 }

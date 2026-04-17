@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getPlayForEditorAction, listPlaysAction } from "@/app/actions/plays";
 import { PlayCarousel } from "@/features/viewer/PlayCarousel";
+import { Badge } from "@/components/ui";
 
 type Props = {
   params: Promise<{ playId: string }>;
@@ -15,7 +16,7 @@ export default async function MobilePlayPage({ params, searchParams }: Props) {
 
   if (!hasSupabaseEnv()) {
     return (
-      <p className="text-sm text-pg-muted">Configure Supabase for mobile viewing.</p>
+      <p className="text-sm text-muted">Configure Supabase for mobile viewing.</p>
     );
   }
 
@@ -27,7 +28,7 @@ export default async function MobilePlayPage({ params, searchParams }: Props) {
 
   const res = await getPlayForEditorAction(playId);
   if (!res.ok) {
-    return <p className="text-sm text-red-700">Could not load play.</p>;
+    return <p className="text-sm text-danger">Could not load play.</p>;
   }
 
   const pbId = playbookFromQuery ?? res.play.playbook_id;
@@ -37,9 +38,11 @@ export default async function MobilePlayPage({ params, searchParams }: Props) {
   return (
     <div className="flex min-h-[80vh] flex-col gap-4">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-pg-subtle">Play</p>
-        <h1 className="text-xl font-semibold text-pg-ink">{res.play.name}</h1>
-        <p className="text-sm text-pg-subtle">{res.play.wristband_code}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Play</p>
+        <h1 className="text-xl font-extrabold tracking-tight text-foreground">{res.play.name}</h1>
+        {res.play.wristband_code && (
+          <Badge variant="primary" className="mt-1">{res.play.wristband_code}</Badge>
+        )}
       </div>
       <PlayCarousel
         plays={plays.map((p) => ({

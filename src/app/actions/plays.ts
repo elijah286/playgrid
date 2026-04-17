@@ -1,23 +1,19 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureDefaultWorkspace, profileDisplayNameFromUser } from "@/lib/data/workspace";
+import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument } from "@/domain/play/factory";
-import type { PlayDocument } from "@/domain/play/types";
-import type { TeamTheme } from "@/domain/team/theme";
-import { DEFAULT_TEAM_THEME, parseTeamTheme } from "@/domain/team/theme";
-import type { PlaybookRoster } from "@/domain/team/roster";
-import { parsePlaybookRoster } from "@/domain/team/roster";
+import type { PlayDocument, Player } from "@/domain/play/types";
+import {
+  compareNavPlays,
+  type PlaybookPlayNavItem,
+} from "@/domain/print/playbookPrint";
 
-export type PlayPrintContext = {
-  playbookName: string;
-  teamName: string;
-  roster: PlaybookRoster;
-  theme: TeamTheme;
-};
-
-export async function listPlaysAction(playbookId: string) {
+export async function listPlaysAction(
+  playbookId: string,
+  opts?: { includeArchived?: boolean },
+) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured.", plays: [] };
   }
@@ -27,17 +23,23 @@ export async function listPlaysAction(playbookId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in.", plays: [] };
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("plays")
-    .select("id, name, wristband_code, shorthand, concept, updated_at, current_version_id")
+    .select(
+      "id, name, wristband_code, shorthand, concept, updated_at, current_version_id, is_archived",
+    )
     .eq("playbook_id", playbookId)
     .order("updated_at", { ascending: false });
+
+  if (!opts?.includeArchived) query = query.eq("is_archived", false);
+
+  const { data, error } = await query;
 
   if (error) return { ok: false as const, error: error.message, plays: [] };
   return { ok: true as const, plays: data ?? [] };
 }
 
-export async function createPlayAction(playbookId: string) {
+export async function createPlayAction(playbookId: string, initialPlayers?: Player[]) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
@@ -47,7 +49,19 @@ export async function createPlayAction(playbookId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const doc = createEmptyPlayDocument();
+  const doc = initialPlayers
+    ? createEmptyPlayDocument({ layers: { players: initialPlayers, routes: [], annotations: [] } })
+    : createEmptyPlayDocument();
+  const { data: sortRow } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", playbookId)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
   const { data: play, error: playErr } = await supabase
     .from("plays")
     .insert({
@@ -59,6 +73,7 @@ export async function createPlayAction(playbookId: string) {
       concept: doc.metadata.concept,
       tag: doc.metadata.tag,
       display_abbrev: doc.metadata.sheetAbbrev,
+      sort_order: nextSort,
     })
     .select("id")
     .single();
@@ -79,11 +94,7 @@ export async function createPlayAction(playbookId: string) {
 
   if (verErr) return { ok: false as const, error: verErr.message };
 
-  const { error: updErr } = await supabase
-    .from("plays")
-    .update({ current_version_id: ver.id })
-    .eq("id", play.id);
-  if (updErr) return { ok: false as const, error: updErr.message };
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
 
   return { ok: true as const, playId: play.id, versionId: ver.id };
 }
@@ -101,23 +112,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      `
-      id,
-      playbook_id,
-      name,
-      wristband_code,
-      shorthand,
-      concept,
-      tag,
-      formation_name,
-      current_version_id,
-      playbooks (
-        id,
-        name,
-        roster,
-        teams ( name, theme )
-      )
-    `,
+      "id, playbook_id, name, wristband_code, shorthand, concept, tag, formation_name, current_version_id",
     )
     .eq("id", playId)
     .single();
@@ -136,34 +131,11 @@ export async function getPlayForEditorAction(playId: string) {
 
   if (vErr || !ver) return { ok: false as const, error: vErr?.message ?? "Version missing" };
 
-  type PbRow = {
-    id: string;
-    name: string;
-    roster: unknown;
-    teams: { name: string; theme: unknown } | null;
-  };
-  const pbRaw = (play as unknown as { playbooks: PbRow | PbRow[] | null }).playbooks;
-  const pb = Array.isArray(pbRaw) ? pbRaw[0] : pbRaw;
-  const printContext: PlayPrintContext = pb
-    ? {
-        playbookName: pb.name,
-        teamName: pb.teams?.name ?? "Team",
-        roster: parsePlaybookRoster(pb.roster),
-        theme: parseTeamTheme(pb.teams?.theme),
-      }
-    : {
-        playbookName: "Playbook",
-        teamName: "Team",
-        roster: { staff: [], players: [] },
-        theme: DEFAULT_TEAM_THEME,
-      };
-
   return {
     ok: true as const,
     play,
     version: ver,
     document: ver.document as PlayDocument,
-    printContext,
   };
 }
 
@@ -235,15 +207,25 @@ export async function duplicatePlayAction(playId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const { data: src, error } = await supabase
+  const { data: srcPlay, error: srcPlayErr } = await supabase
     .from("plays")
-    .select("playbook_id")
+    .select("playbook_id, group_id, sort_order")
     .eq("id", playId)
     .single();
-  if (error || !src) return { ok: false as const, error: "Not found" };
+  if (srcPlayErr || !srcPlay) return { ok: false as const, error: "Not found" };
 
   const doc = structuredClone(loaded.document);
   doc.metadata.coachName = `${doc.metadata.coachName} (copy)`;
+
+  const { data: sortDup } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", srcPlay.playbook_id)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const dupSort = (sortDup?.sort_order ?? -1) + 1;
 
   const { data: play, error: playErr } = await supabase
     .from("plays")
@@ -256,6 +238,8 @@ export async function duplicatePlayAction(playId: string) {
       concept: doc.metadata.concept,
       tag: doc.metadata.tag,
       display_abbrev: doc.metadata.sheetAbbrev,
+      group_id: srcPlay.group_id,
+      sort_order: dupSort,
     })
     .select("id")
     .single();
@@ -282,6 +266,179 @@ export async function duplicatePlayAction(playId: string) {
   return { ok: true as const, playId: play.id };
 }
 
+export async function renamePlayAction(playId: string, name: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false as const, error: "Name can't be empty." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase.from("plays").update({ name: trimmed }).eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function archivePlayAction(playId: string, archived: boolean) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("plays")
+    .update({ is_archived: archived })
+    .eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function deletePlayAction(playId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error } = await supabase.from("plays").delete().eq("id", playId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+/**
+ * Create a play in the user's Inbox playbook and return its id.
+ * Used by the "just start editing" flow for new users and the dashboard's
+ * quick-create button.
+ */
+export async function quickCreatePlayAction(initialPlayers?: Player[]) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { teamId } = await ensureDefaultWorkspace(supabase, user.id);
+  const inboxId = await getOrCreateInboxPlaybook(supabase, teamId);
+  return createPlayAction(inboxId, initialPlayers);
+}
+
+export type DashboardSummary = {
+  recentPlays: {
+    id: string;
+    name: string;
+    concept: string | null;
+    shorthand: string | null;
+    wristband_code: string | null;
+    updated_at: string | null;
+    playbook_id: string;
+    playbook_name: string;
+  }[];
+  playbooks: {
+    id: string;
+    name: string;
+    is_default: boolean;
+    updated_at: string | null;
+    play_count: number;
+  }[];
+  totalPlays: number;
+};
+
+/** One-shot dashboard fetch. Non-archived plays and non-archived playbooks only. */
+export async function getDashboardSummaryAction(): Promise<
+  { ok: true; data: DashboardSummary } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  await ensureDefaultWorkspace(supabase, user.id);
+
+  const [playsRes, booksRes, countRes] = await Promise.all([
+    supabase
+      .from("plays")
+      .select(
+        "id, name, concept, shorthand, wristband_code, updated_at, playbook_id, playbooks!inner(name, is_archived)",
+      )
+      .eq("is_archived", false)
+      .eq("playbooks.is_archived", false)
+      .order("updated_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("playbooks")
+      .select("id, name, is_default, updated_at")
+      .eq("is_archived", false)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("plays")
+      .select("id", { count: "exact", head: true })
+      .eq("is_archived", false),
+  ]);
+
+  if (playsRes.error) return { ok: false, error: playsRes.error.message };
+  if (booksRes.error) return { ok: false, error: booksRes.error.message };
+
+  // Per-playbook counts (single query, group client-side)
+  const { data: allPlays } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("is_archived", false);
+  const counts = new Map<string, number>();
+  for (const row of allPlays ?? []) {
+    counts.set(row.playbook_id, (counts.get(row.playbook_id) ?? 0) + 1);
+  }
+
+  type PlayJoin = {
+    id: string;
+    name: string;
+    concept: string | null;
+    shorthand: string | null;
+    wristband_code: string | null;
+    updated_at: string | null;
+    playbook_id: string;
+    playbooks: { name: string } | { name: string }[] | null;
+  };
+
+  const recentPlays = ((playsRes.data ?? []) as PlayJoin[]).map((r) => {
+    const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+    return {
+      id: r.id,
+      name: r.name,
+      concept: r.concept,
+      shorthand: r.shorthand,
+      wristband_code: r.wristband_code,
+      updated_at: r.updated_at,
+      playbook_id: r.playbook_id,
+      playbook_name: pb?.name ?? "",
+    };
+  });
+
+  const playbooks = (booksRes.data ?? []).map((b) => ({
+    id: b.id as string,
+    name: b.name as string,
+    is_default: b.is_default as boolean,
+    updated_at: b.updated_at as string | null,
+    play_count: counts.get(b.id as string) ?? 0,
+  }));
+
+  return {
+    ok: true,
+    data: {
+      recentPlays,
+      playbooks,
+      totalPlays: countRes.count ?? 0,
+    },
+  };
+}
+
 /** Ensure workspace for actions that need team context */
 export async function ensureUserWorkspaceAction() {
   if (!hasSupabaseEnv()) {
@@ -292,6 +449,6 @@ export async function ensureUserWorkspaceAction() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
-  const ws = await ensureDefaultWorkspace(supabase, user.id, profileDisplayNameFromUser(user));
+  const ws = await ensureDefaultWorkspace(supabase, user.id);
   return { ok: true as const, ...ws };
 }

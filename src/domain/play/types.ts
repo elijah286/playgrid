@@ -10,6 +10,8 @@ export type SportVariant =
 
 export type PlayerRole = "QB" | "RB" | "WR" | "TE" | "C" | "OTHER";
 
+export type PlayerShape = "circle" | "square" | "diamond" | "triangle";
+
 export type Point2 = { x: number; y: number };
 
 export type PathSegmentKind =
@@ -39,6 +41,28 @@ export type PathGeometry = {
   closed?: boolean;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Node-based route model                                            */
+/* ------------------------------------------------------------------ */
+
+export type RouteNode = {
+  id: string;
+  position: Point2;
+};
+
+export type SegmentShape = "straight" | "curve" | "zigzag";
+export type StrokePattern = "solid" | "dashed" | "dotted" | "motion";
+
+export type RouteSegment = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  shape: SegmentShape;
+  strokePattern: StrokePattern;
+  /** Manual curve control offset (null = auto-computed) */
+  controlOffset: Point2 | null;
+};
+
 export type RouteSemantic = {
   family:
     | "slant"
@@ -62,13 +86,19 @@ export type RouteStyle = {
   dash?: string;
 };
 
+/** How the tip of a route is decorated at its terminal node. */
+export type EndDecoration = "arrow" | "t" | "none";
+
 export type Route = {
   id: string;
   carrierPlayerId: string;
   semantic: RouteSemantic | null;
-  geometry: PathGeometry;
+  nodes: RouteNode[];
+  segments: RouteSegment[];
   style: RouteStyle;
   motion?: boolean;
+  /** End-of-route decoration (arrow/T/none). Defaults to "arrow" when unset. */
+  endDecoration?: EndDecoration;
 };
 
 export type PlayerStyle = {
@@ -84,6 +114,7 @@ export type Player = {
   position: Point2;
   eligible: boolean;
   style: PlayerStyle;
+  shape?: PlayerShape;
 };
 
 export type Annotation = {
@@ -169,4 +200,22 @@ export type PlayDocument = {
   layers: PlayLayers;
   printProfile: PrintProfile;
   timeline?: PlayTimeline;
+  fieldBackground?: "green" | "white" | "black" | "gray";
+  /**
+   * Whether to render yard hash marks on the field. When `undefined`, the
+   * default is derived from sportProfile.variant (flag variants off, tackle
+   * variants on) — see `shouldShowHashMarksDefault`.
+   */
+  showHashMarks?: boolean;
+  /**
+   * Line-of-scrimmage marker style. Drawn at `lineOfScrimmageY`.
+   * Defaults to "line".
+   */
+  lineOfScrimmage?: "line" | "football" | "none";
+  /**
+   * Normalized y of the LOS (0 = back of offense's backfield, 1 = far end
+   * zone). Defaults to 0.5 (mid-field). Offensive players are clamped so
+   * they cannot be dragged past this line.
+   */
+  lineOfScrimmageY?: number;
 };

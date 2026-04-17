@@ -1,88 +1,88 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* Youth-football field palette: turf, chalk cards, sideline mist, signal orange */
 @theme {
-  --color-pg-ink: #07140f;
-  --color-pg-body: #1c2e24;
-  --color-pg-muted: #3d5346;
-  --color-pg-subtle: #5a6e61;
-  --color-pg-faint: #889889;
-  --color-pg-mist: #edf5ef;
-  --color-pg-surface: #dfeae2;
-  --color-pg-hover: #d4e3d8;
-  --color-pg-line: #b8cbbf;
-  --color-pg-turf: #134e2a;
-  --color-pg-turf-deep: #0d3a1f;
-  --color-pg-field: #c8ecd4;
-  --color-pg-signal: #c2410c;
-  --color-pg-signal-deep: #9a3412;
-  --color-pg-signal-bright: #ea580c;
-  --color-pg-signal-soft: #fff7ed;
-  --color-pg-signal-ring: #fdba74;
-  --color-pg-chalk: #fefcf6;
-  --color-pg-leather: #7c4a21;
+  --color-primary: #F26522;
+  --color-primary-hover: #E05A1B;
+  --color-primary-light: #FFF3EC;
+  --color-primary-dark: #C44F13;
+
+  --color-surface: #FAFAF8;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-dark: #111318;
+  --color-surface-inset: #F3F3F1;
+
+  --color-field: #2D8B4E;
+  --color-field-dark: #1B5E30;
+
+  --color-foreground: #1C1C1E;
+  --color-muted: #6B7280;
+  --color-muted-light: #9CA3AF;
+
+  --color-border: #E5E7EB;
+  --color-border-light: #F3F4F6;
+
+  --color-danger: #DC2626;
+  --color-danger-light: #FEF2F2;
+  --color-warning: #F59E0B;
+  --color-warning-light: #FFFBEB;
+  --color-success: #16A34A;
+  --color-success-light: #F0FDF4;
+  --color-accent: #2563EB;
+  --color-accent-light: #EFF6FF;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
-:root {
-  --background: var(--color-pg-mist);
-  --foreground: var(--color-pg-ink);
-  --accent: var(--color-pg-turf);
-}
-
-/* Dark mode: same tokens, inverted for readable night sideline */
-html.dark {
-  color-scheme: dark;
-  --color-pg-ink: #e8f4ec;
-  --color-pg-body: #c9e0d2;
-  --color-pg-muted: #9cb8a8;
-  --color-pg-subtle: #7d9a89;
-  --color-pg-faint: #5c7568;
-  --color-pg-mist: #0c1410;
-  --color-pg-surface: #15221a;
-  --color-pg-hover: #1c2e24;
-  --color-pg-line: #2a3d32;
-  --color-pg-turf: #3d8f5a;
-  --color-pg-turf-deep: #2d6b44;
-  --color-pg-field: #1a3d28;
-  --color-pg-signal: #fb923c;
-  --color-pg-signal-deep: #ea580c;
-  --color-pg-signal-bright: #fdba74;
-  --color-pg-signal-soft: #292218;
-  --color-pg-signal-ring: #9a3412;
-  --color-pg-chalk: #121c17;
-  --color-pg-leather: #c4a574;
-  --background: var(--color-pg-mist);
-  --foreground: var(--color-pg-ink);
-  --accent: var(--color-pg-turf);
-}
-
-/* Subtle sideline: cool mist with faint horizontal “yard” rhythm */
 body {
-  color: var(--foreground);
-  background-color: var(--background);
-  background-image: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 11px,
-    rgb(61 143 90 / 6%) 11px,
-    rgb(61 143 90 / 6%) 12px
-  );
+  color: var(--color-foreground);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
 }
 
-html.dark body {
-  background-image: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 11px,
-    rgb(61 143 90 / 8%) 11px,
-    rgb(61 143 90 / 8%) 12px
-  );
+/* Smooth focus ring for interactive elements */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
-/* Stadium board / jersey stencil for display lines */
-.font-display {
-  font-family: var(--font-display), system-ui, sans-serif;
-  letter-spacing: 0.02em;
+/* Marching-ants animation used for selected route segments in the editor.
+   Applied via className="marching-ants" on an SVG <path>. Relies on
+   strokeDasharray being set on the element. */
+@keyframes marching-ants {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -8; }
+}
+
+.marching-ants {
+  animation: marching-ants 0.6s linear infinite;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-muted-light);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
 }

@@ -1,4 +1,46 @@
-import { PLAY_DOCUMENT_SCHEMA_VERSION, type PlayDocument, type Player } from "./types";
+import {
+  PLAY_DOCUMENT_SCHEMA_VERSION,
+  type EndDecoration,
+  type PlayDocument,
+  type Player,
+  type Route,
+  type SportVariant,
+} from "./types";
+
+/** Whether hash marks should render by default for a given sport variant.
+ *  Flag football plays a smaller, cleaner field — hash marks are noise.
+ *  Tackle/6-man plays on a real field — hash marks are expected. */
+export function shouldShowHashMarksDefault(variant: SportVariant): boolean {
+  return variant === "tackle_11" || variant === "six_man";
+}
+
+/** Resolve the effective hash-mark setting: explicit override wins,
+ *  otherwise derive from sport variant. */
+export function resolveShowHashMarks(doc: PlayDocument): boolean {
+  if (typeof doc.showHashMarks === "boolean") return doc.showHashMarks;
+  return shouldShowHashMarksDefault(doc.sportProfile.variant);
+}
+
+/** LOS marker style, defaulting to a horizontal line. */
+export function resolveLineOfScrimmage(
+  doc: PlayDocument,
+): "line" | "football" | "none" {
+  return doc.lineOfScrimmage ?? "line";
+}
+
+/** Normalized y where the LOS lives. Defaults to mid-field (0.5). */
+export function resolveLineOfScrimmageY(doc: PlayDocument): number {
+  const y = doc.lineOfScrimmageY;
+  if (typeof y === "number" && Number.isFinite(y)) {
+    return Math.max(0, Math.min(1, y));
+  }
+  return 0.5;
+}
+
+/** Route end-decoration, defaulting to arrow. */
+export function resolveEndDecoration(route: Route): EndDecoration {
+  return route.endDecoration ?? "arrow";
+}
 
 let idCounter = 0;
 function uid(prefix: string) {
@@ -48,8 +90,8 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
     sportProfile: {
       variant: "flag_7v7",
       offensePlayerCount: 7,
-      fieldWidthYds: 40,
-      fieldLengthYds: 25,
+      fieldWidthYds: 30,
+      fieldLengthYds: 30,
       motionMustNotAdvanceTowardGoal: true,
     },
     metadata: {

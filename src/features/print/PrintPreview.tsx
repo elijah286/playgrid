@@ -3,68 +3,50 @@
 import { useMemo } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
-import type { TeamTheme } from "@/domain/team/theme";
 import { compilePlayToSvg } from "@/domain/print/templates";
-import type { PrintTemplateKind } from "@/domain/print/templates";
+import { SegmentedControl } from "@/components/ui";
+import { useState } from "react";
 
 type Props = {
   doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
-  kind: PrintTemplateKind;
-  onKindChange: (k: PrintTemplateKind) => void;
-  teamTheme?: TeamTheme;
 };
 
-export function PrintPreview({ doc, dispatch, kind, onKindChange, teamTheme }: Props) {
-  const compiled = useMemo(
-    () => compilePlayToSvg(doc, kind, teamTheme),
-    [doc, kind, teamTheme],
-  );
+export function PrintPreview({ doc, dispatch }: Props) {
+  const [kind, setKind] = useState<"wristband" | "full_sheet">("wristband");
+
+  const compiled = useMemo(() => compilePlayToSvg(doc, kind), [doc, kind]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onKindChange("wristband")}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-            kind === "wristband"
-              ? "bg-pg-turf text-white"
-              : "bg-pg-chalk ring-1 ring-pg-line dark:bg-pg-turf-deep/40"
-          }`}
-        >
-          Wristband
-        </button>
-        <button
-          type="button"
-          onClick={() => onKindChange("full_sheet")}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-            kind === "full_sheet"
-              ? "bg-pg-turf text-white"
-              : "bg-pg-chalk ring-1 ring-pg-line dark:bg-pg-turf-deep/40"
-          }`}
-        >
-          Full sheet
-        </button>
-      </div>
+    <div className="space-y-4">
+      <SegmentedControl
+        options={[
+          { value: "wristband" as const, label: "Wristband" },
+          { value: "full_sheet" as const, label: "Full sheet" },
+        ]}
+        value={kind}
+        onChange={setKind}
+      />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div>
-          <p className="text-xs font-medium text-pg-subtle">Live preview</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Live preview</p>
           <div
-            className="mt-2 overflow-hidden rounded-xl bg-pg-chalk p-2 ring-1 ring-pg-line dark:bg-pg-turf-deep/30"
+            className="overflow-hidden rounded-xl border border-border bg-surface-raised p-3"
             dangerouslySetInnerHTML={{ __html: compiled.svgMarkup }}
           />
         </div>
-        <div className="space-y-3 text-xs">
-          <label className="flex flex-col gap-1">
-            <span className="text-pg-subtle">Diagram scale</span>
+        <div className="space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Settings</p>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-foreground">Diagram scale</span>
             <input
               type="range"
               min={0.6}
               max={1.4}
               step={0.05}
               value={doc.printProfile.wristband.diagramScale}
+              className="accent-primary"
               onChange={(e) =>
                 dispatch({
                   type: "document.setPrintProfile",
@@ -79,63 +61,68 @@ export function PrintPreview({ doc, dispatch, kind, onKindChange, teamTheme }: P
               }
             />
           </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={doc.printProfile.visibility.showPlayerLabels}
-              onChange={(e) =>
-                dispatch({
-                  type: "document.setPrintProfile",
-                  printProfile: {
-                    ...doc.printProfile,
-                    visibility: {
-                      ...doc.printProfile.visibility,
-                      showPlayerLabels: e.target.checked,
+          <div className="space-y-2.5">
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={doc.printProfile.visibility.showPlayerLabels}
+                className="size-4 rounded accent-primary"
+                onChange={(e) =>
+                  dispatch({
+                    type: "document.setPrintProfile",
+                    printProfile: {
+                      ...doc.printProfile,
+                      visibility: {
+                        ...doc.printProfile.visibility,
+                        showPlayerLabels: e.target.checked,
+                      },
                     },
-                  },
-                })
-              }
-            />
-            Player labels
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={doc.printProfile.visibility.showNotes}
-              onChange={(e) =>
-                dispatch({
-                  type: "document.setPrintProfile",
-                  printProfile: {
-                    ...doc.printProfile,
-                    visibility: {
-                      ...doc.printProfile.visibility,
-                      showNotes: e.target.checked,
+                  })
+                }
+              />
+              <span className="text-foreground">Player labels</span>
+            </label>
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={doc.printProfile.visibility.showNotes}
+                className="size-4 rounded accent-primary"
+                onChange={(e) =>
+                  dispatch({
+                    type: "document.setPrintProfile",
+                    printProfile: {
+                      ...doc.printProfile,
+                      visibility: {
+                        ...doc.printProfile.visibility,
+                        showNotes: e.target.checked,
+                      },
                     },
-                  },
-                })
-              }
-            />
-            Notes
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={doc.printProfile.visibility.showWristbandCode}
-              onChange={(e) =>
-                dispatch({
-                  type: "document.setPrintProfile",
-                  printProfile: {
-                    ...doc.printProfile,
-                    visibility: {
-                      ...doc.printProfile.visibility,
-                      showWristbandCode: e.target.checked,
+                  })
+                }
+              />
+              <span className="text-foreground">Notes</span>
+            </label>
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={doc.printProfile.visibility.showWristbandCode}
+                className="size-4 rounded accent-primary"
+                onChange={(e) =>
+                  dispatch({
+                    type: "document.setPrintProfile",
+                    printProfile: {
+                      ...doc.printProfile,
+                      visibility: {
+                        ...doc.printProfile.visibility,
+                        showWristbandCode: e.target.checked,
+                      },
                     },
-                  },
-                })
-              }
-            />
-            Wristband code
-          </label>
+                  })
+                }
+              />
+              <span className="text-foreground">Wristband code</span>
+            </label>
+          </div>
         </div>
       </div>
     </div>
