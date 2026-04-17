@@ -418,11 +418,20 @@ export function PlayEditorClient({ playId, playbookId, initialDocument }: Props)
       {tab === "routes" && (
         <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
-            {/* Always reserve toolbar space so the canvas doesn't shift when
-                selection toggles the toolbar's visibility. */}
+            {/* The route toolbar is ALWAYS rendered — even with nothing
+                selected — so the canvas never shifts when a player or
+                route is selected. When no selection exists, the buttons
+                still configure the "active" defaults used by the next
+                route drawn, so the toolbar is never dead UI. Opacity
+                signals that the selection-specific actions (Done, Smooth)
+                don't apply yet. */}
             <div
-              aria-hidden={!showToolbar}
-              className={showToolbar ? "" : "invisible pointer-events-none"}
+              data-toolbar-slot
+              className={
+                showToolbar
+                  ? ""
+                  : "opacity-60 [&_button]:cursor-default"
+              }
             >
               <RouteToolbar
                 shape={displayShape}
