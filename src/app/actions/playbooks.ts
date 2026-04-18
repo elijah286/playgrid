@@ -3,10 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import type { SportVariant } from "@/domain/play/types";
 
 export type PlaybookRow = {
   id: string;
   name: string;
+  sport_variant: string;
   created_at: string | null;
   updated_at: string | null;
   team_id: string;
@@ -33,7 +35,7 @@ export async function listPlaybooksAction(opts?: {
 
   let query = supabase
     .from("playbooks")
-    .select("id, name, created_at, updated_at, team_id, is_default, is_archived")
+    .select("id, name, sport_variant, created_at, updated_at, team_id, is_default, is_archived")
     .order("updated_at", { ascending: false });
 
   if (!opts?.includeDefault) query = query.eq("is_default", false);
@@ -44,7 +46,10 @@ export async function listPlaybooksAction(opts?: {
   return { ok: true as const, playbooks: (data ?? []) as PlaybookRow[] };
 }
 
-export async function createPlaybookAction(name: string) {
+export async function createPlaybookAction(
+  name: string,
+  sportVariant: SportVariant = "flag_7v7",
+) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
@@ -57,7 +62,7 @@ export async function createPlaybookAction(name: string) {
   const { teamId } = await ensureDefaultWorkspace(supabase, user.id);
   const { data, error } = await supabase
     .from("playbooks")
-    .insert({ team_id: teamId, name: name || "New playbook" })
+    .insert({ team_id: teamId, name: name || "New playbook", sport_variant: sportVariant })
     .select("id")
     .single();
 

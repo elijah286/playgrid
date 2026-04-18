@@ -4,6 +4,7 @@ import {
   type PlayDocument,
   type Player,
   type Route,
+  type SportProfile,
   type SportVariant,
 } from "./types";
 
@@ -40,6 +41,89 @@ export function resolveLineOfScrimmageY(doc: PlayDocument): number {
 /** Route end-decoration, defaulting to arrow. */
 export function resolveEndDecoration(route: Route): EndDecoration {
   return route.endDecoration ?? "arrow";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sport-variant helpers                                             */
+/* ------------------------------------------------------------------ */
+
+/** Canonical field + roster dimensions for each supported sport variant. */
+export function sportProfileForVariant(variant: SportVariant): SportProfile {
+  switch (variant) {
+    case "flag_5v5":
+      return { variant, offensePlayerCount: 5, fieldWidthYds: 25, fieldLengthYds: 30, motionMustNotAdvanceTowardGoal: true };
+    case "flag_7v7":
+      return { variant, offensePlayerCount: 7, fieldWidthYds: 30, fieldLengthYds: 40, motionMustNotAdvanceTowardGoal: true };
+    case "six_man":
+      return { variant, offensePlayerCount: 6, fieldWidthYds: 40, fieldLengthYds: 80, motionMustNotAdvanceTowardGoal: false };
+    case "tackle_11":
+      return { variant, offensePlayerCount: 11, fieldWidthYds: 53, fieldLengthYds: 100, motionMustNotAdvanceTowardGoal: false };
+  }
+}
+
+/** Human-readable label for each sport variant, for use in UI. */
+export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
+  flag_5v5: "Flag 5v5",
+  flag_7v7: "Flag 7v7",
+  six_man: "6-Man",
+  tackle_11: "11-Man Tackle",
+};
+
+function mkPlayer(
+  id: string,
+  role: Player["role"],
+  label: string,
+  x: number,
+  y: number,
+  eligible = true,
+): Player {
+  return {
+    id,
+    role,
+    label,
+    position: { x, y },
+    eligible,
+    style: { fill: "#f8fafc", stroke: "#0f172a", labelColor: "#0f172a" },
+  };
+}
+
+/** Default offensive formation for each sport variant. */
+export function defaultPlayersForVariant(variant: SportVariant): Player[] {
+  switch (variant) {
+    case "flag_5v5":
+      return [
+        mkPlayer("p_qb", "QB",  "Q", 0.50, 0.12),
+        mkPlayer("p_c",  "C",   "C", 0.50, 0.06, false),
+        mkPlayer("p_x",  "WR",  "X", 0.15, 0.38),
+        mkPlayer("p_y",  "WR",  "Y", 0.50, 0.38),
+        mkPlayer("p_z",  "WR",  "Z", 0.85, 0.38),
+      ];
+    case "flag_7v7":
+      return defaultFlagSevenPlayers();
+    case "six_man":
+      return [
+        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.12),
+        mkPlayer("p_c",  "C",     "C", 0.50, 0.06, false),
+        mkPlayer("p_lt", "OTHER", "T", 0.38, 0.06, false),
+        mkPlayer("p_rt", "OTHER", "E", 0.62, 0.06),
+        mkPlayer("p_x",  "WR",    "X", 0.12, 0.28),
+        mkPlayer("p_z",  "WR",    "Z", 0.88, 0.28),
+      ];
+    case "tackle_11":
+      return [
+        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.22),
+        mkPlayer("p_c",  "C",     "C", 0.50, 0.06, false),
+        mkPlayer("p_lg", "OTHER", "G", 0.44, 0.06, false),
+        mkPlayer("p_rg", "OTHER", "G", 0.56, 0.06, false),
+        mkPlayer("p_lt", "OTHER", "T", 0.37, 0.06, false),
+        mkPlayer("p_rt", "OTHER", "T", 0.63, 0.06, false),
+        mkPlayer("p_te", "TE",    "Y", 0.72, 0.06),
+        mkPlayer("p_x",  "WR",    "X", 0.05, 0.06),
+        mkPlayer("p_z",  "WR",    "Z", 0.90, 0.14),
+        mkPlayer("p_h",  "WR",    "H", 0.82, 0.22),
+        mkPlayer("p_rb", "RB",    "B", 0.50, 0.34),
+      ];
+  }
 }
 
 let idCounter = 0;
@@ -81,19 +165,15 @@ export function defaultFlagSevenPlayers(): Player[] {
 }
 
 export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): PlayDocument {
-  const players = defaultFlagSevenPlayers();
+  const variant: SportVariant =
+    (overrides?.sportProfile?.variant as SportVariant | undefined) ?? "flag_7v7";
+  const players = defaultPlayersForVariant(variant);
   const anchors: Record<string, { x: number; y: number }> = {};
   for (const p of players) anchors[p.label] = { ...p.position };
 
   const base: PlayDocument = {
     schemaVersion: PLAY_DOCUMENT_SCHEMA_VERSION,
-    sportProfile: {
-      variant: "flag_7v7",
-      offensePlayerCount: 7,
-      fieldWidthYds: 30,
-      fieldLengthYds: 30,
-      motionMustNotAdvanceTowardGoal: true,
-    },
+    sportProfile: sportProfileForVariant(variant),
     metadata: {
       coachName: "Trips Right — Stick",
       shorthand: "TR STK",
