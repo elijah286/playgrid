@@ -1,0 +1,240 @@
+"use client";
+
+import { useCallback, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Save, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { saveFormationAction, updateFormationAction } from "@/app/actions/formations";
+import {
+  Button,
+  Input,
+  Select,
+  useToast,
+} from "@/components/ui";
+import { EditorCanvas } from "@/features/editor/EditorCanvas";
+import { FormationInspector } from "@/features/editor/FormationInspector";
+import { usePlayEditor } from "@/features/editor/usePlayEditor";
+import {
+  createEmptyPlayDocument,
+  defaultPlayersForVariant,
+  SPORT_VARIANT_LABELS,
+  sportProfileForVariant,
+  uid,
+} from "@/domain/play/factory";
+import type { Player, Point2, SportVariant } from "@/domain/play/types";
+
+const SPORT_OPTIONS = (
+  Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]
+).map(([value, label]) => ({ value, label }));
+
+type Props =
+  | { mode: "new" }
+  | {
+      mode: "edit";
+      formationId: string;
+      initialName: string;
+      initialVariant: SportVariant;
+      initialPlayers: Player[];
+    };
+
+export function FormationEditorClient(props: Props) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+
+  /* ── name + sport variant ── */
+  const [name, setName] = useState(
+    props.mode === "edit" ? props.initialName : "",
+  );
+  const [variant, setVariant] = useState<SportVariant>(
+    props.mode === "edit" ? props.initialVariant : "flag_7v7",
+  );
+
+  /* ── play-document state (drives the canvas) ── */
+  const initialDoc =
+    props.mode === "edit"
+      ? (() => {
+          const base = createEmptyPlayDocument({
+            sportProfile: sportProfileForVariant(props.initialVariant),
+          });
+          return {
+            ...base,
+            layers: { ...base.layers, players: props.initialPlayers },
+          };
+        })()
+      : createEmptyPlayDocument({
+          sportProfile: sportProfileForVariant("flag_7v7"),
+        });
+
+  const { doc, dispatch, replaceDocument } = usePlayEditor(initialDoc);
+
+  /* ── selection state ── */
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+
+  /* ── sport-variant change resets the canvas ── */
+  function handleVariantChange(v: string) {
+    const next = v as SportVariant;
+    setVariant(next);
+    const freshDoc = createEmptyPlayDocument({
+      sportProfile: sportProfileForVariant(next),
+    });
+    replaceDocument({
+      ...freshDoc,
+      layers: {
+        ...freshDoc.layers,
+        players: defaultPlayersForVariant(next),
+      },
+    });
+    setSelectedPlayerId(null);
+  }
+
+  /* ── add a player at click position ── */
+  const handleAddPlayer = useCallback(
+    (position: Point2) => {
+      const player: Player = {
+        id: uid("player"),
+        role: "WR",
+        label: "?",
+        position,
+        eligible: true,
+        style: { fill: "#FFFFFF", stroke: "#1C1C1E", labelColor: "#1C1C1E" },
+      };
+      dispatch({ type: "player.add", player });
+      setSelectedPlayerId(player.id);
+    },
+    [dispatch],
+  );
+
+  /* ── save ── */
+  function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast("Enter a formation name", "error");
+      return;
+    }
+    startTransition(async () => {
+      let res: { ok: boolean; error?: string };
+      if (props.mode === "edit") {
+        res = await updateFormationAction(
+          props.formationId,
+          trimmed,
+          doc.layers.players,
+          doc.sportProfile,
+        );
+      } else {
+        const r = await saveFormationAction(trimmed, doc.layers.players, doc.sportProfile);
+        res = r;
+      }
+      if (!res.ok) {
+        toast(res.error ?? "Something went wrong.", "error");
+      } else {
+        toast(
+          props.mode === "edit" ? "Formation updated" : "Formation saved",
+          "success",
+        );
+        router.push("/formations");
+        router.refresh();
+      }
+    });
+  }
+
+  const fieldAspect =
+    doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Header */}
+      <header className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
+        <Link href="/formations">
+          <Button variant="ghost" size="sm" leftIcon={ArrowLeft}>
+            Formations
+          </Button>
+        </Link>
+        <h1 className="text-lg font-bold text-foreground">
+          {props.mode === "edit" ? "Edit formation" : "New formation"}
+        </h1>
+
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={Save}
+            loading={pending}
+            onClick={handleSave}
+          >
+            {props.mode === "edit" ? "Save changes" : "Save formation"}
+          </Button>
+        </div>
+      </header>
+
+      {/* Name + sport row */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted">Sport type</label>
+          <Select
+            value={variant}
+            onChange={handleVariantChange}
+            options={SPORT_OPTIONS}
+            className="w-44"
+            /* Can't change sport on existing formation — would lose player layout */
+          />
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5">
+          <label className="text-xs font-medium text-muted">Formation name</label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Trips Right"
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          />
+        </div>
+      </div>
+
+      {/* Editor area */}
+      <div className="grid min-h-0 gap-5 lg:grid-cols-[1fr_280px]">
+        {/* Canvas */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-muted">
+            <UserPlus className="size-4 shrink-0" />
+            <span>
+              Click the field to add a player. Drag players to reposition. Click
+              a player to edit its label, role, and style.
+            </span>
+          </div>
+          <div className="relative min-h-[400px] overflow-hidden rounded-xl">
+            <EditorCanvas
+              doc={doc}
+              dispatch={dispatch}
+              mode="formation"
+              selectedPlayerId={selectedPlayerId}
+              selectedRouteId={null}
+              selectedNodeId={null}
+              selectedSegmentId={null}
+              onSelectPlayer={setSelectedPlayerId}
+              onSelectRoute={() => {}}
+              onSelectNode={() => {}}
+              onSelectSegment={() => {}}
+              onAddPlayer={handleAddPlayer}
+              activeShape="straight"
+              activeStrokePattern="solid"
+              activeColor="#FFFFFF"
+              activeWidth={2.5}
+              fieldAspect={fieldAspect}
+              fieldBackground={doc.fieldBackground ?? "green"}
+            />
+          </div>
+        </div>
+
+        {/* Inspector */}
+        <aside className="rounded-xl border border-border bg-surface-raised p-4">
+          <FormationInspector
+            doc={doc}
+            dispatch={dispatch}
+            selectedPlayerId={selectedPlayerId}
+            onSelectPlayer={setSelectedPlayerId}
+          />
+        </aside>
+      </div>
+    </div>
+  );
+}

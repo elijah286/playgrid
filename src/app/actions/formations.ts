@@ -104,6 +104,43 @@ export async function saveFormationAction(
   return { ok: true, formationId: data.id as string };
 }
 
+export async function updateFormationAction(
+  formationId: string,
+  name: string,
+  players: Player[],
+  sportProfile: Partial<SportProfile>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: "Name can't be empty." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Guard: can't update system formations
+  const { data: row, error: fetchErr } = await supabase
+    .from("formations")
+    .select("is_system")
+    .eq("id", formationId)
+    .single();
+  if (fetchErr || !row) return { ok: false, error: fetchErr?.message ?? "Not found." };
+  if (row.is_system) return { ok: false, error: "Cannot modify system formations." };
+
+  const params = { displayName: trimmed, players, sportProfile };
+  const { error } = await supabase
+    .from("formations")
+    .update({ params: params as unknown as Record<string, unknown> })
+    .eq("id", formationId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function renameFormationAction(
   formationId: string,
   newName: string,
