@@ -104,6 +104,41 @@ export async function saveFormationAction(
   return { ok: true, formationId: data.id as string };
 }
 
+export async function renameFormationAction(
+  formationId: string,
+  newName: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const trimmed = newName.trim();
+  if (!trimmed) return { ok: false, error: "Name can't be empty." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Fetch current params so we can merge displayName without losing other fields.
+  const { data: row, error: fetchErr } = await supabase
+    .from("formations")
+    .select("params, is_system")
+    .eq("id", formationId)
+    .single();
+  if (fetchErr || !row) return { ok: false, error: fetchErr?.message ?? "Not found." };
+  if (row.is_system) return { ok: false, error: "Cannot rename system formations." };
+
+  const updated = { ...(row.params as Record<string, unknown>), displayName: trimmed };
+  const { error } = await supabase
+    .from("formations")
+    .update({ params: updated as unknown as Record<string, unknown> })
+    .eq("id", formationId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function deleteFormationAction(
   formationId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {

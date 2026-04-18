@@ -2,7 +2,7 @@
 -- Backfill via the team's sport_variant (teams already have that column).
 
 alter table public.playbooks
-  add column sport_variant text not null default 'flag_7v7';
+  add column if not exists sport_variant text not null default 'flag_7v7';
 
 -- Backfill from parent team
 update public.playbooks pb
