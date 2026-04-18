@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { BookOpen, Pencil, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import {
   deleteFormationAction,
@@ -13,21 +13,31 @@ import {
   Button,
   Card,
   EmptyState,
-  Input,
+  SegmentedControl,
   useToast,
 } from "@/components/ui";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 
+type SportFilter = "all" | SportVariant;
+
+const FILTER_OPTIONS: { value: SportFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "flag_5v5", label: "Flag 5v5" },
+  { value: "flag_7v7", label: "Flag 7v7" },
+  { value: "six_man", label: "6-Man" },
+  { value: "tackle_11", label: "11-Man" },
+];
+
 function variantLabel(v: string) {
   return SPORT_VARIANT_LABELS[v as SportVariant] ?? v;
 }
 
-/** Tiny SVG preview of a formation — draws circles at normalized positions. */
+/** Tiny SVG field preview of a formation. */
 function FormationPreview({ formation }: { formation: SavedFormation }) {
   const sp = formation.sportProfile;
-  const fieldW = (sp.fieldWidthYds ?? 30);
-  const fieldL = (sp.fieldLengthYds ?? 40);
+  const fieldW = sp.fieldWidthYds ?? 30;
+  const fieldL = sp.fieldLengthYds ?? 40;
   const aspect = fieldW / fieldL;
 
   const W = 120;
@@ -53,15 +63,14 @@ function FormationPreview({ formation }: { formation: SavedFormation }) {
         const cy = (1 - p.position.y) * H;
         return (
           <g key={p.id}>
-            <circle cx={cx} cy={cy} r={r} fill={p.style.fill} stroke={p.style.stroke} strokeWidth={0.8} />
+            <circle
+              cx={cx} cy={cy} r={r}
+              fill={p.style.fill} stroke={p.style.stroke} strokeWidth={0.8}
+            />
             <text
-              x={cx}
-              y={cy + 0.5}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={4.5}
-              fill={p.style.labelColor}
-              fontWeight="700"
+              x={cx} y={cy + 0.5}
+              textAnchor="middle" dominantBaseline="middle"
+              fontSize={4.5} fill={p.style.labelColor} fontWeight="700"
             >
               {p.label}
             </text>
@@ -102,17 +111,14 @@ function FormationCard({
           <p className="mt-0.5 text-xs text-muted">
             {formation.players.length} players
           </p>
+
           {!formation.isSystem && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={Pencil}
-                loading={pending}
-                onClick={() => onRename(formation.id, formation.displayName)}
-              >
-                Rename
-              </Button>
+              <Link href={`/formations/${formation.id}/edit`}>
+                <Button variant="ghost" size="sm" leftIcon={Pencil}>
+                  Edit
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"
@@ -131,20 +137,18 @@ function FormationCard({
   );
 }
 
-type GroupedFormations = {
-  variant: SportVariant;
-  label: string;
-  formations: SavedFormation[];
-};
+const VARIANT_ORDER: SportVariant[] = [
+  "flag_5v5",
+  "flag_7v7",
+  "six_man",
+  "tackle_11",
+];
 
-export function FormationsClient({
-  initial,
-}: {
-  initial: SavedFormation[];
-}) {
+export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [formations, setFormations] = useState(initial);
+  const [filter, setFilter] = useState<SportFilter>("all");
 
   function handleRename(id: string, current: string) {
     const next = window.prompt("Rename formation", current);
@@ -177,42 +181,63 @@ export function FormationsClient({
     });
   }
 
-  const VARIANT_ORDER: SportVariant[] = ["flag_5v5", "flag_7v7", "six_man", "tackle_11"];
-  const groups: GroupedFormations[] = VARIANT_ORDER.map((variant) => ({
+  // Apply sport filter
+  const visible =
+    filter === "all"
+      ? formations
+      : formations.filter(
+          (f) => (f.sportProfile?.variant ?? "flag_7v7") === filter,
+        );
+
+  // Group by variant (system before custom within each group)
+  const groups = VARIANT_ORDER.map((variant) => ({
     variant,
     label: SPORT_VARIANT_LABELS[variant],
-    formations: formations.filter(
-      (f) => (f.sportProfile?.variant ?? "flag_7v7") === variant,
-    ),
+    formations: visible
+      .filter((f) => (f.sportProfile?.variant ?? "flag_7v7") === variant)
+      .sort((a, b) => (a.isSystem === b.isSystem ? 0 : a.isSystem ? -1 : 1)),
   })).filter((g) => g.formations.length > 0);
 
-  const ungrouped = formations.filter((f) => !f.sportProfile?.variant);
+  const ungrouped = visible.filter((f) => !f.sportProfile?.variant);
 
   return (
-    <div className="space-y-10">
-      {/* How to create custom formations */}
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-surface-raised p-4">
-        <BookOpen className="mt-0.5 size-5 shrink-0 text-primary" />
-        <div className="text-sm">
-          <p className="font-semibold text-foreground">Creating custom formations</p>
-          <p className="mt-1 text-muted">
-            Open any play, switch to the{" "}
-            <span className="font-medium text-foreground">Formation</span> tab, arrange
-            your players, then click{" "}
-            <span className="font-medium text-foreground">Save formation</span>. It will
-            appear here and be available in every playbook.
-          </p>
-          <Link href="/playbooks" className="mt-2 inline-block text-primary hover:underline">
-            Go to Playbooks →
+    <div className="space-y-6">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SegmentedControl
+          value={filter}
+          onChange={(v) => setFilter(v as SportFilter)}
+          options={FILTER_OPTIONS}
+        />
+        <div className="ml-auto">
+          <Link href="/formations/new">
+            <Button variant="primary" size="sm" leftIcon={Plus}>
+              New formation
+            </Button>
           </Link>
         </div>
       </div>
 
-      {formations.length === 0 && (
+      {visible.length === 0 && (
         <EmptyState
           icon={Users}
-          heading="No formations yet"
-          description="System formations appear once migration 0009 has been applied to your database. Custom formations are saved from the play editor's Formation tab."
+          heading={
+            filter === "all"
+              ? "No formations yet"
+              : `No ${SPORT_VARIANT_LABELS[filter as SportVariant]} formations`
+          }
+          description={
+            filter === "all"
+              ? "Create a formation or apply migration 0009 to load the system formations."
+              : "Create a formation for this sport type using the button above."
+          }
+          action={
+            <Link href="/formations/new">
+              <Button variant="primary" leftIcon={Plus}>
+                New formation
+              </Button>
+            </Link>
+          }
         />
       )}
 
@@ -222,17 +247,15 @@ export function FormationsClient({
             {group.label}
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {group.formations
-              .sort((a, b) => (a.isSystem === b.isSystem ? 0 : a.isSystem ? -1 : 1))
-              .map((f) => (
-                <FormationCard
-                  key={f.id}
-                  formation={f}
-                  onRename={handleRename}
-                  onDelete={handleDelete}
-                  pending={pending}
-                />
-              ))}
+            {group.formations.map((f) => (
+              <FormationCard
+                key={f.id}
+                formation={f}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                pending={pending}
+              />
+            ))}
           </div>
         </section>
       ))}
