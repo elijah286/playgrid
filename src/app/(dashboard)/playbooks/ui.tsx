@@ -30,15 +30,23 @@ import {
   EmptyState,
   Input,
   SegmentedControl,
+  Select,
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
+import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import type { SportVariant } from "@/domain/play/types";
+
+const SPORT_OPTIONS = (Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]).map(
+  ([value, label]) => ({ value, label }),
+);
 
 export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
+  const [sportVariant, setSportVariant] = useState<SportVariant>("flag_7v7");
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
   const [rows, setRows] = useState<PlaybookRow[]>(initial);
@@ -73,7 +81,7 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
 
   function create() {
     startTransition(async () => {
-      const res = await createPlaybookAction(name || "New playbook");
+      const res = await createPlaybookAction(name || "New playbook", sportVariant);
       if (res.ok) {
         router.push(`/playbooks/${res.id}`);
         router.refresh();
@@ -127,12 +135,19 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
             { value: "archived", label: "Archived" },
           ]}
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Select
+            value={sportVariant}
+            onChange={(v) => setSportVariant(v as SportVariant)}
+            options={SPORT_OPTIONS}
+            className="w-44"
+          />
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Playbook name"
-            className="w-48"
+            className="w-44"
+            onKeyDown={(e) => e.key === "Enter" && create()}
           />
           <Button
             variant="primary"
@@ -225,11 +240,16 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
                     </h3>
                     {p.is_archived && <Badge>Archived</Badge>}
                   </div>
-                  {p.created_at && (
-                    <p className="mt-1 text-xs text-muted">
-                      Created {new Date(p.created_at).toLocaleDateString()}
-                    </p>
-                  )}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      {SPORT_VARIANT_LABELS[p.sport_variant as SportVariant] ?? p.sport_variant}
+                    </span>
+                    {p.created_at && (
+                      <span className="text-xs text-muted">
+                        Created {new Date(p.created_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
                 </Link>
               </Card>
             );
