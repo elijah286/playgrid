@@ -432,3 +432,181 @@ on conflict (id) do nothing;
 
 alter table public.site_settings enable row level security;
 
+
+-- file: supabase/migrations/0006_profiles_insert_own.sql
+-- Allow signed-in users to insert their own profile row (repairs orphans + supports client upsert)
+create policy if not exists profiles_insert_own on public.profiles
+  for insert with check (id = auth.uid());
+
+-- file: supabase/migrations/0007_archive_and_default_playbook.sql
+-- Phase 1 dashboard + lifecycle support
+alter table public.playbooks
+  add column if not exists is_default boolean not null default false,
+  add column if not exists is_archived boolean not null default false;
+
+alter table public.plays
+  add column if not exists is_archived boolean not null default false;
+
+create unique index if not exists playbooks_default_per_team_idx
+  on public.playbooks (team_id)
+  where is_default = true;
+
+create index if not exists playbooks_team_not_archived_idx
+  on public.playbooks (team_id, is_archived);
+
+create index if not exists plays_playbook_not_archived_idx
+  on public.plays (playbook_id, is_archived);
+
+with eligible as (
+  select distinct on (p.team_id) p.id, p.team_id
+  from public.playbooks p
+  where not exists (
+    select 1 from public.playbooks d
+    where d.team_id = p.team_id and d.is_default = true
+  )
+  order by p.team_id, p.created_at asc, p.id asc
+)
+update public.playbooks pb
+set is_default = true
+from eligible e
+where pb.id = e.id;
+
+-- file: supabase/migrations/0008_playbook_groups.sql
+-- Playbook → group → play: optional named groups and stable ordering within a playbook
+
+create table if not exists public.playbook_groups (
+  id uuid primary key default gen_random_uuid(),
+  playbook_id uuid not null references public.playbooks (id) on delete cascade,
+  name text not null default 'Group',
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists playbook_groups_playbook_id_idx on public.playbook_groups (playbook_id);
+
+create trigger if not exists playbook_groups_updated_at
+  before update on public.playbook_groups
+  for each row execute function public.set_updated_at();
+
+alter table public.plays
+  add column if not exists group_id uuid references public.playbook_groups (id) on delete set null,
+  add column if not exists sort_order int not null default 0;
+
+create index if not exists plays_group_id_idx on public.plays (group_id);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'playbook_groups' and policyname = 'playbook_groups_all'
+  ) then
+    alter table public.playbook_groups enable row level security;
+    create policy playbook_groups_all on public.playbook_groups
+      for all using (
+        exists (
+          select 1
+          from public.playbooks pb
+          join public.teams t on t.id = pb.team_id
+          where pb.id = playbook_id and public.is_org_owner(t.org_id)
+        )
+      )
+      with check (
+        exists (
+          select 1
+          from public.playbooks pb
+          join public.teams t on t.id = pb.team_id
+          where pb.id = playbook_id and public.is_org_owner(t.org_id)
+        )
+      );
+  end if;
+end $$;
+
+-- Backfill deterministic ordering from creation time
+with ranked as (
+  select
+    id,
+    row_number() over (partition by playbook_id order by created_at) - 1 as rn
+  from public.plays
+)
+update public.plays p
+set sort_order = ranked.rn
+from ranked
+where p.id = ranked.id and p.sort_order = 0;
+
+-- file: supabase/migrations/0009_playbook_sport_variant_and_system_formations.sql
+-- Add sport_variant to playbooks so each playbook knows what sport it covers.
+
+alter table public.playbooks
+  add column if not exists sport_variant text not null default 'flag_7v7';
+
+-- Backfill from parent team
+update public.playbooks pb
+set    sport_variant = t.sport_variant
+from   public.teams t
+where  t.id = pb.team_id;
+
+comment on column public.playbooks.sport_variant is
+  'Sport/format this playbook is designed for (flag_5v5 | flag_7v7 | six_man | tackle_11).';
+
+-- Replace stub system formations with real player+field data
+delete from public.formations where is_system = true;
+
+insert into public.formations (is_system, semantic_key, params) values
+
+(true, 'flag_5v5_base', jsonb_build_object(
+  'displayName', '5v5 Base',
+  'sportProfile', jsonb_build_object('variant','flag_5v5','offensePlayerCount',5,'fieldWidthYds',25,'fieldLengthYds',30,'motionMustNotAdvanceTowardGoal',true),
+  'players', jsonb_build_array(
+    jsonb_build_object('id','p_qb','role','QB', 'label','Q','position',jsonb_build_object('x',0.50,'y',0.12),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_c', 'role','C',  'label','C','position',jsonb_build_object('x',0.50,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_x', 'role','WR', 'label','X','position',jsonb_build_object('x',0.15,'y',0.38),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_y', 'role','WR', 'label','Y','position',jsonb_build_object('x',0.50,'y',0.38),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_z', 'role','WR', 'label','Z','position',jsonb_build_object('x',0.85,'y',0.38),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a'))
+  )
+)),
+
+(true, 'flag_7v7_base', jsonb_build_object(
+  'displayName', '7v7 Base',
+  'sportProfile', jsonb_build_object('variant','flag_7v7','offensePlayerCount',7,'fieldWidthYds',30,'fieldLengthYds',40,'motionMustNotAdvanceTowardGoal',true),
+  'players', jsonb_build_array(
+    jsonb_build_object('id','p_qb','role','QB', 'label','Q','position',jsonb_build_object('x',0.50,'y',0.12),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_c', 'role','C',  'label','C','position',jsonb_build_object('x',0.50,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_s', 'role','WR', 'label','S','position',jsonb_build_object('x',0.22,'y',0.22),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_x', 'role','WR', 'label','X','position',jsonb_build_object('x',0.12,'y',0.38),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_y', 'role','WR', 'label','Y','position',jsonb_build_object('x',0.50,'y',0.38),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_z', 'role','WR', 'label','Z','position',jsonb_build_object('x',0.88,'y',0.38),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_f', 'role','RB', 'label','F','position',jsonb_build_object('x',0.78,'y',0.22),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a'))
+  )
+)),
+
+(true, 'six_man_base', jsonb_build_object(
+  'displayName', '6-Man Base',
+  'sportProfile', jsonb_build_object('variant','six_man','offensePlayerCount',6,'fieldWidthYds',40,'fieldLengthYds',80,'motionMustNotAdvanceTowardGoal',false),
+  'players', jsonb_build_array(
+    jsonb_build_object('id','p_qb', 'role','QB',    'label','Q','position',jsonb_build_object('x',0.50,'y',0.12),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_c',  'role','C',     'label','C','position',jsonb_build_object('x',0.50,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_lt', 'role','OTHER', 'label','T','position',jsonb_build_object('x',0.38,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_rt', 'role','OTHER', 'label','E','position',jsonb_build_object('x',0.62,'y',0.06),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_x',  'role','WR',    'label','X','position',jsonb_build_object('x',0.12,'y',0.28),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_z',  'role','WR',    'label','Z','position',jsonb_build_object('x',0.88,'y',0.28),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a'))
+  )
+)),
+
+(true, 'tackle_11_pro_set', jsonb_build_object(
+  'displayName', '11-Man Pro Set',
+  'sportProfile', jsonb_build_object('variant','tackle_11','offensePlayerCount',11,'fieldWidthYds',53,'fieldLengthYds',100,'motionMustNotAdvanceTowardGoal',false),
+  'players', jsonb_build_array(
+    jsonb_build_object('id','p_qb','role','QB',    'label','Q','position',jsonb_build_object('x',0.50,'y',0.22),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_c', 'role','C',     'label','C','position',jsonb_build_object('x',0.50,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_lg','role','OTHER', 'label','G','position',jsonb_build_object('x',0.44,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_rg','role','OTHER', 'label','G','position',jsonb_build_object('x',0.56,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_lt','role','OTHER', 'label','T','position',jsonb_build_object('x',0.37,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_rt','role','OTHER', 'label','T','position',jsonb_build_object('x',0.63,'y',0.06),'eligible',false,'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_te','role','TE',    'label','Y','position',jsonb_build_object('x',0.72,'y',0.06),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_x', 'role','WR',    'label','X','position',jsonb_build_object('x',0.05,'y',0.06),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_z', 'role','WR',    'label','Z','position',jsonb_build_object('x',0.90,'y',0.14),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_h', 'role','WR',    'label','H','position',jsonb_build_object('x',0.82,'y',0.22),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a')),
+    jsonb_build_object('id','p_rb','role','RB',    'label','B','position',jsonb_build_object('x',0.50,'y',0.34),'eligible',true, 'style',jsonb_build_object('fill','#f8fafc','stroke','#0f172a','labelColor','#0f172a'))
+  )
+));
