@@ -274,7 +274,7 @@ export function PlayEditorClient({
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         if (selectedNodeId && selectedRouteId) {
-          dispatch({ type: "route.removeNode", routeId: selectedRouteId, nodeId: selectedNodeId });
+          dispatch({ type: "route.removeNodeBridging", routeId: selectedRouteId, nodeId: selectedNodeId });
           setSelectedNodeId(null);
         } else if (selectedRouteId) {
           dispatch({ type: "route.remove", routeId: selectedRouteId });
