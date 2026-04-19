@@ -497,13 +497,10 @@ export function PlaybookDetailClient({
                           className="flex flex-1 flex-col p-4"
                           aria-label={`Open ${p.name}`}
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 pr-16">
                             <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
                               {p.name}
                             </h3>
-                            {p.wristband_code && (
-                              <Badge variant="primary">{p.wristband_code}</Badge>
-                            )}
                           </div>
                           {p.preview && (
                             <div className="mt-2">
@@ -525,7 +522,10 @@ export function PlaybookDetailClient({
                             </div>
                           )}
                         </Link>
-                        <div className="absolute right-2 top-2">
+                        <div className="absolute right-2 top-2 flex items-center gap-1">
+                          {p.wristband_code && (
+                            <Badge variant="primary">{p.wristband_code}</Badge>
+                          )}
                           <ActionMenu items={buildItems(p)} />
                         </div>
                       </Card>
@@ -682,63 +682,87 @@ function PlayPreview({
   // curves, dashes and end decorations match the edited play exactly.
   const R = 0.032;
 
-  // Compute bounding box of all content in SVG-y (= 1 - field-y) so
-  // routes and players are never cropped. Width always fills 0..1.
+  // Compute bbox over every player + every route node, then stretch the
+  // bbox to a fixed-aspect display area so all thumbnails are the same size.
   const PAD = R * 1.4;
+  let minX = Infinity;
+  let maxX = -Infinity;
   let minSvgY = Infinity;
   let maxSvgY = -Infinity;
   for (const p of preview.players) {
+    if (p.position.x < minX) minX = p.position.x;
+    if (p.position.x > maxX) maxX = p.position.x;
     const sy = 1 - p.position.y;
     if (sy < minSvgY) minSvgY = sy;
     if (sy > maxSvgY) maxSvgY = sy;
   }
   for (const r of preview.routes) {
     for (const n of r.nodes) {
+      if (n.position.x < minX) minX = n.position.x;
+      if (n.position.x > maxX) maxX = n.position.x;
       const sy = 1 - n.position.y;
       if (sy < minSvgY) minSvgY = sy;
       if (sy > maxSvgY) maxSvgY = sy;
     }
   }
-  if (!isFinite(minSvgY) || !isFinite(maxSvgY)) {
+  if (!isFinite(minSvgY) || !isFinite(maxSvgY) || !isFinite(minX) || !isFinite(maxX)) {
+    minX = 0;
+    maxX = 1;
     minSvgY = 0.22;
     maxSvgY = 0.78;
   }
-  // Always include LOS (svgY = 1 - lineOfScrimmageY) and 10yd downfield reference
-  // so the faint guide lines stay in frame.
+  // Always include LOS (svgY = 1 - lineOfScrimmageY) through 10yd downfield
+  // so the faint yard guides stay in frame.
   const losSvgY = 1 - preview.lineOfScrimmageY;
   const tenSvgY = 1 - (preview.lineOfScrimmageY + 0.40);
   minSvgY = Math.min(minSvgY, tenSvgY);
   maxSvgY = Math.max(maxSvgY, losSvgY);
-  const vbY = Math.max(0, minSvgY - PAD);
-  const vbH = Math.min(1, maxSvgY + PAD) - vbY;
+
+  let vbX = Math.max(0, minX - PAD);
+  let vbW = Math.min(1, maxX + PAD) - vbX;
+  let vbY = Math.max(0, minSvgY - PAD);
+  let vbH = Math.min(1, maxSvgY + PAD) - vbY;
+
+  // Pad the bbox to a fixed 16:10 tile so every thumbnail is the same size.
+  // Narrower content → pad width; taller → pad height.
+  const TARGET = 16 / 10;
+  const currentAspect = vbW / vbH;
+  if (currentAspect < TARGET) {
+    const needed = vbH * TARGET;
+    const extra = needed - vbW;
+    vbX = Math.max(0, vbX - extra / 2);
+    vbW = Math.min(1 - vbX, needed);
+  } else if (currentAspect > TARGET) {
+    const needed = vbW / TARGET;
+    const extra = needed - vbH;
+    vbY = Math.max(0, vbY - extra / 2);
+    vbH = Math.min(1 - vbY, needed);
+  }
+
+  const aspect = vbW / vbH;
+  // Screen-space scaleY/scaleX ratio after preserveAspectRatio="none". Used
+  // below to counter-scale player shapes so circles stay round.
+  const sxCorr = aspect / TARGET;
+  // Faint yard-guide positions in SVG-y (y-down).
+  const losY = 1 - preview.lineOfScrimmageY;
+  const fiveY = 1 - (preview.lineOfScrimmageY + 0.20);
+  const tenY = 1 - (preview.lineOfScrimmageY + 0.40);
 
   return (
+    <div
+      className="w-full overflow-hidden rounded-lg border border-border bg-surface-inset"
+      style={{ aspectRatio: `${aspect}` }}
+    >
     <svg
-      viewBox={`0 ${vbY} 1 ${vbH}`}
+      viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       width="100%"
-      className="rounded-lg border border-border bg-surface-inset"
-      preserveAspectRatio="xMidYMid meet"
+      height="100%"
+      preserveAspectRatio="none"
     >
       <g>
-        {(() => {
-          // Faint reference lines at LOS, +5yd, +10yd. 25-yd window → 1 yd = 0.04 in field-y.
-          const losY = 1 - preview.lineOfScrimmageY;
-          const fiveY = 1 - (preview.lineOfScrimmageY + 0.20);
-          const tenY = 1 - (preview.lineOfScrimmageY + 0.40);
-          const common = {
-            x1: 0, x2: 1,
-            stroke: "rgba(100,116,139,0.35)",
-            strokeWidth: 1,
-            vectorEffect: "non-scaling-stroke" as const,
-          };
-          return (
-            <>
-              <line {...common} y1={losY} y2={losY} strokeWidth={1.25} />
-              <line {...common} y1={fiveY} y2={fiveY} strokeDasharray="2 3" />
-              <line {...common} y1={tenY} y2={tenY} strokeDasharray="2 3" />
-            </>
-          );
-        })()}
+        <line x1={vbX} x2={vbX + vbW} y1={losY} y2={losY} stroke="rgba(100,116,139,0.45)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+        <line x1={vbX} x2={vbX + vbW} y1={fiveY} y2={fiveY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        <line x1={vbX} x2={vbX + vbW} y1={tenY} y2={tenY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
         {preview.routes.map((r) => {
           const rendered = routeToRenderedSegments(r);
           const stroke = resolveRouteStroke(r, preview.players);
@@ -834,33 +858,33 @@ function PlayPreview({
           const fill = p.style.fill;
           const strokeColor = p.style.stroke;
           const common = { fill, stroke: strokeColor, strokeWidth: 1, vectorEffect: "non-scaling-stroke" as const };
+          // Shape drawn at origin, counter-scaled in x to undo the
+          // preserveAspectRatio="none" stretch so circles stay round.
           let shapeEl: React.ReactNode;
           if (shape === "square") {
-            shapeEl = <rect x={cx - R} y={cy - R} width={R * 2} height={R * 2} {...common} />;
+            shapeEl = <rect x={-R} y={-R} width={R * 2} height={R * 2} {...common} />;
           } else if (shape === "diamond") {
-            const pts = `${cx},${cy - R} ${cx + R},${cy} ${cx},${cy + R} ${cx - R},${cy}`;
-            shapeEl = <polygon points={pts} {...common} />;
+            shapeEl = <polygon points={`0,${-R} ${R},0 0,${R} ${-R},0`} {...common} />;
           } else if (shape === "triangle") {
-            const pts = `${cx},${cy - R} ${cx + R},${cy + R} ${cx - R},${cy + R}`;
-            shapeEl = <polygon points={pts} {...common} />;
+            shapeEl = <polygon points={`0,${-R} ${R},${R} ${-R},${R}`} {...common} />;
           } else if (shape === "star") {
             const outer = R * 1.15;
             const inner = outer * 0.45;
             const pts = Array.from({ length: 10 }, (_, i) => {
               const angle = -Math.PI / 2 + (i * Math.PI) / 5;
               const rad = i % 2 === 0 ? outer : inner;
-              return `${cx + rad * Math.cos(angle)},${cy + rad * Math.sin(angle)}`;
+              return `${rad * Math.cos(angle)},${rad * Math.sin(angle)}`;
             }).join(" ");
             shapeEl = <polygon points={pts} strokeLinejoin="round" {...common} />;
           } else {
-            shapeEl = <circle cx={cx} cy={cy} r={R} {...common} />;
+            shapeEl = <circle cx={0} cy={0} r={R} {...common} />;
           }
           return (
-            <g key={p.id}>
+            <g key={p.id} transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
               {shapeEl}
               <text
-                x={cx}
-                y={cy}
+                x={0}
+                y={0}
                 textAnchor="middle"
                 dominantBaseline="central"
                 fontSize={0.035}
@@ -875,6 +899,7 @@ function PlayPreview({
         })}
       </g>
     </svg>
+    </div>
   );
 }
 

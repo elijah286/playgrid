@@ -28,11 +28,11 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Slant",
     directional: true,
-    // negative x = toward inside (middle), correct for both sides
+    // quick stem then sharp inside cut — ends ~2.5 yds past the break
     points: [
       { x: 0, y: 0 },
       { x: 0, y: 0.08 },
-      { x: -0.18, y: 0.28 },
+      { x: -0.10, y: 0.18 },
     ],
   },
   {
@@ -199,6 +199,69 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     points: [
       { x: 0, y: 0 },
       { x: -0.10, y: 0.15 },
+    ],
+  },
+  {
+    name: "Skinny Post",
+    directional: true,
+    // like Post but breaks inside at a shallower angle (~20°)
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0.22 },
+      { x: -0.07, y: 0.44 },
+    ],
+    shapes: ["straight", "curve"],
+  },
+  {
+    name: "Whip",
+    directional: true,
+    // stem upfield then snap/whip back outside toward sideline
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0.16 },
+      { x: 0.18, y: 0.08 },
+    ],
+  },
+  {
+    name: "Z-Out",
+    directional: true,
+    // deeper out break (~7 yds), typically run by the Z (flanker)
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0.28 },
+      { x: 0.22, y: 0.28 },
+    ],
+  },
+  {
+    name: "Z-In",
+    directional: true,
+    // deeper in break (~7 yds), typically run by the Z receiver
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0.28 },
+      { x: -0.28, y: 0.28 },
+    ],
+  },
+  {
+    name: "Stop & Go",
+    directional: true,
+    // stem up, fake stop to freeze DB, then release deep
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0.20 },
+      { x: 0.04, y: 0.15 },
+      { x: 0, y: 0.52 },
+    ],
+    shapes: ["straight", "curve", "curve"],
+  },
+  {
+    name: "Dig",
+    directional: true,
+    // deep in-breaking route (~8 yds), sharper/deeper than In
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0.32 },
+      { x: -0.30, y: 0.32 },
     ],
   },
 ];

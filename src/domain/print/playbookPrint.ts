@@ -4,7 +4,23 @@ export type PrintProductKind = "playsheet" | "wristband";
 
 export type PlaysheetGrouping = "manual" | "formation" | "name" | "number" | "group";
 
-export type WristbandSizePreset = "narrow" | "standard" | "wide";
+export type WristbandGridLayout = "8" | "6" | "4" | "4col" | "3";
+export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
+export type WristbandIconSize = "small" | "medium" | "large";
+export type WristbandRouteWeight = "thin" | "medium" | "thick";
+export type WristbandLabelStyle = "prominent" | "compact";
+export type WristbandLabelMode = "both" | "name" | "number";
+export type WristbandPlayerShape = "circle" | "x" | "diamond";
+
+export const WRISTBAND_WIDTHS_IN: readonly number[] = [
+  3, 3.25, 3.5, 3.75, 4, 4.25, 4.5, 4.75, 5,
+] as const;
+
+export const WRISTBAND_HEIGHTS_IN: readonly number[] = [
+  2, 2.25, 2.5, 2.75, 3, 3.5,
+] as const;
+
+export const WRISTBAND_ZOOMS: readonly WristbandZoom[] = [50, 75, 100, 125, 150] as const;
 
 export type PlaybookPrintRunConfig = {
   product: PrintProductKind;
@@ -16,10 +32,25 @@ export type PlaybookPrintRunConfig = {
   backfieldYards: number;
   downfieldYards: number;
   includeCommentsAndNotes: boolean;
-  wristbandSize: WristbandSizePreset;
-  playsPerBand: 1 | 2 | 3 | 4;
-  wristbandShowName: boolean;
-  wristbandShowNumber: boolean;
+  /** Wristband: outer dimensions in inches (quarter-inch increments) */
+  wristbandWidthIn: number;
+  wristbandHeightIn: number;
+  /** Wristband: tile grid preset */
+  wristbandGridLayout: WristbandGridLayout;
+  /** Wristband: per-tile diagram zoom (percent) */
+  wristbandZoom: WristbandZoom;
+  /** Wristband: player-icon size bucket */
+  wristbandIconSize: WristbandIconSize;
+  /** Wristband: route stroke weight bucket */
+  wristbandRouteWeight: WristbandRouteWeight;
+  /** Wristband: play-label emphasis */
+  wristbandLabelStyle: WristbandLabelStyle;
+  /** Wristband: which play label(s) to show per tile */
+  wristbandLabels: WristbandLabelMode;
+  /** Wristband: player marker shape */
+  wristbandPlayerShape: WristbandPlayerShape;
+  /** Wristband: color-code labels by group/formation */
+  wristbandColorCoding: boolean;
   wristbandGrouping: PlaysheetGrouping;
 };
 
@@ -31,12 +62,44 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   backfieldYards: 10,
   downfieldYards: 15,
   includeCommentsAndNotes: true,
-  wristbandSize: "standard",
-  playsPerBand: 2,
-  wristbandShowName: true,
-  wristbandShowNumber: true,
+  wristbandWidthIn: 4.5,
+  wristbandHeightIn: 2.25,
+  wristbandGridLayout: "6",
+  wristbandZoom: 100,
+  wristbandIconSize: "large",
+  wristbandRouteWeight: "medium",
+  wristbandLabelStyle: "compact",
+  wristbandLabels: "number",
+  wristbandPlayerShape: "circle",
+  wristbandColorCoding: true,
   wristbandGrouping: "manual",
 };
+
+export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {
+  switch (layout) {
+    case "8":
+      return { rows: 2, cols: 4 };
+    case "6":
+      return { rows: 2, cols: 3 };
+    case "4":
+      return { rows: 2, cols: 2 };
+    case "4col":
+      return { rows: 1, cols: 4 };
+    case "3":
+      return { rows: 1, cols: 3 };
+  }
+}
+
+export function wristbandTilesPerBand(layout: WristbandGridLayout): number {
+  const { rows, cols } = wristbandGridDims(layout);
+  return rows * cols;
+}
+
+export const IN_TO_MM = 25.4;
+
+export function inchesToMm(inches: number): number {
+  return inches * IN_TO_MM;
+}
 
 export type PlaybookGroupRow = {
   id: string;
@@ -121,24 +184,15 @@ export function formatPlayNavSubtitle(p: Pick<PlaybookPlayNavItem, "formation_na
   return bits.join(" · ") || "—";
 }
 
-export function wristbandWidthMm(size: WristbandSizePreset): number {
-  switch (size) {
-    case "narrow":
-      return 20;
-    case "wide":
-      return 32;
-    default:
-      return 25;
-  }
-}
-
 /** Clone for PDF export only — does not replace on-screen document */
 export function applyExportPresentation(doc: PlayDocument, run: PlaybookPrintRunConfig): PlayDocument {
   const out: PlayDocument = structuredClone(doc);
   out.printProfile.visibility.showNotes = run.includeCommentsAndNotes;
   if (run.product === "wristband") {
-    if (!run.wristbandShowNumber) out.printProfile.visibility.showWristbandCode = false;
-    if (!run.wristbandShowName) out.metadata.coachName = "\u200b";
+    const showCode = run.wristbandLabels !== "name";
+    const showName = run.wristbandLabels !== "number";
+    if (!showCode) out.printProfile.visibility.showWristbandCode = false;
+    if (!showName) out.metadata.coachName = "\u200b";
   }
   return out;
 }

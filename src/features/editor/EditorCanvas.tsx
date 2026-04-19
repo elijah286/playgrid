@@ -58,6 +58,24 @@ const SIMPLIFY_EPSILON = 0.012;
 /* ------------------------------------------------------------------ */
 
 const NODE_RADIUS = 0.009;
+// Minimum distance a non-anchor route node may sit from its carrier
+// player. Matches the player's render radius (0.028) plus a little
+// padding so stroke end-caps/arrows don't sit inside the circle.
+const MIN_NODE_DIST_FROM_PLAYER = 0.034;
+
+function snapOutsidePlayer(p: Point2, carrier: Point2): Point2 {
+  const dx = p.x - carrier.x;
+  const dy = p.y - carrier.y;
+  const d = Math.hypot(dx, dy);
+  if (d >= MIN_NODE_DIST_FROM_PLAYER) return p;
+  if (d < 1e-6) {
+    return { x: carrier.x, y: carrier.y + MIN_NODE_DIST_FROM_PLAYER };
+  }
+  return {
+    x: carrier.x + (dx / d) * MIN_NODE_DIST_FROM_PLAYER,
+    y: carrier.y + (dy / d) * MIN_NODE_DIST_FROM_PLAYER,
+  };
+}
 
 // Background colors per mode. White is solid (main == dark) so the
 // field reads as a crisp printed diagram.
@@ -325,6 +343,20 @@ export function EditorCanvas({
       const simplified = simplifyPolyline(points, SIMPLIFY_EPSILON);
       if (simplified.length < 2) return;
 
+      const carrier = doc.layers.players.find((p) => p.id === playerId);
+      if (carrier) {
+        // Drop any trailing/intermediate points that fall within the player
+        // circle (except the very first, which is the anchor position).
+        for (let i = 1; i < simplified.length; i++) {
+          const dx = simplified[i].x - carrier.position.x;
+          const dy = simplified[i].y - carrier.position.y;
+          if (Math.hypot(dx, dy) < MIN_NODE_DIST_FROM_PLAYER) {
+            simplified[i] = snapOutsidePlayer(simplified[i], carrier.position);
+          }
+        }
+      }
+      if (simplified.length < 2) return;
+
       if (extendingRouteId && extendFromNodeId) {
         // Append new nodes onto existing route (skip index 0 = anchor position)
         let prevNodeId = extendFromNodeId;
@@ -377,15 +409,16 @@ export function EditorCanvas({
       onSelectNode(nodes[nodes.length - 1].id);
       onSelectSegment(null);
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle, doc.layers.players],
   );
 
   /* ---------- Create a 2-node line route (single click, no existing route) ---------- */
 
   const commitClickRoute = useCallback(
     (playerId: string, playerPos: Point2, clickPos: Point2) => {
+      const snapped = snapOutsidePlayer(clickPos, playerPos);
       const startNode: RouteNode = { id: uid("node"), position: playerPos };
-      const endNode: RouteNode = { id: uid("node"), position: clickPos };
+      const endNode: RouteNode = { id: uid("node"), position: snapped };
       const seg: RouteSegment = {
         id: uid("seg"),
         fromNodeId: startNode.id,
@@ -407,7 +440,7 @@ export function EditorCanvas({
       onSelectNode(endNode.id); // so next click extends from here
       onSelectSegment(null);
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle, doc.layers.players],
   );
 
   /* ---------- Pointer handlers ---------- */
@@ -550,11 +583,21 @@ export function EditorCanvas({
       }
 
       if (state.type === "dragging_node") {
+        const raw = toNorm(e);
+        const route = doc.layers.routes.find((r) => r.id === state.routeId);
+        const isAnchor = route?.nodes[0]?.id === state.nodeId;
+        const carrier = route
+          ? doc.layers.players.find((p) => p.id === route.carrierPlayerId)
+          : null;
+        const position =
+          !isAnchor && carrier
+            ? snapOutsidePlayer(raw, carrier.position)
+            : raw;
         dispatch({
           type: "route.moveNode",
           routeId: state.routeId,
           nodeId: state.nodeId,
-          position: toNorm(e),
+          position,
         });
         return;
       }
@@ -1474,6 +1517,28 @@ export function EditorCanvas({
               />
             )}
             {shapeEl}
+            {/* Hot-route star badge — top-right corner of the player circle */}
+            {pl.isHotRoute && (() => {
+              // Star rendered as a Unicode text glyph for simplicity
+              const bx = px + r * 0.72;
+              const by = py - r * 0.72;
+              return (
+                <g pointerEvents="none">
+                  <circle cx={bx} cy={by} r={0.016} fill="#F59E0B" vectorEffect="non-scaling-stroke" />
+                  <text
+                    x={bx}
+                    y={by + 0.006}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={0.018}
+                    fill="#ffffff"
+                    fontWeight="900"
+                  >
+                    ★
+                  </text>
+                </g>
+              );
+            })()}
             <text
               x={px}
               y={py + 0.01}

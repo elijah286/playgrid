@@ -27,6 +27,7 @@ export type PlayCommand =
   | { type: "player.setShape"; playerId: string; shape: PlayerShape }
   | { type: "player.setStyle"; playerId: string; style: PlayerStyle }
   | { type: "player.setRole"; playerId: string; role: PlayerRole }
+  | { type: "player.setHotRoute"; playerId: string; isHotRoute: boolean }
   /* ---- Route-level ---- */
   | { type: "route.add"; route: Route }
   | { type: "route.remove"; routeId: string }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,8 +9,8 @@ import {
   Redo2,
   FlipHorizontal,
   Share2,
-  Save,
-  Star,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { resolveEndDecoration } from "@/domain/play/factory";
@@ -29,7 +29,7 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorPlayContextBar } from "./EditorPlayContextBar";
-import { Button, IconButton, Kbd, useToast } from "@/components/ui";
+import { IconButton, Kbd, useToast } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 type Props = {
@@ -63,22 +63,47 @@ export function PlayEditorClient({
   const [activeColor, setActiveColor] = useState("#FFFFFF");
   const [activeWidth, setActiveWidth] = useState(2.5);
 
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
-  const [dirty, setDirty] = useState(false);
-  useEffect(() => {
-    if (doc !== initialDocument) setDirty(true);
-  }, [doc, initialDocument]);
+  /* ---------- Auto-save ---------- */
+  type SaveStatus = "idle" | "saving" | "saved";
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstDocRender = useRef(true);
 
   useEffect(() => {
-    if (!dirty) return;
+    // Skip the initial population of the document (nothing has changed yet).
+    if (isFirstDocRender.current) {
+      isFirstDocRender.current = false;
+      return;
+    }
+    // Debounce: reset the timer on every doc change, fire 1.5 s after the last one.
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      setSaveStatus("saving");
+      const res = await savePlayVersionAction(playId, doc);
+      if (res.ok) {
+        setSaveStatus("saved");
+        router.refresh();
+        setTimeout(() => setSaveStatus("idle"), 2500);
+      } else {
+        toast(res.error, "error");
+        setSaveStatus("idle");
+      }
+    }, 1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc]);
+
+  // Warn before unload if a save is in flight
+  useEffect(() => {
+    if (saveStatus === "idle") return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+  }, [saveStatus]);
 
   // Show toolbar when a player OR route is selected
   const showToolbar = selectedPlayerId != null || selectedRouteId != null;
@@ -96,18 +121,6 @@ export function PlayEditorClient({
   const displayColor = selectedRoute?.style.stroke ?? activeColor;
   const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
   const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
-
-  const save = useCallback(() => {
-    startTransition(async () => {
-      const res = await savePlayVersionAction(playId, doc);
-      if (!res.ok) toast(res.error, "error");
-      else {
-        toast("Saved", "success");
-        setDirty(false);
-        router.refresh();
-      }
-    });
-  }, [doc, playId, router, toast]);
 
   const duplicate = useCallback(() => {
     startTransition(async () => {
@@ -241,11 +254,6 @@ export function PlayEditorClient({
       const active = document.activeElement;
       const isInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
 
-      if (mod && e.key === "s") {
-        e.preventDefault();
-        save();
-        return;
-      }
       if (mod && e.shiftKey && e.key === "z") {
         e.preventDefault();
         redo();
@@ -286,7 +294,7 @@ export function PlayEditorClient({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [save, undo, redo, selectedRouteId, selectedNodeId, dispatch]);
+  }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -325,33 +333,6 @@ export function PlayEditorClient({
           />
           <IconButton icon={Share2} tooltip="Copy share link" onClick={share} />
 
-          {(() => {
-            const hotPlayerId = selectedPlayerId
-              ?? (selectedRouteId
-                ? doc.layers.routes.find((r) => r.id === selectedRouteId)?.carrierPlayerId ?? null
-                : null);
-            const hotPlayer = hotPlayerId
-              ? doc.layers.players.find((p) => p.id === hotPlayerId) ?? null
-              : null;
-            const isHot = hotPlayer?.shape === "star";
-            return (
-              <IconButton
-                icon={Star}
-                tooltip={isHot ? "Clear hot route" : "Mark as hot route"}
-                disabled={!hotPlayer}
-                variant={isHot ? "active" : "ghost"}
-                onClick={() => {
-                  if (!hotPlayer) return;
-                  dispatch({
-                    type: "player.setShape",
-                    playerId: hotPlayer.id,
-                    shape: isHot ? "circle" : "star",
-                  });
-                }}
-              />
-            );
-          })()}
-
           {/* Field background */}
           <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
             {(["green","white","black"] as const).map((bg) => {
@@ -370,13 +351,19 @@ export function PlayEditorClient({
             })}
           </div>
 
-          <div className="mx-1 h-6 w-px bg-border" />
-
-          <Tooltip content={<span className="flex items-center gap-2">Save <Kbd keys="Ctrl+S" /></span>}>
-            <Button variant="primary" size="sm" leftIcon={Save} loading={pending} onClick={save}>
-              Save
-            </Button>
-          </Tooltip>
+          {/* Auto-save status indicator */}
+          {saveStatus === "saving" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted">
+              <Loader2 className="size-3.5 animate-spin" />
+              Saving…
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted">
+              <CheckCircle2 className="size-3.5 text-success" />
+              Saved
+            </span>
+          )}
         </div>
       </header>
 
@@ -456,6 +443,14 @@ export function PlayEditorClient({
 
             {/* Field size controls (below canvas) */}
             <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
+
+            {/* Play notes */}
+            <PlayNotesCard
+              value={doc.metadata.notes ?? ""}
+              onChange={(notes) =>
+                dispatch({ type: "document.setMetadata", patch: { notes } })
+              }
+            />
           </div>
           <aside className="rounded-xl border border-border bg-surface-raised p-4">
             <Inspector
@@ -469,6 +464,46 @@ export function PlayEditorClient({
           </aside>
       </div>
 
+    </div>
+  );
+}
+
+function PlayNotesCard({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(value.length > 0);
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-surface-raised">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">Play notes</span>
+          {!open && value.trim() && (
+            <span className="truncate text-xs text-muted">
+              {value.trim().slice(0, 80)}
+              {value.trim().length > 80 ? "…" : ""}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border px-4 py-3">
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Explain how to read this play — progressions, keys, coaching points…"
+            className="min-h-[120px] w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+          />
+        </div>
+      )}
     </div>
   );
 }

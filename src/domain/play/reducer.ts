@@ -89,6 +89,12 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       );
       return { ...doc, layers: { ...doc.layers, players } };
     }
+    case "player.setHotRoute": {
+      const players = doc.layers.players.map((p) =>
+        p.id === cmd.playerId ? { ...p, isHotRoute: cmd.isHotRoute } : p,
+      );
+      return { ...doc, layers: { ...doc.layers, players } };
+    }
 
     /* ---- Route-level ---- */
     case "route.add":

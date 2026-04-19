@@ -115,6 +115,8 @@ export type Player = {
   eligible: boolean;
   style: PlayerStyle;
   shape?: PlayerShape;
+  /** When true, a star badge is rendered on the player circle to mark them as a hot route. */
+  isHotRoute?: boolean;
 };
 
 export type Annotation = {
@@ -180,6 +182,8 @@ export type PlayMetadata = {
   concept: string;
   /** User-defined tags for grouping (e.g. pass, run, reverse). */
   tags: string[];
+  /** Free-form notes explaining how to read/execute the play. */
+  notes?: string;
 };
 
 export type PlayLayers = {
