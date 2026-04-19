@@ -180,6 +180,8 @@ export type PlayMetadata = {
   concept: string;
   /** User-defined tags for grouping (e.g. pass, run, reverse). */
   tags: string[];
+  /** Free-form notes explaining how to read/execute the play. */
+  notes?: string;
 };
 
 export type PlayLayers = {
