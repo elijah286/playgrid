@@ -52,6 +52,20 @@ export function resolveEndDecoration(route: Route): EndDecoration {
   return route.endDecoration ?? "arrow";
 }
 
+/**
+ * Routes inherit the carrier player's fill colour unless the user has
+ * explicitly picked a different stroke. Legacy routes were all stored as
+ * white, so treat white as "no explicit colour" and fall back to the
+ * player's fill colour.
+ */
+export function resolveRouteStroke(route: Route, players: Player[]): string {
+  const raw = route.style.stroke;
+  const isDefault = raw.toLowerCase() === "#ffffff" || raw.toLowerCase() === "#fff";
+  if (!isDefault) return raw;
+  const carrier = players.find((p) => p.id === route.carrierPlayerId);
+  return carrier?.style.fill ?? raw;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Sport-variant helpers                                             */
 /* ------------------------------------------------------------------ */

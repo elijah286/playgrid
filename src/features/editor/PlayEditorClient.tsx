@@ -366,14 +366,6 @@ export function PlayEditorClient({
             onDuplicate={duplicate}
           />
         </div>
-        <button
-          type="button"
-          onClick={() => guardedNavigate("/formations")}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-        >
-          <Users className="size-3.5" />
-          Edit formation
-        </button>
         <Link href={`/m/play/${playId}?playbookId=${playbookId}`}>
           <Button variant="ghost" size="sm" leftIcon={Smartphone}>
             Mobile view
