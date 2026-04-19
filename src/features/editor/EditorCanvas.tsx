@@ -12,6 +12,7 @@ import {
   resolveFieldZone,
   resolveLineOfScrimmage,
   resolveLineOfScrimmageY,
+  resolveRouteStroke,
   resolveShowHashMarks,
   uid,
 } from "@/domain/play/factory";
@@ -1062,6 +1063,7 @@ export function EditorCanvas({
           // "Whole-route" selection = route selected but no specific segment.
           const isWholeRouteSelected = isActive && selectedSegmentId == null;
           const rendered = routeToRenderedSegments(route);
+          const effectiveStroke = resolveRouteStroke(route, doc.layers.players);
 
           return (
             <g key={route.id}>
@@ -1086,7 +1088,7 @@ export function EditorCanvas({
                     <path
                       d={rs.d}
                       fill="none"
-                      stroke={isSelectedSeg ? "#F26522" : route.style.stroke}
+                      stroke={isSelectedSeg ? "#F26522" : effectiveStroke}
                       strokeWidth={isSelectedSeg ? 3 : route.style.strokeWidth}
                       strokeDasharray={rs.dash}
                       strokeLinecap="round"
@@ -1243,6 +1245,8 @@ export function EditorCanvas({
         );
         if (terminals.length === 0) return null;
 
+        const effectiveRouteStroke = resolveRouteStroke(route, doc.layers.players);
+
         return (
           <g key={`deco-${route.id}`} pointerEvents="none">
             {terminals.map((seg) => {
@@ -1275,7 +1279,7 @@ export function EditorCanvas({
               const ux = dxS / len;
               const uy = dyS / len;
 
-              const stroke = route.style.stroke;
+              const stroke = effectiveRouteStroke;
               const strokeW = route.style.strokeWidth;
 
               if (decoration === "arrow") {

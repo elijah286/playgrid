@@ -27,7 +27,7 @@ import {
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { Player, Route, SportVariant } from "@/domain/play/types";
-import { sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import { resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import {
   ActionMenu,
@@ -488,7 +488,7 @@ function PlayPreview({
             key={r.id}
             d={pts}
             fill="none"
-            stroke={r.style.stroke}
+            stroke={resolveRouteStroke(r, preview.players)}
             strokeWidth={1.5}
             strokeLinejoin="round"
             strokeLinecap="round"

@@ -1,5 +1,6 @@
 import type { PlayDocument } from "../play/types";
 import { routeToPathGeometry } from "../play/geometry";
+import { resolveRouteStroke } from "../play/factory";
 
 export type PrintTemplateKind = "wristband" | "full_sheet";
 
@@ -125,7 +126,7 @@ export function compilePlayToSvg(
           : `Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
-    routePaths += `<path d="${d}" fill="none" stroke="${r.style.stroke}" stroke-width="${r.style.strokeWidth * 0.35}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+    routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.35}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
   }
 
   const notes =
@@ -235,7 +236,7 @@ function renderPlayCellSvg(doc: PlayDocument, ox: number, oy: number, cw: number
           : `Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
-    routePaths += `<path d="${d}" fill="none" stroke="${r.style.stroke}" stroke-width="${r.style.strokeWidth * 0.28}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+    routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.28}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
   }
 
   const notes =
