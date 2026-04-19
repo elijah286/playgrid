@@ -376,13 +376,10 @@ export function PlaybookDetailClient({
                           className="flex flex-1 flex-col p-4"
                           aria-label={`Open ${p.name}`}
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 pr-16">
                             <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
                               {p.name}
                             </h3>
-                            {p.wristband_code && (
-                              <Badge variant="primary">{p.wristband_code}</Badge>
-                            )}
                           </div>
                           {p.preview && thumbSize !== "none" && (
                             <div
@@ -410,7 +407,10 @@ export function PlaybookDetailClient({
                             </div>
                           )}
                         </Link>
-                        <div className="absolute right-2 top-2">
+                        <div className="absolute right-2 top-2 flex items-center gap-1">
+                          {p.wristband_code && (
+                            <Badge variant="primary">{p.wristband_code}</Badge>
+                          )}
                           <ActionMenu items={buildItems(p)} />
                         </div>
                       </Card>
@@ -558,40 +558,51 @@ function PlayPreview({
   // curves, dashes and end decorations match the edited play exactly.
   const R = 0.032;
 
-  // Compute bounding box of all content in SVG-y (= 1 - field-y) so
-  // routes and players are never cropped. Width always fills 0..1.
+  // Compute bbox over every player + every route node, then stretch the
+  // bbox to a fixed-aspect display area so all thumbnails are the same size.
   const PAD = R * 1.4;
+  let minX = Infinity;
+  let maxX = -Infinity;
   let minSvgY = Infinity;
   let maxSvgY = -Infinity;
   for (const p of preview.players) {
+    if (p.position.x < minX) minX = p.position.x;
+    if (p.position.x > maxX) maxX = p.position.x;
     const sy = 1 - p.position.y;
     if (sy < minSvgY) minSvgY = sy;
     if (sy > maxSvgY) maxSvgY = sy;
   }
   for (const r of preview.routes) {
     for (const n of r.nodes) {
+      if (n.position.x < minX) minX = n.position.x;
+      if (n.position.x > maxX) maxX = n.position.x;
       const sy = 1 - n.position.y;
       if (sy < minSvgY) minSvgY = sy;
       if (sy > maxSvgY) maxSvgY = sy;
     }
   }
-  if (!isFinite(minSvgY) || !isFinite(maxSvgY)) {
+  if (!isFinite(minSvgY) || !isFinite(maxSvgY) || !isFinite(minX) || !isFinite(maxX)) {
+    minX = 0;
+    maxX = 1;
     minSvgY = 0.22;
     maxSvgY = 0.78;
   }
+  const vbX = Math.max(0, minX - PAD);
+  const vbW = Math.min(1, maxX + PAD) - vbX;
   const vbY = Math.max(0, minSvgY - PAD);
   const vbH = Math.min(1, maxSvgY + PAD) - vbY;
 
   return (
+    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border">
     <svg
-      viewBox={`0 ${vbY} 1 ${vbH}`}
+      viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       width="100%"
-      className="rounded-lg border border-border"
+      height="100%"
       preserveAspectRatio="none"
     >
       {/* Field: routes/players live in full 0-1 normalized space */}
       <g>
-        <rect x={0} y={vbY} width={1} height={vbH} fill="#2D8B4E" />
+        <rect x={vbX} y={vbY} width={vbW} height={vbH} fill="#2D8B4E" />
         <line
           x1={0}
           y1={0.5}
@@ -729,6 +740,7 @@ function PlayPreview({
         })}
       </g>
     </svg>
+    </div>
   );
 }
 
