@@ -450,8 +450,9 @@ export async function getDashboardSummaryAction(): Promise<
       .limit(8),
     supabase
       .from("playbooks")
-      .select("id, name, is_default, updated_at")
+      .select("id, name, is_default, updated_at, plays(count)")
       .eq("is_archived", false)
+      .eq("plays.is_archived", false)
       .order("updated_at", { ascending: false }),
     supabase
       .from("plays")
@@ -461,16 +462,6 @@ export async function getDashboardSummaryAction(): Promise<
 
   if (playsRes.error) return { ok: false, error: playsRes.error.message };
   if (booksRes.error) return { ok: false, error: booksRes.error.message };
-
-  // Per-playbook counts (single query, group client-side)
-  const { data: allPlays } = await supabase
-    .from("plays")
-    .select("playbook_id")
-    .eq("is_archived", false);
-  const counts = new Map<string, number>();
-  for (const row of allPlays ?? []) {
-    counts.set(row.playbook_id, (counts.get(row.playbook_id) ?? 0) + 1);
-  }
 
   type PlayJoin = {
     id: string;
@@ -497,13 +488,23 @@ export async function getDashboardSummaryAction(): Promise<
     };
   });
 
-  const playbooks = (booksRes.data ?? []).map((b) => ({
-    id: b.id as string,
-    name: b.name as string,
-    is_default: b.is_default as boolean,
-    updated_at: b.updated_at as string | null,
-    play_count: counts.get(b.id as string) ?? 0,
-  }));
+  type PlaybookRow = {
+    id: string;
+    name: string;
+    is_default: boolean;
+    updated_at: string | null;
+    plays: { count: number }[] | { count: number } | null;
+  };
+  const playbooks = ((booksRes.data ?? []) as PlaybookRow[]).map((b) => {
+    const agg = Array.isArray(b.plays) ? b.plays[0] : b.plays;
+    return {
+      id: b.id,
+      name: b.name,
+      is_default: b.is_default,
+      updated_at: b.updated_at,
+      play_count: agg?.count ?? 0,
+    };
+  });
 
   return {
     ok: true,
