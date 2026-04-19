@@ -59,29 +59,31 @@ export function Inspector({
           <div className="mt-2 flex items-center gap-2">
             <Badge variant="primary">{player.role}</Badge>
             <span className="font-semibold text-foreground">{player.label}</span>
-            <button
-              type="button"
-              title={player.isHotRoute ? "Remove hot route" : "Mark as hot route"}
-              className={`ml-auto flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                player.isHotRoute
-                  ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
-                  : "text-muted hover:bg-surface-inset hover:text-foreground"
-              }`}
-              onClick={() =>
-                dispatch({
-                  type: "player.setHotRoute",
-                  playerId: player.id,
-                  isHotRoute: !player.isHotRoute,
-                })
-              }
-            >
-              <Star
-                className="size-3.5"
-                fill={player.isHotRoute ? "currentColor" : "none"}
-              />
-              Hot
-            </button>
           </div>
+
+          {/* Hot route toggle */}
+          <button
+            type="button"
+            title={player.isHotRoute ? "Remove hot route designation" : "Mark as hot route"}
+            className={`mt-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors ${
+              player.isHotRoute
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                : "border-border bg-surface-inset text-muted hover:border-border hover:bg-surface-raised hover:text-foreground"
+            }`}
+            onClick={() =>
+              dispatch({
+                type: "player.setHotRoute",
+                playerId: player.id,
+                isHotRoute: !player.isHotRoute,
+              })
+            }
+          >
+            <Star
+              className="size-3.5 shrink-0"
+              fill={player.isHotRoute ? "currentColor" : "none"}
+            />
+            <span>{player.isHotRoute ? "Hot route (tap to remove)" : "Mark as hot route"}</span>
+          </button>
           {/* Show the count of routes for this player */}
           {(() => {
             const playerRoutes = doc.layers.routes.filter((r) => r.carrierPlayerId === player.id);
