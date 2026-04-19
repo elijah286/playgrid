@@ -609,8 +609,16 @@ function PlayPreview({
     vbH = Math.min(1 - vbY, needed);
   }
 
+  // Let the thumbnail's container aspect match the content bbox so player
+  // shapes (circles, squares, etc.) render with x/y scaled identically.
+  // Thumbnail heights vary with content shape, widths stay uniform in grid.
+  const aspect = vbW / vbH;
+
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border">
+    <div
+      className="w-full overflow-hidden rounded-lg border border-border"
+      style={{ aspectRatio: `${aspect}` }}
+    >
     <svg
       viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       width="100%"
