@@ -10,7 +10,7 @@ export type SportVariant =
 
 export type PlayerRole = "QB" | "RB" | "WR" | "TE" | "C" | "OTHER";
 
-export type PlayerShape = "circle" | "square" | "diamond" | "triangle";
+export type PlayerShape = "circle" | "square" | "diamond" | "triangle" | "star";
 
 export type Point2 = { x: number; y: number };
 

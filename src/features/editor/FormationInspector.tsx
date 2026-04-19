@@ -38,6 +38,7 @@ const SHAPES: { value: PlayerShape; icon: string; label: string }[] = [
   { value: "square", icon: "□", label: "Square" },
   { value: "diamond", icon: "◇", label: "Diamond" },
   { value: "triangle", icon: "△", label: "Triangle" },
+  { value: "star", icon: "★", label: "Star" },
 ];
 
 export function FormationInspector({

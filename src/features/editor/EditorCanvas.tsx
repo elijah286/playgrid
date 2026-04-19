@@ -1415,6 +1415,25 @@ export function EditorCanvas({
               {...pointerHandlers}
             />
           );
+        } else if (shape === "star") {
+          const outer = r * 1.15;
+          const inner = outer * 0.45;
+          const pts = Array.from({ length: 10 }, (_, i) => {
+            const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+            const rad = i % 2 === 0 ? outer : inner;
+            return `${px + rad * Math.cos(angle)},${py + rad * Math.sin(angle)}`;
+          }).join(" ");
+          shapeEl = (
+            <polygon
+              points={pts}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              {...pointerHandlers}
+            />
+          );
         } else {
           // triangle
           const pts = `${px},${py - r} ${px + r},${py + r} ${px - r},${py + r}`;

@@ -579,6 +579,15 @@ function PlayPreview({
           } else if (shape === "triangle") {
             const pts = `${cx},${cy - R} ${cx + R},${cy + R} ${cx - R},${cy + R}`;
             shapeEl = <polygon points={pts} {...common} />;
+          } else if (shape === "star") {
+            const outer = R * 1.15;
+            const inner = outer * 0.45;
+            const pts = Array.from({ length: 10 }, (_, i) => {
+              const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+              const rad = i % 2 === 0 ? outer : inner;
+              return `${cx + rad * Math.cos(angle)},${cy + rad * Math.sin(angle)}`;
+            }).join(" ");
+            shapeEl = <polygon points={pts} strokeLinejoin="round" {...common} />;
           } else {
             shapeEl = <circle cx={cx} cy={cy} r={R} {...common} />;
           }
