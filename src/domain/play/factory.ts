@@ -42,6 +42,11 @@ export function resolveLineOfScrimmageY(doc: PlayDocument): number {
   return 0.4;
 }
 
+/** Field zone, defaulting to mid-field. */
+export function resolveFieldZone(doc: PlayDocument): "midfield" | "red_zone" {
+  return doc.fieldZone ?? "midfield";
+}
+
 /** Route end-decoration, defaulting to arrow. */
 export function resolveEndDecoration(route: Route): EndDecoration {
   return route.endDecoration ?? "arrow";

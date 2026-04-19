@@ -477,7 +477,7 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
+                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)}
                 fieldBackground={doc.fieldBackground}
               />
             </div>
@@ -577,7 +577,7 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
+                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)}
                 fieldBackground={doc.fieldBackground}
               />
             </div>

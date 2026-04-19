@@ -147,6 +147,43 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         ),
       }));
 
+    case "route.removeNodeBridging":
+      return mapRoute(doc, cmd.routeId, (r) => {
+        const incoming = r.segments.filter((s) => s.toNodeId === cmd.nodeId);
+        const outgoing = r.segments.filter((s) => s.fromNodeId === cmd.nodeId);
+        // Only bridge when there's exactly one in and one out; otherwise
+        // fall back to plain removal (endpoints, forks).
+        if (incoming.length === 1 && outgoing.length === 1) {
+          const inSeg = incoming[0];
+          const outSeg = outgoing[0];
+          const bridged: RouteSegment = {
+            id: uid("seg"),
+            fromNodeId: inSeg.fromNodeId,
+            toNodeId: outSeg.toNodeId,
+            shape: inSeg.shape,
+            strokePattern: inSeg.strokePattern,
+            controlOffset: null,
+          };
+          return {
+            ...r,
+            nodes: r.nodes.filter((n) => n.id !== cmd.nodeId),
+            segments: [
+              ...r.segments.filter(
+                (s) => s.id !== inSeg.id && s.id !== outSeg.id,
+              ),
+              bridged,
+            ],
+          };
+        }
+        return {
+          ...r,
+          nodes: r.nodes.filter((n) => n.id !== cmd.nodeId),
+          segments: r.segments.filter(
+            (s) => s.fromNodeId !== cmd.nodeId && s.toNodeId !== cmd.nodeId,
+          ),
+        };
+      });
+
     case "route.insertNode":
       return mapRoute(doc, cmd.routeId, (r) => {
         const oldSeg = r.segments.find((s) => s.id === cmd.segmentId);
@@ -256,6 +293,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
 
     case "document.setLineOfScrimmage":
       return { ...doc, lineOfScrimmage: cmd.lineOfScrimmage };
+
+    case "document.setFieldZone":
+      return { ...doc, fieldZone: cmd.fieldZone };
 
     case "document.flip": {
       const axis = cmd.axis;

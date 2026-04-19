@@ -9,6 +9,7 @@ import {
 } from "@/domain/play/geometry";
 import {
   resolveEndDecoration,
+  resolveFieldZone,
   resolveLineOfScrimmage,
   resolveLineOfScrimmageY,
   resolveShowHashMarks,
@@ -171,9 +172,17 @@ export function EditorCanvas({
   };
   const [segmentMenu, setSegmentMenu] = useState<SegmentMenu | null>(null);
 
+  type AnchorMenu = {
+    screenX: number;
+    screenY: number;
+    routeId: string;
+    nodeId: string;
+  };
+  const [anchorMenu, setAnchorMenu] = useState<AnchorMenu | null>(null);
+
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
-    if (!segmentMenu) return;
+    if (!segmentMenu && !anchorMenu) return;
     function onDocPointer(e: PointerEvent) {
       const target = e.target as Node | null;
       const wrap = wrapperRef.current;
@@ -184,13 +193,17 @@ export function EditorCanvas({
       }
       // Any other click closes the menu.
       setSegmentMenu(null);
+      setAnchorMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
       // from blocking it.
       void wrap;
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setSegmentMenu(null);
+      if (e.key === "Escape") {
+        setSegmentMenu(null);
+        setAnchorMenu(null);
+      }
     }
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onKey);
@@ -198,7 +211,7 @@ export function EditorCanvas({
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [segmentMenu]);
+  }, [segmentMenu, anchorMenu]);
 
   /* ---------- Line of scrimmage (hoisted early; callbacks depend on losY) ---------- */
 
@@ -228,8 +241,14 @@ export function EditorCanvas({
   /* ---------- Active style builder ---------- */
 
   const buildRouteStyle = useCallback(
-    () => ({ stroke: activeColor, strokeWidth: activeWidth }),
-    [activeColor, activeWidth],
+    (playerId?: string) => {
+      const player = playerId
+        ? doc.layers.players.find((p) => p.id === playerId)
+        : null;
+      const stroke = player?.style.stroke ?? activeColor;
+      return { stroke, strokeWidth: activeWidth };
+    },
+    [activeColor, activeWidth, doc.layers.players],
   );
 
   /* ---------- Anchor resolution ---------- */
@@ -312,7 +331,7 @@ export function EditorCanvas({
         semantic: null,
         nodes,
         segments,
-        style: buildRouteStyle(),
+        style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
@@ -342,7 +361,7 @@ export function EditorCanvas({
         semantic: null,
         nodes: [startNode, endNode],
         segments: [seg],
-        style: buildRouteStyle(),
+        style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
@@ -659,6 +678,44 @@ export function EditorCanvas({
     [toNorm, onSelectRoute, onSelectSegment, onSelectNode, onSelectPlayer],
   );
 
+  const handleAnchorDelete = useCallback(() => {
+    if (!anchorMenu) return;
+    dispatch({
+      type: "route.removeNodeBridging",
+      routeId: anchorMenu.routeId,
+      nodeId: anchorMenu.nodeId,
+    });
+    onSelectNode(null);
+    setAnchorMenu(null);
+  }, [anchorMenu, dispatch, onSelectNode]);
+
+  const setTerminalSegmentStroke = useCallback(
+    (pattern: "solid" | "dashed" | "dotted") => {
+      if (!segmentMenu) return;
+      dispatch({
+        type: "route.setSegmentStroke",
+        routeId: segmentMenu.routeId,
+        segmentId: segmentMenu.segmentId,
+        strokePattern: pattern,
+      });
+      setSegmentMenu(null);
+    },
+    [segmentMenu, dispatch],
+  );
+
+  // Is the segment the terminal (end) of its route? Used to show dash-style
+  // options only on the last leg.
+  const isTerminalSegment = useCallback(
+    (routeId: string, segmentId: string): boolean => {
+      const route = doc.layers.routes.find((r) => r.id === routeId);
+      if (!route) return false;
+      const seg = route.segments.find((s) => s.id === segmentId);
+      if (!seg) return false;
+      return !route.segments.some((other) => other.fromNodeId === seg.toNodeId);
+    },
+    [doc.layers.routes],
+  );
+
   const handleMenuAddAnchor = useCallback(() => {
     if (!segmentMenu) return;
     const newNode: RouteNode = { id: uid("node"), position: segmentMenu.position };
@@ -747,19 +804,72 @@ export function EditorCanvas({
   const fieldLengthYds = doc.sportProfile.fieldLengthYds || 25;
   const yardInterval = 5;
   const yardLines = [];
+  const yardNumbers: React.ReactNode[] = [];
+  const losYd = Math.round(losY * fieldLengthYds); // yards from bottom to LOS
+  const zone = resolveFieldZone(doc);
+  // Anchor yard value at LOS based on zone.
+  const losYardValue = zone === "midfield" ? 50 : 20;
+  const yardLabel = (yd: number) => {
+    // yd is yards from bottom edge of window; offset from LOS in yards:
+    const delta = yd - losYd;
+    if (zone === "midfield") {
+      // Mirror around the 50: number counts down as you move away from LOS.
+      const v = 50 - Math.abs(delta);
+      return v <= 0 ? "" : String(v);
+    }
+    // red_zone: offense driving toward the goal (top of window). Numbers
+    // descend going up (toward goal), ascend going down (back toward midfield).
+    const v = losYardValue - delta;
+    if (v <= 0) return "G";
+    if (v >= 50) return "";
+    return String(v);
+  };
   for (let yd = yardInterval; yd < fieldLengthYds; yd += yardInterval) {
     const y = yd / fieldLengthYds;
+    const svgY = fy(y);
     yardLines.push(
       <line
         key={`h${yd}`}
         x1={0}
-        y1={y}
+        y1={svgY}
         x2={fieldAspect}
-        y2={y}
+        y2={svgY}
         stroke={lineColor}
         strokeWidth={0.002}
       />,
     );
+    const label = yardLabel(yd);
+    if (label) {
+      const numY = svgY + 0.018;
+      yardNumbers.push(
+        <text
+          key={`nL${yd}`}
+          x={0.04 * fieldAspect}
+          y={numY}
+          fontSize={0.035}
+          fontWeight={700}
+          fill={lineColor}
+          opacity={0.55}
+          textAnchor="middle"
+          pointerEvents="none"
+        >
+          {label}
+        </text>,
+        <text
+          key={`nR${yd}`}
+          x={0.96 * fieldAspect}
+          y={numY}
+          fontSize={0.035}
+          fontWeight={700}
+          fill={lineColor}
+          opacity={0.55}
+          textAnchor="middle"
+          pointerEvents="none"
+        >
+          {label}
+        </text>,
+      );
+    }
   }
 
   /* ---------- Hash marks ---------- */
@@ -846,6 +956,7 @@ export function EditorCanvas({
       </defs>
       <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />
       {yardLines}
+      {yardNumbers}
       {hashMarks}
 
       {/* Line of scrimmage */}
@@ -1007,26 +1118,61 @@ export function EditorCanvas({
                   // <ellipse> with rx pre-compensated so the rendered shape is
                   // a perfect circle of radius NODE_RADIUS in field-units.
                   return (
-                    <ellipse
-                      key={node.id}
-                      cx={node.position.x}
-                      cy={1 - node.position.y}
-                      rx={NODE_RADIUS / fieldAspect}
-                      ry={NODE_RADIUS}
-                      fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
-                      stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
-                      strokeWidth={0.0015}
-                      vectorEffect="non-scaling-stroke"
-                      style={{ cursor: "grab" }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        startInteraction(e, {
-                          kind: "route_node",
-                          routeId: route.id,
-                          nodeId: node.id,
-                        });
-                      }}
-                    />
+                    <g key={node.id}>
+                      {isSelectedNode && (
+                        <ellipse
+                          cx={node.position.x}
+                          cy={1 - node.position.y}
+                          rx={(NODE_RADIUS * 2.2) / fieldAspect}
+                          ry={NODE_RADIUS * 2.2}
+                          fill="none"
+                          stroke="#F26522"
+                          strokeWidth={1.5}
+                          strokeDasharray="2 2"
+                          vectorEffect="non-scaling-stroke"
+                          pointerEvents="none"
+                        />
+                      )}
+                      <ellipse
+                        cx={node.position.x}
+                        cy={1 - node.position.y}
+                        rx={NODE_RADIUS / fieldAspect}
+                        ry={NODE_RADIUS}
+                        fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
+                        stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
+                        strokeWidth={0.0015}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: "grab" }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          startInteraction(e, {
+                            kind: "route_node",
+                            routeId: route.id,
+                            nodeId: node.id,
+                          });
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const rect = wrapperRef.current?.getBoundingClientRect();
+                          if (!rect) return;
+                          const MENU_W = 160;
+                          const MENU_H = 40;
+                          const localX = e.clientX - rect.left;
+                          const localY = e.clientY - rect.top;
+                          setAnchorMenu({
+                            screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+                            screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                            routeId: route.id,
+                            nodeId: node.id,
+                          });
+                          setSegmentMenu(null);
+                          onSelectRoute(route.id);
+                          onSelectNode(node.id);
+                          onSelectSegment(null);
+                        }}
+                      />
+                    </g>
                   );
                 })}
             </g>
@@ -1310,6 +1456,40 @@ export function EditorCanvas({
             onClick={handleMenuCreateBranch}
           >
             Create branch here
+          </button>
+          {isTerminalSegment(segmentMenu.routeId, segmentMenu.segmentId) && (
+            <>
+              <div className="border-t border-border" />
+              <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
+                Last-segment style
+              </div>
+              {(["solid", "dashed", "dotted"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
+                  onClick={() => setTerminalSegmentStroke(p)}
+                >
+                  {p[0].toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {anchorMenu && (
+        <div
+          data-segment-menu
+          className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          style={{ left: anchorMenu.screenX, top: anchorMenu.screenY }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
+            onClick={handleAnchorDelete}
+          >
+            Delete anchor
           </button>
         </div>
       )}
