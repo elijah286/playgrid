@@ -11,6 +11,7 @@ import {
   Share2,
   Save,
   Smartphone,
+  Star,
 } from "lucide-react";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { resolveEndDecoration } from "@/domain/play/factory";
@@ -324,6 +325,33 @@ export function PlayEditorClient({
             onClick={() => dispatch({ type: "document.flip", axis: "horizontal" })}
           />
           <IconButton icon={Share2} tooltip="Copy share link" onClick={share} />
+
+          {(() => {
+            const hotPlayerId = selectedPlayerId
+              ?? (selectedRouteId
+                ? doc.layers.routes.find((r) => r.id === selectedRouteId)?.carrierPlayerId ?? null
+                : null);
+            const hotPlayer = hotPlayerId
+              ? doc.layers.players.find((p) => p.id === hotPlayerId) ?? null
+              : null;
+            const isHot = hotPlayer?.shape === "star";
+            return (
+              <IconButton
+                icon={Star}
+                tooltip={isHot ? "Clear hot route" : "Mark as hot route"}
+                disabled={!hotPlayer}
+                variant={isHot ? "active" : "ghost"}
+                onClick={() => {
+                  if (!hotPlayer) return;
+                  dispatch({
+                    type: "player.setShape",
+                    playerId: hotPlayer.id,
+                    shape: isHot ? "circle" : "star",
+                  });
+                }}
+              />
+            );
+          })()}
 
           {/* Field background */}
           <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
