@@ -741,12 +741,17 @@ export function EditorCanvas({
 
   /* ---------- Yard lines ---------- */
 
+  // Draw a stripe every 5 yards based on the field's length.
+  // Field y-axis is 0..1 over `fieldLengthYds`, so a 25-yard field gets
+  // 4 interior stripes at y = 0.2, 0.4, 0.6, 0.8.
+  const fieldLengthYds = doc.sportProfile.fieldLengthYds || 25;
+  const yardInterval = 5;
   const yardLines = [];
-  for (let i = 1; i < 10; i++) {
-    const y = i / 10;
+  for (let yd = yardInterval; yd < fieldLengthYds; yd += yardInterval) {
+    const y = yd / fieldLengthYds;
     yardLines.push(
       <line
-        key={`h${i}`}
+        key={`h${yd}`}
         x1={0}
         y1={y}
         x2={fieldAspect}
