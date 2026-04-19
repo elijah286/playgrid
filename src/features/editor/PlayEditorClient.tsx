@@ -11,7 +11,6 @@ import {
   Share2,
   Save,
   Smartphone,
-  Users,
 } from "lucide-react";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { resolveEndDecoration } from "@/domain/play/factory";
@@ -80,18 +79,6 @@ export function PlayEditorClient({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
-
-  function guardedNavigate(href: string) {
-    if (
-      dirty &&
-      !window.confirm(
-        "You have unsaved changes to this play. Leave without saving?",
-      )
-    ) {
-      return;
-    }
-    router.push(href);
-  }
 
   // Show toolbar when a player OR route is selected
   const showToolbar = selectedPlayerId != null || selectedRouteId != null;
