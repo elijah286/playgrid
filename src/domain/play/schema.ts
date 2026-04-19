@@ -28,16 +28,28 @@ export const playDocumentSchema = z.object({
     fieldLengthYds: z.number().positive(),
     motionMustNotAdvanceTowardGoal: z.boolean().optional(),
   }),
-  metadata: z.object({
-    coachName: z.string(),
-    shorthand: z.string(),
-    wristbandCode: z.string(),
-    mnemonic: z.string().optional(),
-    sheetAbbrev: z.string(),
-    formation: z.string(),
-    concept: z.string(),
-    tag: z.string(),
-  }),
+  metadata: z
+    .object({
+      coachName: z.string(),
+      shorthand: z.string(),
+      wristbandCode: z.string(),
+      mnemonic: z.string().optional(),
+      sheetAbbrev: z.string(),
+      formation: z.string(),
+      concept: z.string(),
+      tags: z.array(z.string()).default([]),
+      // Legacy single-tag field; coerced into `tags` below.
+      tag: z.string().optional(),
+    })
+    .transform(({ tag, tags, ...rest }) => {
+      const merged =
+        tags && tags.length > 0
+          ? tags
+          : tag && tag.trim().length > 0
+            ? [tag.trim()]
+            : [];
+      return { ...rest, tags: merged };
+    }),
   formation: z.object({
     semantic: z.object({
       key: z.string(),

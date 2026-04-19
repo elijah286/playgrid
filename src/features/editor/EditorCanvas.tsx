@@ -9,8 +9,10 @@ import {
 } from "@/domain/play/geometry";
 import {
   resolveEndDecoration,
+  resolveFieldZone,
   resolveLineOfScrimmage,
   resolveLineOfScrimmageY,
+  resolveRouteStroke,
   resolveShowHashMarks,
   uid,
 } from "@/domain/play/factory";
@@ -56,29 +58,51 @@ const SIMPLIFY_EPSILON = 0.012;
 /* ------------------------------------------------------------------ */
 
 const NODE_RADIUS = 0.009;
+// Minimum distance a non-anchor route node may sit from its carrier
+// player. Matches the player's render radius (0.028) plus a little
+// padding so stroke end-caps/arrows don't sit inside the circle.
+const MIN_NODE_DIST_FROM_PLAYER = 0.034;
 
-// Background colors per mode
+function snapOutsidePlayer(p: Point2, carrier: Point2): Point2 {
+  const dx = p.x - carrier.x;
+  const dy = p.y - carrier.y;
+  const d = Math.hypot(dx, dy);
+  if (d >= MIN_NODE_DIST_FROM_PLAYER) return p;
+  if (d < 1e-6) {
+    return { x: carrier.x, y: carrier.y + MIN_NODE_DIST_FROM_PLAYER };
+  }
+  return {
+    x: carrier.x + (dx / d) * MIN_NODE_DIST_FROM_PLAYER,
+    y: carrier.y + (dy / d) * MIN_NODE_DIST_FROM_PLAYER,
+  };
+}
+
+// Background colors per mode. White is solid (main == dark) so the
+// field reads as a crisp printed diagram.
 const BG_COLORS: Record<string, { main: string; dark: string }> = {
   green: { main: "#2D8B4E", dark: "#247540" },
-  white: { main: "#F8FAFC", dark: "#E2E8F0" },
+  white: { main: "#FFFFFF", dark: "#FFFFFF" },
   black: { main: "#0A0A0A", dark: "#141414" },
-  gray:  { main: "#1E1E2E", dark: "#16161E" },
 };
 
 const LINE_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.15)",
-  white: "rgba(0,0,0,0.08)",
-  black: "rgba(255,255,255,0.10)",
-  gray:  "rgba(255,255,255,0.10)",
+  green: "rgba(255,255,255,0.30)",
+  white: "rgba(0,0,0,0.55)",
+  black: "rgba(255,255,255,0.22)",
 };
 
 /** Hash marks render a touch brighter than yard lines so they read clearly
- *  as on-field markings rather than blending into the background gradient. */
+ *  as on-field markings rather than blending into the background. */
 const HASH_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.55)",
-  white: "rgba(0,0,0,0.45)",
-  black: "rgba(255,255,255,0.45)",
-  gray:  "rgba(255,255,255,0.45)",
+  green: "rgba(255,255,255,0.75)",
+  white: "rgba(0,0,0,0.70)",
+  black: "rgba(255,255,255,0.60)",
+};
+
+const NUMBER_COLORS: Record<string, string> = {
+  green: "rgba(255,255,255,0.85)",
+  white: "rgba(0,0,0,0.80)",
+  black: "rgba(255,255,255,0.70)",
 };
 
 /** Thin outline around the whole field so it visually separates from the
@@ -86,17 +110,15 @@ const HASH_COLORS: Record<string, string> = {
  *  blends into the app surface). */
 const BORDER_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.35)",
-  white: "rgba(0,0,0,0.35)",
+  white: "rgba(0,0,0,0.50)",
   black: "rgba(255,255,255,0.30)",
-  gray:  "rgba(255,255,255,0.25)",
 };
 
 /** Contrasting accent color per-background for the LOS marker and ball. */
 const LOS_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.55)",
-  white: "rgba(0,0,0,0.40)",
+  white: "rgba(0,0,0,0.55)",
   black: "rgba(255,255,255,0.50)",
-  gray:  "rgba(255,255,255,0.45)",
 };
 
 /* ------------------------------------------------------------------ */
@@ -127,6 +149,40 @@ type Props = {
   /** Field background color theme */
   fieldBackground?: "green" | "white" | "black" | "gray";
 };
+
+function parseColor(c: string): { r: number; g: number; b: number } | null {
+  const s = c.trim();
+  if (s.startsWith("#")) {
+    const hex = s.slice(1);
+    const full = hex.length === 3 ? hex.split("").map((h) => h + h).join("") : hex;
+    if (full.length !== 6) return null;
+    const n = parseInt(full, 16);
+    if (Number.isNaN(n)) return null;
+    return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
+  }
+  const m = s.match(/rgba?\(([^)]+)\)/i);
+  if (m) {
+    const parts = m[1].split(",").map((p) => parseFloat(p.trim()));
+    if (parts.length >= 3) return { r: parts[0], g: parts[1], b: parts[2] };
+  }
+  return null;
+}
+
+/** Pick black or white for legibility against `fill`. If the stored
+ *  `preferred` already contrasts well (≥ 3:1), keep it. */
+function readableLabelColor(fill: string, preferred?: string): string {
+  const rgb = parseColor(fill);
+  if (!rgb) return preferred ?? "#1C1C1E";
+  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+  const auto = lum < 0.55 ? "#FFFFFF" : "#1C1C1E";
+  if (!preferred) return auto;
+  const pRgb = parseColor(preferred);
+  if (!pRgb) return auto;
+  const pLum = (0.299 * pRgb.r + 0.587 * pRgb.g + 0.114 * pRgb.b) / 255;
+  // If preferred label is too close in luminance to the fill, override.
+  if (Math.abs(pLum - lum) < 0.35) return auto;
+  return preferred;
+}
 
 export function EditorCanvas({
   doc,
@@ -171,9 +227,17 @@ export function EditorCanvas({
   };
   const [segmentMenu, setSegmentMenu] = useState<SegmentMenu | null>(null);
 
+  type AnchorMenu = {
+    screenX: number;
+    screenY: number;
+    routeId: string;
+    nodeId: string;
+  };
+  const [anchorMenu, setAnchorMenu] = useState<AnchorMenu | null>(null);
+
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
-    if (!segmentMenu) return;
+    if (!segmentMenu && !anchorMenu) return;
     function onDocPointer(e: PointerEvent) {
       const target = e.target as Node | null;
       const wrap = wrapperRef.current;
@@ -184,13 +248,17 @@ export function EditorCanvas({
       }
       // Any other click closes the menu.
       setSegmentMenu(null);
+      setAnchorMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
       // from blocking it.
       void wrap;
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setSegmentMenu(null);
+      if (e.key === "Escape") {
+        setSegmentMenu(null);
+        setAnchorMenu(null);
+      }
     }
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onKey);
@@ -198,7 +266,7 @@ export function EditorCanvas({
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [segmentMenu]);
+  }, [segmentMenu, anchorMenu]);
 
   /* ---------- Line of scrimmage (hoisted early; callbacks depend on losY) ---------- */
 
@@ -228,8 +296,16 @@ export function EditorCanvas({
   /* ---------- Active style builder ---------- */
 
   const buildRouteStyle = useCallback(
-    () => ({ stroke: activeColor, strokeWidth: activeWidth }),
-    [activeColor, activeWidth],
+    (playerId?: string) => {
+      const player = playerId
+        ? doc.layers.players.find((p) => p.id === playerId)
+        : null;
+      // Default a new route to the player's fill color (their visible colour),
+      // not their outline stroke which is usually near-black.
+      const stroke = player?.style.fill ?? activeColor;
+      return { stroke, strokeWidth: activeWidth };
+    },
+    [activeColor, activeWidth, doc.layers.players],
   );
 
   /* ---------- Anchor resolution ---------- */
@@ -265,6 +341,20 @@ export function EditorCanvas({
       const { playerId, extendingRouteId, extendFromNodeId, points } = state;
       if (points.length < 2) return;
       const simplified = simplifyPolyline(points, SIMPLIFY_EPSILON);
+      if (simplified.length < 2) return;
+
+      const carrier = doc.layers.players.find((p) => p.id === playerId);
+      if (carrier) {
+        // Drop any trailing/intermediate points that fall within the player
+        // circle (except the very first, which is the anchor position).
+        for (let i = 1; i < simplified.length; i++) {
+          const dx = simplified[i].x - carrier.position.x;
+          const dy = simplified[i].y - carrier.position.y;
+          if (Math.hypot(dx, dy) < MIN_NODE_DIST_FROM_PLAYER) {
+            simplified[i] = snapOutsidePlayer(simplified[i], carrier.position);
+          }
+        }
+      }
       if (simplified.length < 2) return;
 
       if (extendingRouteId && extendFromNodeId) {
@@ -312,22 +402,23 @@ export function EditorCanvas({
         semantic: null,
         nodes,
         segments,
-        style: buildRouteStyle(),
+        style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
       onSelectNode(nodes[nodes.length - 1].id);
       onSelectSegment(null);
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle, doc.layers.players],
   );
 
   /* ---------- Create a 2-node line route (single click, no existing route) ---------- */
 
   const commitClickRoute = useCallback(
     (playerId: string, playerPos: Point2, clickPos: Point2) => {
+      const snapped = snapOutsidePlayer(clickPos, playerPos);
       const startNode: RouteNode = { id: uid("node"), position: playerPos };
-      const endNode: RouteNode = { id: uid("node"), position: clickPos };
+      const endNode: RouteNode = { id: uid("node"), position: snapped };
       const seg: RouteSegment = {
         id: uid("seg"),
         fromNodeId: startNode.id,
@@ -342,14 +433,14 @@ export function EditorCanvas({
         semantic: null,
         nodes: [startNode, endNode],
         segments: [seg],
-        style: buildRouteStyle(),
+        style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
       onSelectNode(endNode.id); // so next click extends from here
       onSelectSegment(null);
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle, doc.layers.players],
   );
 
   /* ---------- Pointer handlers ---------- */
@@ -492,16 +583,31 @@ export function EditorCanvas({
       }
 
       if (state.type === "dragging_node") {
+        const raw = toNorm(e);
+        const route = doc.layers.routes.find((r) => r.id === state.routeId);
+        const isAnchor = route?.nodes[0]?.id === state.nodeId;
+        const carrier = route
+          ? doc.layers.players.find((p) => p.id === route.carrierPlayerId)
+          : null;
+        const position =
+          !isAnchor && carrier
+            ? snapOutsidePlayer(raw, carrier.position)
+            : raw;
         dispatch({
           type: "route.moveNode",
           routeId: state.routeId,
           nodeId: state.nodeId,
-          position: toNorm(e),
+          position,
         });
         return;
       }
 
       if (state.type === "dragging_segment") {
+        // Only allow the drag-to-bend gesture when the user is actively in
+        // curve mode. In straight/dashed/etc. modes, dragging a segment
+        // should not silently convert it to a curve — that surprised users
+        // who expected the active line type to be respected.
+        if (activeShape !== "curve") return;
         const p = toNorm(e);
         dispatch({
           type: "route.setSegmentShape",
@@ -526,7 +632,7 @@ export function EditorCanvas({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape],
   );
 
   const finishInteraction = useCallback(
@@ -659,6 +765,44 @@ export function EditorCanvas({
     [toNorm, onSelectRoute, onSelectSegment, onSelectNode, onSelectPlayer],
   );
 
+  const handleAnchorDelete = useCallback(() => {
+    if (!anchorMenu) return;
+    dispatch({
+      type: "route.removeNodeBridging",
+      routeId: anchorMenu.routeId,
+      nodeId: anchorMenu.nodeId,
+    });
+    onSelectNode(null);
+    setAnchorMenu(null);
+  }, [anchorMenu, dispatch, onSelectNode]);
+
+  const setTerminalSegmentStroke = useCallback(
+    (pattern: "solid" | "dashed" | "dotted") => {
+      if (!segmentMenu) return;
+      dispatch({
+        type: "route.setSegmentStroke",
+        routeId: segmentMenu.routeId,
+        segmentId: segmentMenu.segmentId,
+        strokePattern: pattern,
+      });
+      setSegmentMenu(null);
+    },
+    [segmentMenu, dispatch],
+  );
+
+  // Is the segment the terminal (end) of its route? Used to show dash-style
+  // options only on the last leg.
+  const isTerminalSegment = useCallback(
+    (routeId: string, segmentId: string): boolean => {
+      const route = doc.layers.routes.find((r) => r.id === routeId);
+      if (!route) return false;
+      const seg = route.segments.find((s) => s.id === segmentId);
+      if (!seg) return false;
+      return !route.segments.some((other) => other.fromNodeId === seg.toNodeId);
+    },
+    [doc.layers.routes],
+  );
+
   const handleMenuAddAnchor = useCallback(() => {
     if (!segmentMenu) return;
     const newNode: RouteNode = { id: uid("node"), position: segmentMenu.position };
@@ -728,11 +872,14 @@ export function EditorCanvas({
 
   /* ---------- Dynamic field colors ---------- */
 
-  const bg = BG_COLORS[fieldBackground ?? "green"];
-  const lineColor = LINE_COLORS[fieldBackground ?? "green"];
-  const hashColor = HASH_COLORS[fieldBackground ?? "green"];
-  const borderColor = BORDER_COLORS[fieldBackground ?? "green"];
-  const losColor = LOS_COLORS[fieldBackground ?? "green"];
+  // Legacy "gray" plays fall back to the new solid-white theme.
+  const bgKey = fieldBackground === "gray" ? "white" : (fieldBackground ?? "green");
+  const bg = BG_COLORS[bgKey];
+  const lineColor = LINE_COLORS[bgKey];
+  const hashColor = HASH_COLORS[bgKey];
+  const numberColor = NUMBER_COLORS[bgKey];
+  const borderColor = BORDER_COLORS[bgKey];
+  const losColor = LOS_COLORS[bgKey];
 
   /* ---------- Line of scrimmage ---------- */
 
@@ -741,20 +888,81 @@ export function EditorCanvas({
 
   /* ---------- Yard lines ---------- */
 
+  // Draw a stripe every 5 yards based on the field's length.
+  // Field y-axis is 0..1 over `fieldLengthYds`, so a 25-yard field gets
+  // 4 interior stripes at y = 0.2, 0.4, 0.6, 0.8.
+  const fieldLengthYds = doc.sportProfile.fieldLengthYds || 25;
+  const yardInterval = 5;
   const yardLines = [];
-  for (let i = 1; i < 10; i++) {
-    const y = i / 10;
+  const yardNumbers: React.ReactNode[] = [];
+  const losYd = Math.round(losY * fieldLengthYds); // yards from bottom to LOS
+  const zone = resolveFieldZone(doc);
+  // Anchor yard value at LOS based on zone.
+  const losYardValue = zone === "midfield" ? 50 : 20;
+  const yardLabel = (yd: number) => {
+    // yd is yards from bottom edge of window; offset from LOS in yards:
+    const delta = yd - losYd;
+    if (zone === "midfield") {
+      // Mirror around the 50: number counts down as you move away from LOS.
+      const v = 50 - Math.abs(delta);
+      return v <= 0 ? "" : String(v);
+    }
+    // red_zone: offense driving toward the goal (top of window). Numbers
+    // descend going up (toward goal), ascend going down (back toward midfield).
+    const v = losYardValue - delta;
+    if (v <= 0) return "G";
+    if (v >= 50) return "";
+    return String(v);
+  };
+  for (let yd = yardInterval; yd < fieldLengthYds; yd += yardInterval) {
+    const y = yd / fieldLengthYds;
+    const svgY = fy(y);
     yardLines.push(
       <line
-        key={`h${i}`}
+        key={`h${yd}`}
         x1={0}
-        y1={y}
+        y1={svgY}
         x2={fieldAspect}
-        y2={y}
+        y2={svgY}
         stroke={lineColor}
-        strokeWidth={0.002}
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
       />,
     );
+    const label = yardLabel(yd);
+    if (label) {
+      // Numbers sit just inside each hash column — the same location they
+      // appear on a real field (between the sideline and the hash).
+      const numY = svgY + 0.018;
+      const NUM_X_LEFT = 0.27 * fieldAspect;
+      const NUM_X_RIGHT = 0.73 * fieldAspect;
+      yardNumbers.push(
+        <text
+          key={`nL${yd}`}
+          x={NUM_X_LEFT}
+          y={numY}
+          fontSize={0.04}
+          fontWeight={700}
+          fill={numberColor}
+          textAnchor="middle"
+          pointerEvents="none"
+        >
+          {label}
+        </text>,
+        <text
+          key={`nR${yd}`}
+          x={NUM_X_RIGHT}
+          y={numY}
+          fontSize={0.04}
+          fontWeight={700}
+          fill={numberColor}
+          textAnchor="middle"
+          pointerEvents="none"
+        >
+          {label}
+        </text>,
+      );
+    }
   }
 
   /* ---------- Hash marks ---------- */
@@ -778,7 +986,7 @@ export function EditorCanvas({
           x2={HASH_X_LEFT}
           y2={y + TICK_HALF}
           stroke={hashColor}
-          strokeWidth={1.5}
+          strokeWidth={2.25}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />,
@@ -789,7 +997,7 @@ export function EditorCanvas({
           x2={HASH_X_RIGHT}
           y2={y + TICK_HALF}
           stroke={hashColor}
-          strokeWidth={1.5}
+          strokeWidth={2.25}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />,
@@ -816,7 +1024,7 @@ export function EditorCanvas({
   // stored positions are still in normalized 0-1 field coords.
 
   return (
-    <div ref={wrapperRef} className="relative h-full min-h-0 w-full overflow-hidden">
+    <div ref={wrapperRef} className="relative h-full min-h-0 w-full select-none overflow-hidden" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
     <svg
       ref={svgRef}
       viewBox={`0 0 ${fieldAspect} 1`}
@@ -841,6 +1049,7 @@ export function EditorCanvas({
       </defs>
       <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />
       {yardLines}
+      {yardNumbers}
       {hashMarks}
 
       {/* Line of scrimmage */}
@@ -910,6 +1119,7 @@ export function EditorCanvas({
           // "Whole-route" selection = route selected but no specific segment.
           const isWholeRouteSelected = isActive && selectedSegmentId == null;
           const rendered = routeToRenderedSegments(route);
+          const effectiveStroke = resolveRouteStroke(route, doc.layers.players);
 
           return (
             <g key={route.id}>
@@ -934,7 +1144,7 @@ export function EditorCanvas({
                     <path
                       d={rs.d}
                       fill="none"
-                      stroke={isSelectedSeg ? "#F26522" : route.style.stroke}
+                      stroke={isSelectedSeg ? "#F26522" : effectiveStroke}
                       strokeWidth={isSelectedSeg ? 3 : route.style.strokeWidth}
                       strokeDasharray={rs.dash}
                       strokeLinecap="round"
@@ -1002,26 +1212,61 @@ export function EditorCanvas({
                   // <ellipse> with rx pre-compensated so the rendered shape is
                   // a perfect circle of radius NODE_RADIUS in field-units.
                   return (
-                    <ellipse
-                      key={node.id}
-                      cx={node.position.x}
-                      cy={1 - node.position.y}
-                      rx={NODE_RADIUS / fieldAspect}
-                      ry={NODE_RADIUS}
-                      fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
-                      stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
-                      strokeWidth={0.0015}
-                      vectorEffect="non-scaling-stroke"
-                      style={{ cursor: "grab" }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        startInteraction(e, {
-                          kind: "route_node",
-                          routeId: route.id,
-                          nodeId: node.id,
-                        });
-                      }}
-                    />
+                    <g key={node.id}>
+                      {isSelectedNode && (
+                        <ellipse
+                          cx={node.position.x}
+                          cy={1 - node.position.y}
+                          rx={(NODE_RADIUS * 2.2) / fieldAspect}
+                          ry={NODE_RADIUS * 2.2}
+                          fill="none"
+                          stroke="#F26522"
+                          strokeWidth={1.5}
+                          strokeDasharray="2 2"
+                          vectorEffect="non-scaling-stroke"
+                          pointerEvents="none"
+                        />
+                      )}
+                      <ellipse
+                        cx={node.position.x}
+                        cy={1 - node.position.y}
+                        rx={NODE_RADIUS / fieldAspect}
+                        ry={NODE_RADIUS}
+                        fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
+                        stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
+                        strokeWidth={0.0015}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: "grab" }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          startInteraction(e, {
+                            kind: "route_node",
+                            routeId: route.id,
+                            nodeId: node.id,
+                          });
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const rect = wrapperRef.current?.getBoundingClientRect();
+                          if (!rect) return;
+                          const MENU_W = 160;
+                          const MENU_H = 40;
+                          const localX = e.clientX - rect.left;
+                          const localY = e.clientY - rect.top;
+                          setAnchorMenu({
+                            screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+                            screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                            routeId: route.id,
+                            nodeId: node.id,
+                          });
+                          setSegmentMenu(null);
+                          onSelectRoute(route.id);
+                          onSelectNode(node.id);
+                          onSelectSegment(null);
+                        }}
+                      />
+                    </g>
                   );
                 })}
             </g>
@@ -1056,6 +1301,8 @@ export function EditorCanvas({
         );
         if (terminals.length === 0) return null;
 
+        const effectiveRouteStroke = resolveRouteStroke(route, doc.layers.players);
+
         return (
           <g key={`deco-${route.id}`} pointerEvents="none">
             {terminals.map((seg) => {
@@ -1088,7 +1335,7 @@ export function EditorCanvas({
               const ux = dxS / len;
               const uy = dyS / len;
 
-              const stroke = route.style.stroke;
+              const stroke = effectiveRouteStroke;
               const strokeW = route.style.strokeWidth;
 
               if (decoration === "arrow") {
@@ -1162,13 +1409,12 @@ export function EditorCanvas({
         const px = fx(pl.position.x);
         const py = fy(pl.position.y);
         const r = 0.028;
-        const fillColor = sel ? "#F26522" : (pl.style?.fill ?? "#FFFFFF");
-        const strokeColor = sel
-          ? "#F26522"
-          : (pl.style?.stroke ?? "rgba(0,0,0,0.6)");
+        const fillColor = pl.style?.fill ?? "#FFFFFF";
+        const strokeColor = pl.style?.stroke ?? "rgba(0,0,0,0.6)";
         // With vectorEffect=non-scaling-stroke these widths are in CSS pixels.
         const strokeW = sel ? 2 : 1.5;
-        const labelColor = sel ? "#FFFFFF" : (pl.style?.labelColor ?? "#1C1C1E");
+        const labelColor = readableLabelColor(fillColor, pl.style?.labelColor);
+        const selectionRingColor = pl.style?.stroke ?? "#1C1C1E";
         const shape = pl.shape ?? "circle";
 
         const pointerHandlers = {
@@ -1220,6 +1466,25 @@ export function EditorCanvas({
               {...pointerHandlers}
             />
           );
+        } else if (shape === "star") {
+          const outer = r * 1.15;
+          const inner = outer * 0.45;
+          const pts = Array.from({ length: 10 }, (_, i) => {
+            const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+            const rad = i % 2 === 0 ? outer : inner;
+            return `${px + rad * Math.cos(angle)},${py + rad * Math.sin(angle)}`;
+          }).join(" ");
+          shapeEl = (
+            <polygon
+              points={pts}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              {...pointerHandlers}
+            />
+          );
         } else {
           // triangle
           const pts = `${px},${py - r} ${px + r},${py + r} ${px - r},${py + r}`;
@@ -1239,14 +1504,15 @@ export function EditorCanvas({
           <g key={pl.id}>
             {sel && (
               <circle
+                className="marching-ants"
                 cx={px}
                 cy={py}
                 r={0.042}
                 fill="none"
-                stroke="#F26522"
+                stroke={selectionRingColor}
                 strokeWidth={2}
+                strokeDasharray="4 3"
                 vectorEffect="non-scaling-stroke"
-                opacity={0.5}
                 pointerEvents="none"
               />
             )}
@@ -1327,6 +1593,40 @@ export function EditorCanvas({
             onClick={handleMenuCreateBranch}
           >
             Create branch here
+          </button>
+          {isTerminalSegment(segmentMenu.routeId, segmentMenu.segmentId) && (
+            <>
+              <div className="border-t border-border" />
+              <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
+                Last-segment style
+              </div>
+              {(["solid", "dashed", "dotted"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
+                  onClick={() => setTerminalSegmentStroke(p)}
+                >
+                  {p[0].toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {anchorMenu && (
+        <div
+          data-segment-menu
+          className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          style={{ left: anchorMenu.screenX, top: anchorMenu.screenY }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
+            onClick={handleAnchorDelete}
+          >
+            Delete anchor
           </button>
         </div>
       )}

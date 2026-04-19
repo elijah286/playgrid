@@ -59,7 +59,17 @@ export async function createPlaybookAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const { teamId } = await ensureDefaultWorkspace(supabase, user.id);
+  let teamId: string;
+  try {
+    const ws = await ensureDefaultWorkspace(supabase, user.id);
+    teamId = ws.teamId;
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Could not resolve workspace.",
+    };
+  }
+
   const { data, error } = await supabase
     .from("playbooks")
     .insert({ team_id: teamId, name: name || "New playbook", sport_variant: sportVariant })
@@ -171,7 +181,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
   const { data: plays, error: playsErr } = await supabase
     .from("plays")
     .select(
-      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tag, current_version_id",
+      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id",
     )
     .eq("playbook_id", playbookId)
     .eq("is_archived", false);
@@ -189,6 +199,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
         display_abbrev: p.display_abbrev,
         formation_name: p.formation_name,
         concept: p.concept,
+        tags: p.tags ?? (p.tag ? [p.tag] : []),
         tag: p.tag,
       })
       .select("id")

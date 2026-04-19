@@ -4,6 +4,7 @@ import {
   Minus,
   Spline,
   Undo2,
+  Redo2,
   Check,
   Sparkles,
   Waves,
@@ -27,6 +28,8 @@ type Props = {
   onSmooth: () => void;
   onUndo: () => void;
   canUndo: boolean;
+  onRedo: () => void;
+  canRedo: boolean;
   onDone: () => void;
   doneLabel?: string;
   /** End-of-route decoration (arrow/T/none). Disabled when no route selected. */
@@ -80,6 +83,8 @@ export function RouteToolbar({
   onSmooth,
   onUndo,
   canUndo,
+  onRedo,
+  canRedo,
   onDone,
   doneLabel = "Done",
   endDecoration,
@@ -177,6 +182,15 @@ export function RouteToolbar({
           variant="ghost"
           disabled={!canUndo}
           onClick={onUndo}
+        />
+      </Tooltip>
+
+      <Tooltip content="Redo">
+        <IconButton
+          icon={Redo2}
+          variant="ghost"
+          disabled={!canRedo}
+          onClick={onRedo}
         />
       </Tooltip>
 

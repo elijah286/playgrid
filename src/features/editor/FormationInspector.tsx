@@ -22,7 +22,7 @@ const ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
 
 const FILL_COLORS = [
   "#FFFFFF",
-  "#F8FAFC",
+  "#94A3B8",
   "#1C1C1E",
   "#F26522",
   "#3B82F6",
@@ -38,6 +38,7 @@ const SHAPES: { value: PlayerShape; icon: string; label: string }[] = [
   { value: "square", icon: "□", label: "Square" },
   { value: "diamond", icon: "◇", label: "Diamond" },
   { value: "triangle", icon: "△", label: "Triangle" },
+  { value: "star", icon: "★", label: "Star" },
 ];
 
 export function FormationInspector({

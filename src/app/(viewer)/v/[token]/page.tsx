@@ -1,5 +1,6 @@
 import { getSharedPlayByTokenAction } from "@/app/actions/share";
 import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
+import { resolveRouteStroke } from "@/domain/play/factory";
 import { Badge } from "@/components/ui";
 
 type Props = { params: Promise<{ token: string }> };
@@ -43,7 +44,7 @@ export default async function SharedPlayPage({ params }: Props) {
               key={r.id}
               d={pathGeometryToSvgD(routeToPathGeometry(r))}
               fill="none"
-              stroke={r.style.stroke}
+              stroke={resolveRouteStroke(r, doc.layers.players)}
               strokeWidth={0.004}
             />
           ))}

@@ -46,6 +46,7 @@ export type PlayCommand =
     }
   | { type: "route.moveNode"; routeId: string; nodeId: string; position: Point2 }
   | { type: "route.removeNode"; routeId: string; nodeId: string }
+  | { type: "route.removeNodeBridging"; routeId: string; nodeId: string }
   | {
       /** Split an existing segment by inserting a node at its midpoint */
       type: "route.insertNode";
@@ -79,7 +80,8 @@ export type PlayCommand =
   | { type: "document.setTimeline"; timeline: PlayTimeline }
   | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" }
   | { type: "document.setShowHashMarks"; showHashMarks: boolean }
-  | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" };
+  | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" }
+  | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" };
 
 export type CommandMeta = {
   id: string;

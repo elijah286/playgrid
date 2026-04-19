@@ -42,9 +42,28 @@ export function resolveLineOfScrimmageY(doc: PlayDocument): number {
   return 0.4;
 }
 
+/** Field zone, defaulting to mid-field. */
+export function resolveFieldZone(doc: PlayDocument): "midfield" | "red_zone" {
+  return doc.fieldZone ?? "midfield";
+}
+
 /** Route end-decoration, defaulting to arrow. */
 export function resolveEndDecoration(route: Route): EndDecoration {
   return route.endDecoration ?? "arrow";
+}
+
+/**
+ * Routes inherit the carrier player's fill colour unless the user has
+ * explicitly picked a different stroke. Legacy routes were all stored as
+ * white, so treat white as "no explicit colour" and fall back to the
+ * player's fill colour.
+ */
+export function resolveRouteStroke(route: Route, players: Player[]): string {
+  const raw = route.style.stroke;
+  const isDefault = raw.toLowerCase() === "#ffffff" || raw.toLowerCase() === "#fff";
+  if (!isDefault) return raw;
+  const carrier = players.find((p) => p.id === route.carrierPlayerId);
+  return carrier?.style.fill ?? raw;
 }
 
 /* ------------------------------------------------------------------ */
@@ -73,10 +92,10 @@ export function sportProfileForVariant(variant: SportVariant): SportProfile {
 
 /** Human-readable label for each sport variant, for use in UI. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
-  flag_5v5: "Flag 5v5",
-  flag_7v7: "Flag 7v7",
-  six_man: "6-Man",
-  tackle_11: "11-Man Tackle",
+  flag_5v5: "Flag",
+  flag_7v7: "7v7",
+  six_man: "Other",
+  tackle_11: "Tackle",
 };
 
 function mkPlayer(
@@ -202,7 +221,7 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
       sheetAbbrev: "TR STK",
       formation: "Trips Right",
       concept: "Stick",
-      tag: "",
+      tags: [],
     },
     formation: {
       semantic: { key: "trips_right", strength: "right" },

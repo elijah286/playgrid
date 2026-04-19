@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,50 +9,28 @@ import {
   Redo2,
   FlipHorizontal,
   Share2,
-  Smartphone,
-  FileDown,
-  UserPlus,
-  BookmarkPlus,
   CheckCircle2,
   Loader2,
 } from "lucide-react";
-import type { EndDecoration, PlayDocument, Player, Point2, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { resolveEndDecoration } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
-  loadPlaybookPrintPackAction,
   savePlayVersionAction,
-  type PlaybookPrintPackRow,
 } from "@/app/actions/plays";
-import { saveFormationAction } from "@/app/actions/formations";
 import { createShareLinkForPlayAction } from "@/app/actions/share";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
 import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
-import { FormationInspector } from "./FormationInspector";
-import { PrintPreview } from "@/features/print/PrintPreview";
-import { PlaybookPrintRunControls } from "@/features/print/PlaybookPrintRunControls";
-import { exportSvgToPdf, exportSvgsToMultiPagePdf } from "@/features/print/exportPdf";
-import {
-  compilePlayToSvg,
-  compilePlaysheetPdfPages,
-  compileWristbandPdfPages,
-} from "@/domain/print/templates";
-import {
-  applyExportPresentation,
-  defaultPlaybookPrintRunConfig,
-  sortNavPlaysForPrint,
-  wristbandWidthMm,
-  type PlaybookGroupRow,
-  type PlaybookPlayNavItem,
+import type {
+  PlaybookGroupRow,
+  PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorPlayContextBar } from "./EditorPlayContextBar";
-import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
-import { Button, IconButton, Input, SegmentedControl, Kbd, useToast } from "@/components/ui";
+import { IconButton, Kbd, useToast } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { uid } from "@/domain/play/factory";
 
 type Props = {
   playId: string;
@@ -85,8 +63,7 @@ export function PlayEditorClient({
   const [activeColor, setActiveColor] = useState("#FFFFFF");
   const [activeWidth, setActiveWidth] = useState(2.5);
 
-  const [tab, setTab] = useState<"routes" | "formation" | "print">("routes");
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   /* ---------- Auto-save ---------- */
   type SaveStatus = "idle" | "saving" | "saved";
@@ -117,18 +94,16 @@ export function PlayEditorClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
 
-  const [printPack, setPrintPack] = useState<PlaybookPrintPackRow[] | null>(null);
-  const [printGroups, setPrintGroups] = useState<PlaybookGroupRow[]>(initialGroups);
-  const [printLoading, setPrintLoading] = useState(false);
-  const [selectedPrintIds, setSelectedPrintIds] = useState<Set<string>>(new Set());
-  const [printRun, setPrintRun] = useState(defaultPlaybookPrintRunConfig);
-
-  const previewKind = printRun.product === "wristband" ? "wristband" : "full_sheet";
-
-  // Formation mode state
-  const [showSaveFormation, setShowSaveFormation] = useState(false);
-  const [formationName, setFormationName] = useState("");
-  const [savingFormation, startSavingFormation] = useTransition();
+  // Warn before unload if a save is in flight
+  useEffect(() => {
+    if (saveStatus === "idle") return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [saveStatus]);
 
   // Show toolbar when a player OR route is selected
   const showToolbar = selectedPlayerId != null || selectedRouteId != null;
@@ -171,141 +146,6 @@ export function PlayEditorClient({
     });
   }, [playId, toast]);
 
-  const exportPdf = useCallback(() => {
-    const compiled = compilePlayToSvg(doc, previewKind);
-    startTransition(async () => {
-      const safe = (doc.metadata.wristbandCode || "play").replace(/[^\w.-]+/g, "-");
-      await exportSvgToPdf(compiled.svgMarkup, `${safe}.pdf`);
-      toast("PDF exported", "success");
-    });
-  }, [doc, previewKind, toast]);
-
-  const exportPlaybookPdf = useCallback(() => {
-    startTransition(async () => {
-      const rows = (printPack ?? []).filter((r) => selectedPrintIds.has(r.id));
-      if (rows.length === 0) {
-        toast("Select at least one play to print", "error");
-        return;
-      }
-      const grouping =
-        printRun.product === "playsheet" ? printRun.playsheetGrouping : printRun.wristbandGrouping;
-      const navOrder = sortNavPlaysForPrint(
-        rows.map((r) => r.nav),
-        grouping,
-      );
-      const ordered = navOrder
-        .map((n) => rows.find((r) => r.id === n.id))
-        .filter((x): x is PlaybookPrintPackRow => x != null);
-      const docs = ordered.map((r) => applyExportPresentation(r.document, printRun));
-
-      let pages: string[];
-      if (printRun.product === "playsheet") {
-        pages = compilePlaysheetPdfPages(docs, {
-          playsPerSheet: printRun.playsPerSheet,
-          orientation: printRun.sheetOrientation,
-        });
-      } else {
-        pages = compileWristbandPdfPages(docs, {
-          orientation: printRun.sheetOrientation,
-          wristbandWidthMm: wristbandWidthMm(printRun.wristbandSize),
-        });
-      }
-
-      const name = `playbook-${playbookId.slice(0, 8)}.pdf`;
-      await exportSvgsToMultiPagePdf(pages, name);
-      toast("Playbook PDF exported", "success");
-    });
-  }, [printPack, playbookId, printRun, selectedPrintIds, toast]);
-
-  useEffect(() => {
-    if (tab !== "print") return;
-    let cancelled = false;
-    setPrintLoading(true);
-    void (async () => {
-      const res = await loadPlaybookPrintPackAction(playbookId);
-      if (cancelled) return;
-      if (res.ok) {
-        setPrintPack(res.pack);
-        setPrintGroups(res.groups);
-        setSelectedPrintIds(new Set(res.pack.map((p) => p.id)));
-      } else {
-        toast(res.error, "error");
-        setPrintPack([]);
-      }
-      setPrintLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, playbookId, toast]);
-
-  const printNavItems = useMemo((): PlaybookPlayNavItem[] => {
-    return (printPack ?? []).map((r) => r.nav);
-  }, [printPack]);
-
-  const togglePrintPlay = useCallback((id: string, on: boolean) => {
-    setSelectedPrintIds((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const togglePrintGroup = useCallback(
-    (groupId: string | null, turnOn: boolean) => {
-      setSelectedPrintIds((prev) => {
-        const next = new Set(prev);
-        for (const row of printPack ?? []) {
-          const match =
-            groupId === null ? row.nav.group_id == null : row.nav.group_id === groupId;
-          if (match) {
-            if (turnOn) next.add(row.id);
-            else next.delete(row.id);
-          }
-        }
-        return next;
-      });
-    },
-    [printPack],
-  );
-
-  /* ---------- Formation mode handlers ---------- */
-
-  const handleAddPlayer = useCallback(
-    (position: Point2) => {
-      const newPlayer: Player = {
-        id: uid("player"),
-        role: "WR",
-        label: "?",
-        position,
-        eligible: true,
-        style: { fill: "#FFFFFF", stroke: "#1C1C1E", labelColor: "#1C1C1E" },
-      };
-      dispatch({ type: "player.add", player: newPlayer });
-      setSelectedPlayerId(newPlayer.id);
-    },
-    [dispatch],
-  );
-
-  const handleSaveFormation = useCallback(() => {
-    const name = formationName.trim();
-    if (!name) {
-      toast("Enter a formation name", "error");
-      return;
-    }
-    startSavingFormation(async () => {
-      const res = await saveFormationAction(name, doc.layers.players, doc.sportProfile);
-      if (!res.ok) {
-        toast(res.error, "error");
-      } else {
-        toast("Formation saved", "success");
-        setShowSaveFormation(false);
-        setFormationName("");
-      }
-    });
-  }, [formationName, doc.layers.players, doc.sportProfile, toast]);
-
   /* ---------- Toolbar handlers ---------- */
 
   const handleShapeChange = useCallback(
@@ -328,35 +168,24 @@ export function PlayEditorClient({
       setActiveStrokePattern(strokePattern);
       if (!selectedRouteId || !selectedRoute) return;
 
-      // "Motion" is a whole-route concept: only the first segment from the
-      // player gets the zig-zag motion mark; everything else becomes solid.
-      if (strokePattern === "motion") {
-        if (selectedRoute.segments.length === 0) return;
-        const [first, ...rest] = selectedRoute.segments;
+      // Apply the stroke pattern ONLY to the explicitly selected segment.
+      // If no specific segment is selected, apply to all segments of the
+      // route (whole-route edit).
+      if (selectedSegmentId) {
         dispatch({
           type: "route.setSegmentStroke",
           routeId: selectedRouteId,
-          segmentId: first.id,
-          strokePattern: "motion",
+          segmentId: selectedSegmentId,
+          strokePattern,
         });
-        for (const s of rest) {
-          if (s.strokePattern === "motion") {
-            dispatch({
-              type: "route.setSegmentStroke",
-              routeId: selectedRouteId,
-              segmentId: s.id,
-              strokePattern: "solid",
-            });
-          }
-        }
-        return;
-      }
-
-      if (selectedSegmentId) {
-        dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: selectedSegmentId, strokePattern });
       } else {
         for (const s of selectedRoute.segments) {
-          dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: s.id, strokePattern });
+          dispatch({
+            type: "route.setSegmentStroke",
+            routeId: selectedRouteId,
+            segmentId: s.id,
+            strokePattern,
+          });
         }
       }
     },
@@ -453,7 +282,7 @@ export function PlayEditorClient({
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         if (selectedNodeId && selectedRouteId) {
-          dispatch({ type: "route.removeNode", routeId: selectedRouteId, nodeId: selectedNodeId });
+          dispatch({ type: "route.removeNodeBridging", routeId: selectedRouteId, nodeId: selectedNodeId });
           setSelectedNodeId(null);
         } else if (selectedRouteId) {
           dispatch({ type: "route.remove", routeId: selectedRouteId });
@@ -506,8 +335,8 @@ export function PlayEditorClient({
 
           {/* Field background */}
           <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
-            {(["green","white","black","gray"] as const).map((bg) => {
-              const colors = { green:"#2D8B4E", white:"#F8FAFC", black:"#0A0A0A", gray:"#374151" };
+            {(["green","white","black"] as const).map((bg) => {
+              const colors = { green:"#2D8B4E", white:"#FFFFFF", black:"#0A0A0A" };
               const active = (doc.fieldBackground ?? "green") === bg;
               return (
                 <button
@@ -538,38 +367,19 @@ export function PlayEditorClient({
         </div>
       </header>
 
-      {/* Tab bar + play context */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <SegmentedControl
-            options={[
-              { value: "routes" as const, label: "Routes" },
-              { value: "formation" as const, label: "Formation" },
-              { value: "print" as const, label: "Print preview" },
-            ]}
-            value={tab}
-            onChange={setTab}
-          />
-          <Link href={`/m/play/${playId}?playbookId=${playbookId}`} className="ml-auto">
-            <Button variant="ghost" size="sm" leftIcon={Smartphone}>
-              Mobile view
-            </Button>
-          </Link>
-        </div>
-        <EditorPlayContextBar
-          playId={playId}
-          playbookId={playbookId}
-          doc={doc}
-          dispatch={dispatch}
-          initialNav={initialNav}
-          initialGroups={initialGroups}
-          onDuplicate={duplicate}
-        />
-      </div>
+      {/* Play context */}
+      <EditorPlayContextBar
+        playId={playId}
+        playbookId={playbookId}
+        doc={doc}
+        dispatch={dispatch}
+        initialNav={initialNav}
+        initialGroups={initialGroups}
+        onDuplicate={duplicate}
+      />
 
-      {/* Routes tab */}
-      {tab === "routes" && (
-        <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
+      {/* Routes */}
+      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
             {/* The route toolbar is ALWAYS rendered — even with nothing
                 selected — so the canvas never shifts when a player or
@@ -599,13 +409,18 @@ export function PlayEditorClient({
                 onSmooth={handleSmooth}
                 onUndo={undo}
                 canUndo={canUndo}
+                onRedo={redo}
+                canRedo={canRedo}
                 onDone={handleDone}
                 endDecoration={displayEndDecoration}
                 onEndDecorationChange={handleEndDecorationChange}
               />
             </div>
 
-            <div className="relative min-h-[360px] flex-1 overflow-hidden">
+            <div
+              className="relative w-full overflow-hidden"
+              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)} / 1` }}
+            >
               <EditorCanvas
                 doc={doc}
                 dispatch={dispatch}
@@ -621,13 +436,21 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
+                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)}
                 fieldBackground={doc.fieldBackground}
               />
             </div>
 
             {/* Field size controls (below canvas) */}
             <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
+
+            {/* Play notes */}
+            <PlayNotesCard
+              value={doc.metadata.notes ?? ""}
+              onChange={(notes) =>
+                dispatch({ type: "document.setMetadata", patch: { notes } })
+              }
+            />
           </div>
           <aside className="rounded-xl border border-border bg-surface-raised p-4">
             <Inspector
@@ -639,146 +462,46 @@ export function PlayEditorClient({
               activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
             />
           </aside>
-        </div>
-      )}
+      </div>
 
-      {/* Formation tab */}
-      {tab === "formation" && (
-        <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="flex min-h-[420px] flex-col gap-3">
-            {/* Formation toolbar row */}
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Formation
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                leftIcon={UserPlus}
-                onClick={() => {
-                  // Center of field
-                  handleAddPlayer({ x: 0.5, y: 0.5 });
-                }}
-              >
-                Add player
-              </Button>
-              <div className="ml-auto" />
-              <Button
-                size="sm"
-                variant="primary"
-                leftIcon={BookmarkPlus}
-                onClick={() => setShowSaveFormation(true)}
-              >
-                Save formation
-              </Button>
-            </div>
+    </div>
+  );
+}
 
-            {/* Save formation panel */}
-            {showSaveFormation && (
-              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-surface-raised px-3 py-2">
-                <Input
-                  placeholder="Formation name…"
-                  value={formationName}
-                  onChange={(e) => setFormationName(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={savingFormation}
-                  onClick={handleSaveFormation}
-                >
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowSaveFormation(false);
-                    setFormationName("");
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
-
-            <div className="relative min-h-[360px] flex-1 overflow-hidden">
-              <EditorCanvas
-                doc={doc}
-                dispatch={dispatch}
-                mode="formation"
-                selectedPlayerId={selectedPlayerId}
-                selectedRouteId={null}
-                selectedNodeId={null}
-                selectedSegmentId={null}
-                onSelectPlayer={setSelectedPlayerId}
-                onSelectRoute={() => {}}
-                onSelectNode={() => {}}
-                onSelectSegment={() => {}}
-                onAddPlayer={handleAddPlayer}
-                activeShape={activeShape}
-                activeStrokePattern={activeStrokePattern}
-                activeColor={activeColor}
-                activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds}
-                fieldBackground={doc.fieldBackground}
-              />
-            </div>
-
-            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
-          </div>
-          <aside className="rounded-xl border border-border bg-surface-raised p-4">
-            <FormationInspector
-              doc={doc}
-              dispatch={dispatch}
-              selectedPlayerId={selectedPlayerId}
-              onSelectPlayer={setSelectedPlayerId}
-            />
-          </aside>
-        </div>
-      )}
-
-      {tab === "print" && (
-        <div className="space-y-4">
-          <PlaybookPrintRunControls config={printRun} onChange={setPrintRun} />
-          {printLoading ? (
-            <p className="text-sm text-muted">Loading playbook plays for print…</p>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-muted">
-                Choose which plays to include. The preview below is still the current play only.
-              </p>
-              <PlaybookPlaySearchMenu
-                plays={printNavItems}
-                groups={printGroups}
-                currentPlayId={playId}
-                printMode
-                printSelectedIds={selectedPrintIds}
-                onPrintToggle={togglePrintPlay}
-                onToggleGroup={togglePrintGroup}
-              />
-            </div>
+function PlayNotesCard({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(value.length > 0);
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-surface-raised">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">Play notes</span>
+          {!open && value.trim() && (
+            <span className="truncate text-xs text-muted">
+              {value.trim().slice(0, 80)}
+              {value.trim().length > 80 ? "…" : ""}
+            </span>
           )}
-          <PrintPreview
-            doc={doc}
-            dispatch={dispatch}
-            kind={previewKind}
-            onKindChange={(k) =>
-              setPrintRun((r) => ({
-                ...r,
-                product: k === "wristband" ? "wristband" : "playsheet",
-              }))
-            }
+        </div>
+        <span className="text-xs text-muted">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border px-4 py-3">
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Explain how to read this play — progressions, keys, coaching points…"
+            className="min-h-[120px] w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
           />
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" leftIcon={FileDown} onClick={exportPdf}>
-              Export this play (PDF)
-            </Button>
-            <Button variant="primary" leftIcon={FileDown} onClick={exportPlaybookPdf}>
-              Export playbook (PDF)
-            </Button>
-          </div>
         </div>
       )}
     </div>

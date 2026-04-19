@@ -4,7 +4,7 @@ import { Star, Trash2 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
-import { Input, Select, Badge, Button } from "@/components/ui";
+import { Select, Badge, Button } from "@/components/ui";
 import { QuickRoutes } from "./QuickRoutes";
 
 type Props = {
@@ -40,32 +40,6 @@ export function Inspector({
 
   return (
     <div className="space-y-5 text-sm">
-      <section>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-          Play naming
-        </h3>
-        <div className="mt-3 space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-foreground">Coach name</span>
-            <Input
-              value={doc.metadata.coachName}
-              onChange={(e) =>
-                dispatch({ type: "document.setMetadata", patch: { coachName: e.target.value } })
-              }
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-foreground">Wristband code</span>
-            <Input
-              value={doc.metadata.wristbandCode}
-              onChange={(e) =>
-                dispatch({ type: "document.setMetadata", patch: { wristbandCode: e.target.value } })
-              }
-            />
-          </label>
-        </div>
-      </section>
-
       {warnings.length > 0 && (
         <section className="rounded-lg bg-warning-light px-3 py-2.5 ring-1 ring-warning/20">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-warning">Rules</p>

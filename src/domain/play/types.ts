@@ -10,7 +10,7 @@ export type SportVariant =
 
 export type PlayerRole = "QB" | "RB" | "WR" | "TE" | "C" | "OTHER";
 
-export type PlayerShape = "circle" | "square" | "diamond" | "triangle";
+export type PlayerShape = "circle" | "square" | "diamond" | "triangle" | "star";
 
 export type Point2 = { x: number; y: number };
 
@@ -180,7 +180,10 @@ export type PlayMetadata = {
   sheetAbbrev: string;
   formation: string;
   concept: string;
-  tag: string;
+  /** User-defined tags for grouping (e.g. pass, run, reverse). */
+  tags: string[];
+  /** Free-form notes explaining how to read/execute the play. */
+  notes?: string;
 };
 
 export type PlayLayers = {
@@ -220,4 +223,11 @@ export type PlayDocument = {
    * they cannot be dragged past this line.
    */
   lineOfScrimmageY?: number;
+  /**
+   * Which part of the field the 25-yard display window represents. Controls
+   * the yard numbers painted on the field. Defaults to "midfield".
+   *   - "midfield": LOS is on the ~50, numbers mirror around it (45, 50, 45, 40)
+   *   - "red_zone": offense is driving toward the goal, numbers descend (25, 20, 15, 10)
+   */
+  fieldZone?: "midfield" | "red_zone";
 };
