@@ -16,24 +16,51 @@ type Props = {
 };
 
 function TemplateThumbnail({ template }: { template: RouteTemplate }) {
-  // Render a mini SVG preview of the route shape
+  // Render a mini SVG preview of the route shape.
+  //
+  // IMPORTANT: we use a UNIFORM scale derived from the larger of the two axes
+  // so that angles are preserved accurately. Independent-axis normalization
+  // would make a "Post" (wide angle) and "Skinny Post" (narrow angle) look
+  // identical — both stretched to fill the full box in x.
   const pts = template.points;
-  // Normalize to fit in a 40x40 viewbox centered
+
   const minX = Math.min(...pts.map((p) => p.x));
   const maxX = Math.max(...pts.map((p) => p.x));
   const minY = Math.min(...pts.map((p) => p.y));
   const maxY = Math.max(...pts.map((p) => p.y));
-  const rangeX = maxX - minX || 0.1;
-  const rangeY = maxY - minY || 0.1;
-  const pad = 4;
-  const size = 32;
+  const rangeX = maxX - minX;
+  const rangeY = maxY - minY;
+
+  // Single scale for both axes — routes that are nearly vertical stay narrow,
+  // routes that break wide fill the box. Minimum of 0.08 prevents divide-by-zero
+  // on degenerate single-point routes.
+  const maxRange = Math.max(rangeX, rangeY, 0.08);
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  const pad = 5;
+  const size = 30; // drawable area inside padding
 
   const scaled = pts.map((p) => ({
-    x: pad + ((p.x - minX) / rangeX) * size,
-    y: pad + (1 - (p.y - minY) / rangeY) * size, // flip y for SVG
+    x: pad + size / 2 + ((p.x - centerX) / maxRange) * size,
+    y: pad + size / 2 - ((p.y - centerY) / maxRange) * size, // flip y for SVG
   }));
 
-  const d = scaled.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  // Build path — use quadratic bezier for curve segments so curved routes
+  // (wheel, fade, skinny post, stop-and-go) look smoother in the thumbnail.
+  const pathParts: string[] = [`M ${scaled[0].x.toFixed(1)} ${scaled[0].y.toFixed(1)}`];
+  for (let i = 1; i < scaled.length; i++) {
+    const shape = template.shapes?.[i - 1] ?? "straight";
+    const p = scaled[i];
+    if (shape === "curve" && i >= 2) {
+      // Use the previous point as a rough control point for a quadratic curve
+      const prev = scaled[i - 1];
+      pathParts.push(`Q ${prev.x.toFixed(1)} ${prev.y.toFixed(1)} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`);
+    } else {
+      pathParts.push(`L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`);
+    }
+  }
+  const d = pathParts.join(" ");
 
   return (
     <svg viewBox={`0 0 ${size + pad * 2} ${size + pad * 2}`} className="h-10 w-10">
@@ -48,7 +75,7 @@ function TemplateThumbnail({ template }: { template: RouteTemplate }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* Endpoint arrow/dot */}
+      {/* Endpoint dot */}
       <circle
         cx={scaled[scaled.length - 1].x}
         cy={scaled[scaled.length - 1].y}
