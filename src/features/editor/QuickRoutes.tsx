@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, RouteStyle } from "@/domain/play/types";
 import {
@@ -59,13 +60,36 @@ function TemplateThumbnail({ template }: { template: RouteTemplate }) {
 }
 
 export function QuickRoutes({ player, dispatch, activeStyle }: Props) {
+  const [query, setQuery] = useState("");
+
+  const filtered = query.trim()
+    ? ROUTE_TEMPLATES.filter((t) =>
+        t.name.toLowerCase().includes(query.trim().toLowerCase()),
+      )
+    : ROUTE_TEMPLATES;
+
   return (
     <section>
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
         Quick routes
       </h3>
+
+      {/* Search */}
+      <input
+        type="search"
+        placeholder="Search routes…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="mt-2 w-full rounded-md border border-border bg-surface-inset px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+
       <div className="mt-2 grid grid-cols-2 gap-1.5">
-        {ROUTE_TEMPLATES.map((template) => (
+        {filtered.length === 0 && (
+          <p className="col-span-2 py-3 text-center text-[11px] text-muted">
+            No routes match &ldquo;{query}&rdquo;
+          </p>
+        )}
+        {filtered.map((template) => (
           <button
             key={template.name}
             type="button"
