@@ -395,32 +395,32 @@ export function PlayEditorClient({
         </div>
       </header>
 
-      {/* Tab bar + play context */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <SegmentedControl
-            options={[
-              { value: "routes" as const, label: "Routes" },
-              { value: "formation" as const, label: "Formation" },
-            ]}
-            value={tab}
-            onChange={setTab}
-          />
-          <Link href={`/m/play/${playId}?playbookId=${playbookId}`} className="ml-auto">
-            <Button variant="ghost" size="sm" leftIcon={Smartphone}>
-              Mobile view
-            </Button>
-          </Link>
-        </div>
-        <EditorPlayContextBar
-          playId={playId}
-          playbookId={playbookId}
-          doc={doc}
-          dispatch={dispatch}
-          initialNav={initialNav}
-          initialGroups={initialGroups}
-          onDuplicate={duplicate}
+      {/* Tabs + play context (single row) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SegmentedControl
+          options={[
+            { value: "routes" as const, label: "Routes" },
+            { value: "formation" as const, label: "Formation" },
+          ]}
+          value={tab}
+          onChange={setTab}
         />
+        <div className="min-w-0 flex-1">
+          <EditorPlayContextBar
+            playId={playId}
+            playbookId={playbookId}
+            doc={doc}
+            dispatch={dispatch}
+            initialNav={initialNav}
+            initialGroups={initialGroups}
+            onDuplicate={duplicate}
+          />
+        </div>
+        <Link href={`/m/play/${playId}?playbookId=${playbookId}`}>
+          <Button variant="ghost" size="sm" leftIcon={Smartphone}>
+            Mobile view
+          </Button>
+        </Link>
       </div>
 
       {/* Routes tab */}
