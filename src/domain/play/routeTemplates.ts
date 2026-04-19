@@ -64,7 +64,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0, y: 0.22 },
       { x: -0.18, y: 0.44 },
     ],
-    shapes: ["straight", "curve"],
   },
   {
     name: "Corner",
@@ -75,7 +74,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0, y: 0.22 },
       { x: 0.18, y: 0.44 },
     ],
-    shapes: ["straight", "curve"],
   },
   {
     name: "Curl",
@@ -85,7 +83,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0, y: 0.22 },
       { x: 0.04, y: 0.15 },
     ],
-    shapes: ["straight", "curve"],
   },
   {
     name: "Comeback",
@@ -125,7 +122,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0.18, y: 0.20 },
       { x: 0.18, y: 0.52 },
     ],
-    shapes: ["straight", "straight", "curve"],
   },
   {
     name: "Arrow",
@@ -175,7 +171,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: -0.05, y: 0.20 },
       { x: -0.05, y: 0.55 },
     ],
-    shapes: ["straight", "curve"],
   },
   {
     name: "Fade",
