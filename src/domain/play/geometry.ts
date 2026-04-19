@@ -131,8 +131,8 @@ function zigzagPoints(from: Point2, to: Point2, zigCount?: number): Point2[] {
   const len = Math.hypot(dx, dy);
   // Tight motion marks: fixed amplitude in normalized field coords and
   // wavelength scaled to segment length (min 10 zigs, ~1 zig per 2.5% field).
-  const amplitude = 0.018;
-  const zigs = zigCount ?? Math.max(10, Math.round(len / 0.025));
+  const amplitude = 0.012;
+  const zigs = zigCount ?? Math.max(14, Math.round(len / 0.018));
   const nx = -dy / (len || 1);
   const ny = dx / (len || 1);
   const pts: Point2[] = [from];
