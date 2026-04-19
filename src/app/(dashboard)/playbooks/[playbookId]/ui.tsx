@@ -32,6 +32,7 @@ import {
   renamePlayAction,
   renamePlaybookGroupAction,
   reorderPlaybookGroupsAction,
+  setPlayGroupAction,
   type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
@@ -56,6 +57,14 @@ type GroupBy = "formation" | "group";
 
 const UNASSIGNED = "__unassigned__";
 
+type ThumbSize = "small" | "medium" | "large";
+
+const SIZE_COL_CLASS: Record<ThumbSize, string> = {
+  large: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+  medium: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+  small: "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
+};
+
 export function PlaybookDetailClient({
   playbookId,
   sportVariant,
@@ -78,9 +87,10 @@ export function PlaybookDetailClient({
   const [view, setView] = useState<"active" | "archived">("active");
   const [groupBy, setGroupBy] = useState<GroupBy>("formation");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
-  const [thumbSize, setThumbSize] = useState<"none" | "compact" | "large">("compact");
+  const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showManageGroups, setShowManageGroups] = useState(false);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   // Formation picker state
@@ -121,6 +131,15 @@ export function PlaybookDetailClient({
       else buckets.set(key, { key, label, sortOrder, plays: [p] });
     };
 
+    if (groupBy === "group") {
+      // Always show every existing group (even if empty) plus an Ungrouped bucket,
+      // so the user can drop plays onto empty groups.
+      buckets.set(UNASSIGNED, { key: UNASSIGNED, label: "Ungrouped", plays: [], sortOrder: Number.POSITIVE_INFINITY });
+      for (const g of initialGroups) {
+        buckets.set(g.id, { key: g.id, label: g.name, plays: [], sortOrder: g.sort_order });
+      }
+    }
+
     for (const p of filtered) {
       if (groupBy === "formation") {
         const label = p.formation_name?.trim() || "Unassigned formation";
@@ -145,7 +164,7 @@ export function PlaybookDetailClient({
     });
     for (const s of arr) s.plays.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
     return arr;
-  }, [filtered, groupBy, groupById]);
+  }, [filtered, groupBy, groupById, initialGroups]);
 
   // Scroll-spy: highlight the section nearest the top of the main area.
   useEffect(() => {
@@ -220,6 +239,11 @@ export function PlaybookDetailClient({
     const next = window.prompt("Rename play", current);
     if (next == null) return;
     handle(() => renamePlayAction(id, next));
+  }
+
+  function onDropToGroup(groupKey: string, playId: string) {
+    const target = groupKey === UNASSIGNED ? null : groupKey;
+    handle(() => setPlayGroupAction(playId, target));
   }
 
   function confirmAnd(msg: string, fn: () => void) {
@@ -320,10 +344,10 @@ export function PlaybookDetailClient({
                   <SegmentedControl
                     size="sm"
                     value={thumbSize}
-                    onChange={(v) => setThumbSize(v as "none" | "compact" | "large")}
+                    onChange={(v) => setThumbSize(v as ThumbSize)}
                     options={[
-                      { value: "none", label: "Off" },
-                      { value: "compact", label: "Sm" },
+                      { value: "small", label: "Sm" },
+                      { value: "medium", label: "Md" },
                       { value: "large", label: "Lg" },
                     ]}
                   />
@@ -400,6 +424,10 @@ export function PlaybookDetailClient({
                   ),
               },
             ];
+            const isGroupSection = groupBy === "group";
+            const isDropTarget = isGroupSection;
+            const isNamedGroup = isGroupSection && section.key !== UNASSIGNED;
+            const isDragOver = dragOverKey === section.key;
             return (
               <section
                 key={section.key}
@@ -408,19 +436,59 @@ export function PlaybookDetailClient({
                   if (el) sectionRefs.current.set(section.key, el);
                   else sectionRefs.current.delete(section.key);
                 }}
-                className="space-y-3 scroll-mt-20"
+                className={`scroll-mt-20 space-y-3 rounded-lg transition-colors ${
+                  isDropTarget ? "p-2 -m-2" : ""
+                } ${isDragOver ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
+                onDragOver={
+                  isDropTarget
+                    ? (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dragOverKey !== section.key) setDragOverKey(section.key);
+                      }
+                    : undefined
+                }
+                onDragLeave={
+                  isDropTarget
+                    ? (e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setDragOverKey((k) => (k === section.key ? null : k));
+                        }
+                      }
+                    : undefined
+                }
+                onDrop={
+                  isDropTarget
+                    ? (e) => {
+                        e.preventDefault();
+                        const playId = e.dataTransfer.getData("text/play-id");
+                        setDragOverKey(null);
+                        if (playId) onDropToGroup(section.key, playId);
+                      }
+                    : undefined
+                }
               >
                 <div className="flex items-center gap-2 border-b border-border pb-1.5">
-                  <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
+                  <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
                   <Badge variant="default">{section.plays.length}</Badge>
                 </div>
                 {viewMode === "cards" && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
+
                     {section.plays.map((p) => (
                       <Card
                         key={`${section.key}:${p.id}`}
                         hover
-                        className="relative flex flex-col p-0"
+                        className="relative flex cursor-grab flex-col p-0 active:cursor-grabbing"
+                        draggable={isGroupSection}
+                        onDragStart={
+                          isGroupSection
+                            ? (e) => {
+                                e.dataTransfer.setData("text/play-id", p.id);
+                                e.dataTransfer.effectAllowed = "move";
+                              }
+                            : undefined
+                        }
                       >
                         <Link
                           href={`/plays/${p.id}/edit`}
@@ -432,14 +500,8 @@ export function PlaybookDetailClient({
                               {p.name}
                             </h3>
                           </div>
-                          {p.preview && thumbSize !== "none" && (
-                            <div
-                              className={
-                                thumbSize === "compact"
-                                  ? "mt-2 max-h-24 overflow-hidden"
-                                  : "mt-2"
-                              }
-                            >
+                          {p.preview && (
+                            <div className="mt-2">
                               <PlayPreview preview={p.preview} />
                             </div>
                           )}
@@ -473,7 +535,16 @@ export function PlaybookDetailClient({
                     {section.plays.map((p) => (
                       <li
                         key={`${section.key}:${p.id}`}
-                        className="flex items-center gap-2 pl-8 pr-2"
+                        className={`flex items-center gap-2 pl-8 pr-2 ${isGroupSection ? "cursor-grab active:cursor-grabbing" : ""}`}
+                        draggable={isGroupSection}
+                        onDragStart={
+                          isGroupSection
+                            ? (e) => {
+                                e.dataTransfer.setData("text/play-id", p.id);
+                                e.dataTransfer.effectAllowed = "move";
+                              }
+                            : undefined
+                        }
                       >
                         <Link
                           href={`/plays/${p.id}/edit`}
@@ -788,7 +859,7 @@ function ManageGroupsDialog({
 function PlayPreview({
   preview,
 }: {
-  preview: { players: Player[]; routes: Route[] };
+  preview: { players: Player[]; routes: Route[]; lineOfScrimmageY: number };
 }) {
   // Render in normalized 0-1 field coords (same as editor) so zigzag,
   // curves, dashes and end decorations match the edited play exactly.
@@ -823,42 +894,58 @@ function PlayPreview({
     minSvgY = 0.22;
     maxSvgY = 0.78;
   }
-  const vbX = Math.max(0, minX - PAD);
-  const vbW = Math.min(1, maxX + PAD) - vbX;
-  const vbY = Math.max(0, minSvgY - PAD);
-  const vbH = Math.min(1, maxSvgY + PAD) - vbY;
+  // Always include LOS (svgY = 1 - lineOfScrimmageY) through 10yd downfield
+  // so the faint yard guides stay in frame.
+  const losSvgY = 1 - preview.lineOfScrimmageY;
+  const tenSvgY = 1 - (preview.lineOfScrimmageY + 0.40);
+  minSvgY = Math.min(minSvgY, tenSvgY);
+  maxSvgY = Math.max(maxSvgY, losSvgY);
 
-  // Container is a fixed 16:10 tile so every card is the same size. The
-  // SVG viewBox stretches the content (routes, field) to fill. Per-player
-  // transforms below counter that stretch so player shapes stay true.
+  let vbX = Math.max(0, minX - PAD);
+  let vbW = Math.min(1, maxX + PAD) - vbX;
+  let vbY = Math.max(0, minSvgY - PAD);
+  let vbH = Math.min(1, maxSvgY + PAD) - vbY;
+
+  // Pad the bbox to a fixed 16:10 tile so every thumbnail is the same size.
+  // Narrower content → pad width; taller → pad height.
   const TARGET = 16 / 10;
+  const currentAspect = vbW / vbH;
+  if (currentAspect < TARGET) {
+    const needed = vbH * TARGET;
+    const extra = needed - vbW;
+    vbX = Math.max(0, vbX - extra / 2);
+    vbW = Math.min(1 - vbX, needed);
+  } else if (currentAspect > TARGET) {
+    const needed = vbW / TARGET;
+    const extra = needed - vbH;
+    vbY = Math.max(0, vbY - extra / 2);
+    vbH = Math.min(1 - vbY, needed);
+  }
+
   const aspect = vbW / vbH;
-  // Screen-space ratio scaleY / scaleX after preserveAspectRatio="none".
-  // >1 when viewBox is wider than 16:10 (x is squished on screen, so we
-  // widen shapes in viewBox units to compensate).
+  // Screen-space scaleY/scaleX ratio after preserveAspectRatio="none". Used
+  // below to counter-scale player shapes so circles stay round.
   const sxCorr = aspect / TARGET;
+  // Faint yard-guide positions in SVG-y (y-down).
+  const losY = 1 - preview.lineOfScrimmageY;
+  const fiveY = 1 - (preview.lineOfScrimmageY + 0.20);
+  const tenY = 1 - (preview.lineOfScrimmageY + 0.40);
 
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border">
+    <div
+      className="w-full overflow-hidden rounded-lg border border-border bg-surface-inset"
+      style={{ aspectRatio: `${aspect}` }}
+    >
     <svg
       viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       width="100%"
       height="100%"
       preserveAspectRatio="none"
     >
-      {/* Field: routes/players live in full 0-1 normalized space */}
       <g>
-        <rect x={vbX} y={vbY} width={vbW} height={vbH} fill="#2D8B4E" />
-        <line
-          x1={0}
-          y1={0.5}
-          x2={1}
-          y2={0.5}
-          stroke="rgba(255,255,255,0.4)"
-          strokeWidth={1}
-          strokeDasharray="3 2"
-          vectorEffect="non-scaling-stroke"
-        />
+        <line x1={vbX} x2={vbX + vbW} y1={losY} y2={losY} stroke="rgba(100,116,139,0.45)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+        <line x1={vbX} x2={vbX + vbW} y1={fiveY} y2={fiveY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        <line x1={vbX} x2={vbX + vbW} y1={tenY} y2={tenY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
         {preview.routes.map((r) => {
           const rendered = routeToRenderedSegments(r);
           const stroke = resolveRouteStroke(r, preview.players);
@@ -909,7 +996,7 @@ function PlayPreview({
                 const ux = dxS / len;
                 const uy = dyS / len;
                 if (decoration === "arrow") {
-                  const arrowLen = 0.035;
+                  const arrowLen = 0.05;
                   const cosA = Math.cos(Math.PI / 6);
                   const sinA = Math.sin(Math.PI / 6);
                   const bx = -ux;
@@ -918,11 +1005,20 @@ function PlayPreview({
                   const r1y = sinA * bx + cosA * by;
                   const r2x = cosA * bx + sinA * by;
                   const r2y = -sinA * bx + cosA * by;
+                  const p1x = tipX + arrowLen * r1x;
+                  const p1y = tipY + arrowLen * r1y;
+                  const p2x = tipX + arrowLen * r2x;
+                  const p2y = tipY + arrowLen * r2y;
                   return (
-                    <g key={seg.id}>
-                      <line x1={tipX} y1={tipY} x2={tipX + arrowLen * r1x} y2={tipY + arrowLen * r1y} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-                      <line x1={tipX} y1={tipY} x2={tipX + arrowLen * r2x} y2={tipY + arrowLen * r2y} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-                    </g>
+                    <polygon
+                      key={seg.id}
+                      points={`${tipX},${tipY} ${p1x},${p1y} ${p2x},${p2y}`}
+                      fill={stroke}
+                      stroke={stroke}
+                      strokeWidth={0.8}
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
                   );
                 }
                 if (decoration === "t") {

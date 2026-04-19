@@ -3,6 +3,7 @@ import { routeToPathGeometry } from "../play/geometry";
 import { resolveRouteStroke } from "../play/factory";
 import {
   IN_TO_MM,
+  type PlaysPerSheet,
   type WristbandGridLayout,
   type WristbandIconSize,
   type WristbandLabelMode,
@@ -147,10 +148,11 @@ export function compilePlayToSvg(
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
-  <rect width="100%" height="100%" fill="#fafafa"/>
+  <rect width="100%" height="100%" fill="#ffffff"/>
   <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="system-ui,sans-serif" fill="#111827">${title}</text>
   ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#64748b">${code}</text>` : ""}
-  <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ecfdf5" stroke="#94a3b8" stroke-width="0.4"/>
+  <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#d1d5db" stroke-width="0.3"/>
+  ${yardMarkersSvg(fieldX, fieldY, fieldW, fieldH)}
   ${playerCircles}
   ${routePaths}
   ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#334155">${notes}</text>` : ""}
@@ -159,18 +161,59 @@ export function compilePlayToSvg(
   return { templateKind: kind, svgMarkup: svg, width: w, height: h };
 }
 
-function gridLayoutForPlaysPerSheet(n: 1 | 2 | 4): { cols: number; rows: number } {
-  if (n === 1) return { cols: 1, rows: 1 };
-  if (n === 2) return { cols: 2, rows: 1 };
-  return { cols: 2, rows: 2 };
+function yardMarkersSvg(fx: number, fy: number, fw: number, fh: number): string {
+  const lines: string[] = [];
+  // Horizontal yard lines every ~10% of field height (approx every 2.5 yds in 25-yd view)
+  for (let i = 1; i < 10; i++) {
+    const y = fy + (fh * i) / 10;
+    const bold = i === 5;
+    lines.push(
+      `<line x1="${fx}" y1="${y}" x2="${fx + fw}" y2="${y}" stroke="${bold ? "#cbd5e1" : "#e5e7eb"}" stroke-width="${bold ? 0.25 : 0.15}"/>`,
+    );
+  }
+  // Thin vertical hash thirds
+  for (let i = 1; i < 3; i++) {
+    const x = fx + (fw * i) / 3;
+    lines.push(
+      `<line x1="${x}" y1="${fy}" x2="${x}" y2="${fy + fh}" stroke="#eef2f7" stroke-width="0.12"/>`,
+    );
+  }
+  return lines.join("");
+}
+
+function gridLayoutForPlaysPerSheet(
+  n: PlaysPerSheet,
+  orientation: "portrait" | "landscape",
+): { cols: number; rows: number } {
+  // Portrait uses the first tuple (cols, rows); landscape swaps cols/rows.
+  const portraitShapes: Record<PlaysPerSheet, [number, number]> = {
+    1: [1, 1],
+    2: [1, 2],
+    3: [1, 3],
+    4: [2, 2],
+    5: [2, 3],
+    6: [2, 3],
+    7: [2, 4],
+    8: [2, 4],
+    9: [3, 3],
+    10: [2, 5],
+  };
+  const [pc, pr] = portraitShapes[n];
+  return orientation === "portrait"
+    ? { cols: pc, rows: pr }
+    : { cols: pr, rows: pc };
 }
 
 /** One letter-style page with multiple plays in a grid (full_sheet only). */
 export function compilePlaysheetGridSvg(
   docs: PlayDocument[],
-  opts: { playsPerSheet: 1 | 2 | 4; orientation: "portrait" | "landscape" },
+  opts: {
+    playsPerSheet: PlaysPerSheet;
+    orientation: "portrait" | "landscape";
+    showNotes?: boolean;
+  },
 ): CompiledPrintSvg {
-  const { cols, rows } = gridLayoutForPlaysPerSheet(opts.playsPerSheet);
+  const { cols, rows } = gridLayoutForPlaysPerSheet(opts.playsPerSheet, opts.orientation);
   const basePage = { ...defaultFullSheetTemplate.page, orientation: opts.orientation };
   const w = basePage.orientation === "landscape" ? basePage.heightMm : basePage.widthMm;
   const h = basePage.orientation === "landscape" ? basePage.widthMm : basePage.heightMm;
@@ -186,19 +229,25 @@ export function compilePlaysheetGridSvg(
     const row = Math.floor(i / cols);
     const ox = margin + col * cellW;
     const oy = margin + row * cellH;
-    const inner = renderPlayCellSvg(doc, ox, oy, cellW, cellH);
-    body += inner;
+    body += renderPlayCellSvg(doc, ox, oy, cellW, cellH, opts.showNotes ?? false);
   }
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
-  <rect width="100%" height="100%" fill="#fafafa"/>
+  <rect width="100%" height="100%" fill="#ffffff"/>
   ${body}
 </svg>`;
   return { templateKind: "full_sheet", svgMarkup: svg, width: w, height: h };
 }
 
-function renderPlayCellSvg(doc: PlayDocument, ox: number, oy: number, cw: number, ch: number): string {
+function renderPlayCellSvg(
+  doc: PlayDocument,
+  ox: number,
+  oy: number,
+  cw: number,
+  ch: number,
+  showNotes: boolean,
+): string {
   const vis = doc.printProfile.visibility;
   const scale = doc.printProfile.wristband.diagramScale * doc.printProfile.fontScale * 0.72;
   const title = escSvgText(doc.metadata.coachName);
@@ -209,8 +258,10 @@ function renderPlayCellSvg(doc: PlayDocument, ox: number, oy: number, cw: number
   const codeY = oy + ch * 0.13;
   const fieldX = ox + cw * 0.06;
   const fieldY = oy + ch * 0.18;
+  // Leave more room below the field when notes are on.
+  const fieldHFrac = showNotes ? 0.52 : 0.68;
   const fieldW = cw * 0.88 * scale;
-  const fieldH = ch * 0.55 * scale;
+  const fieldH = ch * fieldHFrac * scale;
 
   let playerCircles = "";
   for (const p of doc.layers.players) {
@@ -250,42 +301,51 @@ function renderPlayCellSvg(doc: PlayDocument, ox: number, oy: number, cw: number
     routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.28}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
   }
 
-  const notes =
-    vis.showNotes && doc.layers.annotations.length
-      ? escSvgText(doc.layers.annotations.map((a) => a.text).join(" · "))
-      : "";
+  const noteLines =
+    showNotes && vis.showNotes
+      ? doc.layers.annotations.map((a) => a.text).filter((t) => t.trim().length > 0)
+      : [];
+  const notesSvg = noteLines.length
+    ? noteLines
+        .map(
+          (line, i) =>
+            `<text x="${fieldX}" y="${fieldY + fieldH + 4 + i * (fontMeta * 1.25)}" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#334155">${escSvgText(line)}</text>`,
+        )
+        .join("")
+    : "";
 
   return `
   <g>
     <text x="${ox + cw / 2}" y="${titleY}" text-anchor="middle" font-size="${fontTitle}" font-family="system-ui,sans-serif" fill="#111827">${title}</text>
     ${code ? `<text x="${ox + cw / 2}" y="${codeY}" text-anchor="middle" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#64748b">${code}</text>` : ""}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ecfdf5" stroke="#94a3b8" stroke-width="0.3"/>
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#d1d5db" stroke-width="0.25"/>
+    ${yardMarkersSvg(fieldX, fieldY, fieldW, fieldH)}
     ${playerCircles}
     ${routePaths}
-    ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 3}" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#334155">${notes}</text>` : ""}
+    ${notesSvg}
   </g>`;
 }
 
 export function compilePlaysheetPdfPages(
   docs: PlayDocument[],
-  opts: { playsPerSheet: 1 | 2 | 4; orientation: "portrait" | "landscape" },
+  opts: {
+    playsPerSheet: PlaysPerSheet;
+    orientation: "portrait" | "landscape";
+    showNotes?: boolean;
+  },
 ): string[] {
   if (docs.length === 0) return [];
-  const per = opts.playsPerSheet;
-  if (per === 1) {
-    return docs.map((d) =>
-      compilePlayToSvg(d, "full_sheet", {
-        templatePatch: {
-          page: { ...defaultFullSheetTemplate.page, orientation: opts.orientation },
-        },
-      }).svgMarkup,
-    );
-  }
+  const cap = opts.playsPerSheet;
   const pages: string[] = [];
-  const cap = per;
   for (let i = 0; i < docs.length; i += cap) {
     const chunk = docs.slice(i, i + cap);
-    pages.push(compilePlaysheetGridSvg(chunk, { playsPerSheet: per, orientation: opts.orientation }).svgMarkup);
+    pages.push(
+      compilePlaysheetGridSvg(chunk, {
+        playsPerSheet: cap,
+        orientation: opts.orientation,
+        showNotes: opts.showNotes,
+      }).svgMarkup,
+    );
   }
   return pages;
 }

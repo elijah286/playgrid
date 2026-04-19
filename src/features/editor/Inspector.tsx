@@ -1,6 +1,6 @@
 "use client";
 
-import { Star, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
@@ -61,50 +61,13 @@ export function Inspector({
             <span className="font-semibold text-foreground">{player.label}</span>
           </div>
 
-          {/* Hot route toggle */}
-          <button
-            type="button"
-            title={player.isHotRoute ? "Remove hot route designation" : "Mark as hot route"}
-            className={`mt-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors ${
-              player.isHotRoute
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                : "border-border bg-surface-inset text-muted hover:border-border hover:bg-surface-raised hover:text-foreground"
-            }`}
-            onClick={() =>
-              dispatch({
-                type: "player.setHotRoute",
-                playerId: player.id,
-                isHotRoute: !player.isHotRoute,
-              })
-            }
-          >
-            <Star
-              className="size-3.5 shrink-0"
-              fill={player.isHotRoute ? "currentColor" : "none"}
-            />
-            <span>{player.isHotRoute ? "Hot route (tap to remove)" : "Mark as hot route"}</span>
-          </button>
-          {/* Show the count of routes for this player */}
           {(() => {
-            const playerRoutes = doc.layers.routes.filter((r) => r.carrierPlayerId === player.id);
-            return playerRoutes.length > 0 ? (
-              <div className="mt-3 space-y-2">
-                <div className="text-xs text-muted">
-                  {playerRoutes.length} route{playerRoutes.length !== 1 ? "s" : ""}
-                </div>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  leftIcon={Trash2}
-                  className="w-full"
-                  onClick={() => {
-                    for (const route of playerRoutes) {
-                      dispatch({ type: "route.remove", routeId: route.id });
-                    }
-                  }}
-                >
-                  Clear routes for {player.label}
-                </Button>
+            const playerRouteCount = doc.layers.routes.filter(
+              (r) => r.carrierPlayerId === player.id,
+            ).length;
+            return playerRouteCount > 0 ? (
+              <div className="mt-2 text-xs text-muted">
+                {playerRouteCount} route{playerRouteCount !== 1 ? "s" : ""}
               </div>
             ) : null;
           })()}

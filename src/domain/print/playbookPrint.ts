@@ -4,6 +4,12 @@ export type PrintProductKind = "playsheet" | "wristband";
 
 export type PlaysheetGrouping = "manual" | "formation" | "name" | "number" | "group";
 
+export type PlaysPerSheet = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+export const PLAYS_PER_SHEET_OPTIONS: readonly PlaysPerSheet[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+] as const;
+
 export type WristbandGridLayout = "8" | "6" | "4" | "4col" | "3";
 export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
 export type WristbandIconSize = "small" | "medium" | "large";
@@ -24,8 +30,8 @@ export const WRISTBAND_ZOOMS: readonly WristbandZoom[] = [50, 75, 100, 125, 150]
 
 export type PlaybookPrintRunConfig = {
   product: PrintProductKind;
-  /** Playsheet: diagrams per letter page (wristband export ignores for page tiling) */
-  playsPerSheet: 1 | 2 | 4;
+  /** Playsheet: diagrams per letter page (1–10). Wristband export ignores. */
+  playsPerSheet: PlaysPerSheet;
   sheetOrientation: "portrait" | "landscape";
   playsheetGrouping: PlaysheetGrouping;
   /** Visual emphasis only for now (feeds print compiler) */

@@ -23,7 +23,7 @@ export type PlaybookDetailPlayRow = {
   sort_order: number;
   updated_at: string | null;
   is_archived: boolean;
-  preview: { players: Player[]; routes: Route[] } | null;
+  preview: { players: Player[]; routes: Route[]; lineOfScrimmageY: number } | null;
 };
 
 export async function listPlaysAction(
@@ -69,7 +69,10 @@ export async function listPlaysAction(
     .map((r) => r.current_version_id as string | null)
     .filter((id): id is string => typeof id === "string" && id.length > 0);
 
-  const previewByVersion = new Map<string, { players: Player[]; routes: Route[] }>();
+  const previewByVersion = new Map<
+    string,
+    { players: Player[]; routes: Route[]; lineOfScrimmageY: number }
+  >();
   if (versionIds.length > 0) {
     const { data: versions } = await supabase
       .from("play_versions")
@@ -81,6 +84,7 @@ export async function listPlaysAction(
       previewByVersion.set(v.id as string, {
         players: doc.layers?.players ?? [],
         routes: doc.layers?.routes ?? [],
+        lineOfScrimmageY: typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
       });
     }
   }
@@ -134,6 +138,19 @@ export async function createPlayAction(playbookId: string, initialPlayers?: Play
     .limit(1)
     .maybeSingle();
   const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
+  // Auto-assign next sequential wristband code for this playbook. Only considers
+  // codes that are pure integers (so manual tags like "HOT" don't break numbering).
+  const { data: codeRows } = await supabase
+    .from("plays")
+    .select("wristband_code")
+    .eq("playbook_id", playbookId);
+  const maxCode = (codeRows ?? [])
+    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
+    .filter((n): n is number => Number.isFinite(n))
+    .reduce((m, n) => Math.max(m, n), 0);
+  const nextCode = String(maxCode + 1).padStart(2, "0");
+  doc.metadata.wristbandCode = nextCode;
 
   const { data: play, error: playErr } = await supabase
     .from("plays")
@@ -660,9 +677,14 @@ export async function createPlaybookGroupAction(playbookId: string, name: string
 export async function renamePlaybookGroupAction(groupId: string, name: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
-  const label = name.trim() || "Group";
+
+  const label = name.trim();
+  if (!label) return { ok: false as const, error: "Name cannot be empty." };
+
   const { error } = await supabase
     .from("playbook_groups")
     .update({ name: label })
@@ -674,8 +696,17 @@ export async function renamePlaybookGroupAction(groupId: string, name: string) {
 export async function deletePlaybookGroupAction(groupId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error: unassignErr } = await supabase
+    .from("plays")
+    .update({ group_id: null })
+    .eq("group_id", groupId);
+  if (unassignErr) return { ok: false as const, error: unassignErr.message };
+
   const { error } = await supabase.from("playbook_groups").delete().eq("id", groupId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };
@@ -687,7 +718,9 @@ export async function reorderPlaybookGroupsAction(
 ) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
   for (let i = 0; i < orderedGroupIds.length; i++) {
     const { error } = await supabase

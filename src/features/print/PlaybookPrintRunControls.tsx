@@ -3,10 +3,12 @@
 import { SegmentedControl, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
+  PLAYS_PER_SHEET_OPTIONS,
   WRISTBAND_HEIGHTS_IN,
   WRISTBAND_WIDTHS_IN,
   WRISTBAND_ZOOMS,
   type PlaybookPrintRunConfig,
+  type PlaysPerSheet,
   type PlaysheetGrouping,
   type WristbandGridLayout,
   type WristbandIconSize,
@@ -94,33 +96,25 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
       </div>
 
       {config.product === "playsheet" && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">Plays per sheet</span>
-            <select
-              className="rounded-lg border border-border bg-surface-raised px-2 py-1.5"
-              value={String(config.playsPerSheet)}
-              onChange={(e) => patch({ playsPerSheet: Number(e.target.value) as 1 | 2 | 4 })}
-            >
-              <option value="1">1</option>
-              <option value="2">2 (side by side)</option>
-              <option value="4">4 (2×2 grid)</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">Page orientation</span>
-            <select
-              className="rounded-lg border border-border bg-surface-raised px-2 py-1.5"
-              value={config.sheetOrientation}
-              onChange={(e) =>
-                patch({ sheetOrientation: e.target.value as "portrait" | "landscape" })
-              }
-            >
-              <option value="portrait">Portrait</option>
-              <option value="landscape">Landscape</option>
-            </select>
-          </label>
-          <div className="sm:col-span-2">
+        <div className="space-y-4">
+          <PillGroup
+            label="Plays per sheet"
+            value={config.playsPerSheet}
+            onChange={(v) => patch({ playsPerSheet: v as PlaysPerSheet })}
+            options={PLAYS_PER_SHEET_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+          />
+
+          <PillGroup
+            label="Page orientation"
+            value={config.sheetOrientation}
+            onChange={(v) => patch({ sheetOrientation: v })}
+            options={[
+              { value: "portrait" as const, label: "Portrait" },
+              { value: "landscape" as const, label: "Landscape" },
+            ]}
+          />
+
+          <div>
             <span className="text-sm text-muted">Group / sort plays for export</span>
             <Select
               className="mt-1"
@@ -129,38 +123,15 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
             />
           </div>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">Backfield yards (diagram emphasis)</span>
-            <input
-              type="range"
-              min={5}
-              max={25}
-              value={config.backfieldYards}
-              onChange={(e) => patch({ backfieldYards: Number(e.target.value) })}
-              className="accent-primary"
-            />
-            <span className="text-xs text-muted">{config.backfieldYards} yds</span>
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">Downfield yards (diagram emphasis)</span>
-            <input
-              type="range"
-              min={5}
-              max={35}
-              value={config.downfieldYards}
-              onChange={(e) => patch({ downfieldYards: Number(e.target.value) })}
-              className="accent-primary"
-            />
-            <span className="text-xs text-muted">{config.downfieldYards} yds</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+
+          <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               className="size-4 accent-primary"
               checked={config.includeCommentsAndNotes}
               onChange={(e) => patch({ includeCommentsAndNotes: e.target.checked })}
             />
-            Include comments &amp; notes on print
+            Show notes below plays
           </label>
         </div>
       )}
