@@ -178,7 +178,8 @@ export type PlayMetadata = {
   sheetAbbrev: string;
   formation: string;
   concept: string;
-  tag: string;
+  /** User-defined tags for grouping (e.g. pass, run, reverse). */
+  tags: string[];
 };
 
 export type PlayLayers = {
