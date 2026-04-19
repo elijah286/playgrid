@@ -59,28 +59,32 @@ const SIMPLIFY_EPSILON = 0.012;
 
 const NODE_RADIUS = 0.009;
 
-// Background colors per mode
+// Background colors per mode. White is solid (main == dark) so the
+// field reads as a crisp printed diagram.
 const BG_COLORS: Record<string, { main: string; dark: string }> = {
   green: { main: "#2D8B4E", dark: "#247540" },
-  white: { main: "#F8FAFC", dark: "#E2E8F0" },
+  white: { main: "#FFFFFF", dark: "#FFFFFF" },
   black: { main: "#0A0A0A", dark: "#141414" },
-  gray:  { main: "#1E1E2E", dark: "#16161E" },
 };
 
 const LINE_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.15)",
-  white: "rgba(0,0,0,0.08)",
-  black: "rgba(255,255,255,0.10)",
-  gray:  "rgba(255,255,255,0.10)",
+  green: "rgba(255,255,255,0.30)",
+  white: "rgba(0,0,0,0.55)",
+  black: "rgba(255,255,255,0.22)",
 };
 
 /** Hash marks render a touch brighter than yard lines so they read clearly
- *  as on-field markings rather than blending into the background gradient. */
+ *  as on-field markings rather than blending into the background. */
 const HASH_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.55)",
-  white: "rgba(0,0,0,0.45)",
-  black: "rgba(255,255,255,0.45)",
-  gray:  "rgba(255,255,255,0.45)",
+  green: "rgba(255,255,255,0.75)",
+  white: "rgba(0,0,0,0.70)",
+  black: "rgba(255,255,255,0.60)",
+};
+
+const NUMBER_COLORS: Record<string, string> = {
+  green: "rgba(255,255,255,0.85)",
+  white: "rgba(0,0,0,0.80)",
+  black: "rgba(255,255,255,0.70)",
 };
 
 /** Thin outline around the whole field so it visually separates from the
@@ -88,17 +92,15 @@ const HASH_COLORS: Record<string, string> = {
  *  blends into the app surface). */
 const BORDER_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.35)",
-  white: "rgba(0,0,0,0.35)",
+  white: "rgba(0,0,0,0.50)",
   black: "rgba(255,255,255,0.30)",
-  gray:  "rgba(255,255,255,0.25)",
 };
 
 /** Contrasting accent color per-background for the LOS marker and ball. */
 const LOS_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.55)",
-  white: "rgba(0,0,0,0.40)",
+  white: "rgba(0,0,0,0.55)",
   black: "rgba(255,255,255,0.50)",
-  gray:  "rgba(255,255,255,0.45)",
 };
 
 /* ------------------------------------------------------------------ */
@@ -827,11 +829,14 @@ export function EditorCanvas({
 
   /* ---------- Dynamic field colors ---------- */
 
-  const bg = BG_COLORS[fieldBackground ?? "green"];
-  const lineColor = LINE_COLORS[fieldBackground ?? "green"];
-  const hashColor = HASH_COLORS[fieldBackground ?? "green"];
-  const borderColor = BORDER_COLORS[fieldBackground ?? "green"];
-  const losColor = LOS_COLORS[fieldBackground ?? "green"];
+  // Legacy "gray" plays fall back to the new solid-white theme.
+  const bgKey = fieldBackground === "gray" ? "white" : (fieldBackground ?? "green");
+  const bg = BG_COLORS[bgKey];
+  const lineColor = LINE_COLORS[bgKey];
+  const hashColor = HASH_COLORS[bgKey];
+  const numberColor = NUMBER_COLORS[bgKey];
+  const borderColor = BORDER_COLORS[bgKey];
+  const losColor = LOS_COLORS[bgKey];
 
   /* ---------- Line of scrimmage ---------- */
 
@@ -877,21 +882,25 @@ export function EditorCanvas({
         x2={fieldAspect}
         y2={svgY}
         stroke={lineColor}
-        strokeWidth={0.002}
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
       />,
     );
     const label = yardLabel(yd);
     if (label) {
+      // Numbers sit just inside each hash column — the same location they
+      // appear on a real field (between the sideline and the hash).
       const numY = svgY + 0.018;
+      const NUM_X_LEFT = 0.27 * fieldAspect;
+      const NUM_X_RIGHT = 0.73 * fieldAspect;
       yardNumbers.push(
         <text
           key={`nL${yd}`}
-          x={0.04 * fieldAspect}
+          x={NUM_X_LEFT}
           y={numY}
-          fontSize={0.035}
+          fontSize={0.04}
           fontWeight={700}
-          fill={lineColor}
-          opacity={0.55}
+          fill={numberColor}
           textAnchor="middle"
           pointerEvents="none"
         >
@@ -899,12 +908,11 @@ export function EditorCanvas({
         </text>,
         <text
           key={`nR${yd}`}
-          x={0.96 * fieldAspect}
+          x={NUM_X_RIGHT}
           y={numY}
-          fontSize={0.035}
+          fontSize={0.04}
           fontWeight={700}
-          fill={lineColor}
-          opacity={0.55}
+          fill={numberColor}
           textAnchor="middle"
           pointerEvents="none"
         >
@@ -935,7 +943,7 @@ export function EditorCanvas({
           x2={HASH_X_LEFT}
           y2={y + TICK_HALF}
           stroke={hashColor}
-          strokeWidth={1.5}
+          strokeWidth={2.25}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />,
@@ -946,7 +954,7 @@ export function EditorCanvas({
           x2={HASH_X_RIGHT}
           y2={y + TICK_HALF}
           stroke={hashColor}
-          strokeWidth={1.5}
+          strokeWidth={2.25}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />,
