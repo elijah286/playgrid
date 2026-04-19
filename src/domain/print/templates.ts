@@ -1,6 +1,17 @@
 import type { PlayDocument } from "../play/types";
 import { routeToPathGeometry } from "../play/geometry";
 import { resolveRouteStroke } from "../play/factory";
+import {
+  IN_TO_MM,
+  type WristbandGridLayout,
+  type WristbandIconSize,
+  type WristbandLabelMode,
+  type WristbandLabelStyle,
+  type WristbandPlayerShape,
+  type WristbandRouteWeight,
+  type WristbandZoom,
+  wristbandGridDims,
+} from "./playbookPrint";
 
 export type PrintTemplateKind = "wristband" | "full_sheet";
 
@@ -279,16 +290,197 @@ export function compilePlaysheetPdfPages(
   return pages;
 }
 
+export type WristbandGridOptions = {
+  widthIn: number;
+  heightIn: number;
+  layout: WristbandGridLayout;
+  zoom: WristbandZoom;
+  iconSize: WristbandIconSize;
+  routeWeight: WristbandRouteWeight;
+  labelStyle: WristbandLabelStyle;
+  labels: WristbandLabelMode;
+  playerShape: WristbandPlayerShape;
+  colorCoding: boolean;
+};
+
+function iconRadius(size: WristbandIconSize): number {
+  if (size === "small") return 1.3;
+  if (size === "large") return 2.4;
+  return 1.8;
+}
+
+function routeStrokeMm(weight: WristbandRouteWeight): number {
+  if (weight === "thin") return 0.35;
+  if (weight === "thick") return 0.9;
+  return 0.6;
+}
+
+function labelFontMm(style: WristbandLabelStyle): { title: number; meta: number } {
+  if (style === "prominent") return { title: 3.4, meta: 2.4 };
+  return { title: 2.4, meta: 1.8 };
+}
+
+function groupLabelColor(doc: PlayDocument): string {
+  const tag = (doc.metadata.tags ?? [])[0]?.toLowerCase() ?? "";
+  if (tag.includes("run")) return "#b45309";
+  if (tag.includes("pass")) return "#1d4ed8";
+  if (tag.includes("rpo")) return "#7c3aed";
+  if (tag.includes("screen")) return "#0f766e";
+  if (tag.includes("trick") || tag.includes("reverse")) return "#be185d";
+  return "#111827";
+}
+
+function playerMarkerSvg(
+  shape: WristbandPlayerShape,
+  cx: number,
+  cy: number,
+  r: number,
+  fill: string,
+  stroke: string,
+): string {
+  if (shape === "x") {
+    const d = r * 0.9;
+    return `<path d="M ${cx - d} ${cy - d} L ${cx + d} ${cy + d} M ${cx + d} ${cy - d} L ${cx - d} ${cy + d}" stroke="${stroke}" stroke-width="${Math.max(0.4, r * 0.45)}" stroke-linecap="round" fill="none"/>`;
+  }
+  if (shape === "diamond") {
+    const d = r * 1.15;
+    return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy} L ${cx} ${cy + d} L ${cx - d} ${cy} Z" fill="${fill}" stroke="${stroke}" stroke-width="0.3"/>`;
+  }
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="0.3"/>`;
+}
+
+function renderWristbandTile(
+  doc: PlayDocument,
+  ox: number,
+  oy: number,
+  cw: number,
+  ch: number,
+  opts: WristbandGridOptions,
+): string {
+  const vis = doc.printProfile.visibility;
+  const zoom = opts.zoom / 100;
+  const fonts = labelFontMm(opts.labelStyle);
+  const showName = opts.labels !== "number";
+  const showCode = opts.labels !== "name" && vis.showWristbandCode;
+  const labelColor = opts.colorCoding ? groupLabelColor(doc) : "#111827";
+
+  const headerH = showName || showCode ? (opts.labelStyle === "prominent" ? 5 : 3.6) : 0;
+  const fieldPadX = cw * 0.04;
+  const fieldPadTop = headerH;
+  const fieldPadBottom = cw * 0.03;
+  const fieldOuterW = cw - fieldPadX * 2;
+  const fieldOuterH = ch - fieldPadTop - fieldPadBottom;
+  const fieldW = fieldOuterW * zoom;
+  const fieldH = fieldOuterH * zoom;
+  const fieldX = ox + fieldPadX + (fieldOuterW - fieldW) / 2;
+  const fieldY = oy + fieldPadTop + (fieldOuterH - fieldH) / 2;
+
+  const pr = iconRadius(opts.iconSize);
+  const strokeW = routeStrokeMm(opts.routeWeight);
+
+  let header = "";
+  if (showName) {
+    const name = escSvgText(doc.metadata.coachName || "");
+    header += `<text x="${ox + cw / 2}" y="${oy + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="system-ui,sans-serif" fill="${labelColor}">${name}</text>`;
+  }
+  if (showCode) {
+    const code = escSvgText(doc.metadata.wristbandCode || "");
+    const cy = showName ? oy + fonts.title * 0.95 + fonts.meta * 1.1 : oy + fonts.meta * 1.1;
+    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="system-ui,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
+  }
+
+  let players = "";
+  for (const p of doc.layers.players) {
+    const px = fieldX + p.position.x * fieldW;
+    const py = fieldY + (1 - p.position.y) * fieldH;
+    players += playerMarkerSvg(opts.playerShape, px, py, pr, p.style.fill, p.style.stroke);
+    if (vis.showPlayerLabels) {
+      players += `<text x="${px}" y="${py + pr * 0.6}" text-anchor="middle" font-size="${Math.max(1.4, pr * 1.1)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif">${escSvgText(p.label)}</text>`;
+    }
+  }
+
+  let routes = "";
+  for (const r of doc.layers.routes) {
+    const geometry = routeToPathGeometry(r);
+    const d = geometry.segments
+      .map((seg, i) => {
+        if (seg.type === "line") {
+          const fx = fieldX + seg.from.x * fieldW;
+          const fy = fieldY + (1 - seg.from.y) * fieldH;
+          const tx = fieldX + seg.to.x * fieldW;
+          const ty = fieldY + (1 - seg.to.y) * fieldH;
+          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
+        }
+        const fx = fieldX + seg.from.x * fieldW;
+        const fy = fieldY + (1 - seg.from.y) * fieldH;
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        const tx = fieldX + seg.to.x * fieldW;
+        const ty = fieldY + (1 - seg.to.y) * fieldH;
+        return i === 0
+          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
+          : `Q ${cx} ${cy} ${tx} ${ty}`;
+      })
+      .join(" ");
+    routes += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${strokeW}" stroke-linecap="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+  }
+
+  return `
+  <g>
+    <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.25"/>
+    ${header}
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.25"/>
+    ${routes}
+    ${players}
+  </g>`;
+}
+
+/** One wristband page tiled as a grid. Returns a single SVG. */
+export function compileWristbandGridSvg(
+  docs: PlayDocument[],
+  opts: WristbandGridOptions,
+): CompiledPrintSvg {
+  const w = opts.widthIn * IN_TO_MM;
+  const h = opts.heightIn * IN_TO_MM;
+  const { rows, cols } = wristbandGridDims(opts.layout);
+  const pad = 1.5;
+  const cellW = (w - pad * 2) / cols;
+  const cellH = (h - pad * 2) / rows;
+
+  let body = "";
+  for (let i = 0; i < rows * cols; i++) {
+    const doc = docs[i];
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const ox = pad + col * cellW;
+    const oy = pad + row * cellH;
+    if (doc) {
+      body += renderWristbandTile(doc, ox, oy, cellW, cellH, opts);
+    } else {
+      body += `<rect x="${ox}" y="${oy}" width="${cellW}" height="${cellH}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.25" stroke-dasharray="1 1"/>`;
+    }
+  }
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
+  <rect width="100%" height="100%" fill="#f1f5f9"/>
+  ${body}
+</svg>`;
+
+  return { templateKind: "wristband", svgMarkup: svg, width: w, height: h };
+}
+
+/** One PDF page per wristband (tiled with N plays each). */
 export function compileWristbandPdfPages(
   docs: PlayDocument[],
-  opts: { orientation: "portrait" | "landscape"; wristbandWidthMm: number },
+  opts: WristbandGridOptions,
 ): string[] {
-  const patch: Partial<PrintTemplateDefinition> = {
-    page: {
-      ...defaultWristbandTemplate.page,
-      widthMm: opts.wristbandWidthMm,
-      orientation: opts.orientation,
-    },
-  };
-  return docs.map((d) => compilePlayToSvg(d, "wristband", { templatePatch: patch }).svgMarkup);
+  if (docs.length === 0) return [];
+  const per = wristbandGridDims(opts.layout).rows * wristbandGridDims(opts.layout).cols;
+  const pages: string[] = [];
+  for (let i = 0; i < docs.length; i += per) {
+    const chunk = docs.slice(i, i + per);
+    pages.push(compileWristbandGridSvg(chunk, opts).svgMarkup);
+  }
+  return pages;
 }

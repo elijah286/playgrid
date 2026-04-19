@@ -7,14 +7,16 @@ import {
   applyExportPresentation,
   defaultPlaybookPrintRunConfig,
   sortNavPlaysForPrint,
-  wristbandWidthMm,
+  wristbandTilesPerBand,
   type PlaybookGroupRow,
   type PlaybookPrintRunConfig,
 } from "@/domain/print/playbookPrint";
 import {
   compilePlayToSvg,
   compilePlaysheetPdfPages,
+  compileWristbandGridSvg,
   compileWristbandPdfPages,
+  type WristbandGridOptions,
 } from "@/domain/print/templates";
 import { exportSvgsToMultiPagePdf } from "@/features/print/exportPdf";
 import { PlaybookPrintRunControls } from "@/features/print/PlaybookPrintRunControls";
@@ -81,12 +83,47 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
     });
   }
 
-  const firstPreview = useMemo(() => {
+  const wristbandGridOpts: WristbandGridOptions = useMemo(
+    () => ({
+      widthIn: config.wristbandWidthIn,
+      heightIn: config.wristbandHeightIn,
+      layout: config.wristbandGridLayout,
+      zoom: config.wristbandZoom,
+      iconSize: config.wristbandIconSize,
+      routeWeight: config.wristbandRouteWeight,
+      labelStyle: config.wristbandLabelStyle,
+      labels: config.wristbandLabels,
+      playerShape: config.wristbandPlayerShape,
+      colorCoding: config.wristbandColorCoding,
+    }),
+    [
+      config.wristbandWidthIn,
+      config.wristbandHeightIn,
+      config.wristbandGridLayout,
+      config.wristbandZoom,
+      config.wristbandIconSize,
+      config.wristbandRouteWeight,
+      config.wristbandLabelStyle,
+      config.wristbandLabels,
+      config.wristbandPlayerShape,
+      config.wristbandColorCoding,
+    ],
+  );
+
+  const preview = useMemo(() => {
+    if (config.product === "wristband") {
+      const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
+      const chosen = initialPack.filter((r) => selected.has(r.id));
+      const docs = (chosen.length > 0 ? chosen : initialPack.slice(0, 1))
+        .slice(0, tiles)
+        .map((r) => r.document);
+      if (docs.length === 0) return null;
+      return compileWristbandGridSvg(docs, wristbandGridOpts).svgMarkup;
+    }
     const chosen = initialPack.find((r) => selected.has(r.id)) ?? initialPack[0];
     if (!chosen) return null;
-    const kind = config.product === "wristband" ? "wristband" : "full_sheet";
-    return compilePlayToSvg(chosen.document, kind).svgMarkup;
-  }, [initialPack, selected, config.product]);
+    return compilePlayToSvg(chosen.document, "full_sheet").svgMarkup;
+  }, [initialPack, selected, config.product, config.wristbandGridLayout, wristbandGridOpts]);
 
   function exportPdf() {
     startTransition(async () => {
@@ -113,10 +150,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
           orientation: config.sheetOrientation,
         });
       } else {
-        pages = compileWristbandPdfPages(docs, {
-          orientation: config.sheetOrientation,
-          wristbandWidthMm: wristbandWidthMm(config.wristbandSize),
-        });
+        pages = compileWristbandPdfPages(docs, wristbandGridOpts);
       }
 
       const label = config.product === "wristband" ? "wristband" : "playcard";
@@ -225,12 +259,14 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
 
       <div className="space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Preview (first selected play)
+          {config.product === "wristband"
+            ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"`
+            : "Preview (first selected play)"}
         </p>
-        {firstPreview ? (
+        {preview ? (
           <div
-            className="overflow-hidden rounded-xl border border-border bg-surface-raised p-4"
-            dangerouslySetInnerHTML={{ __html: firstPreview }}
+            className="overflow-auto rounded-xl border border-border bg-surface-raised p-4 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full"
+            dangerouslySetInnerHTML={{ __html: preview }}
           />
         ) : (
           <p className="text-sm text-muted">Select a play to preview.</p>
