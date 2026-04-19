@@ -463,7 +463,7 @@ export function PlayEditorClient({
 
             <div
               className="relative w-full overflow-hidden"
-              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)} / 1` }}
+              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)} / 1` }}
             >
               <EditorCanvas
                 doc={doc}
@@ -480,7 +480,7 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)}
+                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)}
                 fieldBackground={doc.fieldBackground}
               />
             </div>
@@ -564,7 +564,7 @@ export function PlayEditorClient({
 
             <div
               className="relative w-full overflow-hidden"
-              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)} / 1` }}
+              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)} / 1` }}
             >
               <EditorCanvas
                 doc={doc}
@@ -583,7 +583,7 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)}
+                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)}
                 fieldBackground={doc.fieldBackground}
               />
             </div>

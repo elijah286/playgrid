@@ -121,7 +121,7 @@ export function FormationEditorClient(props: Props) {
   }
 
   const fieldAspect =
-    doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55);
+    doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
 
   return (
     <div className="flex flex-col gap-5">
