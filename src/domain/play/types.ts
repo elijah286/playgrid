@@ -115,6 +115,8 @@ export type Player = {
   eligible: boolean;
   style: PlayerStyle;
   shape?: PlayerShape;
+  /** When true, a star badge is rendered on the player circle to mark them as a hot route. */
+  isHotRoute?: boolean;
 };
 
 export type Annotation = {
