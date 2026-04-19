@@ -29,13 +29,17 @@ export function resolveLineOfScrimmage(
   return doc.lineOfScrimmage ?? "line";
 }
 
-/** Normalized y where the LOS lives. Defaults to mid-field (0.5). */
+/**
+ * Normalized y where the LOS lives.
+ * Default 0.4 = 10 yards behind the line in the standard 25-yard display window
+ * (10 yds backfield + 15 yds downfield).
+ */
 export function resolveLineOfScrimmageY(doc: PlayDocument): number {
   const y = doc.lineOfScrimmageY;
   if (typeof y === "number" && Number.isFinite(y)) {
     return Math.max(0, Math.min(1, y));
   }
-  return 0.5;
+  return 0.4;
 }
 
 /** Route end-decoration, defaulting to arrow. */
@@ -47,17 +51,23 @@ export function resolveEndDecoration(route: Route): EndDecoration {
 /*  Sport-variant helpers                                             */
 /* ------------------------------------------------------------------ */
 
-/** Canonical field + roster dimensions for each supported sport variant. */
+/**
+ * Canonical field dimensions for each sport variant.
+ *
+ * fieldLengthYds = 25 across the board — the display window always shows
+ * 10 yards of backfield + 15 yards downfield from the line of scrimmage.
+ * fieldWidthYds reflects the real sideline-to-sideline width for each sport.
+ */
 export function sportProfileForVariant(variant: SportVariant): SportProfile {
   switch (variant) {
     case "flag_5v5":
-      return { variant, offensePlayerCount: 5, fieldWidthYds: 25, fieldLengthYds: 30, motionMustNotAdvanceTowardGoal: true };
+      return { variant, offensePlayerCount: 5,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_7v7":
-      return { variant, offensePlayerCount: 7, fieldWidthYds: 30, fieldLengthYds: 40, motionMustNotAdvanceTowardGoal: true };
+      return { variant, offensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "six_man":
-      return { variant, offensePlayerCount: 6, fieldWidthYds: 40, fieldLengthYds: 80, motionMustNotAdvanceTowardGoal: false };
+      return { variant, offensePlayerCount: 6,  fieldWidthYds: 40, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
     case "tackle_11":
-      return { variant, offensePlayerCount: 11, fieldWidthYds: 53, fieldLengthYds: 100, motionMustNotAdvanceTowardGoal: false };
+      return { variant, offensePlayerCount: 11, fieldWidthYds: 53, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
   }
 }
 
@@ -87,41 +97,50 @@ function mkPlayer(
   };
 }
 
-/** Default offensive formation for each sport variant. */
+/**
+ * Default offensive formation for each sport variant.
+ *
+ * All y-positions are calibrated for the 25-yard display window
+ * (LOS default y=0.40 = 10 yds from bottom):
+ *   y=0.38 ≈ on the line of scrimmage (0.5 yd back)
+ *   y=0.34 ≈ 1.5 yds back
+ *   y=0.28 ≈ 3 yds back
+ *   y=0.20 ≈ 5 yds back (shotgun / RB depth)
+ */
 export function defaultPlayersForVariant(variant: SportVariant): Player[] {
   switch (variant) {
     case "flag_5v5":
       return [
-        mkPlayer("p_qb", "QB",  "Q", 0.50, 0.12),
-        mkPlayer("p_c",  "C",   "C", 0.50, 0.06, false),
-        mkPlayer("p_x",  "WR",  "X", 0.15, 0.38),
-        mkPlayer("p_y",  "WR",  "Y", 0.50, 0.38),
-        mkPlayer("p_z",  "WR",  "Z", 0.85, 0.38),
+        mkPlayer("p_qb", "QB",  "Q", 0.50, 0.20),        // shotgun QB, 5 yds back
+        mkPlayer("p_c",  "C",   "C", 0.50, 0.38, false), // center on line
+        mkPlayer("p_x",  "WR",  "X", 0.12, 0.38),        // wide left, on line
+        mkPlayer("p_y",  "WR",  "Y", 0.32, 0.38),        // inside left, on line
+        mkPlayer("p_z",  "WR",  "Z", 0.88, 0.38),        // wide right, on line
       ];
     case "flag_7v7":
       return defaultFlagSevenPlayers();
     case "six_man":
       return [
-        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.12),
-        mkPlayer("p_c",  "C",     "C", 0.50, 0.06, false),
-        mkPlayer("p_lt", "OTHER", "T", 0.38, 0.06, false),
-        mkPlayer("p_rt", "OTHER", "E", 0.62, 0.06),
-        mkPlayer("p_x",  "WR",    "X", 0.12, 0.28),
-        mkPlayer("p_z",  "WR",    "Z", 0.88, 0.28),
+        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.20),        // shotgun QB, 5 yds back
+        mkPlayer("p_c",  "C",     "C", 0.50, 0.38, false), // center on line
+        mkPlayer("p_lt", "OTHER", "T", 0.38, 0.38, false), // left tackle on line
+        mkPlayer("p_rt", "OTHER", "E", 0.62, 0.38),        // right end on line
+        mkPlayer("p_x",  "WR",    "X", 0.12, 0.34),        // wide left, 1.5 yds back
+        mkPlayer("p_z",  "WR",    "Z", 0.88, 0.34),        // wide right, 1.5 yds back
       ];
     case "tackle_11":
       return [
-        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.22),
-        mkPlayer("p_c",  "C",     "C", 0.50, 0.06, false),
-        mkPlayer("p_lg", "OTHER", "G", 0.44, 0.06, false),
-        mkPlayer("p_rg", "OTHER", "G", 0.56, 0.06, false),
-        mkPlayer("p_lt", "OTHER", "T", 0.37, 0.06, false),
-        mkPlayer("p_rt", "OTHER", "T", 0.63, 0.06, false),
-        mkPlayer("p_te", "TE",    "Y", 0.72, 0.06),
-        mkPlayer("p_x",  "WR",    "X", 0.05, 0.06),
-        mkPlayer("p_z",  "WR",    "Z", 0.90, 0.14),
-        mkPlayer("p_h",  "WR",    "H", 0.82, 0.22),
-        mkPlayer("p_rb", "RB",    "B", 0.50, 0.34),
+        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.34),        // under center, 1.5 yds back
+        mkPlayer("p_c",  "C",     "C", 0.50, 0.38, false), // center on line
+        mkPlayer("p_lg", "OTHER", "G", 0.44, 0.38, false), // left guard on line
+        mkPlayer("p_rg", "OTHER", "G", 0.56, 0.38, false), // right guard on line
+        mkPlayer("p_lt", "OTHER", "T", 0.37, 0.38, false), // left tackle on line
+        mkPlayer("p_rt", "OTHER", "T", 0.63, 0.38, false), // right tackle on line
+        mkPlayer("p_te", "TE",    "Y", 0.72, 0.38),        // tight end on line
+        mkPlayer("p_x",  "WR",    "X", 0.05, 0.38),        // split end on line
+        mkPlayer("p_z",  "WR",    "Z", 0.90, 0.34),        // flanker, 1.5 yds back
+        mkPlayer("p_h",  "WR",    "H", 0.82, 0.30),        // slot, 2.5 yds back
+        mkPlayer("p_rb", "RB",    "B", 0.50, 0.22),        // RB, 4.5 yds back
       ];
   }
 }
@@ -154,13 +173,13 @@ export function defaultFlagSevenPlayers(): Player[] {
   });
 
   return [
-    mk("p_qb", "QB", "Q", 0.5, 0.12),
-    mk("p_c", "C", "C", 0.5, 0.06),
-    mk("p_s", "WR", "S", 0.22, 0.22),
-    mk("p_x", "WR", "X", 0.12, 0.38),
-    mk("p_y", "WR", "Y", 0.5, 0.38),
-    mk("p_z", "WR", "Z", 0.88, 0.38),
-    mk("p_f", "RB", "F", 0.78, 0.22),
+    mk("p_qb", "QB", "Q", 0.50, 0.20),  // shotgun QB, 5 yds back
+    mk("p_c",  "C",  "C", 0.50, 0.38),  // center on line
+    mk("p_s",  "WR", "S", 0.28, 0.34),  // slot left, 1.5 yds back
+    mk("p_x",  "WR", "X", 0.10, 0.38),  // wide left, on line
+    mk("p_y",  "WR", "Y", 0.66, 0.34),  // slot right, 1.5 yds back
+    mk("p_z",  "WR", "Z", 0.90, 0.38),  // wide right, on line
+    mk("p_f",  "RB", "F", 0.50, 0.28),  // flex/RB, 3 yds back
   ];
 }
 
@@ -174,6 +193,7 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
   const base: PlayDocument = {
     schemaVersion: PLAY_DOCUMENT_SCHEMA_VERSION,
     sportProfile: sportProfileForVariant(variant),
+    lineOfScrimmageY: 0.4,
     metadata: {
       coachName: "Trips Right — Stick",
       shorthand: "TR STK",
