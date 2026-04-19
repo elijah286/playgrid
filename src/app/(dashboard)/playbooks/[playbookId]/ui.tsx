@@ -614,6 +614,16 @@ function PlayPreview({
   // Thumbnail heights vary with content shape, widths stay uniform in grid.
   const aspect = vbW / vbH;
 
+  // Container is a fixed 16:10 tile so every card is the same size. The
+  // SVG viewBox stretches the content (routes, field) to fill. Per-player
+  // transforms below counter that stretch so player shapes stay true.
+  const TARGET = 16 / 10;
+  const aspect = vbW / vbH;
+  // Screen-space ratio scaleY / scaleX after preserveAspectRatio="none".
+  // >1 when viewBox is wider than 16:10 (x is squished on screen, so we
+  // widen shapes in viewBox units to compensate).
+  const sxCorr = aspect / TARGET;
+
   return (
     <div
       className="w-full overflow-hidden rounded-lg border border-border"
@@ -724,33 +734,33 @@ function PlayPreview({
           const fill = p.style.fill;
           const strokeColor = p.style.stroke;
           const common = { fill, stroke: strokeColor, strokeWidth: 1, vectorEffect: "non-scaling-stroke" as const };
+          // Shape drawn at origin, counter-scaled in x to undo the
+          // preserveAspectRatio="none" stretch so circles stay round.
           let shapeEl: React.ReactNode;
           if (shape === "square") {
-            shapeEl = <rect x={cx - R} y={cy - R} width={R * 2} height={R * 2} {...common} />;
+            shapeEl = <rect x={-R} y={-R} width={R * 2} height={R * 2} {...common} />;
           } else if (shape === "diamond") {
-            const pts = `${cx},${cy - R} ${cx + R},${cy} ${cx},${cy + R} ${cx - R},${cy}`;
-            shapeEl = <polygon points={pts} {...common} />;
+            shapeEl = <polygon points={`0,${-R} ${R},0 0,${R} ${-R},0`} {...common} />;
           } else if (shape === "triangle") {
-            const pts = `${cx},${cy - R} ${cx + R},${cy + R} ${cx - R},${cy + R}`;
-            shapeEl = <polygon points={pts} {...common} />;
+            shapeEl = <polygon points={`0,${-R} ${R},${R} ${-R},${R}`} {...common} />;
           } else if (shape === "star") {
             const outer = R * 1.15;
             const inner = outer * 0.45;
             const pts = Array.from({ length: 10 }, (_, i) => {
               const angle = -Math.PI / 2 + (i * Math.PI) / 5;
               const rad = i % 2 === 0 ? outer : inner;
-              return `${cx + rad * Math.cos(angle)},${cy + rad * Math.sin(angle)}`;
+              return `${rad * Math.cos(angle)},${rad * Math.sin(angle)}`;
             }).join(" ");
             shapeEl = <polygon points={pts} strokeLinejoin="round" {...common} />;
           } else {
-            shapeEl = <circle cx={cx} cy={cy} r={R} {...common} />;
+            shapeEl = <circle cx={0} cy={0} r={R} {...common} />;
           }
           return (
-            <g key={p.id}>
+            <g key={p.id} transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
               {shapeEl}
               <text
-                x={cx}
-                y={cy}
+                x={0}
+                y={0}
                 textAnchor="middle"
                 dominantBaseline="central"
                 fontSize={0.035}
