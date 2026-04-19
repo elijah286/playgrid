@@ -22,7 +22,7 @@ const ROLE_OPTIONS: { value: PlayerRole; label: string }[] = [
 
 const FILL_COLORS = [
   "#FFFFFF",
-  "#F8FAFC",
+  "#94A3B8",
   "#1C1C1E",
   "#F26522",
   "#3B82F6",
