@@ -26,7 +26,7 @@ import {
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
-import type { Player, SportVariant } from "@/domain/play/types";
+import type { Player, Route, SportVariant } from "@/domain/play/types";
 import { sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import {
@@ -319,7 +319,16 @@ export function PlaybookDetailClient({
                             <ActionMenu items={items} />
                           </div>
                         </div>
-                        <p className="mt-1 truncate text-xs text-muted">
+                        {p.preview && (
+                          <Link
+                            href={`/plays/${p.id}/edit`}
+                            className="mt-2 block"
+                            aria-label={`Open ${p.name}`}
+                          >
+                            <PlayPreview preview={p.preview} />
+                          </Link>
+                        )}
+                        <p className="mt-2 truncate text-xs text-muted">
                           {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
                             p.shorthand ||
                             "No details"}
@@ -428,6 +437,92 @@ export function PlaybookDetailClient({
         </div>
       )}
     </div>
+  );
+}
+
+function PlayPreview({
+  preview,
+}: {
+  preview: { players: Player[]; routes: Route[] };
+}) {
+  const W = 220;
+  const H = 120;
+  const R = 5;
+
+  const nodeMap = new Map<string, { x: number; y: number }>();
+  for (const r of preview.routes) {
+    for (const n of r.nodes) {
+      nodeMap.set(n.id, { x: n.position.x * W, y: (1 - n.position.y) * H });
+    }
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      className="rounded-lg border border-border"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <rect x={0} y={0} width={W} height={H} fill="#2D8B4E" />
+      <line
+        x1={0}
+        y1={H * 0.5}
+        x2={W}
+        y2={H * 0.5}
+        stroke="rgba(255,255,255,0.4)"
+        strokeWidth={0.8}
+        strokeDasharray="3 2"
+      />
+      {preview.routes.map((r) => {
+        const pts = r.segments
+          .map((s, i) => {
+            const from = nodeMap.get(s.fromNodeId);
+            const to = nodeMap.get(s.toNodeId);
+            if (!from || !to) return "";
+            return `${i === 0 ? `M ${from.x} ${from.y} ` : ""}L ${to.x} ${to.y}`;
+          })
+          .join(" ");
+        if (!pts) return null;
+        return (
+          <path
+            key={r.id}
+            d={pts}
+            fill="none"
+            stroke={r.style.stroke}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {preview.players.map((p) => {
+        const cx = p.position.x * W;
+        const cy = (1 - p.position.y) * H;
+        return (
+          <g key={p.id}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={R}
+              fill={p.style.fill}
+              stroke={p.style.stroke}
+              strokeWidth={0.8}
+            />
+            <text
+              x={cx}
+              y={cy + 0.5}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={4.5}
+              fontWeight="700"
+              fill={p.style.labelColor}
+            >
+              {p.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

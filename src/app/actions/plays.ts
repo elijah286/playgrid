@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, normalizePlayDocument } from "@/domain/play/factory";
-import type { PlayDocument, Player } from "@/domain/play/types";
+import type { PlayDocument, Player, Route } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -23,6 +23,7 @@ export type PlaybookDetailPlayRow = {
   sort_order: number;
   updated_at: string | null;
   is_archived: boolean;
+  preview: { players: Player[]; routes: Route[] } | null;
 };
 
 export async function listPlaysAction(
@@ -63,9 +64,31 @@ export async function listPlaysAction(
   if (playsRes.error) return { ok: false, error: playsRes.error.message, plays: [], groups: [] };
   if (groupsRes.error) return { ok: false, error: groupsRes.error.message, plays: [], groups: [] };
 
-  const plays: PlaybookDetailPlayRow[] = (playsRes.data ?? []).map((r) => {
+  const rawRows = playsRes.data ?? [];
+  const versionIds = rawRows
+    .map((r) => r.current_version_id as string | null)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+  const previewByVersion = new Map<string, { players: Player[]; routes: Route[] }>();
+  if (versionIds.length > 0) {
+    const { data: versions } = await supabase
+      .from("play_versions")
+      .select("id, document")
+      .in("id", versionIds);
+    for (const v of versions ?? []) {
+      const doc = v.document as PlayDocument | null;
+      if (!doc) continue;
+      previewByVersion.set(v.id as string, {
+        players: doc.layers?.players ?? [],
+        routes: doc.layers?.routes ?? [],
+      });
+    }
+  }
+
+  const plays: PlaybookDetailPlayRow[] = rawRows.map((r) => {
     const tagsArr = Array.isArray(r.tags) ? (r.tags as string[]) : [];
     const legacy = typeof r.tag === "string" && r.tag.trim().length > 0 ? [r.tag.trim()] : [];
+    const vid = r.current_version_id as string | null;
     return {
       id: r.id as string,
       name: r.name as string,
@@ -78,6 +101,7 @@ export async function listPlaysAction(
       sort_order: (r.sort_order as number | null) ?? 0,
       updated_at: (r.updated_at as string | null) ?? null,
       is_archived: Boolean(r.is_archived),
+      preview: vid ? previewByVersion.get(vid) ?? null : null,
     };
   });
 
