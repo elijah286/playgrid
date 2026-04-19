@@ -27,7 +27,8 @@ import {
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { Player, Route, SportVariant } from "@/domain/play/types";
-import { resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import { resolveEndDecoration, resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import {
   ActionMenu,
@@ -445,83 +446,148 @@ function PlayPreview({
 }: {
   preview: { players: Player[]; routes: Route[] };
 }) {
-  const W = 220;
-  const H = 120;
-  const R = 5;
-
-  const nodeMap = new Map<string, { x: number; y: number }>();
-  for (const r of preview.routes) {
-    for (const n of r.nodes) {
-      nodeMap.set(n.id, { x: n.position.x * W, y: (1 - n.position.y) * H });
-    }
-  }
+  // Render in normalized 0-1 field coords (same as editor) so zigzag,
+  // curves, dashes and end decorations match the edited play exactly.
+  // Aspect-ratio wrapper on the caller controls display size.
+  const R = 0.032;
 
   return (
     <svg
-      viewBox={`0 0 ${W} ${H}`}
+      viewBox="0 0 1 0.56"
       width="100%"
       className="rounded-lg border border-border"
       preserveAspectRatio="xMidYMid meet"
     >
-      <rect x={0} y={0} width={W} height={H} fill="#2D8B4E" />
-      <line
-        x1={0}
-        y1={H * 0.5}
-        x2={W}
-        y2={H * 0.5}
-        stroke="rgba(255,255,255,0.4)"
-        strokeWidth={0.8}
-        strokeDasharray="3 2"
-      />
-      {preview.routes.map((r) => {
-        const pts = r.segments
-          .map((s, i) => {
-            const from = nodeMap.get(s.fromNodeId);
-            const to = nodeMap.get(s.toNodeId);
-            if (!from || !to) return "";
-            return `${i === 0 ? `M ${from.x} ${from.y} ` : ""}L ${to.x} ${to.y}`;
-          })
-          .join(" ");
-        if (!pts) return null;
-        return (
-          <path
-            key={r.id}
-            d={pts}
-            fill="none"
-            stroke={resolveRouteStroke(r, preview.players)}
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        );
-      })}
-      {preview.players.map((p) => {
-        const cx = p.position.x * W;
-        const cy = (1 - p.position.y) * H;
-        return (
-          <g key={p.id}>
-            <circle
-              cx={cx}
-              cy={cy}
-              r={R}
-              fill={p.style.fill}
-              stroke={p.style.stroke}
-              strokeWidth={0.8}
-            />
-            <text
-              x={cx}
-              y={cy + 0.5}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={4.5}
-              fontWeight="700"
-              fill={p.style.labelColor}
-            >
-              {p.label}
-            </text>
-          </g>
-        );
-      })}
+      {/* Field: center-band of the normalized play (LOS = 0.5 field y) */}
+      <g transform="translate(0 -0.22)">
+        <rect x={0} y={0} width={1} height={1} fill="#2D8B4E" />
+        <line
+          x1={0}
+          y1={0.5}
+          x2={1}
+          y2={0.5}
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth={1}
+          strokeDasharray="3 2"
+          vectorEffect="non-scaling-stroke"
+        />
+        {preview.routes.map((r) => {
+          const rendered = routeToRenderedSegments(r);
+          const stroke = resolveRouteStroke(r, preview.players);
+          return (
+            <g key={r.id}>
+              {rendered.map((rs) => (
+                <path
+                  key={rs.segmentId}
+                  d={rs.d}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={1.8}
+                  strokeDasharray={rs.dash}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </g>
+          );
+        })}
+        {preview.routes.map((r) => {
+          const decoration = resolveEndDecoration(r);
+          if (decoration === "none") return null;
+          const fromIds = new Set(r.segments.map((s) => s.fromNodeId));
+          const terminals = r.segments.filter((s) => !fromIds.has(s.toNodeId));
+          const stroke = resolveRouteStroke(r, preview.players);
+          return (
+            <g key={`deco-${r.id}`}>
+              {terminals.map((seg) => {
+                const fromNode = r.nodes.find((n) => n.id === seg.fromNodeId);
+                const toNode = r.nodes.find((n) => n.id === seg.toNodeId);
+                if (!fromNode || !toNode) return null;
+                const dirFromX = seg.shape === "curve" && seg.controlOffset
+                  ? seg.controlOffset.x
+                  : fromNode.position.x;
+                const dirFromY = seg.shape === "curve" && seg.controlOffset
+                  ? seg.controlOffset.y
+                  : fromNode.position.y;
+                const tipX = toNode.position.x;
+                const tipY = 1 - toNode.position.y;
+                const fromX = dirFromX;
+                const fromY = 1 - dirFromY;
+                const dxS = tipX - fromX;
+                const dyS = tipY - fromY;
+                const len = Math.hypot(dxS, dyS);
+                if (len < 1e-4) return null;
+                const ux = dxS / len;
+                const uy = dyS / len;
+                if (decoration === "arrow") {
+                  const arrowLen = 0.035;
+                  const cosA = Math.cos(Math.PI / 6);
+                  const sinA = Math.sin(Math.PI / 6);
+                  const bx = -ux;
+                  const by = -uy;
+                  const r1x = cosA * bx - sinA * by;
+                  const r1y = sinA * bx + cosA * by;
+                  const r2x = cosA * bx + sinA * by;
+                  const r2y = -sinA * bx + cosA * by;
+                  return (
+                    <g key={seg.id}>
+                      <line x1={tipX} y1={tipY} x2={tipX + arrowLen * r1x} y2={tipY + arrowLen * r1y} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                      <line x1={tipX} y1={tipY} x2={tipX + arrowLen * r2x} y2={tipY + arrowLen * r2y} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                    </g>
+                  );
+                }
+                if (decoration === "t") {
+                  const halfLen = 0.028;
+                  const perpX = -uy;
+                  const perpY = ux;
+                  return (
+                    <line key={seg.id} x1={tipX + perpX * halfLen} y1={tipY + perpY * halfLen} x2={tipX - perpX * halfLen} y2={tipY - perpY * halfLen} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  );
+                }
+                return null;
+              })}
+            </g>
+          );
+        })}
+        {preview.players.map((p) => {
+          const cx = p.position.x;
+          const cy = 1 - p.position.y;
+          const shape = p.shape ?? "circle";
+          const fill = p.style.fill;
+          const strokeColor = p.style.stroke;
+          const common = { fill, stroke: strokeColor, strokeWidth: 1, vectorEffect: "non-scaling-stroke" as const };
+          let shapeEl: React.ReactNode;
+          if (shape === "square") {
+            shapeEl = <rect x={cx - R} y={cy - R} width={R * 2} height={R * 2} {...common} />;
+          } else if (shape === "diamond") {
+            const pts = `${cx},${cy - R} ${cx + R},${cy} ${cx},${cy + R} ${cx - R},${cy}`;
+            shapeEl = <polygon points={pts} {...common} />;
+          } else if (shape === "triangle") {
+            const pts = `${cx},${cy - R} ${cx + R},${cy + R} ${cx - R},${cy + R}`;
+            shapeEl = <polygon points={pts} {...common} />;
+          } else {
+            shapeEl = <circle cx={cx} cy={cy} r={R} {...common} />;
+          }
+          return (
+            <g key={p.id}>
+              {shapeEl}
+              <text
+                x={cx}
+                y={cy}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={0.035}
+                fontWeight={700}
+                fill={p.style.labelColor}
+                style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+              >
+                {p.label}
+              </text>
+            </g>
+          );
+        })}
+      </g>
     </svg>
   );
 }
