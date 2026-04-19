@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { createEmptyPlayDocument } from "@/domain/play/factory";
+import { createEmptyPlayDocument, normalizePlayDocument } from "@/domain/play/factory";
 import type { PlayDocument, Player } from "@/domain/play/types";
 import {
   compareNavPlays,
@@ -136,7 +136,7 @@ export async function getPlayForEditorAction(playId: string) {
     ok: true as const,
     play,
     version: ver,
-    document: ver.document as PlayDocument,
+    document: normalizePlayDocument(ver.document as PlayDocument),
   };
 }
 

@@ -238,4 +238,53 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
   return { ...base, ...overrides };
 }
 
+/**
+ * Normalize a PlayDocument loaded from the database.
+ *
+ * Older saves may have stale sportProfile dimensions (e.g. fieldLengthYds: 40)
+ * or player positions calibrated against the old LOS default (y=0.5).  This
+ * function:
+ *   1. Re-derives sportProfile from the variant so field dimensions are always
+ *      the canonical 25-yard window values.
+ *   2. If the document has no explicit lineOfScrimmageY stored (i.e. it was
+ *      using the old 0.5 default), it migrates player y-positions by the delta
+ *      between old and new defaults (−0.10) so they land in the correct
+ *      backfield zone relative to the new LOS.
+ *   3. Sets lineOfScrimmageY: 0.4 explicitly so the document is self-contained.
+ */
+export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
+  const canonical = sportProfileForVariant(doc.sportProfile.variant);
+
+  // If the stored LOS is the old 0.5 default (no explicit value was ever
+  // saved), migrate player positions so they remain in the backfield relative
+  // to the new default (0.4).
+  const storedLos = doc.lineOfScrimmageY;
+  const needsPlayerMigration =
+    typeof storedLos !== "number" || storedLos === 0.5;
+  const oldLos = 0.5;
+  const newLos = 0.4;
+
+  const players = needsPlayerMigration
+    ? doc.layers.players.map((p) => ({
+        ...p,
+        position: {
+          x: p.position.x,
+          // Shift y by the same delta the LOS moved, preserving relative
+          // distance from the line.  Clamp to [0, 1].
+          y: Math.max(0, Math.min(1, p.position.y - (oldLos - newLos))),
+        },
+      }))
+    : doc.layers.players;
+
+  return {
+    ...doc,
+    sportProfile: canonical,
+    lineOfScrimmageY: newLos,
+    layers: {
+      ...doc.layers,
+      players,
+    },
+  };
+}
+
 export { uid };
