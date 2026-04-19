@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
+  Check,
   Copy,
   FileText,
-  ChevronDown,
-  ChevronRight,
+  Folders,
   LayoutGrid,
   List,
   Pencil,
   Plus,
   Printer,
   Search,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
@@ -28,6 +31,7 @@ import {
   duplicatePlayAction,
   renamePlayAction,
   renamePlaybookGroupAction,
+  reorderPlaybookGroupsAction,
   setPlayGroupAction,
   type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
@@ -49,7 +53,7 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 
-type GroupBy = "formation" | "type" | "group" | "tag";
+type GroupBy = "formation" | "group";
 
 const UNASSIGNED = "__unassigned__";
 
@@ -83,18 +87,11 @@ export function PlaybookDetailClient({
   const [view, setView] = useState<"active" | "archived">("active");
   const [groupBy, setGroupBy] = useState<GroupBy>("formation");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
-  const [thumbSize, setThumbSize] = useState<ThumbSize>("large");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [showManageGroups, setShowManageGroups] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
-
-  function toggleSection(key: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
+  const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   // Formation picker state
   const [showFormationPicker, setShowFormationPicker] = useState(false);
@@ -118,69 +115,87 @@ export function PlaybookDetailClient({
     );
   });
 
-  const groupNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const g of initialGroups) m.set(g.id, g.name);
+  const groupById = useMemo(() => {
+    const m = new Map<string, PlaybookGroupRow>();
+    for (const g of initialGroups) m.set(g.id, g);
     return m;
   }, [initialGroups]);
 
-  type Section = { key: string; label: string; plays: PlaybookDetailPlayRow[] };
+  type Section = { key: string; label: string; plays: PlaybookDetailPlayRow[]; sortOrder: number };
 
   const sections: Section[] = useMemo(() => {
     const buckets = new Map<string, Section>();
-    const pushInto = (key: string, label: string, p: PlaybookDetailPlayRow) => {
+    const pushInto = (key: string, label: string, sortOrder: number, p: PlaybookDetailPlayRow) => {
       const existing = buckets.get(key);
       if (existing) existing.plays.push(p);
-      else buckets.set(key, { key, label, plays: [p] });
+      else buckets.set(key, { key, label, sortOrder, plays: [p] });
     };
 
     if (groupBy === "group") {
       // Always show every existing group (even if empty) plus an Ungrouped bucket,
       // so the user can drop plays onto empty groups.
-      buckets.set(UNASSIGNED, { key: UNASSIGNED, label: "Ungrouped", plays: [] });
+      buckets.set(UNASSIGNED, { key: UNASSIGNED, label: "Ungrouped", plays: [], sortOrder: Number.POSITIVE_INFINITY });
       for (const g of initialGroups) {
-        buckets.set(g.id, { key: g.id, label: g.name, plays: [] });
+        buckets.set(g.id, { key: g.id, label: g.name, plays: [], sortOrder: g.sort_order });
       }
     }
 
     for (const p of filtered) {
-      switch (groupBy) {
-        case "formation": {
-          const label = p.formation_name?.trim() || "Unassigned formation";
-          pushInto(label.toLowerCase(), label, p);
-          break;
-        }
-        case "type": {
-          const label = p.concept?.trim() || "No type";
-          pushInto(label.toLowerCase(), label, p);
-          break;
-        }
-        case "group": {
-          if (!p.group_id) pushInto(UNASSIGNED, "Ungrouped", p);
-          else {
-            const name = groupNameById.get(p.group_id) ?? "Ungrouped";
-            pushInto(p.group_id, name, p);
-          }
-          break;
-        }
-        case "tag": {
-          if (p.tags.length === 0) pushInto(UNASSIGNED, "Untagged", p);
-          else for (const t of p.tags) pushInto(t.toLowerCase(), t, p);
-          break;
+      if (groupBy === "formation") {
+        const label = p.formation_name?.trim() || "Unassigned formation";
+        pushInto(label.toLowerCase(), label, 0, p);
+      } else {
+        if (!p.group_id) pushInto(UNASSIGNED, "Ungrouped", Number.POSITIVE_INFINITY, p);
+        else {
+          const g = groupById.get(p.group_id);
+          if (!g) pushInto(UNASSIGNED, "Ungrouped", Number.POSITIVE_INFINITY, p);
+          else pushInto(p.group_id, g.name, g.sort_order, p);
         }
       }
     }
 
     const arr = Array.from(buckets.values());
     arr.sort((a, b) => {
-      const aUn = a.key === UNASSIGNED || a.label.startsWith("Unassigned") || a.label === "Ungrouped" || a.label === "Untagged" || a.label === "No type";
-      const bUn = b.key === UNASSIGNED || b.label.startsWith("Unassigned") || b.label === "Ungrouped" || b.label === "Untagged" || b.label === "No type";
+      const aUn = a.key === UNASSIGNED;
+      const bUn = b.key === UNASSIGNED;
       if (aUn !== bUn) return aUn ? 1 : -1;
+      if (groupBy === "group") return a.sortOrder - b.sortOrder;
       return a.label.localeCompare(b.label);
     });
     for (const s of arr) s.plays.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
     return arr;
-  }, [filtered, groupBy, groupNameById, initialGroups]);
+  }, [filtered, groupBy, groupById, initialGroups]);
+
+  // Scroll-spy: highlight the section nearest the top of the main area.
+  useEffect(() => {
+    if (sections.length === 0) {
+      setActiveSection(null);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) {
+          const key = (visible[0].target as HTMLElement).dataset.sectionKey;
+          if (key) setActiveSection(key);
+        }
+      },
+      { rootMargin: "-80px 0px -70% 0px", threshold: 0 },
+    );
+    for (const el of sectionRefs.current.values()) observer.observe(el);
+    return () => observer.disconnect();
+  }, [sections]);
+
+  function jumpToSection(key: string) {
+    const el = sectionRefs.current.get(key);
+    if (el) {
+      const top = el.getBoundingClientRect().top + window.scrollY - 72;
+      window.scrollTo({ top, behavior: "smooth" });
+      setActiveSection(key);
+    }
+  }
 
   function openFormationPicker() {
     setShowFormationPicker(true);
@@ -226,27 +241,6 @@ export function PlaybookDetailClient({
     handle(() => renamePlayAction(id, next));
   }
 
-  function onCreateGroup() {
-    const name = window.prompt("Name this group");
-    if (name == null) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    handle(() => createPlaybookGroupAction(playbookId, trimmed));
-  }
-
-  function onRenameGroup(id: string, current: string) {
-    const next = window.prompt("Rename group", current);
-    if (next == null) return;
-    const trimmed = next.trim();
-    if (!trimmed) return;
-    handle(() => renamePlaybookGroupAction(id, trimmed));
-  }
-
-  function onDeleteGroup(id: string, name: string) {
-    if (!window.confirm(`Delete group "${name}"? Plays inside will become ungrouped.`)) return;
-    handle(() => deletePlaybookGroupAction(id));
-  }
-
   function onDropToGroup(groupKey: string, playId: string) {
     const target = groupKey === UNASSIGNED ? null : groupKey;
     handle(() => setPlayGroupAction(playId, target));
@@ -257,7 +251,8 @@ export function PlaybookDetailClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Slim top bar: search, print, new */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1">
           <Input
@@ -267,14 +262,6 @@ export function PlaybookDetailClient({
             placeholder="Search name, code, formation, tag…"
           />
         </div>
-        <SegmentedControl
-          value={view}
-          onChange={(v) => setView(v as "active" | "archived")}
-          options={[
-            { value: "active", label: "Active" },
-            { value: "archived", label: "Archived" },
-          ]}
-        />
         <Link href={`/playbooks/${playbookId}/print`}>
           <Button variant="secondary" leftIcon={Printer}>
             Print playbook
@@ -290,63 +277,100 @@ export function PlaybookDetailClient({
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Group by
-        </span>
-        <SegmentedControl
-          value={groupBy}
-          onChange={(v) => setGroupBy(v as GroupBy)}
-          options={[
-            { value: "formation", label: "Formation" },
-            { value: "type", label: "Type" },
-            { value: "group", label: "Group" },
-            { value: "tag", label: "Tag" },
-          ]}
-        />
-        <SegmentedControl
-          value={viewMode}
-          onChange={(v) => setViewMode(v as "cards" | "list")}
-          options={[
-            { value: "cards", label: "Cards", icon: LayoutGrid },
-            { value: "list", label: "List", icon: List },
-          ]}
-        />
-        {viewMode === "cards" && (
-          <SegmentedControl
-            value={thumbSize}
-            onChange={(v) => setThumbSize(v as ThumbSize)}
-            options={[
-              { value: "small", label: "Small" },
-              { value: "medium", label: "Medium" },
-              { value: "large", label: "Large" },
-            ]}
-          />
-        )}
-        {groupBy === "group" && (
-          <Button variant="secondary" size="sm" leftIcon={Plus} onClick={onCreateGroup}>
-            New group
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCollapsed(new Set())}
-        >
-          Expand all
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCollapsed(new Set(sections.map((s) => s.key)))}
-        >
-          Collapse all
-        </Button>
-        <span className="ml-auto text-xs text-muted">
-          {filtered.length} {filtered.length === 1 ? "play" : "plays"}
-        </span>
-      </div>
+      <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
+        {/* Side rail */}
+        <aside className="lg:sticky lg:top-4 lg:self-start">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-raised p-3">
+            <SegmentedControl
+              value={groupBy}
+              onChange={(v) => setGroupBy(v as GroupBy)}
+              options={[
+                { value: "formation", label: "Formation" },
+                { value: "group", label: "Group" },
+              ]}
+            />
+            {groupBy === "group" && (
+              <button
+                type="button"
+                onClick={() => setShowManageGroups(true)}
+                className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted hover:border-primary hover:text-primary"
+              >
+                <Folders className="size-3.5" />
+                Manage groups
+              </button>
+            )}
 
+            <nav className="flex max-h-[55vh] flex-col gap-0.5 overflow-y-auto">
+              {sections.length === 0 && (
+                <p className="px-2 py-1 text-xs text-muted">No sections</p>
+              )}
+              {sections.map((s) => {
+                const active = activeSection === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => jumpToSection(s.key)}
+                    className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground hover:bg-surface-inset"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                    <span className="shrink-0 text-[10px] text-muted">
+                      {s.plays.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="border-t border-border pt-3">
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                <Settings2 className="size-3" /> View
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <SegmentedControl
+                  size="sm"
+                  value={viewMode}
+                  onChange={(v) => setViewMode(v as "cards" | "list")}
+                  options={[
+                    { value: "cards", label: "Cards", icon: LayoutGrid },
+                    { value: "list", label: "List", icon: List },
+                  ]}
+                />
+                {viewMode === "cards" && (
+                  <SegmentedControl
+                    size="sm"
+                    value={thumbSize}
+                    onChange={(v) => setThumbSize(v as ThumbSize)}
+                    options={[
+                      { value: "small", label: "Sm" },
+                      { value: "medium", label: "Md" },
+                      { value: "large", label: "Lg" },
+                    ]}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-border pt-3">
+              <SegmentedControl
+                size="sm"
+                value={view}
+                onChange={(v) => setView(v as "active" | "archived")}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "archived", label: "Archived" },
+                ]}
+              />
+            </div>
+          </div>
+        </aside>
+
+        {/* Main area */}
+        <div className="min-w-0">
       {filtered.length === 0 ? (
         <EmptyState
           icon={FileText}
@@ -359,9 +383,8 @@ export function PlaybookDetailClient({
           }
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {sections.map((section) => {
-            const isCollapsed = collapsed.has(section.key);
             const buildItems = (p: PlaybookDetailPlayRow): ActionMenuItem[] => [
               {
                 label: "Rename",
@@ -408,7 +431,12 @@ export function PlaybookDetailClient({
             return (
               <section
                 key={section.key}
-                className={`space-y-3 rounded-lg transition-colors ${
+                data-section-key={section.key}
+                ref={(el) => {
+                  if (el) sectionRefs.current.set(section.key, el);
+                  else sectionRefs.current.delete(section.key);
+                }}
+                className={`scroll-mt-20 space-y-3 rounded-lg transition-colors ${
                   isDropTarget ? "p-2 -m-2" : ""
                 } ${isDragOver ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
                 onDragOver={
@@ -440,43 +468,13 @@ export function PlaybookDetailClient({
                     : undefined
                 }
               >
-                <div className="flex w-full items-center gap-2 border-b border-border pb-1.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(section.key)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left hover:opacity-80"
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="h-4 w-4 text-muted" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-muted" />
-                    )}
-                    <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
-                    <Badge variant="default">{section.plays.length}</Badge>
-                  </button>
-                  {isNamedGroup && (
-                    <>
-                      <button
-                        type="button"
-                        aria-label="Rename group"
-                        onClick={() => onRenameGroup(section.key, section.label)}
-                        className="rounded p-1 text-muted hover:bg-surface-inset hover:text-foreground"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Delete group"
-                        onClick={() => onDeleteGroup(section.key, section.label)}
-                        className="rounded p-1 text-muted hover:bg-danger/10 hover:text-danger"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </>
-                  )}
+                <div className="flex items-center gap-2 border-b border-border pb-1.5">
+                  <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
+                  <Badge variant="default">{section.plays.length}</Badge>
                 </div>
-                {!isCollapsed && viewMode === "cards" && (
+                {viewMode === "cards" && (
                   <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
+
                     {section.plays.map((p) => (
                       <Card
                         key={`${section.key}:${p.id}`}
@@ -532,7 +530,7 @@ export function PlaybookDetailClient({
                     ))}
                   </div>
                 )}
-                {!isCollapsed && viewMode === "list" && (
+                {viewMode === "list" && (
                   <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
                     {section.plays.map((p) => (
                       <li
@@ -582,6 +580,19 @@ export function PlaybookDetailClient({
             );
           })}
         </div>
+      )}
+        </div>
+      </div>
+
+      {showManageGroups && (
+        <ManageGroupsDialog
+          playbookId={playbookId}
+          initialGroups={initialGroups}
+          onClose={() => {
+            setShowManageGroups(false);
+            router.refresh();
+          }}
+        />
       )}
 
       {/* Formation picker overlay */}
@@ -669,6 +680,178 @@ export function PlaybookDetailClient({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ManageGroupsDialog({
+  playbookId,
+  initialGroups,
+  onClose,
+}: {
+  playbookId: string;
+  initialGroups: PlaybookGroupRow[];
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [groups, setGroups] = useState<PlaybookGroupRow[]>(
+    [...initialGroups].sort((a, b) => a.sort_order - b.sort_order),
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function addGroup() {
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    const res = await createPlaybookGroupAction(playbookId, name);
+    setBusy(false);
+    if (!res.ok) { toast(res.error, "error"); return; }
+    setGroups((g) => [...g, res.group]);
+    setNewName("");
+  }
+
+  async function saveRename(id: string) {
+    const name = editName.trim();
+    if (!name) { setEditingId(null); return; }
+    setBusy(true);
+    const res = await renamePlaybookGroupAction(id, name);
+    setBusy(false);
+    if (!res.ok) { toast(res.error, "error"); return; }
+    setGroups((gs) => gs.map((g) => (g.id === id ? { ...g, name } : g)));
+    setEditingId(null);
+  }
+
+  async function remove(id: string) {
+    if (!window.confirm("Delete this group? Plays in it become ungrouped.")) return;
+    setBusy(true);
+    const res = await deletePlaybookGroupAction(id);
+    setBusy(false);
+    if (!res.ok) { toast(res.error, "error"); return; }
+    setGroups((gs) => gs.filter((g) => g.id !== id));
+  }
+
+  async function move(id: string, dir: -1 | 1) {
+    const idx = groups.findIndex((g) => g.id === id);
+    const next = idx + dir;
+    if (idx < 0 || next < 0 || next >= groups.length) return;
+    const reordered = [...groups];
+    [reordered[idx], reordered[next]] = [reordered[next], reordered[idx]];
+    setGroups(reordered.map((g, i) => ({ ...g, sort_order: i })));
+    setBusy(true);
+    const res = await reorderPlaybookGroupsAction(playbookId, reordered.map((g) => g.id));
+    setBusy(false);
+    if (!res.ok) toast(res.error, "error");
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-base font-bold text-foreground">Manage groups</h2>
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+            onClick={onClose}
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-1 p-4">
+          {groups.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted">No groups yet.</p>
+          )}
+          {groups.map((g, i) => (
+            <div
+              key={g.id}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-inset px-2 py-1.5"
+            >
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  disabled={busy || i === 0}
+                  onClick={() => move(g.id, -1)}
+                  className="rounded p-0.5 text-muted hover:bg-surface-raised hover:text-foreground disabled:opacity-30"
+                  aria-label="Move up"
+                >
+                  <ArrowUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || i === groups.length - 1}
+                  onClick={() => move(g.id, 1)}
+                  className="rounded p-0.5 text-muted hover:bg-surface-raised hover:text-foreground disabled:opacity-30"
+                  aria-label="Move down"
+                >
+                  <ArrowDown className="size-3.5" />
+                </button>
+              </div>
+              {editingId === g.id ? (
+                <>
+                  <Input
+                    value={editName}
+                    autoFocus
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveRename(g.id);
+                      else if (e.key === "Escape") setEditingId(null);
+                    }}
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => saveRename(g.id)}
+                    className="rounded p-1 text-primary hover:bg-primary/10"
+                    aria-label="Save"
+                  >
+                    <Check className="size-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 truncate text-sm text-foreground">{g.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingId(g.id); setEditName(g.name); }}
+                    className="rounded p-1 text-muted hover:bg-surface-raised hover:text-foreground"
+                    aria-label="Rename"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => remove(g.id)}
+                className="rounded p-1 text-muted hover:bg-surface-raised hover:text-rose-500"
+                aria-label="Delete"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+          <Input
+            placeholder="New group name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }}
+            className="flex-1"
+          />
+          <Button size="sm" leftIcon={Plus} onClick={addGroup} loading={busy}>
+            Add
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
