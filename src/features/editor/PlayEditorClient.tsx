@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,11 +9,12 @@ import {
   Redo2,
   FlipHorizontal,
   Share2,
-  Save,
   Smartphone,
   FileDown,
   UserPlus,
   BookmarkPlus,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, Point2, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { resolveEndDecoration } from "@/domain/play/factory";
@@ -87,6 +88,35 @@ export function PlayEditorClient({
   const [tab, setTab] = useState<"routes" | "formation" | "print">("routes");
   const [pending, startTransition] = useTransition();
 
+  /* ---------- Auto-save ---------- */
+  type SaveStatus = "idle" | "saving" | "saved";
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstDocRender = useRef(true);
+
+  useEffect(() => {
+    // Skip the initial population of the document (nothing has changed yet).
+    if (isFirstDocRender.current) {
+      isFirstDocRender.current = false;
+      return;
+    }
+    // Debounce: reset the timer on every doc change, fire 1.5 s after the last one.
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      setSaveStatus("saving");
+      const res = await savePlayVersionAction(playId, doc);
+      if (res.ok) {
+        setSaveStatus("saved");
+        router.refresh();
+        setTimeout(() => setSaveStatus("idle"), 2500);
+      } else {
+        toast(res.error, "error");
+        setSaveStatus("idle");
+      }
+    }, 1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc]);
+
   const [printPack, setPrintPack] = useState<PlaybookPrintPackRow[] | null>(null);
   const [printGroups, setPrintGroups] = useState<PlaybookGroupRow[]>(initialGroups);
   const [printLoading, setPrintLoading] = useState(false);
@@ -116,17 +146,6 @@ export function PlayEditorClient({
   const displayColor = selectedRoute?.style.stroke ?? activeColor;
   const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
   const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
-
-  const save = useCallback(() => {
-    startTransition(async () => {
-      const res = await savePlayVersionAction(playId, doc);
-      if (!res.ok) toast(res.error, "error");
-      else {
-        toast("Saved", "success");
-        router.refresh();
-      }
-    });
-  }, [doc, playId, router, toast]);
 
   const duplicate = useCallback(() => {
     startTransition(async () => {
@@ -406,11 +425,6 @@ export function PlayEditorClient({
       const active = document.activeElement;
       const isInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
 
-      if (mod && e.key === "s") {
-        e.preventDefault();
-        save();
-        return;
-      }
       if (mod && e.shiftKey && e.key === "z") {
         e.preventDefault();
         redo();
@@ -451,7 +465,7 @@ export function PlayEditorClient({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [save, undo, redo, selectedRouteId, selectedNodeId, dispatch]);
+  }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -508,13 +522,19 @@ export function PlayEditorClient({
             })}
           </div>
 
-          <div className="mx-1 h-6 w-px bg-border" />
-
-          <Tooltip content={<span className="flex items-center gap-2">Save <Kbd keys="Ctrl+S" /></span>}>
-            <Button variant="primary" size="sm" leftIcon={Save} loading={pending} onClick={save}>
-              Save
-            </Button>
-          </Tooltip>
+          {/* Auto-save status indicator */}
+          {saveStatus === "saving" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted">
+              <Loader2 className="size-3.5 animate-spin" />
+              Saving…
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted">
+              <CheckCircle2 className="size-3.5 text-success" />
+              Saved
+            </span>
+          )}
         </div>
       </header>
 
