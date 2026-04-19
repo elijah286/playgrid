@@ -45,6 +45,7 @@ export type PlayCommand =
     }
   | { type: "route.moveNode"; routeId: string; nodeId: string; position: Point2 }
   | { type: "route.removeNode"; routeId: string; nodeId: string }
+  | { type: "route.removeNodeBridging"; routeId: string; nodeId: string }
   | {
       /** Split an existing segment by inserting a node at its midpoint */
       type: "route.insertNode";

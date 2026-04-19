@@ -172,9 +172,17 @@ export function EditorCanvas({
   };
   const [segmentMenu, setSegmentMenu] = useState<SegmentMenu | null>(null);
 
+  type AnchorMenu = {
+    screenX: number;
+    screenY: number;
+    routeId: string;
+    nodeId: string;
+  };
+  const [anchorMenu, setAnchorMenu] = useState<AnchorMenu | null>(null);
+
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
-    if (!segmentMenu) return;
+    if (!segmentMenu && !anchorMenu) return;
     function onDocPointer(e: PointerEvent) {
       const target = e.target as Node | null;
       const wrap = wrapperRef.current;
@@ -185,13 +193,17 @@ export function EditorCanvas({
       }
       // Any other click closes the menu.
       setSegmentMenu(null);
+      setAnchorMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
       // from blocking it.
       void wrap;
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setSegmentMenu(null);
+      if (e.key === "Escape") {
+        setSegmentMenu(null);
+        setAnchorMenu(null);
+      }
     }
     document.addEventListener("pointerdown", onDocPointer, true);
     document.addEventListener("keydown", onKey);
@@ -199,7 +211,7 @@ export function EditorCanvas({
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [segmentMenu]);
+  }, [segmentMenu, anchorMenu]);
 
   /* ---------- Line of scrimmage (hoisted early; callbacks depend on losY) ---------- */
 
@@ -229,8 +241,14 @@ export function EditorCanvas({
   /* ---------- Active style builder ---------- */
 
   const buildRouteStyle = useCallback(
-    () => ({ stroke: activeColor, strokeWidth: activeWidth }),
-    [activeColor, activeWidth],
+    (playerId?: string) => {
+      const player = playerId
+        ? doc.layers.players.find((p) => p.id === playerId)
+        : null;
+      const stroke = player?.style.stroke ?? activeColor;
+      return { stroke, strokeWidth: activeWidth };
+    },
+    [activeColor, activeWidth, doc.layers.players],
   );
 
   /* ---------- Anchor resolution ---------- */
@@ -313,7 +331,7 @@ export function EditorCanvas({
         semantic: null,
         nodes,
         segments,
-        style: buildRouteStyle(),
+        style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
@@ -343,7 +361,7 @@ export function EditorCanvas({
         semantic: null,
         nodes: [startNode, endNode],
         segments: [seg],
-        style: buildRouteStyle(),
+        style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
       onSelectRoute(route.id);
@@ -658,6 +676,44 @@ export function EditorCanvas({
       onSelectPlayer(null);
     },
     [toNorm, onSelectRoute, onSelectSegment, onSelectNode, onSelectPlayer],
+  );
+
+  const handleAnchorDelete = useCallback(() => {
+    if (!anchorMenu) return;
+    dispatch({
+      type: "route.removeNodeBridging",
+      routeId: anchorMenu.routeId,
+      nodeId: anchorMenu.nodeId,
+    });
+    onSelectNode(null);
+    setAnchorMenu(null);
+  }, [anchorMenu, dispatch, onSelectNode]);
+
+  const setTerminalSegmentStroke = useCallback(
+    (pattern: "solid" | "dashed" | "dotted") => {
+      if (!segmentMenu) return;
+      dispatch({
+        type: "route.setSegmentStroke",
+        routeId: segmentMenu.routeId,
+        segmentId: segmentMenu.segmentId,
+        strokePattern: pattern,
+      });
+      setSegmentMenu(null);
+    },
+    [segmentMenu, dispatch],
+  );
+
+  // Is the segment the terminal (end) of its route? Used to show dash-style
+  // options only on the last leg.
+  const isTerminalSegment = useCallback(
+    (routeId: string, segmentId: string): boolean => {
+      const route = doc.layers.routes.find((r) => r.id === routeId);
+      if (!route) return false;
+      const seg = route.segments.find((s) => s.id === segmentId);
+      if (!seg) return false;
+      return !route.segments.some((other) => other.fromNodeId === seg.toNodeId);
+    },
+    [doc.layers.routes],
   );
 
   const handleMenuAddAnchor = useCallback(() => {
@@ -1062,26 +1118,61 @@ export function EditorCanvas({
                   // <ellipse> with rx pre-compensated so the rendered shape is
                   // a perfect circle of radius NODE_RADIUS in field-units.
                   return (
-                    <ellipse
-                      key={node.id}
-                      cx={node.position.x}
-                      cy={1 - node.position.y}
-                      rx={NODE_RADIUS / fieldAspect}
-                      ry={NODE_RADIUS}
-                      fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
-                      stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
-                      strokeWidth={0.0015}
-                      vectorEffect="non-scaling-stroke"
-                      style={{ cursor: "grab" }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        startInteraction(e, {
-                          kind: "route_node",
-                          routeId: route.id,
-                          nodeId: node.id,
-                        });
-                      }}
-                    />
+                    <g key={node.id}>
+                      {isSelectedNode && (
+                        <ellipse
+                          cx={node.position.x}
+                          cy={1 - node.position.y}
+                          rx={(NODE_RADIUS * 2.2) / fieldAspect}
+                          ry={NODE_RADIUS * 2.2}
+                          fill="none"
+                          stroke="#F26522"
+                          strokeWidth={1.5}
+                          strokeDasharray="2 2"
+                          vectorEffect="non-scaling-stroke"
+                          pointerEvents="none"
+                        />
+                      )}
+                      <ellipse
+                        cx={node.position.x}
+                        cy={1 - node.position.y}
+                        rx={NODE_RADIUS / fieldAspect}
+                        ry={NODE_RADIUS}
+                        fill={isSelectedNode ? "#F26522" : "#FFFFFF"}
+                        stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
+                        strokeWidth={0.0015}
+                        vectorEffect="non-scaling-stroke"
+                        style={{ cursor: "grab" }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          startInteraction(e, {
+                            kind: "route_node",
+                            routeId: route.id,
+                            nodeId: node.id,
+                          });
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const rect = wrapperRef.current?.getBoundingClientRect();
+                          if (!rect) return;
+                          const MENU_W = 160;
+                          const MENU_H = 40;
+                          const localX = e.clientX - rect.left;
+                          const localY = e.clientY - rect.top;
+                          setAnchorMenu({
+                            screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+                            screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                            routeId: route.id,
+                            nodeId: node.id,
+                          });
+                          setSegmentMenu(null);
+                          onSelectRoute(route.id);
+                          onSelectNode(node.id);
+                          onSelectSegment(null);
+                        }}
+                      />
+                    </g>
                   );
                 })}
             </g>
@@ -1365,6 +1456,40 @@ export function EditorCanvas({
             onClick={handleMenuCreateBranch}
           >
             Create branch here
+          </button>
+          {isTerminalSegment(segmentMenu.routeId, segmentMenu.segmentId) && (
+            <>
+              <div className="border-t border-border" />
+              <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
+                Last-segment style
+              </div>
+              {(["solid", "dashed", "dotted"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
+                  onClick={() => setTerminalSegmentStroke(p)}
+                >
+                  {p[0].toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {anchorMenu && (
+        <div
+          data-segment-menu
+          className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          style={{ left: anchorMenu.screenX, top: anchorMenu.screenY }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
+            onClick={handleAnchorDelete}
+          >
+            Delete anchor
           </button>
         </div>
       )}
