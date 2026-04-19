@@ -409,6 +409,19 @@ export function PlaybookDetailClient({
                     </div>
                   </button>
 
+                  <Link
+                    href={`/formations/new?variant=${variant}`}
+                    className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                  >
+                    <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                      <Plus className="size-7" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">New formation</p>
+                      <p className="text-xs text-muted">Design from scratch</p>
+                    </div>
+                  </Link>
+
                   {availableFormations
                     .filter((f) => {
                       const fv = f.sportProfile?.variant as SportVariant | undefined;

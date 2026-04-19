@@ -404,6 +404,8 @@ export function PlayEditorClient({
                 onSmooth={handleSmooth}
                 onUndo={undo}
                 canUndo={canUndo}
+                onRedo={redo}
+                canRedo={canRedo}
                 onDone={handleDone}
                 endDecoration={displayEndDecoration}
                 onEndDecorationChange={handleEndDecorationChange}
