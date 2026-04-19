@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Star, Trash2 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
@@ -85,6 +85,28 @@ export function Inspector({
           <div className="mt-2 flex items-center gap-2">
             <Badge variant="primary">{player.role}</Badge>
             <span className="font-semibold text-foreground">{player.label}</span>
+            <button
+              type="button"
+              title={player.isHotRoute ? "Remove hot route" : "Mark as hot route"}
+              className={`ml-auto flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                player.isHotRoute
+                  ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                  : "text-muted hover:bg-surface-inset hover:text-foreground"
+              }`}
+              onClick={() =>
+                dispatch({
+                  type: "player.setHotRoute",
+                  playerId: player.id,
+                  isHotRoute: !player.isHotRoute,
+                })
+              }
+            >
+              <Star
+                className="size-3.5"
+                fill={player.isHotRoute ? "currentColor" : "none"}
+              />
+              Hot
+            </button>
           </div>
           {/* Show the count of routes for this player */}
           {(() => {

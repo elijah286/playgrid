@@ -1251,6 +1251,28 @@ export function EditorCanvas({
               />
             )}
             {shapeEl}
+            {/* Hot-route star badge — top-right corner of the player circle */}
+            {pl.isHotRoute && (() => {
+              // Star rendered as a Unicode text glyph for simplicity
+              const bx = px + r * 0.72;
+              const by = py - r * 0.72;
+              return (
+                <g pointerEvents="none">
+                  <circle cx={bx} cy={by} r={0.016} fill="#F59E0B" vectorEffect="non-scaling-stroke" />
+                  <text
+                    x={bx}
+                    y={by + 0.006}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={0.018}
+                    fill="#ffffff"
+                    fontWeight="900"
+                  >
+                    ★
+                  </text>
+                </g>
+              );
+            })()}
             <text
               x={px}
               y={py + 0.01}
