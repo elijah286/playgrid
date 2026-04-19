@@ -126,10 +126,10 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Arrow",
     directional: true,
-    // short sharp outside angle
+    // flat to outside, ~1 yd past the line (0.04 = 1 yd in the 25-yd window)
     points: [
       { x: 0, y: 0 },
-      { x: 0, y: 0.10 },
+      { x: 0, y: 0.04 },
       { x: 0.16, y: 0.04 },
     ],
   },
@@ -146,11 +146,11 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Hitch",
     directional: true,
-    // quick stop and turn back toward QB
+    // quick stop and turn back toward inside (QB)
     points: [
       { x: 0, y: 0 },
       { x: 0, y: 0.12 },
-      { x: 0.05, y: 0.08 },
+      { x: -0.05, y: 0.08 },
     ],
   },
   {
