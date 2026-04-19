@@ -558,6 +558,11 @@ export function EditorCanvas({
       }
 
       if (state.type === "dragging_segment") {
+        // Only allow the drag-to-bend gesture when the user is actively in
+        // curve mode. In straight/dashed/etc. modes, dragging a segment
+        // should not silently convert it to a curve — that surprised users
+        // who expected the active line type to be respected.
+        if (activeShape !== "curve") return;
         const p = toNorm(e);
         dispatch({
           type: "route.setSegmentShape",
@@ -582,7 +587,7 @@ export function EditorCanvas({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape],
   );
 
   const finishInteraction = useCallback(
