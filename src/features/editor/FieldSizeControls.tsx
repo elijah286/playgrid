@@ -23,6 +23,7 @@ type Preset = {
   offensePlayerCount: number;
 };
 
+// Display window is always 25 yards (10 yds backfield + 15 yds downfield).
 const PRESETS: Preset[] = [
   {
     key: "flag_5v5",

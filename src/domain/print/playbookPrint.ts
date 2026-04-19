@@ -51,7 +51,7 @@ export type PlaybookPlayNavItem = {
   shorthand: string;
   formation_name: string;
   concept: string;
-  tag: string;
+  tags: string[];
   group_id: string | null;
   sort_order: number;
   group_name: string | null;
@@ -104,18 +104,20 @@ export function sortNavPlaysForPrint(
 
 export function formatPlayFullLabel(doc: PlayDocument): string {
   const m = doc.metadata;
+  const tagLabel = m.tags && m.tags.length > 0 ? `Tags: ${m.tags.join(", ")}` : "";
   const parts = [
     m.coachName,
     m.formation && `Formation: ${m.formation}`,
-    m.tag && `Tag: ${m.tag}`,
+    tagLabel,
     m.wristbandCode && `#${m.wristbandCode}`,
     m.concept && `Concept: ${m.concept}`,
   ].filter(Boolean);
   return parts.join(" · ");
 }
 
-export function formatPlayNavSubtitle(p: Pick<PlaybookPlayNavItem, "formation_name" | "tag" | "wristband_code">): string {
-  const bits = [p.formation_name, p.tag, p.wristband_code].filter((s) => s && s.trim().length > 0);
+export function formatPlayNavSubtitle(p: Pick<PlaybookPlayNavItem, "formation_name" | "tags" | "wristband_code">): string {
+  const tagStr = p.tags && p.tags.length > 0 ? p.tags.join(", ") : "";
+  const bits = [p.formation_name, tagStr, p.wristband_code].filter((s) => s && s.trim().length > 0);
   return bits.join(" · ") || "—";
 }
 

@@ -11,33 +11,81 @@ import {
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 
+export type PlaybookDetailPlayRow = {
+  id: string;
+  name: string;
+  wristband_code: string | null;
+  shorthand: string | null;
+  concept: string | null;
+  formation_name: string | null;
+  tags: string[];
+  group_id: string | null;
+  sort_order: number;
+  updated_at: string | null;
+  is_archived: boolean;
+};
+
 export async function listPlaysAction(
   playbookId: string,
   opts?: { includeArchived?: boolean },
-) {
+): Promise<
+  | { ok: true; plays: PlaybookDetailPlayRow[]; groups: PlaybookGroupRow[] }
+  | { ok: false; error: string; plays: PlaybookDetailPlayRow[]; groups: PlaybookGroupRow[] }
+> {
   if (!hasSupabaseEnv()) {
-    return { ok: false as const, error: "Supabase is not configured.", plays: [] };
+    return { ok: false, error: "Supabase is not configured.", plays: [], groups: [] };
   }
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in.", plays: [] };
+  if (!user) return { ok: false, error: "Not signed in.", plays: [], groups: [] };
 
-  let query = supabase
+  let playsQ = supabase
     .from("plays")
     .select(
-      "id, name, wristband_code, shorthand, concept, updated_at, current_version_id, is_archived",
+      "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived",
     )
     .eq("playbook_id", playbookId)
     .order("updated_at", { ascending: false });
 
-  if (!opts?.includeArchived) query = query.eq("is_archived", false);
+  if (!opts?.includeArchived) playsQ = playsQ.eq("is_archived", false);
 
-  const { data, error } = await query;
+  const [playsRes, groupsRes] = await Promise.all([
+    playsQ,
+    supabase
+      .from("playbook_groups")
+      .select("id, name, sort_order")
+      .eq("playbook_id", playbookId)
+      .order("sort_order", { ascending: true }),
+  ]);
 
-  if (error) return { ok: false as const, error: error.message, plays: [] };
-  return { ok: true as const, plays: data ?? [] };
+  if (playsRes.error) return { ok: false, error: playsRes.error.message, plays: [], groups: [] };
+  if (groupsRes.error) return { ok: false, error: groupsRes.error.message, plays: [], groups: [] };
+
+  const plays: PlaybookDetailPlayRow[] = (playsRes.data ?? []).map((r) => {
+    const tagsArr = Array.isArray(r.tags) ? (r.tags as string[]) : [];
+    const legacy = typeof r.tag === "string" && r.tag.trim().length > 0 ? [r.tag.trim()] : [];
+    return {
+      id: r.id as string,
+      name: r.name as string,
+      wristband_code: (r.wristband_code as string | null) ?? null,
+      shorthand: (r.shorthand as string | null) ?? null,
+      concept: (r.concept as string | null) ?? null,
+      formation_name: (r.formation_name as string | null) ?? null,
+      tags: tagsArr.length > 0 ? tagsArr : legacy,
+      group_id: (r.group_id as string | null) ?? null,
+      sort_order: (r.sort_order as number | null) ?? 0,
+      updated_at: (r.updated_at as string | null) ?? null,
+      is_archived: Boolean(r.is_archived),
+    };
+  });
+
+  return {
+    ok: true,
+    plays,
+    groups: (groupsRes.data ?? []) as PlaybookGroupRow[],
+  };
 }
 
 export async function createPlayAction(playbookId: string, initialPlayers?: Player[]) {
@@ -72,7 +120,8 @@ export async function createPlayAction(playbookId: string, initialPlayers?: Play
       wristband_code: doc.metadata.wristbandCode,
       formation_name: doc.metadata.formation,
       concept: doc.metadata.concept,
-      tag: doc.metadata.tag,
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
       display_abbrev: doc.metadata.sheetAbbrev,
       sort_order: nextSort,
     })
@@ -113,7 +162,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tag, formation_name, current_version_id",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id",
     )
     .eq("id", playId)
     .single();
@@ -185,7 +234,8 @@ export async function savePlayVersionAction(
       wristband_code: document.metadata.wristbandCode,
       formation_name: document.metadata.formation,
       concept: document.metadata.concept,
-      tag: document.metadata.tag,
+      tags: document.metadata.tags,
+      tag: document.metadata.tags[0] ?? "",
       display_abbrev: document.metadata.sheetAbbrev,
     })
     .eq("id", playId);
@@ -237,7 +287,8 @@ export async function duplicatePlayAction(playId: string) {
       wristband_code: doc.metadata.wristbandCode,
       formation_name: doc.metadata.formation,
       concept: doc.metadata.concept,
-      tag: doc.metadata.tag,
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
       display_abbrev: doc.metadata.sheetAbbrev,
       group_id: srcPlay.group_id,
       sort_order: dupSort,
@@ -459,7 +510,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
     supabase
       .from("plays")
       .select(
-        "id, name, wristband_code, shorthand, formation_name, concept, tag, group_id, sort_order, current_version_id",
+        "id, name, wristband_code, shorthand, formation_name, concept, tags, tag, group_id, sort_order, current_version_id",
       )
       .eq("playbook_id", playbookId)
       .eq("is_archived", false),
@@ -472,6 +523,8 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
   const items: PlaybookPlayNavItem[] = (rows ?? []).map((row) => {
     const gid = (row.group_id as string | null) ?? null;
     const g = gid ? gMap.get(gid) : undefined;
+    const tagsArr = Array.isArray(row.tags) ? (row.tags as string[]) : [];
+    const legacyTag = (row.tag as string | null) ?? "";
     return {
       id: row.id as string,
       name: row.name as string,
@@ -479,7 +532,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
       shorthand: (row.shorthand as string) ?? "",
       formation_name: (row.formation_name as string) ?? "",
       concept: (row.concept as string) ?? "",
-      tag: (row.tag as string) ?? "",
+      tags: tagsArr.length > 0 ? tagsArr : legacyTag ? [legacyTag] : [],
       group_id: gid,
       sort_order: (row.sort_order as number) ?? 0,
       group_name: g?.name ?? null,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -10,6 +10,7 @@ import {
   FileText,
   Pencil,
   Plus,
+  Printer,
   Search,
   Smartphone,
   Trash2,
@@ -21,10 +22,12 @@ import {
   deletePlayAction,
   duplicatePlayAction,
   renamePlayAction,
+  type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { Player } from "@/domain/play/types";
+import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import {
   ActionMenu,
   Badge,
@@ -37,28 +40,25 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 
-type PlayRow = {
-  id: string;
-  name: string;
-  wristband_code: string | null;
-  shorthand: string | null;
-  concept: string | null;
-  updated_at: string | null;
-  is_archived?: boolean;
-};
+type GroupBy = "formation" | "type" | "group" | "tag";
+
+const UNASSIGNED = "__unassigned__";
 
 export function PlaybookDetailClient({
   playbookId,
   initialPlays,
+  initialGroups,
 }: {
   playbookId: string;
-  initialPlays: PlayRow[];
+  initialPlays: PlaybookDetailPlayRow[];
+  initialGroups: PlaybookGroupRow[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
+  const [groupBy, setGroupBy] = useState<GroupBy>("formation");
 
   // Formation picker state
   const [showFormationPicker, setShowFormationPicker] = useState(false);
@@ -75,9 +75,66 @@ export function PlaybookDetailClient({
       p.name.toLowerCase().includes(s) ||
       (p.wristband_code && p.wristband_code.toLowerCase().includes(s)) ||
       (p.shorthand && p.shorthand.toLowerCase().includes(s)) ||
-      (p.concept && p.concept.toLowerCase().includes(s))
+      (p.concept && p.concept.toLowerCase().includes(s)) ||
+      (p.formation_name && p.formation_name.toLowerCase().includes(s)) ||
+      p.tags.some((t) => t.toLowerCase().includes(s))
     );
   });
+
+  const groupNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of initialGroups) m.set(g.id, g.name);
+    return m;
+  }, [initialGroups]);
+
+  type Section = { key: string; label: string; plays: PlaybookDetailPlayRow[] };
+
+  const sections: Section[] = useMemo(() => {
+    const buckets = new Map<string, Section>();
+    const pushInto = (key: string, label: string, p: PlaybookDetailPlayRow) => {
+      const existing = buckets.get(key);
+      if (existing) existing.plays.push(p);
+      else buckets.set(key, { key, label, plays: [p] });
+    };
+
+    for (const p of filtered) {
+      switch (groupBy) {
+        case "formation": {
+          const label = p.formation_name?.trim() || "Unassigned formation";
+          pushInto(label.toLowerCase(), label, p);
+          break;
+        }
+        case "type": {
+          const label = p.concept?.trim() || "No type";
+          pushInto(label.toLowerCase(), label, p);
+          break;
+        }
+        case "group": {
+          if (!p.group_id) pushInto(UNASSIGNED, "Ungrouped", p);
+          else {
+            const name = groupNameById.get(p.group_id) ?? "Ungrouped";
+            pushInto(p.group_id, name, p);
+          }
+          break;
+        }
+        case "tag": {
+          if (p.tags.length === 0) pushInto(UNASSIGNED, "Untagged", p);
+          else for (const t of p.tags) pushInto(t.toLowerCase(), t, p);
+          break;
+        }
+      }
+    }
+
+    const arr = Array.from(buckets.values());
+    arr.sort((a, b) => {
+      const aUn = a.key === UNASSIGNED || a.label.startsWith("Unassigned") || a.label === "Ungrouped" || a.label === "Untagged" || a.label === "No type";
+      const bUn = b.key === UNASSIGNED || b.label.startsWith("Unassigned") || b.label === "Ungrouped" || b.label === "Untagged" || b.label === "No type";
+      if (aUn !== bUn) return aUn ? 1 : -1;
+      return a.label.localeCompare(b.label);
+    });
+    for (const s of arr) s.plays.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
+    return arr;
+  }, [filtered, groupBy, groupNameById]);
 
   function openFormationPicker() {
     setShowFormationPicker(true);
@@ -136,7 +193,7 @@ export function PlaybookDetailClient({
             leftIcon={Search}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by code, name, or concept..."
+            placeholder="Search name, code, formation, tag…"
           />
         </div>
         <SegmentedControl
@@ -147,6 +204,11 @@ export function PlaybookDetailClient({
             { value: "archived", label: "Archived" },
           ]}
         />
+        <Link href={`/playbooks/${playbookId}/print`}>
+          <Button variant="secondary" leftIcon={Printer}>
+            Print playbook
+          </Button>
+        </Link>
         <Button
           variant="primary"
           leftIcon={Plus}
@@ -155,6 +217,25 @@ export function PlaybookDetailClient({
         >
           New play
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          Group by
+        </span>
+        <SegmentedControl
+          value={groupBy}
+          onChange={(v) => setGroupBy(v as GroupBy)}
+          options={[
+            { value: "formation", label: "Formation" },
+            { value: "type", label: "Type" },
+            { value: "group", label: "Group" },
+            { value: "tag", label: "Tag" },
+          ]}
+        />
+        <span className="ml-auto text-xs text-muted">
+          {filtered.length} {filtered.length === 1 ? "play" : "plays"}
+        </span>
       </div>
 
       {filtered.length === 0 ? (
@@ -169,80 +250,101 @@ export function PlaybookDetailClient({
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => {
-            const items: ActionMenuItem[] = [
-              {
-                label: "Rename",
-                icon: Pencil,
-                onSelect: () => onRenamePlay(p.id, p.name),
-              },
-              {
-                label: "Duplicate",
-                icon: Copy,
-                onSelect: () =>
-                  handle(
-                    () => duplicatePlayAction(p.id),
-                    (res) => {
-                      if (res.ok) router.push(`/plays/${res.playId}/edit`);
+        <div className="space-y-6">
+          {sections.map((section) => (
+            <section key={section.key} className="space-y-3">
+              <div className="flex items-center gap-2 border-b border-border pb-1.5">
+                <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
+                <Badge variant="default">{section.plays.length}</Badge>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {section.plays.map((p) => {
+                  const items: ActionMenuItem[] = [
+                    {
+                      label: "Rename",
+                      icon: Pencil,
+                      onSelect: () => onRenamePlay(p.id, p.name),
                     },
-                  ),
-              },
-              p.is_archived
-                ? {
-                    label: "Restore",
-                    icon: ArchiveRestore,
-                    onSelect: () => handle(() => archivePlayAction(p.id, false)),
-                  }
-                : {
-                    label: "Archive",
-                    icon: Archive,
-                    onSelect: () => handle(() => archivePlayAction(p.id, true)),
-                  },
-              {
-                label: "Delete",
-                icon: Trash2,
-                danger: true,
-                onSelect: () =>
-                  confirmAnd(
-                    `Delete "${p.name}"? This can't be undone.`,
-                    () => handle(() => deletePlayAction(p.id)),
-                  ),
-              },
-            ];
-            return (
-              <Card key={p.id} hover className="flex flex-col justify-between p-5">
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
-                      {p.name}
-                    </h3>
-                    <div className="flex items-center gap-1">
-                      {p.wristband_code && (
-                        <Badge variant="primary">{p.wristband_code}</Badge>
-                      )}
-                      <ActionMenu items={items} />
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    {p.concept || p.shorthand || "No concept set"}
-                  </p>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <Link href={`/plays/${p.id}/edit`} className="flex-1">
-                    <Button variant="primary" size="sm" leftIcon={Pencil} className="w-full">
-                      Edit
-                    </Button>
-                  </Link>
-                  <Link href={`/m/play/${p.id}?playbookId=${playbookId}`}>
-                    <Button variant="secondary" size="sm" leftIcon={Smartphone}>
-                      Mobile
-                    </Button>
-                  </Link>
-                </div>
-              </Card>
-            );
-          })}
+                    {
+                      label: "Duplicate",
+                      icon: Copy,
+                      onSelect: () =>
+                        handle(
+                          () => duplicatePlayAction(p.id),
+                          (res) => {
+                            if (res.ok) router.push(`/plays/${res.playId}/edit`);
+                          },
+                        ),
+                    },
+                    p.is_archived
+                      ? {
+                          label: "Restore",
+                          icon: ArchiveRestore,
+                          onSelect: () => handle(() => archivePlayAction(p.id, false)),
+                        }
+                      : {
+                          label: "Archive",
+                          icon: Archive,
+                          onSelect: () => handle(() => archivePlayAction(p.id, true)),
+                        },
+                    {
+                      label: "Delete",
+                      icon: Trash2,
+                      danger: true,
+                      onSelect: () =>
+                        confirmAnd(
+                          `Delete "${p.name}"? This can't be undone.`,
+                          () => handle(() => deletePlayAction(p.id)),
+                        ),
+                    },
+                  ];
+                  return (
+                    <Card key={`${section.key}:${p.id}`} hover className="flex flex-col justify-between p-4">
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                            {p.name}
+                          </h3>
+                          <div className="flex items-center gap-1">
+                            {p.wristband_code && (
+                              <Badge variant="primary">{p.wristband_code}</Badge>
+                            )}
+                            <ActionMenu items={items} />
+                          </div>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted">
+                          {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
+                            p.shorthand ||
+                            "No details"}
+                        </p>
+                        {p.tags.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {p.tags.map((t) => (
+                              <Badge key={t} variant="default">
+                                {t}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <Link href={`/plays/${p.id}/edit`} className="flex-1">
+                          <Button variant="primary" size="sm" leftIcon={Pencil} className="w-full">
+                            Edit
+                          </Button>
+                        </Link>
+                        <Link href={`/m/play/${p.id}?playbookId=${playbookId}`}>
+                          <Button variant="secondary" size="sm" leftIcon={Smartphone}>
+                            Mobile
+                          </Button>
+                        </Link>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
@@ -278,7 +380,6 @@ export function PlaybookDetailClient({
                 <p className="text-center text-sm text-muted">Loading formations…</p>
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {/* Default card */}
                   <button
                     type="button"
                     className="flex flex-col items-center gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
@@ -291,7 +392,6 @@ export function PlaybookDetailClient({
                     </div>
                   </button>
 
-                  {/* Saved formations */}
                   {availableFormations.map((f) => (
                     <button
                       key={f.id}
@@ -318,14 +418,11 @@ export function PlaybookDetailClient({
   );
 }
 
-/** Small SVG diagram showing player dots at their normalized positions */
 function MiniPlayerDiagram({ players }: { players: Player[] | null }) {
   const SIZE = 80;
   const DOT_R = 4;
 
-  // Default placeholder dots if no players
   if (!players) {
-    // Show a simple 7v7 icon grid
     return (
       <svg width={SIZE} height={SIZE} viewBox="0 0 80 80" className="opacity-60">
         <rect width={80} height={80} rx={6} fill="#2D8B4E" />
@@ -342,7 +439,6 @@ function MiniPlayerDiagram({ players }: { players: Player[] | null }) {
     <svg width={SIZE} height={SIZE} viewBox="0 0 80 80">
       <rect width={80} height={80} rx={6} fill="#2D8B4E" />
       {players.map((pl) => {
-        // Normalized position: x in 0–1 (left→right), y in 0–1 (bottom→top)
         const cx = pl.position.x * SIZE;
         const cy = (1 - pl.position.y) * SIZE;
         return (

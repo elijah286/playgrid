@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Copy, FolderPlus, PencilLine } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, FolderPlus, PencilLine, Tags, X } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/app/actions/plays";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { formatPlayFullLabel } from "@/domain/print/playbookPrint";
-import { Button, IconButton, Input } from "@/components/ui";
+import { Badge, Button, IconButton, Input } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
@@ -42,7 +42,28 @@ export function EditorPlayContextBar({
   const [groups, setGroups] = useState(initialGroups);
   const [renameOpen, setRenameOpen] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
   const [busy, startTransition] = useTransition();
+
+  const tags = doc.metadata.tags;
+
+  function addTag(raw: string) {
+    const cleaned = raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    if (cleaned.length === 0) return;
+    const next = Array.from(new Set([...tags, ...cleaned]));
+    dispatch({ type: "document.setMetadata", patch: { tags: next } });
+    setTagDraft("");
+  }
+
+  function removeTag(t: string) {
+    dispatch({
+      type: "document.setMetadata",
+      patch: { tags: tags.filter((x) => x !== t) },
+    });
+  }
 
   useEffect(() => {
     setNav(initialNav);
@@ -160,6 +181,38 @@ export function EditorPlayContextBar({
           </Button>
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <Tags className="size-3.5" />
+          Tags
+        </span>
+        {tags.map((t) => (
+          <Badge key={t} variant="default" className="inline-flex items-center gap-1">
+            {t}
+            <button
+              type="button"
+              onClick={() => removeTag(t)}
+              className="rounded hover:text-danger"
+              aria-label={`Remove tag ${t}`}
+            >
+              <X className="size-3" />
+            </button>
+          </Badge>
+        ))}
+        <Input
+          value={tagDraft}
+          onChange={(e) => setTagDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              addTag(tagDraft);
+            }
+          }}
+          placeholder="Add tag (press Enter)…"
+          className="h-7 w-[200px] text-xs"
+        />
+      </div>
 
       <details className="group border-t border-border pt-2 text-xs">
         <summary className="cursor-pointer list-none font-medium text-muted [&::-webkit-details-marker]:hidden">

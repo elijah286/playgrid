@@ -176,6 +176,58 @@ export async function renameFormationAction(
   return { ok: true };
 }
 
+export async function duplicateFormationAction(
+  formationId: string,
+): Promise<{ ok: true; formationId: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  let teamId: string | undefined;
+  try {
+    const ws = await ensureDefaultWorkspace(supabase, user.id);
+    teamId = ws.teamId;
+  } catch {
+    return { ok: false, error: "Could not resolve workspace." };
+  }
+
+  const { data: src, error: fetchErr } = await supabase
+    .from("formations")
+    .select("params")
+    .eq("id", formationId)
+    .single();
+  if (fetchErr || !src) return { ok: false, error: fetchErr?.message ?? "Not found." };
+
+  const srcParams = src.params as {
+    displayName: string;
+    players: Player[];
+    sportProfile?: Partial<SportProfile>;
+  };
+  const nextParams = {
+    ...srcParams,
+    displayName: `${srcParams.displayName} (copy)`,
+  };
+
+  const { data, error } = await supabase
+    .from("formations")
+    .insert({
+      team_id: teamId,
+      is_system: false,
+      semantic_key: `custom_${Date.now()}`,
+      params: nextParams as unknown as Record<string, unknown>,
+    })
+    .select("id")
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, formationId: data.id as string };
+}
+
 export async function deleteFormationAction(
   formationId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {

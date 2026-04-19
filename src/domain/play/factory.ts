@@ -202,7 +202,7 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
       sheetAbbrev: "TR STK",
       formation: "Trips Right",
       concept: "Stick",
-      tag: "",
+      tags: [],
     },
     formation: {
       semantic: { key: "trips_right", strength: "right" },
