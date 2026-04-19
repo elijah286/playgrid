@@ -125,17 +125,19 @@ function catmullRomQuadControl(
   return { x: (cp1x + cp2x) / 2, y: (cp1y + cp2y) / 2 };
 }
 
-function zigzagPoints(from: Point2, to: Point2, zigCount = 12): Point2[] {
+function zigzagPoints(from: Point2, to: Point2, zigCount?: number): Point2[] {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy);
-  const amplitude = len * 0.06;
-  // Perpendicular direction
+  // Tight motion marks: fixed amplitude in normalized field coords and
+  // wavelength scaled to segment length (min 10 zigs, ~1 zig per 2.5% field).
+  const amplitude = 0.018;
+  const zigs = zigCount ?? Math.max(10, Math.round(len / 0.025));
   const nx = -dy / (len || 1);
   const ny = dx / (len || 1);
   const pts: Point2[] = [from];
-  for (let i = 1; i < zigCount; i++) {
-    const t = i / zigCount;
+  for (let i = 1; i < zigs; i++) {
+    const t = i / zigs;
     const sign = i % 2 === 1 ? 1 : -1;
     pts.push({
       x: from.x + dx * t + nx * amplitude * sign,
