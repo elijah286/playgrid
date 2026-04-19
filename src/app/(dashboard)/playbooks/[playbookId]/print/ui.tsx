@@ -12,7 +12,7 @@ import {
   type PlaybookPrintRunConfig,
 } from "@/domain/print/playbookPrint";
 import {
-  compilePlayToSvg,
+  compilePlaysheetGridSvg,
   compilePlaysheetPdfPages,
   compileWristbandGridSvg,
   compileWristbandPdfPages,
@@ -120,10 +120,24 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       if (docs.length === 0) return null;
       return compileWristbandGridSvg(docs, wristbandGridOpts).svgMarkup;
     }
-    const chosen = initialPack.find((r) => selected.has(r.id)) ?? initialPack[0];
-    if (!chosen) return null;
-    return compilePlayToSvg(chosen.document, "full_sheet").svgMarkup;
-  }, [initialPack, selected, config.product, config.wristbandGridLayout, wristbandGridOpts]);
+    const chosen = initialPack.filter((r) => selected.has(r.id));
+    const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
+    const docs = pool
+      .slice(0, config.playsPerSheet)
+      .map((r) => applyExportPresentation(r.document, config));
+    if (docs.length === 0) return null;
+    return compilePlaysheetGridSvg(docs, {
+      playsPerSheet: config.playsPerSheet,
+      orientation: config.sheetOrientation,
+      showNotes: config.includeCommentsAndNotes,
+    }).svgMarkup;
+  }, [
+    initialPack,
+    selected,
+    config,
+    config.wristbandGridLayout,
+    wristbandGridOpts,
+  ]);
 
   function exportPdf() {
     startTransition(async () => {
@@ -148,6 +162,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         pages = compilePlaysheetPdfPages(docs, {
           playsPerSheet: config.playsPerSheet,
           orientation: config.sheetOrientation,
+          showNotes: config.includeCommentsAndNotes,
         });
       } else {
         pages = compileWristbandPdfPages(docs, wristbandGridOpts);
@@ -261,7 +276,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {config.product === "wristband"
             ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"`
-            : "Preview (first selected play)"}
+            : `Live preview · ${config.playsPerSheet}/sheet · ${config.sheetOrientation}`}
         </p>
         {preview ? (
           <div
