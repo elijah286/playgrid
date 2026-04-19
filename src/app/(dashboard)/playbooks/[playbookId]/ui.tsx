@@ -26,7 +26,8 @@ import {
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
-import type { Player } from "@/domain/play/types";
+import type { Player, SportVariant } from "@/domain/play/types";
+import { sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import {
   ActionMenu,
@@ -46,13 +47,19 @@ const UNASSIGNED = "__unassigned__";
 
 export function PlaybookDetailClient({
   playbookId,
+  sportVariant,
   initialPlays,
   initialGroups,
 }: {
   playbookId: string;
+  sportVariant: string;
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
 }) {
+  const variant = sportVariant as SportVariant;
+  const variantProfile = sportProfileForVariant(variant);
+  const expectedPlayerCount = variantProfile.offensePlayerCount;
+  const variantLabel = SPORT_VARIANT_LABELS[variant] ?? variant;
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -387,12 +394,18 @@ export function PlaybookDetailClient({
                   >
                     <MiniPlayerDiagram players={null} />
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Default (7v7)</p>
+                      <p className="text-sm font-semibold text-foreground">Default ({variantLabel})</p>
                       <p className="text-xs text-muted">Standard formation</p>
                     </div>
                   </button>
 
-                  {availableFormations.map((f) => (
+                  {availableFormations
+                    .filter((f) => {
+                      const fv = f.sportProfile?.variant as SportVariant | undefined;
+                      if (fv) return fv === variant;
+                      return f.players.length === expectedPlayerCount;
+                    })
+                    .map((f) => (
                     <button
                       key={f.id}
                       type="button"
