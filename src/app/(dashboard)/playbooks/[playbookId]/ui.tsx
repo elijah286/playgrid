@@ -60,9 +60,9 @@ const UNASSIGNED = "__unassigned__";
 type ThumbSize = "small" | "medium" | "large";
 
 const SIZE_COL_CLASS: Record<ThumbSize, string> = {
-  large: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
-  medium: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
-  small: "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
+  large: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  medium: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+  small: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
 };
 
 export function PlaybookDetailClient({
