@@ -932,10 +932,7 @@ function PlayPreview({
   const tenY = 1 - (preview.lineOfScrimmageY + 0.40);
 
   return (
-    <div
-      className="w-full overflow-hidden rounded-lg border border-border bg-surface-inset"
-      style={{ aspectRatio: `${aspect}` }}
-    >
+    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border bg-surface-inset">
     <svg
       viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       width="100%"
