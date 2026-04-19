@@ -88,22 +88,23 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
     return p.name.toLowerCase().includes(s);
   });
 
-  function create() {
+  const [creating, setCreating] = useState(false);
+
+  async function create() {
     const trimmed = name.trim();
     if (!trimmed) {
       toast("Enter a playbook name.", "error");
       return;
     }
-    startTransition(async () => {
-      const res = await createPlaybookAction(trimmed, sportVariant);
-      if (res.ok) {
-        setCreateOpen(false);
-        router.push(`/playbooks/${res.id}`);
-        router.refresh();
-      } else {
-        toast(res.error, "error");
-      }
-    });
+    setCreating(true);
+    const res = await createPlaybookAction(trimmed, sportVariant);
+    if (res.ok) {
+      setCreateOpen(false);
+      router.push(`/playbooks/${res.id}`);
+    } else {
+      setCreating(false);
+      toast(res.error, "error");
+    }
   }
 
   function handle<T>(fn: () => Promise<T>, onOk?: (r: T) => void) {
@@ -304,14 +305,14 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
               <Button
                 variant="ghost"
                 onClick={() => setCreateOpen(false)}
-                disabled={pending}
+                disabled={creating}
               >
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 onClick={create}
-                loading={pending}
+                loading={creating}
               >
                 Create
               </Button>
