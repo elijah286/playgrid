@@ -216,7 +216,7 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
     metadata: {
       coachName: "Trips Right — Stick",
       shorthand: "TR STK",
-      wristbandCode: "01",
+      wristbandCode: "",
       mnemonic: "",
       sheetAbbrev: "TR STK",
       formation: "Trips Right",
