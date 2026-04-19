@@ -355,8 +355,8 @@ export function PlayEditorClient({
 
           {/* Field background */}
           <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
-            {(["green","white","black","gray"] as const).map((bg) => {
-              const colors = { green:"#2D8B4E", white:"#F8FAFC", black:"#0A0A0A", gray:"#374151" };
+            {(["green","white","black"] as const).map((bg) => {
+              const colors = { green:"#2D8B4E", white:"#FFFFFF", black:"#0A0A0A" };
               const active = (doc.fieldBackground ?? "green") === bg;
               return (
                 <button
