@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, MousePointer } from "lucide-react";
 import Link from "next/link";
@@ -39,7 +39,7 @@ type Props =
 export function FormationEditorClient(props: Props) {
   const router = useRouter();
   const { toast } = useToast();
-  const [pending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
 
   /* ── name + sport variant ── */
   const [name, setName] = useState(
@@ -88,36 +88,34 @@ export function FormationEditorClient(props: Props) {
   }
 
   /* ── save ── */
-  function handleSave() {
+  async function handleSave() {
     const trimmed = name.trim();
     if (!trimmed) {
       toast("Enter a formation name", "error");
       return;
     }
-    startTransition(async () => {
-      let res: { ok: boolean; error?: string };
-      if (props.mode === "edit") {
-        res = await updateFormationAction(
-          props.formationId,
-          trimmed,
-          doc.layers.players,
-          doc.sportProfile,
-        );
-      } else {
-        const r = await saveFormationAction(trimmed, doc.layers.players, doc.sportProfile);
-        res = r;
-      }
-      if (!res.ok) {
-        toast(res.error ?? "Something went wrong.", "error");
-      } else {
-        toast(
-          props.mode === "edit" ? "Formation updated" : "Formation saved",
-          "success",
-        );
-        router.push("/formations");
-        router.refresh();
-      }
-    });
+    setSaving(true);
+    let res: { ok: boolean; error?: string };
+    if (props.mode === "edit") {
+      res = await updateFormationAction(
+        props.formationId,
+        trimmed,
+        doc.layers.players,
+        doc.sportProfile,
+      );
+    } else {
+      res = await saveFormationAction(trimmed, doc.layers.players, doc.sportProfile);
+    }
+    if (!res.ok) {
+      setSaving(false);
+      toast(res.error ?? "Something went wrong.", "error");
+      return;
+    }
+    toast(
+      props.mode === "edit" ? "Formation updated" : "Formation saved",
+      "success",
+    );
+    router.push("/formations");
   }
 
   const fieldAspect =
@@ -141,7 +139,7 @@ export function FormationEditorClient(props: Props) {
             variant="primary"
             size="sm"
             leftIcon={Save}
-            loading={pending}
+            loading={saving}
             onClick={handleSave}
           >
             {props.mode === "edit" ? "Save changes" : "Save formation"}
