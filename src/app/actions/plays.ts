@@ -657,6 +657,49 @@ export async function createPlaybookGroupAction(playbookId: string, name: string
   return { ok: true as const, group: row as PlaybookGroupRow };
 }
 
+export async function renamePlaybookGroupAction(groupId: string, name: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+  const label = name.trim() || "Group";
+  const { error } = await supabase
+    .from("playbook_groups")
+    .update({ name: label })
+    .eq("id", groupId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function deletePlaybookGroupAction(groupId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+  const { error } = await supabase.from("playbook_groups").delete().eq("id", groupId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function reorderPlaybookGroupsAction(
+  playbookId: string,
+  orderedGroupIds: string[],
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+  for (let i = 0; i < orderedGroupIds.length; i++) {
+    const { error } = await supabase
+      .from("playbook_groups")
+      .update({ sort_order: i })
+      .eq("id", orderedGroupIds[i])
+      .eq("playbook_id", playbookId);
+    if (error) return { ok: false as const, error: error.message };
+  }
+  return { ok: true as const };
+}
+
 export async function setPlayGroupAction(playId: string, groupId: string | null) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
