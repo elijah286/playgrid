@@ -1313,13 +1313,12 @@ export function EditorCanvas({
         const px = fx(pl.position.x);
         const py = fy(pl.position.y);
         const r = 0.028;
-        const fillColor = sel ? "#F26522" : (pl.style?.fill ?? "#FFFFFF");
-        const strokeColor = sel
-          ? "#F26522"
-          : (pl.style?.stroke ?? "rgba(0,0,0,0.6)");
+        const fillColor = pl.style?.fill ?? "#FFFFFF";
+        const strokeColor = pl.style?.stroke ?? "rgba(0,0,0,0.6)";
         // With vectorEffect=non-scaling-stroke these widths are in CSS pixels.
         const strokeW = sel ? 2 : 1.5;
-        const labelColor = sel ? "#FFFFFF" : (pl.style?.labelColor ?? "#1C1C1E");
+        const labelColor = pl.style?.labelColor ?? "#1C1C1E";
+        const selectionRingColor = pl.style?.stroke ?? "#1C1C1E";
         const shape = pl.shape ?? "circle";
 
         const pointerHandlers = {
@@ -1390,14 +1389,15 @@ export function EditorCanvas({
           <g key={pl.id}>
             {sel && (
               <circle
+                className="marching-ants"
                 cx={px}
                 cy={py}
                 r={0.042}
                 fill="none"
-                stroke="#F26522"
+                stroke={selectionRingColor}
                 strokeWidth={2}
+                strokeDasharray="4 3"
                 vectorEffect="non-scaling-stroke"
-                opacity={0.5}
                 pointerEvents="none"
               />
             )}
