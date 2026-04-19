@@ -117,15 +117,13 @@ export function EditorPlayContextBar({
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2.5">
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-            Current play
-          </p>
-          <p className="mt-0.5 text-sm leading-snug text-foreground" title={formatPlayFullLabel(doc)}>
-            {formatPlayFullLabel(doc)}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <p
+          className="min-w-0 flex-1 truncate text-xs text-muted"
+          title={formatPlayFullLabel(doc)}
+        >
+          {formatPlayFullLabel(doc)}
+        </p>
         <div className="flex shrink-0 flex-wrap items-center gap-1">
           <Tooltip content="Previous play">
             <IconButton
@@ -173,6 +171,16 @@ export function EditorPlayContextBar({
               value={doc.metadata.coachName}
               onChange={(e) =>
                 dispatch({ type: "document.setMetadata", patch: { coachName: e.target.value } })
+              }
+            />
+          </label>
+          <label className="w-32">
+            <span className="text-xs text-muted">Wristband code</span>
+            <Input
+              className="mt-1"
+              value={doc.metadata.wristbandCode}
+              onChange={(e) =>
+                dispatch({ type: "document.setMetadata", patch: { wristbandCode: e.target.value } })
               }
             />
           </label>
