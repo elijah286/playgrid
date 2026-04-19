@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Copy, Plus, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,12 +10,14 @@ import {
   type SavedFormation,
 } from "@/app/actions/formations";
 import {
+  ActionMenu,
   Badge,
   Button,
   Card,
   EmptyState,
   SegmentedControl,
   useToast,
+  type ActionMenuItem,
 } from "@/components/ui";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
@@ -81,75 +83,59 @@ function FormationCard({
   formation,
   onDelete,
   onDuplicate,
-  pending,
 }: {
   formation: SavedFormation;
   onDelete: (id: string, name: string) => void;
   onDuplicate: (id: string) => void;
-  pending: boolean;
 }) {
+  const router = useRouter();
+  const items: ActionMenuItem[] = [
+    {
+      label: "Duplicate",
+      icon: Copy,
+      onSelect: () => onDuplicate(formation.id),
+    },
+  ];
+  if (!formation.isSystem) {
+    items.push({
+      label: "Delete",
+      icon: Trash2,
+      danger: true,
+      onSelect: () => onDelete(formation.id, formation.displayName),
+    });
+  }
+
+  // System formations can't be edited directly — clicking opens a duplicate
+  // for editing, matching what the old Edit button did.
+  const handleOpen = () => {
+    if (formation.isSystem) onDuplicate(formation.id);
+    else router.push(`/formations/${formation.id}/edit`);
+  };
+
   return (
-    <Card className="p-4">
-      <div className="flex items-start gap-3">
+    <Card hover className="relative p-3">
+      <button
+        type="button"
+        onClick={handleOpen}
+        className="flex w-full items-center gap-3 text-left"
+      >
         <FormationPreview formation={formation} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-8">
           <div className="flex flex-wrap items-center gap-1.5">
-            <h3 className="truncate font-semibold text-foreground text-sm">
+            <h3 className="truncate text-sm font-semibold text-foreground">
               {formation.displayName}
             </h3>
             {formation.isSystem && <Badge>System</Badge>}
           </div>
-          {formation.sportProfile?.variant && (
-            <p className="mt-0.5 text-[11px] text-muted">
-              {variantLabel(formation.sportProfile.variant)}
-            </p>
-          )}
           <p className="mt-0.5 text-xs text-muted">
-            {formation.players.length} players
+            {formation.sportProfile?.variant
+              ? `${variantLabel(formation.sportProfile.variant)} · ${formation.players.length} players`
+              : `${formation.players.length} players`}
           </p>
-
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {formation.isSystem ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={Pencil}
-                loading={pending}
-                onClick={() => onDuplicate(formation.id)}
-                title="Duplicate and edit (system formations can't be modified directly)"
-              >
-                Edit
-              </Button>
-            ) : (
-              <Link href={`/formations/${formation.id}/edit`}>
-                <Button variant="ghost" size="sm" leftIcon={Pencil}>
-                  Edit
-                </Button>
-              </Link>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={Copy}
-              loading={pending}
-              onClick={() => onDuplicate(formation.id)}
-            >
-              Duplicate
-            </Button>
-            {!formation.isSystem && (
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={Trash2}
-                className="text-danger hover:text-danger"
-                loading={pending}
-                onClick={() => onDelete(formation.id, formation.displayName)}
-              >
-                Delete
-              </Button>
-            )}
-          </div>
         </div>
+      </button>
+      <div className="absolute right-2 top-2">
+        <ActionMenu items={items} />
       </div>
     </Card>
   );
@@ -165,7 +151,7 @@ const VARIANT_ORDER: SportVariant[] = [
 export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
   const { toast } = useToast();
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [formations, setFormations] = useState(initial);
   const [filter, setFilter] = useState<SportFilter>("all");
 
@@ -254,7 +240,6 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
                   formation={f}
                   onDelete={handleDelete}
                   onDuplicate={handleDuplicate}
-                  pending={pending}
                 />
               ))}
             </div>
@@ -274,7 +259,6 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
                 formation={f}
                 onDelete={handleDelete}
                 onDuplicate={handleDuplicate}
-                pending={pending}
               />
             ))}
           </div>
