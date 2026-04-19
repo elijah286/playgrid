@@ -28,11 +28,11 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Slant",
     directional: true,
-    // negative x = toward inside (middle), correct for both sides
+    // quick stem then sharp inside cut — ends ~2.5 yds past the break
     points: [
       { x: 0, y: 0 },
       { x: 0, y: 0.08 },
-      { x: -0.18, y: 0.28 },
+      { x: -0.10, y: 0.18 },
     ],
   },
   {
