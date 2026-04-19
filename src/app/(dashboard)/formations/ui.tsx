@@ -36,13 +36,8 @@ function variantLabel(v: string) {
 
 /** Tiny SVG field preview of a formation. */
 function FormationPreview({ formation }: { formation: SavedFormation }) {
-  const sp = formation.sportProfile;
-  const fieldW = sp.fieldWidthYds ?? 30;
-  const fieldL = sp.fieldLengthYds ?? 40;
-  const aspect = fieldW / fieldL;
-
   const W = 120;
-  const H = Math.min(160, W / aspect);
+  const H = 80;
   const r = 5;
 
   return (
@@ -114,7 +109,18 @@ function FormationCard({
           </p>
 
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {!formation.isSystem && (
+            {formation.isSystem ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={Pencil}
+                loading={pending}
+                onClick={() => onDuplicate(formation.id)}
+                title="Duplicate and edit (system formations can't be modified directly)"
+              >
+                Edit
+              </Button>
+            ) : (
               <Link href={`/formations/${formation.id}/edit`}>
                 <Button variant="ghost" size="sm" leftIcon={Pencil}>
                   Edit
