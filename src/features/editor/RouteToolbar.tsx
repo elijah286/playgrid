@@ -10,6 +10,8 @@ import {
   Waves,
   ArrowRight,
   Ban,
+  Star,
+  Trash2,
 } from "lucide-react";
 import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { SegmentedControl, IconButton, Button } from "@/components/ui";
@@ -35,6 +37,12 @@ type Props = {
   /** End-of-route decoration (arrow/T/none). Disabled when no route selected. */
   endDecoration: EndDecoration;
   onEndDecorationChange: (d: EndDecoration) => void;
+  /** Player-level controls — shown when a player is selected. */
+  hasSelectedPlayer?: boolean;
+  isHotRoute?: boolean;
+  onToggleHotRoute?: () => void;
+  playerRouteCount?: number;
+  onClearPlayerRoutes?: () => void;
 };
 
 const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
@@ -89,6 +97,11 @@ export function RouteToolbar({
   doneLabel = "Done",
   endDecoration,
   onEndDecorationChange,
+  hasSelectedPlayer = false,
+  isHotRoute = false,
+  onToggleHotRoute,
+  playerRouteCount = 0,
+  onClearPlayerRoutes,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
@@ -193,6 +206,32 @@ export function RouteToolbar({
           onClick={onRedo}
         />
       </Tooltip>
+
+      {hasSelectedPlayer && (
+        <>
+          <div className="h-5 w-px bg-border" />
+          <Tooltip content={isHotRoute ? "Remove hot route" : "Mark as hot route"}>
+            <IconButton
+              icon={Star}
+              variant="ghost"
+              size="sm"
+              onClick={onToggleHotRoute}
+              className={isHotRoute ? "text-amber-400 hover:text-amber-300" : undefined}
+              aria-pressed={isHotRoute}
+            />
+          </Tooltip>
+          <Tooltip content={playerRouteCount > 0 ? `Clear ${playerRouteCount} route${playerRouteCount !== 1 ? "s" : ""}` : "No routes to clear"}>
+            <IconButton
+              icon={Trash2}
+              variant="ghost"
+              size="sm"
+              disabled={playerRouteCount === 0}
+              onClick={onClearPlayerRoutes}
+              className="text-danger hover:bg-danger/10 hover:text-danger"
+            />
+          </Tooltip>
+        </>
+      )}
 
       <div className="ml-auto" />
 

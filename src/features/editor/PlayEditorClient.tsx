@@ -414,6 +414,34 @@ export function PlayEditorClient({
                 onDone={handleDone}
                 endDecoration={displayEndDecoration}
                 onEndDecorationChange={handleEndDecorationChange}
+                hasSelectedPlayer={selectedPlayerId != null}
+                isHotRoute={
+                  doc.layers.players.find((p) => p.id === selectedPlayerId)?.isHotRoute ?? false
+                }
+                onToggleHotRoute={() => {
+                  if (!selectedPlayerId) return;
+                  const p = doc.layers.players.find((pl) => pl.id === selectedPlayerId);
+                  if (!p) return;
+                  dispatch({
+                    type: "player.setHotRoute",
+                    playerId: p.id,
+                    isHotRoute: !p.isHotRoute,
+                  });
+                }}
+                playerRouteCount={
+                  selectedPlayerId
+                    ? doc.layers.routes.filter((r) => r.carrierPlayerId === selectedPlayerId).length
+                    : 0
+                }
+                onClearPlayerRoutes={() => {
+                  if (!selectedPlayerId) return;
+                  const playerRoutes = doc.layers.routes.filter(
+                    (r) => r.carrierPlayerId === selectedPlayerId,
+                  );
+                  for (const r of playerRoutes) {
+                    dispatch({ type: "route.remove", routeId: r.id });
+                  }
+                }}
               />
             </div>
 
