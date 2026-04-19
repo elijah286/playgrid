@@ -9,6 +9,7 @@ import {
 } from "@/domain/play/geometry";
 import {
   resolveEndDecoration,
+  resolveFieldZone,
   resolveLineOfScrimmage,
   resolveLineOfScrimmageY,
   resolveShowHashMarks,
@@ -747,19 +748,72 @@ export function EditorCanvas({
   const fieldLengthYds = doc.sportProfile.fieldLengthYds || 25;
   const yardInterval = 5;
   const yardLines = [];
+  const yardNumbers: React.ReactNode[] = [];
+  const losYd = Math.round(losY * fieldLengthYds); // yards from bottom to LOS
+  const zone = resolveFieldZone(doc);
+  // Anchor yard value at LOS based on zone.
+  const losYardValue = zone === "midfield" ? 50 : 20;
+  const yardLabel = (yd: number) => {
+    // yd is yards from bottom edge of window; offset from LOS in yards:
+    const delta = yd - losYd;
+    if (zone === "midfield") {
+      // Mirror around the 50: number counts down as you move away from LOS.
+      const v = 50 - Math.abs(delta);
+      return v <= 0 ? "" : String(v);
+    }
+    // red_zone: offense driving toward the goal (top of window). Numbers
+    // descend going up (toward goal), ascend going down (back toward midfield).
+    const v = losYardValue - delta;
+    if (v <= 0) return "G";
+    if (v >= 50) return "";
+    return String(v);
+  };
   for (let yd = yardInterval; yd < fieldLengthYds; yd += yardInterval) {
     const y = yd / fieldLengthYds;
+    const svgY = fy(y);
     yardLines.push(
       <line
         key={`h${yd}`}
         x1={0}
-        y1={y}
+        y1={svgY}
         x2={fieldAspect}
-        y2={y}
+        y2={svgY}
         stroke={lineColor}
         strokeWidth={0.002}
       />,
     );
+    const label = yardLabel(yd);
+    if (label) {
+      const numY = svgY + 0.018;
+      yardNumbers.push(
+        <text
+          key={`nL${yd}`}
+          x={0.04 * fieldAspect}
+          y={numY}
+          fontSize={0.035}
+          fontWeight={700}
+          fill={lineColor}
+          opacity={0.55}
+          textAnchor="middle"
+          pointerEvents="none"
+        >
+          {label}
+        </text>,
+        <text
+          key={`nR${yd}`}
+          x={0.96 * fieldAspect}
+          y={numY}
+          fontSize={0.035}
+          fontWeight={700}
+          fill={lineColor}
+          opacity={0.55}
+          textAnchor="middle"
+          pointerEvents="none"
+        >
+          {label}
+        </text>,
+      );
+    }
   }
 
   /* ---------- Hash marks ---------- */
@@ -846,6 +900,7 @@ export function EditorCanvas({
       </defs>
       <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />
       {yardLines}
+      {yardNumbers}
       {hashMarks}
 
       {/* Line of scrimmage */}

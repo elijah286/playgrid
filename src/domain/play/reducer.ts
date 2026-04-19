@@ -257,6 +257,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setLineOfScrimmage":
       return { ...doc, lineOfScrimmage: cmd.lineOfScrimmage };
 
+    case "document.setFieldZone":
+      return { ...doc, fieldZone: cmd.fieldZone };
+
     case "document.flip": {
       const axis = cmd.axis;
       return {

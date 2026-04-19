@@ -3,7 +3,11 @@
 import { useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, SportProfile, SportVariant } from "@/domain/play/types";
-import { resolveLineOfScrimmage, resolveShowHashMarks } from "@/domain/play/factory";
+import {
+  resolveFieldZone,
+  resolveLineOfScrimmage,
+  resolveShowHashMarks,
+} from "@/domain/play/factory";
 import { Button, Input, SegmentedControl } from "@/components/ui";
 
 type Props = {
@@ -161,6 +165,23 @@ export function FieldSizeControls({ profile, dispatch, doc }: Props) {
             value={resolveLineOfScrimmage(doc)}
             onChange={(v) =>
               dispatch({ type: "document.setLineOfScrimmage", lineOfScrimmage: v })
+            }
+          />
+        </div>
+      )}
+
+      {doc && (
+        <div className="ml-2 flex items-center gap-1.5">
+          <span className="text-xs text-muted">Zone</span>
+          <SegmentedControl
+            size="sm"
+            options={[
+              { value: "midfield" as const, label: "Mid-field" },
+              { value: "red_zone" as const, label: "Red zone" },
+            ]}
+            value={resolveFieldZone(doc)}
+            onChange={(v) =>
+              dispatch({ type: "document.setFieldZone", fieldZone: v })
             }
           />
         </div>

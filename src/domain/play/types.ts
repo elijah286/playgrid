@@ -219,4 +219,11 @@ export type PlayDocument = {
    * they cannot be dragged past this line.
    */
   lineOfScrimmageY?: number;
+  /**
+   * Which part of the field the 25-yard display window represents. Controls
+   * the yard numbers painted on the field. Defaults to "midfield".
+   *   - "midfield": LOS is on the ~50, numbers mirror around it (45, 50, 45, 40)
+   *   - "red_zone": offense is driving toward the goal, numbers descend (25, 20, 15, 10)
+   */
+  fieldZone?: "midfield" | "red_zone";
 };
