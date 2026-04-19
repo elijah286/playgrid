@@ -10,7 +10,6 @@ import {
   FlipHorizontal,
   Share2,
   Save,
-  Smartphone,
   Star,
 } from "lucide-react";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
@@ -382,24 +381,15 @@ export function PlayEditorClient({
       </header>
 
       {/* Play context */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <EditorPlayContextBar
-            playId={playId}
-            playbookId={playbookId}
-            doc={doc}
-            dispatch={dispatch}
-            initialNav={initialNav}
-            initialGroups={initialGroups}
-            onDuplicate={duplicate}
-          />
-        </div>
-        <Link href={`/m/play/${playId}?playbookId=${playbookId}`}>
-          <Button variant="ghost" size="sm" leftIcon={Smartphone}>
-            Mobile view
-          </Button>
-        </Link>
-      </div>
+      <EditorPlayContextBar
+        playId={playId}
+        playbookId={playbookId}
+        doc={doc}
+        dispatch={dispatch}
+        initialNav={initialNav}
+        initialGroups={initialGroups}
+        onDuplicate={duplicate}
+      />
 
       {/* Routes */}
       <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">

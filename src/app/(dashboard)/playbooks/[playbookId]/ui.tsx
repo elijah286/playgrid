@@ -8,11 +8,14 @@ import {
   ArchiveRestore,
   Copy,
   FileText,
+  ChevronDown,
+  ChevronRight,
+  LayoutGrid,
+  List,
   Pencil,
   Plus,
   Printer,
   Search,
-  Smartphone,
   Trash2,
   X,
 } from "lucide-react";
@@ -67,6 +70,18 @@ export function PlaybookDetailClient({
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
   const [groupBy, setGroupBy] = useState<GroupBy>("formation");
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+  const [thumbSize, setThumbSize] = useState<"none" | "compact" | "large">("compact");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleSection(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   // Formation picker state
   const [showFormationPicker, setShowFormationPicker] = useState(false);
@@ -241,6 +256,39 @@ export function PlaybookDetailClient({
             { value: "tag", label: "Tag" },
           ]}
         />
+        <SegmentedControl
+          value={viewMode}
+          onChange={(v) => setViewMode(v as "cards" | "list")}
+          options={[
+            { value: "cards", label: "Cards", icon: LayoutGrid },
+            { value: "list", label: "List", icon: List },
+          ]}
+        />
+        {viewMode === "cards" && (
+          <SegmentedControl
+            value={thumbSize}
+            onChange={(v) => setThumbSize(v as "none" | "compact" | "large")}
+            options={[
+              { value: "none", label: "No thumb" },
+              { value: "compact", label: "Compact" },
+              { value: "large", label: "Large" },
+            ]}
+          />
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setCollapsed(new Set())}
+        >
+          Expand all
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setCollapsed(new Set(sections.map((s) => s.key)))}
+        >
+          Collapse all
+        </Button>
         <span className="ml-auto text-xs text-muted">
           {filtered.length} {filtered.length === 1 ? "play" : "plays"}
         </span>
@@ -258,110 +306,157 @@ export function PlaybookDetailClient({
           }
         />
       ) : (
-        <div className="space-y-6">
-          {sections.map((section) => (
-            <section key={section.key} className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-border pb-1.5">
-                <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
-                <Badge variant="default">{section.plays.length}</Badge>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {section.plays.map((p) => {
-                  const items: ActionMenuItem[] = [
-                    {
-                      label: "Rename",
-                      icon: Pencil,
-                      onSelect: () => onRenamePlay(p.id, p.name),
+        <div className="space-y-4">
+          {sections.map((section) => {
+            const isCollapsed = collapsed.has(section.key);
+            const buildItems = (p: PlaybookDetailPlayRow): ActionMenuItem[] => [
+              {
+                label: "Rename",
+                icon: Pencil,
+                onSelect: () => onRenamePlay(p.id, p.name),
+              },
+              {
+                label: "Duplicate",
+                icon: Copy,
+                onSelect: () =>
+                  handle(
+                    () => duplicatePlayAction(p.id),
+                    (res) => {
+                      if (res.ok) router.push(`/plays/${res.playId}/edit`);
                     },
-                    {
-                      label: "Duplicate",
-                      icon: Copy,
-                      onSelect: () =>
-                        handle(
-                          () => duplicatePlayAction(p.id),
-                          (res) => {
-                            if (res.ok) router.push(`/plays/${res.playId}/edit`);
-                          },
-                        ),
-                    },
-                    p.is_archived
-                      ? {
-                          label: "Restore",
-                          icon: ArchiveRestore,
-                          onSelect: () => handle(() => archivePlayAction(p.id, false)),
-                        }
-                      : {
-                          label: "Archive",
-                          icon: Archive,
-                          onSelect: () => handle(() => archivePlayAction(p.id, true)),
-                        },
-                    {
-                      label: "Delete",
-                      icon: Trash2,
-                      danger: true,
-                      onSelect: () =>
-                        confirmAnd(
-                          `Delete "${p.name}"? This can't be undone.`,
-                          () => handle(() => deletePlayAction(p.id)),
-                        ),
-                    },
-                  ];
-                  return (
-                    <Card key={`${section.key}:${p.id}`} hover className="flex flex-col justify-between p-4">
-                      <div>
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
-                            {p.name}
-                          </h3>
-                          <div className="flex items-center gap-1">
+                  ),
+              },
+              p.is_archived
+                ? {
+                    label: "Restore",
+                    icon: ArchiveRestore,
+                    onSelect: () => handle(() => archivePlayAction(p.id, false)),
+                  }
+                : {
+                    label: "Archive",
+                    icon: Archive,
+                    onSelect: () => handle(() => archivePlayAction(p.id, true)),
+                  },
+              {
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () =>
+                  confirmAnd(
+                    `Delete "${p.name}"? This can't be undone.`,
+                    () => handle(() => deletePlayAction(p.id)),
+                  ),
+              },
+            ];
+            return (
+              <section key={section.key} className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.key)}
+                  className="flex w-full items-center gap-2 border-b border-border pb-1.5 text-left hover:border-muted-light"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="h-4 w-4 text-muted" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted" />
+                  )}
+                  <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
+                  <Badge variant="default">{section.plays.length}</Badge>
+                </button>
+                {!isCollapsed && viewMode === "cards" && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {section.plays.map((p) => (
+                      <Card
+                        key={`${section.key}:${p.id}`}
+                        hover
+                        className="relative flex flex-col p-0"
+                      >
+                        <Link
+                          href={`/plays/${p.id}/edit`}
+                          className="flex flex-1 flex-col p-4"
+                          aria-label={`Open ${p.name}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                              {p.name}
+                            </h3>
                             {p.wristband_code && (
                               <Badge variant="primary">{p.wristband_code}</Badge>
                             )}
-                            <ActionMenu items={items} />
                           </div>
+                          {p.preview && thumbSize !== "none" && (
+                            <div
+                              className={
+                                thumbSize === "compact"
+                                  ? "mt-2 max-h-24 overflow-hidden"
+                                  : "mt-2"
+                              }
+                            >
+                              <PlayPreview preview={p.preview} />
+                            </div>
+                          )}
+                          <p className="mt-2 truncate text-xs text-muted">
+                            {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
+                              p.shorthand ||
+                              "No details"}
+                          </p>
+                          {p.tags.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {p.tags.map((t) => (
+                                <Badge key={t} variant="default">
+                                  {t}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </Link>
+                        <div className="absolute right-2 top-2">
+                          <ActionMenu items={buildItems(p)} />
                         </div>
-                        {p.preview && (
-                          <Link
-                            href={`/plays/${p.id}/edit`}
-                            className="mt-2 block"
-                            aria-label={`Open ${p.name}`}
-                          >
-                            <PlayPreview preview={p.preview} />
-                          </Link>
-                        )}
-                        <p className="mt-2 truncate text-xs text-muted">
-                          {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
-                            p.shorthand ||
-                            "No details"}
-                        </p>
-                        {p.tags.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {p.tags.map((t) => (
-                              <Badge key={t} variant="default">
-                                {t}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-3 flex gap-2">
-                        <Link href={`/plays/${p.id}/edit`} className="flex-1">
-                          <Button variant="primary" size="sm" leftIcon={Pencil} className="w-full">
-                            Edit
-                          </Button>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+                {!isCollapsed && viewMode === "list" && (
+                  <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
+                    {section.plays.map((p) => (
+                      <li
+                        key={`${section.key}:${p.id}`}
+                        className="flex items-center gap-2 pl-8 pr-2"
+                      >
+                        <Link
+                          href={`/plays/${p.id}/edit`}
+                          className="flex min-w-0 flex-1 items-center gap-3 py-2 hover:opacity-80"
+                        >
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                            {p.name}
+                          </span>
+                          <span className="truncate text-xs text-muted">
+                            {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
+                              p.shorthand ||
+                              ""}
+                          </span>
+                          {p.wristband_code && (
+                            <Badge variant="primary">{p.wristband_code}</Badge>
+                          )}
+                          {p.tags.length > 0 && (
+                            <div className="hidden flex-wrap gap-1 md:flex">
+                              {p.tags.slice(0, 3).map((t) => (
+                                <Badge key={t} variant="default">
+                                  {t}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </Link>
-                        <Link href={`/m/play/${p.id}?playbookId=${playbookId}`}>
-                          <Button variant="secondary" size="sm" leftIcon={Smartphone}>
-                            Mobile
-                          </Button>
-                        </Link>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                        <ActionMenu items={buildItems(p)} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -461,19 +556,42 @@ function PlayPreview({
 }) {
   // Render in normalized 0-1 field coords (same as editor) so zigzag,
   // curves, dashes and end decorations match the edited play exactly.
-  // Aspect-ratio wrapper on the caller controls display size.
   const R = 0.032;
+
+  // Compute bounding box of all content in SVG-y (= 1 - field-y) so
+  // routes and players are never cropped. Width always fills 0..1.
+  const PAD = R * 1.4;
+  let minSvgY = Infinity;
+  let maxSvgY = -Infinity;
+  for (const p of preview.players) {
+    const sy = 1 - p.position.y;
+    if (sy < minSvgY) minSvgY = sy;
+    if (sy > maxSvgY) maxSvgY = sy;
+  }
+  for (const r of preview.routes) {
+    for (const n of r.nodes) {
+      const sy = 1 - n.position.y;
+      if (sy < minSvgY) minSvgY = sy;
+      if (sy > maxSvgY) maxSvgY = sy;
+    }
+  }
+  if (!isFinite(minSvgY) || !isFinite(maxSvgY)) {
+    minSvgY = 0.22;
+    maxSvgY = 0.78;
+  }
+  const vbY = Math.max(0, minSvgY - PAD);
+  const vbH = Math.min(1, maxSvgY + PAD) - vbY;
 
   return (
     <svg
-      viewBox="0 0 1 0.56"
+      viewBox={`0 ${vbY} 1 ${vbH}`}
       width="100%"
       className="rounded-lg border border-border"
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio="none"
     >
-      {/* Field: center-band of the normalized play (LOS = 0.5 field y) */}
-      <g transform="translate(0 -0.22)">
-        <rect x={0} y={0} width={1} height={1} fill="#2D8B4E" />
+      {/* Field: routes/players live in full 0-1 normalized space */}
+      <g>
+        <rect x={0} y={vbY} width={1} height={vbH} fill="#2D8B4E" />
         <line
           x1={0}
           y1={0.5}
