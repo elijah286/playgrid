@@ -11,31 +11,27 @@ import {
   Share2,
   Save,
   Smartphone,
-  UserPlus,
-  BookmarkPlus,
+  Users,
 } from "lucide-react";
-import type { EndDecoration, PlayDocument, Player, Point2, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { resolveEndDecoration } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
   savePlayVersionAction,
 } from "@/app/actions/plays";
-import { saveFormationAction } from "@/app/actions/formations";
 import { createShareLinkForPlayAction } from "@/app/actions/share";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
 import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
-import { FormationInspector } from "./FormationInspector";
 import type {
   PlaybookGroupRow,
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorPlayContextBar } from "./EditorPlayContextBar";
-import { Button, IconButton, Input, SegmentedControl, Kbd, useToast } from "@/components/ui";
+import { Button, IconButton, Kbd, useToast } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { uid } from "@/domain/play/factory";
 
 type Props = {
   playId: string;
@@ -68,13 +64,34 @@ export function PlayEditorClient({
   const [activeColor, setActiveColor] = useState("#FFFFFF");
   const [activeWidth, setActiveWidth] = useState(2.5);
 
-  const [tab, setTab] = useState<"routes" | "formation">("routes");
   const [pending, startTransition] = useTransition();
 
-  // Formation mode state
-  const [showSaveFormation, setShowSaveFormation] = useState(false);
-  const [formationName, setFormationName] = useState("");
-  const [savingFormation, startSavingFormation] = useTransition();
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (doc !== initialDocument) setDirty(true);
+  }, [doc, initialDocument]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  function guardedNavigate(href: string) {
+    if (
+      dirty &&
+      !window.confirm(
+        "You have unsaved changes to this play. Leave without saving?",
+      )
+    ) {
+      return;
+    }
+    router.push(href);
+  }
 
   // Show toolbar when a player OR route is selected
   const showToolbar = selectedPlayerId != null || selectedRouteId != null;
@@ -99,6 +116,7 @@ export function PlayEditorClient({
       if (!res.ok) toast(res.error, "error");
       else {
         toast("Saved", "success");
+        setDirty(false);
         router.refresh();
       }
     });
@@ -128,42 +146,6 @@ export function PlayEditorClient({
     });
   }, [playId, toast]);
 
-  /* ---------- Formation mode handlers ---------- */
-
-  const handleAddPlayer = useCallback(
-    (position: Point2) => {
-      const newPlayer: Player = {
-        id: uid("player"),
-        role: "WR",
-        label: "?",
-        position,
-        eligible: true,
-        style: { fill: "#FFFFFF", stroke: "#1C1C1E", labelColor: "#1C1C1E" },
-      };
-      dispatch({ type: "player.add", player: newPlayer });
-      setSelectedPlayerId(newPlayer.id);
-    },
-    [dispatch],
-  );
-
-  const handleSaveFormation = useCallback(() => {
-    const name = formationName.trim();
-    if (!name) {
-      toast("Enter a formation name", "error");
-      return;
-    }
-    startSavingFormation(async () => {
-      const res = await saveFormationAction(name, doc.layers.players, doc.sportProfile);
-      if (!res.ok) {
-        toast(res.error, "error");
-      } else {
-        toast("Formation saved", "success");
-        setShowSaveFormation(false);
-        setFormationName("");
-      }
-    });
-  }, [formationName, doc.layers.players, doc.sportProfile, toast]);
-
   /* ---------- Toolbar handlers ---------- */
 
   const handleShapeChange = useCallback(
@@ -186,35 +168,24 @@ export function PlayEditorClient({
       setActiveStrokePattern(strokePattern);
       if (!selectedRouteId || !selectedRoute) return;
 
-      // "Motion" is a whole-route concept: only the first segment from the
-      // player gets the zig-zag motion mark; everything else becomes solid.
-      if (strokePattern === "motion") {
-        if (selectedRoute.segments.length === 0) return;
-        const [first, ...rest] = selectedRoute.segments;
+      // Apply the stroke pattern ONLY to the explicitly selected segment.
+      // If no specific segment is selected, apply to all segments of the
+      // route (whole-route edit).
+      if (selectedSegmentId) {
         dispatch({
           type: "route.setSegmentStroke",
           routeId: selectedRouteId,
-          segmentId: first.id,
-          strokePattern: "motion",
+          segmentId: selectedSegmentId,
+          strokePattern,
         });
-        for (const s of rest) {
-          if (s.strokePattern === "motion") {
-            dispatch({
-              type: "route.setSegmentStroke",
-              routeId: selectedRouteId,
-              segmentId: s.id,
-              strokePattern: "solid",
-            });
-          }
-        }
-        return;
-      }
-
-      if (selectedSegmentId) {
-        dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: selectedSegmentId, strokePattern });
       } else {
         for (const s of selectedRoute.segments) {
-          dispatch({ type: "route.setSegmentStroke", routeId: selectedRouteId, segmentId: s.id, strokePattern });
+          dispatch({
+            type: "route.setSegmentStroke",
+            routeId: selectedRouteId,
+            segmentId: s.id,
+            strokePattern,
+          });
         }
       }
     },
@@ -395,16 +366,8 @@ export function PlayEditorClient({
         </div>
       </header>
 
-      {/* Tabs + play context (single row) */}
+      {/* Play context */}
       <div className="flex flex-wrap items-center gap-3">
-        <SegmentedControl
-          options={[
-            { value: "routes" as const, label: "Routes" },
-            { value: "formation" as const, label: "Formation" },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
         <div className="min-w-0 flex-1">
           <EditorPlayContextBar
             playId={playId}
@@ -416,6 +379,14 @@ export function PlayEditorClient({
             onDuplicate={duplicate}
           />
         </div>
+        <button
+          type="button"
+          onClick={() => guardedNavigate("/formations")}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        >
+          <Users className="size-3.5" />
+          Edit formation
+        </button>
         <Link href={`/m/play/${playId}?playbookId=${playbookId}`}>
           <Button variant="ghost" size="sm" leftIcon={Smartphone}>
             Mobile view
@@ -423,9 +394,8 @@ export function PlayEditorClient({
         </Link>
       </div>
 
-      {/* Routes tab */}
-      {tab === "routes" && (
-        <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
+      {/* Routes */}
+      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
             {/* The route toolbar is ALWAYS rendered — even with nothing
                 selected — so the canvas never shifts when a player or
@@ -498,108 +468,7 @@ export function PlayEditorClient({
               activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
             />
           </aside>
-        </div>
-      )}
-
-      {/* Formation tab */}
-      {tab === "formation" && (
-        <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="flex min-h-[420px] flex-col gap-3">
-            {/* Formation toolbar row */}
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Formation
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                leftIcon={UserPlus}
-                onClick={() => {
-                  // Center of field
-                  handleAddPlayer({ x: 0.5, y: 0.5 });
-                }}
-              >
-                Add player
-              </Button>
-              <div className="ml-auto" />
-              <Button
-                size="sm"
-                variant="primary"
-                leftIcon={BookmarkPlus}
-                onClick={() => setShowSaveFormation(true)}
-              >
-                Save formation
-              </Button>
-            </div>
-
-            {/* Save formation panel */}
-            {showSaveFormation && (
-              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-surface-raised px-3 py-2">
-                <Input
-                  placeholder="Formation name…"
-                  value={formationName}
-                  onChange={(e) => setFormationName(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={savingFormation}
-                  onClick={handleSaveFormation}
-                >
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowSaveFormation(false);
-                    setFormationName("");
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
-
-            <div
-              className="relative w-full overflow-hidden"
-              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)} / 1` }}
-            >
-              <EditorCanvas
-                doc={doc}
-                dispatch={dispatch}
-                mode="formation"
-                selectedPlayerId={selectedPlayerId}
-                selectedRouteId={null}
-                selectedNodeId={null}
-                selectedSegmentId={null}
-                onSelectPlayer={setSelectedPlayerId}
-                onSelectRoute={() => {}}
-                onSelectNode={() => {}}
-                onSelectSegment={() => {}}
-                onAddPlayer={handleAddPlayer}
-                activeShape={activeShape}
-                activeStrokePattern={activeStrokePattern}
-                activeColor={activeColor}
-                activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)}
-                fieldBackground={doc.fieldBackground}
-              />
-            </div>
-
-            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
-          </div>
-          <aside className="rounded-xl border border-border bg-surface-raised p-4">
-            <FormationInspector
-              doc={doc}
-              dispatch={dispatch}
-              selectedPlayerId={selectedPlayerId}
-              onSelectPlayer={setSelectedPlayerId}
-            />
-          </aside>
-        </div>
-      )}
+      </div>
 
     </div>
   );

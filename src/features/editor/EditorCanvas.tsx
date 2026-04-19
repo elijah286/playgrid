@@ -279,7 +279,9 @@ export function EditorCanvas({
       const player = playerId
         ? doc.layers.players.find((p) => p.id === playerId)
         : null;
-      const stroke = player?.style.stroke ?? activeColor;
+      // Default a new route to the player's fill color (their visible colour),
+      // not their outline stroke which is usually near-black.
+      const stroke = player?.style.fill ?? activeColor;
       return { stroke, strokeWidth: activeWidth };
     },
     [activeColor, activeWidth, doc.layers.players],
