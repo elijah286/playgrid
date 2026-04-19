@@ -657,6 +657,44 @@ export async function createPlaybookGroupAction(playbookId: string, name: string
   return { ok: true as const, group: row as PlaybookGroupRow };
 }
 
+export async function renamePlaybookGroupAction(groupId: string, name: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const label = name.trim();
+  if (!label) return { ok: false as const, error: "Name cannot be empty." };
+
+  const { error } = await supabase
+    .from("playbook_groups")
+    .update({ name: label })
+    .eq("id", groupId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function deletePlaybookGroupAction(groupId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { error: unassignErr } = await supabase
+    .from("plays")
+    .update({ group_id: null })
+    .eq("group_id", groupId);
+  if (unassignErr) return { ok: false as const, error: unassignErr.message };
+
+  const { error } = await supabase.from("playbook_groups").delete().eq("id", groupId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 export async function setPlayGroupAction(playId: string, groupId: string | null) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();

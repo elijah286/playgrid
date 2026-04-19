@@ -22,9 +22,13 @@ import {
 import {
   archivePlayAction,
   createPlayAction,
+  createPlaybookGroupAction,
   deletePlayAction,
+  deletePlaybookGroupAction,
   duplicatePlayAction,
   renamePlayAction,
+  renamePlaybookGroupAction,
+  setPlayGroupAction,
   type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
@@ -49,6 +53,14 @@ type GroupBy = "formation" | "type" | "group" | "tag";
 
 const UNASSIGNED = "__unassigned__";
 
+const COL_CLASS: Record<number, string> = {
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  4: "grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+  5: "grid-cols-2 md:grid-cols-4 lg:grid-cols-5",
+  6: "grid-cols-2 md:grid-cols-4 lg:grid-cols-6",
+};
+
 export function PlaybookDetailClient({
   playbookId,
   sportVariant,
@@ -71,8 +83,9 @@ export function PlaybookDetailClient({
   const [view, setView] = useState<"active" | "archived">("active");
   const [groupBy, setGroupBy] = useState<GroupBy>("formation");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
-  const [thumbSize, setThumbSize] = useState<"none" | "compact" | "large">("compact");
+  const [columns, setColumns] = useState<number>(3);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   function toggleSection(key: string) {
     setCollapsed((prev) => {
@@ -121,6 +134,15 @@ export function PlaybookDetailClient({
       else buckets.set(key, { key, label, plays: [p] });
     };
 
+    if (groupBy === "group") {
+      // Always show every existing group (even if empty) plus an Ungrouped bucket,
+      // so the user can drop plays onto empty groups.
+      buckets.set(UNASSIGNED, { key: UNASSIGNED, label: "Ungrouped", plays: [] });
+      for (const g of initialGroups) {
+        buckets.set(g.id, { key: g.id, label: g.name, plays: [] });
+      }
+    }
+
     for (const p of filtered) {
       switch (groupBy) {
         case "formation": {
@@ -158,7 +180,7 @@ export function PlaybookDetailClient({
     });
     for (const s of arr) s.plays.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
     return arr;
-  }, [filtered, groupBy, groupNameById]);
+  }, [filtered, groupBy, groupNameById, initialGroups]);
 
   function openFormationPicker() {
     setShowFormationPicker(true);
@@ -202,6 +224,32 @@ export function PlaybookDetailClient({
     const next = window.prompt("Rename play", current);
     if (next == null) return;
     handle(() => renamePlayAction(id, next));
+  }
+
+  function onCreateGroup() {
+    const name = window.prompt("Name this group");
+    if (name == null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    handle(() => createPlaybookGroupAction(playbookId, trimmed));
+  }
+
+  function onRenameGroup(id: string, current: string) {
+    const next = window.prompt("Rename group", current);
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed) return;
+    handle(() => renamePlaybookGroupAction(id, trimmed));
+  }
+
+  function onDeleteGroup(id: string, name: string) {
+    if (!window.confirm(`Delete group "${name}"? Plays inside will become ungrouped.`)) return;
+    handle(() => deletePlaybookGroupAction(id));
+  }
+
+  function onDropToGroup(groupKey: string, playId: string) {
+    const target = groupKey === UNASSIGNED ? null : groupKey;
+    handle(() => setPlayGroupAction(playId, target));
   }
 
   function confirmAnd(msg: string, fn: () => void) {
@@ -265,15 +313,24 @@ export function PlaybookDetailClient({
           ]}
         />
         {viewMode === "cards" && (
-          <SegmentedControl
-            value={thumbSize}
-            onChange={(v) => setThumbSize(v as "none" | "compact" | "large")}
-            options={[
-              { value: "none", label: "No thumb" },
-              { value: "compact", label: "Compact" },
-              { value: "large", label: "Large" },
-            ]}
-          />
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <span>Cols</span>
+            <input
+              type="range"
+              min={2}
+              max={6}
+              step={1}
+              value={columns}
+              onChange={(e) => setColumns(Number(e.target.value))}
+              className="w-24 accent-primary"
+            />
+            <span className="w-3 text-center font-semibold text-foreground">{columns}</span>
+          </label>
+        )}
+        {groupBy === "group" && (
+          <Button variant="secondary" size="sm" leftIcon={Plus} onClick={onCreateGroup}>
+            New group
+          </Button>
         )}
         <Button
           variant="ghost"
@@ -348,28 +405,96 @@ export function PlaybookDetailClient({
                   ),
               },
             ];
+            const isGroupSection = groupBy === "group";
+            const isDropTarget = isGroupSection;
+            const isNamedGroup = isGroupSection && section.key !== UNASSIGNED;
+            const isDragOver = dragOverKey === section.key;
             return (
-              <section key={section.key} className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => toggleSection(section.key)}
-                  className="flex w-full items-center gap-2 border-b border-border pb-1.5 text-left hover:border-muted-light"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="h-4 w-4 text-muted" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted" />
+              <section
+                key={section.key}
+                className={`space-y-3 rounded-lg transition-colors ${
+                  isDropTarget ? "p-2 -m-2" : ""
+                } ${isDragOver ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
+                onDragOver={
+                  isDropTarget
+                    ? (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dragOverKey !== section.key) setDragOverKey(section.key);
+                      }
+                    : undefined
+                }
+                onDragLeave={
+                  isDropTarget
+                    ? (e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setDragOverKey((k) => (k === section.key ? null : k));
+                        }
+                      }
+                    : undefined
+                }
+                onDrop={
+                  isDropTarget
+                    ? (e) => {
+                        e.preventDefault();
+                        const playId = e.dataTransfer.getData("text/play-id");
+                        setDragOverKey(null);
+                        if (playId) onDropToGroup(section.key, playId);
+                      }
+                    : undefined
+                }
+              >
+                <div className="flex w-full items-center gap-2 border-b border-border pb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.key)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left hover:opacity-80"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-muted" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted" />
+                    )}
+                    <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
+                    <Badge variant="default">{section.plays.length}</Badge>
+                  </button>
+                  {isNamedGroup && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Rename group"
+                        onClick={() => onRenameGroup(section.key, section.label)}
+                        className="rounded p-1 text-muted hover:bg-surface-inset hover:text-foreground"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Delete group"
+                        onClick={() => onDeleteGroup(section.key, section.label)}
+                        className="rounded p-1 text-muted hover:bg-danger/10 hover:text-danger"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
                   )}
-                  <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
-                  <Badge variant="default">{section.plays.length}</Badge>
-                </button>
+                </div>
                 {!isCollapsed && viewMode === "cards" && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className={`grid gap-3 ${COL_CLASS[columns] ?? COL_CLASS[3]}`}>
                     {section.plays.map((p) => (
                       <Card
                         key={`${section.key}:${p.id}`}
                         hover
-                        className="relative flex flex-col p-0"
+                        className="relative flex cursor-grab flex-col p-0 active:cursor-grabbing"
+                        draggable={isGroupSection}
+                        onDragStart={
+                          isGroupSection
+                            ? (e) => {
+                                e.dataTransfer.setData("text/play-id", p.id);
+                                e.dataTransfer.effectAllowed = "move";
+                              }
+                            : undefined
+                        }
                       >
                         <Link
                           href={`/plays/${p.id}/edit`}
@@ -384,14 +509,8 @@ export function PlaybookDetailClient({
                               <Badge variant="primary">{p.wristband_code}</Badge>
                             )}
                           </div>
-                          {p.preview && thumbSize !== "none" && (
-                            <div
-                              className={
-                                thumbSize === "compact"
-                                  ? "mt-2 max-h-24 overflow-hidden"
-                                  : "mt-2"
-                              }
-                            >
+                          {p.preview && (
+                            <div className="mt-2">
                               <PlayPreview preview={p.preview} />
                             </div>
                           )}
@@ -422,7 +541,16 @@ export function PlaybookDetailClient({
                     {section.plays.map((p) => (
                       <li
                         key={`${section.key}:${p.id}`}
-                        className="flex items-center gap-2 pl-8 pr-2"
+                        className={`flex items-center gap-2 pl-8 pr-2 ${isGroupSection ? "cursor-grab active:cursor-grabbing" : ""}`}
+                        draggable={isGroupSection}
+                        onDragStart={
+                          isGroupSection
+                            ? (e) => {
+                                e.dataTransfer.setData("text/play-id", p.id);
+                                e.dataTransfer.effectAllowed = "move";
+                              }
+                            : undefined
+                        }
                       >
                         <Link
                           href={`/plays/${p.id}/edit`}
@@ -586,22 +714,10 @@ function PlayPreview({
     <svg
       viewBox={`0 ${vbY} 1 ${vbH}`}
       width="100%"
-      className="rounded-lg border border-border"
+      className="rounded-lg border border-border bg-surface-inset"
       preserveAspectRatio="none"
     >
-      {/* Field: routes/players live in full 0-1 normalized space */}
       <g>
-        <rect x={0} y={vbY} width={1} height={vbH} fill="#2D8B4E" />
-        <line
-          x1={0}
-          y1={0.5}
-          x2={1}
-          y2={0.5}
-          stroke="rgba(255,255,255,0.4)"
-          strokeWidth={1}
-          strokeDasharray="3 2"
-          vectorEffect="non-scaling-stroke"
-        />
         {preview.routes.map((r) => {
           const rendered = routeToRenderedSegments(r);
           const stroke = resolveRouteStroke(r, preview.players);
