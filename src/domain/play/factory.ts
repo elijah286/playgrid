@@ -73,10 +73,10 @@ export function sportProfileForVariant(variant: SportVariant): SportProfile {
 
 /** Human-readable label for each sport variant, for use in UI. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
-  flag_5v5: "Flag 5v5",
-  flag_7v7: "Flag 7v7",
-  six_man: "6-Man",
-  tackle_11: "11-Man Tackle",
+  flag_5v5: "Flag",
+  flag_7v7: "7v7",
+  six_man: "Other",
+  tackle_11: "Tackle",
 };
 
 function mkPlayer(

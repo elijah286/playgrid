@@ -59,7 +59,17 @@ export async function createPlaybookAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const { teamId } = await ensureDefaultWorkspace(supabase, user.id);
+  let teamId: string;
+  try {
+    const ws = await ensureDefaultWorkspace(supabase, user.id);
+    teamId = ws.teamId;
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Could not resolve workspace.",
+    };
+  }
+
   const { data, error } = await supabase
     .from("playbooks")
     .insert({ team_id: teamId, name: name || "New playbook", sport_variant: sportVariant })
