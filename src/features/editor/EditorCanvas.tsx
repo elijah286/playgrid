@@ -973,7 +973,7 @@ export function EditorCanvas({
   // stored positions are still in normalized 0-1 field coords.
 
   return (
-    <div ref={wrapperRef} className="relative h-full min-h-0 w-full overflow-hidden">
+    <div ref={wrapperRef} className="relative h-full min-h-0 w-full select-none overflow-hidden" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
     <svg
       ref={svgRef}
       viewBox={`0 0 ${fieldAspect} 1`}
