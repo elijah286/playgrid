@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { signOutAction } from "@/app/actions/auth";
+import { getCachedUserRole } from "@/lib/auth/profile-cache";
 
 export default async function DashboardLayout({
   children,
@@ -30,12 +31,8 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  const isAdmin = profile?.role === "admin";
+  const role = await getCachedUserRole(user.id);
+  const isAdmin = role === "admin";
 
   return (
     <div className="min-h-full">

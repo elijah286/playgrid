@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -78,6 +78,7 @@ export async function createUserAsAdminAction(input: {
     .eq("id", data.user.id);
   if (upErr) return { ok: false as const, error: upErr.message };
 
+  revalidateTag(`user-role:${data.user.id}`, "max");
   revalidatePath("/admin/users");
   return { ok: true as const };
 }
@@ -93,6 +94,7 @@ export async function updateUserRoleAction(userId: string, role: "user" | "admin
   const { error } = await admin.from("profiles").update({ role }).eq("id", userId);
   if (error) return { ok: false as const, error: error.message };
 
+  revalidateTag(`user-role:${userId}`, "max");
   revalidatePath("/admin/users");
   return { ok: true as const };
 }
