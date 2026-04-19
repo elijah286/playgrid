@@ -587,30 +587,21 @@ function PlayPreview({
     minSvgY = 0.22;
     maxSvgY = 0.78;
   }
-  let vbX = Math.max(0, minX - PAD);
-  let vbW = Math.min(1, maxX + PAD) - vbX;
-  let vbY = Math.max(0, minSvgY - PAD);
-  let vbH = Math.min(1, maxSvgY + PAD) - vbY;
+  const vbX = Math.max(0, minX - PAD);
+  const vbW = Math.min(1, maxX + PAD) - vbX;
+  const vbY = Math.max(0, minSvgY - PAD);
+  const vbH = Math.min(1, maxSvgY + PAD) - vbY;
 
-  // Pad the content bbox out to the container's 16:10 aspect so every
-  // thumbnail renders the same size without distorting shapes. Narrower
-  // content → pad the width; taller → pad the height.
-  const TARGET = 16 / 10;
-  const currentAspect = vbW / vbH;
-  if (currentAspect < TARGET) {
-    const needed = vbH * TARGET;
-    const extra = needed - vbW;
-    vbX = Math.max(0, vbX - extra / 2);
-    vbW = Math.min(1 - vbX, needed);
-  } else if (currentAspect > TARGET) {
-    const needed = vbW / TARGET;
-    const extra = needed - vbH;
-    vbY = Math.max(0, vbY - extra / 2);
-    vbH = Math.min(1 - vbY, needed);
-  }
+  // Let the thumbnail's container aspect match the content bbox so player
+  // shapes (circles, squares, etc.) render with x/y scaled identically.
+  // Thumbnail heights vary with content shape, widths stay uniform in grid.
+  const aspect = vbW / vbH;
 
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border">
+    <div
+      className="w-full overflow-hidden rounded-lg border border-border"
+      style={{ aspectRatio: `${aspect}` }}
+    >
     <svg
       viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
       width="100%"
