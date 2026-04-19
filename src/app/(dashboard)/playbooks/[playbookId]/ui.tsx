@@ -53,12 +53,12 @@ type GroupBy = "formation" | "type" | "group" | "tag";
 
 const UNASSIGNED = "__unassigned__";
 
-const COL_CLASS: Record<number, string> = {
-  2: "grid-cols-1 sm:grid-cols-2",
-  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-  4: "grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
-  5: "grid-cols-2 md:grid-cols-4 lg:grid-cols-5",
-  6: "grid-cols-2 md:grid-cols-4 lg:grid-cols-6",
+type ThumbSize = "small" | "medium" | "large";
+
+const SIZE_COL_CLASS: Record<ThumbSize, string> = {
+  large: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+  medium: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+  small: "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
 };
 
 export function PlaybookDetailClient({
@@ -83,7 +83,7 @@ export function PlaybookDetailClient({
   const [view, setView] = useState<"active" | "archived">("active");
   const [groupBy, setGroupBy] = useState<GroupBy>("formation");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
-  const [columns, setColumns] = useState<number>(3);
+  const [thumbSize, setThumbSize] = useState<ThumbSize>("large");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -313,19 +313,15 @@ export function PlaybookDetailClient({
           ]}
         />
         {viewMode === "cards" && (
-          <label className="flex items-center gap-2 text-xs text-muted">
-            <span>Cols</span>
-            <input
-              type="range"
-              min={2}
-              max={6}
-              step={1}
-              value={columns}
-              onChange={(e) => setColumns(Number(e.target.value))}
-              className="w-24 accent-primary"
-            />
-            <span className="w-3 text-center font-semibold text-foreground">{columns}</span>
-          </label>
+          <SegmentedControl
+            value={thumbSize}
+            onChange={(v) => setThumbSize(v as ThumbSize)}
+            options={[
+              { value: "small", label: "Small" },
+              { value: "medium", label: "Medium" },
+              { value: "large", label: "Large" },
+            ]}
+          />
         )}
         {groupBy === "group" && (
           <Button variant="secondary" size="sm" leftIcon={Plus} onClick={onCreateGroup}>
@@ -480,7 +476,7 @@ export function PlaybookDetailClient({
                   )}
                 </div>
                 {!isCollapsed && viewMode === "cards" && (
-                  <div className={`grid gap-3 ${COL_CLASS[columns] ?? COL_CLASS[3]}`}>
+                  <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
                     {section.plays.map((p) => (
                       <Card
                         key={`${section.key}:${p.id}`}
@@ -680,7 +676,7 @@ export function PlaybookDetailClient({
 function PlayPreview({
   preview,
 }: {
-  preview: { players: Player[]; routes: Route[] };
+  preview: { players: Player[]; routes: Route[]; lineOfScrimmageY: number };
 }) {
   // Render in normalized 0-1 field coords (same as editor) so zigzag,
   // curves, dashes and end decorations match the edited play exactly.
@@ -707,6 +703,12 @@ function PlayPreview({
     minSvgY = 0.22;
     maxSvgY = 0.78;
   }
+  // Always include LOS (svgY = 1 - lineOfScrimmageY) and 10yd downfield reference
+  // so the faint guide lines stay in frame.
+  const losSvgY = 1 - preview.lineOfScrimmageY;
+  const tenSvgY = 1 - (preview.lineOfScrimmageY + 0.40);
+  minSvgY = Math.min(minSvgY, tenSvgY);
+  maxSvgY = Math.max(maxSvgY, losSvgY);
   const vbY = Math.max(0, minSvgY - PAD);
   const vbH = Math.min(1, maxSvgY + PAD) - vbY;
 
@@ -715,9 +717,28 @@ function PlayPreview({
       viewBox={`0 ${vbY} 1 ${vbH}`}
       width="100%"
       className="rounded-lg border border-border bg-surface-inset"
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid meet"
     >
       <g>
+        {(() => {
+          // Faint reference lines at LOS, +5yd, +10yd. 25-yd window → 1 yd = 0.04 in field-y.
+          const losY = 1 - preview.lineOfScrimmageY;
+          const fiveY = 1 - (preview.lineOfScrimmageY + 0.20);
+          const tenY = 1 - (preview.lineOfScrimmageY + 0.40);
+          const common = {
+            x1: 0, x2: 1,
+            stroke: "rgba(100,116,139,0.35)",
+            strokeWidth: 1,
+            vectorEffect: "non-scaling-stroke" as const,
+          };
+          return (
+            <>
+              <line {...common} y1={losY} y2={losY} strokeWidth={1.25} />
+              <line {...common} y1={fiveY} y2={fiveY} strokeDasharray="2 3" />
+              <line {...common} y1={tenY} y2={tenY} strokeDasharray="2 3" />
+            </>
+          );
+        })()}
         {preview.routes.map((r) => {
           const rendered = routeToRenderedSegments(r);
           const stroke = resolveRouteStroke(r, preview.players);
@@ -768,7 +789,7 @@ function PlayPreview({
                 const ux = dxS / len;
                 const uy = dyS / len;
                 if (decoration === "arrow") {
-                  const arrowLen = 0.035;
+                  const arrowLen = 0.05;
                   const cosA = Math.cos(Math.PI / 6);
                   const sinA = Math.sin(Math.PI / 6);
                   const bx = -ux;
@@ -777,11 +798,20 @@ function PlayPreview({
                   const r1y = sinA * bx + cosA * by;
                   const r2x = cosA * bx + sinA * by;
                   const r2y = -sinA * bx + cosA * by;
+                  const p1x = tipX + arrowLen * r1x;
+                  const p1y = tipY + arrowLen * r1y;
+                  const p2x = tipX + arrowLen * r2x;
+                  const p2y = tipY + arrowLen * r2y;
                   return (
-                    <g key={seg.id}>
-                      <line x1={tipX} y1={tipY} x2={tipX + arrowLen * r1x} y2={tipY + arrowLen * r1y} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-                      <line x1={tipX} y1={tipY} x2={tipX + arrowLen * r2x} y2={tipY + arrowLen * r2y} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-                    </g>
+                    <polygon
+                      key={seg.id}
+                      points={`${tipX},${tipY} ${p1x},${p1y} ${p2x},${p2y}`}
+                      fill={stroke}
+                      stroke={stroke}
+                      strokeWidth={0.8}
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
                   );
                 }
                 if (decoration === "t") {
