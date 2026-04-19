@@ -96,14 +96,12 @@ function FormationCard({
       onSelect: () => onDuplicate(formation.id),
     },
   ];
-  if (!formation.isSystem) {
-    items.push({
-      label: "Delete",
-      icon: Trash2,
-      danger: true,
-      onSelect: () => onDelete(formation.id, formation.displayName),
-    });
-  }
+  items.push({
+    label: "Delete",
+    icon: Trash2,
+    danger: true,
+    onSelect: () => onDelete(formation.id, formation.displayName),
+  });
 
   // System formations can't be edited directly — clicking opens a duplicate
   // for editing, matching what the old Edit button did.
