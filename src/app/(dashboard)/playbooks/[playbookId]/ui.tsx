@@ -64,6 +64,7 @@ export function PlaybookDetailClient({
   const [showFormationPicker, setShowFormationPicker] = useState(false);
   const [availableFormations, setAvailableFormations] = useState<SavedFormation[]>([]);
   const [loadingFormations, setLoadingFormations] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const viewed = initialPlays.filter((p) =>
     view === "archived" ? p.is_archived : !p.is_archived,
@@ -147,17 +148,16 @@ export function PlaybookDetailClient({
     });
   }
 
-  function createWithFormation(players?: Player[]) {
+  async function createWithFormation(players?: Player[]) {
     setShowFormationPicker(false);
-    startTransition(async () => {
-      const res = await createPlayAction(playbookId, players);
-      if (res.ok) {
-        router.push(`/plays/${res.playId}/edit`);
-        router.refresh();
-      } else {
-        toast(res.error, "error");
-      }
-    });
+    setCreating(true);
+    const res = await createPlayAction(playbookId, players);
+    if (res.ok) {
+      router.push(`/plays/${res.playId}/edit`);
+    } else {
+      setCreating(false);
+      toast(res.error, "error");
+    }
   }
 
   function handle<T>(fn: () => Promise<T>, onOk?: (r: T) => void) {
@@ -212,7 +212,7 @@ export function PlaybookDetailClient({
         <Button
           variant="primary"
           leftIcon={Plus}
-          loading={pending}
+          loading={creating}
           onClick={openFormationPicker}
         >
           New play
@@ -244,7 +244,7 @@ export function PlaybookDetailClient({
           heading="No plays yet"
           description="Create your first play to start designing routes and formations."
           action={
-            <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={pending}>
+            <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
               New play
             </Button>
           }
