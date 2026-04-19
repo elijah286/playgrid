@@ -461,7 +461,10 @@ export function PlayEditorClient({
               />
             </div>
 
-            <div className="relative min-h-[360px] flex-1 overflow-hidden">
+            <div
+              className="relative w-full overflow-hidden"
+              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)} / 1` }}
+            >
               <EditorCanvas
                 doc={doc}
                 dispatch={dispatch}
@@ -559,7 +562,10 @@ export function PlayEditorClient({
               </div>
             )}
 
-            <div className="relative min-h-[360px] flex-1 overflow-hidden">
+            <div
+              className="relative w-full overflow-hidden"
+              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55)} / 1` }}
+            >
               <EditorCanvas
                 doc={doc}
                 dispatch={dispatch}

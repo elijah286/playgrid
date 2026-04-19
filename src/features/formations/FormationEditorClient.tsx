@@ -121,7 +121,7 @@ export function FormationEditorClient(props: Props) {
   }
 
   const fieldAspect =
-    doc.sportProfile.fieldWidthYds / doc.sportProfile.fieldLengthYds;
+    doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.55);
 
   return (
     <div className="flex flex-col gap-5">
@@ -183,7 +183,10 @@ export function FormationEditorClient(props: Props) {
               role, and style.
             </span>
           </div>
-          <div className="relative min-h-[400px] overflow-hidden rounded-xl">
+          <div
+            className="relative w-full overflow-hidden rounded-xl"
+            style={{ aspectRatio: `${fieldAspect} / 1` }}
+          >
             <EditorCanvas
               doc={doc}
               dispatch={dispatch}
