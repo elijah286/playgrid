@@ -30,26 +30,35 @@ import {
   EmptyState,
   Input,
   SegmentedControl,
-  Select,
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 
-const SPORT_OPTIONS = (Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]).map(
-  ([value, label]) => ({ value, label }),
-);
+const TYPE_OPTIONS: { value: SportVariant; label: string }[] = [
+  { value: "flag_7v7", label: "7v7" },
+  { value: "flag_5v5", label: "Flag" },
+  { value: "tackle_11", label: "Tackle" },
+  { value: "six_man", label: "Other" },
+];
 
 export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
+  const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [sportVariant, setSportVariant] = useState<SportVariant>("flag_7v7");
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
   const [rows, setRows] = useState<PlaybookRow[]>(initial);
+
+  function openCreate() {
+    setName("");
+    setSportVariant("flag_7v7");
+    setCreateOpen(true);
+  }
 
   function reload(nextView: "active" | "archived" = view) {
     startTransition(async () => {
@@ -80,9 +89,15 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
   });
 
   function create() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast("Enter a playbook name.", "error");
+      return;
+    }
     startTransition(async () => {
-      const res = await createPlaybookAction(name || "New playbook", sportVariant);
+      const res = await createPlaybookAction(trimmed, sportVariant);
       if (res.ok) {
+        setCreateOpen(false);
         router.push(`/playbooks/${res.id}`);
         router.refresh();
       } else {
@@ -135,29 +150,9 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
             { value: "archived", label: "Archived" },
           ]}
         />
-        <div className="flex flex-wrap gap-2">
-          <Select
-            value={sportVariant}
-            onChange={(v) => setSportVariant(v as SportVariant)}
-            options={SPORT_OPTIONS}
-            className="w-44"
-          />
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Playbook name"
-            className="w-44"
-            onKeyDown={(e) => e.key === "Enter" && create()}
-          />
-          <Button
-            variant="primary"
-            leftIcon={Plus}
-            loading={pending}
-            onClick={create}
-          >
-            Create
-          </Button>
-        </div>
+        <Button variant="primary" leftIcon={Plus} onClick={openCreate}>
+          Create
+        </Button>
       </div>
 
       {filtered.length === 0 ? (
@@ -176,8 +171,7 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
               <Button
                 variant="primary"
                 leftIcon={Plus}
-                onClick={create}
-                loading={pending}
+                onClick={openCreate}
               >
                 Create playbook
               </Button>
@@ -254,6 +248,75 @@ export function PlaybooksClient({ initial }: { initial: PlaybookRow[] }) {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {createOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !pending && setCreateOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-foreground">New playbook</h2>
+            <p className="mt-1 text-sm text-muted">
+              Choose a name and playbook type.
+            </p>
+
+            <label className="mt-4 block">
+              <span className="text-xs font-medium text-muted">Name</span>
+              <Input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Spring 2026"
+                className="mt-1 w-full"
+                onKeyDown={(e) => e.key === "Enter" && create()}
+              />
+            </label>
+
+            <div className="mt-4">
+              <span className="text-xs font-medium text-muted">Type</span>
+              <div className="mt-1.5 grid grid-cols-4 gap-2">
+                {TYPE_OPTIONS.map((opt) => {
+                  const active = sportVariant === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setSportVariant(opt.value)}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-foreground hover:bg-surface-inset"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setCreateOpen(false)}
+                disabled={pending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={create}
+                loading={pending}
+              >
+                Create
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
