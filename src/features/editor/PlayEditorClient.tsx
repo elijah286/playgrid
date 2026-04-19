@@ -456,6 +456,14 @@ export function PlayEditorClient({
 
             {/* Field size controls (below canvas) */}
             <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
+
+            {/* Play notes */}
+            <PlayNotesCard
+              value={doc.metadata.notes ?? ""}
+              onChange={(notes) =>
+                dispatch({ type: "document.setMetadata", patch: { notes } })
+              }
+            />
           </div>
           <aside className="rounded-xl border border-border bg-surface-raised p-4">
             <Inspector
@@ -469,6 +477,46 @@ export function PlayEditorClient({
           </aside>
       </div>
 
+    </div>
+  );
+}
+
+function PlayNotesCard({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(value.length > 0);
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-surface-raised">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">Play notes</span>
+          {!open && value.trim() && (
+            <span className="truncate text-xs text-muted">
+              {value.trim().slice(0, 80)}
+              {value.trim().length > 80 ? "…" : ""}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border px-4 py-3">
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Explain how to read this play — progressions, keys, coaching points…"
+            className="min-h-[120px] w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+          />
+        </div>
+      )}
     </div>
   );
 }
