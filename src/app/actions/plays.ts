@@ -3,8 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { createEmptyPlayDocument, normalizePlayDocument } from "@/domain/play/factory";
-import type { PlayDocument, Player, Route } from "@/domain/play/types";
+import {
+  createEmptyPlayDocument,
+  normalizePlayDocument,
+  sportProfileForVariant,
+} from "@/domain/play/factory";
+import type { PlayDocument, Player, Route, SportVariant } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -116,6 +120,14 @@ export async function listPlaysAction(
   };
 }
 
+/**
+ * Create a play.
+ *
+ * `initialPlayers` semantics:
+ *   - undefined → use the playbook variant's default formation
+ *   - non-empty array → use those players (from a chosen saved formation)
+ *   - empty array → "no formation": start with zero players
+ */
 export async function createPlayAction(playbookId: string, initialPlayers?: Player[]) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -126,9 +138,25 @@ export async function createPlayAction(playbookId: string, initialPlayers?: Play
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const doc = initialPlayers
-    ? createEmptyPlayDocument({ layers: { players: initialPlayers, routes: [], annotations: [] } })
-    : createEmptyPlayDocument();
+  // The playbook's sport variant determines field dimensions + the default
+  // formation when the caller didn't pick one.
+  const { data: book } = await supabase
+    .from("playbooks")
+    .select("sport_variant")
+    .eq("id", playbookId)
+    .maybeSingle();
+  const variant = ((book?.sport_variant as SportVariant | undefined) ?? "flag_7v7") as SportVariant;
+  const sportProfile = sportProfileForVariant(variant);
+
+  const overrides: Partial<PlayDocument> = { sportProfile };
+  if (initialPlayers !== undefined) {
+    overrides.layers = {
+      players: initialPlayers,
+      routes: [],
+      annotations: [],
+    };
+  }
+  const doc = createEmptyPlayDocument(overrides);
   const { data: sortRow } = await supabase
     .from("plays")
     .select("sort_order")

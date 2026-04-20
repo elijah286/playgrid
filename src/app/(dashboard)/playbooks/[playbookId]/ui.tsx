@@ -68,17 +68,29 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
 export function PlaybookDetailClient({
   playbookId,
   sportVariant,
+  customOffenseCount,
   initialPlays,
   initialGroups,
 }: {
   playbookId: string;
   sportVariant: string;
+  customOffenseCount?: number | null;
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
 }) {
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
-  const expectedPlayerCount = variantProfile.offensePlayerCount;
+  // For "Other" (six_man) we honour the playbook's custom_offense_count so only
+  // formations with the right headcount are offered. For fixed variants the
+  // canonical offensePlayerCount from the sport profile is the source of truth.
+  const expectedPlayerCount =
+    variant === "six_man" && typeof customOffenseCount === "number"
+      ? customOffenseCount
+      : variantProfile.offensePlayerCount;
+  const hasNonDefaultCount =
+    variant === "six_man" &&
+    typeof customOffenseCount === "number" &&
+    customOffenseCount !== variantProfile.offensePlayerCount;
   const variantLabel = SPORT_VARIANT_LABELS[variant] ?? variant;
   const router = useRouter();
   const { toast } = useToast();
@@ -626,55 +638,94 @@ export function PlaybookDetailClient({
               {loadingFormations ? (
                 <p className="text-center text-sm text-muted">Loading formations…</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    className="flex flex-col items-center gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
-                    onClick={() => createWithFormation()}
-                  >
-                    <MiniPlayerDiagram players={null} />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Default ({variantLabel})</p>
-                      <p className="text-xs text-muted">Standard formation</p>
-                    </div>
-                  </button>
+                (() => {
+                  const legalFormations = availableFormations.filter((f) => {
+                    const fv = f.sportProfile?.variant as SportVariant | undefined;
+                    const variantOk = fv ? fv === variant : true;
+                    // Every option must be legal for the game type. For the
+                    // "Other" variant with a custom player count, that means
+                    // headcount must match exactly too.
+                    const countOk = f.players.length === expectedPlayerCount;
+                    return variantOk && countOk;
+                  });
+                  return (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {!hasNonDefaultCount && (
+                        <button
+                          type="button"
+                          className="flex flex-col items-center gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
+                          onClick={() => createWithFormation()}
+                        >
+                          <MiniPlayerDiagram players={null} />
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">
+                              Default ({variantLabel})
+                            </p>
+                            <p className="text-xs text-muted">Standard formation</p>
+                          </div>
+                        </button>
+                      )}
 
-                  <Link
-                    href={`/formations/new?variant=${variant}`}
-                    className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                  >
-                    <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
-                      <Plus className="size-7" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">New formation</p>
-                      <p className="text-xs text-muted">Design from scratch</p>
-                    </div>
-                  </Link>
+                      <button
+                        type="button"
+                        className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                        onClick={() => createWithFormation([])}
+                      >
+                        <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                          <span className="text-xs font-semibold uppercase tracking-wider">
+                            Blank
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">No formation</p>
+                          <p className="text-xs text-muted">Start with no players</p>
+                        </div>
+                      </button>
 
-                  {availableFormations
-                    .filter((f) => {
-                      const fv = f.sportProfile?.variant as SportVariant | undefined;
-                      if (fv) return fv === variant;
-                      return f.players.length === expectedPlayerCount;
-                    })
-                    .map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                      onClick={() => createWithFormation(f.players)}
-                    >
-                      <MiniPlayerDiagram players={f.players} />
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
-                        <p className="text-xs text-muted">
-                          {f.players.length} players
+                      <Link
+                        href={`/formations/new?variant=${variant}`}
+                        className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                      >
+                        <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                          <Plus className="size-7" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">New formation</p>
+                          <p className="text-xs text-muted">Design from scratch</p>
+                        </div>
+                      </Link>
+
+                      {legalFormations.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                          onClick={() => createWithFormation(f.players)}
+                        >
+                          <MiniPlayerDiagram players={f.players} />
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                            <p className="text-xs text-muted">
+                              {f.players.length} players
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+
+                      {legalFormations.length === 0 && !hasNonDefaultCount && (
+                        <p className="col-span-full text-center text-xs text-muted">
+                          No saved formations for {variantLabel} yet.
                         </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                      )}
+                      {hasNonDefaultCount && legalFormations.length === 0 && (
+                        <p className="col-span-full text-center text-xs text-muted">
+                          No saved formations match {expectedPlayerCount}-player{" "}
+                          {variantLabel}. Create one, or start with no formation.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()
               )}
             </div>
           </div>
