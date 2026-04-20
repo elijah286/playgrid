@@ -32,6 +32,10 @@ export type PlayAnimation = {
   flats: FlatRoute[];
   step: () => void;
   reset: () => void;
+  speed: number;
+  setSpeed: (s: number) => void;
+  paused: boolean;
+  togglePause: () => void;
 };
 
 export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
@@ -50,6 +54,10 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
   const [progress, setProgress] = useState<Map<string, number>>(
     () => new Map(),
   );
+  const [speed, setSpeed] = useState(1);
+  const [paused, setPaused] = useState(false);
+  const speedRef = useRef(1);
+  speedRef.current = speed;
 
   // The RAF loop mutates progress synchronously through this ref; setProgress
   // is only called to trigger a re-render. Using the ref avoids the React 18
@@ -68,7 +76,7 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
   }, []);
 
   useEffect(() => {
-    if (phase !== "motion" && phase !== "play") {
+    if ((phase !== "motion" && phase !== "play") || paused) {
       stopRaf();
       return;
     }
@@ -77,7 +85,7 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
       const last = lastTsRef.current ?? ts;
       const dt = Math.min(0.1, (ts - last) / 1000);
       lastTsRef.current = ts;
-      const advance = dt * UNITS_PER_SEC;
+      const advance = dt * UNITS_PER_SEC * speedRef.current;
 
       const next = new Map(progressRef.current);
       let allDone = true;
@@ -106,7 +114,11 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
 
     rafRef.current = requestAnimationFrame(tick);
     return stopRaf;
-  }, [phase, flats, stopRaf]);
+  }, [phase, paused, flats, stopRaf]);
+
+  const togglePause = useCallback(() => {
+    setPaused((p) => !p);
+  }, []);
 
   const step = useCallback(() => {
     setPhase((p) => {
@@ -130,6 +142,7 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
     progressRef.current = new Map();
     setProgress(new Map());
     setPhase("idle");
+    setPaused(false);
   }, [stopRaf]);
 
   const playerPositions = useMemo(() => {
@@ -149,5 +162,9 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
     flats,
     step,
     reset,
+    speed,
+    setSpeed,
+    paused,
+    togglePause,
   };
 }

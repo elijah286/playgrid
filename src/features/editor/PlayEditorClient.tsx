@@ -22,7 +22,7 @@ import { EditorHeaderBar } from "./EditorHeaderBar";
 import { useToast } from "@/components/ui";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
-import { PlayControls } from "@/features/animation/PlayControls";
+import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 
 type Props = {
   playId: string;
@@ -402,7 +402,6 @@ export function PlayEditorClient({
                 opponentFormation={opponentFormation ?? null}
               />
               <AnimationOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
-              <PlayControls anim={anim} />
             </div>
 
             {/* Field size controls (below canvas) */}
@@ -416,7 +415,8 @@ export function PlayEditorClient({
               }
             />
           </div>
-          <aside className="rounded-xl border border-border bg-surface-raised p-4">
+          <aside className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
+            {!showToolbar && <PlayControlsPanel anim={anim} />}
             <Inspector
               doc={doc}
               dispatch={dispatch}
