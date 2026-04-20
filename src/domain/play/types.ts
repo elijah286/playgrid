@@ -217,6 +217,11 @@ export type PlayDocument = {
    */
   showHashMarks?: boolean;
   /**
+   * Whether to render the yard numbers (5, 10, 15…) painted on the field.
+   * Defaults to `true`.
+   */
+  showYardNumbers?: boolean;
+  /**
    * Line-of-scrimmage marker style. Drawn at `lineOfScrimmageY`.
    * Defaults to "line".
    */

@@ -24,6 +24,11 @@ export function resolveShowHashMarks(doc: PlayDocument): boolean {
   return shouldShowHashMarksDefault(doc.sportProfile.variant);
 }
 
+/** Effective yard-number setting. Defaults to true when unset. */
+export function resolveShowYardNumbers(doc: PlayDocument): boolean {
+  return doc.showYardNumbers ?? true;
+}
+
 /** LOS marker style, defaulting to a horizontal line. */
 export function resolveLineOfScrimmage(
   doc: PlayDocument,

@@ -8,6 +8,7 @@ import {
   resolveFieldZone,
   resolveLineOfScrimmage,
   resolveShowHashMarks,
+  resolveShowYardNumbers,
 } from "@/domain/play/factory";
 import { SegmentedControl } from "@/components/ui";
 
@@ -100,6 +101,22 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
           }
         />
         <span>Hashes</span>
+      </label>
+
+      {/* Yard numbers */}
+      <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+        <input
+          type="checkbox"
+          className="size-3.5 cursor-pointer accent-primary"
+          checked={resolveShowYardNumbers(doc)}
+          onChange={(e) =>
+            dispatch({
+              type: "document.setShowYardNumbers",
+              showYardNumbers: e.target.checked,
+            })
+          }
+        />
+        <span>Numbers</span>
       </label>
 
       {/* LOS style */}

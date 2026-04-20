@@ -14,6 +14,7 @@ import {
   resolveLineOfScrimmageY,
   resolveRouteStroke,
   resolveShowHashMarks,
+  resolveShowYardNumbers,
   uid,
 } from "@/domain/play/factory";
 
@@ -905,15 +906,17 @@ export function EditorCanvas({
     if (zone === "midfield") {
       // Mirror around the 50: number counts down as you move away from LOS.
       const v = 50 - Math.abs(delta);
-      return v <= 0 ? "" : String(v);
+      if (v <= 0 || v % 5 !== 0) return "";
+      return String(v);
     }
     // red_zone: offense driving toward the goal (top of window). Numbers
     // descend going up (toward goal), ascend going down (back toward midfield).
     const v = losYardValue - delta;
     if (v <= 0) return "G";
-    if (v >= 50) return "";
+    if (v >= 50 || v % 5 !== 0) return "";
     return String(v);
   };
+  const showYardNumbers = resolveShowYardNumbers(doc);
   for (let yd = yardInterval; yd < fieldLengthYds; yd += yardInterval) {
     const y = yd / fieldLengthYds;
     const svgY = fy(y);
@@ -930,7 +933,7 @@ export function EditorCanvas({
       />,
     );
     const label = yardLabel(yd);
-    if (label) {
+    if (label && showYardNumbers) {
       // Numbers sit just inside each hash column — the same location they
       // appear on a real field (between the sideline and the hash).
       const numY = svgY + 0.018;

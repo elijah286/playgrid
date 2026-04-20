@@ -448,9 +448,13 @@ export function PlayEditorClient({
               />
             </div>
 
+            {/* The editor renders a fixed-aspect window. Changing the
+                length/backfield/downfield yards changes yard-line *density*,
+                not the on-screen box size, so DISPLAY_LENGTH_YDS is a
+                constant. */}
             <div
               className="relative w-full overflow-hidden"
-              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)} / 1` }}
+              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (25 * 0.75)} / 1` }}
             >
               <EditorCanvas
                 doc={doc}
@@ -467,7 +471,7 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75)}
+                fieldAspect={doc.sportProfile.fieldWidthYds / (25 * 0.75)}
                 fieldBackground={doc.fieldBackground}
               />
             </div>
