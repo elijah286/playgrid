@@ -10,6 +10,7 @@ import {
   Waves,
   ArrowRight,
   Ban,
+  FlipHorizontal,
   Star,
   Trash2,
 } from "lucide-react";
@@ -43,6 +44,7 @@ type Props = {
   onToggleHotRoute?: () => void;
   playerRouteCount?: number;
   onClearPlayerRoutes?: () => void;
+  onFlipHorizontal?: () => void;
 };
 
 const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
@@ -102,6 +104,7 @@ export function RouteToolbar({
   onToggleHotRoute,
   playerRouteCount = 0,
   onClearPlayerRoutes,
+  onFlipHorizontal,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
@@ -206,6 +209,16 @@ export function RouteToolbar({
           onClick={onRedo}
         />
       </Tooltip>
+
+      {onFlipHorizontal && (
+        <Tooltip content="Flip horizontal">
+          <IconButton
+            icon={FlipHorizontal}
+            variant="ghost"
+            onClick={onFlipHorizontal}
+          />
+        </Tooltip>
+      )}
 
       {hasSelectedPlayer && (
         <>

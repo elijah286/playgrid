@@ -1,17 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Undo2,
-  Redo2,
-  FlipHorizontal,
-  Share2,
-  CheckCircle2,
-  Loader2,
-} from "lucide-react";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { resolveEndDecoration } from "@/domain/play/factory";
@@ -19,7 +9,6 @@ import {
   duplicatePlayAction,
   savePlayVersionAction,
 } from "@/app/actions/plays";
-import { createShareLinkForPlayAction } from "@/app/actions/share";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
 import { RouteToolbar } from "./RouteToolbar";
@@ -29,9 +18,8 @@ import type {
   PlaybookGroupRow,
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
-import { EditorPlayContextBar } from "./EditorPlayContextBar";
-import { IconButton, Kbd, useToast } from "@/components/ui";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { EditorHeaderBar } from "./EditorHeaderBar";
+import { useToast } from "@/components/ui";
 
 type Props = {
   playId: string;
@@ -135,19 +123,6 @@ export function PlayEditorClient({
       }
     });
   }, [playId, router, toast]);
-
-  const share = useCallback(() => {
-    startTransition(async () => {
-      const res = await createShareLinkForPlayAction(playId);
-      if (!res.ok) {
-        toast(res.error, "error");
-        return;
-      }
-      const url = `${window.location.origin}/v/${res.token}`;
-      await navigator.clipboard.writeText(url);
-      toast("Share link copied to clipboard", "success");
-    });
-  }, [playId, toast]);
 
   /* ---------- Toolbar handlers ---------- */
 
@@ -300,78 +275,8 @@ export function PlayEditorClient({
   }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      {/* Header toolbar */}
-      <header className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
-        <div className="flex items-center gap-3">
-          <Link href={`/playbooks/${playbookId}`}>
-            <IconButton icon={ArrowLeft} tooltip="Back to playbook" />
-          </Link>
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-              Play editor
-            </p>
-            <h1 className="truncate text-base font-bold text-foreground">
-              {doc.metadata.coachName || "Untitled play"}
-            </h1>
-          </div>
-        </div>
-
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
-            <Tooltip content={<span className="flex items-center gap-2">Undo <Kbd keys="Ctrl+Z" /></span>}>
-              <IconButton icon={Undo2} variant="ghost" disabled={!canUndo} onClick={undo} />
-            </Tooltip>
-            <Tooltip content={<span className="flex items-center gap-2">Redo <Kbd keys="Ctrl+Shift+Z" /></span>}>
-              <IconButton icon={Redo2} variant="ghost" disabled={!canRedo} onClick={redo} />
-            </Tooltip>
-          </div>
-
-          <div className="mx-1 h-6 w-px bg-border" />
-
-          <IconButton
-            icon={FlipHorizontal}
-            tooltip="Flip horizontal"
-            onClick={() => dispatch({ type: "document.flip", axis: "horizontal" })}
-          />
-          <IconButton icon={Share2} tooltip="Copy share link" onClick={share} />
-
-          {/* Field background */}
-          <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
-            {(["green","white","black"] as const).map((bg) => {
-              const colors = { green:"#2D8B4E", white:"#FFFFFF", black:"#0A0A0A" };
-              const active = (doc.fieldBackground ?? "green") === bg;
-              return (
-                <button
-                  key={bg}
-                  type="button"
-                  title={bg.charAt(0).toUpperCase() + bg.slice(1)}
-                  onClick={() => dispatch({ type: "document.setFieldBackground", background: bg })}
-                  className={`size-6 rounded-md border-2 transition-all ${active ? "border-primary scale-110" : "border-transparent hover:scale-105"}`}
-                  style={{ backgroundColor: colors[bg] }}
-                />
-              );
-            })}
-          </div>
-
-          {/* Auto-save status indicator */}
-          {saveStatus === "saving" && (
-            <span className="flex items-center gap-1.5 text-xs text-muted">
-              <Loader2 className="size-3.5 animate-spin" />
-              Saving…
-            </span>
-          )}
-          {saveStatus === "saved" && (
-            <span className="flex items-center gap-1.5 text-xs text-muted">
-              <CheckCircle2 className="size-3.5 text-success" />
-              Saved
-            </span>
-          )}
-        </div>
-      </header>
-
-      {/* Play context */}
-      <EditorPlayContextBar
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}
         doc={doc}
@@ -379,6 +284,11 @@ export function PlayEditorClient({
         initialNav={initialNav}
         initialGroups={initialGroups}
         onDuplicate={duplicate}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        saveStatus={saveStatus}
       />
 
       {/* Routes */}
@@ -435,6 +345,9 @@ export function PlayEditorClient({
                   selectedPlayerId
                     ? doc.layers.routes.filter((r) => r.carrierPlayerId === selectedPlayerId).length
                     : 0
+                }
+                onFlipHorizontal={() =>
+                  dispatch({ type: "document.flip", axis: "horizontal" })
                 }
                 onClearPlayerRoutes={() => {
                   if (!selectedPlayerId) return;
