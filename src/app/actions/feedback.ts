@@ -84,3 +84,30 @@ export async function listFeedbackForAdminAction() {
 
   return { ok: true as const, items };
 }
+
+export async function deleteFeedbackAction(id: string) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") {
+    return { ok: false as const, error: "Forbidden." };
+  }
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin.from("feedback").delete().eq("id", id);
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath("/settings");
+  return { ok: true as const };
+}

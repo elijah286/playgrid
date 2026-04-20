@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui";
 import type { FeedbackRow } from "@/app/actions/feedback";
-import { listFeedbackForAdminAction } from "@/app/actions/feedback";
+import {
+  deleteFeedbackAction,
+  listFeedbackForAdminAction,
+} from "@/app/actions/feedback";
 
 export function FeedbackAdminClient({
   initialItems,
@@ -25,6 +29,19 @@ export function FeedbackAdminClient({
         setErr(null);
       } else {
         setErr(res.error);
+      }
+    });
+  }
+
+  function remove(id: string) {
+    if (!window.confirm("Delete this feedback? This cannot be undone.")) return;
+    const prev = items;
+    setItems((xs) => xs.filter((x) => x.id !== id));
+    startTransition(async () => {
+      const res = await deleteFeedbackAction(id);
+      if (!res.ok) {
+        setErr(res.error);
+        setItems(prev);
       }
     });
   }
@@ -77,12 +94,22 @@ export function FeedbackAdminClient({
                     <p className="truncate text-xs text-muted">{item.email}</p>
                   )}
                 </div>
-                <time
-                  dateTime={item.createdAt}
-                  className="shrink-0 text-xs text-muted"
-                >
-                  {new Date(item.createdAt).toLocaleString()}
-                </time>
+                <div className="flex shrink-0 items-center gap-2">
+                  <time
+                    dateTime={item.createdAt}
+                    className="text-xs text-muted"
+                  >
+                    {new Date(item.createdAt).toLocaleString()}
+                  </time>
+                  <IconButton
+                    icon={Trash2}
+                    variant="ghost"
+                    size="sm"
+                    tooltip="Delete feedback"
+                    aria-label="Delete feedback"
+                    onClick={() => remove(item.id)}
+                  />
+                </div>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
                 {item.message}
