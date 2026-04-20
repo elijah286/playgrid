@@ -2,10 +2,11 @@
 
 import { useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import { CreditCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
+import { CreditCard, IdCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   removeAvatarAction,
+  updateDisplayNameAction,
   uploadAvatarAction,
 } from "@/app/actions/account";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -36,9 +37,10 @@ export function AccountClient({
 }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
+      <NameCard initialDisplayName={displayName} />
       <PasswordCard />
-      <PlanCard />
       <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
+      <PlanCard />
       <AppearanceCard />
     </div>
   );
@@ -64,6 +66,62 @@ function Card({
       {description && <p className="mt-1 text-xs text-muted">{description}</p>}
       <div className="mt-4">{children}</div>
     </section>
+  );
+}
+
+function NameCard({ initialDisplayName }: { initialDisplayName: string | null }) {
+  const [name, setName] = useState(initialDisplayName ?? "");
+  const [savedName, setSavedName] = useState(initialDisplayName ?? "");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const trimmed = name.trim();
+  const dirty = trimmed !== (savedName ?? "").trim();
+  const disabled = pending || !dirty;
+
+  return (
+    <Card
+      icon={IdCard}
+      title="Display name"
+      description="Shown on invites, playsheets, and throughout PlayGrid."
+    >
+      <div className="space-y-3">
+        <label className="block text-sm">
+          <span className="text-muted">Your name</span>
+          <input
+            type="text"
+            autoComplete="name"
+            maxLength={80}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Coach Smith"
+            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
+          />
+        </label>
+        {msg && (
+          <p className={cn("text-xs", msg.ok ? "text-emerald-600" : "text-red-600")}>{msg.text}</p>
+        )}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            setMsg(null);
+            startTransition(async () => {
+              const res = await updateDisplayNameAction({ displayName: trimmed });
+              if (!res.ok) setMsg({ ok: false, text: res.error });
+              else {
+                setSavedName(res.displayName ?? "");
+                setName(res.displayName ?? "");
+                setMsg({ ok: true, text: "Name updated." });
+              }
+            });
+          }}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save name"}
+        </button>
+      </div>
+    </Card>
   );
 }
 

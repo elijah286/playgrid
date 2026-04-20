@@ -31,6 +31,31 @@ export async function changePasswordAction(input: { password: string }) {
   return { ok: true as const };
 }
 
+const MAX_DISPLAY_NAME_LEN = 80;
+
+export async function updateDisplayNameAction(input: { displayName: string }) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const trimmed = (input.displayName ?? "").trim().slice(0, MAX_DISPLAY_NAME_LEN);
+  const value = trimmed.length > 0 ? trimmed : null;
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin
+    .from("profiles")
+    .upsert({ id: user.id, display_name: value }, { onConflict: "id" });
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath("/account");
+  revalidatePath("/", "layout");
+  return { ok: true as const, displayName: value };
+}
+
 export async function uploadAvatarAction(formData: FormData) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
 
