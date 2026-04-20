@@ -146,11 +146,11 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Hitch",
     directional: true,
-    // quick stop and turn back toward inside (QB)
+    // stem straight upfield then turn straight back toward the LOS
     points: [
       { x: 0, y: 0 },
-      { x: 0, y: 0.12 },
-      { x: -0.05, y: 0.08 },
+      { x: 0, y: 0.20 },
+      { x: 0, y: 0.14 },
     ],
   },
   {
