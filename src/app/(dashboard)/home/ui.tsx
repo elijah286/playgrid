@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import {
   Archive,
-  BookOpen,
   Copy,
   Inbox,
   Layers,
@@ -36,7 +35,6 @@ import {
   Badge,
   Button,
   Card,
-  EmptyState,
   Input,
   SegmentedControl,
   useToast,
@@ -212,6 +210,26 @@ function PlaybookTile({
   );
 }
 
+function NewPlaybookTile({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex h-full min-h-[212px] flex-col overflow-hidden rounded-2xl border-2 border-dashed border-border bg-surface-inset/40 text-left transition-colors hover:border-primary hover:bg-primary/5"
+    >
+      <div className="flex h-32 items-center justify-center bg-surface-inset/60 group-hover:bg-primary/10">
+        <Plus className="size-10 text-muted group-hover:text-primary" strokeWidth={1.5} />
+      </div>
+      <div className="flex flex-1 flex-col gap-1 p-4">
+        <h3 className="truncate text-base font-bold text-muted group-hover:text-primary">
+          New playbook
+        </h3>
+        <p className="text-xs text-muted">Click to create</p>
+      </div>
+    </button>
+  );
+}
+
 export function DashboardClient({ data }: { data: DashboardSummary }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -343,41 +361,16 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
             Pick a playbook to edit plays, add notes, or share with your team.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="primary"
-            leftIcon={Plus}
-            onClick={() => setShowCreate(true)}
-          >
-            New playbook
-          </Button>
-        </div>
       </div>
 
       {/* Owned */}
       <section>
-        {owned.length === 0 ? (
-          <EmptyState
-            icon={BookOpen}
-            heading="No playbooks yet"
-            description="Create your first playbook to start designing plays."
-            action={
-              <Button
-                variant="primary"
-                leftIcon={Plus}
-                onClick={() => setShowCreate(true)}
-              >
-                New playbook
-              </Button>
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {owned.map((b) => (
-              <PlaybookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <NewPlaybookTile onClick={() => setShowCreate(true)} />
+          {owned.map((b) => (
+            <PlaybookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
+          ))}
+        </div>
       </section>
 
       {/* Shared with you */}
