@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { CreditCard, IdCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
 import {
@@ -222,25 +222,27 @@ function AvatarCard({
   const [avatarUrl, setAvatarUrl] = useState(initial);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initials = initialsFor(email, displayName);
 
-  function onPick(file: File) {
-    setMsg(null);
+  function uploadBlob(blob: Blob) {
     const fd = new FormData();
-    fd.append("file", file);
+    const jpg = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+    fd.append("file", jpg);
     startTransition(async () => {
       const res = await uploadAvatarAction(fd);
       if (!res.ok) setMsg({ ok: false, text: res.error });
       else {
         setAvatarUrl(res.url);
         setMsg({ ok: true, text: "Avatar updated." });
+        setPendingFile(null);
       }
     });
   }
 
   return (
-    <Card icon={UserCircle} title="Avatar" description="PNG, JPG, WebP, or GIF · up to 2 MB.">
+    <Card icon={UserCircle} title="Avatar" description="Drag to reposition and zoom before uploading.">
       <div className="flex items-center gap-4">
         <div className="relative size-16 overflow-hidden rounded-full bg-primary text-lg font-bold text-white">
           {avatarUrl ? (
@@ -260,11 +262,14 @@ function AvatarCard({
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) onPick(f);
+              if (f) {
+                setMsg(null);
+                setPendingFile(f);
+              }
               if (inputRef.current) inputRef.current.value = "";
             }}
           />
@@ -303,7 +308,196 @@ function AvatarCard({
           {msg.text}
         </p>
       )}
+      {pendingFile && (
+        <AvatarCropperDialog
+          file={pendingFile}
+          saving={pending}
+          onCancel={() => setPendingFile(null)}
+          onConfirm={uploadBlob}
+          onError={(text) => {
+            setMsg({ ok: false, text });
+            setPendingFile(null);
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+const CROP_DISPLAY = 288;
+const EXPORT_SIZE = 512;
+
+function AvatarCropperDialog({
+  file,
+  saving,
+  onCancel,
+  onConfirm,
+  onError,
+}: {
+  file: File;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: (blob: Blob) => void;
+  onError: (message: string) => void;
+}) {
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragRef = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    const i = new window.Image();
+    i.onload = () => {
+      const s = CROP_DISPLAY / Math.min(i.naturalWidth, i.naturalHeight);
+      setImg(i);
+      setScale(s);
+      setTx(0);
+      setTy(0);
+    };
+    i.onerror = () => onError("Could not read that image. Try a different file.");
+    i.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [file, onError]);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !img) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.save();
+    ctx.clearRect(0, 0, CROP_DISPLAY, CROP_DISPLAY);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, CROP_DISPLAY, CROP_DISPLAY);
+    const w = img.naturalWidth * scale;
+    const h = img.naturalHeight * scale;
+    const cx = CROP_DISPLAY / 2 + tx;
+    const cy = CROP_DISPLAY / 2 + ty;
+    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    ctx.restore();
+  }, [img, scale, tx, ty]);
+
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  const minScale = img
+    ? Math.max(CROP_DISPLAY / Math.max(img.naturalWidth, img.naturalHeight), 0.02)
+    : 0.02;
+  const fitScale = img ? CROP_DISPLAY / Math.min(img.naturalWidth, img.naturalHeight) : 1;
+  const maxScale = fitScale * 5;
+
+  function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    dragRef.current = { x: e.clientX, y: e.clientY, tx, ty };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!dragRef.current) return;
+    setTx(dragRef.current.tx + (e.clientX - dragRef.current.x));
+    setTy(dragRef.current.ty + (e.clientY - dragRef.current.y));
+  }
+  function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
+    dragRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* noop */
+    }
+  }
+
+  async function confirm() {
+    if (!img) return;
+    const out = document.createElement("canvas");
+    out.width = EXPORT_SIZE;
+    out.height = EXPORT_SIZE;
+    const ctx = out.getContext("2d");
+    if (!ctx) {
+      onError("Could not prepare image for upload.");
+      return;
+    }
+    const k = EXPORT_SIZE / CROP_DISPLAY;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, EXPORT_SIZE, EXPORT_SIZE);
+    ctx.imageSmoothingQuality = "high";
+    const w = img.naturalWidth * scale * k;
+    const h = img.naturalHeight * scale * k;
+    const cx = EXPORT_SIZE / 2 + tx * k;
+    const cy = EXPORT_SIZE / 2 + ty * k;
+    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      out.toBlob((b) => resolve(b), "image/jpeg", 0.85),
+    );
+    if (!blob) {
+      onError("Could not encode image for upload.");
+      return;
+    }
+    onConfirm(blob);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !saving) onCancel();
+      }}
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated">
+        <h2 className="text-base font-bold text-foreground">Crop avatar</h2>
+        <p className="mt-1 text-xs text-muted">Drag to reposition. Use the slider to zoom.</p>
+        <div className="mt-4 flex justify-center">
+          <div
+            className="relative rounded-full bg-surface-inset"
+            style={{ width: CROP_DISPLAY, height: CROP_DISPLAY }}
+          >
+            <canvas
+              ref={canvasRef}
+              width={CROP_DISPLAY}
+              height={CROP_DISPLAY}
+              className="block cursor-move touch-none rounded-full"
+              style={{ width: CROP_DISPLAY, height: CROP_DISPLAY }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            />
+            <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-primary/60" />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-xs text-muted">Zoom</label>
+          <input
+            type="range"
+            min={minScale}
+            max={maxScale}
+            step={0.001}
+            value={scale}
+            onChange={(e) => setScale(parseFloat(e.target.value))}
+            className="mt-1 w-full accent-primary"
+            disabled={!img || saving}
+          />
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirm}
+            disabled={saving || !img}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Uploading…" : "Upload"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
