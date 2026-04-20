@@ -230,6 +230,11 @@ export function EditorCanvas({
   /** Which route is the pointer currently hovering over (if any). */
   const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
 
+  /** When set, an inline input is rendered over the player so the label can
+   *  be typed directly on the canvas. Committed on Enter/blur, cancelled on
+   *  Esc. Capped at 2 characters. */
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+
   /* ---------- Right-click context menu state ---------- */
   type SegmentMenu = {
     /** Position in wrapper-relative CSS pixels (for absolute overlay) */
@@ -1888,6 +1893,11 @@ export function EditorCanvas({
             // startInteraction already guards button !== 0, so pass through always.
             startInteraction(e, { kind: "player", playerId: pl.id });
           },
+          onDoubleClick: (e: React.MouseEvent) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setEditingPlayerId(pl.id);
+          },
         };
 
         let shapeEl: React.ReactNode;
@@ -2004,18 +2014,71 @@ export function EditorCanvas({
                 </g>
               );
             })()}
-            <text
-              x={px}
-              y={py + 0.01}
-              textAnchor="middle"
-              fontSize={0.022}
-              fontWeight={700}
-              fill={labelColor}
-              pointerEvents="none"
-              style={{ fontFamily: "Inter, system-ui, sans-serif" }}
-            >
-              {pl.label}
-            </text>
+            {editingPlayerId !== pl.id && (
+              <text
+                x={px}
+                y={py + 0.01}
+                textAnchor="middle"
+                fontSize={0.022}
+                fontWeight={700}
+                fill={labelColor}
+                pointerEvents="none"
+                style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+              >
+                {pl.label}
+              </text>
+            )}
+            {editingPlayerId === pl.id && (() => {
+              const w = r * 2.2;
+              const h = r * 1.5;
+              return (
+                <foreignObject
+                  x={px - w / 2}
+                  y={py - h / 2}
+                  width={w}
+                  height={h}
+                  style={{ overflow: "visible" }}
+                >
+                  <input
+                    autoFocus
+                    defaultValue={pl.label}
+                    maxLength={2}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const next = e.currentTarget.value.slice(0, 2);
+                        dispatch({ type: "player.setLabel", playerId: pl.id, label: next });
+                        setEditingPlayerId(null);
+                      } else if (e.key === "Escape") {
+                        setEditingPlayerId(null);
+                      }
+                      e.stopPropagation();
+                    }}
+                    onBlur={(e) => {
+                      const next = e.currentTarget.value.slice(0, 2);
+                      dispatch({ type: "player.setLabel", playerId: pl.id, label: next });
+                      setEditingPlayerId(null);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      outline: "none",
+                      background: "transparent",
+                      color: labelColor,
+                      textAlign: "center",
+                      fontFamily: "Inter, system-ui, sans-serif",
+                      fontWeight: 700,
+                      fontSize: "10px",
+                      padding: 0,
+                      textTransform: "uppercase",
+                    }}
+                  />
+                </foreignObject>
+              );
+            })()}
           </g>
         );
       })}
