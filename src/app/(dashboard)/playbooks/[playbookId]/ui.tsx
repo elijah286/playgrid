@@ -296,14 +296,22 @@ export function PlaybookDetailClient({
             Print playbook
           </Button>
         </Link>
-        <Button
-          variant="primary"
-          leftIcon={Plus}
-          loading={creating}
-          onClick={openFormationPicker}
-        >
-          New play
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            variant="primary"
+            leftIcon={Plus}
+            loading={creating}
+            onClick={openFormationPicker}
+          >
+            New play
+          </Button>
+          <Link
+            href={`/formations/new?variant=${variant}`}
+            className="text-xs text-muted hover:text-primary hover:underline"
+          >
+            + New formation
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
