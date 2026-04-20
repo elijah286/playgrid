@@ -1221,6 +1221,35 @@ export function EditorCanvas({
 
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>
+        {/* During playback, keep the pre-snap motion zig-zag visible so the
+            motion symbol reads at a glance even while the animated overlay
+            draws a straight line along the same vector. */}
+        {hideRoutesAndPlayers && doc.layers.routes.map((route) => {
+          const segById = new Map(route.segments.map((s) => [s.id, s]));
+          const rendered = routeToRenderedSegments(route);
+          const effectiveStroke = resolveRouteStroke(route, doc.layers.players);
+          return (
+            <g key={`motion-${route.id}`}>
+              {rendered.map((rs) => {
+                const seg = segById.get(rs.segmentId);
+                if (seg?.strokePattern !== "motion") return null;
+                return (
+                  <path
+                    key={rs.segmentId}
+                    d={rs.d}
+                    fill="none"
+                    stroke={effectiveStroke}
+                    strokeWidth={route.style.strokeWidth}
+                    strokeDasharray={rs.dash}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
         {!hideRoutesAndPlayers && doc.layers.routes.map((route) => {
           const isActive = route.id === selectedRouteId && mode !== "formation";
           const isHovered = route.id === hoveredRouteId && !isActive && mode !== "formation";
@@ -1397,8 +1426,9 @@ export function EditorCanvas({
       )}
 
       {/* End-of-route decorations (arrow / T / none). Rendered outside the
-          fieldAspect scale group so angles stay isotropic. */}
-      {!hideRoutesAndPlayers && doc.layers.routes.map((route) => {
+          fieldAspect scale group so angles stay isotropic. Kept visible
+          during playback so the route's terminal intent stays readable. */}
+      {doc.layers.routes.map((route) => {
         const decoration = resolveEndDecoration(route);
         if (decoration === "none") return null;
 
