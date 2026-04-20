@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getDashboardSummaryAction } from "@/app/actions/plays";
+import { DashboardTabs } from "@/components/layout/DashboardTabs";
 import { DashboardClient } from "./ui";
 
 type Props = { searchParams: Promise<{ error?: string }> };
@@ -16,6 +17,7 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <div className="space-y-8">
+      <DashboardTabs active="playbooks" />
       {errFromQuery && (
         <p className="rounded-lg bg-danger-light px-3 py-2 text-sm text-danger">
           {errFromQuery}
