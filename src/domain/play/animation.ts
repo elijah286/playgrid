@@ -35,6 +35,15 @@ export type FlatRoute = {
    * Ordered along the same walk used to build `points`.
    */
   fullD: string;
+  /**
+   * SVG `d` string covering ONLY the post-motion portion of the walk. Motion
+   * segments are rendered as the pre-snap zig-zag by the static canvas; the
+   * animated overlay only reveals post-motion travel so we don't draw a
+   * straight line through the zig-zag.
+   */
+  postMotionD: string;
+  /** Arc-length of the post-motion portion (== length - motionBoundary). */
+  postMotionLength: number;
 };
 
 const CURVE_SAMPLES = 32;
@@ -158,12 +167,14 @@ function samplesForSegment(
  * straight line here — the zig-zag motion symbol is baked into the static
  * render; during playback we show a clean line since the player runs it).
  */
-function walkToFullD(
+function walkToSvgD(
   walked: RouteSegment[],
   nodeMap: Map<string, { position: Point2 }>,
+  { skipMotion }: { skipMotion: boolean },
 ): string {
   const parts: string[] = [];
   walked.forEach((seg, i) => {
+    if (skipMotion && seg.strokePattern === "motion") return;
     const from = nodeMap.get(seg.fromNodeId)?.position;
     const to = nodeMap.get(seg.toNodeId)?.position;
     if (!from || !to) return;
@@ -245,7 +256,9 @@ export function flattenRoute(route: Route): FlatRoute | null {
     cumulative,
     length,
     motionBoundary,
-    fullD: walkToFullD(walked, nodeMap),
+    fullD: walkToSvgD(walked, nodeMap, { skipMotion: false }),
+    postMotionD: walkToSvgD(walked, nodeMap, { skipMotion: true }),
+    postMotionLength: Math.max(0, length - motionBoundary),
   };
 }
 

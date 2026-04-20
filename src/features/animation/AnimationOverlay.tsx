@@ -36,16 +36,21 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
         {anim.flats.map((f) => {
           const route = routeById.get(f.routeId);
           if (!route) return null;
+          if (!f.postMotionD || f.postMotionLength <= 0) return null;
           const color = resolveRouteStroke(route, doc.layers.players);
-          const L = f.length;
-          const s = Math.max(0, Math.min(L, anim.progress.get(f.routeId) ?? 0));
+          // Progress is measured along the full route; clamp to the post-motion
+          // portion for overlay rendering so pre-snap motion (rendered by the
+          // static canvas as a zig-zag) isn't drawn over as a straight line.
+          const raw = anim.progress.get(f.routeId) ?? 0;
+          const L = f.postMotionLength;
+          const s = Math.max(0, Math.min(L, raw - f.motionBoundary));
 
           return (
             <g key={f.routeId}>
               {/* Gray trail: visible 0 → s (dash s, gap covers the remainder) */}
               {s > 0 && (
                 <path
-                  d={f.fullD}
+                  d={f.postMotionD}
                   pathLength={L}
                   fill="none"
                   stroke="rgba(156, 163, 175, 0.55)"
@@ -60,7 +65,7 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
                   with offset (L-s) shifts the dash to start at arc-pos s. */}
               {s < L && (
                 <path
-                  d={f.fullD}
+                  d={f.postMotionD}
                   pathLength={L}
                   fill="none"
                   stroke={color}
