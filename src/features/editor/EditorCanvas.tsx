@@ -801,17 +801,6 @@ export function EditorCanvas({
 
   // Is the segment the terminal (end) of its route? Used to show dash-style
   // options only on the last leg.
-  const isTerminalSegment = useCallback(
-    (routeId: string, segmentId: string): boolean => {
-      const route = doc.layers.routes.find((r) => r.id === routeId);
-      if (!route) return false;
-      const seg = route.segments.find((s) => s.id === segmentId);
-      if (!seg) return false;
-      return !route.segments.some((other) => other.fromNodeId === seg.toNodeId);
-    },
-    [doc.layers.routes],
-  );
-
   const handleMenuAddAnchor = useCallback(() => {
     if (!segmentMenu) return;
     const newNode: RouteNode = { id: uid("node"), position: segmentMenu.position };
@@ -1426,36 +1415,36 @@ export function EditorCanvas({
         const selectionRingColor = pl.style?.stroke ?? "#1C1C1E";
         const shape = pl.shape ?? "circle";
 
-        const openPlayerMenu = (e: React.MouseEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const wrap = wrapperRef.current;
-          if (!wrap) return;
-          const rect = wrap.getBoundingClientRect();
-          const MENU_W = 180;
-          const MENU_H = 90;
-          const localX = e.clientX - rect.left;
-          const localY = e.clientY - rect.top;
-          setPlayerMenu({
-            screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
-            screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
-            playerId: pl.id,
-          });
-          setSegmentMenu(null);
-          setAnchorMenu(null);
-          onSelectPlayer(pl.id);
-          onSelectRoute(null);
-          onSelectNode(null);
-          onSelectSegment(null);
-        };
-
         const pointerHandlers = {
           style: { cursor: isDragging ? "grabbing" : "grab" } as React.CSSProperties,
           onPointerDown: (e: React.PointerEvent) => {
             e.stopPropagation();
+            if (e.button === 2) {
+              // Right-click → open player context menu.
+              // The SVG-level onContextMenu already calls e.preventDefault() so
+              // the browser's native menu is suppressed; we just set our state here.
+              const wrap = wrapperRef.current;
+              if (!wrap) return;
+              const rect = wrap.getBoundingClientRect();
+              const MENU_W = 180;
+              const MENU_H = 90;
+              const localX = e.clientX - rect.left;
+              const localY = e.clientY - rect.top;
+              setPlayerMenu({
+                screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+                screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                playerId: pl.id,
+              });
+              setSegmentMenu(null);
+              setAnchorMenu(null);
+              onSelectPlayer(pl.id);
+              onSelectRoute(null);
+              onSelectNode(null);
+              onSelectSegment(null);
+              return;
+            }
             startInteraction(e, { kind: "player", playerId: pl.id });
           },
-          onContextMenu: openPlayerMenu,
         };
 
         let shapeEl: React.ReactNode;
@@ -1627,24 +1616,20 @@ export function EditorCanvas({
           >
             Create branch here
           </button>
-          {isTerminalSegment(segmentMenu.routeId, segmentMenu.segmentId) && (
-            <>
-              <div className="border-t border-border" />
-              <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
-                Last-segment style
-              </div>
-              {(["solid", "dashed", "dotted"] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
-                  onClick={() => setTerminalSegmentStroke(p)}
-                >
-                  {p[0].toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </>
-          )}
+          <div className="border-t border-border" />
+          <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
+            Segment style
+          </div>
+          {(["solid", "dashed", "dotted"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
+              onClick={() => setTerminalSegmentStroke(p)}
+            >
+              {p[0].toUpperCase() + p.slice(1)}
+            </button>
+          ))}
         </div>
       )}
       {anchorMenu && (
