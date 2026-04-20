@@ -7,3 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## LLM-first data (required)
 
 All play and playbook persistence MUST stay **retrieval- and edit-friendly** for an integrated LLM: canonical typed `PlayDocument` in `play_versions.document`, denormalized truth on `public.plays`, preserved route/formation semantics, deterministic text for future RAG, and command-shaped mutations. Full checklist: `.cursor/rules/llm-first-data.mdc`. Workflow skill: `.cursor/skills/playbook-llm-data/SKILL.md`.
+
+## Git workflow
+
+Work directly on `main`. Commit and push small, focused changes straight to `main` instead of creating long-lived feature branches. Only create a branch when the user explicitly asks for one (e.g. a WIP spike, an experimental refactor the user wants isolated). Do not open pull requests unless asked.
