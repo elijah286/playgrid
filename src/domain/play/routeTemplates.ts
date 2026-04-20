@@ -181,7 +181,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0.08, y: 0.22 },
       { x: 0.14, y: 0.52 },
     ],
-    shapes: ["straight", "curve"],
   },
   {
     name: "Bubble",
@@ -210,7 +209,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0, y: 0.22 },
       { x: -0.07, y: 0.44 },
     ],
-    shapes: ["straight", "curve"],
   },
   {
     name: "Whip",
@@ -252,7 +250,6 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
       { x: 0.04, y: 0.15 },
       { x: 0, y: 0.52 },
     ],
-    shapes: ["straight", "curve", "curve"],
   },
   {
     name: "Dig",
