@@ -361,12 +361,15 @@ export type WristbandGridOptions = {
   labels: WristbandLabelMode;
   playerShape: WristbandPlayerShape;
   colorCoding: boolean;
+  showLos: boolean;
+  showYardMarkers: boolean;
+  showPlayerLabels: boolean;
 };
 
 function iconRadius(size: WristbandIconSize): number {
-  if (size === "small") return 1.3;
-  if (size === "large") return 2.4;
-  return 1.8;
+  if (size === "small") return 0.65;
+  if (size === "large") return 1.3;
+  return 0.95;
 }
 
 function routeStrokeMm(weight: WristbandRouteWeight): number {
@@ -454,15 +457,16 @@ function renderWristbandTile(
     const px = fieldX + p.position.x * fieldW;
     const py = fieldY + (1 - p.position.y) * fieldH;
     players += playerMarkerSvg(opts.playerShape, px, py, pr, p.style.fill, p.style.stroke);
-    if (vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.6}" text-anchor="middle" font-size="${Math.max(1.4, pr * 1.1)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif">${escSvgText(p.label)}</text>`;
+    if (opts.showPlayerLabels && vis.showPlayerLabels) {
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
     }
   }
 
   let routes = "";
   for (const r of doc.layers.routes) {
     const geometry = routeToPathGeometry(r);
-    const d = geometry.segments
+    const segs = geometry.segments;
+    const d = segs
       .map((seg, i) => {
         if (seg.type === "line") {
           const fx = fieldX + seg.from.x * fieldW;
@@ -482,14 +486,64 @@ function renderWristbandTile(
           : `Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
-    routes += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${strokeW}" stroke-linecap="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+    const stroke = resolveRouteStroke(r, doc.layers.players);
+    routes += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+
+    const deco = r.endDecoration ?? "arrow";
+    const last = segs[segs.length - 1];
+    if (deco !== "none" && last) {
+      const tipX = fieldX + last.to.x * fieldW;
+      const tipY = fieldY + (1 - last.to.y) * fieldH;
+      const refFrom = last.type === "quadratic" ? last.control : last.from;
+      const fromX = fieldX + refFrom.x * fieldW;
+      const fromY = fieldY + (1 - refFrom.y) * fieldH;
+      const dxS = tipX - fromX;
+      const dyS = tipY - fromY;
+      const len = Math.hypot(dxS, dyS);
+      if (len > 1e-4) {
+        const ux = dxS / len;
+        const uy = dyS / len;
+        if (deco === "arrow") {
+          const aLen = Math.max(1.4, strokeW * 4.5);
+          const cos = Math.cos(Math.PI / 6);
+          const sin = Math.sin(Math.PI / 6);
+          const bx = -ux;
+          const by = -uy;
+          const r1x = cos * bx - sin * by;
+          const r1y = sin * bx + cos * by;
+          const r2x = cos * bx + sin * by;
+          const r2y = -sin * bx + cos * by;
+          routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r1x}" y2="${tipY + aLen * r1y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+          routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r2x}" y2="${tipY + aLen * r2y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+        } else if (deco === "t") {
+          const half = Math.max(1.1, strokeW * 3.5);
+          const perpX = -uy;
+          const perpY = ux;
+          routes += `<line x1="${tipX + perpX * half}" y1="${tipY + perpY * half}" x2="${tipX - perpX * half}" y2="${tipY - perpY * half}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+        }
+      }
+    }
+  }
+
+  let guides = "";
+  if (opts.showYardMarkers) {
+    for (let i = 1; i < 5; i++) {
+      const gy = fieldY + (fieldH * i) / 5;
+      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#e5e7eb" stroke-width="0.15"/>`;
+    }
+  }
+  if (opts.showLos) {
+    const losY = doc.lineOfScrimmageY ?? 0.5;
+    const ly = fieldY + (1 - losY) * fieldH;
+    guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="0.35"/>`;
   }
 
   return `
   <g>
     <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.25"/>
     ${header}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.25"/>
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.25"/>
+    ${guides}
     ${routes}
     ${players}
   </g>`;
