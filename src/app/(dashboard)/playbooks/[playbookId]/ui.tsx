@@ -87,6 +87,14 @@ const UNASSIGNED = "__unassigned__";
 
 type ThumbSize = "small" | "medium" | "large";
 
+type PlaybookPrefs = {
+  view: "active" | "archived";
+  typeFilter: PlayType | "all";
+  groupBy: GroupBy;
+  viewMode: "cards" | "list";
+  thumbSize: ThumbSize;
+};
+
 const SIZE_COL_CLASS: Record<ThumbSize, string> = {
   large: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
   medium: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
@@ -137,14 +145,49 @@ export function PlaybookDetailClient({
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
+  // Per-playbook persisted view prefs. Read once on mount to seed state,
+  // then mirror every change back to localStorage. Search query is
+  // intentionally ephemeral.
+  const prefsKey = `playbook:${playbookId}:prefs`;
+  const seeded = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem(prefsKey);
+      return raw ? (JSON.parse(raw) as Partial<PlaybookPrefs>) : null;
+    } catch {
+      return null;
+    }
+  }, [prefsKey]);
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"active" | "archived">("active");
-  const [typeFilter, setTypeFilter] = useState<PlayType | "all">("all");
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [view, setView] = useState<"active" | "archived">(seeded?.view ?? "active");
+  const [typeFilter, setTypeFilter] = useState<PlayType | "all">(
+    seeded?.typeFilter ?? "all",
+  );
+  const [groupBy, setGroupBy] = useState<GroupBy>(seeded?.groupBy ?? "none");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelRef = useRef<HTMLDivElement | null>(null);
-  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
-  const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
+  const [viewMode, setViewMode] = useState<"cards" | "list">(
+    seeded?.viewMode ?? "cards",
+  );
+  const [thumbSize, setThumbSize] = useState<ThumbSize>(
+    seeded?.thumbSize ?? "medium",
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const prefs: PlaybookPrefs = {
+      view,
+      typeFilter,
+      groupBy,
+      viewMode,
+      thumbSize,
+    };
+    try {
+      window.localStorage.setItem(prefsKey, JSON.stringify(prefs));
+    } catch {
+      /* ignore quota/storage errors */
+    }
+  }, [prefsKey, view, typeFilter, groupBy, viewMode, thumbSize]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showManageGroups, setShowManageGroups] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
