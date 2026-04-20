@@ -70,6 +70,7 @@ export type PlaybookRow = {
   id: string;
   name: string;
   sport_variant: string;
+  season: string | null;
   created_at: string | null;
   updated_at: string | null;
   team_id: string;
@@ -96,7 +97,7 @@ export async function listPlaybooksAction(opts?: {
 
   let query = supabase
     .from("playbooks")
-    .select("id, name, sport_variant, created_at, updated_at, team_id, is_default, is_archived")
+    .select("id, name, sport_variant, season, created_at, updated_at, team_id, is_default, is_archived")
     .order("updated_at", { ascending: false });
 
   if (!opts?.includeDefault) query = query.eq("is_default", false);
@@ -112,6 +113,7 @@ export async function createPlaybookAction(
   sportVariant: SportVariant = "flag_7v7",
   appearance?: { color?: string | null; logo_url?: string | null },
   customOffenseCount?: number | null,
+  season?: string | null,
 ) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -153,6 +155,8 @@ export async function createPlaybookAction(
     };
   }
 
+  const seasonClean = season?.trim().slice(0, 60) || null;
+
   const { data, error } = await supabase
     .from("playbooks")
     .insert({
@@ -162,6 +166,7 @@ export async function createPlaybookAction(
       color,
       logo_url: logo,
       custom_offense_count: offenseCount,
+      season: seasonClean,
     })
     .select("id")
     .single();
@@ -198,6 +203,26 @@ export async function updatePlaybookAppearanceAction(
   const { error } = await supabase
     .from("playbooks")
     .update({ logo_url: logo, color })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function updatePlaybookSeasonAction(
+  playbookId: string,
+  season: string | null,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const clean = season?.trim().slice(0, 60) || null;
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ season: clean })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };
@@ -285,7 +310,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
 
   const { data: src, error: srcErr } = await supabase
     .from("playbooks")
-    .select("id, team_id, name")
+    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season")
     .eq("id", playbookId)
     .single();
   if (srcErr || !src) return { ok: false as const, error: srcErr?.message ?? "Not found" };
@@ -295,6 +320,11 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     .insert({
       team_id: src.team_id,
       name: (newName?.trim() || `${src.name} (copy)`).slice(0, 120),
+      sport_variant: src.sport_variant,
+      custom_offense_count: src.custom_offense_count,
+      color: src.color,
+      logo_url: src.logo_url,
+      season: src.season,
     })
     .select("id")
     .single();

@@ -21,6 +21,7 @@ import {
 import {
   archivePlaybookAction,
   createPlaybookAction,
+  updatePlaybookSeasonAction,
   deletePlaybookAction,
   duplicatePlaybookAction,
   renamePlaybookAction,
@@ -197,6 +198,7 @@ function PlaybookTile({
             )}
           </div>
           <p className="text-xs text-muted">
+            {tile.season ? `${tile.season} · ` : ""}
             {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
           </p>
         </div>
@@ -254,6 +256,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     color: string | null;
     logo_url: string | null;
     customOffenseCount: number | null;
+    season: string | null;
   }) {
     startTransition(async () => {
       const res = await createPlaybookAction(
@@ -261,6 +264,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         config.variant,
         { color: config.color, logo_url: config.logo_url },
         config.customOffenseCount,
+        config.season,
       );
       if (!res.ok) {
         toast(res.error, "error");
@@ -284,6 +288,15 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
     return [
       { label: "Rename", icon: Pencil, onSelect: () => onRenameBook(tile.id, tile.name) },
+      {
+        label: tile.season ? "Edit season" : "Set season",
+        icon: Pencil,
+        onSelect: () => {
+          const next = window.prompt("Season (e.g. Spring 2026)", tile.season ?? "");
+          if (next == null) return;
+          handle(() => updatePlaybookSeasonAction(tile.id, next));
+        },
+      },
       {
         label: "Edit appearance",
         icon: Palette,
@@ -449,6 +462,7 @@ function CreatePlaybookDialog({
     color: string | null;
     logo_url: string | null;
     customOffenseCount: number | null;
+    season: string | null;
   }) => void;
 }) {
   const [name, setName] = useState("");
@@ -456,6 +470,7 @@ function CreatePlaybookDialog({
   const [color, setColor] = useState<string>(PALETTE[0]);
   const [logoUrl, setLogoUrl] = useState("");
   const [otherCount, setOtherCount] = useState<number>(6);
+  const [season, setSeason] = useState("");
 
   const initials =
     name
@@ -476,6 +491,7 @@ function CreatePlaybookDialog({
       color,
       logo_url: logoUrl.trim() || null,
       customOffenseCount: variant === "other" ? otherCount : null,
+      season: season.trim() || null,
     });
   }
 
@@ -527,6 +543,21 @@ function CreatePlaybookDialog({
                 if (e.key === "Enter") submit();
               }}
               placeholder="e.g. Varsity 2026"
+            />
+          </div>
+
+          {/* Season */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Season <span className="font-normal normal-case text-muted-light">(optional)</span>
+            </label>
+            <Input
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+              placeholder="e.g. Spring 2026"
             />
           </div>
 

@@ -466,6 +466,7 @@ export type DashboardPlaybookTile = {
   play_count: number;
   logo_url: string | null;
   color: string | null;
+  season: string | null;
   role: "owner" | "editor" | "viewer";
 };
 
@@ -492,7 +493,7 @@ export async function getDashboardSummaryAction(): Promise<
   const { data: memberRows, error: memErr } = await supabase
     .from("playbook_members")
     .select(
-      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, plays(count))",
+      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, plays(count))",
     )
     .eq("user_id", user.id)
     .eq("playbooks.is_archived", false)
@@ -507,6 +508,7 @@ export async function getDashboardSummaryAction(): Promise<
     updated_at: string | null;
     logo_url: string | null;
     color: string | null;
+    season: string | null;
     plays: { count: number }[] | { count: number } | null;
   };
   type MemberJoin = {
@@ -527,6 +529,7 @@ export async function getDashboardSummaryAction(): Promise<
         play_count: agg?.count ?? 0,
         logo_url: b.logo_url,
         color: b.color,
+        season: b.season,
         role: r.role,
       };
     })
