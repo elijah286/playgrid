@@ -544,9 +544,6 @@ export function PlaybookDetailClient({
                           )}
                         </Link>
                         <div className="absolute right-2 top-2 flex items-center gap-1">
-                          {p.wristband_code && (
-                            <Badge variant="primary">{p.wristband_code}</Badge>
-                          )}
                           <ActionMenu items={buildItems(p)} />
                         </div>
                       </Card>
@@ -581,9 +578,6 @@ export function PlaybookDetailClient({
                               p.shorthand ||
                               ""}
                           </span>
-                          {p.wristband_code && (
-                            <Badge variant="primary">{p.wristband_code}</Badge>
-                          )}
                           {p.tags.length > 0 && (
                             <div className="hidden flex-wrap gap-1 md:flex">
                               {p.tags.slice(0, 3).map((t) => (
