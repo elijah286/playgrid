@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { Play, RotateCcw, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { GripVertical, Play, RotateCcw, Zap } from "lucide-react";
 import type { PlayAnimation } from "./usePlayAnimation";
 
 type Props = {
@@ -52,9 +52,52 @@ export function PlayControls({ anim, disabled = false }: Props) {
 
   const isRunning = phase === "motion" || phase === "play";
 
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+
+  function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: offset.x,
+      baseY: offset.y,
+    };
+  }
+  function onPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const d = dragRef.current;
+    if (!d) return;
+    setOffset({
+      x: d.baseX + (e.clientX - d.startX),
+      y: d.baseY + (e.clientY - d.startY),
+    });
+  }
+  function onPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
+    dragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }
+
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-surface-raised/95 px-2 py-1.5 shadow-elevated backdrop-blur-sm">
+      <div
+        className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-surface-raised/95 py-1.5 pl-1 pr-2 shadow-elevated backdrop-blur-sm"
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+      >
+        <button
+          type="button"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          className="inline-flex cursor-grab items-center justify-center rounded-full p-1 text-muted hover:bg-surface-inset hover:text-foreground active:cursor-grabbing"
+          aria-label="Drag controls"
+          title="Drag to move"
+        >
+          <GripVertical className="size-3.5" />
+        </button>
         <button
           type="button"
           onClick={step}
