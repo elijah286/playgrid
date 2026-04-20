@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import { listUsersForAdminAction } from "@/app/actions/admin-users";
 import { getOpenAIIntegrationStatusAction } from "@/app/actions/admin-integrations";
+import { getResendStatusAction } from "@/app/actions/admin-resend";
 import { listFeedbackForAdminAction } from "@/app/actions/feedback";
 import { SettingsClient } from "./ui";
 
@@ -12,9 +13,10 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
   if (profile?.role !== "admin") redirect("/home");
 
-  const [usersRes, integrationRes, feedbackRes] = await Promise.all([
+  const [usersRes, integrationRes, resendRes, feedbackRes] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
+    getResendStatusAction(),
     listFeedbackForAdminAction(),
   ]);
 
@@ -45,6 +47,17 @@ export default async function SettingsPage() {
                 updatedAt: integrationRes.updatedAt,
               }
             : { ok: false, error: integrationRes.error }
+        }
+        resend={
+          resendRes.ok
+            ? {
+                ok: true,
+                configured: resendRes.configured,
+                statusLabel: resendRes.statusLabel,
+                fromEmail: resendRes.fromEmail,
+                updatedAt: resendRes.updatedAt,
+              }
+            : { ok: false, error: resendRes.error }
         }
         initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
         feedbackError={feedbackRes.ok ? null : feedbackRes.error}

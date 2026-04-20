@@ -11,3 +11,4 @@ export { EmptyState } from "./EmptyState";
 export { Kbd } from "./Kbd";
 export { ActionMenu } from "./ActionMenu";
 export type { ActionMenuItem } from "./ActionMenu";
+export { Modal } from "./Modal";

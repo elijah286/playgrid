@@ -59,27 +59,40 @@ export async function createUserAsAdminAction(input: {
   email: string;
   password: string;
   role: "user" | "admin";
+  displayName?: string;
 }) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
 
+  const email = input.email.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false as const, error: "Invalid email." };
+  }
+  if (input.password.length < 8) {
+    return { ok: false as const, error: "Password must be at least 8 characters." };
+  }
+
   const admin = createServiceRoleClient();
   const { data, error } = await admin.auth.admin.createUser({
-    email: input.email.trim(),
+    email,
     password: input.password,
     email_confirm: true,
   });
   if (error) return { ok: false as const, error: error.message };
   if (!data.user) return { ok: false as const, error: "No user returned." };
 
+  const profilePatch: Record<string, string | null> = { role: input.role };
+  const displayName = input.displayName?.trim();
+  if (displayName) profilePatch.display_name = displayName;
+
   const { error: upErr } = await admin
     .from("profiles")
-    .update({ role: input.role })
+    .update(profilePatch)
     .eq("id", data.user.id);
   if (upErr) return { ok: false as const, error: upErr.message };
 
   revalidateTag(`user-role:${data.user.id}`, "max");
-  revalidatePath("/admin/users");
+  revalidatePath("/settings");
   return { ok: true as const };
 }
 
@@ -96,6 +109,66 @@ export async function updateUserRoleAction(userId: string, role: "user" | "admin
 
   revalidateTag(`user-role:${userId}`, "max");
   revalidatePath("/admin/users");
+  return { ok: true as const };
+}
+
+export async function updateUserAsAdminAction(input: {
+  userId: string;
+  email?: string;
+  displayName?: string | null;
+  role?: "user" | "admin";
+}) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const admin = createServiceRoleClient();
+
+  const email = input.email?.trim();
+  if (email !== undefined && email.length > 0) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false as const, error: "Invalid email." };
+    }
+    const { error } = await admin.auth.admin.updateUserById(input.userId, { email });
+    if (error) return { ok: false as const, error: error.message };
+  }
+
+  const profilePatch: Record<string, string | null> = {};
+  if (input.displayName !== undefined) {
+    const trimmed = (input.displayName ?? "").trim();
+    profilePatch.display_name = trimmed.length > 0 ? trimmed : null;
+  }
+  if (input.role !== undefined) {
+    if (input.userId === gate.userId && input.role === "user") {
+      return { ok: false as const, error: "You cannot remove your own admin role." };
+    }
+    profilePatch.role = input.role;
+  }
+  if (Object.keys(profilePatch).length > 0) {
+    const { error } = await admin.from("profiles").update(profilePatch).eq("id", input.userId);
+    if (error) return { ok: false as const, error: error.message };
+    if (profilePatch.role) {
+      revalidateTag(`user-role:${input.userId}`, "max");
+    }
+  }
+
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+export async function setUserPasswordAsAdminAction(input: {
+  userId: string;
+  password: string;
+}) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+  if (input.password.length < 8) {
+    return { ok: false as const, error: "Password must be at least 8 characters." };
+  }
+  const admin = createServiceRoleClient();
+  const { error } = await admin.auth.admin.updateUserById(input.userId, {
+    password: input.password,
+  });
+  if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };
 }
 

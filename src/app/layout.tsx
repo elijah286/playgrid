@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
@@ -35,7 +36,10 @@ export default function RootLayout({
         <ThemeProvider>
           <ToastProvider>
             <ConfigBanner />
-            {children}
+            <div className="flex min-h-[100dvh] flex-col">
+              <div className="flex-1">{children}</div>
+              <SiteFooter />
+            </div>
           </ToastProvider>
         </ThemeProvider>
       </body>
