@@ -98,6 +98,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       showLos: config.wristbandShowLos,
       showYardMarkers: config.wristbandShowYardMarkers,
       showPlayerLabels: config.wristbandShowPlayerLabels,
+      playerOutline: config.wristbandPlayerOutline,
     }),
     [
       config.wristbandWidthIn,
@@ -113,6 +114,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       config.wristbandShowLos,
       config.wristbandShowYardMarkers,
       config.wristbandShowPlayerLabels,
+      config.wristbandPlayerOutline,
     ],
   );
 

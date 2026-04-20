@@ -117,25 +117,18 @@ export function compilePlayToSvg(
   for (const r of doc.layers.routes) {
     // Convert node-based route to PathGeometry for rendering
     const geometry = routeToPathGeometry(r);
-    const segments = geometry.segments;
-    const d = segments
-      .map((seg, i) => {
-        if (seg.type === "line") {
-          const fx = fieldX + seg.from.x * fieldW;
-          const fy = fieldY + (1 - seg.from.y) * fieldH;
-          const tx = fieldX + seg.to.x * fieldW;
-          const ty = fieldY + (1 - seg.to.y) * fieldH;
-          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
-        }
+    const d = geometry.segments
+      .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
         const tx = fieldX + seg.to.x * fieldW;
         const ty = fieldY + (1 - seg.to.y) * fieldH;
-        return i === 0
-          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
-          : `Q ${cx} ${cy} ${tx} ${ty}`;
+        if (seg.type === "line") {
+          return `M ${fx} ${fy} L ${tx} ${ty}`;
+        }
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
     routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.35}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
@@ -279,23 +272,17 @@ function renderPlayCellSvg(
     const geometry = routeToPathGeometry(r);
     const segments = geometry.segments;
     const d = segments
-      .map((seg, i) => {
-        if (seg.type === "line") {
-          const fx = fieldX + seg.from.x * fieldW;
-          const fy = fieldY + (1 - seg.from.y) * fieldH;
-          const tx = fieldX + seg.to.x * fieldW;
-          const ty = fieldY + (1 - seg.to.y) * fieldH;
-          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
-        }
+      .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
         const tx = fieldX + seg.to.x * fieldW;
         const ty = fieldY + (1 - seg.to.y) * fieldH;
-        return i === 0
-          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
-          : `Q ${cx} ${cy} ${tx} ${ty}`;
+        if (seg.type === "line") {
+          return `M ${fx} ${fy} L ${tx} ${ty}`;
+        }
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
     routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.28}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
@@ -364,6 +351,7 @@ export type WristbandGridOptions = {
   showLos: boolean;
   showYardMarkers: boolean;
   showPlayerLabels: boolean;
+  playerOutline: boolean;
 };
 
 function iconRadius(size: WristbandIconSize): number {
@@ -400,16 +388,18 @@ function playerMarkerSvg(
   r: number,
   fill: string,
   stroke: string,
+  outline: boolean,
 ): string {
   if (shape === "x") {
     const d = r * 0.9;
     return `<path d="M ${cx - d} ${cy - d} L ${cx + d} ${cy + d} M ${cx + d} ${cy - d} L ${cx - d} ${cy + d}" stroke="${stroke}" stroke-width="${Math.max(0.4, r * 0.45)}" stroke-linecap="round" fill="none"/>`;
   }
+  const strokeAttrs = outline ? `stroke="${stroke}" stroke-width="0.3"` : `stroke="none"`;
   if (shape === "diamond") {
     const d = r * 1.15;
-    return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy} L ${cx} ${cy + d} L ${cx - d} ${cy} Z" fill="${fill}" stroke="${stroke}" stroke-width="0.3"/>`;
+    return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy} L ${cx} ${cy + d} L ${cx - d} ${cy} Z" fill="${fill}" ${strokeAttrs}/>`;
   }
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="0.3"/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" ${strokeAttrs}/>`;
 }
 
 function renderWristbandTile(
@@ -456,7 +446,7 @@ function renderWristbandTile(
   for (const p of doc.layers.players) {
     const px = fieldX + p.position.x * fieldW;
     const py = fieldY + (1 - p.position.y) * fieldH;
-    players += playerMarkerSvg(opts.playerShape, px, py, pr, p.style.fill, p.style.stroke);
+    players += playerMarkerSvg(opts.playerShape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
       players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
     }
@@ -467,23 +457,17 @@ function renderWristbandTile(
     const geometry = routeToPathGeometry(r);
     const segs = geometry.segments;
     const d = segs
-      .map((seg, i) => {
-        if (seg.type === "line") {
-          const fx = fieldX + seg.from.x * fieldW;
-          const fy = fieldY + (1 - seg.from.y) * fieldH;
-          const tx = fieldX + seg.to.x * fieldW;
-          const ty = fieldY + (1 - seg.to.y) * fieldH;
-          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
-        }
+      .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
         const tx = fieldX + seg.to.x * fieldW;
         const ty = fieldY + (1 - seg.to.y) * fieldH;
-        return i === 0
-          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
-          : `Q ${cx} ${cy} ${tx} ${ty}`;
+        if (seg.type === "line") {
+          return `M ${fx} ${fy} L ${tx} ${ty}`;
+        }
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
     const stroke = resolveRouteStroke(r, doc.layers.players);

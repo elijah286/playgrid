@@ -258,6 +258,15 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               <input
                 type="checkbox"
                 className="size-4 accent-primary"
+                checked={config.wristbandPlayerOutline}
+                onChange={(e) => patch({ wristbandPlayerOutline: e.target.checked })}
+              />
+              Outline player markers
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
                 checked={config.wristbandColorCoding}
                 onChange={(e) => patch({ wristbandColorCoding: e.target.checked })}
               />

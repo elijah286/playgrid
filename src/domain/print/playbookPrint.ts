@@ -63,6 +63,8 @@ export type PlaybookPrintRunConfig = {
   wristbandShowYardMarkers: boolean;
   /** Wristband: show letter labels inside player markers */
   wristbandShowPlayerLabels: boolean;
+  /** Wristband: draw dark outline around player markers */
+  wristbandPlayerOutline: boolean;
   wristbandGrouping: PlaysheetGrouping;
 };
 
@@ -87,6 +89,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandShowLos: true,
   wristbandShowYardMarkers: true,
   wristbandShowPlayerLabels: true,
+  wristbandPlayerOutline: true,
   wristbandGrouping: "manual",
 };
 
