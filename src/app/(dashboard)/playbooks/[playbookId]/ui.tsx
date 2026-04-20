@@ -9,6 +9,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  CheckSquare,
   Copy,
   Crown,
   FileText,
@@ -171,6 +172,10 @@ export function PlaybookDetailClient({
   );
   const [thumbSize, setThumbSize] = useState<ThumbSize>(
     seeded?.thumbSize ?? "medium",
+  );
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
+    () => new Set(),
   );
 
   useEffect(() => {
@@ -649,6 +654,20 @@ export function PlaybookDetailClient({
             )}
           </div>
 
+          <Button
+            variant={selectionMode ? "primary" : "secondary"}
+            leftIcon={CheckSquare}
+            onClick={() => {
+              if (selectionMode) {
+                setSelectionMode(false);
+                setSelectedPlayIds(new Set());
+              } else {
+                setSelectionMode(true);
+              }
+            }}
+          >
+            {selectionMode ? "Cancel" : "Select"}
+          </Button>
           <Link href={`/playbooks/${playbookId}/print`}>
             <Button variant="secondary" leftIcon={Printer}>
               Print playbook
@@ -746,7 +765,14 @@ export function PlaybookDetailClient({
               {
                 label: "Duplicate",
                 icon: Copy,
-                onSelect: () => handle(() => duplicatePlayAction(p.id)),
+                onSelect: () =>
+                  handle(
+                    () => duplicatePlayAction(p.id),
+                    (res) => {
+                      const r = res as { ok: true; playId: string };
+                      router.push(`/plays/${r.playId}/edit`);
+                    },
+                  ),
               },
               p.is_archived
                 ? {
@@ -823,27 +849,53 @@ export function PlaybookDetailClient({
                 {viewMode === "cards" && (
                   <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
 
-                    {section.plays.map((p) => (
+                    {section.plays.map((p) => {
+                      const isSelected = selectedPlayIds.has(p.id);
+                      return (
                       <Card
                         key={`${section.key}:${p.id}`}
                         hover
-                        className="relative flex cursor-grab flex-col p-0 active:cursor-grabbing"
-                        draggable={isGroupSection}
+                        className={`relative flex flex-col p-0 ${selectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${isSelected ? "ring-2 ring-primary" : ""}`}
+                        draggable={!selectionMode && isGroupSection}
                         onDragStart={
-                          isGroupSection
+                          !selectionMode && isGroupSection
                             ? (e) => {
                                 e.dataTransfer.setData("text/play-id", p.id);
                                 e.dataTransfer.effectAllowed = "move";
                               }
                             : undefined
                         }
+                        onClick={
+                          selectionMode
+                            ? (e) => {
+                                e.preventDefault();
+                                setSelectedPlayIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(p.id)) next.delete(p.id);
+                                  else next.add(p.id);
+                                  return next;
+                                });
+                              }
+                            : undefined
+                        }
                       >
+                        {selectionMode && (
+                          <div className="pointer-events-none absolute left-2 top-2 z-10 flex size-5 items-center justify-center rounded border-2 border-primary bg-surface-raised">
+                            {isSelected && <Check className="size-3.5 text-primary" />}
+                          </div>
+                        )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className="flex flex-1 flex-col p-4"
+                          className={`flex flex-1 flex-col p-4 ${selectionMode ? "pointer-events-none" : ""}`}
                           aria-label={`Open ${p.name}`}
+                          tabIndex={selectionMode ? -1 : 0}
                         >
                           <div className="pr-16">
+                            {(p.formation_name || p.shorthand) && (
+                              <p className="mb-0.5 truncate text-[11px] text-muted">
+                                {p.formation_name || p.shorthand}
+                              </p>
+                            )}
                             <EditablePlayTitle
                               name={p.name}
                               onRename={(next) => onRenamePlayInline(p.id, next)}
@@ -855,11 +907,6 @@ export function PlaybookDetailClient({
                               <PlayPreview preview={p.preview} />
                             </div>
                           )}
-                          <p className="mt-2 truncate text-xs text-muted">
-                            {p.formation_name ||
-                              p.shorthand ||
-                              "No details"}
-                          </p>
                           {p.tags.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1">
                               {p.tags.map((t) => (
@@ -879,18 +926,21 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                       </Card>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {viewMode === "list" && (
                   <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
-                    {section.plays.map((p) => (
+                    {section.plays.map((p) => {
+                      const isSelected = selectedPlayIds.has(p.id);
+                      return (
                       <li
                         key={`${section.key}:${p.id}`}
-                        className={`flex items-center gap-2 pl-8 pr-2 ${isGroupSection ? "cursor-grab active:cursor-grabbing" : ""}`}
-                        draggable={isGroupSection}
+                        className={`flex items-center gap-2 pl-8 pr-2 ${!selectionMode && isGroupSection ? "cursor-grab active:cursor-grabbing" : ""} ${isSelected ? "bg-primary/5" : ""}`}
+                        draggable={!selectionMode && isGroupSection}
                         onDragStart={
-                          isGroupSection
+                          !selectionMode && isGroupSection
                             ? (e) => {
                                 e.dataTransfer.setData("text/play-id", p.id);
                                 e.dataTransfer.effectAllowed = "move";
@@ -898,20 +948,38 @@ export function PlaybookDetailClient({
                             : undefined
                         }
                       >
+                        {selectionMode && (
+                          <button
+                            type="button"
+                            className="flex size-5 items-center justify-center rounded border-2 border-primary bg-surface-raised"
+                            onClick={() =>
+                              setSelectedPlayIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(p.id)) next.delete(p.id);
+                                else next.add(p.id);
+                                return next;
+                              })
+                            }
+                            aria-label={isSelected ? "Deselect" : "Select"}
+                          >
+                            {isSelected && <Check className="size-3.5 text-primary" />}
+                          </button>
+                        )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className="flex min-w-0 flex-1 items-center gap-3 py-2 hover:opacity-80"
+                          className={`flex min-w-0 flex-1 items-center gap-2 py-2 hover:opacity-80 ${selectionMode ? "pointer-events-none" : ""}`}
+                          tabIndex={selectionMode ? -1 : 0}
                         >
+                          {(p.formation_name || p.shorthand) && (
+                            <span className="max-w-[140px] shrink-0 truncate text-xs text-muted">
+                              {p.formation_name || p.shorthand}
+                            </span>
+                          )}
                           <EditablePlayTitle
                             name={p.name}
                             onRename={(next) => onRenamePlayInline(p.id, next)}
-                            className="text-sm font-medium"
+                            className="shrink-0 text-sm font-medium"
                           />
-                          <span className="truncate text-xs text-muted">
-                            {p.formation_name ||
-                              p.shorthand ||
-                              ""}
-                          </span>
                           {p.tags.length > 0 && (
                             <div className="hidden flex-wrap gap-1 md:flex">
                               {p.tags.slice(0, 3).map((t) => (
@@ -924,7 +992,8 @@ export function PlaybookDetailClient({
                         </Link>
                         <ActionMenu items={buildItems(p)} />
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
               </section>
@@ -935,6 +1004,58 @@ export function PlaybookDetailClient({
         </div>
       </div>
 
+      )}
+
+      {selectionMode && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface-raised px-4 py-2 shadow-elevated">
+            <span className="text-sm font-medium text-foreground">
+              {selectedPlayIds.size} selected
+            </span>
+            <button
+              type="button"
+              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => {
+                const allVisible = new Set(filtered.map((p) => p.id));
+                const allOn = filtered.every((p) => selectedPlayIds.has(p.id));
+                setSelectedPlayIds((prev) => {
+                  const next = new Set(prev);
+                  if (allOn) {
+                    for (const id of allVisible) next.delete(id);
+                  } else {
+                    for (const id of allVisible) next.add(id);
+                  }
+                  return next;
+                });
+              }}
+            >
+              {filtered.every((p) => selectedPlayIds.has(p.id)) && filtered.length > 0
+                ? "Clear visible"
+                : "Select all visible"}
+            </button>
+            <button
+              type="button"
+              className="text-xs font-medium text-muted hover:text-foreground"
+              onClick={() => {
+                setSelectionMode(false);
+                setSelectedPlayIds(new Set());
+              }}
+            >
+              Cancel
+            </button>
+            <Button
+              variant="primary"
+              leftIcon={Printer}
+              disabled={selectedPlayIds.size === 0}
+              onClick={() => {
+                const ids = Array.from(selectedPlayIds).join(",");
+                router.push(`/playbooks/${playbookId}/print?plays=${ids}`);
+              }}
+            >
+              Print {selectedPlayIds.size} {selectedPlayIds.size === 1 ? "play" : "plays"}
+            </Button>
+          </div>
+        </div>
       )}
 
       {showManageGroups && (
