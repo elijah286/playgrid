@@ -1,11 +1,10 @@
 import Link from "next/link";
 
-type Tab = { href: string; label: string; key: "playbooks" | "formations" | "team" };
+type Tab = { href: string; label: string; key: "playbooks" | "formations" };
 
 const TABS: Tab[] = [
   { href: "/home", label: "Playbooks", key: "playbooks" },
   { href: "/formations", label: "Formations", key: "formations" },
-  { href: "/team", label: "Team", key: "team" },
 ];
 
 export function DashboardTabs({ active }: { active: Tab["key"] }) {
