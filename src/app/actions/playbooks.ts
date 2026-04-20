@@ -85,6 +85,34 @@ export async function createPlaybookAction(
   return { ok: true as const, id: data.id };
 }
 
+export async function updatePlaybookAppearanceAction(
+  playbookId: string,
+  appearance: { logo_url: string | null; color: string | null },
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const logo = appearance.logo_url?.trim() || null;
+  const color = appearance.color?.trim() || null;
+  if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+    return { ok: false as const, error: "Color must be a hex like #RRGGBB." };
+  }
+  if (logo && !/^https?:\/\//i.test(logo)) {
+    return { ok: false as const, error: "Logo must be an http(s) URL." };
+  }
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ logo_url: logo, color })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 export async function renamePlaybookAction(playbookId: string, name: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const trimmed = name.trim();

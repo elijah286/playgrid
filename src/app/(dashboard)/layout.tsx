@@ -49,12 +49,6 @@ export default async function DashboardLayout({
               Home
             </Link>
             <Link
-              href="/playbooks"
-              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-            >
-              Playbooks
-            </Link>
-            <Link
               href="/formations"
               className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
             >

@@ -13,7 +13,7 @@ export default async function AdminIntegrationsPage() {
   if (!status.ok) {
     return (
       <div className="space-y-4">
-        <Link href="/playbooks" className="text-sm text-pg-subtle hover:text-pg-ink">
+        <Link href="/home" className="text-sm text-pg-subtle hover:text-pg-ink">
           ← Playbooks
         </Link>
         <p className="text-sm text-red-700 dark:text-red-300">{status.error}</p>
@@ -28,7 +28,7 @@ export default async function AdminIntegrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/playbooks" className="text-sm text-pg-subtle hover:text-pg-ink">
+        <Link href="/home" className="text-sm text-pg-subtle hover:text-pg-ink">
           ← Playbooks
         </Link>
         <h1 className="mt-2 text-2xl font-semibold text-pg-ink dark:text-pg-chalk">Integrations</h1>
