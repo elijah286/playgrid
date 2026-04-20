@@ -89,7 +89,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandShowLos: true,
   wristbandShowYardMarkers: true,
   wristbandShowPlayerLabels: true,
-  wristbandPlayerOutline: true,
+  wristbandPlayerOutline: false,
   wristbandGrouping: "manual",
 };
 
