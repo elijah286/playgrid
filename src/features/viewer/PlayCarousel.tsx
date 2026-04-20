@@ -8,6 +8,9 @@ import type { PlayDocument } from "@/domain/play/types";
 import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
 import { resolveRouteStroke } from "@/domain/play/factory";
 import { Button, Input } from "@/components/ui";
+import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
+import { PlayControls } from "@/features/animation/PlayControls";
 
 type PlayRow = {
   id: string;
@@ -26,6 +29,7 @@ type Props = {
 export function PlayCarousel({ plays, currentId, document, playbookId }: Props) {
   const router = useRouter();
   const [q, setQ] = useState("");
+  const anim = usePlayAnimation(document);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -81,8 +85,8 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
         >
           Prev
         </Button>
-        <div className="aspect-[4/3] w-full max-w-[280px] justify-self-center overflow-hidden rounded-xl shadow-card">
-          <svg viewBox="0 0 1 1" className="h-full w-full">
+        <div className="relative aspect-[4/3] w-full max-w-[280px] justify-self-center overflow-hidden rounded-xl shadow-card">
+          <svg viewBox="0 0 1 1" className="h-full w-full" preserveAspectRatio="none">
             <defs>
               <linearGradient id="mobileFieldGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#2D8B4E" />
@@ -90,7 +94,7 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
               </linearGradient>
             </defs>
             <rect width={1} height={1} fill="url(#mobileFieldGrad)" />
-            {document.layers.routes.map((r) => (
+            {anim.phase === "idle" && document.layers.routes.map((r) => (
               <path
                 key={r.id}
                 d={pathGeometryToSvgD(routeToPathGeometry(r))}
@@ -99,7 +103,7 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
                 strokeWidth={0.004}
               />
             ))}
-            {document.layers.players.map((pl) => (
+            {anim.phase === "idle" && document.layers.players.map((pl) => (
               <g key={pl.id}>
                 <circle
                   cx={pl.position.x}
@@ -123,6 +127,8 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
               </g>
             ))}
           </svg>
+          <AnimationOverlay doc={document} anim={anim} fieldAspect={1} />
+          <PlayControls anim={anim} />
         </div>
         <Button
           variant="secondary"
