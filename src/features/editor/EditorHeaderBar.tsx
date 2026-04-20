@@ -13,7 +13,6 @@ import {
   Link2Off,
   PencilLine,
   Plus,
-  RefreshCcw,
   Search,
   X,
 } from "lucide-react";
@@ -131,18 +130,6 @@ export function EditorHeaderBar({
     setStableDrift(false);
   }, [formationId]);
   const showDriftPrompt = stableDrift && !formationTag;
-
-  function reapplyFormation() {
-    if (!linkedFormation) return;
-    dispatch({
-      type: "document.reapplyFormation",
-      players: linkedFormation.players,
-      formationLosY: linkedFormation.losY,
-    });
-  }
-  function unlinkFormation() {
-    dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" });
-  }
 
   function setFormationTag(tag: string) {
     dispatch({ type: "document.setFormationTag", formationTag: tag || null });
@@ -319,30 +306,6 @@ export function EditorHeaderBar({
           className="h-7 w-[160px] text-xs"
         />
 
-        {formationId && (
-          <div className="ml-auto flex items-center gap-1">
-            {linkedFormation && (
-              <button
-                type="button"
-                title="Reapply formation (snap players back)"
-                onClick={reapplyFormation}
-                className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-raised px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
-              >
-                <RefreshCcw className="size-3" />
-                Reapply
-              </button>
-            )}
-            <button
-              type="button"
-              title="Unlink formation"
-              onClick={unlinkFormation}
-              className="flex size-6 items-center justify-center rounded text-muted hover:text-foreground"
-              aria-label="Unlink formation"
-            >
-              <Link2Off className="size-3.5" />
-            </button>
-          </div>
-        )}
       </div>
 
       {formationId && (
