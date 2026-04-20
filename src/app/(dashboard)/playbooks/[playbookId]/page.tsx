@@ -44,33 +44,38 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const initial = (book.name as string).trim().charAt(0).toUpperCase();
 
   const pageHeader = (
-    <div className="space-y-4">
-      {/* Back link */}
-      <Link
-        href="/home"
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="size-4" />
-        Home
-      </Link>
-
-      {/* Playbook identity: logo avatar + name + game type */}
-      <div className="flex items-center gap-4">
+    <div
+      className="relative -mx-6 -mt-3 overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}d9 55%, ${accentColor}99 100%)`,
+      }}
+    >
+      <div className="relative mx-auto flex max-w-7xl items-center gap-4 px-6 py-4">
+        <Link
+          href="/home"
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label="Back to home"
+        >
+          <ArrowLeft className="size-4" />
+          Home
+        </Link>
+        <div className="h-6 w-px bg-white/25" />
         <div
-          className="relative size-14 shrink-0 overflow-hidden rounded-2xl flex items-center justify-center text-white text-xl font-extrabold shadow-sm"
-          style={{ backgroundColor: accentColor }}
+          className="relative size-11 shrink-0 overflow-hidden rounded-xl bg-white/20 ring-1 ring-white/30 flex items-center justify-center text-white text-lg font-extrabold"
         >
           {logoUrl ? (
-            <Image src={logoUrl} alt="" fill className="object-cover" sizes="56px" />
+            <Image src={logoUrl} alt="" fill className="object-cover" sizes="44px" />
           ) : (
             <span>{initial}</span>
           )}
         </div>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-extrabold tracking-tight text-foreground leading-tight truncate">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-xl font-extrabold tracking-tight text-white sm:text-2xl">
             {book.name}
           </h1>
-          {variantLabel && <p className="mt-0.5 text-sm text-muted">{variantLabel}</p>}
+          {variantLabel && (
+            <p className="truncate text-xs font-medium text-white/80 sm:text-sm">{variantLabel}</p>
+          )}
         </div>
       </div>
     </div>

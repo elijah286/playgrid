@@ -19,6 +19,7 @@ import {
   Printer,
   Search,
   Settings2,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -74,7 +75,7 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 
-type GroupBy = "formation" | "group";
+type GroupBy = "none" | "formation" | "group";
 
 const UNASSIGNED = "__unassigned__";
 
@@ -123,7 +124,9 @@ export function PlaybookDetailClient({
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
   const [typeFilter, setTypeFilter] = useState<PlayType | "all">("all");
-  const [groupBy, setGroupBy] = useState<GroupBy>("formation");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersPanelRef = useRef<HTMLDivElement | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
   const [activeSection, setActiveSection] = useState<string | null>(null);
@@ -193,7 +196,9 @@ export function PlaybookDetailClient({
     }
 
     for (const p of filtered) {
-      if (groupBy === "formation") {
+      if (groupBy === "none") {
+        pushInto("__all__", "", 0, p);
+      } else if (groupBy === "formation") {
         const label = p.formation_name?.trim() || "Unassigned formation";
         pushInto(label.toLowerCase(), label, 0, p);
       } else {
@@ -217,6 +222,24 @@ export function PlaybookDetailClient({
     for (const s of arr) s.plays.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
     return arr;
   }, [filtered, groupBy, groupById, initialGroups]);
+
+  // Close the filters popover on outside click or Escape.
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const panel = filtersPanelRef.current;
+      if (panel && !panel.contains(e.target as Node)) setFiltersOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFiltersOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filtersOpen]);
 
   // Scroll-spy: highlight the section nearest the top of the main area.
   useEffect(() => {
@@ -358,8 +381,8 @@ export function PlaybookDetailClient({
       <div className="sticky top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
         {pageHeader}
 
-        <div className="-mb-2 border-b border-border">
-          <nav className="-mb-px flex gap-1" aria-label="Playbook sections">
+        <div className="border-b border-border">
+          <nav className="-mb-px flex gap-6" aria-label="Playbook sections">
             {(
               [
                 { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length },
@@ -373,14 +396,18 @@ export function PlaybookDetailClient({
                   type="button"
                   onClick={() => setTab(t.key)}
                   aria-current={active ? "page" : undefined}
-                  className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                  className={`relative inline-flex items-center gap-2 border-b-[3px] px-1 pb-3 pt-1 text-base font-bold tracking-tight transition-colors ${
                     active
                       ? "border-primary text-foreground"
-                      : "border-transparent text-muted hover:border-border hover:text-foreground"
+                      : "border-transparent text-muted hover:text-foreground"
                   }`}
                 >
                   {t.label}
-                  <span className="rounded-full bg-surface-inset px-1.5 py-0.5 text-[10px] text-muted">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
+                      active ? "bg-primary/10 text-primary" : "bg-surface-inset text-muted"
+                    }`}
+                  >
                     {t.count}
                   </span>
                 </button>
@@ -390,7 +417,7 @@ export function PlaybookDetailClient({
         </div>
 
         {tab === "plays" && (
-        /* Slim top bar: search, print, new */
+        /* Slim top bar: search, filters, print, new */
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1">
             <Input
@@ -400,6 +427,124 @@ export function PlaybookDetailClient({
               placeholder="Search name, code, formation, tag…"
             />
           </div>
+
+          <div ref={filtersPanelRef} className="relative">
+            <Button
+              variant="secondary"
+              leftIcon={SlidersHorizontal}
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+            >
+              {groupBy === "none" && typeFilter === "all" && view === "active"
+                ? "Filters"
+                : "Filters •"}
+            </Button>
+            {filtersOpen && (
+              <div
+                role="dialog"
+                aria-label="Play filters"
+                className="absolute right-0 top-full z-30 mt-2 w-[280px] space-y-4 rounded-xl border border-border bg-surface-raised p-4 shadow-elevated"
+              >
+                <div>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    Group by
+                  </div>
+                  <SegmentedControl
+                    size="sm"
+                    className="w-full [&>button]:flex-1"
+                    value={groupBy}
+                    onChange={(v) => setGroupBy(v as GroupBy)}
+                    options={[
+                      { value: "none", label: "None" },
+                      { value: "formation", label: "Formation" },
+                      { value: "group", label: "Group" },
+                    ]}
+                  />
+                  {groupBy === "group" && (
+                    <button
+                      type="button"
+                      onClick={() => setShowManageGroups(true)}
+                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted hover:border-primary hover:text-primary"
+                    >
+                      <Folders className="size-3.5" />
+                      Manage groups
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    <Settings2 className="size-3" /> View
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <SegmentedControl
+                      size="sm"
+                      className="w-full [&>button]:flex-1"
+                      value={viewMode}
+                      onChange={(v) => setViewMode(v as "cards" | "list")}
+                      options={[
+                        { value: "cards", label: "Cards", icon: LayoutGrid },
+                        { value: "list", label: "List", icon: List },
+                      ]}
+                    />
+                    {viewMode === "cards" && (
+                      <SegmentedControl
+                        size="sm"
+                        className="w-full [&>button]:flex-1"
+                        value={thumbSize}
+                        onChange={(v) => setThumbSize(v as ThumbSize)}
+                        options={[
+                          { value: "small", label: "Sm" },
+                          { value: "medium", label: "Md" },
+                          { value: "large", label: "Lg" },
+                        ]}
+                      />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    Type
+                  </div>
+                  <SegmentedControl
+                    size="sm"
+                    className="w-full [&>button]:flex-1"
+                    value={typeFilter}
+                    onChange={(v) => setTypeFilter(v as PlayType | "all")}
+                    options={
+                      variant === "tackle_11"
+                        ? [
+                            { value: "all", label: "All" },
+                            { value: "offense", label: "Off" },
+                            { value: "defense", label: "Def" },
+                            { value: "special_teams", label: "ST" },
+                          ]
+                        : [
+                            { value: "all", label: "All" },
+                            { value: "offense", label: "Off" },
+                            { value: "defense", label: "Def" },
+                          ]
+                    }
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    Status
+                  </div>
+                  <SegmentedControl
+                    size="sm"
+                    className="w-full [&>button]:flex-1"
+                    value={view}
+                    onChange={(v) => setView(v as "active" | "archived")}
+                    options={[
+                      { value: "active", label: "Active" },
+                      { value: "archived", label: "Archived" },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <Link href={`/playbooks/${playbookId}/print`}>
             <Button variant="secondary" leftIcon={Printer}>
               Print playbook
@@ -434,125 +579,35 @@ export function PlaybookDetailClient({
       )}
 
       {tab === "plays" && (
-      <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
-        {/* Side rail — sticks under the page-header block above. The top
-            offset is approximate (covers ~56px global header + ~176px sticky
-            page header including padding); a few pixels of drift here is
-            cosmetic and acceptable. */}
-        <aside className="lg:sticky lg:top-[14.5rem] lg:self-start">
-          <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-raised p-3">
-            <SegmentedControl
-              value={groupBy}
-              onChange={(v) => setGroupBy(v as GroupBy)}
-              options={[
-                { value: "formation", label: "Formation" },
-                { value: "group", label: "Group" },
-              ]}
-            />
-            {groupBy === "group" && (
-              <button
-                type="button"
-                onClick={() => setShowManageGroups(true)}
-                className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted hover:border-primary hover:text-primary"
-              >
-                <Folders className="size-3.5" />
-                Manage groups
-              </button>
-            )}
-
-            <nav className="flex max-h-[55vh] flex-col gap-0.5 overflow-y-auto">
-              {sections.length === 0 && (
-                <p className="px-2 py-1 text-xs text-muted">No sections</p>
-              )}
-              {sections.map((s) => {
-                const active = activeSection === s.key;
-                return (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => jumpToSection(s.key)}
-                    className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                      active
-                        ? "bg-primary/10 text-primary"
-                        : "text-foreground hover:bg-surface-inset"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                    <span className="shrink-0 text-[10px] text-muted">
-                      {s.plays.length}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div className="border-t border-border pt-3">
-              <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                <Settings2 className="size-3" /> View
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <SegmentedControl
-                  size="sm"
-                  value={viewMode}
-                  onChange={(v) => setViewMode(v as "cards" | "list")}
-                  options={[
-                    { value: "cards", label: "Cards", icon: LayoutGrid },
-                    { value: "list", label: "List", icon: List },
-                  ]}
-                />
-                {viewMode === "cards" && (
-                  <SegmentedControl
-                    size="sm"
-                    value={thumbSize}
-                    onChange={(v) => setThumbSize(v as ThumbSize)}
-                    options={[
-                      { value: "small", label: "Sm" },
-                      { value: "medium", label: "Md" },
-                      { value: "large", label: "Lg" },
-                    ]}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="border-t border-border pt-3">
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Type
-              </div>
-              <SegmentedControl
-                size="sm"
-                value={typeFilter}
-                onChange={(v) => setTypeFilter(v as PlayType | "all")}
-                options={
-                  variant === "tackle_11"
-                    ? [
-                        { value: "all", label: "All" },
-                        { value: "offense", label: "Off" },
-                        { value: "defense", label: "Def" },
-                        { value: "special_teams", label: "ST" },
-                      ]
-                    : [
-                        { value: "all", label: "All" },
-                        { value: "offense", label: "Off" },
-                        { value: "defense", label: "Def" },
-                      ]
-                }
-              />
-            </div>
-
-            <div className="border-t border-border pt-3">
-              <SegmentedControl
-                size="sm"
-                value={view}
-                onChange={(v) => setView(v as "active" | "archived")}
-                options={[
-                  { value: "active", label: "Active" },
-                  { value: "archived", label: "Archived" },
-                ]}
-              />
-            </div>
-          </div>
-        </aside>
+      <div>
+        {/* Section jump pills — only shown when grouping is active and there's
+            more than one section. Horizontal scroll on overflow so this stays
+            tidy on mobile and doesn't introduce a separate sidebar. */}
+        {groupBy !== "none" && sections.length > 1 && (
+          <nav
+            aria-label="Jump to section"
+            className="mb-4 -mx-6 flex gap-1.5 overflow-x-auto px-6 pb-1"
+          >
+            {sections.map((s) => {
+              const active = activeSection === s.key;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => jumpToSection(s.key)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-primary/10 text-primary ring-1 ring-primary/30"
+                      : "bg-surface-inset text-foreground hover:bg-surface-raised"
+                  }`}
+                >
+                  <span className="truncate max-w-[12rem]">{s.label || "Ungrouped"}</span>
+                  <span className="text-[10px] text-muted tabular-nums">{s.plays.length}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         {/* Main area */}
         <div className="min-w-0">
@@ -647,10 +702,12 @@ export function PlaybookDetailClient({
                     : undefined
                 }
               >
-                <div className="flex items-center gap-2 border-b border-border pb-1.5">
-                  <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
-                  <Badge variant="default">{section.plays.length}</Badge>
-                </div>
+                {groupBy !== "none" && (
+                  <div className="flex items-center gap-2 border-b border-border pb-1.5">
+                    <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
+                    <Badge variant="default">{section.plays.length}</Badge>
+                  </div>
+                )}
                 {viewMode === "cards" && (
                   <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
 
