@@ -25,6 +25,8 @@ import {
   updatePlaybookAppearanceAction,
 } from "@/app/actions/playbooks";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
+import type { SportVariant } from "@/domain/play/types";
+import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import {
   ActionMenu,
   Badge,
@@ -32,6 +34,7 @@ import {
   Card,
   EmptyState,
   Input,
+  SegmentedControl,
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
@@ -112,7 +115,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [newBookName, setNewBookName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState<DashboardPlaybookTile | null>(null);
 
@@ -147,17 +149,24 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     });
   }
 
-  function createBook() {
-    handle(
-      () => createPlaybookAction(newBookName || "New playbook"),
-      (res) => {
-        if (res.ok) {
-          setNewBookName("");
-          setShowCreate(false);
-          router.push(`/playbooks/${res.id}`);
-        }
-      },
-    );
+  function createBook(config: {
+    name: string;
+    variant: SportVariant;
+    color: string | null;
+    logo_url: string | null;
+  }) {
+    startTransition(async () => {
+      const res = await createPlaybookAction(config.name, config.variant, {
+        color: config.color,
+        logo_url: config.logo_url,
+      });
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setShowCreate(false);
+      router.push(`/playbooks/${res.id}`);
+    });
   }
 
   function onRenameBook(bookId: string, current: string) {
@@ -220,44 +229,13 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           </p>
         </div>
         <div className="flex gap-2">
-          {showCreate ? (
-            <div className="flex gap-2">
-              <Input
-                autoFocus
-                value={newBookName}
-                onChange={(e) => setNewBookName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createBook();
-                  if (e.key === "Escape") {
-                    setShowCreate(false);
-                    setNewBookName("");
-                  }
-                }}
-                placeholder="Playbook name"
-                className="h-9 w-56"
-              />
-              <Button variant="primary" onClick={createBook} loading={pending}>
-                Create
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowCreate(false);
-                  setNewBookName("");
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button
-              variant="primary"
-              leftIcon={Plus}
-              onClick={() => setShowCreate(true)}
-            >
-              New playbook
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            leftIcon={Plus}
+            onClick={() => setShowCreate(true)}
+          >
+            New playbook
+          </Button>
         </div>
       </div>
 
@@ -337,6 +315,187 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           }}
         />
       )}
+
+      {showCreate && (
+        <CreatePlaybookDialog
+          pending={pending}
+          onClose={() => setShowCreate(false)}
+          onCreate={(config) => createBook(config)}
+        />
+      )}
+    </div>
+  );
+}
+
+const SPORT_OPTIONS: { value: SportVariant; label: string }[] = [
+  { value: "flag_5v5", label: SPORT_VARIANT_LABELS.flag_5v5 },
+  { value: "flag_7v7", label: SPORT_VARIANT_LABELS.flag_7v7 },
+  { value: "tackle_11", label: SPORT_VARIANT_LABELS.tackle_11 },
+  { value: "six_man", label: SPORT_VARIANT_LABELS.six_man },
+];
+
+function CreatePlaybookDialog({
+  pending,
+  onClose,
+  onCreate,
+}: {
+  pending: boolean;
+  onClose: () => void;
+  onCreate: (config: {
+    name: string;
+    variant: SportVariant;
+    color: string | null;
+    logo_url: string | null;
+  }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [variant, setVariant] = useState<SportVariant>("flag_7v7");
+  const [color, setColor] = useState<string>(PALETTE[0]);
+  const [logoUrl, setLogoUrl] = useState("");
+
+  const initials =
+    name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((s) => s[0])
+      .filter(Boolean)
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "PB";
+
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onCreate({
+      name: trimmed,
+      variant,
+      color,
+      logo_url: logoUrl.trim() || null,
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-base font-bold text-foreground">New playbook</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          {/* Preview */}
+          <div
+            className="flex h-28 items-center justify-center rounded-lg"
+            style={{ backgroundColor: color }}
+          >
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" className="h-20 w-20 object-contain" />
+            ) : (
+              <span className="text-3xl font-black tracking-tight text-white drop-shadow">
+                {initials}
+              </span>
+            )}
+          </div>
+
+          {/* Name */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Name
+            </label>
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+              placeholder="e.g. Varsity 2026"
+            />
+          </div>
+
+          {/* Sport variant */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Game type
+            </label>
+            <SegmentedControl
+              options={SPORT_OPTIONS}
+              value={variant}
+              onChange={setVariant}
+              size="sm"
+            />
+          </div>
+
+          {/* Color */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Team color
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {PALETTE.map((c) => {
+                const active = color.toLowerCase() === c.toLowerCase();
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                      active ? "border-foreground scale-110" : "border-border"
+                    }`}
+                    style={{ backgroundColor: c }}
+                    aria-label={c}
+                  />
+                );
+              })}
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-8 w-8 cursor-pointer rounded-full border-2 border-border"
+                aria-label="Custom color"
+              />
+            </div>
+          </div>
+
+          {/* Logo URL */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Logo URL <span className="font-normal normal-case text-muted">(optional)</span>
+            </label>
+            <Input
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://example.com/logo.png"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <Button variant="ghost" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={submit}
+            loading={pending}
+            disabled={!name.trim()}
+          >
+            Create
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
