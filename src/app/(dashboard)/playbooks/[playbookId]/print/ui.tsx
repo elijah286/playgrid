@@ -93,11 +93,11 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       routeWeight: config.wristbandRouteWeight,
       labelStyle: config.wristbandLabelStyle,
       labels: config.wristbandLabels,
-      playerShape: config.wristbandPlayerShape,
       colorCoding: config.wristbandColorCoding,
       showLos: config.wristbandShowLos,
       showYardMarkers: config.wristbandShowYardMarkers,
       showPlayerLabels: config.wristbandShowPlayerLabels,
+      playerOutline: config.wristbandPlayerOutline,
     }),
     [
       config.wristbandWidthIn,
@@ -108,35 +108,45 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       config.wristbandRouteWeight,
       config.wristbandLabelStyle,
       config.wristbandLabels,
-      config.wristbandPlayerShape,
       config.wristbandColorCoding,
       config.wristbandShowLos,
       config.wristbandShowYardMarkers,
       config.wristbandShowPlayerLabels,
+      config.wristbandPlayerOutline,
     ],
   );
 
-  const preview = useMemo(() => {
+  const previewPages = useMemo<string[]>(() => {
     if (config.product === "wristband") {
       const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
       const chosen = initialPack.filter((r) => selected.has(r.id));
-      const docs = (chosen.length > 0 ? chosen : initialPack.slice(0, 1))
-        .slice(0, tiles)
-        .map((r) => r.document);
-      if (docs.length === 0) return null;
-      return compileWristbandGridSvg(docs, wristbandGridOpts).svgMarkup;
+      const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
+      const docs = pool.map((r) => applyExportPresentation(r.document, config));
+      if (docs.length === 0) return [];
+      const pages: string[] = [];
+      for (let i = 0; i < docs.length; i += tiles) {
+        pages.push(
+          compileWristbandGridSvg(docs.slice(i, i + tiles), wristbandGridOpts).svgMarkup,
+        );
+      }
+      return pages;
     }
     const chosen = initialPack.filter((r) => selected.has(r.id));
     const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
-    const docs = pool
-      .slice(0, config.playsPerSheet)
-      .map((r) => applyExportPresentation(r.document, config));
-    if (docs.length === 0) return null;
-    return compilePlaysheetGridSvg(docs, {
-      playsPerSheet: config.playsPerSheet,
-      orientation: config.sheetOrientation,
-      showNotes: config.includeCommentsAndNotes,
-    }).svgMarkup;
+    const docs = pool.map((r) => applyExportPresentation(r.document, config));
+    if (docs.length === 0) return [];
+    const per = config.playsPerSheet;
+    const pages: string[] = [];
+    for (let i = 0; i < docs.length; i += per) {
+      pages.push(
+        compilePlaysheetGridSvg(docs.slice(i, i + per), {
+          playsPerSheet: per,
+          orientation: config.sheetOrientation,
+          showNotes: config.includeCommentsAndNotes,
+        }).svgMarkup,
+      );
+    }
+    return pages;
   }, [
     initialPack,
     selected,
@@ -284,11 +294,16 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
             ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"`
             : `Live preview · ${config.playsPerSheet}/sheet · ${config.sheetOrientation}`}
         </p>
-        {preview ? (
-          <div
-            className="overflow-auto rounded-xl border border-border bg-surface-raised p-4 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full"
-            dangerouslySetInnerHTML={{ __html: preview }}
-          />
+        {previewPages.length > 0 ? (
+          <div className="space-y-4">
+            {previewPages.map((svg, i) => (
+              <div
+                key={i}
+                className="overflow-auto rounded-xl border border-border bg-surface-raised p-4 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full"
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+            ))}
+          </div>
         ) : (
           <p className="text-sm text-muted">Select a play to preview.</p>
         )}

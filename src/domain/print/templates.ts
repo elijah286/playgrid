@@ -1,4 +1,4 @@
-import type { PlayDocument } from "../play/types";
+import type { PlayDocument, PlayerShape } from "../play/types";
 import { routeToPathGeometry } from "../play/geometry";
 import { resolveRouteStroke } from "../play/factory";
 import {
@@ -8,7 +8,6 @@ import {
   type WristbandIconSize,
   type WristbandLabelMode,
   type WristbandLabelStyle,
-  type WristbandPlayerShape,
   type WristbandRouteWeight,
   type WristbandZoom,
   wristbandGridDims,
@@ -359,11 +358,11 @@ export type WristbandGridOptions = {
   routeWeight: WristbandRouteWeight;
   labelStyle: WristbandLabelStyle;
   labels: WristbandLabelMode;
-  playerShape: WristbandPlayerShape;
   colorCoding: boolean;
   showLos: boolean;
   showYardMarkers: boolean;
   showPlayerLabels: boolean;
+  playerOutline: boolean;
 };
 
 function iconRadius(size: WristbandIconSize): number {
@@ -394,22 +393,42 @@ function groupLabelColor(doc: PlayDocument): string {
 }
 
 function playerMarkerSvg(
-  shape: WristbandPlayerShape,
+  shape: PlayerShape | undefined,
   cx: number,
   cy: number,
   r: number,
   fill: string,
   stroke: string,
+  outline: boolean,
 ): string {
-  if (shape === "x") {
-    const d = r * 0.9;
-    return `<path d="M ${cx - d} ${cy - d} L ${cx + d} ${cy + d} M ${cx + d} ${cy - d} L ${cx - d} ${cy + d}" stroke="${stroke}" stroke-width="${Math.max(0.4, r * 0.45)}" stroke-linecap="round" fill="none"/>`;
-  }
+  const strokeAttrs = outline ? `stroke="${stroke}" stroke-width="0.3"` : `stroke="none"`;
   if (shape === "diamond") {
     const d = r * 1.15;
-    return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy} L ${cx} ${cy + d} L ${cx - d} ${cy} Z" fill="${fill}" stroke="${stroke}" stroke-width="0.3"/>`;
+    return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy} L ${cx} ${cy + d} L ${cx - d} ${cy} Z" fill="${fill}" ${strokeAttrs}/>`;
   }
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="0.3"/>`;
+  if (shape === "square") {
+    const d = r * 0.95;
+    return `<rect x="${cx - d}" y="${cy - d}" width="${d * 2}" height="${d * 2}" fill="${fill}" ${strokeAttrs}/>`;
+  }
+  if (shape === "triangle") {
+    const d = r * 1.15;
+    return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy + d * 0.85} L ${cx - d} ${cy + d * 0.85} Z" fill="${fill}" ${strokeAttrs}/>`;
+  }
+  if (shape === "star") {
+    const outer = r * 1.2;
+    const inner = outer * 0.45;
+    let d = "";
+    for (let i = 0; i < 10; i++) {
+      const rad = (Math.PI / 5) * i - Math.PI / 2;
+      const rr = i % 2 === 0 ? outer : inner;
+      const x = cx + Math.cos(rad) * rr;
+      const y = cy + Math.sin(rad) * rr;
+      d += `${i === 0 ? "M" : "L"} ${x} ${y} `;
+    }
+    d += "Z";
+    return `<path d="${d}" fill="${fill}" ${strokeAttrs}/>`;
+  }
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" ${strokeAttrs}/>`;
 }
 
 function renderWristbandTile(
@@ -456,7 +475,7 @@ function renderWristbandTile(
   for (const p of doc.layers.players) {
     const px = fieldX + p.position.x * fieldW;
     const py = fieldY + (1 - p.position.y) * fieldH;
-    players += playerMarkerSvg(opts.playerShape, px, py, pr, p.style.fill, p.style.stroke);
+    players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
       players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
     }

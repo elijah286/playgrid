@@ -10,7 +10,7 @@ export const PLAYS_PER_SHEET_OPTIONS: readonly PlaysPerSheet[] = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
 ] as const;
 
-export type WristbandGridLayout = "8" | "6" | "4" | "4col" | "3";
+export type WristbandGridLayout = "10" | "8" | "6" | "4" | "4col" | "3";
 export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
 export type WristbandIconSize = "small" | "medium" | "large";
 export type WristbandRouteWeight = "thin" | "medium" | "thick";
@@ -53,8 +53,8 @@ export type PlaybookPrintRunConfig = {
   wristbandLabelStyle: WristbandLabelStyle;
   /** Wristband: which play label(s) to show per tile */
   wristbandLabels: WristbandLabelMode;
-  /** Wristband: player marker shape */
-  wristbandPlayerShape: WristbandPlayerShape;
+  /** Wristband: draw dark outline around player markers */
+  wristbandPlayerOutline: boolean;
   /** Wristband: color-code labels by group/formation */
   wristbandColorCoding: boolean;
   /** Wristband: draw LOS line on each tile */
@@ -74,15 +74,15 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   backfieldYards: 10,
   downfieldYards: 15,
   includeCommentsAndNotes: true,
-  wristbandWidthIn: 4.5,
+  wristbandWidthIn: 4,
   wristbandHeightIn: 2.25,
-  wristbandGridLayout: "6",
+  wristbandGridLayout: "8",
   wristbandZoom: 100,
-  wristbandIconSize: "large",
+  wristbandIconSize: "medium",
   wristbandRouteWeight: "medium",
   wristbandLabelStyle: "compact",
   wristbandLabels: "number",
-  wristbandPlayerShape: "circle",
+  wristbandPlayerOutline: false,
   wristbandColorCoding: true,
   wristbandShowLos: true,
   wristbandShowYardMarkers: true,
@@ -92,6 +92,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {
   switch (layout) {
+    case "10":
+      return { rows: 2, cols: 5 };
     case "8":
       return { rows: 2, cols: 4 };
     case "6":

@@ -14,7 +14,6 @@ import {
   type WristbandIconSize,
   type WristbandLabelMode,
   type WristbandLabelStyle,
-  type WristbandPlayerShape,
   type WristbandRouteWeight,
   type WristbandZoom,
 } from "@/domain/print/playbookPrint";
@@ -139,21 +138,11 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
       {config.product === "wristband" && (
         <div className="space-y-4">
           <PillGroup
-            label="Player shape"
-            value={config.wristbandPlayerShape}
-            onChange={(v) => patch({ wristbandPlayerShape: v })}
-            options={[
-              { value: "circle" as WristbandPlayerShape, label: "●" },
-              { value: "x" as WristbandPlayerShape, label: "✕" },
-              { value: "diamond" as WristbandPlayerShape, label: "◆" },
-            ]}
-          />
-
-          <PillGroup
             label="Grid"
             value={config.wristbandGridLayout}
             onChange={(v) => patch({ wristbandGridLayout: v })}
             options={[
+              { value: "10" as WristbandGridLayout, label: "10 plays" },
               { value: "8" as WristbandGridLayout, label: "8 plays" },
               { value: "6" as WristbandGridLayout, label: "6 plays" },
               { value: "4" as WristbandGridLayout, label: "4 plays" },
@@ -258,6 +247,15 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               <input
                 type="checkbox"
                 className="size-4 accent-primary"
+                checked={config.wristbandPlayerOutline}
+                onChange={(e) => patch({ wristbandPlayerOutline: e.target.checked })}
+              />
+              Outline player markers
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
                 checked={config.wristbandColorCoding}
                 onChange={(e) => patch({ wristbandColorCoding: e.target.checked })}
               />
@@ -274,16 +272,6 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
             />
           </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={config.includeCommentsAndNotes}
-              onChange={(e) => patch({ includeCommentsAndNotes: e.target.checked })}
-            />
-            Include comments &amp; notes
-          </label>
         </div>
       )}
     </div>
