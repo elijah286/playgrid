@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
-import { resolveEndDecoration } from "@/domain/play/factory";
+import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
   savePlayVersionAction,
@@ -31,6 +31,8 @@ type Props = {
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
   linkedFormation?: SavedFormation | null;
+  opponentFormation?: SavedFormation | null;
+  allFormations?: SavedFormation[];
 };
 
 export function PlayEditorClient({
@@ -40,6 +42,8 @@ export function PlayEditorClient({
   initialNav,
   initialGroups,
   linkedFormation,
+  opponentFormation,
+  allFormations = [],
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -292,6 +296,8 @@ export function PlayEditorClient({
         onDuplicate={duplicate}
         saveStatus={saveStatus}
         linkedFormation={linkedFormation}
+        opponentFormation={opponentFormation ?? null}
+        allFormations={allFormations}
       />
 
       {/* Routes */}
@@ -386,10 +392,16 @@ export function PlayEditorClient({
                 fieldAspect={fieldAspect}
                 fieldBackground={doc.fieldBackground}
                 hideRoutesAndPlayers={anim.phase !== "idle"}
+                opponentFormation={opponentFormation ?? null}
               />
               <AnimationOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
               <PlayControls anim={anim} />
             </div>
+
+            {/* Zones panel (defensive plays) */}
+            {doc.metadata.playType === "defense" && (
+              <ZonesBar doc={doc} dispatch={dispatch} />
+            )}
 
             {/* Field size controls (below canvas) */}
             <FieldSizeControls doc={doc} dispatch={dispatch} />
@@ -415,6 +427,77 @@ export function PlayEditorClient({
           </aside>
       </div>
 
+    </div>
+  );
+}
+
+function ZonesBar({
+  doc,
+  dispatch,
+}: {
+  doc: PlayDocument;
+  dispatch: (c: import("@/domain/play/commands").PlayCommand) => void;
+}) {
+  const zones = doc.layers.zones ?? [];
+  return (
+    <div className="rounded-xl border border-border bg-surface-raised p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-foreground">Zones</span>
+        <button
+          type="button"
+          onClick={() =>
+            dispatch({ type: "zone.add", zone: mkZone("rectangle", "Flat") })
+          }
+          className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-inset"
+        >
+          + Rectangle
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            dispatch({ type: "zone.add", zone: mkZone("ellipse", "Hook") })
+          }
+          className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-inset"
+        >
+          + Ellipse
+        </button>
+        {zones.length > 0 && (
+          <span className="text-[11px] text-muted">
+            Drag a zone on the field to reposition.
+          </span>
+        )}
+      </div>
+      {zones.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {zones.map((z) => (
+            <li
+              key={z.id}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-foreground"
+            >
+              <input
+                value={z.label}
+                onChange={(e) =>
+                  dispatch({
+                    type: "zone.update",
+                    zoneId: z.id,
+                    patch: { label: e.target.value },
+                  })
+                }
+                className="w-20 bg-transparent text-[11px] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => dispatch({ type: "zone.remove", zoneId: z.id })}
+                className="text-muted hover:text-danger"
+                aria-label={`Remove ${z.label}`}
+                title="Remove"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

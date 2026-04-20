@@ -17,6 +17,7 @@ import type {
   SegmentShape,
   SportProfile,
   StrokePattern,
+  Zone,
 } from "./types";
 
 export type PlayCommand =
@@ -77,6 +78,10 @@ export type PlayCommand =
   /* ---- Annotations ---- */
   | { type: "annotation.upsert"; annotation: Annotation }
   | { type: "annotation.remove"; annotationId: string }
+  /* ---- Zones (defensive coverage) ---- */
+  | { type: "zone.add"; zone: Zone }
+  | { type: "zone.remove"; zoneId: string }
+  | { type: "zone.update"; zoneId: string; patch: Partial<Omit<Zone, "id">> }
   /* ---- Formation ---- */
   | { type: "formation.set"; semantic: FormationSemantic }
   /* ---- Document ---- */

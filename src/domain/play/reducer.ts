@@ -372,6 +372,34 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         },
       };
 
+    /* ---- Zones ---- */
+    case "zone.add":
+      return {
+        ...doc,
+        layers: {
+          ...doc.layers,
+          zones: [...(doc.layers.zones ?? []), cmd.zone],
+        },
+      };
+    case "zone.remove":
+      return {
+        ...doc,
+        layers: {
+          ...doc.layers,
+          zones: (doc.layers.zones ?? []).filter((z) => z.id !== cmd.zoneId),
+        },
+      };
+    case "zone.update":
+      return {
+        ...doc,
+        layers: {
+          ...doc.layers,
+          zones: (doc.layers.zones ?? []).map((z) =>
+            z.id === cmd.zoneId ? { ...z, ...cmd.patch } : z,
+          ),
+        },
+      };
+
     /* ---- Formation ---- */
     case "formation.set":
       return { ...doc, formation: { ...doc.formation, semantic: cmd.semantic } };

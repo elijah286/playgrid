@@ -20,9 +20,11 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
-import type { SportVariant } from "@/domain/play/types";
+import type { PlayType, SportVariant } from "@/domain/play/types";
+import type { FormationKind } from "@/app/actions/formations";
 
 type SportFilter = "all" | SportVariant;
+type KindFilter = "all" | FormationKind;
 
 const FILTER_OPTIONS: { value: SportFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -31,6 +33,19 @@ const FILTER_OPTIONS: { value: SportFilter; label: string }[] = [
   { value: "other", label: "Other" },
   { value: "tackle_11", label: "11-Man" },
 ];
+
+const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "offense", label: "Offense" },
+  { value: "defense", label: "Defense" },
+  { value: "special_teams", label: "Special teams" },
+];
+
+const KIND_LABEL: Record<PlayType, string> = {
+  offense: "Offense",
+  defense: "Defense",
+  special_teams: "Special teams",
+};
 
 function variantLabel(v: string) {
   return SPORT_VARIANT_LABELS[v as SportVariant] ?? v;
@@ -206,7 +221,11 @@ function FormationCard({
 
         {/* Metadata */}
         <p className="mt-2 truncate text-xs text-muted">
-          {[variantStr, `${formation.players.length} players`]
+          {[
+            KIND_LABEL[formation.kind ?? "offense"],
+            variantStr,
+            `${formation.players.length} players`,
+          ]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -233,6 +252,7 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
   const [, startTransition] = useTransition();
   const [formations, setFormations] = useState(initial);
   const [filter, setFilter] = useState<SportFilter>("all");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
 
   function handleDelete(id: string, displayName: string) {
     if (!window.confirm(`Delete "${displayName}"? This can't be undone.`)) return;
@@ -259,10 +279,15 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
     });
   }
 
+  const kindVisible =
+    kindFilter === "all"
+      ? formations
+      : formations.filter((f) => (f.kind ?? "offense") === kindFilter);
+
   const visible =
     filter === "all"
-      ? formations
-      : formations.filter(
+      ? kindVisible
+      : kindVisible.filter(
           (f) => (f.sportProfile?.variant ?? "flag_7v7") === filter,
         );
 
@@ -284,6 +309,11 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
     <div className="space-y-8">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
+        <SegmentedControl
+          value={kindFilter}
+          onChange={(v) => setKindFilter(v as KindFilter)}
+          options={KIND_OPTIONS}
+        />
         <SegmentedControl
           value={filter}
           onChange={(v) => setFilter(v as SportFilter)}

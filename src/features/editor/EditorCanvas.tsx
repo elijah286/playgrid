@@ -152,6 +152,8 @@ type Props = {
   /** When true, suppress rendering of routes, route decorations, and player
    *  tokens. Used when an animation overlay is drawing them instead. */
   hideRoutesAndPlayers?: boolean;
+  /** Optional opposing-side formation to render behind the play, in gray. */
+  opponentFormation?: import("@/app/actions/formations").SavedFormation | null;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -208,6 +210,7 @@ export function EditorCanvas({
   onAddPlayer,
   fieldBackground,
   hideRoutesAndPlayers = false,
+  opponentFormation = null,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1218,6 +1221,124 @@ export function EditorCanvas({
           </g>
         );
       })()}
+
+      {/* Coverage zones (defense). Rendered above the field, below routes/players. */}
+      {!hideRoutesAndPlayers &&
+        (doc.layers.zones ?? []).map((z) => {
+          const cx = z.center.x * fieldAspect;
+          const cy = 1 - z.center.y;
+          const w = z.size.w * fieldAspect;
+          const h = z.size.h;
+          return (
+            <g
+              key={z.id}
+              onPointerDown={(e) => {
+                if (mode === "formation") return;
+                e.stopPropagation();
+                const svg = svgRef.current;
+                if (!svg) return;
+                const rect = svg.getBoundingClientRect();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startCenter = { x: z.center.x, y: z.center.y };
+                (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+                const onMove = (ev: PointerEvent) => {
+                  const dx = (ev.clientX - startX) / rect.width; // 0..fieldAspect per 1
+                  const dy = (ev.clientY - startY) / rect.height;
+                  const nx = Math.max(0, Math.min(1, startCenter.x + dx / fieldAspect));
+                  const ny = Math.max(0, Math.min(1, startCenter.y - dy));
+                  dispatch({
+                    type: "zone.update",
+                    zoneId: z.id,
+                    patch: { center: { x: nx, y: ny } },
+                  });
+                };
+                const onUp = () => {
+                  window.removeEventListener("pointermove", onMove);
+                  window.removeEventListener("pointerup", onUp);
+                };
+                window.addEventListener("pointermove", onMove);
+                window.addEventListener("pointerup", onUp);
+              }}
+              style={{ cursor: "move" }}
+            >
+              {z.kind === "rectangle" ? (
+                <rect
+                  x={cx - w}
+                  y={cy - h}
+                  width={w * 2}
+                  height={h * 2}
+                  fill={z.style.fill}
+                  stroke={z.style.stroke}
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                  vectorEffect="non-scaling-stroke"
+                  rx={0.01}
+                />
+              ) : (
+                <ellipse
+                  cx={cx}
+                  cy={cy}
+                  rx={w}
+                  ry={h}
+                  fill={z.style.fill}
+                  stroke={z.style.stroke}
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+              <text
+                x={cx}
+                y={cy}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={0.03}
+                fontWeight={600}
+                fill="#1f2937"
+                style={{ fontFamily: "Inter, system-ui, sans-serif", userSelect: "none" }}
+              >
+                {z.label}
+              </text>
+            </g>
+          );
+        })}
+
+      {/* Opponent formation ghost overlay (gray, no routes, no interaction). */}
+      {opponentFormation && !hideRoutesAndPlayers && (
+        <g pointerEvents="none" opacity={0.55}>
+          {opponentFormation.players.map((pl) => {
+            const cx = pl.position.x * fieldAspect;
+            const cy = 1 - pl.position.y;
+            const r = 0.028;
+            return (
+              <g key={`opp-${pl.id}`} transform={`translate(${cx} ${cy})`}>
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={r}
+                  fill="#9ca3af"
+                  stroke="#4b5563"
+                  strokeWidth={1.2}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={0.028}
+                  fontWeight={700}
+                  fill="#1f2937"
+                  style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+                >
+                  {pl.label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      )}
 
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>

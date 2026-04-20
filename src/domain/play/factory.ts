@@ -240,9 +240,24 @@ export function defaultPlayersForVariant(variant: SportVariant, playerCount?: nu
 }
 
 let idCounter = 0;
-function uid(prefix: string) {
+export function uid(prefix: string) {
   idCounter += 1;
   return `${prefix}_${Date.now().toString(36)}_${idCounter}`;
+}
+
+export function mkZone(
+  kind: "rectangle" | "ellipse",
+  label: string,
+  center: { x: number; y: number } = { x: 0.5, y: 0.65 },
+): import("./types").Zone {
+  return {
+    id: uid("zn"),
+    kind,
+    center,
+    size: { w: 0.14, h: 0.1 },
+    label,
+    style: { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)" },
+  };
 }
 
 /** Default 7v7 offensive positions — normalized field box */
@@ -407,8 +422,6 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
     },
   };
 }
-
-export { uid };
 
 /* ------------------------------------------------------------------ */
 /*  Defensive formations                                              */

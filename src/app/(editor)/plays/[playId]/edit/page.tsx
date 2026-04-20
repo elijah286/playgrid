@@ -37,6 +37,15 @@ export default async function PlayEditPage({ params }: Props) {
     linkedFormation = formationsRes.formations.find((f) => f.id === formationId) ?? null;
   }
 
+  let opponentFormation: SavedFormation | null = null;
+  const opponentFormationId = res.document.metadata.opponentFormationId;
+  if (opponentFormationId && formationsRes.ok) {
+    opponentFormation =
+      formationsRes.formations.find((f) => f.id === opponentFormationId) ?? null;
+  }
+
+  const allFormations = formationsRes.ok ? formationsRes.formations : [];
+
   return (
     <PlayEditorClient
       playId={res.play.id}
@@ -45,6 +54,8 @@ export default async function PlayEditPage({ params }: Props) {
       initialNav={nav.ok ? nav.plays : []}
       initialGroups={nav.ok ? nav.groups : []}
       linkedFormation={linkedFormation}
+      opponentFormation={opponentFormation}
+      allFormations={allFormations}
     />
   );
 }
