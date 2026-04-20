@@ -12,10 +12,10 @@ import {
   type PlaybookPrintRunConfig,
 } from "@/domain/print/playbookPrint";
 import {
-  compilePlaysheetGridSvg,
   compilePlaysheetPdfPages,
   compileWristbandGridSvg,
   compileWristbandPdfPages,
+  type PlaysheetOptions,
   type WristbandGridOptions,
 } from "@/domain/print/templates";
 import { exportSvgsToMultiPagePdf } from "@/features/print/exportPdf";
@@ -116,11 +116,46 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
     ],
   );
 
+  const playsheetOpts: PlaysheetOptions = useMemo(
+    () => ({
+      columns: config.playsheetColumns,
+      orientation: config.sheetOrientation,
+      pageBreak: config.playsheetPageBreak,
+      showNotes: config.playsheetShowNotes,
+      noteLines: config.playsheetNoteLines,
+      iconSize: config.playsheetIconSize,
+      routeWeight: config.playsheetRouteWeight,
+      labelStyle: config.playsheetLabelStyle,
+      labels: config.playsheetLabels,
+      colorCoding: config.playsheetColorCoding,
+      showLos: config.playsheetShowLos,
+      showYardMarkers: config.playsheetShowYardMarkers,
+      showPlayerLabels: config.playsheetShowPlayerLabels,
+      playerOutline: config.playsheetPlayerOutline,
+    }),
+    [
+      config.playsheetColumns,
+      config.sheetOrientation,
+      config.playsheetPageBreak,
+      config.playsheetShowNotes,
+      config.playsheetNoteLines,
+      config.playsheetIconSize,
+      config.playsheetRouteWeight,
+      config.playsheetLabelStyle,
+      config.playsheetLabels,
+      config.playsheetColorCoding,
+      config.playsheetShowLos,
+      config.playsheetShowYardMarkers,
+      config.playsheetShowPlayerLabels,
+      config.playsheetPlayerOutline,
+    ],
+  );
+
   const previewPages = useMemo<string[]>(() => {
+    const chosen = initialPack.filter((r) => selected.has(r.id));
+    const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
     if (config.product === "wristband") {
       const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
-      const chosen = initialPack.filter((r) => selected.has(r.id));
-      const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
       const docs = pool.map((r) => applyExportPresentation(r.document, config));
       if (docs.length === 0) return [];
       const pages: string[] = [];
@@ -131,28 +166,24 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       }
       return pages;
     }
-    const chosen = initialPack.filter((r) => selected.has(r.id));
-    const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
-    const docs = pool.map((r) => applyExportPresentation(r.document, config));
-    if (docs.length === 0) return [];
-    const per = config.playsPerSheet;
-    const pages: string[] = [];
-    for (let i = 0; i < docs.length; i += per) {
-      pages.push(
-        compilePlaysheetGridSvg(docs.slice(i, i + per), {
-          playsPerSheet: per,
-          orientation: config.sheetOrientation,
-          showNotes: config.includeCommentsAndNotes,
-        }).svgMarkup,
-      );
-    }
-    return pages;
+    const grouping = config.playsheetGrouping;
+    const navOrder = sortNavPlaysForPrint(
+      pool.map((r) => r.nav),
+      grouping,
+    );
+    const ordered = navOrder
+      .map((n) => pool.find((r) => r.id === n.id))
+      .filter((x): x is PlaybookPrintPackRow => x != null);
+    const docs = ordered.map((r) => applyExportPresentation(r.document, config));
+    const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
+    return compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys);
   }, [
     initialPack,
     selected,
     config,
     config.wristbandGridLayout,
     wristbandGridOpts,
+    playsheetOpts,
   ]);
 
   function exportPdf() {
@@ -175,11 +206,8 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
 
       let pages: string[];
       if (config.product === "playsheet") {
-        pages = compilePlaysheetPdfPages(docs, {
-          playsPerSheet: config.playsPerSheet,
-          orientation: config.sheetOrientation,
-          showNotes: config.includeCommentsAndNotes,
-        });
+        const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
+        pages = compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys);
       } else {
         pages = compileWristbandPdfPages(docs, wristbandGridOpts);
       }
@@ -292,7 +320,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {config.product === "wristband"
             ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"`
-            : `Live preview · ${config.playsPerSheet}/sheet · ${config.sheetOrientation}`}
+            : `Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
         </p>
         {previewPages.length > 0 ? (
           <div className="space-y-4">

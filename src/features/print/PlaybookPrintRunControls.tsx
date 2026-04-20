@@ -3,13 +3,15 @@
 import { SegmentedControl, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
-  PLAYS_PER_SHEET_OPTIONS,
+  PLAYSHEET_COLUMN_OPTIONS,
   WRISTBAND_HEIGHTS_IN,
   WRISTBAND_WIDTHS_IN,
   WRISTBAND_ZOOMS,
   type PlaybookPrintRunConfig,
-  type PlaysPerSheet,
+  type PlaysheetColumns,
   type PlaysheetGrouping,
+  type PlaysheetNoteLines,
+  type PlaysheetPageBreak,
   type WristbandGridLayout,
   type WristbandIconSize,
   type WristbandLabelMode,
@@ -97,10 +99,10 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
       {config.product === "playsheet" && (
         <div className="space-y-4">
           <PillGroup
-            label="Plays per sheet"
-            value={config.playsPerSheet}
-            onChange={(v) => patch({ playsPerSheet: v as PlaysPerSheet })}
-            options={PLAYS_PER_SHEET_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+            label="Columns"
+            value={config.playsheetColumns}
+            onChange={(v) => patch({ playsheetColumns: v as PlaysheetColumns })}
+            options={PLAYSHEET_COLUMN_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
           />
 
           <PillGroup
@@ -123,15 +125,130 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={config.includeCommentsAndNotes}
-              onChange={(e) => patch({ includeCommentsAndNotes: e.target.checked })}
-            />
-            Show notes below plays
-          </label>
+          <PillGroup
+            label="Page breaks"
+            value={config.playsheetPageBreak}
+            onChange={(v) => patch({ playsheetPageBreak: v as PlaysheetPageBreak })}
+            options={[
+              { value: "continuous" as const, label: "Pack tightly" },
+              { value: "group" as const, label: "New page per group" },
+            ]}
+          />
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.playsheetShowNotes}
+                onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
+              />
+              Show notes strip below plays
+            </label>
+            {config.playsheetShowNotes && (
+              <PillGroup
+                label="Note lines"
+                value={config.playsheetNoteLines}
+                onChange={(v) => patch({ playsheetNoteLines: v as PlaysheetNoteLines })}
+                options={[
+                  { value: 1 as PlaysheetNoteLines, label: "1" },
+                  { value: 2 as PlaysheetNoteLines, label: "2" },
+                  { value: 3 as PlaysheetNoteLines, label: "3" },
+                ]}
+              />
+            )}
+          </div>
+
+          <PillGroup
+            label="Position icon size"
+            value={config.playsheetIconSize}
+            onChange={(v) => patch({ playsheetIconSize: v as WristbandIconSize })}
+            options={[
+              { value: "small" as WristbandIconSize, label: "Small" },
+              { value: "medium" as WristbandIconSize, label: "Medium" },
+              { value: "large" as WristbandIconSize, label: "Large" },
+            ]}
+          />
+
+          <PillGroup
+            label="Route line weight"
+            value={config.playsheetRouteWeight}
+            onChange={(v) => patch({ playsheetRouteWeight: v as WristbandRouteWeight })}
+            options={[
+              { value: "thin" as WristbandRouteWeight, label: "Thin" },
+              { value: "medium" as WristbandRouteWeight, label: "Medium" },
+              { value: "thick" as WristbandRouteWeight, label: "Thick" },
+            ]}
+          />
+
+          <PillGroup
+            label="Play label style"
+            value={config.playsheetLabelStyle}
+            onChange={(v) => patch({ playsheetLabelStyle: v as WristbandLabelStyle })}
+            options={[
+              { value: "prominent" as WristbandLabelStyle, label: "Prominent" },
+              { value: "compact" as WristbandLabelStyle, label: "Compact" },
+            ]}
+          />
+
+          <PillGroup
+            label="Play labels"
+            value={config.playsheetLabels}
+            onChange={(v) => patch({ playsheetLabels: v as WristbandLabelMode })}
+            options={[
+              { value: "both" as WristbandLabelMode, label: "Both" },
+              { value: "name" as WristbandLabelMode, label: "Name" },
+              { value: "number" as WristbandLabelMode, label: "Number" },
+            ]}
+          />
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.playsheetShowLos}
+                onChange={(e) => patch({ playsheetShowLos: e.target.checked })}
+              />
+              Show line of scrimmage
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.playsheetShowYardMarkers}
+                onChange={(e) => patch({ playsheetShowYardMarkers: e.target.checked })}
+              />
+              Show yard markers
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.playsheetShowPlayerLabels}
+                onChange={(e) => patch({ playsheetShowPlayerLabels: e.target.checked })}
+              />
+              Show player letters
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.playsheetPlayerOutline}
+                onChange={(e) => patch({ playsheetPlayerOutline: e.target.checked })}
+              />
+              Outline player markers
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.playsheetColorCoding}
+                onChange={(e) => patch({ playsheetColorCoding: e.target.checked })}
+              />
+              Color-code labels by tag
+            </label>
+          </div>
         </div>
       )}
 
