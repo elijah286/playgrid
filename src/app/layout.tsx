@@ -32,14 +32,12 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-full bg-surface text-foreground font-sans">
+      <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans">
         <ThemeProvider>
           <ToastProvider>
             <ConfigBanner />
-            <div className="flex min-h-[100dvh] flex-col">
-              <div className="flex-1">{children}</div>
-              <SiteFooter />
-            </div>
+            <div className="flex flex-1 flex-col">{children}</div>
+            <SiteFooter />
           </ToastProvider>
         </ThemeProvider>
       </body>
