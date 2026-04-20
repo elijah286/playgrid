@@ -82,6 +82,7 @@ export default async function PlaybookPrintPage({ params }: Props) {
         initialGroups={pack.ok ? pack.groups : []}
         loadError={pack.ok ? null : pack.error}
         team={team}
+        logoUrl={(book.logo_url as string | null) ?? null}
       />
     </div>
   );

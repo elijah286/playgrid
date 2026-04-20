@@ -311,6 +311,7 @@ export function compilePlaysheetPdfPages(
   opts: PlaysheetOptions,
   groupKeys?: readonly (string | null)[],
   header?: PlaysheetHeader | null,
+  watermark?: Watermark | null,
 ): string[] {
   if (docs.length === 0) return [];
   const basePage = defaultFullSheetTemplate.page;
@@ -346,7 +347,7 @@ export function compilePlaysheetPdfPages(
   }
 
   return chunks.map((chunk) =>
-    renderPlaysheetPage(chunk, { w, h, margin, topOffset, cellW, cellH, notesH, rows, opts, header: header ?? null }),
+    renderPlaysheetPage(chunk, { w, h, margin, topOffset, cellW, cellH, notesH, rows, opts, header: header ?? null, watermark: watermark ?? null }),
   );
 }
 
@@ -363,9 +364,10 @@ function renderPlaysheetPage(
     rows: number;
     opts: PlaysheetOptions;
     header: PlaysheetHeader | null;
+    watermark: Watermark | null;
   },
 ): string {
-  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header } = layout;
+  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header, watermark } = layout;
   let body = "";
   for (let i = 0; i < docs.length; i++) {
     const col = i % opts.columns;
@@ -378,6 +380,7 @@ function renderPlaysheetPage(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#ffffff"/>
+  ${watermarkSvg(w, h, watermark)}
   ${headerSvg}
   ${body}
 </svg>`;
@@ -602,6 +605,21 @@ export type WristbandGridOptions = {
   playerOutline: boolean;
 };
 
+/** Optional page-level watermark rendered behind the print content. */
+export type Watermark = {
+  logoUrl: string;
+  /** 0–1 opacity. Callers should clamp to the UI's 5–20% range. */
+  opacity: number;
+};
+
+function watermarkSvg(w: number, h: number, wm: Watermark | null): string {
+  if (!wm || !wm.logoUrl) return "";
+  const size = Math.min(w, h) * 0.6;
+  const x = (w - size) / 2;
+  const y = (h - size) / 2;
+  return `<image href="${escSvgText(wm.logoUrl)}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" opacity="${wm.opacity}"/>`;
+}
+
 function iconRadius(size: WristbandIconSize): number {
   if (size === "small") return 0.65;
   if (size === "large") return 1.3;
@@ -767,6 +785,7 @@ function renderWristbandTile(
 export function compileWristbandGridSvg(
   docs: PlayDocument[],
   opts: WristbandGridOptions,
+  watermark?: Watermark | null,
 ): CompiledPrintSvg {
   const w = opts.widthIn * IN_TO_MM;
   const h = opts.heightIn * IN_TO_MM;
@@ -792,6 +811,7 @@ export function compileWristbandGridSvg(
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#f1f5f9"/>
+  ${watermarkSvg(w, h, watermark ?? null)}
   ${body}
 </svg>`;
 
@@ -802,13 +822,75 @@ export function compileWristbandGridSvg(
 export function compileWristbandPdfPages(
   docs: PlayDocument[],
   opts: WristbandGridOptions,
+  watermark?: Watermark | null,
 ): string[] {
   if (docs.length === 0) return [];
   const per = wristbandGridDims(opts.layout).rows * wristbandGridDims(opts.layout).cols;
   const pages: string[] = [];
   for (let i = 0; i < docs.length; i += per) {
     const chunk = docs.slice(i, i + per);
-    pages.push(compileWristbandGridSvg(chunk, opts).svgMarkup);
+    pages.push(compileWristbandGridSvg(chunk, opts, watermark ?? null).svgMarkup);
+  }
+  return pages;
+}
+
+/**
+ * Letter-size "sheet" of wristband strips, laid out side-by-side top-aligned.
+ * Each strip contains the full tile grid for its chunk of plays. Copies per
+ * sheet auto-fits by default to maximize paper use. Users cut strips apart
+ * with scissors.
+ */
+export function compileWristbandSheetPdfPages(
+  docs: PlayDocument[],
+  opts: WristbandGridOptions,
+  copies: "auto" | number,
+  watermark?: Watermark | null,
+): string[] {
+  if (docs.length === 0) return [];
+  const pageW = 216;
+  const pageH = 279;
+  const margin = 8;
+  const gutter = 3;
+  const stripW = opts.widthIn * IN_TO_MM;
+  const stripH = opts.heightIn * IN_TO_MM;
+
+  // Each strip is one wristband tile-grid (holds `per` plays).
+  const per = wristbandGridDims(opts.layout).rows * wristbandGridDims(opts.layout).cols;
+  const strips: PlayDocument[][] = [];
+  for (let i = 0; i < docs.length; i += per) {
+    strips.push(docs.slice(i, i + per));
+  }
+
+  const autoFit = Math.max(1, Math.floor((pageW - margin * 2 + gutter) / (stripW + gutter)));
+  const perRow = copies === "auto" ? autoFit : Math.min(autoFit, Math.max(1, copies));
+  const perCol = Math.max(1, Math.floor((pageH - margin * 2 + gutter) / (stripH + gutter)));
+  const stripsPerSheet = perRow * perCol;
+
+  const pages: string[] = [];
+  for (let i = 0; i < strips.length; i += stripsPerSheet) {
+    const chunk = strips.slice(i, i + stripsPerSheet);
+    let body = "";
+    chunk.forEach((stripDocs, idx) => {
+      const col = idx % perRow;
+      const row = Math.floor(idx / perRow);
+      const x = margin + col * (stripW + gutter);
+      const y = margin + row * (stripH + gutter);
+      const inner = compileWristbandGridSvg(stripDocs, opts).svgMarkup;
+      // Extract the <svg> children from the inner strip and translate into place.
+      const match = /<svg[^>]*>([\s\S]*?)<\/svg>/.exec(inner);
+      const innerBody = match ? match[1] : "";
+      body += `<g transform="translate(${x} ${y})">
+  <svg width="${stripW}" height="${stripH}" viewBox="0 0 ${stripW} ${stripH}">
+    ${innerBody}
+  </svg>
+</g>`;
+    });
+    pages.push(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${pageW}mm" height="${pageH}mm" viewBox="0 0 ${pageW} ${pageH}">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  ${watermarkSvg(pageW, pageH, watermark ?? null)}
+  ${body}
+</svg>`);
   }
   return pages;
 }

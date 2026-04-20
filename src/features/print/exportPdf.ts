@@ -45,3 +45,37 @@ export async function exportSvgsToMultiPagePdf(svgPages: string[], filename: str
 
   pdf!.save(filename);
 }
+
+/** Open the compiled PDF in a new tab and trigger the browser print dialog. */
+export async function openSvgsInPrintTab(svgPages: string[]) {
+  if (svgPages.length === 0) return;
+  const parser = new DOMParser();
+  let pdf: jsPDF | null = null;
+  for (const svgMarkup of svgPages) {
+    const parsed = parser.parseFromString(svgMarkup, "image/svg+xml");
+    const svg = parsed.documentElement;
+    const width = Number(svg.getAttribute("width")?.replace("mm", "") ?? 216);
+    const height = Number(svg.getAttribute("height")?.replace("mm", "") ?? 279);
+    const orientation = width > height ? "landscape" : "portrait";
+    const fmt: [number, number] = [Math.max(width, 10), Math.max(height, 10)];
+    if (!pdf) {
+      pdf = new jsPDF({ orientation, unit: "mm", format: fmt });
+      await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
+    } else {
+      pdf.addPage(fmt, orientation);
+      await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
+    }
+  }
+  const blobUrl = pdf!.output("bloburl");
+  const win = window.open(blobUrl as unknown as string, "_blank");
+  if (win) {
+    win.addEventListener("load", () => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        // swallow — user can Cmd+P manually
+      }
+    });
+  }
+}

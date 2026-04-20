@@ -30,6 +30,12 @@ const arrowSizeOptions: { value: ArrowSize; label: string }[] = [
 type Props = {
   config: PlaybookPrintRunConfig;
   onChange: (next: PlaybookPrintRunConfig) => void;
+  /**
+   * Which subset of controls to render. "layout" = structural (product,
+   * columns, orientation, grouping, sizes). "visuals" = look (icons, route
+   * weight, labels, colors, LOS/yard markers). "all" (default) = everything.
+   */
+  section?: "layout" | "visuals" | "all";
 };
 
 const groupingOptions: { value: PlaysheetGrouping; label: string }[] = [
@@ -82,236 +88,289 @@ function PillGroup<T extends string | number>({
   );
 }
 
-export function PlaybookPrintRunControls({ config, onChange }: Props) {
+export function PlaybookPrintRunControls({ config, onChange, section = "all" }: Props) {
   function patch(partial: Partial<PlaybookPrintRunConfig>) {
     onChange({ ...config, ...partial });
   }
 
+  const showLayout = section === "all" || section === "layout";
+  const showVisuals = section === "all" || section === "visuals";
+
   return (
     <div className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
-      <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Output type
-        </p>
-        <SegmentedControl
-          options={[
-            { value: "playsheet" as const, label: "Playsheet" },
-            { value: "wristband" as const, label: "Wristband" },
-          ]}
-          value={config.product}
-          onChange={(product) => patch({ product })}
-        />
-      </div>
+      {showLayout && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+            Output type
+          </p>
+          <SegmentedControl
+            options={[
+              { value: "playsheet" as const, label: "Playsheet" },
+              { value: "wristband" as const, label: "Wristband" },
+            ]}
+            value={config.product}
+            onChange={(product) => patch({ product })}
+          />
+        </div>
+      )}
 
       {config.product === "playsheet" && (
         <div className="space-y-4">
-          <PillGroup
-            label="Columns"
-            value={config.playsheetColumns}
-            onChange={(v) => patch({ playsheetColumns: v as PlaysheetColumns })}
-            options={PLAYSHEET_COLUMN_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
-          />
-
-          <PillGroup
-            label="Page orientation"
-            value={config.sheetOrientation}
-            onChange={(v) => patch({ sheetOrientation: v })}
-            options={[
-              { value: "portrait" as const, label: "Portrait" },
-              { value: "landscape" as const, label: "Landscape" },
-            ]}
-          />
-
-          <div>
-            <span className="text-sm text-muted">Group / sort plays for export</span>
-            <Select
-              className="mt-1"
-              value={config.playsheetGrouping}
-              onChange={(v) => patch({ playsheetGrouping: v as PlaysheetGrouping })}
-              options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
-            />
-          </div>
-
-          <PillGroup
-            label="Page breaks"
-            value={config.playsheetPageBreak}
-            onChange={(v) => patch({ playsheetPageBreak: v as PlaysheetPageBreak })}
-            options={[
-              { value: "continuous" as const, label: "Pack tightly" },
-              { value: "group" as const, label: "New page per group" },
-            ]}
-          />
-
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetIncludeHeader}
-                onChange={(e) => patch({ playsheetIncludeHeader: e.target.checked })}
-              />
-              Include team header on every page
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetShowNotes}
-                onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
-              />
-              Show notes strip below plays
-            </label>
-            {config.playsheetShowNotes && (
+          {showLayout && (
+            <>
               <PillGroup
-                label="Note lines"
-                value={config.playsheetNoteLines}
-                onChange={(v) => patch({ playsheetNoteLines: v as PlaysheetNoteLines })}
+                label="Columns"
+                value={config.playsheetColumns}
+                onChange={(v) => patch({ playsheetColumns: v as PlaysheetColumns })}
+                options={PLAYSHEET_COLUMN_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+              />
+
+              <PillGroup
+                label="Page orientation"
+                value={config.sheetOrientation}
+                onChange={(v) => patch({ sheetOrientation: v })}
                 options={[
-                  { value: 1 as PlaysheetNoteLines, label: "1" },
-                  { value: 2 as PlaysheetNoteLines, label: "2" },
-                  { value: 3 as PlaysheetNoteLines, label: "3" },
+                  { value: "portrait" as const, label: "Portrait" },
+                  { value: "landscape" as const, label: "Landscape" },
                 ]}
               />
-            )}
-          </div>
 
-          <PillGroup
-            label="Position icon size"
-            value={config.playsheetIconSize}
-            onChange={(v) => patch({ playsheetIconSize: v as WristbandIconSize })}
-            options={[
-              { value: "small" as WristbandIconSize, label: "Small" },
-              { value: "medium" as WristbandIconSize, label: "Medium" },
-              { value: "large" as WristbandIconSize, label: "Large" },
-            ]}
-          />
+              <div>
+                <span className="text-sm text-muted">Group / sort plays for export</span>
+                <Select
+                  className="mt-1"
+                  value={config.playsheetGrouping}
+                  onChange={(v) => patch({ playsheetGrouping: v as PlaysheetGrouping })}
+                  options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
+                />
+              </div>
 
-          <PillGroup
-            label="Route line weight"
-            value={config.playsheetRouteWeight}
-            onChange={(v) => patch({ playsheetRouteWeight: v as WristbandRouteWeight })}
-            options={[
-              { value: "thin" as WristbandRouteWeight, label: "Thin" },
-              { value: "medium" as WristbandRouteWeight, label: "Medium" },
-              { value: "thick" as WristbandRouteWeight, label: "Thick" },
-            ]}
-          />
-
-          <PillGroup
-            label="Arrow size"
-            value={config.playsheetArrowSize}
-            onChange={(v) => patch({ playsheetArrowSize: v as ArrowSize })}
-            options={arrowSizeOptions}
-          />
-
-          <PillGroup
-            label="Play label style"
-            value={config.playsheetLabelStyle}
-            onChange={(v) => patch({ playsheetLabelStyle: v as WristbandLabelStyle })}
-            options={[
-              { value: "prominent" as WristbandLabelStyle, label: "Prominent" },
-              { value: "compact" as WristbandLabelStyle, label: "Compact" },
-            ]}
-          />
-
-          <PillGroup
-            label="Play labels"
-            value={config.playsheetLabels}
-            onChange={(v) => patch({ playsheetLabels: v as WristbandLabelMode })}
-            options={[
-              { value: "both" as WristbandLabelMode, label: "Both" },
-              { value: "name" as WristbandLabelMode, label: "Name" },
-              { value: "number" as WristbandLabelMode, label: "Number" },
-            ]}
-          />
-
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetShowLos}
-                onChange={(e) => patch({ playsheetShowLos: e.target.checked })}
+              <PillGroup
+                label="Page breaks"
+                value={config.playsheetPageBreak}
+                onChange={(v) => patch({ playsheetPageBreak: v as PlaysheetPageBreak })}
+                options={[
+                  { value: "continuous" as const, label: "Pack tightly" },
+                  { value: "group" as const, label: "New page per group" },
+                ]}
               />
-              Show line of scrimmage
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetShowYardMarkers}
-                onChange={(e) => patch({ playsheetShowYardMarkers: e.target.checked })}
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetIncludeHeader}
+                    onChange={(e) => patch({ playsheetIncludeHeader: e.target.checked })}
+                  />
+                  Include team header on every page
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetShowNotes}
+                    onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
+                  />
+                  Show notes strip below plays
+                </label>
+                {config.playsheetShowNotes && (
+                  <PillGroup
+                    label="Note lines"
+                    value={config.playsheetNoteLines}
+                    onChange={(v) => patch({ playsheetNoteLines: v as PlaysheetNoteLines })}
+                    options={[
+                      { value: 1 as PlaysheetNoteLines, label: "1" },
+                      { value: 2 as PlaysheetNoteLines, label: "2" },
+                      { value: 3 as PlaysheetNoteLines, label: "3" },
+                    ]}
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          {showVisuals && (
+            <>
+              <PillGroup
+                label="Position icon size"
+                value={config.playsheetIconSize}
+                onChange={(v) => patch({ playsheetIconSize: v as WristbandIconSize })}
+                options={[
+                  { value: "small" as WristbandIconSize, label: "Small" },
+                  { value: "medium" as WristbandIconSize, label: "Medium" },
+                  { value: "large" as WristbandIconSize, label: "Large" },
+                ]}
               />
-              Show yard markers
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetShowPlayerLabels}
-                onChange={(e) => patch({ playsheetShowPlayerLabels: e.target.checked })}
+
+              <PillGroup
+                label="Route line weight"
+                value={config.playsheetRouteWeight}
+                onChange={(v) => patch({ playsheetRouteWeight: v as WristbandRouteWeight })}
+                options={[
+                  { value: "thin" as WristbandRouteWeight, label: "Thin" },
+                  { value: "medium" as WristbandRouteWeight, label: "Medium" },
+                  { value: "thick" as WristbandRouteWeight, label: "Thick" },
+                ]}
               />
-              Show player letters
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetPlayerOutline}
-                onChange={(e) => patch({ playsheetPlayerOutline: e.target.checked })}
+
+              <PillGroup
+                label="Arrow size"
+                value={config.playsheetArrowSize}
+                onChange={(v) => patch({ playsheetArrowSize: v as ArrowSize })}
+                options={arrowSizeOptions}
               />
-              Outline player markers
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.playsheetColorCoding}
-                onChange={(e) => patch({ playsheetColorCoding: e.target.checked })}
+
+              <PillGroup
+                label="Play label style"
+                value={config.playsheetLabelStyle}
+                onChange={(v) => patch({ playsheetLabelStyle: v as WristbandLabelStyle })}
+                options={[
+                  { value: "prominent" as WristbandLabelStyle, label: "Prominent" },
+                  { value: "compact" as WristbandLabelStyle, label: "Compact" },
+                ]}
               />
-              Color-code labels by tag
-            </label>
-          </div>
+
+              <PillGroup
+                label="Play labels"
+                value={config.playsheetLabels}
+                onChange={(v) => patch({ playsheetLabels: v as WristbandLabelMode })}
+                options={[
+                  { value: "both" as WristbandLabelMode, label: "Both" },
+                  { value: "name" as WristbandLabelMode, label: "Name" },
+                  { value: "number" as WristbandLabelMode, label: "Number" },
+                ]}
+              />
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetShowLos}
+                    onChange={(e) => patch({ playsheetShowLos: e.target.checked })}
+                  />
+                  Show line of scrimmage
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetShowYardMarkers}
+                    onChange={(e) => patch({ playsheetShowYardMarkers: e.target.checked })}
+                  />
+                  Show yard markers
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetShowPlayerLabels}
+                    onChange={(e) => patch({ playsheetShowPlayerLabels: e.target.checked })}
+                  />
+                  Show player letters
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetPlayerOutline}
+                    onChange={(e) => patch({ playsheetPlayerOutline: e.target.checked })}
+                  />
+                  Outline player markers
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.playsheetColorCoding}
+                    onChange={(e) => patch({ playsheetColorCoding: e.target.checked })}
+                  />
+                  Color-code labels by tag
+                </label>
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {config.product === "wristband" && (
         <div className="space-y-4">
-          <PillGroup
-            label="Grid"
-            value={config.wristbandGridLayout}
-            onChange={(v) => patch({ wristbandGridLayout: v })}
-            options={[
-              { value: "10" as WristbandGridLayout, label: "10 plays" },
-              { value: "8" as WristbandGridLayout, label: "8 plays" },
-              { value: "6" as WristbandGridLayout, label: "6 plays" },
-              { value: "4" as WristbandGridLayout, label: "4 plays" },
-              { value: "4col" as WristbandGridLayout, label: "4 cols" },
-              { value: "3" as WristbandGridLayout, label: "3 plays" },
-            ]}
-          />
+          {showLayout && (
+            <>
+              <PillGroup
+                label="Sheet layout"
+                value={config.wristbandSheet}
+                onChange={(v) => patch({ wristbandSheet: v as "single" | "sheet" })}
+                options={[
+                  { value: "sheet" as const, label: "Pack onto letter (cut apart)" },
+                  { value: "single" as const, label: "One strip per page" },
+                ]}
+              />
 
-          <PillGroup
-            label="Width (inches)"
-            value={config.wristbandWidthIn}
-            onChange={(v) => patch({ wristbandWidthIn: v })}
-            options={WRISTBAND_WIDTHS_IN.map((n) => ({ value: n, label: `${n}"` }))}
-          />
+              {config.wristbandSheet === "sheet" && (
+                <PillGroup
+                  label="Copies per sheet"
+                  value={config.wristbandCopiesPerSheet}
+                  onChange={(v) =>
+                    patch({
+                      wristbandCopiesPerSheet:
+                        v as PlaybookPrintRunConfig["wristbandCopiesPerSheet"],
+                    })
+                  }
+                  options={[
+                    { value: "auto" as const, label: "Auto-fit" },
+                    { value: 1, label: "1" },
+                    { value: 2, label: "2" },
+                    { value: 3, label: "3" },
+                    { value: 4, label: "4" },
+                    { value: 5, label: "5" },
+                    { value: 6, label: "6" },
+                    { value: 7, label: "7" },
+                    { value: 8, label: "8" },
+                  ]}
+                />
+              )}
 
-          <PillGroup
-            label="Height (inches)"
-            value={config.wristbandHeightIn}
-            onChange={(v) => patch({ wristbandHeightIn: v })}
-            options={WRISTBAND_HEIGHTS_IN.map((n) => ({ value: n, label: `${n}"` }))}
-          />
+              <PillGroup
+                label="Grid"
+                value={config.wristbandGridLayout}
+                onChange={(v) => patch({ wristbandGridLayout: v })}
+                options={[
+                  { value: "10" as WristbandGridLayout, label: "10 plays" },
+                  { value: "8" as WristbandGridLayout, label: "8 plays" },
+                  { value: "6" as WristbandGridLayout, label: "6 plays" },
+                  { value: "4" as WristbandGridLayout, label: "4 plays" },
+                  { value: "4col" as WristbandGridLayout, label: "4 cols" },
+                  { value: "3" as WristbandGridLayout, label: "3 plays" },
+                ]}
+              />
 
-          <PillGroup
-            label="Zoom"
-            value={config.wristbandZoom}
-            onChange={(v) => patch({ wristbandZoom: v as WristbandZoom })}
-            options={WRISTBAND_ZOOMS.map((n) => ({ value: n, label: `${n}%` }))}
-          />
+              <PillGroup
+                label="Width (inches)"
+                value={config.wristbandWidthIn}
+                onChange={(v) => patch({ wristbandWidthIn: v })}
+                options={WRISTBAND_WIDTHS_IN.map((n) => ({ value: n, label: `${n}"` }))}
+              />
 
+              <PillGroup
+                label="Height (inches)"
+                value={config.wristbandHeightIn}
+                onChange={(v) => patch({ wristbandHeightIn: v })}
+                options={WRISTBAND_HEIGHTS_IN.map((n) => ({ value: n, label: `${n}"` }))}
+              />
+
+              <PillGroup
+                label="Zoom"
+                value={config.wristbandZoom}
+                onChange={(v) => patch({ wristbandZoom: v as WristbandZoom })}
+                options={WRISTBAND_ZOOMS.map((n) => ({ value: n, label: `${n}%` }))}
+              />
+            </>
+          )}
+
+          {showVisuals && (
+            <>
           <PillGroup
             label="Position icon size"
             value={config.wristbandIconSize}
@@ -419,6 +478,8 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
             />
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

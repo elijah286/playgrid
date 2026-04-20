@@ -86,7 +86,28 @@ export type PlaybookPrintRunConfig = {
   /** Wristband: show letter labels inside player markers */
   wristbandShowPlayerLabels: boolean;
   wristbandGrouping: PlaysheetGrouping;
+  /**
+   * Wristband layout mode. "single" (legacy) = one narrow strip per PDF page.
+   * "sheet" = pack as many identical strips as fit onto letter-size pages, top
+   * aligned, so the user can cut them apart and hand one to each player.
+   */
+  wristbandSheet: WristbandSheetMode;
+  /** Sheet mode: explicit copies per page, or auto-fit across the width. */
+  wristbandCopiesPerSheet: "auto" | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  /** Playbook-logo watermark behind every page. */
+  watermarkEnabled: boolean;
+  /**
+   * Watermark opacity, expressed as a percentage (5–20 per product spec).
+   * Applied to a centered <image> layer rendered behind the content.
+   */
+  watermarkOpacityPct: number;
 };
+
+export type WristbandSheetMode = "single" | "sheet";
+
+/** Clamp the watermark opacity to the product range (5–20%). */
+export const WATERMARK_MIN_PCT = 5;
+export const WATERMARK_MAX_PCT = 20;
 
 export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   product: "playsheet",
@@ -124,6 +145,10 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandShowYardMarkers: true,
   wristbandShowPlayerLabels: true,
   wristbandGrouping: "number",
+  wristbandSheet: "sheet",
+  wristbandCopiesPerSheet: "auto",
+  watermarkEnabled: false,
+  watermarkOpacityPct: 10,
 };
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {

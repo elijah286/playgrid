@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { FileDown } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { ChevronDown, ChevronRight, FileDown, Printer, Save, Trash2 } from "lucide-react";
 import type { PlaybookPrintPackRow } from "@/app/actions/plays";
 import {
   applyExportPresentation,
   defaultPlaybookPrintRunConfig,
   sortNavPlaysForPrint,
   wristbandTilesPerBand,
+  WATERMARK_MAX_PCT,
+  WATERMARK_MIN_PCT,
   type PlaybookGroupRow,
   type PlaybookPrintRunConfig,
 } from "@/domain/print/playbookPrint";
@@ -15,13 +18,22 @@ import {
   compilePlaysheetPdfPages,
   compileWristbandGridSvg,
   compileWristbandPdfPages,
+  compileWristbandSheetPdfPages,
   type PlaysheetHeader,
   type PlaysheetOptions,
+  type Watermark,
   type WristbandGridOptions,
 } from "@/domain/print/templates";
-import { exportSvgsToMultiPagePdf } from "@/features/print/exportPdf";
+import { exportSvgsToMultiPagePdf, openSvgsInPrintTab } from "@/features/print/exportPdf";
 import { PlaybookPrintRunControls } from "@/features/print/PlaybookPrintRunControls";
-import { Badge, Button, Card, Input, useToast } from "@/components/ui";
+import {
+  deletePrintPresetAction,
+  listPrintPresetsAction,
+  savePrintPresetAction,
+  type PrintPreset,
+} from "@/app/actions/printPresets";
+import { Badge, Button, Card, Input, SegmentedControl, useToast } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
 type Props = {
   playbookId: string;
@@ -29,16 +41,36 @@ type Props = {
   initialGroups: PlaybookGroupRow[];
   loadError: string | null;
   team: PlaysheetHeader;
+  logoUrl: string | null;
 };
 
-export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, loadError, team }: Props) {
+type TabKey = "plays" | "layout" | "visuals" | "presets";
+
+export function PrintPlaybookClient({
+  playbookId,
+  initialPack,
+  initialGroups,
+  loadError,
+  team,
+  logoUrl,
+}: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [q, setQ] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(initialPack.map((p) => p.id)),
-  );
+  const [printing, startPrint] = useTransition();
+  const searchParams = useSearchParams();
+
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    const fromUrl = searchParams.get("plays");
+    if (fromUrl) {
+      const ids = new Set(fromUrl.split(",").filter(Boolean));
+      const ok = new Set(initialPack.filter((p) => ids.has(p.id)).map((p) => p.id));
+      if (ok.size > 0) return ok;
+    }
+    return new Set(initialPack.map((p) => p.id));
+  });
   const [config, setConfig] = useState<PlaybookPrintRunConfig>(defaultPlaybookPrintRunConfig);
+  const [tab, setTab] = useState<TabKey>("plays");
+  const [q, setQ] = useState("");
 
   const groupNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -46,10 +78,12 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
     return m;
   }, [initialGroups]);
 
-  const filtered = useMemo(() => {
+  // Grouped tree for Plays tab — group ID (or null for ungrouped) → plays.
+  type TreeNode = { key: string; name: string; rows: PlaybookPrintPackRow[] };
+  const tree: TreeNode[] = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return initialPack;
-    return initialPack.filter((r) => {
+    const match = (r: PlaybookPrintPackRow) => {
+      if (!s) return true;
       const n = r.nav;
       return (
         n.name.toLowerCase().includes(s) ||
@@ -58,13 +92,42 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         n.formation_name.toLowerCase().includes(s) ||
         n.tags.some((t) => t.toLowerCase().includes(s))
       );
+    };
+    const byKey = new Map<string, PlaybookPrintPackRow[]>();
+    for (const r of initialPack) {
+      if (!match(r)) continue;
+      const k = r.nav.group_id ?? "__ungrouped__";
+      const arr = byKey.get(k) ?? [];
+      arr.push(r);
+      byKey.set(k, arr);
+    }
+    const nodes: TreeNode[] = [];
+    for (const g of initialGroups) {
+      const rows = byKey.get(g.id);
+      if (rows && rows.length > 0) nodes.push({ key: g.id, name: g.name, rows });
+    }
+    const ung = byKey.get("__ungrouped__");
+    if (ung && ung.length > 0) nodes.push({ key: "__ungrouped__", name: "Ungrouped", rows: ung });
+    return nodes;
+  }, [initialPack, initialGroups, q]);
+
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
+  // Default-expand groups that contain search matches.
+  useEffect(() => {
+    if (!q.trim()) return;
+    setOpenGroups(new Set(tree.map((n) => n.key)));
+  }, [q, tree]);
+
+  function toggleGroupOpen(k: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
     });
-  }, [initialPack, q]);
+  }
 
-  const allVisibleSelected =
-    filtered.length > 0 && filtered.every((r) => selected.has(r.id));
-
-  function toggle(id: string) {
+  function togglePlay(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -73,12 +136,26 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
     });
   }
 
-  function setAllVisible(on: boolean) {
+  function toggleGroup(node: TreeNode) {
+    const allOn = node.rows.every((r) => selected.has(r.id));
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const r of filtered) {
-        if (on) next.add(r.id);
-        else next.delete(r.id);
+      for (const r of node.rows) {
+        if (allOn) next.delete(r.id);
+        else next.add(r.id);
+      }
+      return next;
+    });
+  }
+
+  function selectAllVisible(on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const node of tree) {
+        for (const r of node.rows) {
+          if (on) next.add(r.id);
+          else next.delete(r.id);
+        }
       }
       return next;
     });
@@ -101,22 +178,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       showPlayerLabels: config.wristbandShowPlayerLabels,
       playerOutline: config.wristbandPlayerOutline,
     }),
-    [
-      config.wristbandWidthIn,
-      config.wristbandHeightIn,
-      config.wristbandGridLayout,
-      config.wristbandZoom,
-      config.wristbandIconSize,
-      config.wristbandRouteWeight,
-      config.wristbandArrowSize,
-      config.wristbandLabelStyle,
-      config.wristbandLabels,
-      config.wristbandColorCoding,
-      config.wristbandShowLos,
-      config.wristbandShowYardMarkers,
-      config.wristbandShowPlayerLabels,
-      config.wristbandPlayerOutline,
-    ],
+    [config],
   );
 
   const playsheetOpts: PlaysheetOptions = useMemo(
@@ -137,91 +199,114 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       showPlayerLabels: config.playsheetShowPlayerLabels,
       playerOutline: config.playsheetPlayerOutline,
     }),
-    [
-      config.playsheetColumns,
-      config.sheetOrientation,
-      config.playsheetPageBreak,
-      config.playsheetShowNotes,
-      config.playsheetNoteLines,
-      config.playsheetIconSize,
-      config.playsheetRouteWeight,
-      config.playsheetArrowSize,
-      config.playsheetLabelStyle,
-      config.playsheetLabels,
-      config.playsheetColorCoding,
-      config.playsheetShowLos,
-      config.playsheetShowYardMarkers,
-      config.playsheetShowPlayerLabels,
-      config.playsheetPlayerOutline,
-    ],
+    [config],
   );
+
+  const watermark: Watermark | null = useMemo(() => {
+    if (!config.watermarkEnabled || !logoUrl) return null;
+    const pct = Math.max(
+      WATERMARK_MIN_PCT,
+      Math.min(WATERMARK_MAX_PCT, config.watermarkOpacityPct),
+    );
+    return { logoUrl, opacity: pct / 100 };
+  }, [config.watermarkEnabled, config.watermarkOpacityPct, logoUrl]);
 
   const previewPages = useMemo<string[]>(() => {
     const chosen = initialPack.filter((r) => selected.has(r.id));
     const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
     if (config.product === "wristband") {
-      const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
       const docs = pool.map((r) => applyExportPresentation(r.document, config));
       if (docs.length === 0) return [];
+      if (config.wristbandSheet === "sheet") {
+        return compileWristbandSheetPdfPages(
+          docs,
+          wristbandGridOpts,
+          config.wristbandCopiesPerSheet,
+          watermark,
+        );
+      }
+      const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
       const pages: string[] = [];
       for (let i = 0; i < docs.length; i += tiles) {
         pages.push(
-          compileWristbandGridSvg(docs.slice(i, i + tiles), wristbandGridOpts).svgMarkup,
+          compileWristbandGridSvg(docs.slice(i, i + tiles), wristbandGridOpts, watermark)
+            .svgMarkup,
         );
       }
       return pages;
     }
-    const grouping = config.playsheetGrouping;
     const navOrder = sortNavPlaysForPrint(
       pool.map((r) => r.nav),
-      grouping,
+      config.playsheetGrouping,
     );
     const ordered = navOrder
       .map((n) => pool.find((r) => r.id === n.id))
       .filter((x): x is PlaybookPrintPackRow => x != null);
     const docs = ordered.map((r) => applyExportPresentation(r.document, config));
     const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
-    return compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys, config.playsheetIncludeHeader ? team : null);
-  }, [
-    initialPack,
-    selected,
-    config,
-    config.wristbandGridLayout,
-    wristbandGridOpts,
-    playsheetOpts,
-    team,
-  ]);
+    return compilePlaysheetPdfPages(
+      docs,
+      playsheetOpts,
+      groupKeys,
+      config.playsheetIncludeHeader ? team : null,
+      watermark,
+    );
+  }, [initialPack, selected, config, wristbandGridOpts, playsheetOpts, team, watermark]);
+
+  async function compileForExport(): Promise<string[] | null> {
+    const rows = initialPack.filter((r) => selected.has(r.id));
+    if (rows.length === 0) {
+      toast("Select at least one play to print", "error");
+      return null;
+    }
+    const grouping =
+      config.product === "playsheet" ? config.playsheetGrouping : config.wristbandGrouping;
+    const navOrder = sortNavPlaysForPrint(
+      rows.map((r) => r.nav),
+      grouping,
+    );
+    const ordered = navOrder
+      .map((n) => rows.find((r) => r.id === n.id))
+      .filter((x): x is PlaybookPrintPackRow => x != null);
+    const docs = ordered.map((r) => applyExportPresentation(r.document, config));
+
+    if (config.product === "playsheet") {
+      const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
+      return compilePlaysheetPdfPages(
+        docs,
+        playsheetOpts,
+        groupKeys,
+        config.playsheetIncludeHeader ? team : null,
+        watermark,
+      );
+    }
+    if (config.wristbandSheet === "sheet") {
+      return compileWristbandSheetPdfPages(
+        docs,
+        wristbandGridOpts,
+        config.wristbandCopiesPerSheet,
+        watermark,
+      );
+    }
+    return compileWristbandPdfPages(docs, wristbandGridOpts, watermark);
+  }
 
   function exportPdf() {
     startTransition(async () => {
-      const rows = initialPack.filter((r) => selected.has(r.id));
-      if (rows.length === 0) {
-        toast("Select at least one play to print", "error");
-        return;
-      }
-      const grouping =
-        config.product === "playsheet" ? config.playsheetGrouping : config.wristbandGrouping;
-      const navOrder = sortNavPlaysForPrint(
-        rows.map((r) => r.nav),
-        grouping,
-      );
-      const ordered = navOrder
-        .map((n) => rows.find((r) => r.id === n.id))
-        .filter((x): x is PlaybookPrintPackRow => x != null);
-      const docs = ordered.map((r) => applyExportPresentation(r.document, config));
-
-      let pages: string[];
-      if (config.product === "playsheet") {
-        const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
-        pages = compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys, config.playsheetIncludeHeader ? team : null);
-      } else {
-        pages = compileWristbandPdfPages(docs, wristbandGridOpts);
-      }
-
+      const pages = await compileForExport();
+      if (!pages) return;
       const label = config.product === "wristband" ? "wristband" : "playcard";
       const name = `${label}-${playbookId.slice(0, 8)}.pdf`;
       await exportSvgsToMultiPagePdf(pages, name);
       toast(`${config.product === "wristband" ? "Wrist coach" : "Playcard"} PDF exported`, "success");
+    });
+  }
+
+  function printNow() {
+    startPrint(async () => {
+      const pages = await compileForExport();
+      if (!pages) return;
+      await openSvgsInPrintTab(pages);
     });
   }
 
@@ -240,91 +325,218 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
       <div className="space-y-4">
-        <PlaybookPrintRunControls config={config} onChange={setConfig} />
+        <SegmentedControl
+          options={[
+            { value: "plays" as const, label: `Plays (${selected.size})` },
+            { value: "layout" as const, label: "Layout" },
+            { value: "visuals" as const, label: "Visuals" },
+            { value: "presets" as const, label: "Presets" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              Plays ({selected.size}/{initialPack.length})
-            </p>
-            <button
-              type="button"
-              className="text-xs font-medium text-primary hover:underline"
-              onClick={() => setAllVisible(!allVisibleSelected)}
-            >
-              {allVisibleSelected ? "Clear shown" : "Select shown"}
-            </button>
-          </div>
-          <div className="mt-3">
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Filter plays…"
-            />
-          </div>
-          <ul className="mt-3 max-h-[50vh] divide-y divide-border overflow-y-auto">
-            {filtered.map((r) => {
-              const on = selected.has(r.id);
-              const group = r.nav.group_id ? groupNameById.get(r.nav.group_id) : null;
-              return (
-                <li key={r.id}>
-                  <label className="flex cursor-pointer items-start gap-2 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 size-4 accent-primary"
-                      checked={on}
-                      onChange={() => toggle(r.id)}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-medium text-foreground">
-                          {r.nav.name}
-                        </span>
-                        {r.nav.wristband_code && (
-                          <Badge variant="primary">{r.nav.wristband_code}</Badge>
+        {tab === "plays" && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                {selected.size}/{initialPack.length} selected
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => selectAllVisible(true)}
+                >
+                  Select shown
+                </button>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => selectAllVisible(false)}
+                >
+                  Clear shown
+                </button>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Filter plays…"
+              />
+            </div>
+            <div className="mt-3 space-y-1">
+              {tree.length === 0 && (
+                <p className="py-3 text-center text-xs text-muted">No plays match.</p>
+              )}
+              {tree.map((node) => {
+                const allOn = node.rows.every((r) => selected.has(r.id));
+                const someOn = !allOn && node.rows.some((r) => selected.has(r.id));
+                const expanded = openGroups.has(node.key);
+                return (
+                  <div key={node.key} className="rounded border border-border/60">
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupOpen(node.key)}
+                        className="text-muted hover:text-foreground"
+                        aria-label={expanded ? "Collapse group" : "Expand group"}
+                      >
+                        {expanded ? (
+                          <ChevronDown className="size-4" />
+                        ) : (
+                          <ChevronRight className="size-4" />
                         )}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap gap-1 text-xs text-muted">
-                        {r.nav.formation_name && <span>{r.nav.formation_name}</span>}
-                        {group && <span>· {group}</span>}
-                      </div>
-                      {r.nav.tags.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {r.nav.tags.map((t) => (
-                            <Badge key={t} variant="default">
-                              {t}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      </button>
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={allOn}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someOn;
+                        }}
+                        onChange={() => toggleGroup(node)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupOpen(node.key)}
+                        className="flex-1 text-left text-sm font-medium text-foreground"
+                      >
+                        {node.name}
+                      </button>
+                      <span className="text-xs text-muted">
+                        {node.rows.filter((r) => selected.has(r.id)).length}/{node.rows.length}
+                      </span>
                     </div>
-                  </label>
-                </li>
-              );
-            })}
-            {filtered.length === 0 && (
-              <li className="py-3 text-center text-xs text-muted">No plays match.</li>
-            )}
-          </ul>
-        </Card>
+                    {expanded && (
+                      <ul className="divide-y divide-border/50 border-t border-border/50">
+                        {node.rows.map((r) => {
+                          const on = selected.has(r.id);
+                          return (
+                            <li key={r.id}>
+                              <label className="flex cursor-pointer items-start gap-2 px-3 py-1.5 pl-9 text-sm">
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5 size-4 accent-primary"
+                                  checked={on}
+                                  onChange={() => togglePlay(r.id)}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate font-medium text-foreground">
+                                      {r.nav.name}
+                                    </span>
+                                    {r.nav.wristband_code && (
+                                      <Badge variant="primary">{r.nav.wristband_code}</Badge>
+                                    )}
+                                  </div>
+                                  {r.nav.formation_name && (
+                                    <div className="mt-0.5 text-xs text-muted">
+                                      {r.nav.formation_name}
+                                    </div>
+                                  )}
+                                </div>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
 
-        <Button
-          variant="primary"
-          leftIcon={FileDown}
-          onClick={exportPdf}
-          loading={pending}
-          className="w-full"
-        >
-          Export {config.product === "wristband" ? "wrist coach" : "playcard"} PDF
-        </Button>
+        {tab === "layout" && (
+          <PlaybookPrintRunControls config={config} onChange={setConfig} section="layout" />
+        )}
+
+        {tab === "visuals" && (
+          <div className="space-y-4">
+            <PlaybookPrintRunControls config={config} onChange={setConfig} section="visuals" />
+            <Card className="space-y-3 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                Watermark
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.watermarkEnabled}
+                  disabled={!logoUrl}
+                  onChange={(e) =>
+                    setConfig({ ...config, watermarkEnabled: e.target.checked })
+                  }
+                />
+                Show playbook logo watermark
+              </label>
+              {!logoUrl && (
+                <p className="text-xs text-muted">
+                  Upload a playbook logo on the playbook page to enable the watermark.
+                </p>
+              )}
+              {config.watermarkEnabled && logoUrl && (
+                <div>
+                  <label className="flex items-center justify-between text-xs text-muted">
+                    <span>Opacity</span>
+                    <span>{config.watermarkOpacityPct}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={WATERMARK_MIN_PCT}
+                    max={WATERMARK_MAX_PCT}
+                    step={1}
+                    value={config.watermarkOpacityPct}
+                    onChange={(e) =>
+                      setConfig({ ...config, watermarkOpacityPct: Number(e.target.value) })
+                    }
+                    className="mt-1 w-full accent-primary"
+                  />
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {tab === "presets" && (
+          <PresetsPanel
+            config={config}
+            onLoad={(c) => {
+              setConfig({ ...defaultPlaybookPrintRunConfig, ...c });
+              toast("Preset loaded", "success");
+            }}
+          />
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            leftIcon={Printer}
+            onClick={printNow}
+            loading={printing}
+          >
+            Print
+          </Button>
+          <Button
+            variant="primary"
+            leftIcon={FileDown}
+            onClick={exportPdf}
+            loading={pending}
+          >
+            PDF
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {config.product === "wristband"
-            ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"`
+            ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"${config.wristbandSheet === "sheet" ? " · letter sheet" : ""}`
             : `Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
         </p>
         {previewPages.length > 0 ? (
@@ -342,5 +554,104 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         )}
       </div>
     </div>
+  );
+}
+
+function PresetsPanel({
+  config,
+  onLoad,
+}: {
+  config: PlaybookPrintRunConfig;
+  onLoad: (cfg: PlaybookPrintRunConfig) => void;
+}) {
+  const { toast } = useToast();
+  const [presets, setPresets] = useState<PrintPreset[] | null>(null);
+  const [name, setName] = useState("");
+  const [busy, startBusy] = useTransition();
+
+  useEffect(() => {
+    (async () => {
+      const res = await listPrintPresetsAction();
+      if (res.ok) setPresets(res.presets);
+      else setPresets([]);
+    })();
+  }, []);
+
+  function save() {
+    const n = name.trim();
+    if (!n) {
+      toast("Name required", "error");
+      return;
+    }
+    startBusy(async () => {
+      const res = await savePrintPresetAction(n, config);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setName("");
+      const list = await listPrintPresetsAction();
+      if (list.ok) setPresets(list.presets);
+      toast("Preset saved", "success");
+    });
+  }
+
+  function remove(id: string) {
+    startBusy(async () => {
+      const res = await deletePrintPresetAction(id);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setPresets((prev) => (prev ?? []).filter((p) => p.id !== id));
+    });
+  }
+
+  return (
+    <Card className="space-y-3 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        Saved configurations
+      </p>
+      <div className="flex gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder='e.g. "Small wristbands"'
+          className="flex-1"
+        />
+        <Button variant="secondary" leftIcon={Save} onClick={save} loading={busy}>
+          Save
+        </Button>
+      </div>
+      {presets == null ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : presets.length === 0 ? (
+        <p className="text-xs text-muted">No saved configurations yet.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {presets.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 py-2 text-sm">
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 truncate text-left font-medium text-foreground hover:text-primary",
+                )}
+                onClick={() => onLoad(p.config)}
+              >
+                {p.name}
+              </button>
+              <button
+                type="button"
+                className="text-muted hover:text-danger"
+                onClick={() => remove(p.id)}
+                aria-label="Delete preset"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
