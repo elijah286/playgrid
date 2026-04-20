@@ -10,6 +10,7 @@ import {
   ArrowUp,
   Check,
   Copy,
+  Crown,
   FileText,
   Folders,
   LayoutGrid,
@@ -59,6 +60,9 @@ import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
 import {
   approveMemberAction,
   denyMemberAction,
+  removeStaffMemberAction,
+  setCoachTitleAction,
+  setHeadCoachAction,
 } from "@/app/actions/playbook-roster";
 import {
   createInviteAction,
@@ -425,7 +429,8 @@ export function PlaybookDetailClient({
               [
                 { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length },
                 { key: "formations" as const, label: "Formations", count: initialFormations.length },
-                { key: "roster" as const, label: "Roster", count: initialRoster.length },
+                { key: "roster" as const, label: "Roster", count: initialRoster.filter((m) => m.role === "viewer").length },
+                { key: "staff" as const, label: "Staff", count: initialRoster.filter((m) => m.role !== "viewer").length },
               ]
             ).map((t) => {
               const active = tab === t.key;
@@ -614,6 +619,14 @@ export function PlaybookDetailClient({
           playbookId={playbookId}
           variant={variant}
           initial={initialFormations}
+        />
+      )}
+
+      {tab === "staff" && (
+        <StaffPanel
+          playbookId={playbookId}
+          members={initialRoster}
+          invites={initialInvites}
         />
       )}
 
@@ -2025,6 +2038,290 @@ function PlayTypeSection({
         </div>
       )}
     </div>
+  );
+}
+
+function StaffPanel({
+  playbookId,
+  members,
+  invites,
+}: {
+  playbookId: string;
+  members: PlaybookRosterMember[];
+  invites: PlaybookInvite[];
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  // Coaches = owner/editor; players live in the Roster tab.
+  const coaches = members.filter((m) => m.role !== "viewer");
+  const pending = coaches.filter((m) => m.status === "pending");
+  const active = coaches.filter((m) => m.status === "active");
+  const activeInvites = invites.filter(
+    (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
+  );
+
+  async function approve(userId: string) {
+    setPendingId(userId);
+    const res = await approveMemberAction(playbookId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Approve failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function deny(userId: string) {
+    setPendingId(userId);
+    const res = await denyMemberAction(playbookId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function revoke(inviteId: string) {
+    const res = await revokeInviteAction(inviteId, playbookId);
+    if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+
+  async function toggleHeadCoach(userId: string, currentlyHead: boolean) {
+    const res = await setHeadCoachAction(playbookId, currentlyHead ? null : userId);
+    if (!res.ok) toast(`Update failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function saveTitle(userId: string, title: string) {
+    const res = await setCoachTitleAction(playbookId, userId, title);
+    if (!res.ok) toast(`Update failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function removeStaff(userId: string, name: string) {
+    if (
+      !window.confirm(
+        `Remove ${name} from the staff? They'll lose access to this playbook.`,
+      )
+    )
+      return;
+    const res = await removeStaffMemberAction(playbookId, userId);
+    if (!res.ok) toast(`Remove failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Staff</h2>
+          <p className="text-xs text-muted">
+            Coaches who can edit this playbook. Mark one head coach and give
+            others a title.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          leftIcon={Plus}
+          onClick={() => setShowInviteModal(true)}
+        >
+          Invite
+        </Button>
+      </div>
+
+      {pending.length > 0 && (
+        <section className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Pending approvals
+            <span className="ml-2 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] text-warning">
+              {pending.length}
+            </span>
+          </h3>
+          <ul className="divide-y divide-border">
+            {pending.map((m) => (
+              <li key={m.user_id} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {m.label || m.display_name || m.user_id.slice(0, 8)}
+                  </p>
+                  <p className="text-xs text-muted">
+                    Requested {m.role === "owner" ? "Owner" : "Coach"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    leftIcon={Check}
+                    loading={pendingId === m.user_id}
+                    onClick={() => approve(m.user_id)}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={X}
+                    disabled={pendingId === m.user_id}
+                    onClick={() => deny(m.user_id)}
+                  >
+                    Deny
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {active.length === 0 ? (
+        <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
+          <p className="text-sm font-semibold text-foreground">No coaches yet</p>
+          <p className="mt-1 text-xs text-muted">
+            Use Invite to share this playbook with other coaches.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-surface-raised">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
+                <tr>
+                  <th className="px-4 py-2.5 font-semibold">Head coach</th>
+                  <th className="px-4 py-2.5 font-semibold">Name</th>
+                  <th className="px-4 py-2.5 font-semibold">Title</th>
+                  <th className="w-10 px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {active.map((m) => {
+                  const name = m.label || m.display_name || "—";
+                  const isOwner = m.role === "owner";
+                  return (
+                    <StaffRow
+                      key={m.user_id}
+                      member={m}
+                      name={name}
+                      isOwner={isOwner}
+                      onToggleHead={() => toggleHeadCoach(m.user_id, m.is_head_coach)}
+                      onSaveTitle={(t) => saveTitle(m.user_id, t)}
+                      onRemove={isOwner ? null : () => removeStaff(m.user_id, name)}
+                    />
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeInvites.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">Active invite links</h3>
+          <ul className="space-y-2">
+            {activeInvites.map((inv) => (
+              <InviteRow key={inv.id} invite={inv} onRevoke={() => revoke(inv.id)} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {showInviteModal && (
+        <InviteModal
+          playbookId={playbookId}
+          onClose={() => {
+            setShowInviteModal(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function StaffRow({
+  member,
+  name,
+  isOwner,
+  onToggleHead,
+  onSaveTitle,
+  onRemove,
+}: {
+  member: PlaybookRosterMember;
+  name: string;
+  isOwner: boolean;
+  onToggleHead: () => void;
+  onSaveTitle: (title: string) => void;
+  onRemove: (() => void) | null;
+}) {
+  const [title, setTitle] = useState(member.coach_title ?? "");
+  useEffect(() => {
+    setTitle(member.coach_title ?? "");
+  }, [member.coach_title]);
+
+  function commitTitle() {
+    const next = title.trim();
+    if (next === (member.coach_title ?? "")) return;
+    onSaveTitle(next);
+  }
+
+  return (
+    <tr>
+      <td className="px-4 py-2.5">
+        <button
+          type="button"
+          onClick={onToggleHead}
+          aria-pressed={member.is_head_coach}
+          aria-label={member.is_head_coach ? "Clear head coach" : "Make head coach"}
+          title={member.is_head_coach ? "Head coach — click to clear" : "Make head coach"}
+          className={`inline-flex size-7 items-center justify-center rounded-full transition-colors ${
+            member.is_head_coach
+              ? "bg-primary/10 text-primary"
+              : "text-muted hover:bg-surface-inset hover:text-foreground"
+          }`}
+        >
+          <Crown className="size-4" />
+        </button>
+      </td>
+      <td className="px-4 py-2.5 font-medium text-foreground">
+        <span className="inline-flex items-center gap-2">
+          {name}
+          {isOwner && (
+            <Badge variant="primary" className="text-[10px]">
+              Owner
+            </Badge>
+          )}
+          {member.is_head_coach && (
+            <Badge variant="primary" className="text-[10px]">
+              Head coach
+            </Badge>
+          )}
+        </span>
+      </td>
+      <td className="px-4 py-2.5">
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          placeholder="e.g. Offensive Coordinator"
+          className="h-8 max-w-[260px] text-sm"
+        />
+      </td>
+      <td className="px-4 py-2.5 text-right">
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded p-1 text-muted hover:bg-danger/10 hover:text-danger"
+            aria-label="Remove from staff"
+            title="Remove from staff"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        ) : null}
+      </td>
+    </tr>
   );
 }
 
