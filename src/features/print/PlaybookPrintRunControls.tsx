@@ -7,6 +7,7 @@ import {
   WRISTBAND_HEIGHTS_IN,
   WRISTBAND_WIDTHS_IN,
   WRISTBAND_ZOOMS,
+  type ArrowSize,
   type PlaybookPrintRunConfig,
   type PlaysheetColumns,
   type PlaysheetGrouping,
@@ -19,6 +20,12 @@ import {
   type WristbandRouteWeight,
   type WristbandZoom,
 } from "@/domain/print/playbookPrint";
+
+const arrowSizeOptions: { value: ArrowSize; label: string }[] = [
+  { value: "small", label: "Small" },
+  { value: "medium", label: "Medium" },
+  { value: "large", label: "Large" },
+];
 
 type Props = {
   config: PlaybookPrintRunConfig;
@@ -182,6 +189,13 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
           />
 
           <PillGroup
+            label="Arrow size"
+            value={config.playsheetArrowSize}
+            onChange={(v) => patch({ playsheetArrowSize: v as ArrowSize })}
+            options={arrowSizeOptions}
+          />
+
+          <PillGroup
             label="Play label style"
             value={config.playsheetLabelStyle}
             onChange={(v) => patch({ playsheetLabelStyle: v as WristbandLabelStyle })}
@@ -309,6 +323,13 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               { value: "medium" as WristbandRouteWeight, label: "Medium" },
               { value: "thick" as WristbandRouteWeight, label: "Thick" },
             ]}
+          />
+
+          <PillGroup
+            label="Arrow size"
+            value={config.wristbandArrowSize}
+            onChange={(v) => patch({ wristbandArrowSize: v as ArrowSize })}
+            options={arrowSizeOptions}
           />
 
           <PillGroup

@@ -3,6 +3,7 @@ import { routeToPathGeometry } from "../play/geometry";
 import { resolveRouteStroke } from "../play/factory";
 import {
   IN_TO_MM,
+  type ArrowSize,
   type PlaysheetColumns,
   type PlaysheetNoteLines,
   type PlaysheetPageBreak,
@@ -199,6 +200,7 @@ function yardMarkersSvg(fx: number, fy: number, fw: number, fh: number): string 
 export type PlayTileLookOptions = {
   iconSize: WristbandIconSize;
   routeWeight: WristbandRouteWeight;
+  arrowSize: ArrowSize;
   labelStyle: WristbandLabelStyle;
   labels: WristbandLabelMode;
   colorCoding: boolean;
@@ -207,6 +209,44 @@ export type PlayTileLookOptions = {
   showPlayerLabels: boolean;
   playerOutline: boolean;
 };
+
+function arrowSizeScale(size: ArrowSize): number {
+  if (size === "small") return 0.45;
+  if (size === "large") return 1;
+  return 0.65;
+}
+
+/** Scale content around center (0.5, 0.5) so the bounding box of players + route
+ *  nodes fills the tile (leaving a small margin). Returns 1 if no zoom needed. */
+function computeFitScale(doc: PlayDocument, margin = 0.05, maxScale = 1.75): number {
+  let minX = 0.5;
+  let maxX = 0.5;
+  let minY = 0.5;
+  let maxY = 0.5;
+  let any = false;
+  const upd = (x: number, y: number) => {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    any = true;
+  };
+  for (const p of doc.layers.players) upd(p.position.x, p.position.y);
+  for (const r of doc.layers.routes) {
+    for (const n of r.nodes) upd(n.position.x, n.position.y);
+  }
+  if (!any) return 1;
+  const half = Math.max(0.5 - minX, maxX - 0.5, 0.5 - minY, maxY - 0.5, 0.01);
+  const scale = (0.5 - margin) / half;
+  return Math.max(1, Math.min(maxScale, scale));
+}
+
+function fitX(x: number, scale: number): number {
+  return 0.5 + (x - 0.5) * scale;
+}
+function fitY(y: number, scale: number): number {
+  return 0.5 + (y - 0.5) * scale;
+}
 
 export type PlaysheetOptions = PlayTileLookOptions & {
   columns: PlaysheetColumns;
@@ -370,6 +410,7 @@ function renderFieldContents(
   const fieldMin = Math.min(fieldW, fieldH);
   const pr = iconRadiusProportional(look.iconSize, fieldMin);
   const strokeW = routeStrokeProportional(look.routeWeight, fieldMin);
+  const fit = computeFitScale(doc);
 
   let guides = "";
   if (look.showYardMarkers) {
@@ -384,12 +425,12 @@ function renderFieldContents(
     guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="${Math.max(0.2, fieldMin * 0.008)}"/>`;
   }
 
-  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin);
+  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin, look.arrowSize, fit);
 
   let players = "";
   for (const p of doc.layers.players) {
-    const px = fieldX + p.position.x * fieldW;
-    const py = fieldY + (1 - p.position.y) * fieldH;
+    const px = fieldX + fitX(p.position.x, fit) * fieldW;
+    const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
     if (look.showPlayerLabels && vis.showPlayerLabels) {
       players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
@@ -408,21 +449,26 @@ function renderRoutesAndArrows(
   fieldH: number,
   strokeW: number,
   fieldMin: number,
+  arrowSize: ArrowSize,
+  fit: number,
 ): string {
+  const aScale = arrowSizeScale(arrowSize);
+  const sx = (x: number) => fieldX + fitX(x, fit) * fieldW;
+  const sy = (y: number) => fieldY + (1 - fitY(y, fit)) * fieldH;
   let out = "";
   for (const r of doc.layers.routes) {
     const geometry = routeToPathGeometry(r);
     const d = geometry.segments
       .map((seg) => {
-        const fx = fieldX + seg.from.x * fieldW;
-        const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const tx = fieldX + seg.to.x * fieldW;
-        const ty = fieldY + (1 - seg.to.y) * fieldH;
+        const fx = sx(seg.from.x);
+        const fy = sy(seg.from.y);
+        const tx = sx(seg.to.x);
+        const ty = sy(seg.to.y);
         if (seg.type === "line") {
           return `M ${fx} ${fy} L ${tx} ${ty}`;
         }
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        const cx = sx(seg.control.x);
+        const cy = sy(seg.control.y);
         return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
@@ -441,10 +487,10 @@ function renderRoutesAndArrows(
       if (!from || !to) continue;
       const refFrom =
         seg.shape === "curve" && seg.controlOffset ? seg.controlOffset : from.position;
-      const tipX = fieldX + to.position.x * fieldW;
-      const tipY = fieldY + (1 - to.position.y) * fieldH;
-      const fromX = fieldX + refFrom.x * fieldW;
-      const fromY = fieldY + (1 - refFrom.y) * fieldH;
+      const tipX = sx(to.position.x);
+      const tipY = sy(to.position.y);
+      const fromX = sx(refFrom.x);
+      const fromY = sy(refFrom.y);
       const dxS = tipX - fromX;
       const dyS = tipY - fromY;
       const len = Math.hypot(dxS, dyS);
@@ -452,7 +498,7 @@ function renderRoutesAndArrows(
       const ux = dxS / len;
       const uy = dyS / len;
       if (deco === "arrow") {
-        const aLen = Math.max(strokeW * 2, Math.min(strokeW * 4.5, fieldMin * 0.07));
+        const aLen = Math.max(strokeW * 2, Math.min(strokeW * 4.5, fieldMin * 0.07)) * aScale;
         const cos = Math.cos(Math.PI / 6);
         const sin = Math.sin(Math.PI / 6);
         const bx = -ux;
@@ -464,7 +510,7 @@ function renderRoutesAndArrows(
         out += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r1x}" y2="${tipY + aLen * r1y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
         out += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r2x}" y2="${tipY + aLen * r2y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
       } else if (deco === "t") {
-        const half = Math.max(strokeW * 1.5, Math.min(strokeW * 3.5, fieldMin * 0.055));
+        const half = Math.max(strokeW * 1.5, Math.min(strokeW * 3.5, fieldMin * 0.055)) * aScale;
         const perpX = -uy;
         const perpY = ux;
         out += `<line x1="${tipX + perpX * half}" y1="${tipY + perpY * half}" x2="${tipX - perpX * half}" y2="${tipY - perpY * half}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
@@ -491,6 +537,7 @@ export type WristbandGridOptions = {
   zoom: WristbandZoom;
   iconSize: WristbandIconSize;
   routeWeight: WristbandRouteWeight;
+  arrowSize: ArrowSize;
   labelStyle: WristbandLabelStyle;
   labels: WristbandLabelMode;
   colorCoding: boolean;
@@ -623,17 +670,19 @@ function renderWristbandTile(
     header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="system-ui,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
   }
 
+  const fit = computeFitScale(doc);
+
   let players = "";
   for (const p of doc.layers.players) {
-    const px = fieldX + p.position.x * fieldW;
-    const py = fieldY + (1 - p.position.y) * fieldH;
+    const px = fieldX + fitX(p.position.x, fit) * fieldW;
+    const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
       players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
     }
   }
 
-  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, Math.min(fieldW, fieldH));
+  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, Math.min(fieldW, fieldH), opts.arrowSize, fit);
 
   let guides = "";
   if (opts.showYardMarkers) {

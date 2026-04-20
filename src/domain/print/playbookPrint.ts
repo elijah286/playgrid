@@ -16,6 +16,7 @@ export type WristbandGridLayout = "10" | "8" | "6" | "4" | "4col" | "3";
 export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
 export type WristbandIconSize = "small" | "medium" | "large";
 export type WristbandRouteWeight = "thin" | "medium" | "thick";
+export type ArrowSize = "small" | "medium" | "large";
 export type WristbandLabelStyle = "prominent" | "compact";
 export type WristbandLabelMode = "both" | "name" | "number";
 export type WristbandPlayerShape = "circle" | "x" | "diamond";
@@ -44,6 +45,7 @@ export type PlaybookPrintRunConfig = {
   /** Playsheet visual look (matches wristband options). */
   playsheetIconSize: WristbandIconSize;
   playsheetRouteWeight: WristbandRouteWeight;
+  playsheetArrowSize: ArrowSize;
   playsheetLabelStyle: WristbandLabelStyle;
   playsheetLabels: WristbandLabelMode;
   playsheetColorCoding: boolean;
@@ -65,6 +67,8 @@ export type PlaybookPrintRunConfig = {
   wristbandIconSize: WristbandIconSize;
   /** Wristband: route stroke weight bucket */
   wristbandRouteWeight: WristbandRouteWeight;
+  /** Wristband: arrow-head size bucket */
+  wristbandArrowSize: ArrowSize;
   /** Wristband: play-label emphasis */
   wristbandLabelStyle: WristbandLabelStyle;
   /** Wristband: which play label(s) to show per tile */
@@ -92,6 +96,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetNoteLines: 2,
   playsheetIconSize: "medium",
   playsheetRouteWeight: "medium",
+  playsheetArrowSize: "medium",
   playsheetLabelStyle: "compact",
   playsheetLabels: "both",
   playsheetColorCoding: false,
@@ -107,6 +112,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandZoom: 100,
   wristbandIconSize: "medium",
   wristbandRouteWeight: "medium",
+  wristbandArrowSize: "medium",
   wristbandLabelStyle: "compact",
   wristbandLabels: "number",
   wristbandPlayerOutline: false,
