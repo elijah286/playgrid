@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -193,27 +195,32 @@ export function EditorHeaderBar({
             aria-label="Play name"
           />
         ) : (
-          <button
-            type="button"
-            onClick={() => setEditingName(true)}
-            className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-surface-inset"
-            title="Rename play"
-          >
-            <h1 className="truncate text-base font-bold text-foreground">
-              {formation ? (
-                <>
-                  <span className="text-muted">{formation} · </span>
-                  {name}
-                </>
-              ) : (
-                name
-              )}
+          <div className="inline-flex min-w-0 items-center gap-1">
+            <h1 className="flex min-w-0 items-center truncate text-base font-bold text-foreground">
+              {(doc.metadata.playType ?? "offense") === "offense" && (formation || formationId) ? (
+                <FormationTitlePicker
+                  currentId={formationId ?? null}
+                  currentName={formation ?? ""}
+                  allFormations={allFormations}
+                  dispatch={dispatch}
+                />
+              ) : formation ? (
+                <span className="text-muted">{formation} · </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setEditingName(true)}
+                className="group inline-flex items-center gap-1.5 truncate rounded-md px-1 py-0.5 hover:bg-surface-inset"
+                title="Rename play"
+              >
+                <span className="truncate">{name}</span>
+                <PencilLine className="size-3.5 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
             </h1>
             {code ? (
               <span className="text-xs font-semibold text-muted">#{code}</span>
             ) : null}
-            <PencilLine className="size-3.5 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
-          </button>
+          </div>
         )}
 
         <div className="ml-auto flex flex-wrap items-center gap-1">
@@ -366,6 +373,93 @@ export function EditorHeaderBar({
         )}
       </div>
     </header>
+  );
+}
+
+function FormationTitlePicker({
+  currentId,
+  currentName,
+  allFormations,
+  dispatch,
+}: {
+  currentId: string | null;
+  currentName: string;
+  allFormations: SavedFormation[];
+  dispatch: (c: PlayCommand) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const offenseFormations = allFormations.filter((f) => (f.kind ?? "offense") === "offense");
+
+  function pick(f: SavedFormation | null) {
+    if (!f) {
+      dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" });
+    } else {
+      dispatch({
+        type: "document.setFormationLink",
+        formationId: f.id,
+        formationName: f.displayName,
+        players: f.players,
+        formationLosY: f.losY,
+      });
+    }
+    setOpen(false);
+  }
+
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-muted hover:bg-surface-inset hover:text-foreground"
+        title="Change or unlink formation"
+      >
+        <span>{currentName || "No formation"}</span>
+        <ChevronDown className="size-3.5" />
+      </button>
+      <span className="mx-1 text-muted">·</span>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-border bg-surface-raised shadow-lg">
+            <ul className="max-h-64 overflow-y-auto py-1 text-sm font-normal">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => pick(null)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-inset ${
+                    !currentId ? "text-foreground" : "text-muted"
+                  }`}
+                >
+                  {!currentId && <Check className="size-3 shrink-0" />}
+                  <span className={!currentId ? "ml-0" : "ml-5"}>No formation</span>
+                </button>
+              </li>
+              {offenseFormations.length > 0 && (
+                <li className="mx-2 my-1 border-t border-border" aria-hidden />
+              )}
+              {offenseFormations.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onClick={() => pick(f)}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-inset ${
+                      f.id === currentId ? "text-foreground" : "text-muted"
+                    }`}
+                  >
+                    {f.id === currentId && <Check className="size-3 shrink-0" />}
+                    <span className={f.id === currentId ? "ml-0" : "ml-5"}>{f.displayName}</span>
+                  </button>
+                </li>
+              ))}
+              {offenseFormations.length === 0 && (
+                <li className="px-3 py-1.5 text-xs text-muted">No saved formations</li>
+              )}
+            </ul>
+          </div>
+        </>
+      )}
+    </span>
   );
 }
 
