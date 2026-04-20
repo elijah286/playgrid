@@ -2,7 +2,6 @@
 
 import type { PlayDocument, Route } from "@/domain/play/types";
 import { resolveRouteStroke } from "@/domain/play/factory";
-import { subpathD } from "@/domain/play/animation";
 import type { PlayAnimation } from "./usePlayAnimation";
 
 type Props = {
@@ -12,15 +11,13 @@ type Props = {
 };
 
 /**
- * SVG overlay rendered on top of the static canvas while an animation is
- * running. Shows:
- *   - Traversed portion of each route in gray (the "trail")
- *   - Remaining portion in the original route color
- *   - Player tokens at their current sampled positions
+ * Overlay rendered on top of the static canvas while an animation is running.
  *
- * Designed to be rendered as a sibling <svg> absolutely positioned over the
- * existing canvas SVG, with pointer-events: none so editor interactions
- * (while paused) remain available.
+ * For each route we render the exact same SVG `d` that the static canvas uses
+ * (curves and all) twice: once as a gray "trail" dash-clipped to the
+ * traversed arc-length, and once in the route's color dash-clipped to the
+ * remaining arc-length. This guarantees the route shape is unchanged between
+ * the static view and playback.
  */
 export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
   if (anim.phase === "idle") return null;
@@ -40,32 +37,37 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
           const route = routeById.get(f.routeId);
           if (!route) return null;
           const color = resolveRouteStroke(route, doc.layers.players);
-          const s = anim.progress.get(f.routeId) ?? 0;
-
-          const trailD = s > 0 ? subpathD(f, 0, s) : "";
-          const remainingD = s < f.length ? subpathD(f, s, f.length) : "";
+          const L = f.length;
+          const s = Math.max(0, Math.min(L, anim.progress.get(f.routeId) ?? 0));
 
           return (
             <g key={f.routeId}>
-              {trailD && (
+              {/* Gray trail: visible from 0 → s */}
+              {s > 0 && (
                 <path
-                  d={trailD}
+                  d={f.fullD}
+                  pathLength={L}
                   fill="none"
                   stroke="rgba(156, 163, 175, 0.55)"
                   strokeWidth={route.style.strokeWidth}
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  strokeDasharray={`${s} ${L}`}
                   vectorEffect="non-scaling-stroke"
                 />
               )}
-              {remainingD && (
+              {/* Colored remainder: visible from s → L */}
+              {s < L && (
                 <path
-                  d={remainingD}
+                  d={f.fullD}
+                  pathLength={L}
                   fill="none"
                   stroke={color}
                   strokeWidth={route.style.strokeWidth}
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  strokeDasharray={`${L - s} ${L}`}
+                  strokeDashoffset={-s}
                   vectorEffect="non-scaling-stroke"
                 />
               )}
@@ -73,16 +75,15 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
           );
         })}
 
-        {/* Animated player tokens. Render over routes. Players with no
-            route, or whose route hasn't advanced, fall back to their
-            default position. */}
+        {/* Animated player tokens. Players without a route (or whose route
+            hasn't advanced) fall back to their default position. */}
         {doc.layers.players.map((p) => {
-          const anim_pos = anim.playerPositions.get(p.id) ?? p.position;
+          const pos = anim.playerPositions.get(p.id) ?? p.position;
           return (
             <g key={p.id}>
               <ellipse
-                cx={anim_pos.x}
-                cy={1 - anim_pos.y}
+                cx={pos.x}
+                cy={1 - pos.y}
                 rx={0.028 / fieldAspect}
                 ry={0.028}
                 fill={p.style.fill}
@@ -91,8 +92,8 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
                 vectorEffect="non-scaling-stroke"
               />
               <text
-                x={anim_pos.x}
-                y={1 - anim_pos.y + 0.011}
+                x={pos.x}
+                y={1 - pos.y + 0.011}
                 textAnchor="middle"
                 fontSize={0.024}
                 fontWeight={700}
