@@ -18,6 +18,19 @@ type Props = {
   linkedFormation?: SavedFormation | null;
 };
 
+const PLAYER_FILL_COLORS = [
+  "#FFFFFF",
+  "#94A3B8",
+  "#1C1C1E",
+  "#F26522",
+  "#3B82F6",
+  "#EF4444",
+  "#22C55E",
+  "#FACC15",
+];
+
+const PLAYER_LABEL_COLORS = ["#FFFFFF", "#1C1C1E"];
+
 const routeOptions = [
   { value: "", label: "Custom / unset" },
   { value: "slant", label: "Slant" },
@@ -74,6 +87,65 @@ export function Inspector({
               </div>
             ) : null;
           })()}
+
+          <div className="mt-3 flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Fill color</span>
+            <div className="flex flex-wrap gap-1.5">
+              {PLAYER_FILL_COLORS.map((color) => {
+                const active = player.style.fill === color;
+                return (
+                  <button
+                    key={color}
+                    type="button"
+                    title={color}
+                    onClick={() =>
+                      dispatch({
+                        type: "player.setStyle",
+                        playerId: player.id,
+                        style: { ...player.style, fill: color },
+                      })
+                    }
+                    className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                      active ? "border-primary scale-110" : "border-border"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">Label color</span>
+            <div className="flex gap-2">
+              {PLAYER_LABEL_COLORS.map((color) => {
+                const active = player.style.labelColor === color;
+                return (
+                  <button
+                    key={color}
+                    type="button"
+                    title={color === "#FFFFFF" ? "White" : "Black"}
+                    onClick={() =>
+                      dispatch({
+                        type: "player.setStyle",
+                        playerId: player.id,
+                        style: { ...player.style, labelColor: color },
+                      })
+                    }
+                    className={`flex h-7 flex-1 items-center justify-center rounded-md border-2 text-xs font-semibold transition-colors ${
+                      active ? "border-primary" : "border-border"
+                    }`}
+                    style={{
+                      backgroundColor: color,
+                      color: color === "#FFFFFF" ? "#1C1C1E" : "#FFFFFF",
+                    }}
+                  >
+                    Aa
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </section>
       )}
 

@@ -64,6 +64,7 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
   const downfield = resolveDownfieldYards(doc);
   const isDefense = doc.metadata.playType === "defense";
   const rushLineYards = doc.rushLineYards ?? 7;
+  const showRushLine = doc.showRushLine ?? true;
 
   const handleYards = (bk: number, dn: number) => {
     dispatch({ type: "field.setYardage", backfieldYards: bk, downfieldYards: dn });
@@ -141,15 +142,31 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
       {isDefense && (
         <>
           <div className="h-4 w-px bg-border" />
-          <YardSpinner
-            label="Rush"
-            value={rushLineYards}
-            min={6}
-            max={8}
-            onChange={(v) =>
-              dispatch({ type: "document.setRushLineYards", rushLineYards: v })
-            }
-          />
+          <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+            <input
+              type="checkbox"
+              className="size-3.5 cursor-pointer accent-primary"
+              checked={showRushLine}
+              onChange={(e) =>
+                dispatch({
+                  type: "document.setShowRushLine",
+                  showRushLine: e.target.checked,
+                })
+              }
+            />
+            <span>Rush line</span>
+          </label>
+          {showRushLine && (
+            <YardSpinner
+              label="Rush"
+              value={rushLineYards}
+              min={6}
+              max={8}
+              onChange={(v) =>
+                dispatch({ type: "document.setRushLineYards", rushLineYards: v })
+              }
+            />
+          )}
         </>
       )}
 

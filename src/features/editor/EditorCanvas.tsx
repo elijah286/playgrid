@@ -250,6 +250,13 @@ export function EditorCanvas({
   };
   const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
 
+  type ZoneMenu = {
+    screenX: number;
+    screenY: number;
+    zoneId: string;
+  };
+  const [zoneMenu, setZoneMenu] = useState<ZoneMenu | null>(null);
+
   // Ref holding the latest values the stable native contextmenu listener needs.
   // Assigned directly during render (safe for refs).
   const nativeMenuCtxRef = useRef({
@@ -355,7 +362,7 @@ export function EditorCanvas({
 
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
-    if (!segmentMenu && !anchorMenu && !playerMenu) return;
+    if (!segmentMenu && !anchorMenu && !playerMenu && !zoneMenu) return;
     function onDocPointer(e: PointerEvent) {
       const target = e.target as Node | null;
       const wrap = wrapperRef.current;
@@ -368,6 +375,7 @@ export function EditorCanvas({
       setSegmentMenu(null);
       setAnchorMenu(null);
       setPlayerMenu(null);
+      setZoneMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
       // from blocking it.
@@ -378,6 +386,7 @@ export function EditorCanvas({
         setSegmentMenu(null);
         setAnchorMenu(null);
         setPlayerMenu(null);
+        setZoneMenu(null);
       }
     }
     document.addEventListener("pointerdown", onDocPointer, true);
@@ -386,7 +395,7 @@ export function EditorCanvas({
       document.removeEventListener("pointerdown", onDocPointer, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [segmentMenu, anchorMenu]);
+  }, [segmentMenu, anchorMenu, playerMenu, zoneMenu]);
 
   /* ---------- Line of scrimmage (hoisted early; callbacks depend on losY) ---------- */
 
@@ -1233,7 +1242,7 @@ export function EditorCanvas({
       })()}
 
       {/* Rush line (flag defense): dashed line at losY + rushLineYards / fieldLengthYds. */}
-      {doc.metadata.playType === "defense" && (() => {
+      {doc.metadata.playType === "defense" && (doc.showRushLine ?? true) && (() => {
         const rushYds = doc.rushLineYards ?? 7;
         const rushY = losY + rushYds / fieldLengthYds;
         if (rushY >= 1) return null;
@@ -1275,6 +1284,26 @@ export function EditorCanvas({
           return (
             <g
               key={z.id}
+              onContextMenu={(e) => {
+                if (mode === "formation") return;
+                e.preventDefault();
+                e.stopPropagation();
+                const wrap = wrapperRef.current;
+                if (!wrap) return;
+                const rect = wrap.getBoundingClientRect();
+                const MENU_W = 220;
+                const MENU_H = 160;
+                const localX = e.clientX - rect.left;
+                const localY = e.clientY - rect.top;
+                setZoneMenu({
+                  screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+                  screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                  zoneId: z.id,
+                });
+                setPlayerMenu(null);
+                setSegmentMenu(null);
+                setAnchorMenu(null);
+              }}
               onPointerDown={(e) => {
                 if (mode === "formation") return;
                 e.stopPropagation();
@@ -2039,6 +2068,86 @@ export function EditorCanvas({
               }}
             >
               Clear all routes
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Zone context menu */}
+      {zoneMenu && mode !== "formation" && (() => {
+        const z = (doc.layers.zones ?? []).find((zn) => zn.id === zoneMenu.zoneId);
+        if (!z) return null;
+        const ZONE_COLORS: { fill: string; stroke: string; label: string }[] = [
+          { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)", label: "Blue" },
+          { fill: "rgba(239,68,68,0.18)", stroke: "rgba(239,68,68,0.7)", label: "Red" },
+          { fill: "rgba(34,197,94,0.18)", stroke: "rgba(34,197,94,0.7)", label: "Green" },
+          { fill: "rgba(250,204,21,0.22)", stroke: "rgba(202,138,4,0.75)", label: "Yellow" },
+          { fill: "rgba(168,85,247,0.18)", stroke: "rgba(168,85,247,0.7)", label: "Purple" },
+          { fill: "rgba(148,163,184,0.22)", stroke: "rgba(71,85,105,0.75)", label: "Gray" },
+        ];
+        return (
+          <div
+            data-segment-menu
+            className="absolute z-20 min-w-[220px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+            style={{ left: zoneMenu.screenX, top: zoneMenu.screenY }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+              Color
+            </div>
+            <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+              {ZONE_COLORS.map((c) => {
+                const active = z.style.fill === c.fill && z.style.stroke === c.stroke;
+                return (
+                  <button
+                    key={c.label}
+                    type="button"
+                    title={c.label}
+                    onClick={() => {
+                      dispatch({
+                        type: "zone.update",
+                        zoneId: z.id,
+                        patch: { style: { fill: c.fill, stroke: c.stroke } },
+                      });
+                    }}
+                    className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                      active ? "border-primary scale-110" : "border-border"
+                    }`}
+                    style={{ backgroundColor: c.stroke }}
+                  />
+                );
+              })}
+            </div>
+            <div className="h-px bg-border" />
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+              onClick={() => {
+                dispatch({
+                  type: "zone.add",
+                  zone: {
+                    ...z,
+                    id: uid("zn"),
+                    center: {
+                      x: Math.min(1, z.center.x + 0.04),
+                      y: Math.max(0, z.center.y - 0.04),
+                    },
+                  },
+                });
+                setZoneMenu(null);
+              }}
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
+              onClick={() => {
+                dispatch({ type: "zone.remove", zoneId: z.id });
+                setZoneMenu(null);
+              }}
+            >
+              Delete
             </button>
           </div>
         );

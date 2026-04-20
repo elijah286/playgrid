@@ -38,7 +38,7 @@ import {
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
-import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant } from "@/domain/play/types";
+import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
   defaultPlayersForVariant,
@@ -285,7 +285,7 @@ export function PlaybookDetailClient({
 
   async function createWithFormation(
     formation?: SavedFormation,
-    opts?: { playType?: PlayType; specialTeamsUnit?: SpecialTeamsUnit | null; initialPlayers?: Player[]; formationName?: string },
+    opts?: { playType?: PlayType; specialTeamsUnit?: SpecialTeamsUnit | null; initialPlayers?: Player[]; formationName?: string; playName?: string },
   ) {
     setShowFormationPicker(false);
     setCreating(true);
@@ -300,6 +300,7 @@ export function PlaybookDetailClient({
       playerCount: playbookPlayerCount,
       playType,
       specialTeamsUnit: opts?.specialTeamsUnit ?? null,
+      playName: opts?.playName,
     });
     if (res.ok) {
       router.push(`/plays/${res.playId}/edit`);
@@ -309,11 +310,28 @@ export function PlaybookDetailClient({
     }
   }
 
+  function nextPlayNameForTemplate(displayName: string): string {
+    const base = displayName.trim();
+    const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${escaped}(?:\\s+(\\d+))?$`, "i");
+    let maxN = 0;
+    let anyMatch = false;
+    for (const p of initialPlays) {
+      const m = (p.name ?? "").trim().match(re);
+      if (!m) continue;
+      anyMatch = true;
+      const n = m[1] ? parseInt(m[1], 10) : 1;
+      if (Number.isFinite(n) && n > maxN) maxN = n;
+    }
+    return `${base} ${anyMatch ? maxN + 1 : 1}`;
+  }
+
   function createFromDefenseTemplate(t: DefenseTemplate) {
     void createWithFormation(undefined, {
       playType: "defense",
       initialPlayers: t.players,
       formationName: t.displayName,
+      playName: nextPlayNameForTemplate(t.displayName),
     });
   }
 
@@ -323,6 +341,7 @@ export function PlaybookDetailClient({
       specialTeamsUnit: t.unit,
       initialPlayers: t.players,
       formationName: t.displayName,
+      playName: nextPlayNameForTemplate(t.displayName),
     });
   }
 
@@ -1612,7 +1631,7 @@ function ManageGroupsDialog({
 function PlayPreview({
   preview,
 }: {
-  preview: { players: Player[]; routes: Route[]; lineOfScrimmageY: number };
+  preview: { players: Player[]; routes: Route[]; zones?: Zone[]; lineOfScrimmageY: number };
 }) {
   // Render in normalized 0-1 field coords (same as editor) so zigzag,
   // curves, dashes and end decorations match the edited play exactly.
@@ -1696,6 +1715,42 @@ function PlayPreview({
         <line x1={vbX} x2={vbX + vbW} y1={losY} y2={losY} stroke="rgba(100,116,139,0.45)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
         <line x1={vbX} x2={vbX + vbW} y1={fiveY} y2={fiveY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
         <line x1={vbX} x2={vbX + vbW} y1={tenY} y2={tenY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        {(preview.zones ?? []).map((z) => {
+          const cx = z.center.x;
+          const cy = 1 - z.center.y;
+          const w = z.size.w;
+          const h = z.size.h;
+          if (z.kind === "rectangle") {
+            return (
+              <rect
+                key={z.id}
+                x={cx - w}
+                y={cy - h}
+                width={w * 2}
+                height={h * 2}
+                fill={z.style.fill}
+                stroke={z.style.stroke}
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          }
+          return (
+            <ellipse
+              key={z.id}
+              cx={cx}
+              cy={cy}
+              rx={w}
+              ry={h}
+              fill={z.style.fill}
+              stroke={z.style.stroke}
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
         {preview.routes.map((r) => {
           const rendered = routeToRenderedSegments(r);
           const stroke = resolveRouteStroke(r, preview.players);

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
-import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant } from "@/domain/play/types";
+import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -25,7 +25,12 @@ export type PlaybookDetailPlayRow = {
   is_archived: boolean;
   play_type: PlayType;
   special_teams_unit: SpecialTeamsUnit | null;
-  preview: { players: Player[]; routes: Route[]; lineOfScrimmageY: number } | null;
+  preview: {
+    players: Player[];
+    routes: Route[];
+    zones: Zone[];
+    lineOfScrimmageY: number;
+  } | null;
 };
 
 export async function listPlaysAction(
@@ -73,7 +78,7 @@ export async function listPlaysAction(
 
   const previewByVersion = new Map<
     string,
-    { players: Player[]; routes: Route[]; lineOfScrimmageY: number }
+    { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number }
   >();
   if (versionIds.length > 0) {
     const { data: versions } = await supabase
@@ -86,6 +91,7 @@ export async function listPlaysAction(
       previewByVersion.set(v.id as string, {
         players: doc.layers?.players ?? [],
         routes: doc.layers?.routes ?? [],
+        zones: doc.layers?.zones ?? [],
         lineOfScrimmageY: typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
       });
     }
@@ -130,6 +136,7 @@ export async function createPlayAction(
     variant?: SportVariant;
     playType?: PlayType;
     specialTeamsUnit?: SpecialTeamsUnit | null;
+    playName?: string;
   },
 ) {
   if (!hasSupabaseEnv()) {
@@ -158,6 +165,9 @@ export async function createPlayAction(
   doc.metadata.formation = opts?.formationName ?? "";
   doc.metadata.playType = opts?.playType ?? "offense";
   doc.metadata.specialTeamsUnit = opts?.specialTeamsUnit ?? null;
+  if (opts?.playName && opts.playName.trim()) {
+    doc.metadata.coachName = opts.playName.trim();
+  }
   const { data: sortRow } = await supabase
     .from("plays")
     .select("sort_order")

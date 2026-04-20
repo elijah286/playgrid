@@ -432,6 +432,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setRushLineYards":
       return { ...doc, rushLineYards: cmd.rushLineYards };
 
+    case "document.setShowRushLine":
+      return { ...doc, showRushLine: cmd.showRushLine };
+
     case "document.setFormationLink": {
       const metadata = {
         ...doc.metadata,

@@ -167,7 +167,7 @@ function mkDefender(
     position: { x, y },
     eligible: true,
     shape: "triangle",
-    style: { fill: "#fecaca", stroke: "#991b1b", labelColor: "#7f1d1d" },
+    style: { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" },
   };
 }
 

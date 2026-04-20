@@ -293,4 +293,9 @@ export type PlayDocument = {
    * metadata.playType === "defense".
    */
   rushLineYards?: number;
+  /**
+   * Whether to render the rush line on defensive plays. Defaults to true for
+   * legacy docs so existing defense plays keep the line visible.
+   */
+  showRushLine?: boolean;
 };
