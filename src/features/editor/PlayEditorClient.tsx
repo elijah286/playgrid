@@ -13,6 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { SavedFormation } from "@/app/actions/formations";
 import { resolveEndDecoration } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
@@ -38,6 +39,7 @@ type Props = {
   initialDocument: PlayDocument;
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
+  linkedFormation?: SavedFormation | null;
 };
 
 export function PlayEditorClient({
@@ -46,6 +48,7 @@ export function PlayEditorClient({
   initialDocument,
   initialNav,
   initialGroups,
+  linkedFormation,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -488,6 +491,7 @@ export function PlayEditorClient({
               selectedRouteId={selectedRouteId}
               selectedSegmentId={selectedSegmentId}
               activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
+              linkedFormation={linkedFormation}
             />
           </aside>
       </div>

@@ -208,12 +208,30 @@ export function PlaybookDetailClient({
     });
   }
 
-  async function createWithFormation(players?: Player[]) {
+  async function createWithFormation(formation?: SavedFormation) {
     setShowFormationPicker(false);
     setCreating(true);
-    const res = await createPlayAction(playbookId, players);
+    const res = await createPlayAction(playbookId, {
+      initialPlayers: formation?.players,
+      formationId: formation?.id ?? null,
+      formationName: formation?.displayName ?? "",
+    });
     if (res.ok) {
       router.push(`/plays/${res.playId}/edit`);
+    } else {
+      setCreating(false);
+      toast(res.error, "error");
+    }
+  }
+
+  async function createAndGoToFormationEditor() {
+    setShowFormationPicker(false);
+    setCreating(true);
+    const res = await createPlayAction(playbookId, {});
+    if (res.ok) {
+      // Go to formation editor; when user saves, the formation editor
+      // should redirect back to the play. Pass playId as return target.
+      router.push(`/formations/new?variant=${variant}&returnToPlay=${res.playId}`);
     } else {
       setCreating(false);
       toast(res.error, "error");
@@ -607,10 +625,10 @@ export function PlaybookDetailClient({
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <div>
                 <h2 className="text-base font-bold text-foreground">
-                  Choose a starting formation
+                  Start a new play
                 </h2>
                 <p className="mt-0.5 text-xs text-muted">
-                  Pick a saved formation or start with the default.
+                  Choose a formation to begin with, or start blank.
                 </p>
               </div>
               <button
@@ -622,58 +640,78 @@ export function PlaybookDetailClient({
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="max-h-[60vh] overflow-y-auto p-6">
               {loadingFormations ? (
-                <p className="text-center text-sm text-muted">Loading formations…</p>
+                <p className="py-8 text-center text-sm text-muted">Loading formations…</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    className="flex flex-col items-center gap-3 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
-                    onClick={() => createWithFormation()}
-                  >
-                    <MiniPlayerDiagram players={null} />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Default ({variantLabel})</p>
-                      <p className="text-xs text-muted">Standard formation</p>
-                    </div>
-                  </button>
-
-                  <Link
-                    href={`/formations/new?variant=${variant}`}
-                    className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                  >
-                    <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
-                      <Plus className="size-7" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">New formation</p>
-                      <p className="text-xs text-muted">Design from scratch</p>
-                    </div>
-                  </Link>
-
-                  {availableFormations
-                    .filter((f) => {
-                      const fv = f.sportProfile?.variant as SportVariant | undefined;
-                      if (fv) return fv === variant;
-                      return f.players.length === expectedPlayerCount;
-                    })
-                    .map((f) => (
+                <div className="space-y-4">
+                  {/* ── Fixed options ── */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* No specific formation */}
                     <button
-                      key={f.id}
                       type="button"
-                      className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                      onClick={() => createWithFormation(f.players)}
+                      className="flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
+                      onClick={() => createWithFormation()}
                     >
-                      <MiniPlayerDiagram players={f.players} />
+                      <MiniPlayerDiagram players={null} />
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
-                        <p className="text-xs text-muted">
-                          {f.players.length} players
-                        </p>
+                        <p className="text-sm font-semibold text-foreground">No specific formation</p>
+                        <p className="text-xs text-muted">{expectedPlayerCount} default players</p>
                       </div>
                     </button>
-                  ))}
+
+                    {/* Create new formation */}
+                    <button
+                      type="button"
+                      className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                      onClick={createAndGoToFormationEditor}
+                    >
+                      <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                        <Plus className="size-7" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Create new formation</p>
+                        <p className="text-xs text-muted">Design from scratch</p>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* ── Saved formations ── */}
+                  {availableFormations.filter((f) => {
+                    const fv = f.sportProfile?.variant as SportVariant | undefined;
+                    if (fv) return fv === variant;
+                    return f.players.length === expectedPlayerCount;
+                  }).length > 0 && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Your formations</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {availableFormations
+                          .filter((f) => {
+                            const fv = f.sportProfile?.variant as SportVariant | undefined;
+                            if (fv) return fv === variant;
+                            return f.players.length === expectedPlayerCount;
+                          })
+                          .map((f) => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                              onClick={() => createWithFormation(f)}
+                            >
+                              <MiniPlayerDiagram players={f.players} />
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                                <p className="text-xs text-muted">{f.players.length} players</p>
+                              </div>
+                            </button>
+                          ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
