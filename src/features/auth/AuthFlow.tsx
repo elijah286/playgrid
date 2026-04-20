@@ -1,0 +1,608 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Lock, Mail, User } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { emailHasAccountAction } from "@/app/actions/auth-lookup";
+import { afterSignupSyncRoleAction } from "@/app/actions/coach-invitations";
+import { Button, Input, useToast } from "@/components/ui";
+import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
+
+/**
+ * A single unified sign-in / sign-up flow. Email first; the form branches
+ * on whether that email already has an account. Code is the universal
+ * fallback (bad password, forgot password, first-time signup) so there is
+ * only ever one "what do I do now?" answer.
+ */
+export type AuthFlowProps = {
+  /** Where to send the user after success. Defaults to /home. */
+  next?: string;
+  /** Optional heading copy shown above the form (e.g. invite context). */
+  heading?: string;
+  /** Optional subheading copy (e.g. "to join the 2026 playbook"). */
+  subheading?: string;
+  /** Hidden invite code to pass through the signup metadata. */
+  inviteCode?: string;
+};
+
+type Step =
+  | "email"
+  | "password"
+  | "code"
+  | "new-user-profile"
+  | "offer-reset"
+  | "set-new-password";
+
+const RESEND_COOLDOWN_SECONDS = 30;
+
+function isInvalidCredentials(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const m = err.message.toLowerCase();
+  return (
+    m.includes("invalid login credentials") ||
+    m.includes("invalid email or password") ||
+    m.includes("invalid_grant")
+  );
+}
+
+export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+
+  const [pending, setPending] = useState(false);
+  const [badPassword, setBadPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [resendCountdown, setResendCountdown] = useState(0);
+
+  // Cleared on any form edit so stale errors don't linger.
+  const clearErrors = useCallback(() => {
+    setBadPassword(false);
+    setFormError(null);
+  }, []);
+
+  // Resend cooldown tick.
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const t = setTimeout(() => setResendCountdown((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCountdown]);
+
+  const startCooldown = useCallback(() => {
+    setResendCountdown(RESEND_COOLDOWN_SECONDS);
+  }, []);
+
+  // Autofocus the first field whenever the step changes, so keyboard users
+  // don't have to click back into the form.
+  const stepRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = stepRootRef.current?.querySelector<HTMLInputElement>("input:not([disabled])");
+    el?.focus();
+  }, [step]);
+
+  // ---------- Effects: step transitions ----------
+
+  async function submitEmail() {
+    if (!hasSupabaseEnv()) {
+      setFormError("Supabase is not configured.");
+      return;
+    }
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed.includes("@")) {
+      setFormError("Enter a valid email.");
+      return;
+    }
+    setPending(true);
+    clearErrors();
+    try {
+      const res = await emailHasAccountAction(trimmed);
+      if (!res.ok) throw new Error(res.error);
+      if (res.exists) {
+        setStep("password");
+      } else {
+        await sendCode({ isNewUser: true, silent: true });
+        setStep("code");
+      }
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function submitPassword() {
+    setPending(true);
+    clearErrors();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      router.push(safeNext);
+      router.refresh();
+    } catch (e: unknown) {
+      if (isInvalidCredentials(e)) {
+        setBadPassword(true);
+      } else {
+        setFormError(e instanceof Error ? e.message : "Sign-in failed.");
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function sendCode({
+    isNewUser,
+    silent = false,
+  }: {
+    isNewUser: boolean;
+    silent?: boolean;
+  }) {
+    if (resendCountdown > 0) return;
+    setPending(true);
+    clearErrors();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: isNewUser,
+          data: inviteCode ? { invite_code: inviteCode } : undefined,
+        },
+      });
+      if (error) throw error;
+      startCooldown();
+      if (!silent) toast("Code sent. Check your email.", "success");
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "Could not send code.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function verifyCode({ cameFromForgot }: { cameFromForgot: boolean }) {
+    if (code.trim().length !== 6) {
+      setFormError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setPending(true);
+    clearErrors();
+    try {
+      const supabase = createClient();
+      const { error, data } = await supabase.auth.verifyOtp({
+        email,
+        token: code.trim(),
+        type: "email",
+      });
+      if (error) throw error;
+
+      // Sync coach role if an invite code was carried through signup.
+      if (inviteCode && data.session) {
+        await afterSignupSyncRoleAction();
+      }
+
+      // Branch on whether this is a brand-new account (no display_name yet
+      // and created within the last minute) vs an existing user who asked
+      // for a code. Simpler proxy: check user_metadata.display_name.
+      const user = data.user;
+      const hasProfile = Boolean(
+        (user?.user_metadata as Record<string, unknown> | undefined)?.display_name,
+      );
+      // Treat "created within last 5 min" as a fresh signup so we collect
+      // name + password. Otherwise this is a returning user using a code.
+      const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
+      const justCreated = Date.now() - createdAt < 5 * 60_000;
+
+      if (!hasProfile && justCreated) {
+        setStep("new-user-profile");
+      } else if (cameFromForgot) {
+        setStep("set-new-password");
+      } else {
+        setStep("offer-reset");
+      }
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "That code didn't work. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function completeNewUserProfile() {
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2) {
+      setFormError("Enter your name.");
+      return;
+    }
+    const pwErr = validatePassword(newPassword);
+    if (pwErr) {
+      setFormError(pwErr);
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+    setPending(true);
+    clearErrors();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+        data: { display_name: trimmedName },
+      });
+      if (error) throw error;
+      toast("Welcome to PlayGrid!", "success");
+      router.push(safeNext);
+      router.refresh();
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "Could not finish sign-up.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function setNewPasswordSubmit() {
+    const pwErr = validatePassword(newPassword);
+    if (pwErr) {
+      setFormError(pwErr);
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+    setPending(true);
+    clearErrors();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast("Password updated.", "success");
+      router.push(safeNext);
+      router.refresh();
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "Could not update password.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function continueWithoutReset() {
+    router.push(safeNext);
+    router.refresh();
+  }
+
+  function handleForgot() {
+    void sendCode({ isNewUser: false });
+    setStep("code");
+  }
+
+  function handleBadPasswordCode() {
+    setBadPassword(false);
+    void sendCode({ isNewUser: false });
+    setStep("code");
+  }
+
+  // ---------- Form submit routing ----------
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pending) return;
+    if (step === "email") return void submitEmail();
+    if (step === "password") return void submitPassword();
+    if (step === "code") return void verifyCode({ cameFromForgot: false });
+    if (step === "new-user-profile") return void completeNewUserProfile();
+    if (step === "set-new-password") return void setNewPasswordSubmit();
+  }
+
+  // ---------- Per-step UI ----------
+
+  const primaryLabel =
+    step === "email"
+      ? "Continue"
+      : step === "password"
+        ? "Sign in"
+        : step === "code"
+          ? "Verify code"
+          : step === "new-user-profile"
+            ? "Create account"
+            : step === "set-new-password"
+              ? "Update password"
+              : "Continue";
+
+  if (!hasSupabaseEnv()) {
+    return (
+      <div className="rounded-lg border border-warning bg-warning-light p-4 text-sm text-warning">
+        Add NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.
+      </div>
+    );
+  }
+
+  return (
+    <div ref={stepRootRef} className="space-y-4">
+      {(heading || subheading) && (
+        <div>
+          {heading && <h2 className="text-base font-semibold text-foreground">{heading}</h2>}
+          {subheading && <p className="mt-0.5 text-xs text-muted">{subheading}</p>}
+        </div>
+      )}
+
+      {step === "offer-reset" ? (
+        <OfferResetStep
+          onReset={() => setStep("set-new-password")}
+          onSkip={continueWithoutReset}
+        />
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+          {/* Email — shown on every step except new-user-profile where it's implicit */}
+          {step !== "new-user-profile" && step !== "set-new-password" && (
+            <label className="block text-sm">
+              <span className="mb-1.5 block font-medium text-foreground">Email</span>
+              <Input
+                type="email"
+                autoComplete="email"
+                leftIcon={Mail}
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  clearErrors();
+                }}
+                disabled={step !== "email"}
+                required
+              />
+            </label>
+          )}
+
+          {step === "password" && (
+            <label className="block text-sm">
+              <span className="mb-1.5 block font-medium text-foreground">Password</span>
+              <Input
+                type="password"
+                autoComplete="current-password"
+                leftIcon={Lock}
+                placeholder="Your password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearErrors();
+                }}
+                required
+              />
+            </label>
+          )}
+
+          {step === "code" && (
+            <label className="block text-sm">
+              <span className="mb-1.5 block font-medium text-foreground">6-digit code</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  clearErrors();
+                }}
+                className="font-mono tracking-[0.3em]"
+                required
+              />
+              <p className="mt-1 text-xs text-muted">
+                Sent to <span className="font-medium text-foreground">{email}</span>.{" "}
+                {resendCountdown > 0 ? (
+                  <span>Resend in {resendCountdown}s</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="font-medium text-primary hover:text-primary-hover disabled:opacity-50"
+                    onClick={() => void sendCode({ isNewUser: false })}
+                    disabled={pending}
+                  >
+                    Resend code
+                  </button>
+                )}
+              </p>
+            </label>
+          )}
+
+          {step === "new-user-profile" && (
+            <>
+              <label className="block text-sm">
+                <span className="mb-1.5 block font-medium text-foreground">Your name</span>
+                <Input
+                  type="text"
+                  autoComplete="name"
+                  leftIcon={User}
+                  placeholder="Alex Rodriguez"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clearErrors();
+                  }}
+                  required
+                />
+              </label>
+              <PasswordFields
+                password={newPassword}
+                onPasswordChange={(v) => {
+                  setNewPassword(v);
+                  clearErrors();
+                }}
+                confirm={newPasswordConfirm}
+                onConfirmChange={(v) => {
+                  setNewPasswordConfirm(v);
+                  clearErrors();
+                }}
+              />
+            </>
+          )}
+
+          {step === "set-new-password" && (
+            <PasswordFields
+              password={newPassword}
+              onPasswordChange={(v) => {
+                setNewPassword(v);
+                clearErrors();
+              }}
+              confirm={newPasswordConfirm}
+              onConfirmChange={(v) => {
+                setNewPasswordConfirm(v);
+                clearErrors();
+              }}
+            />
+          )}
+
+          {/* Bad-password inline recovery block */}
+          {badPassword && step === "password" && (
+            <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2.5 text-sm">
+              <p className="font-medium text-danger">
+                That password didn&rsquo;t match our records.
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Try again, or email yourself a code to sign in.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleBadPasswordCode}
+                  disabled={pending}
+                  className="text-xs font-medium text-primary hover:text-primary-hover disabled:opacity-50"
+                >
+                  Email me a 6-digit code
+                </button>
+              </div>
+            </div>
+          )}
+
+          {formError && (
+            <p className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              {formError}
+            </p>
+          )}
+
+          <Button type="submit" variant="primary" className="w-full" loading={pending}>
+            {primaryLabel}
+          </Button>
+
+          {/* Contextual helpers under the primary button */}
+          {step === "password" && (
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={handleForgot}
+                disabled={pending}
+                className="font-medium text-muted hover:text-foreground disabled:opacity-50"
+              >
+                Forgot password?
+              </button>
+              <button
+                type="button"
+                onClick={() => void sendCode({ isNewUser: false })}
+                disabled={pending || resendCountdown > 0}
+                className="font-medium text-primary hover:text-primary-hover disabled:opacity-50"
+              >
+                {resendCountdown > 0
+                  ? `Email me a code (${resendCountdown}s)`
+                  : "Email me a 6-digit code"}
+              </button>
+            </div>
+          )}
+
+          {(step === "code" || step === "password") && (
+            <button
+              type="button"
+              onClick={() => {
+                setStep("email");
+                setCode("");
+                setPassword("");
+                clearErrors();
+              }}
+              disabled={pending}
+              className="flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+            >
+              <ArrowLeft className="size-3" /> Use a different email
+            </button>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
+
+function PasswordFields({
+  password,
+  onPasswordChange,
+  confirm,
+  onConfirmChange,
+}: {
+  password: string;
+  onPasswordChange: (v: string) => void;
+  confirm: string;
+  onConfirmChange: (v: string) => void;
+}) {
+  const pwError = password.length > 0 ? validatePassword(password) : null;
+  const mismatch = confirm.length > 0 && password !== confirm;
+
+  return (
+    <>
+      <label className="block text-sm">
+        <span className="mb-1.5 block font-medium text-foreground">Password</span>
+        <Input
+          type="password"
+          autoComplete="new-password"
+          leftIcon={Lock}
+          value={password}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          required
+        />
+      </label>
+      <label className="block text-sm">
+        <span className="mb-1.5 block font-medium text-foreground">Confirm password</span>
+        <Input
+          type="password"
+          autoComplete="new-password"
+          leftIcon={Lock}
+          value={confirm}
+          onChange={(e) => onConfirmChange(e.target.value)}
+          required
+        />
+      </label>
+      <p className="text-xs text-muted">{PASSWORD_RULES_LABEL}</p>
+      {pwError && <p className="text-xs text-amber-600">{pwError}</p>}
+      {mismatch && <p className="text-xs text-amber-600">Passwords do not match.</p>}
+    </>
+  );
+}
+
+function OfferResetStep({ onReset, onSkip }: { onReset: () => void; onSkip: () => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-border bg-surface-inset px-3 py-2.5">
+        <p className="text-sm font-medium text-foreground">You&rsquo;re signed in.</p>
+        <p className="mt-1 text-xs text-muted">
+          While you&rsquo;re here — want to set a new password so you can sign in
+          faster next time?
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="primary" className="flex-1" onClick={onReset}>
+          Set a new password
+        </Button>
+        <Button variant="secondary" className="flex-1" onClick={onSkip}>
+          Skip for now
+        </Button>
+      </div>
+    </div>
+  );
+}

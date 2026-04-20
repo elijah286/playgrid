@@ -1,7 +1,8 @@
-import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { previewInviteAction } from "@/app/actions/invites";
+import { AuthFlow } from "@/features/auth/AuthFlow";
 import { AcceptInviteButton } from "./ui";
 
 type Props = { params: Promise<{ token: string }> };
@@ -56,34 +57,109 @@ export default async function InvitePage({ params }: Props) {
 
   const roleLabel = preview.role === "viewer" ? "Player (view-only)" : "Coach (edit)";
   const next = `/invite/${token}`;
+  const accent = preview.color || "#2563eb";
 
   return (
-    <Frame title={`You've been invited to ${preview.playbook_name}`}>
-      <p className="text-sm text-muted">
-        Role on accept: <span className="font-semibold text-foreground">{roleLabel}</span>
-      </p>
-      <p className="mt-2 text-xs text-muted">
-        After you accept, the coach will need to approve your access before you can see plays.
-      </p>
+    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-12">
+      <PreviewCard
+        playbookName={preview.playbook_name}
+        teamName={preview.team_name}
+        season={preview.season}
+        logoUrl={preview.logo_url}
+        color={accent}
+        playCount={preview.play_count}
+        roleLabel={roleLabel}
+      />
 
       {user ? (
-        <div className="mt-6">
-          <AcceptInviteButton token={token} />
+        <div className="rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
+          <p className="text-sm text-foreground">
+            Signed in as <span className="font-semibold">{user.email}</span>
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            After you accept, the coach will approve your access before you can see plays.
+          </p>
+          <div className="mt-4">
+            <AcceptInviteButton token={token} />
+          </div>
         </div>
       ) : (
-        <div className="mt-6 flex flex-col gap-2">
-          <Link
-            href={`/login?next=${encodeURIComponent(next)}`}
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-white hover:bg-primary/90"
-          >
-            Sign in to accept
-          </Link>
-          <p className="text-xs text-muted">
-            New here? Create an account on the same screen — you&apos;ll come right back to this invite.
-          </p>
-        </div>
+        <AuthFlow
+          next={next}
+          heading="Sign in or create an account"
+          subheading="Enter your email to join. We'll send a code if you're new here."
+          inviteCode={token}
+        />
       )}
-    </Frame>
+    </div>
+  );
+}
+
+function PreviewCard({
+  playbookName,
+  teamName,
+  season,
+  logoUrl,
+  color,
+  playCount,
+  roleLabel,
+}: {
+  playbookName: string;
+  teamName: string | null;
+  season: string | null;
+  logoUrl: string | null;
+  color: string;
+  playCount: number;
+  roleLabel: string;
+}) {
+  return (
+    <div
+      className="overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated"
+      style={{ borderTopWidth: 4, borderTopColor: color }}
+    >
+      <div className="flex items-center gap-4 p-6">
+        {logoUrl ? (
+          <Image
+            src={logoUrl}
+            alt=""
+            width={64}
+            height={64}
+            className="size-16 rounded-xl object-cover"
+            unoptimized
+          />
+        ) : (
+          <div
+            className="flex size-16 items-center justify-center rounded-xl text-2xl font-extrabold text-white"
+            style={{ backgroundColor: color }}
+          >
+            {(teamName ?? playbookName).slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">
+            You&rsquo;re invited to
+          </p>
+          <h1 className="truncate text-xl font-extrabold tracking-tight text-foreground">
+            {playbookName}
+          </h1>
+          {teamName && (
+            <p className="truncate text-sm text-muted">
+              {teamName}
+              {season ? ` · ${season}` : ""}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-between border-t border-border bg-surface px-6 py-3 text-xs text-muted">
+        <span>
+          <span className="font-semibold text-foreground">{playCount}</span>{" "}
+          {playCount === 1 ? "play" : "plays"}
+        </span>
+        <span>
+          Role: <span className="font-semibold text-foreground">{roleLabel}</span>
+        </span>
+      </div>
+    </div>
   );
 }
 

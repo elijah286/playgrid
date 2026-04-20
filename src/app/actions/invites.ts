@@ -23,6 +23,11 @@ export type InvitePreview = {
   invite_id: string;
   playbook_id: string;
   playbook_name: string;
+  team_name: string | null;
+  season: string | null;
+  logo_url: string | null;
+  color: string | null;
+  play_count: number;
   role: "owner" | "editor" | "viewer";
   expires_at: string;
   exhausted: boolean;
