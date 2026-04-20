@@ -149,6 +149,9 @@ type Props = {
   onAddPlayer?: (position: import("@/domain/play/types").Point2) => void;
   /** Field background color theme */
   fieldBackground?: "green" | "white" | "black" | "gray";
+  /** When true, suppress rendering of routes, route decorations, and player
+   *  tokens. Used when an animation overlay is drawing them instead. */
+  hideRoutesAndPlayers?: boolean;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -204,6 +207,7 @@ export function EditorCanvas({
   mode = "routes",
   onAddPlayer,
   fieldBackground,
+  hideRoutesAndPlayers = false,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1217,7 +1221,7 @@ export function EditorCanvas({
 
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>
-        {doc.layers.routes.map((route) => {
+        {!hideRoutesAndPlayers && doc.layers.routes.map((route) => {
           const isActive = route.id === selectedRouteId && mode !== "formation";
           const isHovered = route.id === hoveredRouteId && !isActive && mode !== "formation";
           // "Whole-route" selection = route selected but no specific segment.
@@ -1394,7 +1398,7 @@ export function EditorCanvas({
 
       {/* End-of-route decorations (arrow / T / none). Rendered outside the
           fieldAspect scale group so angles stay isotropic. */}
-      {doc.layers.routes.map((route) => {
+      {!hideRoutesAndPlayers && doc.layers.routes.map((route) => {
         const decoration = resolveEndDecoration(route);
         if (decoration === "none") return null;
 
@@ -1506,7 +1510,7 @@ export function EditorCanvas({
       })}
 
       {/* Players */}
-      {doc.layers.players.map((pl) => {
+      {!hideRoutesAndPlayers && doc.layers.players.map((pl) => {
         const sel = pl.id === selectedPlayerId;
         const isDragging =
           interaction.type === "dragging_player" && interaction.playerId === pl.id;
