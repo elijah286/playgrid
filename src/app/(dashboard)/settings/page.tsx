@@ -26,8 +26,8 @@ export default async function SettingsPage() {
           <ArrowLeft className="size-4" />
           Home
         </Link>
-        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">Settings</h1>
-        <p className="mt-1 text-sm text-muted">Site admin · manage users and integrations.</p>
+        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">Site Admin</h1>
+        <p className="mt-1 text-sm text-muted">Manage users and integrations.</p>
       </div>
 
       <SettingsClient

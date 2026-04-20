@@ -8,6 +8,22 @@ import {
   updateUserRoleAction,
 } from "@/app/actions/admin-users";
 
+function formatLastSignIn(iso: string | null): string {
+  if (!iso) return "Never";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diffMs = Date.now() - then;
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 export type AdminUserRow = {
   id: string;
   email: string;
@@ -118,6 +134,7 @@ export function UsersAdminClient({
               <tr>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Last sign in</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
@@ -143,6 +160,9 @@ export function UsersAdminClient({
                       <option value="user">user</option>
                       <option value="admin">admin</option>
                     </select>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-pg-muted" title={u.lastSignIn ?? ""}>
+                    {formatLastSignIn(u.lastSignIn)}
                   </td>
                   <td className="px-4 py-3">
                     <button

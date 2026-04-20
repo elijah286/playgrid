@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CreditCard, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { CreditCard, LogOut, Monitor, Moon, Shield, Sun } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
@@ -97,8 +97,8 @@ export function UserMenu({ email, displayName, isAdmin, compact }: Props) {
                 role="menuitem"
                 className="flex items-center gap-2 px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
               >
-                <Settings className="size-4" />
-                Settings
+                <Shield className="size-4" />
+                Site Admin
               </Link>
             )}
           </div>
