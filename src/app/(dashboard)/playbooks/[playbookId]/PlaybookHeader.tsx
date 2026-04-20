@@ -17,7 +17,10 @@ import {
   renamePlaybookAction,
   updatePlaybookAppearanceAction,
   updatePlaybookSeasonAction,
+  updatePlaybookSettingsAction,
 } from "@/app/actions/playbooks";
+import type { PlaybookSettings } from "@/domain/playbook/settings";
+import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import {
   createInviteAction,
   sendPlaybookInviteEmailAction,
@@ -44,6 +47,7 @@ export function PlaybookHeader({
   name,
   season,
   variantLabel,
+  settings,
   logoUrl,
   accentColor,
   canManage,
@@ -53,6 +57,7 @@ export function PlaybookHeader({
   name: string;
   season: string | null;
   variantLabel: string;
+  settings: PlaybookSettings;
   logoUrl: string | null;
   accentColor: string;
   canManage: boolean;
@@ -135,6 +140,8 @@ export function PlaybookHeader({
           initialSeason={season ?? ""}
           initialLogoUrl={logoUrl ?? ""}
           initialColor={accentColor}
+          initialSettings={settings}
+          variantLabel={variantLabel}
           onClose={() => setCustomizeOpen(false)}
         />
       )}
@@ -220,6 +227,8 @@ function CustomizeTeamDialog({
   initialSeason,
   initialLogoUrl,
   initialColor,
+  initialSettings,
+  variantLabel,
   onClose,
 }: {
   playbookId: string;
@@ -227,6 +236,8 @@ function CustomizeTeamDialog({
   initialSeason: string;
   initialLogoUrl: string;
   initialColor: string;
+  initialSettings: PlaybookSettings;
+  variantLabel: string;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -235,6 +246,7 @@ function CustomizeTeamDialog({
   const [season, setSeason] = useState(initialSeason);
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [color, setColor] = useState(initialColor);
+  const [settings, setSettings] = useState<PlaybookSettings>(initialSettings);
   const [saving, setSaving] = useState(false);
 
   const initials =
@@ -273,6 +285,13 @@ function CustomizeTeamDialog({
           logo_url: logoUrl || null,
           color: color || null,
         });
+        if (!r.ok) {
+          toast(r.error, "error");
+          return;
+        }
+      }
+      if (JSON.stringify(settings) !== JSON.stringify(initialSettings)) {
+        const r = await updatePlaybookSettingsAction(playbookId, settings);
         if (!r.ok) {
           toast(r.error, "error");
           return;
@@ -369,6 +388,16 @@ function CustomizeTeamDialog({
           </div>
 
           <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={saving} />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Game type
+              </label>
+              <span className="text-xs text-muted">{variantLabel}</span>
+            </div>
+            <PlaybookRulesForm value={settings} onChange={setSettings} disabled={saving} />
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">

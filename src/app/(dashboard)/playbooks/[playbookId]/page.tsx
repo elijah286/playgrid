@@ -6,6 +6,7 @@ import { listPlaybookRosterAction } from "@/app/actions/playbook-roster";
 import { listInvitesAction } from "@/app/actions/invites";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
+import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookDetailClient } from "./ui";
 import { PlaybookHeader } from "./PlaybookHeader";
 
@@ -25,7 +26,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, player_count, logo_url, color")
+    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings")
     .eq("id", playbookId)
     .single();
 
@@ -39,8 +40,13 @@ export default async function PlaybookDetailPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const variantLabel =
-    SPORT_VARIANT_LABELS[book.sport_variant as SportVariant] ?? book.sport_variant ?? "";
+  const sportVariant = (book.sport_variant as SportVariant) ?? "flag_7v7";
+  const variantLabel = SPORT_VARIANT_LABELS[sportVariant] ?? (book.sport_variant as string) ?? "";
+  const playbookSettings = normalizePlaybookSettings(
+    book.settings,
+    sportVariant,
+    (book.custom_offense_count as number | null) ?? null,
+  );
   const accentColor = (book.color as string | null) || "#134e2a";
   const logoUrl = (book.logo_url as string | null) ?? null;
 
@@ -63,6 +69,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       name={book.name as string}
       season={(book.season as string | null) ?? null}
       variantLabel={variantLabel}
+      settings={playbookSettings}
       logoUrl={logoUrl}
       accentColor={accentColor}
       canManage={canManage}

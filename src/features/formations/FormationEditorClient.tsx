@@ -21,6 +21,7 @@ import {
   sportProfileForVariant,
 } from "@/domain/play/factory";
 import type { Player, SportVariant } from "@/domain/play/types";
+import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 
 const SPORT_OPTIONS = (
   Object.entries(SPORT_VARIANT_LABELS) as [SportVariant, string][]
@@ -163,6 +164,16 @@ export function FormationEditorClient(props: Props) {
           </Button>
         </div>
       </header>
+
+      {(() => {
+        const max = defaultSettingsForVariant(variant).maxPlayers;
+        const count = doc.layers.players.length;
+        return count > max ? (
+          <p className="-mt-2 text-xs font-medium text-danger">
+            {count} players — {SPORT_VARIANT_LABELS[variant]} allows only {max}.
+          </p>
+        ) : null;
+      })()}
 
       {/* Name + sport row */}
       <div className="flex flex-wrap items-end gap-3">

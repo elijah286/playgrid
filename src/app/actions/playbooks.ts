@@ -5,6 +5,11 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SportVariant } from "@/domain/play/types";
+import {
+  defaultSettingsForVariant,
+  normalizePlaybookSettings,
+  type PlaybookSettings,
+} from "@/domain/playbook/settings";
 
 const LOGO_BUCKET = "playbook-logos";
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -114,6 +119,7 @@ export async function createPlaybookAction(
   appearance?: { color?: string | null; logo_url?: string | null },
   customOffenseCount?: number | null,
   season?: string | null,
+  settings?: PlaybookSettings | null,
 ) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -157,6 +163,9 @@ export async function createPlaybookAction(
 
   const seasonClean = season?.trim().slice(0, 60) || null;
 
+  const resolvedSettings =
+    settings ?? defaultSettingsForVariant(sportVariant, offenseCount);
+
   const { data, error } = await supabase
     .from("playbooks")
     .insert({
@@ -167,6 +176,7 @@ export async function createPlaybookAction(
       logo_url: logo,
       custom_offense_count: offenseCount,
       season: seasonClean,
+      settings: resolvedSettings,
     })
     .select("id")
     .single();
@@ -226,6 +236,61 @@ export async function updatePlaybookSeasonAction(
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };
+}
+
+export async function updatePlaybookSettingsAction(
+  playbookId: string,
+  settings: PlaybookSettings,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  if (!Number.isFinite(settings.maxPlayers) || settings.maxPlayers < 1 || settings.maxPlayers > 15) {
+    return { ok: false as const, error: "Max players must be between 1 and 15." };
+  }
+  if (settings.rushingAllowed && settings.rushingYards != null) {
+    if (!Number.isFinite(settings.rushingYards) || settings.rushingYards < 0 || settings.rushingYards > 30) {
+      return { ok: false as const, error: "Required rush yardage must be 0–30." };
+    }
+  }
+
+  const payload: PlaybookSettings = {
+    rushingAllowed: !!settings.rushingAllowed,
+    rushingYards: settings.rushingAllowed ? settings.rushingYards ?? 0 : null,
+    handoffsAllowed: !!settings.handoffsAllowed,
+    blockingAllowed: !!settings.blockingAllowed,
+    maxPlayers: Math.round(settings.maxPlayers),
+  };
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ settings: payload })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function getPlaybookSettingsAction(
+  playbookId: string,
+): Promise<{ ok: true; settings: PlaybookSettings } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("playbooks")
+    .select("sport_variant, custom_offense_count, settings")
+    .eq("id", playbookId)
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? "Not found" };
+  const settings = normalizePlaybookSettings(
+    data.settings,
+    (data.sport_variant as SportVariant) ?? "flag_7v7",
+    (data.custom_offense_count as number | null) ?? null,
+  );
+  return { ok: true, settings };
 }
 
 export async function renamePlaybookAction(playbookId: string, name: string) {

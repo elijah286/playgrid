@@ -154,8 +154,8 @@ type Props = {
   hideRoutesAndPlayers?: boolean;
   /** Optional opposing-side formation to render behind the play, in gray. */
   opponentFormation?: import("@/app/actions/formations").SavedFormation | null;
-  /** Optional opposing play (full document) to render behind as a ghost. */
-  opponentPlayDoc?: import("@/domain/play/types").PlayDocument | null;
+  /** Optional opposing players (from a play or formation) to render as ghosts. */
+  opponentPlayers?: import("@/domain/play/types").Player[] | null;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -213,7 +213,7 @@ export function EditorCanvas({
   fieldBackground,
   hideRoutesAndPlayers = false,
   opponentFormation = null,
-  opponentPlayDoc = null,
+  opponentPlayers = null,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1455,9 +1455,9 @@ export function EditorCanvas({
         })}
 
       {/* Opponent play ghost overlay (gray players only, no interaction). */}
-      {opponentPlayDoc && !hideRoutesAndPlayers && (
+      {opponentPlayers && opponentPlayers.length > 0 && !hideRoutesAndPlayers && (
         <g pointerEvents="none" opacity={0.55}>
-          {opponentPlayDoc.layers.players.map((pl) => {
+          {opponentPlayers.map((pl) => {
             const cx = pl.position.x * fieldAspect;
             const cy = 1 - pl.position.y;
             const r = 0.028;

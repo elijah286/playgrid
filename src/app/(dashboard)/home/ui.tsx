@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
   Copy,
@@ -29,6 +29,11 @@ import {
 } from "@/app/actions/playbooks";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
 import type { SportVariant } from "@/domain/play/types";
+import {
+  defaultSettingsForVariant,
+  type PlaybookSettings,
+} from "@/domain/playbook/settings";
+import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import {
   ActionMenu,
@@ -275,6 +280,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     logo_url: string | null;
     customOffenseCount: number | null;
     season: string | null;
+    settings: PlaybookSettings;
   }) {
     startTransition(async () => {
       const res = await createPlaybookAction(
@@ -283,6 +289,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         { color: config.color, logo_url: config.logo_url },
         config.customOffenseCount,
         config.season,
+        config.settings,
       );
       if (!res.ok) {
         toast(res.error, "error");
@@ -456,6 +463,7 @@ function CreatePlaybookDialog({
     logo_url: string | null;
     customOffenseCount: number | null;
     season: string | null;
+    settings: PlaybookSettings;
   }) => void;
 }) {
   const [name, setName] = useState("");
@@ -464,6 +472,16 @@ function CreatePlaybookDialog({
   const [logoUrl, setLogoUrl] = useState("");
   const [otherCount, setOtherCount] = useState<number>(6);
   const [season, setSeason] = useState("");
+  const [settings, setSettings] = useState<PlaybookSettings>(() =>
+    defaultSettingsForVariant("flag_7v7"),
+  );
+  const touchedSettingsRef = useRef(false);
+
+  // Sync settings to variant defaults until the user edits them directly.
+  useEffect(() => {
+    if (touchedSettingsRef.current) return;
+    setSettings(defaultSettingsForVariant(variant, variant === "other" ? otherCount : null));
+  }, [variant, otherCount]);
 
   const initials =
     name
@@ -485,6 +503,7 @@ function CreatePlaybookDialog({
       logo_url: logoUrl.trim() || null,
       customOffenseCount: variant === "other" ? otherCount : null,
       season: season.trim() || null,
+      settings,
     });
   }
 
@@ -588,6 +607,16 @@ function CreatePlaybookDialog({
               </div>
             )}
           </div>
+
+          {/* Game rules */}
+          <PlaybookRulesForm
+            value={settings}
+            onChange={(s) => {
+              touchedSettingsRef.current = true;
+              setSettings(s);
+            }}
+            disabled={pending}
+          />
 
           {/* Color */}
           <div className="space-y-2">

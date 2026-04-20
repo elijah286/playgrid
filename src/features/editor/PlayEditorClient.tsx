@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { EndDecoration, PlayDocument, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import {
@@ -24,6 +24,7 @@ import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
+import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 type Props = {
   playId: string;
@@ -34,6 +35,7 @@ type Props = {
   linkedFormation?: SavedFormation | null;
   opponentFormation?: SavedFormation | null;
   allFormations?: SavedFormation[];
+  playbookSettings?: PlaybookSettings;
 };
 
 export function PlayEditorClient({
@@ -45,6 +47,7 @@ export function PlayEditorClient({
   linkedFormation,
   opponentFormation,
   allFormations = [],
+  playbookSettings,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -60,7 +63,7 @@ export function PlayEditorClient({
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
 
   // Transient opponent overlay (never saved, resets on navigation)
-  const [opponentPlayDoc, setOpponentPlayDoc] = useState<PlayDocument | null>(null);
+  const [opponentPlayers, setOpponentPlayers] = useState<Player[] | null>(null);
 
   // Active drawing style (defaults for new routes)
   const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
@@ -313,6 +316,14 @@ export function PlayEditorClient({
         allFormations={allFormations}
       />
 
+      {playbookSettings &&
+        doc.layers.players.length > playbookSettings.maxPlayers && (
+          <p className="-mt-1 text-xs font-medium text-danger">
+            {doc.layers.players.length} players on the field — this playbook
+            allows only {playbookSettings.maxPlayers}.
+          </p>
+        )}
+
       {/* Routes */}
       <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[420px] flex-col gap-3">
@@ -413,7 +424,7 @@ export function PlayEditorClient({
                 fieldBackground={doc.fieldBackground}
                 hideRoutesAndPlayers={anim.phase !== "idle"}
                 opponentFormation={opponentFormation ?? null}
-                opponentPlayDoc={opponentPlayDoc}
+                opponentPlayers={opponentPlayers}
               />
               <AnimationOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
             </div>
@@ -429,15 +440,16 @@ export function PlayEditorClient({
               }
             />
           </div>
-          <aside className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
+          <aside className="flex min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4">
             {!showToolbar && <PlayControlsPanel anim={anim} />}
             {!showToolbar && (
               <OpponentOverlayCard
                 currentPlayId={playId}
                 playType={doc.metadata.playType ?? "offense"}
                 nav={initialNav}
-                opponentDoc={opponentPlayDoc}
-                onChange={setOpponentPlayDoc}
+                allFormations={allFormations}
+                hasSelection={opponentPlayers != null}
+                onChange={setOpponentPlayers}
               />
             )}
             <Inspector
