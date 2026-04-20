@@ -22,7 +22,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, sport_variant, player_count")
+    .select("id, name, sport_variant, player_count, season")
     .eq("id", playbookId)
     .single();
 
@@ -41,6 +41,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
           Home
         </Link>
         <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">{book.name}</h1>
+        {book.season ? (
+          <p className="mt-0.5 text-sm text-muted">{book.season as string}</p>
+        ) : null}
       </div>
       <PlaybookDetailClient
         playbookId={playbookId}
