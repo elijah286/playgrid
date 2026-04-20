@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, MessageCircle, Users } from "lucide-react";
+import { KeyRound, MessageCircle, Ticket, Users } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
+import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
+import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import { SegmentedControl } from "@/components/ui";
 
 type IntegrationProps =
@@ -23,7 +25,7 @@ type ResendProps =
     }
   | { ok: false; error: string };
 
-type Tab = "users" | "integrations" | "feedback";
+type Tab = "users" | "invites" | "integrations" | "feedback";
 
 export function SettingsClient({
   currentUserId,
@@ -33,6 +35,8 @@ export function SettingsClient({
   resend,
   initialFeedback,
   feedbackError,
+  initialInvites,
+  invitesError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -41,6 +45,8 @@ export function SettingsClient({
   resend: ResendProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
+  initialInvites: CoachInvitationRow[];
+  invitesError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("users");
 
@@ -51,6 +57,7 @@ export function SettingsClient({
         onChange={setTab}
         options={[
           { value: "users", label: "Users", icon: Users },
+          { value: "invites", label: "Coach invites", icon: Ticket },
           { value: "integrations", label: "Integrations", icon: KeyRound },
           { value: "feedback", label: "Feedback", icon: MessageCircle },
         ]}
@@ -66,6 +73,13 @@ export function SettingsClient({
             <UsersAdminClient initialUsers={initialUsers} currentUserId={currentUserId} />
           )}
         </div>
+      )}
+
+      {tab === "invites" && (
+        <CoachInvitationsAdminClient
+          initialItems={initialInvites}
+          initialError={invitesError}
+        />
       )}
 
       {tab === "feedback" && (

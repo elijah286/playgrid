@@ -46,7 +46,7 @@ export async function listUsersForAdminAction() {
       id: u.id,
       email: u.email ?? "",
       displayName: pr?.display_name ?? null,
-      role: (pr?.role as "user" | "admin") ?? "user",
+      role: (pr?.role as "user" | "admin" | "coach") ?? "user",
       createdAt: u.created_at,
       lastSignIn: u.last_sign_in_at ?? null,
     };
@@ -58,7 +58,7 @@ export async function listUsersForAdminAction() {
 export async function createUserAsAdminAction(input: {
   email: string;
   password: string;
-  role: "user" | "admin";
+  role: "user" | "admin" | "coach";
   displayName?: string;
 }) {
   const gate = await assertAdmin();
@@ -96,10 +96,10 @@ export async function createUserAsAdminAction(input: {
   return { ok: true as const };
 }
 
-export async function updateUserRoleAction(userId: string, role: "user" | "admin") {
+export async function updateUserRoleAction(userId: string, role: "user" | "admin" | "coach") {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
-  if (userId === gate.userId && role === "user") {
+  if (userId === gate.userId && role !== "admin") {
     return { ok: false as const, error: "You cannot remove your own admin role." };
   }
 
@@ -116,7 +116,7 @@ export async function updateUserAsAdminAction(input: {
   userId: string;
   email?: string;
   displayName?: string | null;
-  role?: "user" | "admin";
+  role?: "user" | "admin" | "coach";
 }) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
@@ -138,7 +138,7 @@ export async function updateUserAsAdminAction(input: {
     profilePatch.display_name = trimmed.length > 0 ? trimmed : null;
   }
   if (input.role !== undefined) {
-    if (input.userId === gate.userId && input.role === "user") {
+    if (input.userId === gate.userId && input.role !== "admin") {
       return { ok: false as const, error: "You cannot remove your own admin role." };
     }
     profilePatch.role = input.role;
