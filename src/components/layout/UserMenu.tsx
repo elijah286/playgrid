@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { CreditCard, LogOut, Monitor, Moon, Shield, Sun } from "lucide-react";
+import { CreditCard, LogOut, Shield } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
-import { useTheme } from "@/components/theme/ThemeProvider";
-import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
 
 type Props = {
   email: string;
   displayName: string | null;
+  avatarUrl?: string | null;
   isAdmin: boolean;
   compact?: boolean;
 };
@@ -22,14 +22,7 @@ function initialsFor(email: string, displayName: string | null): string {
   return letters.join("") || "?";
 }
 
-const THEME_OPTIONS: { value: ColorSchemePreference; label: string; icon: typeof Sun }[] = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
-];
-
-export function UserMenu({ email, displayName, isAdmin, compact }: Props) {
-  const { colorScheme, setColorScheme } = useTheme();
+export function UserMenu({ email, displayName, avatarUrl, isAdmin, compact }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const initials = initialsFor(email, displayName);
@@ -61,11 +54,22 @@ export function UserMenu({ email, displayName, isAdmin, compact }: Props) {
         aria-label="Account menu"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "inline-flex items-center justify-center rounded-full bg-primary font-bold text-white shadow-sm transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          "relative inline-flex items-center justify-center overflow-hidden rounded-full bg-primary font-bold text-white shadow-sm transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           size,
         )}
       >
-        {initials}
+        {avatarUrl ? (
+          <Image
+            src={avatarUrl}
+            alt=""
+            fill
+            sizes={compact ? "28px" : "36px"}
+            className="object-cover"
+            unoptimized
+          />
+        ) : (
+          initials
+        )}
       </button>
 
       {open && (
@@ -101,34 +105,6 @@ export function UserMenu({ email, displayName, isAdmin, compact }: Props) {
                 Site Admin
               </Link>
             )}
-          </div>
-
-          <div className="border-t border-border px-4 py-3">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              Appearance
-            </p>
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-surface-inset p-1">
-              {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
-                const active = colorScheme === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setColorScheme(value)}
-                    className={cn(
-                      "flex flex-col items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors",
-                      active
-                        ? "bg-surface-raised text-foreground shadow-sm"
-                        : "text-muted hover:text-foreground",
-                    )}
-                    aria-pressed={active}
-                  >
-                    <Icon className="size-3.5" />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           <form action={signOutAction} className="border-t border-border">

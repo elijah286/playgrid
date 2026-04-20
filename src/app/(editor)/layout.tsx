@@ -20,14 +20,16 @@ export default async function EditorLayout({ children }: { children: React.React
   const role = await getCachedUserRole(user.id);
   const isAdmin = role === "admin";
   let displayName: string | null = null;
+  let avatarUrl: string | null = null;
   try {
     const admin = createServiceRoleClient();
     const { data } = await admin
       .from("profiles")
-      .select("display_name")
+      .select("display_name, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
     displayName = (data?.display_name as string | null) ?? null;
+    avatarUrl = (data?.avatar_url as string | null) ?? null;
   } catch {
     /* best effort */
   }

@@ -35,14 +35,16 @@ export default async function DashboardLayout({
   const isAdmin = role === "admin";
 
   let displayName: string | null = null;
+  let avatarUrl: string | null = null;
   try {
     const admin = createServiceRoleClient();
     const { data } = await admin
       .from("profiles")
-      .select("display_name")
+      .select("display_name, avatar_url")
       .eq("id", user.id)
       .maybeSingle();
     displayName = (data?.display_name as string | null) ?? null;
+    avatarUrl = (data?.avatar_url as string | null) ?? null;
   } catch {
     /* profile lookup is best-effort for the avatar */
   }
@@ -57,6 +59,7 @@ export default async function DashboardLayout({
           <UserMenu
             email={user.email ?? ""}
             displayName={displayName}
+            avatarUrl={avatarUrl}
             isAdmin={isAdmin}
           />
         </div>
