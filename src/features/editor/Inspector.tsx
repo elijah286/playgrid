@@ -42,21 +42,34 @@ export function Inspector({
   const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
   const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
 
-  // Formation drift detection — threshold is 0.08 (~2 yards in 25-yd field)
-  const DRIFT_THRESHOLD = 0.08;
   const formationId = doc.metadata.formationId;
   const formationTag = doc.metadata.formationTag;
   const formationName = doc.metadata.formation;
+
+  // Drift detection — compare in yards-from-LOS space so changes to
+  // lineOfScrimmageY / fieldLengthYds (yard spinners) or legacy LOS migrations
+  // don't produce false positives.
+  const DRIFT_THRESHOLD_YDS = 2; // 2 yards in any direction
+  const playLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
+  const playFieldLen = doc.sportProfile.fieldLengthYds; // total yards in play window
+  const playFieldW = doc.sportProfile.fieldWidthYds;
 
   const hasDrift =
     !!formationId &&
     !!linkedFormation &&
     (() => {
+      const formLosY = linkedFormation.losY ?? 0.4;
+      const FORM_FIELD_LEN = 25; // standard window for all stored formations
       const fpMap = new Map(linkedFormation.players.map((p) => [p.id, p.position]));
       return doc.layers.players.some((p) => {
         const fp = fpMap.get(p.id);
         if (!fp) return false;
-        return Math.hypot(p.position.x - fp.x, p.position.y - fp.y) > DRIFT_THRESHOLD;
+        // Convert both to yards from LOS
+        const playYds = (p.position.y - playLosY) * playFieldLen;
+        const formYds = (fp.y - formLosY) * FORM_FIELD_LEN;
+        const dyYds = playYds - formYds;
+        const dxYds = (p.position.x - fp.x) * playFieldW;
+        return Math.hypot(dxYds, dyYds) > DRIFT_THRESHOLD_YDS;
       });
     })();
 
@@ -210,6 +223,7 @@ function FormationSection({
               dispatch({
                 type: "document.reapplyFormation",
                 players: linkedFormation.players,
+                formationLosY: linkedFormation.losY,
               })
             }
             className="flex items-center gap-1 rounded-md border border-border bg-surface-raised px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
@@ -304,6 +318,7 @@ function FormationChangePicker({
         formationId: f.id,
         formationName: f.displayName,
         players: f.players,
+        formationLosY: f.losY,
       });
     }
     setOpen(false);

@@ -11,6 +11,13 @@ export type SavedFormation = {
   players: Player[];
   sportProfile: Partial<SportProfile>;
   isSystem: boolean;
+  /**
+   * The lineOfScrimmageY that was active when this formation was saved.
+   * Used to convert stored player positions to yards-from-LOS for drift
+   * detection and reapply coordinate transforms.  Defaults to 0.4 for
+   * formations saved before this field was introduced.
+   */
+  losY: number;
 };
 
 export async function listFormationsAction(): Promise<
@@ -51,6 +58,7 @@ export async function listFormationsAction(): Promise<
         displayName: string;
         players: Player[];
         sportProfile?: Partial<SportProfile>;
+        lineOfScrimmageY?: number;
       };
       return {
         id: row.id as string,
@@ -58,6 +66,7 @@ export async function listFormationsAction(): Promise<
         players: p.players,
         sportProfile: p.sportProfile ?? {},
         isSystem: Boolean(row.is_system),
+        losY: typeof p.lineOfScrimmageY === "number" ? p.lineOfScrimmageY : 0.4,
       };
     });
 
@@ -68,6 +77,7 @@ export async function saveFormationAction(
   name: string,
   players: Player[],
   sportProfile: Partial<SportProfile>,
+  losY = 0.4,
 ): Promise<{ ok: true; formationId: string } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) {
     return { ok: false, error: "Supabase is not configured." };
@@ -86,7 +96,7 @@ export async function saveFormationAction(
     return { ok: false, error: "Could not resolve workspace." };
   }
 
-  const params = { displayName: name, players, sportProfile };
+  const params = { displayName: name, players, sportProfile, lineOfScrimmageY: losY };
 
   const { data, error } = await supabase
     .from("formations")
@@ -109,6 +119,7 @@ export async function updateFormationAction(
   name: string,
   players: Player[],
   sportProfile: Partial<SportProfile>,
+  losY = 0.4,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) {
     return { ok: false, error: "Supabase is not configured." };
@@ -131,7 +142,7 @@ export async function updateFormationAction(
   if (fetchErr || !row) return { ok: false, error: fetchErr?.message ?? "Not found." };
   if (row.is_system) return { ok: false, error: "Cannot modify system formations." };
 
-  const params = { displayName: trimmed, players, sportProfile };
+  const params = { displayName: trimmed, players, sportProfile, lineOfScrimmageY: losY };
   const { error } = await supabase
     .from("formations")
     .update({ params: params as unknown as Record<string, unknown> })

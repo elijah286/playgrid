@@ -105,15 +105,17 @@ export function FormationEditorClient(props: Props) {
     }
     setSaving(true);
     let res: { ok: boolean; error?: string };
+    const losY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
     if (props.mode === "edit") {
       res = await updateFormationAction(
         props.formationId,
         trimmed,
         doc.layers.players,
         doc.sportProfile,
+        losY,
       );
     } else {
-      res = await saveFormationAction(trimmed, doc.layers.players, doc.sportProfile);
+      res = await saveFormationAction(trimmed, doc.layers.players, doc.sportProfile, losY);
     }
     if (!res.ok) {
       setSaving(false);
