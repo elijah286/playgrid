@@ -15,6 +15,7 @@ import {
   Loader2,
   PencilLine,
   RefreshCcw,
+  Search,
   X,
 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
@@ -196,7 +197,7 @@ export function EditorHeaderBar({
           />
         ) : (
           <div className="inline-flex min-w-0 items-center gap-1">
-            <h1 className="flex min-w-0 items-center truncate text-base font-bold text-foreground">
+            <h1 className="flex min-w-0 items-center text-base font-bold text-foreground">
               {(doc.metadata.playType ?? "offense") === "offense" && (formation || formationId) ? (
                 <FormationTitlePicker
                   currentId={formationId ?? null}
@@ -210,7 +211,7 @@ export function EditorHeaderBar({
               <button
                 type="button"
                 onClick={() => setEditingName(true)}
-                className="group inline-flex items-center gap-1.5 truncate rounded-md px-1 py-0.5 hover:bg-surface-inset"
+                className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-surface-inset"
                 title="Rename play"
               >
                 <span className="truncate">{name}</span>
@@ -376,7 +377,21 @@ function FormationTitlePicker({
   dispatch: (c: PlayCommand) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const offenseFormations = allFormations.filter((f) => (f.kind ?? "offense") === "offense");
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      queueMicrotask(() => searchRef.current?.focus());
+    }
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? offenseFormations.filter((f) => f.displayName.toLowerCase().includes(q))
+    : offenseFormations;
 
   function pick(f: SavedFormation | null) {
     if (!f) {
@@ -408,40 +423,56 @@ function FormationTitlePicker({
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-border bg-surface-raised shadow-lg">
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
+            <div className="relative border-b border-border p-2">
+              <Search className="pointer-events-none absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setOpen(false);
+                  if (e.key === "Enter" && filtered.length > 0) pick(filtered[0]);
+                }}
+                placeholder="Search formations…"
+                className="w-full rounded-md border border-border bg-surface-inset py-1.5 pl-7 pr-2 text-xs font-normal text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+            </div>
+            {currentId && (
+              <button
+                type="button"
+                onClick={() => pick(null)}
+                className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-xs font-medium text-danger hover:bg-danger/5"
+              >
+                <Link2Off className="size-3.5" />
+                Unlink formation
+              </button>
+            )}
             <ul className="max-h-64 overflow-y-auto py-1 text-sm font-normal">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => pick(null)}
-                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-inset ${
-                    !currentId ? "text-foreground" : "text-muted"
-                  }`}
-                >
-                  {!currentId && <Check className="size-3 shrink-0" />}
-                  <span className={!currentId ? "ml-0" : "ml-5"}>No formation</span>
-                </button>
-              </li>
-              {offenseFormations.length > 0 && (
-                <li className="mx-2 my-1 border-t border-border" aria-hidden />
-              )}
-              {offenseFormations.map((f) => (
+              {filtered.map((f) => (
                 <li key={f.id}>
                   <button
                     type="button"
                     onClick={() => pick(f)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-inset ${
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface-inset ${
                       f.id === currentId ? "text-foreground" : "text-muted"
                     }`}
                   >
-                    {f.id === currentId && <Check className="size-3 shrink-0" />}
-                    <span className={f.id === currentId ? "ml-0" : "ml-5"}>{f.displayName}</span>
+                    {f.id === currentId ? (
+                      <Check className="size-3 shrink-0 text-primary" />
+                    ) : (
+                      <span className="size-3 shrink-0" />
+                    )}
+                    <span className="truncate">{f.displayName}</span>
                   </button>
                 </li>
               ))}
-              {offenseFormations.length === 0 && (
-                <li className="px-3 py-1.5 text-xs text-muted">No saved formations</li>
+              {filtered.length === 0 && (
+                <li className="px-3 py-3 text-center text-xs text-muted">
+                  {q ? "No matches." : "No saved formations"}
+                </li>
               )}
             </ul>
           </div>
