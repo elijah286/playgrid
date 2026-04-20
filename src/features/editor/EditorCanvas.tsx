@@ -154,6 +154,8 @@ type Props = {
   hideRoutesAndPlayers?: boolean;
   /** Optional opposing-side formation to render behind the play, in gray. */
   opponentFormation?: import("@/app/actions/formations").SavedFormation | null;
+  /** Optional opposing play (full document) to render behind as a ghost. */
+  opponentPlayDoc?: import("@/domain/play/types").PlayDocument | null;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -211,6 +213,7 @@ export function EditorCanvas({
   fieldBackground,
   hideRoutesAndPlayers = false,
   opponentFormation = null,
+  opponentPlayDoc = null,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1450,6 +1453,42 @@ export function EditorCanvas({
             </g>
           );
         })}
+
+      {/* Opponent play ghost overlay (gray players only, no interaction). */}
+      {opponentPlayDoc && !hideRoutesAndPlayers && (
+        <g pointerEvents="none" opacity={0.55}>
+          {opponentPlayDoc.layers.players.map((pl) => {
+            const cx = pl.position.x * fieldAspect;
+            const cy = 1 - pl.position.y;
+            const r = 0.028;
+            return (
+              <g key={`oppplay-${pl.id}`} transform={`translate(${cx} ${cy})`}>
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={r}
+                  fill="#9ca3af"
+                  stroke="#4b5563"
+                  strokeWidth={1.2}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={0.028}
+                  fontWeight={700}
+                  fill="#1f2937"
+                  style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+                >
+                  {pl.label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      )}
 
       {/* Opponent formation ghost overlay (gray, no routes, no interaction). */}
       {opponentFormation && !hideRoutesAndPlayers && (

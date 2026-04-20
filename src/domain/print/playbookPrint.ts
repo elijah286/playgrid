@@ -170,6 +170,7 @@ export type PlaybookPlayNavItem = {
   group_name: string | null;
   group_sort_order: number | null;
   current_version_id: string | null;
+  play_type: "offense" | "defense" | "special_teams";
 };
 
 export function compareNavPlays(a: PlaybookPlayNavItem, b: PlaybookPlayNavItem): number {

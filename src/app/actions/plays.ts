@@ -597,7 +597,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
     supabase
       .from("plays")
       .select(
-        "id, name, wristband_code, shorthand, formation_name, concept, tags, tag, group_id, sort_order, current_version_id",
+        "id, name, wristband_code, shorthand, formation_name, concept, tags, tag, group_id, sort_order, current_version_id, play_type",
       )
       .eq("playbook_id", playbookId)
       .eq("is_archived", false),
@@ -625,6 +625,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
       group_name: g?.name ?? null,
       group_sort_order: g?.sort_order ?? null,
       current_version_id: (row.current_version_id as string) ?? null,
+      play_type: ((row.play_type as "offense" | "defense" | "special_teams" | null) ?? "offense"),
     };
   });
   items.sort(compareNavPlays);

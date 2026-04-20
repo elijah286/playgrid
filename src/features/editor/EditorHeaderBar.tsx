@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { PlayDocument, PlayType } from "@/domain/play/types";
+import type { PlayDocument } from "@/domain/play/types";
 import { listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
@@ -335,18 +335,6 @@ export function EditorHeaderBar({
           </>
         )}
 
-        <OpponentFormationPicker
-          playType={doc.metadata.playType ?? "offense"}
-          opponentFormation={opponentFormation ?? null}
-          allFormations={allFormations}
-          onPick={(id) =>
-            dispatch({
-              type: "document.setMetadata",
-              patch: { opponentFormationId: id },
-            })
-          }
-        />
-
         {formationId && (
           <div className="ml-auto flex items-center gap-1">
             {linkedFormation && (
@@ -463,44 +451,3 @@ function FormationTitlePicker({
   );
 }
 
-function OpponentFormationPicker({
-  playType,
-  opponentFormation,
-  allFormations,
-  onPick,
-}: {
-  playType: PlayType;
-  opponentFormation: SavedFormation | null;
-  allFormations: SavedFormation[];
-  onPick: (id: string | null) => void;
-}) {
-  // Offense plays pick a defense to overlay; defense picks an offense; ST picks either.
-  const opposingKinds: string[] =
-    playType === "offense"
-      ? ["defense"]
-      : playType === "defense"
-      ? ["offense"]
-      : ["offense", "defense"];
-  const options = allFormations.filter((f) =>
-    opposingKinds.includes(f.kind ?? "offense"),
-  );
-  if (options.length === 0 && !opponentFormation) return null;
-  const currentId = opponentFormation?.id ?? "";
-  return (
-    <label className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-muted">
-      <span>vs.</span>
-      <select
-        value={currentId}
-        onChange={(e) => onPick(e.target.value === "" ? null : e.target.value)}
-        className="bg-transparent text-[11px] text-foreground focus:outline-none"
-      >
-        <option value="">None</option>
-        {options.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.displayName}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}

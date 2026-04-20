@@ -23,6 +23,7 @@ import { useToast } from "@/components/ui";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
+import { OpponentOverlayCard } from "./OpponentOverlayCard";
 
 type Props = {
   playId: string;
@@ -57,6 +58,9 @@ export function PlayEditorClient({
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+
+  // Transient opponent overlay (never saved, resets on navigation)
+  const [opponentPlayDoc, setOpponentPlayDoc] = useState<PlayDocument | null>(null);
 
   // Active drawing style (defaults for new routes)
   const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
@@ -111,6 +115,7 @@ export function PlayEditorClient({
 
   const selectedRoute = doc.layers.routes.find((r) => r.id === selectedRouteId);
   const selectedSeg = selectedRoute?.segments.find((s) => s.id === selectedSegmentId);
+  const selectedPlayer = doc.layers.players.find((p) => p.id === selectedPlayerId);
 
   // Toolbar display values: reflect current selection if one exists, else active defaults
   // If a segment's stored shape is "zigzag" (legacy — the shape option has been
@@ -119,7 +124,9 @@ export function PlayEditorClient({
   const rawShape = selectedSeg?.shape ?? activeShape;
   const displayShape: SegmentShape = rawShape === "zigzag" ? "straight" : rawShape;
   const displayStroke = selectedSeg?.strokePattern ?? activeStrokePattern;
-  const displayColor = selectedRoute?.style.stroke ?? activeColor;
+  const displayColor =
+    selectedRoute?.style.stroke ??
+    (selectedPlayer && !selectedRouteId ? selectedPlayer.style.fill : activeColor);
   const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
   const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
 
@@ -197,9 +204,15 @@ export function PlayEditorClient({
           routeId: selectedRouteId,
           style: { ...selectedRoute.style, stroke: color },
         });
+      } else if (selectedPlayer) {
+        dispatch({
+          type: "player.setStyle",
+          playerId: selectedPlayer.id,
+          style: { ...selectedPlayer.style, fill: color },
+        });
       }
     },
-    [dispatch, selectedRouteId, selectedRoute],
+    [dispatch, selectedRouteId, selectedRoute, selectedPlayer],
   );
 
   const handleWidthChange = useCallback(
@@ -400,6 +413,7 @@ export function PlayEditorClient({
                 fieldBackground={doc.fieldBackground}
                 hideRoutesAndPlayers={anim.phase !== "idle"}
                 opponentFormation={opponentFormation ?? null}
+                opponentPlayDoc={opponentPlayDoc}
               />
               <AnimationOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
             </div>
@@ -417,6 +431,15 @@ export function PlayEditorClient({
           </div>
           <aside className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
             {!showToolbar && <PlayControlsPanel anim={anim} />}
+            {!showToolbar && (
+              <OpponentOverlayCard
+                currentPlayId={playId}
+                playType={doc.metadata.playType ?? "offense"}
+                nav={initialNav}
+                opponentDoc={opponentPlayDoc}
+                onChange={setOpponentPlayDoc}
+              />
+            )}
             <Inspector
               doc={doc}
               dispatch={dispatch}
