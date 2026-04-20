@@ -15,6 +15,7 @@ import {
   compilePlaysheetPdfPages,
   compileWristbandGridSvg,
   compileWristbandPdfPages,
+  type PlaysheetHeader,
   type PlaysheetOptions,
   type WristbandGridOptions,
 } from "@/domain/print/templates";
@@ -27,9 +28,10 @@ type Props = {
   initialPack: PlaybookPrintPackRow[];
   initialGroups: PlaybookGroupRow[];
   loadError: string | null;
+  team: PlaysheetHeader;
 };
 
-export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, loadError }: Props) {
+export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, loadError, team }: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
@@ -180,7 +182,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       .filter((x): x is PlaybookPrintPackRow => x != null);
     const docs = ordered.map((r) => applyExportPresentation(r.document, config));
     const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
-    return compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys);
+    return compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys, config.playsheetIncludeHeader ? team : null);
   }, [
     initialPack,
     selected,
@@ -188,6 +190,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
     config.wristbandGridLayout,
     wristbandGridOpts,
     playsheetOpts,
+    team,
   ]);
 
   function exportPdf() {
@@ -211,7 +214,7 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       let pages: string[];
       if (config.product === "playsheet") {
         const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
-        pages = compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys);
+        pages = compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys, config.playsheetIncludeHeader ? team : null);
       } else {
         pages = compileWristbandPdfPages(docs, wristbandGridOpts);
       }

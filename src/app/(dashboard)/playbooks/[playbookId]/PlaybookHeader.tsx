@@ -100,7 +100,7 @@ export function PlaybookHeader({
               {name}
             </h1>
             <p className={`truncate text-xs font-medium sm:text-sm ${onAccentMuted}`}>
-              {[season, variantLabel].filter(Boolean).join(" · ") || variantLabel}
+              {[season, variantLabel, senderName].filter(Boolean).join(" · ") || variantLabel}
             </p>
           </div>
 

@@ -256,20 +256,71 @@ export type PlaysheetOptions = PlayTileLookOptions & {
   noteLines: PlaysheetNoteLines;
 };
 
+export type PlaysheetHeader = {
+  teamName: string;
+  subtext: string;
+  logoUrl: string | null;
+  accentColor: string;
+};
+
+const PLAYSHEET_HEADER_H = 14;
+
+function hexLum(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return 0.5;
+  const n = parseInt(m[1]!, 16);
+  const r = ((n >> 16) & 0xff) / 255;
+  const g = ((n >> 8) & 0xff) / 255;
+  const b = (n & 0xff) / 255;
+  const toLin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
+}
+
+function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin: number): string {
+  const accent = header.accentColor || "#134e2a";
+  const isLight = hexLum(accent) > 0.55;
+  const textColor = isLight ? "#0f172a" : "#ffffff";
+  const mutedColor = isLight ? "#334155" : "rgba(255,255,255,0.82)";
+  const badgeFill = isLight ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.22)";
+  const badgeStroke = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.35)";
+  const hH = PLAYSHEET_HEADER_H;
+  const logoSize = 10;
+  const logoX = margin;
+  const logoY = (hH - logoSize) / 2;
+  const textX = logoX + logoSize + 4;
+  const name = escSvgText(header.teamName || "");
+  const sub = escSvgText(header.subtext || "");
+  const initial = (header.teamName || "").trim().charAt(0).toUpperCase() || "?";
+  const logoMarkup = header.logoUrl
+    ? `<image href="${escSvgText(header.logoUrl)}" x="${logoX + 1}" y="${logoY + 1}" width="${logoSize - 2}" height="${logoSize - 2}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="800" font-family="system-ui,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
+  return `
+  <g>
+    <rect x="0" y="0" width="${w}" height="${hH}" fill="${accent}"/>
+    <rect x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" rx="1.8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="0.2"/>
+    ${logoMarkup}
+    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="800" font-family="system-ui,sans-serif" fill="${textColor}">${name}</text>
+    ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="system-ui,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
+  </g>`;
+}
+
 /** Render playsheet pages. When pageBreak === "group" and groupKeys is supplied,
  *  each run of consecutive matching keys starts a new page. */
 export function compilePlaysheetPdfPages(
   docs: PlayDocument[],
   opts: PlaysheetOptions,
   groupKeys?: readonly (string | null)[],
+  header?: PlaysheetHeader | null,
 ): string[] {
   if (docs.length === 0) return [];
   const basePage = defaultFullSheetTemplate.page;
   const w = opts.orientation === "landscape" ? basePage.heightMm : basePage.widthMm;
   const h = opts.orientation === "landscape" ? basePage.widthMm : basePage.heightMm;
   const margin = 8;
+  const headerH = header ? PLAYSHEET_HEADER_H : 0;
+  const topOffset = header ? PLAYSHEET_HEADER_H + 4 : margin;
   const innerW = w - margin * 2;
-  const innerH = h - margin * 2;
+  const innerH = h - topOffset - margin;
   const cellW = innerW / opts.columns;
   const notesH = opts.showNotes ? opts.noteLines * 3.2 + 3 : 0;
   const cellH = cellW * 0.72 + notesH;
@@ -295,7 +346,7 @@ export function compilePlaysheetPdfPages(
   }
 
   return chunks.map((chunk) =>
-    renderPlaysheetPage(chunk, { w, h, margin, cellW, cellH, notesH, rows, opts }),
+    renderPlaysheetPage(chunk, { w, h, margin, topOffset, cellW, cellH, notesH, rows, opts, header: header ?? null }),
   );
 }
 
@@ -305,25 +356,29 @@ function renderPlaysheetPage(
     w: number;
     h: number;
     margin: number;
+    topOffset: number;
     cellW: number;
     cellH: number;
     notesH: number;
     rows: number;
     opts: PlaysheetOptions;
+    header: PlaysheetHeader | null;
   },
 ): string {
-  const { w, h, margin, cellW, cellH, notesH, opts } = layout;
+  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header } = layout;
   let body = "";
   for (let i = 0; i < docs.length; i++) {
     const col = i % opts.columns;
     const row = Math.floor(i / opts.columns);
     const ox = margin + col * cellW;
-    const oy = margin + row * cellH;
+    const oy = topOffset + row * cellH;
     body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts);
   }
+  const headerSvg = header ? renderPlaysheetHeaderBanner(w, header, margin) : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#ffffff"/>
+  ${headerSvg}
   ${body}
 </svg>`;
 }

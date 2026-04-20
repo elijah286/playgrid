@@ -147,6 +147,15 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
               <input
                 type="checkbox"
                 className="size-4 accent-primary"
+                checked={config.playsheetIncludeHeader}
+                onChange={(e) => patch({ playsheetIncludeHeader: e.target.checked })}
+              />
+              Include team header on every page
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
                 checked={config.playsheetShowNotes}
                 onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
               />

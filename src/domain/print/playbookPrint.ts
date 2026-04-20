@@ -42,6 +42,8 @@ export type PlaybookPrintRunConfig = {
   /** Playsheet: fixed-height notes strip under each play. */
   playsheetShowNotes: boolean;
   playsheetNoteLines: PlaysheetNoteLines;
+  /** Playsheet: render the team header banner across the top of every page. */
+  playsheetIncludeHeader: boolean;
   /** Playsheet visual look (matches wristband options). */
   playsheetIconSize: WristbandIconSize;
   playsheetRouteWeight: WristbandRouteWeight;
@@ -94,6 +96,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetPageBreak: "continuous",
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
+  playsheetIncludeHeader: true,
   playsheetIconSize: "medium",
   playsheetRouteWeight: "medium",
   playsheetArrowSize: "medium",
