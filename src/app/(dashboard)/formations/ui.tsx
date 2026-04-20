@@ -36,46 +36,113 @@ function variantLabel(v: string) {
   return SPORT_VARIANT_LABELS[v as SportVariant] ?? v;
 }
 
-/** Tiny SVG field preview of a formation. */
-function FormationPreview({ formation }: { formation: SavedFormation }) {
-  const W = 120;
-  const H = 80;
-  const r = 5;
+/**
+ * Formation thumbnail — same visual language as PlayPreview in playbooks/ui.tsx:
+ * 16:10 aspect-ratio container, bg-surface-inset, LOS + yard-guide lines,
+ * players rendered in normalized field coords with counter-scaling for circles.
+ */
+function FormationThumbnail({ formation }: { formation: SavedFormation }) {
+  const R = 0.032;
+  const PAD = R * 1.6;
+
+  // Compute bounding box over all player positions (SVG y-down: sy = 1 - y).
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minSvgY = Infinity;
+  let maxSvgY = -Infinity;
+  for (const p of formation.players) {
+    if (p.position.x < minX) minX = p.position.x;
+    if (p.position.x > maxX) maxX = p.position.x;
+    const sy = 1 - p.position.y;
+    if (sy < minSvgY) minSvgY = sy;
+    if (sy > maxSvgY) maxSvgY = sy;
+  }
+  if (!isFinite(minX)) {
+    minX = 0; maxX = 1; minSvgY = 0.22; maxSvgY = 0.78;
+  }
+
+  // Always include LOS and 10-yd downfield guide in the frame.
+  const losY = 1 - 0.4;        // SVG-y of line of scrimmage (default y=0.4)
+  const fiveY = 1 - 0.6;       // 5 yds downfield
+  const tenY = 1 - 0.8;        // 10 yds downfield
+  minSvgY = Math.min(minSvgY, tenY);
+  maxSvgY = Math.max(maxSvgY, losY);
+
+  let vbX = Math.max(0, minX - PAD);
+  let vbW = Math.min(1, maxX + PAD) - vbX;
+  let vbY = Math.max(0, minSvgY - PAD);
+  let vbH = Math.min(1, maxSvgY + PAD) - vbY;
+
+  // Pad to 16:10 so all thumbnails share the same aspect.
+  const TARGET = 16 / 10;
+  const currentAspect = vbW / vbH;
+  if (currentAspect < TARGET) {
+    const needed = vbH * TARGET;
+    const extra = needed - vbW;
+    vbX = Math.max(0, vbX - extra / 2);
+    vbW = Math.min(1 - vbX, needed);
+  } else if (currentAspect > TARGET) {
+    const needed = vbW / TARGET;
+    const extra = needed - vbH;
+    vbY = Math.max(0, vbY - extra / 2);
+    vbH = Math.min(1 - vbY, needed);
+  }
+
+  const aspect = vbW / vbH;
+  // Counter-scale x so circles stay round under preserveAspectRatio="none".
+  const sxCorr = aspect / TARGET;
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      width={W}
-      height={H}
-      className="shrink-0 rounded-lg border border-border bg-[#2D8B4E]"
-    >
-      <rect x={0} y={0} width={W} height={H} fill="#2D8B4E" />
-      <line
-        x1={0} y1={H * 0.5}
-        x2={W} y2={H * 0.5}
-        stroke="rgba(255,255,255,0.4)"
-        strokeWidth={1}
-      />
-      {formation.players.map((p) => {
-        const cx = p.position.x * W;
-        const cy = (1 - p.position.y) * H;
-        return (
-          <g key={p.id}>
-            <circle
-              cx={cx} cy={cy} r={r}
-              fill={p.style.fill} stroke={p.style.stroke} strokeWidth={0.8}
-            />
-            <text
-              x={cx} y={cy + 0.5}
-              textAnchor="middle" dominantBaseline="middle"
-              fontSize={4.5} fill={p.style.labelColor} fontWeight="700"
-            >
-              {p.label}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border bg-surface-inset">
+      <svg
+        viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="none"
+      >
+        {/* Yard guides */}
+        <line
+          x1={vbX} x2={vbX + vbW} y1={losY} y2={losY}
+          stroke="rgba(100,116,139,0.45)" strokeWidth={1.25} vectorEffect="non-scaling-stroke"
+        />
+        <line
+          x1={vbX} x2={vbX + vbW} y1={fiveY} y2={fiveY}
+          stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke"
+        />
+        <line
+          x1={vbX} x2={vbX + vbW} y1={tenY} y2={tenY}
+          stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke"
+        />
+
+        {/* Players */}
+        {formation.players.map((p) => {
+          const cx = p.position.x;
+          const cy = 1 - p.position.y;
+          return (
+            <g key={p.id} transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
+              <circle
+                cx={0} cy={0} r={R}
+                fill={p.style.fill}
+                stroke={p.style.stroke}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+              <text
+                x={0} y={0}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={0.035}
+                fontWeight={700}
+                fill={p.style.labelColor}
+                style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+              >
+                {p.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -89,6 +156,7 @@ function FormationCard({
   onDuplicate: (id: string) => void;
 }) {
   const router = useRouter();
+
   const items: ActionMenuItem[] = [
     {
       label: "Duplicate",
@@ -96,42 +164,55 @@ function FormationCard({
       onSelect: () => onDuplicate(formation.id),
     },
   ];
-  items.push({
-    label: "Delete",
-    icon: Trash2,
-    danger: true,
-    onSelect: () => onDelete(formation.id, formation.displayName),
-  });
+  if (!formation.isSystem) {
+    items.push({
+      label: "Delete",
+      icon: Trash2,
+      danger: true,
+      onSelect: () => onDelete(formation.id, formation.displayName),
+    });
+  }
 
-  // System formations can't be edited directly — clicking opens a duplicate
-  // for editing, matching what the old Edit button did.
   const handleOpen = () => {
     if (formation.isSystem) onDuplicate(formation.id);
     else router.push(`/formations/${formation.id}/edit`);
   };
 
+  const variantStr = formation.sportProfile?.variant
+    ? variantLabel(formation.sportProfile.variant)
+    : null;
+
   return (
-    <Card hover className="relative p-3">
+    <Card hover className="relative flex flex-col p-0">
       <button
         type="button"
         onClick={handleOpen}
-        className="flex w-full items-center gap-3 text-left"
+        className="flex flex-1 flex-col p-4 text-left"
       >
-        <FormationPreview formation={formation} />
-        <div className="min-w-0 flex-1 pr-8">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <h3 className="truncate text-sm font-semibold text-foreground">
-              {formation.displayName}
-            </h3>
-            {formation.isSystem && <Badge>System</Badge>}
-          </div>
-          <p className="mt-0.5 text-xs text-muted">
-            {formation.sportProfile?.variant
-              ? `${variantLabel(formation.sportProfile.variant)} · ${formation.players.length} players`
-              : `${formation.players.length} players`}
-          </p>
+        {/* Title row */}
+        <div className="flex items-start gap-1.5 pr-8">
+          <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
+            {formation.displayName}
+          </h3>
+          {formation.isSystem && (
+            <Badge variant="default" className="shrink-0">System</Badge>
+          )}
         </div>
+
+        {/* Thumbnail */}
+        <div className="mt-2">
+          <FormationThumbnail formation={formation} />
+        </div>
+
+        {/* Metadata */}
+        <p className="mt-2 truncate text-xs text-muted">
+          {[variantStr, `${formation.players.length} players`]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
       </button>
+
+      {/* Action menu */}
       <div className="absolute right-2 top-2">
         <ActionMenu items={items} />
       </div>
@@ -178,7 +259,6 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
     });
   }
 
-  // Apply sport filter
   const visible =
     filter === "all"
       ? formations
@@ -191,7 +271,7 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
 
   const groups = groupsToShow.map((variant) => ({
     variant,
-    label: SPORT_VARIANT_LABELS[variant],
+    label: SPORT_VARIANT_LABELS[variant].toUpperCase(),
     formations: visible
       .filter((f) => (f.sportProfile?.variant ?? "flag_7v7") === variant)
       .sort((a, b) => (a.isSystem === b.isSystem ? 0 : a.isSystem ? -1 : 1)),
@@ -201,7 +281,7 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
     filter === "all" ? visible.filter((f) => !f.sportProfile?.variant) : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <SegmentedControl
@@ -220,7 +300,7 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
 
       {groups.map((group) => (
         <section key={group.variant}>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted">
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
             {group.label}
           </h2>
           {group.formations.length === 0 ? (
@@ -231,7 +311,7 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
               No formations — click here to create one
             </Link>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {group.formations.map((f) => (
                 <FormationCard
                   key={f.id}
@@ -247,10 +327,10 @@ export function FormationsClient({ initial }: { initial: SavedFormation[] }) {
 
       {ungrouped.length > 0 && (
         <section>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted">
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Custom
           </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {ungrouped.map((f) => (
               <FormationCard
                 key={f.id}
