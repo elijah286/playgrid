@@ -263,17 +263,22 @@ export function EditorCanvas({
     onSelectSegment,
   };
 
-  // Native contextmenu listener on the SVG — fires before React's synthetic
-  // events (React 17+ delegates to the root container, making onContextMenu
-  // on SVG child shapes fire too late / unreliably on macOS Ctrl+click).
+  // Native contextmenu listener on the WRAPPER in capture phase — fires before
+  // React's entire synthetic event system and before any bubble-phase handlers.
+  // This is the only reliable way to intercept right-clicks on SVG children on
+  // macOS (Ctrl+click fires contextmenu with button=0, not pointerdown button=2).
   useEffect(() => {
-    const svg = svgRef.current;
     const wrapper = wrapperRef.current;
-    if (!svg || !wrapper) return;
+    if (!wrapper) return;
 
     function handleContextMenu(e: MouseEvent) {
+      // Read the live SVG ref inside the handler so we always have the current element.
+      const svg = svgRef.current;
+
       // Always suppress the browser's native right-click menu on the canvas.
       e.preventDefault();
+
+      if (!svg) return;
 
       const {
         players,
@@ -288,7 +293,7 @@ export function EditorCanvas({
       if (m === "formation") return;
 
       // Convert screen coords → normalised field coords via the SVG's CTM.
-      const ctm = svg!.getScreenCTM();
+      const ctm = svg.getScreenCTM();
       if (!ctm) return;
       const inv = ctm.inverse();
       const svgX = inv.a * e.clientX + inv.c * e.clientY + inv.e;
@@ -306,11 +311,14 @@ export function EditorCanvas({
       });
 
       if (!hitPlayer) {
-        // Not over a player — let the event bubble so segment onContextMenu fires.
+        // Not over a player — stop propagation here too so the event doesn't
+        // bubble past the wrapper, but allow React's synthetic handlers on
+        // segment hit-paths to still fire (they fire via React root, not native
+        // bubbling past wrapper — React re-dispatches from the original target).
         return;
       }
 
-      // Stop native bubbling so React's root contextmenu handler doesn't also fire.
+      // Stop propagation so React's root contextmenu handler doesn't also fire.
       e.stopPropagation();
 
       const rect = wrapper!.getBoundingClientRect();
@@ -331,9 +339,11 @@ export function EditorCanvas({
       oss(null);
     }
 
-    svg.addEventListener("contextmenu", handleContextMenu);
-    return () => svg.removeEventListener("contextmenu", handleContextMenu);
-  }, []); // stable — reads exclusively from nativeMenuCtxRef
+    // Capture phase: fires before any bubble-phase handlers and before React's
+    // synthetic event system, which attaches at the root container.
+    wrapper.addEventListener("contextmenu", handleContextMenu, true);
+    return () => wrapper.removeEventListener("contextmenu", handleContextMenu, true);
+  }, []); // stable — reads from nativeMenuCtxRef and svgRef directly
 
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
