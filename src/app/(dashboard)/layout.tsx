@@ -5,6 +5,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 
 export default async function DashboardLayout({
   children,
@@ -64,6 +65,7 @@ export default async function DashboardLayout({
       <main className="mx-auto max-w-6xl px-6 py-8">
         {children}
       </main>
+      <FeedbackWidget />
     </div>
   );
 }

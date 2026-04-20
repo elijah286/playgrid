@@ -1,27 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Users } from "lucide-react";
+import { KeyRound, MessageCircle, Users } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
+import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
+import type { FeedbackRow } from "@/app/actions/feedback";
 import { SegmentedControl } from "@/components/ui";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
   | { ok: false; error: string };
 
-type Tab = "users" | "integrations";
+type Tab = "users" | "integrations" | "feedback";
 
 export function SettingsClient({
   currentUserId,
   initialUsers,
   usersError,
   integration,
+  initialFeedback,
+  feedbackError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
   usersError: string | null;
   integration: IntegrationProps;
+  initialFeedback: FeedbackRow[];
+  feedbackError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("users");
 
@@ -33,6 +39,7 @@ export function SettingsClient({
         options={[
           { value: "users", label: "Users", icon: Users },
           { value: "integrations", label: "Integrations", icon: KeyRound },
+          { value: "feedback", label: "Feedback", icon: MessageCircle },
         ]}
       />
 
@@ -46,6 +53,13 @@ export function SettingsClient({
             <UsersAdminClient initialUsers={initialUsers} currentUserId={currentUserId} />
           )}
         </div>
+      )}
+
+      {tab === "feedback" && (
+        <FeedbackAdminClient
+          initialItems={initialFeedback}
+          initialError={feedbackError}
+        />
       )}
 
       {tab === "integrations" && (
