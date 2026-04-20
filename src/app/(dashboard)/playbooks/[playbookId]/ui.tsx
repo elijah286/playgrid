@@ -14,6 +14,7 @@ import {
   Folders,
   LayoutGrid,
   List,
+  Loader2,
   Pencil,
   Plus,
   Printer,
@@ -287,7 +288,6 @@ export function PlaybookDetailClient({
     formation?: SavedFormation,
     opts?: { playType?: PlayType; specialTeamsUnit?: SpecialTeamsUnit | null; initialPlayers?: Player[]; formationName?: string; playName?: string },
   ) {
-    setShowFormationPicker(false);
     setCreating(true);
     const playType = opts?.playType ?? "offense";
     const initialPlayers =
@@ -306,6 +306,7 @@ export function PlaybookDetailClient({
       router.push(`/plays/${res.playId}/edit`);
     } else {
       setCreating(false);
+      setShowFormationPicker(false);
       toast(res.error, "error");
     }
   }
@@ -346,7 +347,6 @@ export function PlaybookDetailClient({
   }
 
   async function createAndGoToFormationEditor() {
-    setShowFormationPicker(false);
     setCreating(true);
     const res = await createPlayAction(playbookId, { initialPlayers: defaultPlayers, variant, playerCount: playbookPlayerCount });
     if (res.ok) {
@@ -355,6 +355,7 @@ export function PlaybookDetailClient({
       router.push(`/formations/new?variant=${variant}&returnToPlay=${res.playId}`);
     } else {
       setCreating(false);
+      setShowFormationPicker(false);
       toast(res.error, "error");
     }
   }
@@ -854,10 +855,11 @@ export function PlaybookDetailClient({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={(e) => {
+            if (creating) return;
             if (e.target === e.currentTarget) setShowFormationPicker(false);
           }}
         >
-          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
+          <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
             <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
               <div>
                 <h2 className="text-base font-bold text-foreground">
@@ -869,8 +871,9 @@ export function PlaybookDetailClient({
               </div>
               <button
                 type="button"
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground disabled:opacity-40"
                 onClick={() => setShowFormationPicker(false)}
+                disabled={creating}
               >
                 <X className="size-5" />
               </button>
@@ -1061,6 +1064,12 @@ export function PlaybookDetailClient({
                 </div>
               )}
             </div>
+            {creating && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-surface-raised/80 backdrop-blur-sm">
+                <Loader2 className="size-8 animate-spin text-primary" />
+                <p className="text-sm font-medium text-foreground">Preparing play editor…</p>
+              </div>
+            )}
           </div>
         </div>
       )}

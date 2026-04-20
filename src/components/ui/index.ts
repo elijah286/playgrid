@@ -12,3 +12,4 @@ export { Kbd } from "./Kbd";
 export { ActionMenu } from "./ActionMenu";
 export type { ActionMenuItem } from "./ActionMenu";
 export { Modal } from "./Modal";
+export { LogoPicker } from "./LogoPicker";

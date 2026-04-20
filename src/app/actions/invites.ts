@@ -2,8 +2,13 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getStoredResendConfig } from "@/lib/site/resend-config";
+
+const DEFAULT_FROM_EMAIL = "PlayGrid <onboarding@resend.dev>";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type PlaybookInvite = {
   id: string;
@@ -118,6 +123,71 @@ export async function previewInviteAction(
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: "Invite not found." };
   return { ok: true, preview: row as InvitePreview };
+}
+
+export async function sendPlaybookInviteEmailAction(input: {
+  playbookId: string;
+  toEmail: string;
+  inviteUrl: string;
+  teamName: string;
+  senderName?: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const to = input.toEmail.trim();
+  if (!EMAIL_RE.test(to)) return { ok: false, error: "Enter a valid email." };
+
+  const cfg = await getStoredResendConfig().catch(() => ({
+    apiKey: null as string | null,
+    fromEmail: null as string | null,
+  }));
+  const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
+  const fromEmail = cfg.fromEmail ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  if (!apiKey) {
+    return { ok: false, error: "Email isn't configured. Copy the link instead, or set up Resend in Settings." };
+  }
+
+  const team = input.teamName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const sender = (input.senderName ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const url = input.inviteUrl;
+  const subject = `You're invited to ${input.teamName} on PlayGrid`;
+  const text = [
+    sender ? `${input.senderName} invited you to join ${input.teamName} on PlayGrid.` : `You've been invited to join ${input.teamName} on PlayGrid.`,
+    "",
+    `Open this link to join: ${url}`,
+  ].join("\n");
+  const html = `<!doctype html>
+<html><body style="font-family:ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+    <tr><td style="padding:24px">
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">Join ${team} on PlayGrid</h1>
+      <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5">
+        ${sender ? `${sender} invited you` : `You've been invited`} to view this team's playbook.
+      </p>
+      <p style="margin:0 0 20px">
+        <a href="${url}" style="display:inline-block;padding:10px 16px;background:#16a34a;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+          Open invite
+        </a>
+      </p>
+      <p style="margin:0;color:#64748b;font-size:12px;word-break:break-all">Or paste this link: ${url}</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({ from: fromEmail, to, subject, text, html });
+    if (error) return { ok: false, error: error.message ?? "Failed to send email." };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to send email." };
+  }
+
+  return { ok: true };
 }
 
 export async function acceptInviteAction(
