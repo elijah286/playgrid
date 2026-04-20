@@ -88,12 +88,16 @@ export type PlayCommand =
       formationName: string;
       /** When provided, snap player positions to these formation players (by id). */
       players?: Player[];
+      /** lineOfScrimmageY of the source formation — used to transform positions. */
+      formationLosY?: number;
     }
   | { type: "document.setFormationTag"; formationTag: string | null }
   | {
       /** Snap all player positions back to the linked formation's canonical layout. */
       type: "document.reapplyFormation";
       players: Player[];
+      /** lineOfScrimmageY of the formation — used to convert positions into play coords. */
+      formationLosY: number;
     }
   | {
       /**

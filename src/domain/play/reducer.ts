@@ -2,6 +2,70 @@ import type { PlayCommand } from "./commands";
 import type { PlayDocument, Point2, RouteSegment } from "./types";
 import { uid } from "./factory";
 
+/**
+ * Formations store player positions in a specific coordinate system defined by
+ * their `losY` (lineOfScrimmageY) and a standard 25-yard display window.
+ * When applying formation positions to a play that may have different field
+ * settings, we convert through "yards from LOS" space so positions are
+ * always placed at the correct relative yardage.
+ *
+ * Also translates any routes carried by those players so routes stay
+ * attached (same behaviour as player.move).
+ */
+function applyFormationPositions(
+  doc: PlayDocument,
+  formationPlayers: import("./types").Player[],
+  formationLosY: number,
+): { players: PlayDocument["layers"]["players"]; routes: PlayDocument["layers"]["routes"] } {
+  const FORM_FIELD_LEN = 25; // all stored formations use the standard 25-yd window
+  const playLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
+  const playFieldLen = doc.sportProfile.fieldLengthYds;
+
+  const fMap = new Map(formationPlayers.map((p) => [p.id, p]));
+
+  // Compute new position and delta for every player that has a match in the formation.
+  const updates = new Map<string, { newX: number; newY: number; dx: number; dy: number }>();
+  for (const player of doc.layers.players) {
+    const fp = fMap.get(player.id);
+    if (!fp) continue;
+
+    // Convert formation y → yards from formation LOS → play normalized y.
+    const yardsFromLos = (fp.position.y - formationLosY) * FORM_FIELD_LEN;
+    const newY = Math.max(0, Math.min(1, playLosY + yardsFromLos / playFieldLen));
+    const newX = fp.position.x; // x is width-relative; no transform needed
+
+    updates.set(player.id, {
+      newX,
+      newY,
+      dx: newX - player.position.x,
+      dy: newY - player.position.y,
+    });
+  }
+
+  const players = doc.layers.players.map((p) => {
+    const u = updates.get(p.id);
+    return u ? { ...p, position: { x: u.newX, y: u.newY } } : p;
+  });
+
+  // Translate each player's routes by the same delta (keeps routes attached).
+  const routes = doc.layers.routes.map((r) => {
+    const u = updates.get(r.carrierPlayerId);
+    if (!u || (Math.abs(u.dx) < 1e-9 && Math.abs(u.dy) < 1e-9)) return r;
+    return {
+      ...r,
+      nodes: r.nodes.map((n) => ({
+        ...n,
+        position: {
+          x: Math.min(1, Math.max(0, n.position.x + u.dx)),
+          y: Math.min(1, Math.max(0, n.position.y + u.dy)),
+        },
+      })),
+    };
+  });
+
+  return { players, routes };
+}
+
 function flipPoint(p: Point2, axis: "horizontal" | "vertical"): Point2 {
   if (axis === "horizontal") return { x: 1 - p.x, y: p.y };
   return { x: p.x, y: 1 - p.y };
@@ -304,26 +368,24 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return { ...doc, fieldZone: cmd.fieldZone };
 
     case "document.setFormationLink": {
-      // Optionally snap player positions to the new formation (change formation).
-      let players = doc.layers.players;
-      if (cmd.players && cmd.players.length > 0) {
-        const fMap = new Map(cmd.players.map((p) => [p.id, p.position]));
-        players = doc.layers.players.map((p) => {
-          const pos = fMap.get(p.id);
-          return pos ? { ...p, position: pos } : p;
-        });
-      }
-      return {
-        ...doc,
-        metadata: {
-          ...doc.metadata,
-          formationId: cmd.formationId,
-          formation: cmd.formationName,
-          formationTag: null,
-        },
-        layers: { ...doc.layers, players },
+      const metadata = {
+        ...doc.metadata,
+        formationId: cmd.formationId,
+        formation: cmd.formationName,
+        formationTag: null,
       };
+      // Optionally snap player positions to the new formation (change formation).
+      if (!cmd.players || cmd.players.length === 0) {
+        return { ...doc, metadata, layers: doc.layers };
+      }
+      const { players, routes } = applyFormationPositions(
+        doc,
+        cmd.players,
+        cmd.formationLosY ?? 0.4,
+      );
+      return { ...doc, metadata, layers: { ...doc.layers, players, routes } };
     }
+
     case "document.setFormationTag":
       return {
         ...doc,
@@ -331,15 +393,15 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       };
 
     case "document.reapplyFormation": {
-      const fMap = new Map(cmd.players.map((p) => [p.id, p.position]));
-      const players = doc.layers.players.map((p) => {
-        const pos = fMap.get(p.id);
-        return pos ? { ...p, position: pos } : p;
-      });
+      const { players, routes } = applyFormationPositions(
+        doc,
+        cmd.players,
+        cmd.formationLosY,
+      );
       return {
         ...doc,
         metadata: { ...doc.metadata, formationTag: null },
-        layers: { ...doc.layers, players },
+        layers: { ...doc.layers, players, routes },
       };
     }
 
