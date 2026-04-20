@@ -159,6 +159,37 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       );
       return { ...doc, layers: { ...doc.layers, players } };
     }
+    case "player.clearRoutes":
+      return {
+        ...doc,
+        layers: {
+          ...doc.layers,
+          routes: doc.layers.routes.filter((r) => r.carrierPlayerId !== cmd.playerId),
+        },
+      };
+    case "player.flipRoutes": {
+      const player = doc.layers.players.find((p) => p.id === cmd.playerId);
+      if (!player) return doc;
+      const px = player.position.x;
+      const flipX = (x: number) => Math.min(1, Math.max(0, 2 * px - x));
+      const routes = doc.layers.routes.map((r) => {
+        if (r.carrierPlayerId !== cmd.playerId) return r;
+        return {
+          ...r,
+          nodes: r.nodes.map((n) => ({
+            ...n,
+            position: { x: flipX(n.position.x), y: n.position.y },
+          })),
+          segments: r.segments.map((s) => ({
+            ...s,
+            controlOffset: s.controlOffset
+              ? { x: flipX(s.controlOffset.x), y: s.controlOffset.y }
+              : null,
+          })),
+        };
+      });
+      return { ...doc, layers: { ...doc.layers, routes } };
+    }
 
     /* ---- Route-level ---- */
     case "route.add":

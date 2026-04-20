@@ -90,7 +90,6 @@ export function Inspector({
       <FormationSection
         formationId={formationId ?? null}
         formationName={formationName ?? ""}
-        formationTag={formationTag ?? null}
         linkedFormation={linkedFormation ?? null}
         hasDrift={hasDrift}
         dispatch={dispatch}
@@ -174,47 +173,38 @@ export function Inspector({
 function FormationSection({
   formationId,
   formationName,
-  formationTag,
   linkedFormation,
   hasDrift,
   dispatch,
 }: {
   formationId: string | null;
   formationName: string;
-  formationTag: string | null;
   linkedFormation: SavedFormation | null;
   hasDrift: boolean;
   dispatch: (c: PlayCommand) => void;
 }) {
-  const isDrifted = hasDrift && !formationTag;
-
   return (
-    <section
-      className={`rounded-lg px-3 py-2.5 ring-1 ${
-        isDrifted ? "bg-warning-light ring-warning/20" : "bg-surface-inset ring-border"
-      }`}
-    >
+    <section className="rounded-lg bg-surface-inset px-3 py-2.5 ring-1 ring-border">
       {/* Header row */}
       <div className="flex items-center justify-between gap-2">
-        <p
-          className={`text-[11px] font-semibold uppercase tracking-wider ${
-            isDrifted ? "text-warning" : "text-muted"
-          }`}
-        >
-          {isDrifted ? "⚠ Formation drifted" : "Formation"}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+          Formation
+          {hasDrift && (
+            <span className="ml-1.5 inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
+              drifted
+            </span>
+          )}
         </p>
       </div>
 
       {/* Formation name + actions row */}
       <div className="mt-1 flex items-center gap-1.5">
-        {/* Clickable name — opens change picker */}
         <FormationChangePicker
           formationId={formationId}
           formationName={formationName}
           dispatch={dispatch}
         />
 
-        {/* Reapply — snap back to formation positions */}
         {formationId && linkedFormation && (
           <button
             type="button"
@@ -233,7 +223,6 @@ function FormationSection({
           </button>
         )}
 
-        {/* Unlink */}
         {formationId && (
           <button
             type="button"
@@ -247,36 +236,6 @@ function FormationSection({
           </button>
         )}
       </div>
-
-      {/* Tag row — shown when drifted (no tag yet) */}
-      {isDrifted && (
-        <div className="mt-2 border-t border-warning/20 pt-2">
-          <FormationTagPicker
-            value={formationTag ?? ""}
-            onChange={(tag) =>
-              dispatch({ type: "document.setFormationTag", formationTag: tag || null })
-            }
-          />
-        </div>
-      )}
-
-      {/* Active tag display */}
-      {formationTag && (
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
-            {formationTag}
-          </span>
-          <button
-            type="button"
-            className="text-[11px] text-muted hover:text-foreground"
-            onClick={() =>
-              dispatch({ type: "document.setFormationTag", formationTag: null })
-            }
-          >
-            ×
-          </button>
-        </div>
-      )}
     </section>
   );
 }
@@ -402,54 +361,8 @@ function FormationChangePicker({
 /*  Formation tag picker                                               */
 /* ------------------------------------------------------------------ */
 
-const FORMATION_TAG_PRESETS = [
+export const FORMATION_TAG_PRESETS = [
   "Under Center", "Pistol", "Empty", "Trips", "Bunch",
   "Spread", "Open", "Heavy", "Tight", "Nub", "Motion", "Jet", "Shift",
 ];
 
-function FormationTagPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (tag: string) => void;
-}) {
-  const [custom, setCustom] = useState(
-    value && !FORMATION_TAG_PRESETS.includes(value) ? value : "",
-  );
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-[11px] text-muted">Tag this variation</p>
-      <div className="flex flex-wrap gap-1">
-        {FORMATION_TAG_PRESETS.map((tag) => (
-          <button
-            key={tag}
-            type="button"
-            onClick={() => onChange(value === tag ? "" : tag)}
-            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
-              value === tag
-                ? "border-primary/60 bg-primary/10 text-primary"
-                : "border-border bg-surface-inset text-muted hover:border-primary/40 hover:text-foreground"
-            }`}
-          >
-            {tag}
-          </button>
-        ))}
-      </div>
-      <input
-        type="text"
-        placeholder="Custom tag…"
-        value={custom}
-        onChange={(e) => setCustom(e.target.value)}
-        onBlur={() => {
-          if (custom.trim()) onChange(custom.trim());
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && custom.trim()) onChange(custom.trim());
-        }}
-        className="w-full rounded-md border border-border bg-surface-inset px-2 py-1 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary"
-      />
-    </div>
-  );
-}

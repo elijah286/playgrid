@@ -236,9 +236,119 @@ export function EditorCanvas({
   };
   const [anchorMenu, setAnchorMenu] = useState<AnchorMenu | null>(null);
 
+  type PlayerMenu = {
+    screenX: number;
+    screenY: number;
+    playerId: string;
+  };
+  const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
+
+  // Ref holding the latest values the stable native contextmenu listener needs.
+  // Assigned directly during render (safe for refs).
+  const nativeMenuCtxRef = useRef({
+    players: doc.layers.players,
+    fieldAspect,
+    mode,
+    onSelectPlayer,
+    onSelectRoute,
+    onSelectNode,
+    onSelectSegment,
+  });
+  nativeMenuCtxRef.current = {
+    players: doc.layers.players,
+    fieldAspect,
+    mode,
+    onSelectPlayer,
+    onSelectRoute,
+    onSelectNode,
+    onSelectSegment,
+  };
+
+  // Native contextmenu listener on the WRAPPER in capture phase — fires before
+  // React's entire synthetic event system and before any bubble-phase handlers.
+  // This is the only reliable way to intercept right-clicks on SVG children on
+  // macOS (Ctrl+click fires contextmenu with button=0, not pointerdown button=2).
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    function handleContextMenu(e: MouseEvent) {
+      // Read the live SVG ref inside the handler so we always have the current element.
+      const svg = svgRef.current;
+
+      // Always suppress the browser's native right-click menu on the canvas.
+      e.preventDefault();
+
+      if (!svg) return;
+
+      const {
+        players,
+        fieldAspect: fa,
+        mode: m,
+        onSelectPlayer: osp,
+        onSelectRoute: osr,
+        onSelectNode: osn,
+        onSelectSegment: oss,
+      } = nativeMenuCtxRef.current;
+
+      if (m === "formation") return;
+
+      // Convert screen coords → normalised field coords via the SVG's CTM.
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      const inv = ctm.inverse();
+      const svgX = inv.a * e.clientX + inv.c * e.clientY + inv.e;
+      const svgY = inv.b * e.clientX + inv.d * e.clientY + inv.f;
+      const normX = Math.min(1, Math.max(0, svgX / fa));
+      const normY = Math.min(1, Math.max(0, 1 - svgY));
+
+      // Hit-test players. Player visual radius is 0.028 SVG units; use 0.055
+      // normalised for a generous click target.
+      const HIT_RADIUS = 0.055;
+      const hitPlayer = players.find((p) => {
+        const dx = p.position.x - normX;
+        const dy = p.position.y - normY;
+        return Math.hypot(dx, dy) < HIT_RADIUS;
+      });
+
+      if (!hitPlayer) {
+        // Not over a player — stop propagation here too so the event doesn't
+        // bubble past the wrapper, but allow React's synthetic handlers on
+        // segment hit-paths to still fire (they fire via React root, not native
+        // bubbling past wrapper — React re-dispatches from the original target).
+        return;
+      }
+
+      // Stop propagation so React's root contextmenu handler doesn't also fire.
+      e.stopPropagation();
+
+      const rect = wrapper!.getBoundingClientRect();
+      const MENU_W = 180;
+      const MENU_H = 90;
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      setPlayerMenu({
+        screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+        screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+        playerId: hitPlayer.id,
+      });
+      setSegmentMenu(null);
+      setAnchorMenu(null);
+      osp(hitPlayer.id);
+      osr(null);
+      osn(null);
+      oss(null);
+    }
+
+    // Capture phase: fires before any bubble-phase handlers and before React's
+    // synthetic event system, which attaches at the root container.
+    wrapper.addEventListener("contextmenu", handleContextMenu, true);
+    return () => wrapper.removeEventListener("contextmenu", handleContextMenu, true);
+  }, []); // stable — reads from nativeMenuCtxRef and svgRef directly
+
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
-    if (!segmentMenu && !anchorMenu) return;
+    if (!segmentMenu && !anchorMenu && !playerMenu) return;
     function onDocPointer(e: PointerEvent) {
       const target = e.target as Node | null;
       const wrap = wrapperRef.current;
@@ -250,6 +360,7 @@ export function EditorCanvas({
       // Any other click closes the menu.
       setSegmentMenu(null);
       setAnchorMenu(null);
+      setPlayerMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
       // from blocking it.
@@ -259,6 +370,7 @@ export function EditorCanvas({
       if (e.key === "Escape") {
         setSegmentMenu(null);
         setAnchorMenu(null);
+        setPlayerMenu(null);
       }
     }
     document.addEventListener("pointerdown", onDocPointer, true);
@@ -793,17 +905,6 @@ export function EditorCanvas({
 
   // Is the segment the terminal (end) of its route? Used to show dash-style
   // options only on the last leg.
-  const isTerminalSegment = useCallback(
-    (routeId: string, segmentId: string): boolean => {
-      const route = doc.layers.routes.find((r) => r.id === routeId);
-      if (!route) return false;
-      const seg = route.segments.find((s) => s.id === segmentId);
-      if (!seg) return false;
-      return !route.segments.some((other) => other.fromNodeId === seg.toNodeId);
-    },
-    [doc.layers.routes],
-  );
-
   const handleMenuAddAnchor = useCallback(() => {
     if (!segmentMenu) return;
     const newNode: RouteNode = { id: uid("node"), position: segmentMenu.position };
@@ -1424,6 +1525,8 @@ export function EditorCanvas({
           style: { cursor: isDragging ? "grabbing" : "grab" } as React.CSSProperties,
           onPointerDown: (e: React.PointerEvent) => {
             e.stopPropagation();
+            // Right-clicks are handled by the native contextmenu listener above.
+            // startInteraction already guards button !== 0, so pass through always.
             startInteraction(e, { kind: "player", playerId: pl.id });
           },
         };
@@ -1597,24 +1700,20 @@ export function EditorCanvas({
           >
             Create branch here
           </button>
-          {isTerminalSegment(segmentMenu.routeId, segmentMenu.segmentId) && (
-            <>
-              <div className="border-t border-border" />
-              <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
-                Last-segment style
-              </div>
-              {(["solid", "dashed", "dotted"] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
-                  onClick={() => setTerminalSegmentStroke(p)}
-                >
-                  {p[0].toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </>
-          )}
+          <div className="border-t border-border" />
+          <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
+            Segment style
+          </div>
+          {(["solid", "dashed", "dotted"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-inset"
+              onClick={() => setTerminalSegmentStroke(p)}
+            >
+              {p[0].toUpperCase() + p.slice(1)}
+            </button>
+          ))}
         </div>
       )}
       {anchorMenu && (
@@ -1633,6 +1732,44 @@ export function EditorCanvas({
           </button>
         </div>
       )}
+
+      {/* Player context menu */}
+      {playerMenu && mode !== "formation" && (() => {
+        const hasRoutes = doc.layers.routes.some(
+          (r) => r.carrierPlayerId === playerMenu.playerId,
+        );
+        return (
+          <div
+            data-segment-menu
+            className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
+            style={{ left: playerMenu.screenX, top: playerMenu.screenY }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              disabled={!hasRoutes}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                dispatch({ type: "player.flipRoutes", playerId: playerMenu.playerId });
+                setPlayerMenu(null);
+              }}
+            >
+              Flip route
+            </button>
+            <button
+              type="button"
+              disabled={!hasRoutes}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                dispatch({ type: "player.clearRoutes", playerId: playerMenu.playerId });
+                setPlayerMenu(null);
+              }}
+            >
+              Clear all routes
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
