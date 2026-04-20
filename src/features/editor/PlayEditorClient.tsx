@@ -20,6 +20,9 @@ import type {
 } from "@/domain/print/playbookPrint";
 import { EditorHeaderBar } from "./EditorHeaderBar";
 import { useToast } from "@/components/ui";
+import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
+import { PlayControls } from "@/features/animation/PlayControls";
 
 type Props = {
   playId: string;
@@ -41,6 +44,8 @@ export function PlayEditorClient({
   const router = useRouter();
   const { toast } = useToast();
   const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
+  const anim = usePlayAnimation(doc);
+  const fieldAspect = doc.sportProfile.fieldWidthYds / (25 * 0.75);
 
   // Selection state
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -367,7 +372,7 @@ export function PlayEditorClient({
                 constant. */}
             <div
               className="relative w-full overflow-hidden"
-              style={{ aspectRatio: `${doc.sportProfile.fieldWidthYds / (25 * 0.75)} / 1` }}
+              style={{ aspectRatio: `${fieldAspect} / 1` }}
             >
               <EditorCanvas
                 doc={doc}
@@ -384,9 +389,12 @@ export function PlayEditorClient({
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
-                fieldAspect={doc.sportProfile.fieldWidthYds / (25 * 0.75)}
+                fieldAspect={fieldAspect}
                 fieldBackground={doc.fieldBackground}
+                hideRoutesAndPlayers={anim.phase !== "idle"}
               />
+              <AnimationOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
+              <PlayControls anim={anim} />
             </div>
 
             {/* Field size controls (below canvas) */}
