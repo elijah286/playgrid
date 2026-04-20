@@ -15,6 +15,8 @@ export function LoginForm() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const urlInvite = searchParams.get("invite")?.trim() ?? "";
+  const nextParam = searchParams.get("next") ?? "";
+  const safeNext = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,7 +68,7 @@ export function LoginForm() {
           );
         }
       }
-      router.push("/home");
+      router.push(safeNext || "/home");
       router.refresh();
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : "Something went wrong", "error");
