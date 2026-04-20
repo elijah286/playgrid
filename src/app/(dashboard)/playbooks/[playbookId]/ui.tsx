@@ -460,8 +460,26 @@ export function PlaybookDetailClient({
         </div>
 
         {tab === "plays" && (
-        /* Slim top bar: search, filters, print, new */
+        /* Slim top bar: type tabs, search, filters, print, new */
         <div className="flex flex-wrap items-end gap-3">
+          <SegmentedControl
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v as PlayType | "all")}
+            options={
+              variant === "tackle_11"
+                ? [
+                    { value: "all", label: "All" },
+                    { value: "offense", label: "Offense" },
+                    { value: "defense", label: "Defense" },
+                    { value: "special_teams", label: "Special teams" },
+                  ]
+                : [
+                    { value: "all", label: "All" },
+                    { value: "offense", label: "Offense" },
+                    { value: "defense", label: "Defense" },
+                  ]
+            }
+          />
           <div className="min-w-[200px] flex-1">
             <Input
               leftIcon={Search}
