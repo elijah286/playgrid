@@ -1378,13 +1378,13 @@ export function EditorCanvas({
                 />
               )}
 
-              {/* Resize handles. Rectangle: 4 corners. Ellipse: +x and +y radius anchors. */}
-              {(() => {
+              {/* Resize handles — only visible when this zone is selected. */}
+              {selectedZoneId === z.id && (() => {
                 const handleR = 0.012;
-                const startResize = (
-                  ev: React.PointerEvent,
-                  axis: "rect-nw" | "rect-ne" | "rect-sw" | "rect-se" | "ellipse-x" | "ellipse-y",
-                ) => {
+                type Axis =
+                  | "n" | "s" | "e" | "w"
+                  | "ne" | "nw" | "se" | "sw";
+                const startResize = (ev: React.PointerEvent, axis: Axis) => {
                   ev.stopPropagation();
                   const svg = svgRef.current;
                   if (!svg) return;
@@ -1399,12 +1399,10 @@ export function EditorCanvas({
                     const dy = -(m.clientY - startY) / rect.height;
                     let nw = startW;
                     let nh = startH;
-                    if (axis === "rect-ne" || axis === "rect-se") nw = startW + dx;
-                    if (axis === "rect-nw" || axis === "rect-sw") nw = startW - dx;
-                    if (axis === "rect-ne" || axis === "rect-nw") nh = startH + dy;
-                    if (axis === "rect-se" || axis === "rect-sw") nh = startH - dy;
-                    if (axis === "ellipse-x") nw = startW + dx;
-                    if (axis === "ellipse-y") nh = startH + dy;
+                    if (axis.includes("e")) nw = startW + dx;
+                    if (axis.includes("w")) nw = startW - dx;
+                    if (axis.includes("n")) nh = startH + dy;
+                    if (axis.includes("s")) nh = startH - dy;
                     dispatch({
                       type: "zone.update",
                       zoneId: z.id,
@@ -1431,7 +1429,7 @@ export function EditorCanvas({
                 }: {
                   hx: number;
                   hy: number;
-                  axis: Parameters<typeof startResize>[1];
+                  axis: Axis;
                   cursor: string;
                 }) => (
                   <rect
@@ -1450,17 +1448,23 @@ export function EditorCanvas({
                 if (z.kind === "rectangle") {
                   return (
                     <>
-                      <Handle hx={cx - w} hy={cy - h} axis="rect-nw" cursor="nwse-resize" />
-                      <Handle hx={cx + w} hy={cy - h} axis="rect-ne" cursor="nesw-resize" />
-                      <Handle hx={cx - w} hy={cy + h} axis="rect-sw" cursor="nesw-resize" />
-                      <Handle hx={cx + w} hy={cy + h} axis="rect-se" cursor="nwse-resize" />
+                      <Handle hx={cx - w} hy={cy - h} axis="nw" cursor="nwse-resize" />
+                      <Handle hx={cx + w} hy={cy - h} axis="ne" cursor="nesw-resize" />
+                      <Handle hx={cx - w} hy={cy + h} axis="sw" cursor="nesw-resize" />
+                      <Handle hx={cx + w} hy={cy + h} axis="se" cursor="nwse-resize" />
+                      <Handle hx={cx} hy={cy - h} axis="n" cursor="ns-resize" />
+                      <Handle hx={cx} hy={cy + h} axis="s" cursor="ns-resize" />
+                      <Handle hx={cx + w} hy={cy} axis="e" cursor="ew-resize" />
+                      <Handle hx={cx - w} hy={cy} axis="w" cursor="ew-resize" />
                     </>
                   );
                 }
                 return (
                   <>
-                    <Handle hx={cx + w} hy={cy} axis="ellipse-x" cursor="ew-resize" />
-                    <Handle hx={cx} hy={cy - h} axis="ellipse-y" cursor="ns-resize" />
+                    <Handle hx={cx + w} hy={cy} axis="e" cursor="ew-resize" />
+                    <Handle hx={cx - w} hy={cy} axis="w" cursor="ew-resize" />
+                    <Handle hx={cx} hy={cy - h} axis="n" cursor="ns-resize" />
+                    <Handle hx={cx} hy={cy + h} axis="s" cursor="ns-resize" />
                   </>
                 );
               })()}
@@ -2130,48 +2134,13 @@ export function EditorCanvas({
       {zoneMenu && mode !== "formation" && (() => {
         const z = (doc.layers.zones ?? []).find((zn) => zn.id === zoneMenu.zoneId);
         if (!z) return null;
-        const ZONE_COLORS: { fill: string; stroke: string; label: string }[] = [
-          { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)", label: "Blue" },
-          { fill: "rgba(239,68,68,0.18)", stroke: "rgba(239,68,68,0.7)", label: "Red" },
-          { fill: "rgba(34,197,94,0.18)", stroke: "rgba(34,197,94,0.7)", label: "Green" },
-          { fill: "rgba(250,204,21,0.22)", stroke: "rgba(202,138,4,0.75)", label: "Yellow" },
-          { fill: "rgba(168,85,247,0.18)", stroke: "rgba(168,85,247,0.7)", label: "Purple" },
-          { fill: "rgba(148,163,184,0.22)", stroke: "rgba(71,85,105,0.75)", label: "Gray" },
-        ];
         return (
           <div
             data-segment-menu
-            className="absolute z-20 min-w-[220px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+            className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
             style={{ left: zoneMenu.screenX, top: zoneMenu.screenY }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <div className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
-              Color
-            </div>
-            <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-              {ZONE_COLORS.map((c) => {
-                const active = z.style.fill === c.fill && z.style.stroke === c.stroke;
-                return (
-                  <button
-                    key={c.label}
-                    type="button"
-                    title={c.label}
-                    onClick={() => {
-                      dispatch({
-                        type: "zone.update",
-                        zoneId: z.id,
-                        patch: { style: { fill: c.fill, stroke: c.stroke } },
-                      });
-                    }}
-                    className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
-                      active ? "border-primary scale-110" : "border-border"
-                    }`}
-                    style={{ backgroundColor: c.stroke }}
-                  />
-                );
-              })}
-            </div>
-            <div className="h-px bg-border" />
             <button
               type="button"
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
