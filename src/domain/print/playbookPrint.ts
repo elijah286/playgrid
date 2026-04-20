@@ -4,13 +4,15 @@ export type PrintProductKind = "playsheet" | "wristband";
 
 export type PlaysheetGrouping = "manual" | "formation" | "name" | "number" | "group";
 
-export type PlaysPerSheet = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type PlaysheetColumns = 1 | 2 | 3 | 4 | 5;
 
-export const PLAYS_PER_SHEET_OPTIONS: readonly PlaysPerSheet[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-] as const;
+export const PLAYSHEET_COLUMN_OPTIONS: readonly PlaysheetColumns[] = [1, 2, 3, 4, 5] as const;
 
-export type WristbandGridLayout = "8" | "6" | "4" | "4col" | "3";
+export type PlaysheetPageBreak = "continuous" | "group";
+
+export type PlaysheetNoteLines = 1 | 2 | 3;
+
+export type WristbandGridLayout = "10" | "8" | "6" | "4" | "4col" | "3";
 export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
 export type WristbandIconSize = "small" | "medium" | "large";
 export type WristbandRouteWeight = "thin" | "medium" | "thick";
@@ -30,14 +32,28 @@ export const WRISTBAND_ZOOMS: readonly WristbandZoom[] = [50, 75, 100, 125, 150]
 
 export type PlaybookPrintRunConfig = {
   product: PrintProductKind;
-  /** Playsheet: diagrams per letter page (1–10). Wristband export ignores. */
-  playsPerSheet: PlaysPerSheet;
+  /** Playsheet: columns across a letter page (1–5). */
+  playsheetColumns: PlaysheetColumns;
   sheetOrientation: "portrait" | "landscape";
   playsheetGrouping: PlaysheetGrouping;
+  /** Playsheet: continuous packing or force a new page per group. */
+  playsheetPageBreak: PlaysheetPageBreak;
+  /** Playsheet: fixed-height notes strip under each play. */
+  playsheetShowNotes: boolean;
+  playsheetNoteLines: PlaysheetNoteLines;
+  /** Playsheet visual look (matches wristband options). */
+  playsheetIconSize: WristbandIconSize;
+  playsheetRouteWeight: WristbandRouteWeight;
+  playsheetLabelStyle: WristbandLabelStyle;
+  playsheetLabels: WristbandLabelMode;
+  playsheetColorCoding: boolean;
+  playsheetShowLos: boolean;
+  playsheetShowYardMarkers: boolean;
+  playsheetShowPlayerLabels: boolean;
+  playsheetPlayerOutline: boolean;
   /** Visual emphasis only for now (feeds print compiler) */
   backfieldYards: number;
   downfieldYards: number;
-  includeCommentsAndNotes: boolean;
   /** Wristband: outer dimensions in inches (quarter-inch increments) */
   wristbandWidthIn: number;
   wristbandHeightIn: number;
@@ -53,8 +69,8 @@ export type PlaybookPrintRunConfig = {
   wristbandLabelStyle: WristbandLabelStyle;
   /** Wristband: which play label(s) to show per tile */
   wristbandLabels: WristbandLabelMode;
-  /** Wristband: player marker shape */
-  wristbandPlayerShape: WristbandPlayerShape;
+  /** Wristband: draw dark outline around player markers */
+  wristbandPlayerOutline: boolean;
   /** Wristband: color-code labels by group/formation */
   wristbandColorCoding: boolean;
   /** Wristband: draw LOS line on each tile */
@@ -68,21 +84,32 @@ export type PlaybookPrintRunConfig = {
 
 export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   product: "playsheet",
-  playsPerSheet: 1,
+  playsheetColumns: 3,
   sheetOrientation: "portrait",
   playsheetGrouping: "manual",
+  playsheetPageBreak: "continuous",
+  playsheetShowNotes: true,
+  playsheetNoteLines: 2,
+  playsheetIconSize: "medium",
+  playsheetRouteWeight: "medium",
+  playsheetLabelStyle: "compact",
+  playsheetLabels: "both",
+  playsheetColorCoding: false,
+  playsheetShowLos: true,
+  playsheetShowYardMarkers: true,
+  playsheetShowPlayerLabels: true,
+  playsheetPlayerOutline: false,
   backfieldYards: 10,
   downfieldYards: 15,
-  includeCommentsAndNotes: true,
-  wristbandWidthIn: 4.5,
+  wristbandWidthIn: 4,
   wristbandHeightIn: 2.25,
-  wristbandGridLayout: "6",
+  wristbandGridLayout: "8",
   wristbandZoom: 100,
-  wristbandIconSize: "large",
+  wristbandIconSize: "medium",
   wristbandRouteWeight: "medium",
   wristbandLabelStyle: "compact",
   wristbandLabels: "number",
-  wristbandPlayerShape: "circle",
+  wristbandPlayerOutline: false,
   wristbandColorCoding: true,
   wristbandShowLos: true,
   wristbandShowYardMarkers: true,
@@ -92,6 +119,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {
   switch (layout) {
+    case "10":
+      return { rows: 2, cols: 5 };
     case "8":
       return { rows: 2, cols: 4 };
     case "6":
@@ -202,10 +231,16 @@ export function formatPlayNavSubtitle(p: Pick<PlaybookPlayNavItem, "formation_na
 /** Clone for PDF export only — does not replace on-screen document */
 export function applyExportPresentation(doc: PlayDocument, run: PlaybookPrintRunConfig): PlayDocument {
   const out: PlayDocument = structuredClone(doc);
-  out.printProfile.visibility.showNotes = run.includeCommentsAndNotes;
   if (run.product === "wristband") {
+    out.printProfile.visibility.showNotes = false;
     const showCode = run.wristbandLabels !== "name";
     const showName = run.wristbandLabels !== "number";
+    if (!showCode) out.printProfile.visibility.showWristbandCode = false;
+    if (!showName) out.metadata.coachName = "\u200b";
+  } else {
+    out.printProfile.visibility.showNotes = run.playsheetShowNotes;
+    const showCode = run.playsheetLabels !== "name";
+    const showName = run.playsheetLabels !== "number";
     if (!showCode) out.printProfile.visibility.showWristbandCode = false;
     if (!showName) out.metadata.coachName = "\u200b";
   }

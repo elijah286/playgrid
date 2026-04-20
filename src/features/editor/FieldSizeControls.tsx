@@ -1,243 +1,156 @@
 "use client";
 
-import { useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { PlayDocument, SportProfile, SportVariant } from "@/domain/play/types";
+import type { PlayDocument } from "@/domain/play/types";
 import {
+  resolveBackfieldYards,
+  resolveDownfieldYards,
   resolveFieldZone,
   resolveLineOfScrimmage,
   resolveShowHashMarks,
   resolveShowYardNumbers,
 } from "@/domain/play/factory";
-import { Button, Input, SegmentedControl } from "@/components/ui";
+import { SegmentedControl } from "@/components/ui";
 
 type Props = {
-  profile: SportProfile;
+  doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
-  /** Full document — lets us read/toggle hash-marks state. Optional so older
-   *  callsites keep compiling. */
-  doc?: PlayDocument;
 };
 
-type Preset = {
-  key: string;
+/** Small +/- spinner for an integer yard value. */
+function YardSpinner({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
   label: string;
-  variant: SportVariant;
-  fieldLengthYds: number;
-  fieldWidthYds: number;
-  offensePlayerCount: number;
-};
-
-// Display window is always 25 yards (10 yds backfield + 15 yds downfield).
-const PRESETS: Preset[] = [
-  {
-    key: "flag_5v5",
-    label: "Flag 5v5",
-    variant: "flag_5v5",
-    fieldLengthYds: 25,
-    fieldWidthYds: 25,
-    offensePlayerCount: 5,
-  },
-  {
-    key: "flag_7v7",
-    label: "Flag 7v7",
-    variant: "flag_7v7",
-    fieldLengthYds: 25,
-    fieldWidthYds: 30,
-    offensePlayerCount: 7,
-  },
-  {
-    key: "other",
-    label: "Other",
-    variant: "other" as SportVariant,
-    fieldLengthYds: 25,
-    fieldWidthYds: 40,
-    offensePlayerCount: 6,
-  },
-  {
-    key: "tackle_11",
-    label: "Tackle 11v11",
-    variant: "tackle_11",
-    fieldLengthYds: 25,
-    fieldWidthYds: 53,
-    offensePlayerCount: 11,
-  },
-];
-
-export function FieldSizeControls({ profile, dispatch, doc }: Props) {
-  const [showCustom, setShowCustom] = useState(false);
-  const [customLen, setCustomLen] = useState(String(profile.fieldLengthYds));
-  const [customWid, setCustomWid] = useState(String(profile.fieldWidthYds));
-
-  const matchedPreset = PRESETS.find(
-    (p) =>
-      p.fieldLengthYds === profile.fieldLengthYds &&
-      p.fieldWidthYds === profile.fieldWidthYds &&
-      p.variant === profile.variant,
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[11px] text-muted">{label}</span>
+      <button
+        type="button"
+        aria-label={`Decrease ${label}`}
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
+        className="flex size-5 items-center justify-center rounded border border-border bg-surface-inset text-xs text-muted hover:bg-surface-raised hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        −
+      </button>
+      <span className="w-6 text-center text-xs font-medium tabular-nums text-foreground">
+        {value}
+      </span>
+      <button
+        type="button"
+        aria-label={`Increase ${label}`}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
+        className="flex size-5 items-center justify-center rounded border border-border bg-surface-inset text-xs text-muted hover:bg-surface-raised hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        +
+      </button>
+    </div>
   );
+}
 
-  const applyPreset = (preset: Preset) => {
-    dispatch({
-      type: "document.setSportProfile",
-      patch: {
-        variant: preset.variant,
-        fieldLengthYds: preset.fieldLengthYds,
-        fieldWidthYds: preset.fieldWidthYds,
-        offensePlayerCount: preset.offensePlayerCount,
-      },
-    });
-    setShowCustom(false);
-  };
+export function FieldSizeControls({ doc, dispatch }: Props) {
+  const backfield = resolveBackfieldYards(doc);
+  const downfield = resolveDownfieldYards(doc);
 
-  const applyCustom = () => {
-    const len = Math.max(5, Math.min(120, Number(customLen) || profile.fieldLengthYds));
-    const wid = Math.max(5, Math.min(100, Number(customWid) || profile.fieldWidthYds));
-    dispatch({
-      type: "document.setSportProfile",
-      patch: { fieldLengthYds: len, fieldWidthYds: wid },
-    });
+  const handleYards = (bk: number, dn: number) => {
+    dispatch({ type: "field.setYardage", backfieldYards: bk, downfieldYards: dn });
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-        Field
-      </span>
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2">
+      {/* Yard window spinners */}
+      <YardSpinner
+        label="Bkf"
+        value={backfield}
+        min={2}
+        max={30}
+        onChange={(v) => handleYards(v, downfield)}
+      />
+      <YardSpinner
+        label="Dwn"
+        value={downfield}
+        min={5}
+        max={50}
+        onChange={(v) => handleYards(backfield, v)}
+      />
 
-      <div className="flex items-center gap-1">
-        {PRESETS.map((p) => {
-          const active = matchedPreset?.key === p.key && !showCustom;
-          return (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => applyPreset(p)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                active
-                  ? "bg-surface-inset text-foreground shadow-sm"
-                  : "text-muted hover:bg-surface-inset/50 hover:text-foreground"
-              }`}
-              title={`${p.fieldLengthYds}×${p.fieldWidthYds} yd`}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => setShowCustom((s) => !s)}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-            showCustom
-              ? "bg-surface-inset text-foreground shadow-sm"
-              : "text-muted hover:bg-surface-inset/50 hover:text-foreground"
-          }`}
-        >
-          Custom
-        </button>
+      <div className="h-4 w-px bg-border" />
+
+      {/* Hash marks */}
+      <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+        <input
+          type="checkbox"
+          className="size-3.5 cursor-pointer accent-primary"
+          checked={resolveShowHashMarks(doc)}
+          onChange={(e) =>
+            dispatch({
+              type: "document.setShowHashMarks",
+              showHashMarks: e.target.checked,
+            })
+          }
+        />
+        <span>Hashes</span>
+      </label>
+
+      {/* Yard numbers */}
+      <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+        <input
+          type="checkbox"
+          className="size-3.5 cursor-pointer accent-primary"
+          checked={resolveShowYardNumbers(doc)}
+          onChange={(e) =>
+            dispatch({
+              type: "document.setShowYardNumbers",
+              showYardNumbers: e.target.checked,
+            })
+          }
+        />
+        <span>Numbers</span>
+      </label>
+
+      {/* LOS style */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-muted">LOS</span>
+        <SegmentedControl
+          size="sm"
+          options={[
+            { value: "line" as const, label: "Line" },
+            { value: "football" as const, label: "Ball" },
+            { value: "none" as const, label: "None" },
+          ]}
+          value={resolveLineOfScrimmage(doc)}
+          onChange={(v) =>
+            dispatch({ type: "document.setLineOfScrimmage", lineOfScrimmage: v })
+          }
+        />
       </div>
 
-      {doc && (
-        <label className="ml-2 flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
-          <input
-            type="checkbox"
-            className="size-3.5 cursor-pointer accent-primary"
-            checked={resolveShowHashMarks(doc)}
-            onChange={(e) =>
-              dispatch({
-                type: "document.setShowHashMarks",
-                showHashMarks: e.target.checked,
-              })
-            }
-          />
-          <span>Hash marks</span>
-        </label>
-      )}
-
-      {doc && (
-        <label className="ml-2 flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
-          <input
-            type="checkbox"
-            className="size-3.5 cursor-pointer accent-primary"
-            checked={resolveShowYardNumbers(doc)}
-            onChange={(e) =>
-              dispatch({
-                type: "document.setShowYardNumbers",
-                showYardNumbers: e.target.checked,
-              })
-            }
-          />
-          <span>Yard numbers</span>
-        </label>
-      )}
-
-      {doc && (
-        <div className="ml-2 flex items-center gap-1.5">
-          <span className="text-xs text-muted">LOS</span>
-          <SegmentedControl
-            size="sm"
-            options={[
-              { value: "line" as const, label: "Line" },
-              { value: "football" as const, label: "Ball" },
-              { value: "none" as const, label: "None" },
-            ]}
-            value={resolveLineOfScrimmage(doc)}
-            onChange={(v) =>
-              dispatch({ type: "document.setLineOfScrimmage", lineOfScrimmage: v })
-            }
-          />
-        </div>
-      )}
-
-      {doc && (
-        <div className="ml-2 flex items-center gap-1.5">
-          <span className="text-xs text-muted">Zone</span>
-          <SegmentedControl
-            size="sm"
-            options={[
-              { value: "midfield" as const, label: "Mid-field" },
-              { value: "red_zone" as const, label: "Red zone" },
-            ]}
-            value={resolveFieldZone(doc)}
-            onChange={(v) =>
-              dispatch({ type: "document.setFieldZone", fieldZone: v })
-            }
-          />
-        </div>
-      )}
-
-      <div className="ml-auto text-xs text-muted">
-        {profile.fieldLengthYds}L × {profile.fieldWidthYds}W yd
+      {/* Field zone */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-muted">Zone</span>
+        <SegmentedControl
+          size="sm"
+          options={[
+            { value: "midfield" as const, label: "Mid" },
+            { value: "red_zone" as const, label: "Red" },
+          ]}
+          value={resolveFieldZone(doc)}
+          onChange={(v) =>
+            dispatch({ type: "document.setFieldZone", fieldZone: v })
+          }
+        />
       </div>
-
-      {showCustom && (
-        <div className="flex w-full flex-wrap items-center gap-2 border-t border-border pt-2">
-          <label className="flex items-center gap-1.5">
-            <span className="text-xs text-muted">Length</span>
-            <Input
-              type="number"
-              value={customLen}
-              onChange={(e) => setCustomLen(e.target.value)}
-              className="w-20"
-              min={5}
-              max={120}
-            />
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span className="text-xs text-muted">Width</span>
-            <Input
-              type="number"
-              value={customWid}
-              onChange={(e) => setCustomWid(e.target.value)}
-              className="w-20"
-              min={5}
-              max={100}
-            />
-          </label>
-          <Button size="sm" variant="primary" onClick={applyCustom}>
-            Apply
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

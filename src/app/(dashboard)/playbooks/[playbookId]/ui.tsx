@@ -38,7 +38,7 @@ import {
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { Player, Route, SportVariant } from "@/domain/play/types";
-import { resolveEndDecoration, resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import { defaultPlayersForVariant, resolveEndDecoration, resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import {
@@ -68,17 +68,24 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
 export function PlaybookDetailClient({
   playbookId,
   sportVariant,
+  playerCount: playbookPlayerCount,
   initialPlays,
   initialGroups,
 }: {
   playbookId: string;
   sportVariant: string;
+  playerCount?: number;
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
 }) {
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
-  const expectedPlayerCount = variantProfile.offensePlayerCount;
+  const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
+  // Default players for this variant/count — used for "No specific formation"
+  const defaultPlayers = useMemo(
+    () => defaultPlayersForVariant(variant, playbookPlayerCount),
+    [variant, playbookPlayerCount],
+  );
   const variantLabel = SPORT_VARIANT_LABELS[variant] ?? variant;
   const router = useRouter();
   const { toast } = useToast();
@@ -212,9 +219,13 @@ export function PlaybookDetailClient({
     setShowFormationPicker(false);
     setCreating(true);
     const res = await createPlayAction(playbookId, {
-      initialPlayers: formation?.players,
+      // Always provide players so the action uses the right variant layout.
+      // Fall back to the variant's computed default when no saved formation is chosen.
+      initialPlayers: formation?.players ?? defaultPlayers,
       formationId: formation?.id ?? null,
       formationName: formation?.displayName ?? "",
+      variant,
+      playerCount: playbookPlayerCount,
     });
     if (res.ok) {
       router.push(`/plays/${res.playId}/edit`);
@@ -227,7 +238,7 @@ export function PlaybookDetailClient({
   async function createAndGoToFormationEditor() {
     setShowFormationPicker(false);
     setCreating(true);
-    const res = await createPlayAction(playbookId, {});
+    const res = await createPlayAction(playbookId, { initialPlayers: defaultPlayers, variant, playerCount: playbookPlayerCount });
     if (res.ok) {
       // Go to formation editor; when user saves, the formation editor
       // should redirect back to the play. Pass playId as return target.
@@ -647,7 +658,7 @@ export function PlaybookDetailClient({
                       className="flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
                       onClick={() => createWithFormation()}
                     >
-                      <MiniPlayerDiagram players={null} />
+                      <MiniPlayerDiagram players={defaultPlayers} />
                       <div>
                         <p className="text-sm font-semibold text-foreground">No specific formation</p>
                         <p className="text-xs text-muted">{expectedPlayerCount} default players</p>

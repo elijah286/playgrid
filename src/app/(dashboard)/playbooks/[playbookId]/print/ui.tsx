@@ -12,10 +12,10 @@ import {
   type PlaybookPrintRunConfig,
 } from "@/domain/print/playbookPrint";
 import {
-  compilePlaysheetGridSvg,
   compilePlaysheetPdfPages,
   compileWristbandGridSvg,
   compileWristbandPdfPages,
+  type PlaysheetOptions,
   type WristbandGridOptions,
 } from "@/domain/print/templates";
 import { exportSvgsToMultiPagePdf } from "@/features/print/exportPdf";
@@ -93,11 +93,11 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       routeWeight: config.wristbandRouteWeight,
       labelStyle: config.wristbandLabelStyle,
       labels: config.wristbandLabels,
-      playerShape: config.wristbandPlayerShape,
       colorCoding: config.wristbandColorCoding,
       showLos: config.wristbandShowLos,
       showYardMarkers: config.wristbandShowYardMarkers,
       showPlayerLabels: config.wristbandShowPlayerLabels,
+      playerOutline: config.wristbandPlayerOutline,
     }),
     [
       config.wristbandWidthIn,
@@ -108,41 +108,82 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
       config.wristbandRouteWeight,
       config.wristbandLabelStyle,
       config.wristbandLabels,
-      config.wristbandPlayerShape,
       config.wristbandColorCoding,
       config.wristbandShowLos,
       config.wristbandShowYardMarkers,
       config.wristbandShowPlayerLabels,
+      config.wristbandPlayerOutline,
     ],
   );
 
-  const preview = useMemo(() => {
-    if (config.product === "wristband") {
-      const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
-      const chosen = initialPack.filter((r) => selected.has(r.id));
-      const docs = (chosen.length > 0 ? chosen : initialPack.slice(0, 1))
-        .slice(0, tiles)
-        .map((r) => r.document);
-      if (docs.length === 0) return null;
-      return compileWristbandGridSvg(docs, wristbandGridOpts).svgMarkup;
-    }
+  const playsheetOpts: PlaysheetOptions = useMemo(
+    () => ({
+      columns: config.playsheetColumns,
+      orientation: config.sheetOrientation,
+      pageBreak: config.playsheetPageBreak,
+      showNotes: config.playsheetShowNotes,
+      noteLines: config.playsheetNoteLines,
+      iconSize: config.playsheetIconSize,
+      routeWeight: config.playsheetRouteWeight,
+      labelStyle: config.playsheetLabelStyle,
+      labels: config.playsheetLabels,
+      colorCoding: config.playsheetColorCoding,
+      showLos: config.playsheetShowLos,
+      showYardMarkers: config.playsheetShowYardMarkers,
+      showPlayerLabels: config.playsheetShowPlayerLabels,
+      playerOutline: config.playsheetPlayerOutline,
+    }),
+    [
+      config.playsheetColumns,
+      config.sheetOrientation,
+      config.playsheetPageBreak,
+      config.playsheetShowNotes,
+      config.playsheetNoteLines,
+      config.playsheetIconSize,
+      config.playsheetRouteWeight,
+      config.playsheetLabelStyle,
+      config.playsheetLabels,
+      config.playsheetColorCoding,
+      config.playsheetShowLos,
+      config.playsheetShowYardMarkers,
+      config.playsheetShowPlayerLabels,
+      config.playsheetPlayerOutline,
+    ],
+  );
+
+  const previewPages = useMemo<string[]>(() => {
     const chosen = initialPack.filter((r) => selected.has(r.id));
     const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
-    const docs = pool
-      .slice(0, config.playsPerSheet)
-      .map((r) => applyExportPresentation(r.document, config));
-    if (docs.length === 0) return null;
-    return compilePlaysheetGridSvg(docs, {
-      playsPerSheet: config.playsPerSheet,
-      orientation: config.sheetOrientation,
-      showNotes: config.includeCommentsAndNotes,
-    }).svgMarkup;
+    if (config.product === "wristband") {
+      const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
+      const docs = pool.map((r) => applyExportPresentation(r.document, config));
+      if (docs.length === 0) return [];
+      const pages: string[] = [];
+      for (let i = 0; i < docs.length; i += tiles) {
+        pages.push(
+          compileWristbandGridSvg(docs.slice(i, i + tiles), wristbandGridOpts).svgMarkup,
+        );
+      }
+      return pages;
+    }
+    const grouping = config.playsheetGrouping;
+    const navOrder = sortNavPlaysForPrint(
+      pool.map((r) => r.nav),
+      grouping,
+    );
+    const ordered = navOrder
+      .map((n) => pool.find((r) => r.id === n.id))
+      .filter((x): x is PlaybookPrintPackRow => x != null);
+    const docs = ordered.map((r) => applyExportPresentation(r.document, config));
+    const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
+    return compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys);
   }, [
     initialPack,
     selected,
     config,
     config.wristbandGridLayout,
     wristbandGridOpts,
+    playsheetOpts,
   ]);
 
   function exportPdf() {
@@ -165,11 +206,8 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
 
       let pages: string[];
       if (config.product === "playsheet") {
-        pages = compilePlaysheetPdfPages(docs, {
-          playsPerSheet: config.playsPerSheet,
-          orientation: config.sheetOrientation,
-          showNotes: config.includeCommentsAndNotes,
-        });
+        const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
+        pages = compilePlaysheetPdfPages(docs, playsheetOpts, groupKeys);
       } else {
         pages = compileWristbandPdfPages(docs, wristbandGridOpts);
       }
@@ -282,13 +320,18 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           {config.product === "wristband"
             ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"`
-            : `Live preview · ${config.playsPerSheet}/sheet · ${config.sheetOrientation}`}
+            : `Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
         </p>
-        {preview ? (
-          <div
-            className="overflow-auto rounded-xl border border-border bg-surface-raised p-4 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full"
-            dangerouslySetInnerHTML={{ __html: preview }}
-          />
+        {previewPages.length > 0 ? (
+          <div className="space-y-4">
+            {previewPages.map((svg, i) => (
+              <div
+                key={i}
+                className="overflow-auto rounded-xl border border-border bg-surface-raised p-4 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full"
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+            ))}
+          </div>
         ) : (
           <p className="text-sm text-muted">Select a play to preview.</p>
         )}

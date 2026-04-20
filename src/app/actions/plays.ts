@@ -3,8 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { createEmptyPlayDocument, generateOtherVariantPlayers, normalizePlayDocument } from "@/domain/play/factory";
-import type { PlayDocument, Player, Route } from "@/domain/play/types";
+import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
+import type { PlayDocument, Player, Route, SportVariant } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -122,7 +122,8 @@ export async function createPlayAction(
     initialPlayers?: Player[];
     formationId?: string | null;
     formationName?: string;
-    playerCount?: number;       // for "other" variant
+    playerCount?: number;
+    variant?: SportVariant;
   },
 ) {
   if (!hasSupabaseEnv()) {
@@ -134,15 +135,17 @@ export async function createPlayAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  // Determine players: use provided initialPlayers, or generate for playerCount, or default
-  let players: Player[] | undefined = opts?.initialPlayers;
-  if (!players && opts?.playerCount != null) {
-    players = generateOtherVariantPlayers(opts.playerCount);
-  }
+  // Use the playbook's variant to drive both sport profile and default players.
+  const effectiveVariant: SportVariant = opts?.variant ?? "flag_7v7";
+  const sportProfile = sportProfileForVariant(effectiveVariant);
+  const players: Player[] =
+    opts?.initialPlayers ??
+    defaultPlayersForVariant(effectiveVariant, opts?.playerCount);
 
-  const doc = players
-    ? createEmptyPlayDocument({ layers: { players, routes: [], annotations: [] } })
-    : createEmptyPlayDocument();
+  const doc = createEmptyPlayDocument({
+    sportProfile,
+    layers: { players, routes: [], annotations: [] },
+  });
 
   // Patch metadata with formation link
   doc.metadata.formationId = opts?.formationId ?? null;

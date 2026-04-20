@@ -477,7 +477,7 @@ export function PlayEditorClient({
             </div>
 
             {/* Field size controls (below canvas) */}
-            <FieldSizeControls profile={doc.sportProfile} dispatch={dispatch} doc={doc} />
+            <FieldSizeControls doc={doc} dispatch={dispatch} />
 
             {/* Play notes */}
             <PlayNotesCard

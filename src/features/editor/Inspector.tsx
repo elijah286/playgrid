@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Link2Off, PlusCircle, Tag, Trash2 } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Check, ChevronDown, Link2Off, RefreshCcw, Trash2 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
 import { Select, Badge, Button } from "@/components/ui";
 import { QuickRoutes } from "./QuickRoutes";
-import type { SavedFormation } from "@/app/actions/formations";
+import { listFormationsAction, type SavedFormation } from "@/app/actions/formations";
 
 type Props = {
   doc: PlayDocument;
@@ -48,14 +48,17 @@ export function Inspector({
   const formationTag = doc.metadata.formationTag;
   const formationName = doc.metadata.formation;
 
-  const hasDrift = !!formationId && !!linkedFormation && (() => {
-    const fpMap = new Map(linkedFormation.players.map((p) => [p.id, p.position]));
-    return doc.layers.players.some((p) => {
-      const fp = fpMap.get(p.id);
-      if (!fp) return false;
-      return Math.hypot(p.position.x - fp.x, p.position.y - fp.y) > DRIFT_THRESHOLD;
-    });
-  })();
+  const hasDrift =
+    !!formationId &&
+    !!linkedFormation &&
+    (() => {
+      const fpMap = new Map(linkedFormation.players.map((p) => [p.id, p.position]));
+      return doc.layers.players.some((p) => {
+        const fp = fpMap.get(p.id);
+        if (!fp) return false;
+        return Math.hypot(p.position.x - fp.x, p.position.y - fp.y) > DRIFT_THRESHOLD;
+      });
+    })();
 
   return (
     <div className="space-y-5 text-sm">
@@ -70,71 +73,15 @@ export function Inspector({
         </section>
       )}
 
-      {/* Formation link indicator / drift banner */}
-      {formationId && (
-        <section className={`rounded-lg px-3 py-2.5 ring-1 ${
-          hasDrift && !formationTag
-            ? "bg-warning-light ring-warning/20"
-            : "bg-surface-inset ring-border"
-        }`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className={`text-[11px] font-semibold uppercase tracking-wider ${hasDrift && !formationTag ? "text-warning" : "text-muted"}`}>
-              {hasDrift && !formationTag ? "⚠ Formation drifted" : "Formation"}
-            </p>
-            <button
-              type="button"
-              title="Unlink formation"
-              onClick={() => dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" })}
-              className="text-muted hover:text-foreground"
-            >
-              <Link2Off className="size-3.5" />
-            </button>
-          </div>
-          <p className="mt-0.5 text-xs font-medium text-foreground">
-            {formationName || "Linked formation"}
-            {formationTag && <span className="ml-1.5 text-xs text-muted">— {formationTag}</span>}
-          </p>
-
-          {/* Drift actions */}
-          {hasDrift && !formationTag && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {/* Keep — do nothing, just dismiss by adding empty tag sentinel */}
-              <button
-                type="button"
-                className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] font-medium text-foreground hover:bg-surface-inset"
-                onClick={() => {/* no-op: user acknowledges but keeps link */}}
-              >
-                Keep link
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] font-medium text-foreground hover:bg-surface-inset"
-                onClick={() => {
-                  dispatch({ type: "document.setFormationLink", formationId: null, formationName: formationName ?? "" });
-                }}
-              >
-                Unlink
-              </button>
-            </div>
-          )}
-
-          {/* Formation tag picker */}
-          <div className="mt-2">
-            <FormationTagPicker
-              value={formationTag ?? ""}
-              onChange={(tag) => dispatch({ type: "document.setFormationTag", formationTag: tag || null })}
-            />
-          </div>
-        </section>
-      )}
-
-      {/* No formation linked — show option to pick one */}
-      {!formationId && (
-        <section>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Formation</p>
-          <p className="mt-1 text-xs text-muted">No formation linked</p>
-        </section>
-      )}
+      {/* Formation section — always visible */}
+      <FormationSection
+        formationId={formationId ?? null}
+        formationName={formationName ?? ""}
+        formationTag={formationTag ?? null}
+        linkedFormation={linkedFormation ?? null}
+        hasDrift={hasDrift}
+        dispatch={dispatch}
+      />
 
       {player && (
         <section>
@@ -207,6 +154,239 @@ export function Inspector({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Formation section                                                  */
+/* ------------------------------------------------------------------ */
+
+function FormationSection({
+  formationId,
+  formationName,
+  formationTag,
+  linkedFormation,
+  hasDrift,
+  dispatch,
+}: {
+  formationId: string | null;
+  formationName: string;
+  formationTag: string | null;
+  linkedFormation: SavedFormation | null;
+  hasDrift: boolean;
+  dispatch: (c: PlayCommand) => void;
+}) {
+  const isDrifted = hasDrift && !formationTag;
+
+  return (
+    <section
+      className={`rounded-lg px-3 py-2.5 ring-1 ${
+        isDrifted ? "bg-warning-light ring-warning/20" : "bg-surface-inset ring-border"
+      }`}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2">
+        <p
+          className={`text-[11px] font-semibold uppercase tracking-wider ${
+            isDrifted ? "text-warning" : "text-muted"
+          }`}
+        >
+          {isDrifted ? "⚠ Formation drifted" : "Formation"}
+        </p>
+      </div>
+
+      {/* Formation name + actions row */}
+      <div className="mt-1 flex items-center gap-1.5">
+        {/* Clickable name — opens change picker */}
+        <FormationChangePicker
+          formationId={formationId}
+          formationName={formationName}
+          dispatch={dispatch}
+        />
+
+        {/* Reapply — snap back to formation positions */}
+        {formationId && linkedFormation && (
+          <button
+            type="button"
+            title="Reapply formation (snap players back)"
+            onClick={() =>
+              dispatch({
+                type: "document.reapplyFormation",
+                players: linkedFormation.players,
+              })
+            }
+            className="flex items-center gap-1 rounded-md border border-border bg-surface-raised px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <RefreshCcw className="size-3" />
+            Reapply
+          </button>
+        )}
+
+        {/* Unlink */}
+        {formationId && (
+          <button
+            type="button"
+            title="Unlink formation"
+            onClick={() =>
+              dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" })
+            }
+            className="ml-auto flex size-6 items-center justify-center rounded text-muted hover:text-foreground"
+          >
+            <Link2Off className="size-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Tag row — shown when drifted (no tag yet) */}
+      {isDrifted && (
+        <div className="mt-2 border-t border-warning/20 pt-2">
+          <FormationTagPicker
+            value={formationTag ?? ""}
+            onChange={(tag) =>
+              dispatch({ type: "document.setFormationTag", formationTag: tag || null })
+            }
+          />
+        </div>
+      )}
+
+      {/* Active tag display */}
+      {formationTag && (
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+            {formationTag}
+          </span>
+          <button
+            type="button"
+            className="text-[11px] text-muted hover:text-foreground"
+            onClick={() =>
+              dispatch({ type: "document.setFormationTag", formationTag: null })
+            }
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Formation change picker (lazy-loaded dropdown)                     */
+/* ------------------------------------------------------------------ */
+
+function FormationChangePicker({
+  formationId,
+  formationName,
+  dispatch,
+}: {
+  formationId: string | null;
+  formationName: string;
+  dispatch: (c: PlayCommand) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [formations, setFormations] = useState<SavedFormation[] | null>(null);
+  const [, startTransition] = useTransition();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const openPicker = () => {
+    setOpen((prev) => !prev);
+    if (!formations) {
+      startTransition(async () => {
+        const res = await listFormationsAction();
+        if (res.ok) setFormations(res.formations);
+      });
+    }
+  };
+
+  const select = (f: SavedFormation | null) => {
+    if (!f) {
+      dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" });
+    } else {
+      dispatch({
+        type: "document.setFormationLink",
+        formationId: f.id,
+        formationName: f.displayName,
+        players: f.players,
+      });
+    }
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={openPicker}
+        className="flex max-w-full items-center gap-1 truncate text-xs font-medium text-foreground hover:text-primary"
+      >
+        <span className="truncate">
+          {formationName || "No formation"}
+        </span>
+        <ChevronDown className="size-3 shrink-0 text-muted" />
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-10"
+            onClick={() => setOpen(false)}
+          />
+          {/* Dropdown */}
+          <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-border bg-surface-raised shadow-lg">
+            {formations === null ? (
+              <p className="px-3 py-2 text-xs text-muted">Loading…</p>
+            ) : (
+              <ul className="max-h-56 overflow-y-auto py-1">
+                {/* No formation option */}
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => select(null)}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-inset ${
+                      !formationId ? "text-foreground" : "text-muted"
+                    }`}
+                  >
+                    {!formationId && <Check className="size-3 shrink-0" />}
+                    <span className={!formationId ? "ml-0" : "ml-5"}>No formation</span>
+                  </button>
+                </li>
+
+                {formations.length > 0 && (
+                  <li className="mx-2 my-1 border-t border-border" aria-hidden />
+                )}
+
+                {formations.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      onClick={() => select(f)}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-surface-inset ${
+                        f.id === formationId ? "text-foreground" : "text-muted"
+                      }`}
+                    >
+                      {f.id === formationId && <Check className="size-3 shrink-0" />}
+                      <span className={f.id === formationId ? "ml-0" : "ml-5"}>
+                        {f.displayName}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+
+                {formations.length === 0 && (
+                  <li className="px-3 py-1.5 text-xs text-muted">No formations saved yet</li>
+                )}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Formation tag picker                                               */
+/* ------------------------------------------------------------------ */
+
 const FORMATION_TAG_PRESETS = [
   "Under Center", "Pistol", "Empty", "Trips", "Bunch",
   "Spread", "Open", "Heavy", "Tight", "Nub", "Motion", "Jet", "Shift",
@@ -225,7 +405,7 @@ function FormationTagPicker({
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[11px] text-muted">Add a tag for this variation</p>
+      <p className="text-[11px] text-muted">Tag this variation</p>
       <div className="flex flex-wrap gap-1">
         {FORMATION_TAG_PRESETS.map((tag) => (
           <button
@@ -247,8 +427,12 @@ function FormationTagPicker({
         placeholder="Custom tag…"
         value={custom}
         onChange={(e) => setCustom(e.target.value)}
-        onBlur={() => { if (custom.trim()) onChange(custom.trim()); }}
-        onKeyDown={(e) => { if (e.key === "Enter" && custom.trim()) onChange(custom.trim()); }}
+        onBlur={() => {
+          if (custom.trim()) onChange(custom.trim());
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && custom.trim()) onChange(custom.trim());
+        }}
         className="w-full rounded-md border border-border bg-surface-inset px-2 py-1 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary"
       />
     </div>

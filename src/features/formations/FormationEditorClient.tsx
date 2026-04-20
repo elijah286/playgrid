@@ -27,7 +27,13 @@ const SPORT_OPTIONS = (
 ).map(([value, label]) => ({ value, label }));
 
 type Props =
-  | { mode: "new" }
+  | {
+      mode: "new";
+      /** Pre-selected sport variant (from ?variant= query param). */
+      initialVariant?: SportVariant;
+      /** Play ID to return to after saving (from ?returnToPlay= query param). */
+      returnToPlay?: string | null;
+    }
   | {
       mode: "edit";
       formationId: string;
@@ -41,13 +47,16 @@ export function FormationEditorClient(props: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
 
+  const defaultVariant: SportVariant =
+    props.mode === "edit"
+      ? props.initialVariant
+      : (props.initialVariant ?? "flag_7v7");
+
   /* ── name + sport variant ── */
   const [name, setName] = useState(
     props.mode === "edit" ? props.initialName : "",
   );
-  const [variant, setVariant] = useState<SportVariant>(
-    props.mode === "edit" ? props.initialVariant : "flag_7v7",
-  );
+  const [variant, setVariant] = useState<SportVariant>(defaultVariant);
 
   /* ── play-document state (drives the canvas) ── */
   const initialDoc =
@@ -62,7 +71,7 @@ export function FormationEditorClient(props: Props) {
           };
         })()
       : createEmptyPlayDocument({
-          sportProfile: sportProfileForVariant("flag_7v7"),
+          sportProfile: sportProfileForVariant(defaultVariant),
         });
 
   const { doc, dispatch, replaceDocument } = usePlayEditor(initialDoc);
@@ -115,7 +124,13 @@ export function FormationEditorClient(props: Props) {
       props.mode === "edit" ? "Formation updated" : "Formation saved",
       "success",
     );
-    router.push("/formations");
+    // If we came from "create new formation" in a playbook context, return to
+    // that play's editor; otherwise go to the formations list.
+    const returnTo =
+      props.mode === "new" && props.returnToPlay
+        ? `/plays/${props.returnToPlay}/edit`
+        : "/formations";
+    router.push(returnTo);
   }
 
   const fieldAspect =
@@ -181,9 +196,11 @@ export function FormationEditorClient(props: Props) {
               role, and style.
             </span>
           </div>
+          {/* Fixed 8:5 canvas — sport type changes field proportions inside
+              but never resizes this box. Green bg hides any letterboxing. */}
           <div
-            className="relative w-full overflow-hidden rounded-xl"
-            style={{ aspectRatio: `${fieldAspect} / 1` }}
+            className="relative w-full overflow-hidden rounded-xl bg-[#2D8B4E]"
+            style={{ aspectRatio: "8 / 5" }}
           >
             <EditorCanvas
               doc={doc}

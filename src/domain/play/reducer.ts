@@ -306,21 +306,86 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setFieldZone":
       return { ...doc, fieldZone: cmd.fieldZone };
 
-    case "document.setFormationLink":
+    case "document.setFormationLink": {
+      // Optionally snap player positions to the new formation (change formation).
+      let players = doc.layers.players;
+      if (cmd.players && cmd.players.length > 0) {
+        const fMap = new Map(cmd.players.map((p) => [p.id, p.position]));
+        players = doc.layers.players.map((p) => {
+          const pos = fMap.get(p.id);
+          return pos ? { ...p, position: pos } : p;
+        });
+      }
       return {
         ...doc,
         metadata: {
           ...doc.metadata,
           formationId: cmd.formationId,
           formation: cmd.formationName,
-          formationTag: null, // clear tag when re-linking
+          formationTag: null,
         },
+        layers: { ...doc.layers, players },
       };
+    }
     case "document.setFormationTag":
       return {
         ...doc,
         metadata: { ...doc.metadata, formationTag: cmd.formationTag },
       };
+
+    case "document.reapplyFormation": {
+      const fMap = new Map(cmd.players.map((p) => [p.id, p.position]));
+      const players = doc.layers.players.map((p) => {
+        const pos = fMap.get(p.id);
+        return pos ? { ...p, position: pos } : p;
+      });
+      return {
+        ...doc,
+        metadata: { ...doc.metadata, formationTag: null },
+        layers: { ...doc.layers, players },
+      };
+    }
+
+    case "field.setYardage": {
+      const clampYards = (v: number, lo: number, hi: number) =>
+        Math.max(lo, Math.min(hi, Math.round(v)));
+      const bk = clampYards(cmd.backfieldYards, 2, 30);
+      const dn = clampYards(cmd.downfieldYards, 5, 50);
+      const newTotal = bk + dn;
+      const newLosY = bk / newTotal;
+
+      const oldTotal = doc.sportProfile.fieldLengthYds;
+      const oldLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
+
+      const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+      const scaleY = (y: number) =>
+        clamp01(newLosY + ((y - oldLosY) * oldTotal) / newTotal);
+
+      return {
+        ...doc,
+        lineOfScrimmageY: newLosY,
+        sportProfile: { ...doc.sportProfile, fieldLengthYds: newTotal },
+        layers: {
+          players: doc.layers.players.map((p) => ({
+            ...p,
+            position: { x: p.position.x, y: scaleY(p.position.y) },
+          })),
+          routes: doc.layers.routes.map((r) => ({
+            ...r,
+            nodes: r.nodes.map((n) => ({
+              ...n,
+              position: { x: n.position.x, y: scaleY(n.position.y) },
+            })),
+            // controlOffset is a relative delta from segment midpoint — no rescaling needed
+            segments: r.segments,
+          })),
+          annotations: doc.layers.annotations.map((a) => ({
+            ...a,
+            anchor: { x: a.anchor.x, y: scaleY(a.anchor.y) },
+          })),
+        },
+      };
+    }
 
     case "document.flip": {
       const axis = cmd.axis;
