@@ -55,6 +55,9 @@ export async function ensureDefaultWorkspace(supabase: SupabaseClient, userId: s
       .single();
     if (error) throw error;
     playbookId = book.id;
+    await supabase
+      .from("playbook_members")
+      .insert({ playbook_id: playbookId, user_id: userId, role: "owner" });
   }
 
   if (!orgId || !teamId || !playbookId) {
@@ -87,5 +90,14 @@ export async function getOrCreateInboxPlaybook(
     .select("id")
     .single();
   if (insErr) throw insErr;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    await supabase
+      .from("playbook_members")
+      .insert({ playbook_id: created.id, user_id: user.id, role: "owner" });
+  }
   return created.id as string;
 }

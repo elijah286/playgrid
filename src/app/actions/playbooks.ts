@@ -77,6 +77,11 @@ export async function createPlaybookAction(
     .single();
 
   if (error) return { ok: false as const, error: error.message };
+
+  await supabase
+    .from("playbook_members")
+    .insert({ playbook_id: data.id, user_id: user.id, role: "owner" });
+
   return { ok: true as const, id: data.id };
 }
 
@@ -176,6 +181,10 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     .select("id")
     .single();
   if (pbErr) return { ok: false as const, error: pbErr.message };
+
+  await supabase
+    .from("playbook_members")
+    .insert({ playbook_id: newBook.id, user_id: user.id, role: "owner" });
 
   // Copy plays + current versions. Archived plays are skipped.
   const { data: plays, error: playsErr } = await supabase

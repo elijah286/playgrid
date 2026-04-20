@@ -421,24 +421,19 @@ export async function quickCreatePlayAction(initialPlayers?: Player[]) {
   return createPlayAction(inboxId, initialPlayers);
 }
 
+export type DashboardPlaybookTile = {
+  id: string;
+  name: string;
+  is_default: boolean;
+  updated_at: string | null;
+  play_count: number;
+  logo_url: string | null;
+  color: string | null;
+  role: "owner" | "editor" | "viewer";
+};
+
 export type DashboardSummary = {
-  recentPlays: {
-    id: string;
-    name: string;
-    concept: string | null;
-    shorthand: string | null;
-    wristband_code: string | null;
-    updated_at: string | null;
-    playbook_id: string;
-    playbook_name: string;
-  }[];
-  playbooks: {
-    id: string;
-    name: string;
-    is_default: boolean;
-    updated_at: string | null;
-    play_count: number;
-  }[];
+  playbooks: DashboardPlaybookTile[];
   totalPlays: number;
 };
 
@@ -455,80 +450,59 @@ export async function getDashboardSummaryAction(): Promise<
 
   await ensureDefaultWorkspace(supabase, user.id);
 
-  const [playsRes, booksRes, countRes] = await Promise.all([
-    supabase
-      .from("plays")
-      .select(
-        "id, name, concept, shorthand, wristband_code, updated_at, playbook_id, playbooks!inner(name, is_archived)",
-      )
-      .eq("is_archived", false)
-      .eq("playbooks.is_archived", false)
-      .order("updated_at", { ascending: false })
-      .limit(8),
-    supabase
-      .from("playbooks")
-      .select("id, name, is_default, updated_at, plays(count)")
-      .eq("is_archived", false)
-      .eq("plays.is_archived", false)
-      .order("updated_at", { ascending: false }),
-    supabase
-      .from("plays")
-      .select("id", { count: "exact", head: true })
-      .eq("is_archived", false),
-  ]);
+  // Read through playbook_members so we get both owned and shared playbooks,
+  // and know the caller's role on each.
+  const { data: memberRows, error: memErr } = await supabase
+    .from("playbook_members")
+    .select(
+      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, plays(count))",
+    )
+    .eq("user_id", user.id)
+    .eq("playbooks.is_archived", false)
+    .eq("playbooks.plays.is_archived", false);
 
-  if (playsRes.error) return { ok: false, error: playsRes.error.message };
-  if (booksRes.error) return { ok: false, error: booksRes.error.message };
+  if (memErr) return { ok: false, error: memErr.message };
 
-  type PlayJoin = {
-    id: string;
-    name: string;
-    concept: string | null;
-    shorthand: string | null;
-    wristband_code: string | null;
-    updated_at: string | null;
-    playbook_id: string;
-    playbooks: { name: string } | { name: string }[] | null;
-  };
-
-  const recentPlays = ((playsRes.data ?? []) as PlayJoin[]).map((r) => {
-    const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
-    return {
-      id: r.id,
-      name: r.name,
-      concept: r.concept,
-      shorthand: r.shorthand,
-      wristband_code: r.wristband_code,
-      updated_at: r.updated_at,
-      playbook_id: r.playbook_id,
-      playbook_name: pb?.name ?? "",
-    };
-  });
-
-  type PlaybookRow = {
+  type PlaybookJoin = {
     id: string;
     name: string;
     is_default: boolean;
     updated_at: string | null;
+    logo_url: string | null;
+    color: string | null;
     plays: { count: number }[] | { count: number } | null;
   };
-  const playbooks = ((booksRes.data ?? []) as PlaybookRow[]).map((b) => {
-    const agg = Array.isArray(b.plays) ? b.plays[0] : b.plays;
-    return {
-      id: b.id,
-      name: b.name,
-      is_default: b.is_default,
-      updated_at: b.updated_at,
-      play_count: agg?.count ?? 0,
-    };
-  });
+  type MemberJoin = {
+    role: "owner" | "editor" | "viewer";
+    playbooks: PlaybookJoin | PlaybookJoin[] | null;
+  };
+
+  const playbooks: DashboardPlaybookTile[] = ((memberRows ?? []) as unknown as MemberJoin[])
+    .map((r) => {
+      const b = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+      if (!b) return null;
+      const agg = Array.isArray(b.plays) ? b.plays[0] : b.plays;
+      return {
+        id: b.id,
+        name: b.name,
+        is_default: b.is_default,
+        updated_at: b.updated_at,
+        play_count: agg?.count ?? 0,
+        logo_url: b.logo_url,
+        color: b.color,
+        role: r.role,
+      };
+    })
+    .filter((r): r is DashboardPlaybookTile => r !== null)
+    .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+
+  const totalPlays = playbooks.reduce((n, b) => n + b.play_count, 0);
 
   return {
     ok: true,
     data: {
-      recentPlays,
       playbooks,
-      totalPlays: countRes.count ?? 0,
+      totalPlays,
     },
   };
 }
