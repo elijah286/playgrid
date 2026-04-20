@@ -12,9 +12,8 @@ import {
 
 /**
  * Constant pacing: every route advances at the same field-units per second.
- * The flattened routes are measured in normalized field coords (x:0..1,
- * y:0..1), so a route spanning 0.3 field-units takes ~1.2s at 0.25 units/s.
- * Tuned to "roughly 1 yard = ~0.25s" on a 25-yd display window.
+ * Flattened routes are measured in normalized field coords (x:0..1, y:0..1),
+ * so a route spanning 0.3 field-units takes ~1.7s at 0.18 units/s.
  */
 const UNITS_PER_SEC = 0.18;
 
@@ -25,24 +24,12 @@ export type AnimationPhase =
   | "play"
   | "done";
 
-export type AnimationFrame = {
-  phase: AnimationPhase;
-  /** Per-route arc-length progress in field-units. */
-  progress: Map<string, number>;
-  /** Per-player animated position. Not present = use player's default position. */
-  playerPositions: Map<string, Point2>;
-};
-
 export type PlayAnimation = {
   phase: AnimationPhase;
   hasMotion: boolean;
-  /** Progress map keyed by routeId (field-units traveled). */
   progress: Map<string, number>;
-  /** Animated player positions keyed by playerId. */
   playerPositions: Map<string, Point2>;
-  /** Flat (arc-length) view of routes for overlay rendering. */
   flats: FlatRoute[];
-  /** Advance to the next phase: idle→motion (or play), motion-done→play, done→idle (reset). */
   step: () => void;
   reset: () => void;
 };
@@ -54,15 +41,21 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
       .filter((f): f is FlatRoute => f !== null);
   }, [doc.layers.routes]);
 
-  const motionFlats = useMemo(
-    () => flats.filter((f) => hasMotion(f)),
+  const anyMotion = useMemo(
+    () => flats.some((f) => hasMotion(f)),
     [flats],
   );
-  const anyMotion = motionFlats.length > 0;
 
   const [phase, setPhase] = useState<AnimationPhase>("idle");
-  const [progress, setProgress] = useState<Map<string, number>>(() => new Map());
+  const [progress, setProgress] = useState<Map<string, number>>(
+    () => new Map(),
+  );
 
+  // The RAF loop mutates progress synchronously through this ref; setProgress
+  // is only called to trigger a re-render. Using the ref avoids the React 18
+  // quirk where setState functional updaters don't run until commit — we need
+  // to decide "animation done?" the same frame we advance.
+  const progressRef = useRef<Map<string, number>>(new Map());
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
 
@@ -74,9 +67,6 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
     lastTsRef.current = null;
   }, []);
 
-  // Animation loop. During "motion" phase, only motion portions of motion
-  // routes advance. During "play" phase, everything advances toward each
-  // route's full length.
   useEffect(() => {
     if (phase !== "motion" && phase !== "play") {
       stopRaf();
@@ -85,28 +75,26 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
 
     const tick = (ts: number) => {
       const last = lastTsRef.current ?? ts;
-      const dt = Math.min(0.1, (ts - last) / 1000); // cap huge gaps
+      const dt = Math.min(0.1, (ts - last) / 1000);
       lastTsRef.current = ts;
       const advance = dt * UNITS_PER_SEC;
 
+      const next = new Map(progressRef.current);
       let allDone = true;
-      setProgress((prev) => {
-        const next = new Map(prev);
-        for (const f of flats) {
-          const target =
-            phase === "motion"
-              ? hasMotion(f)
-                ? motionLength(f)
-                : 0
-              : f.length;
-          const current = next.get(f.routeId) ?? 0;
-          if (current < target) {
-            next.set(f.routeId, Math.min(target, current + advance));
-            if (Math.min(target, current + advance) < target) allDone = false;
-          }
-        }
-        return next;
-      });
+      for (const f of flats) {
+        const target =
+          phase === "motion"
+            ? hasMotion(f)
+              ? motionLength(f)
+              : 0
+            : f.length;
+        const current = next.get(f.routeId) ?? 0;
+        const newVal = Math.min(target, current + advance);
+        next.set(f.routeId, newVal);
+        if (newVal < target) allDone = false;
+      }
+      progressRef.current = next;
+      setProgress(next);
 
       if (allDone) {
         stopRaf();
@@ -123,33 +111,32 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
   const step = useCallback(() => {
     setPhase((p) => {
       if (p === "idle") {
-        if (anyMotion) return "motion";
+        progressRef.current = new Map();
         setProgress(new Map());
-        return "play";
+        return anyMotion ? "motion" : "play";
       }
       if (p === "motion-done") return "play";
       if (p === "done") {
+        progressRef.current = new Map();
         setProgress(new Map());
         return "idle";
       }
-      return p; // mid-animation presses ignored
+      return p;
     });
   }, [anyMotion]);
 
   const reset = useCallback(() => {
     stopRaf();
+    progressRef.current = new Map();
     setProgress(new Map());
     setPhase("idle");
   }, [stopRaf]);
 
-  // Compute animated player positions from current progress.
   const playerPositions = useMemo(() => {
     const map = new Map<string, Point2>();
     for (const f of flats) {
       const s = progress.get(f.routeId) ?? 0;
-      if (s > 0) {
-        map.set(f.carrierPlayerId, sampleAt(f, s));
-      }
+      if (s > 0) map.set(f.carrierPlayerId, sampleAt(f, s));
     }
     return map;
   }, [flats, progress]);
