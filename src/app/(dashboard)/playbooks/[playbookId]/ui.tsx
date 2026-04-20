@@ -296,7 +296,7 @@ export function PlaybookDetailClient({
             Print playbook
           </Button>
         </Link>
-        <div className="flex flex-col items-end gap-1">
+        <div className="relative">
           <Button
             variant="primary"
             leftIcon={Plus}
@@ -307,7 +307,7 @@ export function PlaybookDetailClient({
           </Button>
           <Link
             href={`/formations/new?variant=${variant}`}
-            className="text-xs text-muted hover:text-primary hover:underline"
+            className="absolute right-0 top-full mt-1 whitespace-nowrap text-xs text-muted hover:text-primary hover:underline"
           >
             + New formation
           </Link>
