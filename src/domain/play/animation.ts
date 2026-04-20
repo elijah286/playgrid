@@ -6,13 +6,14 @@ import type { Point2, Route, RouteSegment } from "./types";
 
 /**
  * A single route flattened to a polyline so we can sample positions by
- * arc-length. All segment shapes (straight, curve, zigzag, motion zig-zag)
- * reduce to line-strip samples here.
+ * arc-length. Curves are sampled densely so the animated path matches the
+ * rendered route. Motion segments collapse to a straight line from the
+ * motion's starting anchor to its end anchor — the visible zig-zag is a
+ * pre-snap convention, not a path the player actually runs.
  *
- * `length` is Euclidean length in field-units (x:0..1, y:0..1). Since the
- * field square is drawn with uniform aspect (the scale(fieldAspect,1) group
- * compensates rendering), two routes of equal field-unit length animate for
- * the same duration — which is what we want for "1 yard per tick" feel.
+ * If a route branches, the player follows the first branch created at each
+ * fork (segments are picked in their route.segments array order). A player
+ * can only be in one place at a time.
  */
 export type FlatRoute = {
   routeId: string;
@@ -24,22 +25,25 @@ export type FlatRoute = {
   /** Total length == cumulative[cumulative.length - 1]. */
   length: number;
   /**
-   * Index in `points` at which post-motion segments begin. 0 means the whole
-   * route is post-snap (no motion). points.length - 1 means the whole route
-   * is motion (rare). Used to split animation into pre-snap + post-snap.
+   * Arc-length at which post-motion segments begin. 0 means the whole route
+   * is post-snap. Equal to `length` when the whole route is motion.
    */
-  motionSplitIndex: number;
+  motionBoundary: number;
+  /**
+   * Pre-rendered SVG `d` string matching the static route render, so the
+   * overlay can draw an exact copy of the visible path (curves and all).
+   * Ordered along the same walk used to build `points`.
+   */
+  fullD: string;
 };
 
-const CURVE_SAMPLES = 24;
-const ZIGZAG_SAMPLES = 2;
+const CURVE_SAMPLES = 32;
 
-function quadPoint(
-  from: Point2,
-  ctrl: Point2,
-  to: Point2,
-  t: number,
-): Point2 {
+function toSvgY(y: number) {
+  return 1 - y;
+}
+
+function quadPoint(from: Point2, ctrl: Point2, to: Point2, t: number): Point2 {
   const u = 1 - t;
   return {
     x: u * u * from.x + 2 * u * t * ctrl.x + t * t * to.x,
@@ -59,112 +63,166 @@ function autoControl(from: Point2, to: Point2): Point2 {
   return { x: mx + nx * offset, y: my + ny * offset };
 }
 
+/** Catmull-Rom → single quadratic control point (mirror of geometry.ts). */
+function catmullRomQuadControl(
+  p0: Point2 | null,
+  p1: Point2,
+  p2: Point2,
+  p3: Point2 | null,
+): Point2 {
+  const g0x = p0 ? p0.x : p1.x - (p2.x - p1.x);
+  const g0y = p0 ? p0.y : p1.y - (p2.y - p1.y);
+  const g3x = p3 ? p3.x : p2.x + (p2.x - p1.x);
+  const g3y = p3 ? p3.y : p2.y + (p2.y - p1.y);
+  const cp1x = p1.x + (p2.x - g0x) / 6;
+  const cp1y = p1.y + (p2.y - g0y) / 6;
+  const cp2x = p2.x - (g3x - p1.x) / 6;
+  const cp2y = p2.y - (g3y - p1.y) / 6;
+  return { x: (cp1x + cp2x) / 2, y: (cp1y + cp2y) / 2 };
+}
+
+/**
+ * Pick the segment to follow from a given node. When multiple segments leave
+ * the same node (a branch), we pick the one that appeared first in
+ * `route.segments` — the first branch created.
+ */
+function buildWalk(route: Route): RouteSegment[] {
+  const incoming = new Set(route.segments.map((s) => s.toNodeId));
+  let rootId: string | null = null;
+  for (const n of route.nodes) {
+    if (!incoming.has(n.id)) {
+      rootId = n.id;
+      break;
+    }
+  }
+  if (!rootId) rootId = route.nodes[0]?.id ?? null;
+  if (!rootId) return [];
+
+  // Ordered outgoing segments per node (preserves route.segments order).
+  const outgoing = new Map<string, RouteSegment[]>();
+  for (const s of route.segments) {
+    const arr = outgoing.get(s.fromNodeId) ?? [];
+    arr.push(s);
+    outgoing.set(s.fromNodeId, arr);
+  }
+
+  const walked: RouteSegment[] = [];
+  const seen = new Set<string>();
+  let cur = rootId;
+  while (true) {
+    const outs = outgoing.get(cur);
+    if (!outs || outs.length === 0) break;
+    const next = outs[0];
+    if (seen.has(next.id)) break;
+    seen.add(next.id);
+    walked.push(next);
+    cur = next.toNodeId;
+  }
+  return walked;
+}
+
+/**
+ * Sample a segment into (>=1) interior points ending at `to`. The caller
+ * already has `from` as the previous polyline point, so we do NOT include it.
+ */
 function samplesForSegment(
   seg: RouteSegment,
   from: Point2,
   to: Point2,
+  prevFrom: Point2 | null,
+  nextTo: Point2 | null,
 ): Point2[] {
-  // Motion renders as a zig-zag regardless of declared shape, but for
-  // animation purposes the player moves along the straight line between
-  // endpoints (the zig-zag is a visual convention, not a path to run).
-  if (seg.strokePattern === "motion") {
-    return [to];
-  }
+  // Motion: player runs a straight line from motion start to motion end.
+  if (seg.strokePattern === "motion") return [to];
+
   if (seg.shape === "curve") {
-    const ctrl = seg.controlOffset ?? autoControl(from, to);
+    const ctrl = seg.controlOffset
+      ? seg.controlOffset
+      : catmullRomQuadControl(prevFrom, from, to, nextTo);
     const out: Point2[] = [];
     for (let i = 1; i <= CURVE_SAMPLES; i++) {
       out.push(quadPoint(from, ctrl, to, i / CURVE_SAMPLES));
     }
     return out;
   }
-  if (seg.shape === "zigzag") {
-    const out: Point2[] = [];
-    for (let i = 1; i <= ZIGZAG_SAMPLES; i++) {
-      const t = i / ZIGZAG_SAMPLES;
-      out.push({
-        x: from.x + (to.x - from.x) * t,
-        y: from.y + (to.y - from.y) * t,
-      });
-    }
-    return out;
-  }
+
+  // Zigzag: treat as a straight line for pacing (short amplitude wouldn't
+  // meaningfully change player travel; visual zigzag is covered by the
+  // overlay's fullD render).
   return [to];
 }
 
 /**
- * Flatten a Route into a polyline plus cumulative arc-length table, with a
- * split index marking where motion (pre-snap) ends and the live route begins.
- *
- * Branching routes are flattened as a single chain by walking fromNodeId →
- * toNodeId in segment order; for the playback feature this is good enough.
+ * Build the SVG `d` string for the full walked route, matching the static
+ * render exactly: per-segment `M … L/Q …` commands (motion becomes a plain
+ * straight line here — the zig-zag motion symbol is baked into the static
+ * render; during playback we show a clean line since the player runs it).
  */
+function walkToFullD(
+  walked: RouteSegment[],
+  nodeMap: Map<string, { position: Point2 }>,
+): string {
+  const parts: string[] = [];
+  walked.forEach((seg, i) => {
+    const from = nodeMap.get(seg.fromNodeId)?.position;
+    const to = nodeMap.get(seg.toNodeId)?.position;
+    if (!from || !to) return;
+    const fx = from.x;
+    const fy = toSvgY(from.y);
+    const tx = to.x;
+    const ty = toSvgY(to.y);
+
+    if (seg.strokePattern !== "motion" && seg.shape === "curve") {
+      const prevFrom = i > 0 ? nodeMap.get(walked[i - 1].fromNodeId)?.position ?? null : null;
+      const nextTo = i < walked.length - 1
+        ? nodeMap.get(walked[i + 1].toNodeId)?.position ?? null
+        : null;
+      const ctrl = seg.controlOffset
+        ? seg.controlOffset
+        : catmullRomQuadControl(prevFrom, from, to, nextTo);
+      parts.push(`M ${fx} ${fy} Q ${ctrl.x} ${toSvgY(ctrl.y)} ${tx} ${ty}`);
+    } else {
+      parts.push(`M ${fx} ${fy} L ${tx} ${ty}`);
+    }
+  });
+  return parts.join(" ");
+}
+
 export function flattenRoute(route: Route): FlatRoute | null {
   if (route.nodes.length < 2 || route.segments.length === 0) return null;
 
   const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
-  const first = nodeMap.get(route.segments[0].fromNodeId);
-  if (!first) return null;
+  const walked = buildWalk(route);
+  if (walked.length === 0) return null;
 
-  const points: Point2[] = [first.position];
-  let motionSplitIndex = 0;
-  let sawMotion = false;
+  const startNode = nodeMap.get(walked[0].fromNodeId);
+  if (!startNode) return null;
 
-  for (const seg of route.segments) {
+  const points: Point2[] = [startNode.position];
+  let motionBoundaryIdx: number | null = null;
+  let inMotion = false;
+
+  walked.forEach((seg, i) => {
     const fromNode = nodeMap.get(seg.fromNodeId);
     const toNode = nodeMap.get(seg.toNodeId);
-    if (!fromNode || !toNode) continue;
+    if (!fromNode || !toNode) return;
 
-    // Track motion→non-motion boundary. As soon as we encounter a motion
-    // segment, remember the index of its starting point (we can't know the
-    // end yet); when we first see a non-motion segment *after* motion, the
-    // current points.length is where post-motion begins.
-    if (seg.strokePattern === "motion" && !sawMotion) {
-      sawMotion = true;
-      motionSplitIndex = points.length; // motion segments start appending from here
-    }
-    if (seg.strokePattern !== "motion" && sawMotion) {
-      // If we've already started appending the motion's end-point,
-      // points.length here is the post-motion start.
-      if (motionSplitIndex === 0) motionSplitIndex = points.length;
+    const isMotion = seg.strokePattern === "motion";
+    if (isMotion) inMotion = true;
+    if (!isMotion && inMotion && motionBoundaryIdx === null) {
+      // Last point already in `points` is where motion ended.
+      motionBoundaryIdx = points.length - 1;
     }
 
-    const added = samplesForSegment(seg, fromNode.position, toNode.position);
+    const prevFrom = i > 0 ? nodeMap.get(walked[i - 1].fromNodeId)?.position ?? null : null;
+    const nextTo = i < walked.length - 1
+      ? nodeMap.get(walked[i + 1].toNodeId)?.position ?? null
+      : null;
+    const added = samplesForSegment(seg, fromNode.position, toNode.position, prevFrom, nextTo);
     points.push(...added);
-  }
+  });
 
   if (points.length < 2) return null;
-
-  // If the whole route was motion, the split is the final point (nothing
-  // post-snap). If sawMotion but split never moved past 0, set split to end
-  // of motion (covers the case where the entire route is motion).
-  if (sawMotion && motionSplitIndex === 0) {
-    motionSplitIndex = points.length - 1;
-  }
-  // Also: when the motion→non-motion transition happened mid-route, find the
-  // actual boundary by re-walking. Above logic is approximate; the exact
-  // boundary is the first sample contributed by a non-motion segment after
-  // motion segments began.
-  {
-    let walkedPoints = 1; // first point
-    let inMotion = false;
-    let boundary = 0;
-    for (const seg of route.segments) {
-      const fromNode = nodeMap.get(seg.fromNodeId);
-      const toNode = nodeMap.get(seg.toNodeId);
-      if (!fromNode || !toNode) continue;
-      const added = samplesForSegment(seg, fromNode.position, toNode.position);
-      const isMotion = seg.strokePattern === "motion";
-      if (isMotion) inMotion = true;
-      if (!isMotion && inMotion && boundary === 0) {
-        boundary = walkedPoints; // index at which this non-motion segment's samples start
-      }
-      walkedPoints += added.length;
-    }
-    if (sawMotion) {
-      motionSplitIndex = boundary || points.length - 1;
-    }
-  }
 
   const cumulative: number[] = [0];
   for (let i = 1; i < points.length; i++) {
@@ -172,40 +230,40 @@ export function flattenRoute(route: Route): FlatRoute | null {
     const dy = points[i].y - points[i - 1].y;
     cumulative.push(cumulative[i - 1] + Math.hypot(dx, dy));
   }
+  const length = cumulative[cumulative.length - 1];
+
+  let motionBoundary = 0;
+  if (inMotion) {
+    const idx = motionBoundaryIdx ?? points.length - 1;
+    motionBoundary = cumulative[idx] ?? length;
+  }
 
   return {
     routeId: route.id,
     carrierPlayerId: route.carrierPlayerId,
     points,
     cumulative,
-    length: cumulative[cumulative.length - 1],
-    motionSplitIndex,
+    length,
+    motionBoundary,
+    fullD: walkToFullD(walked, nodeMap),
   };
 }
 
-/**
- * Arc-length at which the motion portion ends (pre-snap). 0 if no motion.
- * Everything from this length onward is post-snap.
- */
+/** Arc-length of the motion portion (0 if no motion). */
 export function motionLength(f: FlatRoute): number {
-  if (f.motionSplitIndex <= 0) return 0;
-  return f.cumulative[f.motionSplitIndex] ?? 0;
+  return f.motionBoundary;
 }
 
 export function hasMotion(f: FlatRoute): boolean {
-  return motionLength(f) > 0;
+  return f.motionBoundary > 0;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Sampling                                                          */
 /* ------------------------------------------------------------------ */
 
-/**
- * Position along the flattened route at arc-length `s` (clamped to [0,length]).
- */
 export function sampleAt(f: FlatRoute, s: number): Point2 {
   const clamped = Math.max(0, Math.min(f.length, s));
-  // Binary search the cumulative table.
   let lo = 0;
   let hi = f.cumulative.length - 1;
   while (lo < hi) {
@@ -221,36 +279,4 @@ export function sampleAt(f: FlatRoute, s: number): Point2 {
   const a = f.points[lo - 1];
   const b = f.points[lo];
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-}
-
-/**
- * Build an SVG `d` string for a poly-segment of the flat route, from arc
- * length `s0` to `s1` (inclusive). Coords flipped (y-up → SVG y-down).
- */
-export function subpathD(f: FlatRoute, s0: number, s1: number): string {
-  if (s1 <= s0) return "";
-  const start = sampleAt(f, s0);
-  const parts: string[] = [`M ${start.x} ${1 - start.y}`];
-  for (let i = 1; i < f.points.length; i++) {
-    const cLo = f.cumulative[i - 1];
-    const cHi = f.cumulative[i];
-    if (cHi <= s0) continue;
-    if (cLo >= s1) break;
-    if (cLo >= s0 && cHi <= s1) {
-      const p = f.points[i];
-      parts.push(`L ${p.x} ${1 - p.y}`);
-    } else if (cLo < s0 && cHi > s0 && cHi <= s1) {
-      const p = f.points[i];
-      parts.push(`L ${p.x} ${1 - p.y}`);
-    } else if (cLo >= s0 && cLo < s1 && cHi > s1) {
-      const end = sampleAt(f, s1);
-      parts.push(`L ${end.x} ${1 - end.y}`);
-      break;
-    } else if (cLo < s0 && cHi > s1) {
-      const end = sampleAt(f, s1);
-      parts.push(`L ${end.x} ${1 - end.y}`);
-      break;
-    }
-  }
-  return parts.join(" ");
 }
