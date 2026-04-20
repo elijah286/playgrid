@@ -57,6 +57,26 @@ export type CompilePlaySvgOptions = {
   templatePatch?: Partial<PrintTemplateDefinition>;
 };
 
+function wrapText(text: string, maxChars: number): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  for (const para of text.split(/\r?\n/)) {
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = "";
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (next.length > maxChars && line) {
+        out.push(line);
+        line = w;
+      } else {
+        line = next;
+      }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+
 function escSvgText(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -313,13 +333,14 @@ function renderPlaysheetCell(
     const ny = oy + tileH;
     const lineH = 3.2;
     const fontNote = 2.3;
-    const raw = vis.showNotes
-      ? doc.layers.annotations.map((a) => a.text).filter((t) => t.trim().length > 0)
-      : [];
+    const raw = vis.showNotes ? (doc.metadata.notes ?? "").trim() : "";
+    const innerW = cw - padX * 2;
+    const charsPerLine = Math.max(10, Math.floor(innerW / (fontNote * 0.48)));
+    const wrapped = wrapText(raw, charsPerLine).slice(0, opts.noteLines);
     const clipId = `nc-${Math.random().toString(36).slice(2, 9)}`;
-    notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${cw - padX * 2}" height="${notesH - 1}"/></clipPath></defs>`;
+    notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
     notes += `<g clip-path="url(#${clipId})">`;
-    raw.slice(0, opts.noteLines).forEach((line, i) => {
+    wrapped.forEach((line, i) => {
       notes += `<text x="${ox + padX}" y="${ny + lineH * (i + 1)}" font-size="${fontNote}" font-family="system-ui,sans-serif" fill="#334155">${escSvgText(line)}</text>`;
     });
     notes += `</g>`;
@@ -363,11 +384,35 @@ function renderFieldContents(
     guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="${Math.max(0.2, fieldMin * 0.008)}"/>`;
   }
 
-  let routes = "";
+  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin);
+
+  let players = "";
+  for (const p of doc.layers.players) {
+    const px = fieldX + p.position.x * fieldW;
+    const py = fieldY + (1 - p.position.y) * fieldH;
+    players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
+    if (look.showPlayerLabels && vis.showPlayerLabels) {
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
+    }
+  }
+
+  return guides + routes + players;
+}
+
+/** Arrow rendered at each terminal segment's tip (matches editor logic). */
+function renderRoutesAndArrows(
+  doc: PlayDocument,
+  fieldX: number,
+  fieldY: number,
+  fieldW: number,
+  fieldH: number,
+  strokeW: number,
+  fieldMin: number,
+): string {
+  let out = "";
   for (const r of doc.layers.routes) {
     const geometry = routeToPathGeometry(r);
-    const segs = geometry.segments;
-    const d = segs
+    const d = geometry.segments
       .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
@@ -382,55 +427,51 @@ function renderFieldContents(
       })
       .join(" ");
     const stroke = resolveRouteStroke(r, doc.layers.players);
-    routes += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+    out += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
 
     const deco = r.endDecoration ?? "arrow";
-    const last = segs[segs.length - 1];
-    if (deco !== "none" && last) {
-      const tipX = fieldX + last.to.x * fieldW;
-      const tipY = fieldY + (1 - last.to.y) * fieldH;
-      const refFrom = last.type === "quadratic" ? last.control : last.from;
+    if (deco === "none") continue;
+
+    const fromIds = new Set(r.segments.map((s) => s.fromNodeId));
+    const terminals = r.segments.filter((s) => !fromIds.has(s.toNodeId));
+    const nodeMap = new Map(r.nodes.map((n) => [n.id, n]));
+    for (const seg of terminals) {
+      const from = nodeMap.get(seg.fromNodeId);
+      const to = nodeMap.get(seg.toNodeId);
+      if (!from || !to) continue;
+      const refFrom =
+        seg.shape === "curve" && seg.controlOffset ? seg.controlOffset : from.position;
+      const tipX = fieldX + to.position.x * fieldW;
+      const tipY = fieldY + (1 - to.position.y) * fieldH;
       const fromX = fieldX + refFrom.x * fieldW;
       const fromY = fieldY + (1 - refFrom.y) * fieldH;
       const dxS = tipX - fromX;
       const dyS = tipY - fromY;
       const len = Math.hypot(dxS, dyS);
-      if (len > 1e-4) {
-        const ux = dxS / len;
-        const uy = dyS / len;
-        if (deco === "arrow") {
-          const aLen = Math.max(strokeW * 2, Math.min(strokeW * 4.5, fieldMin * 0.07));
-          const cos = Math.cos(Math.PI / 6);
-          const sin = Math.sin(Math.PI / 6);
-          const bx = -ux;
-          const by = -uy;
-          const r1x = cos * bx - sin * by;
-          const r1y = sin * bx + cos * by;
-          const r2x = cos * bx + sin * by;
-          const r2y = -sin * bx + cos * by;
-          routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r1x}" y2="${tipY + aLen * r1y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
-          routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r2x}" y2="${tipY + aLen * r2y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
-        } else if (deco === "t") {
-          const half = Math.max(strokeW * 1.5, Math.min(strokeW * 3.5, fieldMin * 0.055));
-          const perpX = -uy;
-          const perpY = ux;
-          routes += `<line x1="${tipX + perpX * half}" y1="${tipY + perpY * half}" x2="${tipX - perpX * half}" y2="${tipY - perpY * half}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
-        }
+      if (len <= 1e-4) continue;
+      const ux = dxS / len;
+      const uy = dyS / len;
+      if (deco === "arrow") {
+        const aLen = Math.max(strokeW * 2, Math.min(strokeW * 4.5, fieldMin * 0.07));
+        const cos = Math.cos(Math.PI / 6);
+        const sin = Math.sin(Math.PI / 6);
+        const bx = -ux;
+        const by = -uy;
+        const r1x = cos * bx - sin * by;
+        const r1y = sin * bx + cos * by;
+        const r2x = cos * bx + sin * by;
+        const r2y = -sin * bx + cos * by;
+        out += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r1x}" y2="${tipY + aLen * r1y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+        out += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r2x}" y2="${tipY + aLen * r2y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+      } else if (deco === "t") {
+        const half = Math.max(strokeW * 1.5, Math.min(strokeW * 3.5, fieldMin * 0.055));
+        const perpX = -uy;
+        const perpY = ux;
+        out += `<line x1="${tipX + perpX * half}" y1="${tipY + perpY * half}" x2="${tipX - perpX * half}" y2="${tipY - perpY * half}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
       }
     }
   }
-
-  let players = "";
-  for (const p of doc.layers.players) {
-    const px = fieldX + p.position.x * fieldW;
-    const py = fieldY + (1 - p.position.y) * fieldH;
-    players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
-    if (look.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
-    }
-  }
-
-  return guides + routes + players;
+  return out;
 }
 
 function iconRadiusProportional(size: WristbandIconSize, fieldMin: number): number {
@@ -486,6 +527,19 @@ function groupLabelColor(doc: PlayDocument): string {
   return "#111827";
 }
 
+function isLightFill(hex: string): boolean {
+  const s = hex.trim().toLowerCase();
+  if (s === "white" || s === "#fff" || s === "#ffffff") return true;
+  const m = /^#([0-9a-f]{6})$/i.exec(s);
+  if (!m) return false;
+  const n = parseInt(m[1]!, 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum > 0.82;
+}
+
 function playerMarkerSvg(
   shape: PlayerShape | undefined,
   cx: number,
@@ -495,7 +549,11 @@ function playerMarkerSvg(
   stroke: string,
   outline: boolean,
 ): string {
-  const strokeAttrs = outline ? `stroke="${stroke}" stroke-width="0.3"` : `stroke="none"`;
+  const effectiveOutline = outline || isLightFill(fill);
+  const outlineStroke = outline ? stroke : "#64748b";
+  const strokeAttrs = effectiveOutline
+    ? `stroke="${outlineStroke}" stroke-width="${outline ? 0.3 : 0.22}"`
+    : `stroke="none"`;
   if (shape === "diamond") {
     const d = r * 1.15;
     return `<path d="M ${cx} ${cy - d} L ${cx + d} ${cy} L ${cx} ${cy + d} L ${cx - d} ${cy} Z" fill="${fill}" ${strokeAttrs}/>`;
@@ -575,63 +633,7 @@ function renderWristbandTile(
     }
   }
 
-  let routes = "";
-  for (const r of doc.layers.routes) {
-    const geometry = routeToPathGeometry(r);
-    const segs = geometry.segments;
-    const d = segs
-      .map((seg) => {
-        const fx = fieldX + seg.from.x * fieldW;
-        const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const tx = fieldX + seg.to.x * fieldW;
-        const ty = fieldY + (1 - seg.to.y) * fieldH;
-        if (seg.type === "line") {
-          return `M ${fx} ${fy} L ${tx} ${ty}`;
-        }
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
-        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
-      })
-      .join(" ");
-    const stroke = resolveRouteStroke(r, doc.layers.players);
-    routes += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
-
-    const deco = r.endDecoration ?? "arrow";
-    const last = segs[segs.length - 1];
-    if (deco !== "none" && last) {
-      const tipX = fieldX + last.to.x * fieldW;
-      const tipY = fieldY + (1 - last.to.y) * fieldH;
-      const refFrom = last.type === "quadratic" ? last.control : last.from;
-      const fromX = fieldX + refFrom.x * fieldW;
-      const fromY = fieldY + (1 - refFrom.y) * fieldH;
-      const dxS = tipX - fromX;
-      const dyS = tipY - fromY;
-      const len = Math.hypot(dxS, dyS);
-      if (len > 1e-4) {
-        const ux = dxS / len;
-        const uy = dyS / len;
-        const fieldMin = Math.min(fieldW, fieldH);
-        if (deco === "arrow") {
-          const aLen = Math.max(strokeW * 2, Math.min(strokeW * 4.5, fieldMin * 0.07));
-          const cos = Math.cos(Math.PI / 6);
-          const sin = Math.sin(Math.PI / 6);
-          const bx = -ux;
-          const by = -uy;
-          const r1x = cos * bx - sin * by;
-          const r1y = sin * bx + cos * by;
-          const r2x = cos * bx + sin * by;
-          const r2y = -sin * bx + cos * by;
-          routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r1x}" y2="${tipY + aLen * r1y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
-          routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r2x}" y2="${tipY + aLen * r2y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
-        } else if (deco === "t") {
-          const half = Math.max(strokeW * 1.5, Math.min(strokeW * 3.5, fieldMin * 0.055));
-          const perpX = -uy;
-          const perpY = ux;
-          routes += `<line x1="${tipX + perpX * half}" y1="${tipY + perpY * half}" x2="${tipX - perpX * half}" y2="${tipY - perpY * half}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
-        }
-      }
-    }
-  }
+  const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, Math.min(fieldW, fieldH));
 
   let guides = "";
   if (opts.showYardMarkers) {

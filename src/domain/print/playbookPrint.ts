@@ -86,7 +86,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   product: "playsheet",
   playsheetColumns: 3,
   sheetOrientation: "portrait",
-  playsheetGrouping: "manual",
+  playsheetGrouping: "number",
   playsheetPageBreak: "continuous",
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
@@ -114,7 +114,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandShowLos: true,
   wristbandShowYardMarkers: true,
   wristbandShowPlayerLabels: true,
-  wristbandGrouping: "manual",
+  wristbandGrouping: "number",
 };
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {
