@@ -781,8 +781,8 @@ export function PlaybookDetailClient({
             if (e.target === e.currentTarget) setShowFormationPicker(false);
           }}
         >
-          <div className="w-full max-w-2xl rounded-2xl border border-border bg-surface-raised shadow-elevated">
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
               <div>
                 <h2 className="text-base font-bold text-foreground">
                   Start a new play
@@ -800,11 +800,11 @@ export function PlaybookDetailClient({
               </button>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto p-4">
+            <div className="flex min-h-0 flex-1 flex-col p-4">
               {loadingFormations ? (
                 <p className="py-8 text-center text-sm text-muted">Loading formations…</p>
               ) : (
-                <div className="space-y-2">
+                <div className="flex min-h-0 flex-1 flex-col gap-2">
                   <PlayTypeSection
                     title="Offense"
                     subtitle={`${expectedPlayerCount} players`}
@@ -1858,11 +1858,13 @@ function PlayTypeSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface-raised">
+    <div
+      className={`flex flex-col rounded-xl border border-border bg-surface-raised ${open ? "min-h-0 flex-1" : "shrink-0"}`}
+    >
       <button
         type="button"
         onClick={onHeaderClick}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex w-full shrink-0 items-center justify-between gap-3 px-4 py-3 text-left"
         aria-expanded={open}
       >
         <div className="min-w-0">
@@ -1871,7 +1873,11 @@ function PlayTypeSection({
         </div>
         <span className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
-      {open && <div className="space-y-3 border-t border-border p-4">{children}</div>}
+      {open && (
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto border-t border-border p-4">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
