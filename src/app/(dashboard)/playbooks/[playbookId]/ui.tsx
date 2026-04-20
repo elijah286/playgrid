@@ -71,12 +71,16 @@ export function PlaybookDetailClient({
   playerCount: playbookPlayerCount,
   initialPlays,
   initialGroups,
+  pageHeader,
 }: {
   playbookId: string;
   sportVariant: string;
   playerCount?: number;
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
+  // Back link + playbook identity block. Rendered inside the sticky header
+  // region so it stays pinned while plays scroll.
+  pageHeader?: React.ReactNode;
 }) {
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
@@ -281,42 +285,52 @@ export function PlaybookDetailClient({
 
   return (
     <div className="space-y-4">
-      {/* Slim top bar: search, print, new */}
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px] flex-1">
-          <Input
-            leftIcon={Search}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, code, formation, tag…"
-          />
-        </div>
-        <Link href={`/playbooks/${playbookId}/print`}>
-          <Button variant="secondary" leftIcon={Printer}>
-            Print playbook
-          </Button>
-        </Link>
-        <div className="relative">
-          <Button
-            variant="primary"
-            leftIcon={Plus}
-            loading={creating}
-            onClick={openFormationPicker}
-          >
-            New play
-          </Button>
-          <Link
-            href={`/formations/new?variant=${variant}`}
-            className="absolute right-0 top-full mt-1 whitespace-nowrap text-xs text-muted hover:text-primary hover:underline"
-          >
-            + New formation
+      {/* Sticky header region: back link + playbook identity + slim top bar.
+          Stays pinned below the global dashboard header (h ≈ 56px = top-14)
+          while plays scroll beneath. Negative margin + padding extend the
+          backdrop to the page edges so scrolling plays don't bleed through. */}
+      <div className="sticky top-14 z-20 -mx-6 space-y-4 bg-surface/90 px-6 pb-4 pt-4 backdrop-blur-lg">
+        {pageHeader}
+        {/* Slim top bar: search, print, new */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px] flex-1">
+            <Input
+              leftIcon={Search}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search name, code, formation, tag…"
+            />
+          </div>
+          <Link href={`/playbooks/${playbookId}/print`}>
+            <Button variant="secondary" leftIcon={Printer}>
+              Print playbook
+            </Button>
           </Link>
+          <div className="relative">
+            <Button
+              variant="primary"
+              leftIcon={Plus}
+              loading={creating}
+              onClick={openFormationPicker}
+            >
+              New play
+            </Button>
+            <Link
+              href={`/formations/new?variant=${variant}`}
+              className="absolute right-0 top-full mt-1 whitespace-nowrap text-xs text-muted hover:text-primary hover:underline"
+            >
+              + New formation
+            </Link>
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
-        {/* Side rail */}
-        <aside className="lg:sticky lg:top-4 lg:self-start">
+        {/* Side rail — sticks under the page-header block above. The top
+            offset is approximate (covers ~56px global header + ~176px sticky
+            page header including padding); a few pixels of drift here is
+            cosmetic and acceptable. */}
+        <aside className="lg:sticky lg:top-[14.5rem] lg:self-start">
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-raised p-3">
             <SegmentedControl
               value={groupBy}

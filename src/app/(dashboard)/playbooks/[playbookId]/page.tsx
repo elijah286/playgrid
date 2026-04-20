@@ -39,8 +39,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const logoUrl = (book.logo_url as string | null) ?? null;
   const initial = (book.name as string).trim().charAt(0).toUpperCase();
 
-  return (
-    <div className="space-y-6">
+  const pageHeader = (
+    <div className="space-y-4">
       {/* Back link */}
       <Link
         href="/home"
@@ -52,41 +52,34 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
       {/* Playbook identity: logo avatar + name + game type */}
       <div className="flex items-center gap-4">
-        {/* Logo avatar — colored square with logo image or initial */}
         <div
           className="relative size-14 shrink-0 overflow-hidden rounded-2xl flex items-center justify-center text-white text-xl font-extrabold shadow-sm"
           style={{ backgroundColor: accentColor }}
         >
           {logoUrl ? (
-            <Image
-              src={logoUrl}
-              alt=""
-              fill
-              className="object-cover"
-              sizes="56px"
-            />
+            <Image src={logoUrl} alt="" fill className="object-cover" sizes="56px" />
           ) : (
             <span>{initial}</span>
           )}
         </div>
-
         <div className="min-w-0">
           <h1 className="text-2xl font-extrabold tracking-tight text-foreground leading-tight truncate">
             {book.name}
           </h1>
-          {variantLabel && (
-            <p className="mt-0.5 text-sm text-muted">{variantLabel}</p>
-          )}
+          {variantLabel && <p className="mt-0.5 text-sm text-muted">{variantLabel}</p>}
         </div>
       </div>
-
-      <PlaybookDetailClient
-        playbookId={playbookId}
-        sportVariant={book.sport_variant as string}
-        playerCount={(book.player_count as number | null) ?? undefined}
-        initialPlays={listed.ok ? listed.plays : []}
-        initialGroups={listed.ok ? listed.groups : []}
-      />
     </div>
+  );
+
+  return (
+    <PlaybookDetailClient
+      playbookId={playbookId}
+      sportVariant={book.sport_variant as string}
+      playerCount={(book.player_count as number | null) ?? undefined}
+      initialPlays={listed.ok ? listed.plays : []}
+      initialGroups={listed.ok ? listed.groups : []}
+      pageHeader={pageHeader}
+    />
   );
 }
