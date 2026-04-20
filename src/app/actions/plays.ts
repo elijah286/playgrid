@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
-import type { PlayDocument, Player, Route, SportVariant } from "@/domain/play/types";
+import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -23,6 +23,8 @@ export type PlaybookDetailPlayRow = {
   sort_order: number;
   updated_at: string | null;
   is_archived: boolean;
+  play_type: PlayType;
+  special_teams_unit: SpecialTeamsUnit | null;
   preview: { players: Player[]; routes: Route[]; lineOfScrimmageY: number } | null;
 };
 
@@ -45,7 +47,7 @@ export async function listPlaysAction(
   let playsQ = supabase
     .from("plays")
     .select(
-      "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived",
+      "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived, play_type, special_teams_unit",
     )
     .eq("playbook_id", playbookId)
     .order("updated_at", { ascending: false });
@@ -105,6 +107,8 @@ export async function listPlaysAction(
       sort_order: (r.sort_order as number | null) ?? 0,
       updated_at: (r.updated_at as string | null) ?? null,
       is_archived: Boolean(r.is_archived),
+      play_type: ((r.play_type as PlayType | null) ?? "offense"),
+      special_teams_unit: (r.special_teams_unit as SpecialTeamsUnit | null) ?? null,
       preview: vid ? previewByVersion.get(vid) ?? null : null,
     };
   });
@@ -124,6 +128,8 @@ export async function createPlayAction(
     formationName?: string;
     playerCount?: number;
     variant?: SportVariant;
+    playType?: PlayType;
+    specialTeamsUnit?: SpecialTeamsUnit | null;
   },
 ) {
   if (!hasSupabaseEnv()) {
@@ -147,9 +153,11 @@ export async function createPlayAction(
     layers: { players, routes: [], annotations: [] },
   });
 
-  // Patch metadata with formation link
+  // Patch metadata with formation link + play type
   doc.metadata.formationId = opts?.formationId ?? null;
   doc.metadata.formation = opts?.formationName ?? "";
+  doc.metadata.playType = opts?.playType ?? "offense";
+  doc.metadata.specialTeamsUnit = opts?.specialTeamsUnit ?? null;
   const { data: sortRow } = await supabase
     .from("plays")
     .select("sort_order")
@@ -188,6 +196,8 @@ export async function createPlayAction(
       sort_order: nextSort,
       formation_id: opts?.formationId ?? null,
       formation_tag: null,
+      play_type: opts?.playType ?? "offense",
+      special_teams_unit: opts?.specialTeamsUnit ?? null,
     })
     .select("id")
     .single();
@@ -198,7 +208,7 @@ export async function createPlayAction(
     .from("play_versions")
     .insert({
       play_id: play.id,
-      schema_version: 1,
+      schema_version: 2,
       document: doc as unknown as Record<string, unknown>,
       label: "v1",
       created_by: user.id,
@@ -226,7 +236,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id",
     )
     .eq("id", playId)
     .single();
@@ -247,13 +257,18 @@ export async function getPlayForEditorAction(playId: string) {
 
   const normalizedDoc = normalizePlayDocument(ver.document as PlayDocument);
 
-  // Backfill formation link from plays row if not already in document
+  // Backfill formation link + play type from plays row if not already in document
   const docWithLink: PlayDocument = {
     ...normalizedDoc,
     metadata: {
       ...normalizedDoc.metadata,
       formationId: normalizedDoc.metadata.formationId ?? ((play.formation_id as string | null) ?? null),
       formationTag: normalizedDoc.metadata.formationTag ?? ((play.formation_tag as string | null) ?? null),
+      playType: normalizedDoc.metadata.playType ?? ((play.play_type as PlayType | null) ?? "offense"),
+      specialTeamsUnit:
+        normalizedDoc.metadata.specialTeamsUnit ?? ((play.special_teams_unit as SpecialTeamsUnit | null) ?? null),
+      opponentFormationId:
+        normalizedDoc.metadata.opponentFormationId ?? ((play.opponent_formation_id as string | null) ?? null),
     },
   };
 
@@ -290,7 +305,7 @@ export async function savePlayVersionAction(
     .from("play_versions")
     .insert({
       play_id: playId,
-      schema_version: 1,
+      schema_version: 2,
       document: document as unknown as Record<string, unknown>,
       parent_version_id: play.current_version_id,
       label: label ?? `save ${new Date().toISOString()}`,
@@ -315,6 +330,9 @@ export async function savePlayVersionAction(
       display_abbrev: document.metadata.sheetAbbrev,
       formation_id: document.metadata.formationId ?? null,
       formation_tag: document.metadata.formationTag ?? null,
+      play_type: document.metadata.playType ?? "offense",
+      special_teams_unit: document.metadata.specialTeamsUnit ?? null,
+      opponent_formation_id: document.metadata.opponentFormationId ?? null,
     })
     .eq("id", playId);
 
@@ -338,7 +356,7 @@ export async function duplicatePlayAction(playId: string) {
 
   const { data: srcPlay, error: srcPlayErr } = await supabase
     .from("plays")
-    .select("playbook_id, group_id")
+    .select("playbook_id, group_id, play_type, special_teams_unit, opponent_formation_id")
     .eq("id", playId)
     .single();
   if (srcPlayErr || !srcPlay) return { ok: false as const, error: "Not found" };
@@ -370,6 +388,9 @@ export async function duplicatePlayAction(playId: string) {
       display_abbrev: doc.metadata.sheetAbbrev,
       group_id: srcPlay.group_id,
       sort_order: dupSort,
+      play_type: (srcPlay.play_type as PlayType | null) ?? "offense",
+      special_teams_unit: (srcPlay.special_teams_unit as SpecialTeamsUnit | null) ?? null,
+      opponent_formation_id: (srcPlay.opponent_formation_id as string | null) ?? null,
     })
     .select("id")
     .single();
@@ -380,7 +401,7 @@ export async function duplicatePlayAction(playId: string) {
     .from("play_versions")
     .insert({
       play_id: play.id,
-      schema_version: 1,
+      schema_version: 2,
       document: doc as unknown as Record<string, unknown>,
       label: "duplicated",
       parent_version_id: loaded.version.id,

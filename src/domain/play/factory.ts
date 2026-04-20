@@ -3,7 +3,9 @@ import {
   type EndDecoration,
   type PlayDocument,
   type Player,
+  type PlayType,
   type Route,
+  type SpecialTeamsUnit,
   type SportProfile,
   type SportVariant,
 } from "./types";
@@ -105,14 +107,23 @@ export function resolveRouteStroke(route: Route, players: Player[]): string {
 export function sportProfileForVariant(variant: SportVariant): SportProfile {
   switch (variant) {
     case "flag_5v5":
-      return { variant, offensePlayerCount: 5,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
+      return { variant, offensePlayerCount: 5,  defensePlayerCount: 5,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_7v7":
-      return { variant, offensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
+      return { variant, offensePlayerCount: 7,  defensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "other":
-      return { variant, offensePlayerCount: 6,  fieldWidthYds: 40, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
+      return { variant, offensePlayerCount: 6,  defensePlayerCount: 6,  fieldWidthYds: 40, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
     case "tackle_11":
-      return { variant, offensePlayerCount: 11, fieldWidthYds: 53, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
+      return { variant, offensePlayerCount: 11, defensePlayerCount: 11, fieldWidthYds: 53, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
   }
+}
+
+/** Number of defensive players for a variant, respecting playbook override for "other". */
+export function defensePlayerCountForVariant(
+  variant: SportVariant,
+  customCount?: number | null,
+): number {
+  if (variant === "other" && typeof customCount === "number") return customCount;
+  return sportProfileForVariant(variant).defensePlayerCount;
 }
 
 /** Human-readable label for each sport variant, for use in UI. */
@@ -138,6 +149,25 @@ function mkPlayer(
     position: { x, y },
     eligible,
     style: { fill: "#f8fafc", stroke: "#0f172a", labelColor: "#0f172a" },
+  };
+}
+
+/** Defender shape + red fill. Positioned above the LOS (y > losY). */
+function mkDefender(
+  id: string,
+  role: Player["role"],
+  label: string,
+  x: number,
+  y: number,
+): Player {
+  return {
+    id,
+    role,
+    label,
+    position: { x, y },
+    eligible: true,
+    shape: "triangle",
+    style: { fill: "#fecaca", stroke: "#991b1b", labelColor: "#7f1d1d" },
   };
 }
 
@@ -269,6 +299,9 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
       tags: [],
       formationId: null,
       formationTag: null,
+      playType: "offense",
+      specialTeamsUnit: null,
+      opponentFormationId: null,
     },
     formation: {
       semantic: { key: "" },
@@ -278,6 +311,7 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
       players,
       routes: [],
       annotations: [],
+      zones: [],
     },
     printProfile: {
       visibility: {
@@ -319,6 +353,8 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
  *   3. Sets lineOfScrimmageY: 0.4 explicitly so the document is self-contained.
  */
 export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
+  // Upgrade schema-level defaults first.
+  doc = migratePlayDocument(doc);
   const canonical = sportProfileForVariant(doc.sportProfile.variant);
 
   // For "other" variant, preserve the user's custom player count.
@@ -330,7 +366,13 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
 
   const sportProfile =
     doc.sportProfile.variant === "other"
-      ? { ...canonical, offensePlayerCount: doc.sportProfile.offensePlayerCount, fieldLengthYds: effectiveFieldLength }
+      ? {
+          ...canonical,
+          offensePlayerCount: doc.sportProfile.offensePlayerCount,
+          defensePlayerCount:
+            doc.sportProfile.defensePlayerCount ?? doc.sportProfile.offensePlayerCount,
+          fieldLengthYds: effectiveFieldLength,
+        }
       : { ...canonical, fieldLengthYds: effectiveFieldLength };
 
   // If the stored LOS is the old 0.5 default (no explicit value was ever
@@ -367,3 +409,391 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
 }
 
 export { uid };
+
+/* ------------------------------------------------------------------ */
+/*  Defensive formations                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Defensive templates are keyed by sport variant. Positions use the same
+ * normalized field coords as offense; defensive players sit ABOVE the LOS
+ * (y > 0.4 default). Each template includes a `key` (stable, semantic),
+ * a `displayName` for UI, and the default player set.
+ */
+export type DefenseTemplate = {
+  key: string;
+  displayName: string;
+  description: string;
+  variant: SportVariant;
+  players: Player[];
+};
+
+// LOS default = 0.4 across the app. Defenders sit slightly above (y > 0.4).
+// Linebackers ~3 yards off LOS (~0.45); safeties deep (~0.70).
+
+export function defenseTemplatesForVariant(variant: SportVariant): DefenseTemplate[] {
+  switch (variant) {
+    case "flag_5v5":
+      return [
+        {
+          key: "flag5_3rush_2zone",
+          displayName: "3-Rush, 2-Zone",
+          description: "Three rushers, two underneath zones",
+          variant,
+          players: [
+            mkDefender("d_r1", "DL", "R", 0.35, 0.44),
+            mkDefender("d_r2", "DL", "R", 0.50, 0.44),
+            mkDefender("d_r3", "DL", "R", 0.65, 0.44),
+            mkDefender("d_z1", "LB", "Z", 0.30, 0.58),
+            mkDefender("d_z2", "LB", "Z", 0.70, 0.58),
+          ],
+        },
+        {
+          key: "flag5_2rush_3zone",
+          displayName: "2-Rush, 3-Zone",
+          description: "Two rushers, three-deep zone",
+          variant,
+          players: [
+            mkDefender("d_r1", "DL", "R", 0.42, 0.44),
+            mkDefender("d_r2", "DL", "R", 0.58, 0.44),
+            mkDefender("d_z1", "CB", "Z", 0.18, 0.70),
+            mkDefender("d_z2", "S",  "Z", 0.50, 0.75),
+            mkDefender("d_z3", "CB", "Z", 0.82, 0.70),
+          ],
+        },
+      ];
+    case "flag_7v7":
+      return [
+        {
+          key: "flag7_cover3",
+          displayName: "Cover 3",
+          description: "4 rush, 3 underneath, 3 deep thirds",
+          variant,
+          players: [
+            mkDefender("d_e1", "DL", "E", 0.30, 0.44),
+            mkDefender("d_e2", "DL", "E", 0.70, 0.44),
+            mkDefender("d_lb1", "LB", "M", 0.42, 0.50),
+            mkDefender("d_lb2", "LB", "M", 0.58, 0.50),
+            mkDefender("d_cb1", "CB", "C", 0.12, 0.68),
+            mkDefender("d_cb2", "CB", "C", 0.88, 0.68),
+            mkDefender("d_fs",  "S",  "F", 0.50, 0.78),
+          ],
+        },
+        {
+          key: "flag7_cover2_man",
+          displayName: "Cover 2 Man",
+          description: "Press corners with two deep safeties",
+          variant,
+          players: [
+            mkDefender("d_e1", "DL", "E", 0.35, 0.44),
+            mkDefender("d_e2", "DL", "E", 0.65, 0.44),
+            mkDefender("d_cb1", "CB", "C", 0.10, 0.44),
+            mkDefender("d_cb2", "CB", "C", 0.90, 0.44),
+            mkDefender("d_nb",  "NB", "N", 0.28, 0.50),
+            mkDefender("d_fs",  "S",  "F", 0.35, 0.78),
+            mkDefender("d_ss",  "S",  "S", 0.65, 0.78),
+          ],
+        },
+      ];
+    case "tackle_11":
+      return [
+        {
+          key: "tackle11_43_over",
+          displayName: "4-3 Over",
+          description: "Four down linemen, three linebackers",
+          variant,
+          players: [
+            mkDefender("d_de1", "DL", "E", 0.30, 0.43),
+            mkDefender("d_dt1", "DL", "T", 0.42, 0.43),
+            mkDefender("d_dt2", "DL", "T", 0.54, 0.43),
+            mkDefender("d_de2", "DL", "E", 0.70, 0.43),
+            mkDefender("d_sam", "LB", "S", 0.30, 0.50),
+            mkDefender("d_mlb", "LB", "M", 0.50, 0.50),
+            mkDefender("d_will","LB", "W", 0.70, 0.50),
+            mkDefender("d_cb1", "CB", "C", 0.08, 0.46),
+            mkDefender("d_cb2", "CB", "C", 0.92, 0.46),
+            mkDefender("d_fs",  "S",  "F", 0.38, 0.76),
+            mkDefender("d_ss",  "S",  "S", 0.62, 0.76),
+          ],
+        },
+        {
+          key: "tackle11_34_base",
+          displayName: "3-4 Base",
+          description: "Three down linemen, four linebackers",
+          variant,
+          players: [
+            mkDefender("d_de1", "DL", "E", 0.36, 0.43),
+            mkDefender("d_nt",  "DL", "N", 0.50, 0.43),
+            mkDefender("d_de2", "DL", "E", 0.64, 0.43),
+            mkDefender("d_olb1","LB", "O", 0.24, 0.47),
+            mkDefender("d_ilb1","LB", "I", 0.42, 0.50),
+            mkDefender("d_ilb2","LB", "I", 0.58, 0.50),
+            mkDefender("d_olb2","LB", "O", 0.76, 0.47),
+            mkDefender("d_cb1", "CB", "C", 0.08, 0.46),
+            mkDefender("d_cb2", "CB", "C", 0.92, 0.46),
+            mkDefender("d_fs",  "S",  "F", 0.38, 0.76),
+            mkDefender("d_ss",  "S",  "S", 0.62, 0.76),
+          ],
+        },
+      ];
+    case "other":
+      return [
+        {
+          key: "other_balanced_zone",
+          displayName: "Balanced Zone",
+          description: "Evenly-spaced front with deep help",
+          variant,
+          players: generateDefaultDefenders(6),
+        },
+      ];
+  }
+}
+
+/** Generic defender layout for "other" variant / custom player counts. */
+export function generateDefaultDefenders(count: number): Player[] {
+  const players: Player[] = [];
+  const frontCount = Math.min(Math.max(Math.floor(count / 2), 2), count - 1);
+  const backCount = count - frontCount;
+  for (let i = 0; i < frontCount; i++) {
+    const x = frontCount === 1 ? 0.5 : 0.20 + (i / (frontCount - 1)) * 0.60;
+    players.push(mkDefender(`d_f${i}`, "LB", "D", x, 0.46));
+  }
+  for (let i = 0; i < backCount; i++) {
+    const x = backCount === 1 ? 0.5 : 0.15 + (i / (backCount - 1)) * 0.70;
+    players.push(mkDefender(`d_b${i}`, "S", "D", x, 0.72));
+  }
+  return players;
+}
+
+/** Default defender set for a variant when no template is selected. */
+export function defaultDefendersForVariant(
+  variant: SportVariant,
+  customCount?: number | null,
+): Player[] {
+  if (variant === "other") {
+    return generateDefaultDefenders(customCount ?? 6);
+  }
+  // Use the first template as the blank default.
+  return defenseTemplatesForVariant(variant)[0].players.map((p) => ({ ...p }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Special teams templates (tackle only)                             */
+/* ------------------------------------------------------------------ */
+
+export type SpecialTeamsTemplate = {
+  key: string;
+  unit: SpecialTeamsUnit;
+  displayName: string;
+  description: string;
+  players: Player[];
+};
+
+// Special teams players use neutral styling + a small square marker to
+// distinguish from offense/defense.
+function mkST(
+  id: string,
+  role: Player["role"],
+  label: string,
+  x: number,
+  y: number,
+): Player {
+  return {
+    id,
+    role,
+    label,
+    position: { x, y },
+    eligible: true,
+    shape: "square",
+    style: { fill: "#e0f2fe", stroke: "#0369a1", labelColor: "#0c4a6e" },
+  };
+}
+
+export function specialTeamsTemplates(): SpecialTeamsTemplate[] {
+  return [
+    {
+      key: "st_punt",
+      unit: "punt",
+      displayName: "Punt",
+      description: "Standard spread punt formation",
+      players: [
+        mkST("st_p",  "P",  "P", 0.50, 0.05),
+        mkST("st_ps", "LS", "S", 0.50, 0.38),
+        mkST("st_pg1","ST", "G", 0.44, 0.38),
+        mkST("st_pg2","ST", "G", 0.56, 0.38),
+        mkST("st_pt1","ST", "T", 0.36, 0.38),
+        mkST("st_pt2","ST", "T", 0.64, 0.38),
+        mkST("st_pw1","ST", "W", 0.16, 0.38),
+        mkST("st_pw2","ST", "W", 0.84, 0.38),
+        mkST("st_pu1","ST", "U", 0.28, 0.30),
+        mkST("st_pu2","ST", "U", 0.72, 0.30),
+        mkST("st_pp", "ST", "PP", 0.50, 0.18),
+      ],
+    },
+    {
+      key: "st_punt_left",
+      unit: "punt_left",
+      displayName: "Punt Left",
+      description: "Punt formation rolled left",
+      players: [
+        mkST("st_p",  "P",  "P", 0.40, 0.05),
+        mkST("st_ps", "LS", "S", 0.50, 0.38),
+        mkST("st_pg1","ST", "G", 0.44, 0.38),
+        mkST("st_pg2","ST", "G", 0.56, 0.38),
+        mkST("st_pt1","ST", "T", 0.36, 0.38),
+        mkST("st_pt2","ST", "T", 0.64, 0.38),
+        mkST("st_pw1","ST", "W", 0.12, 0.38),
+        mkST("st_pw2","ST", "W", 0.80, 0.38),
+        mkST("st_pu1","ST", "U", 0.24, 0.30),
+        mkST("st_pu2","ST", "U", 0.68, 0.30),
+        mkST("st_pp", "ST", "PP", 0.40, 0.18),
+      ],
+    },
+    {
+      key: "st_punt_right",
+      unit: "punt_right",
+      displayName: "Punt Right",
+      description: "Punt formation rolled right",
+      players: [
+        mkST("st_p",  "P",  "P", 0.60, 0.05),
+        mkST("st_ps", "LS", "S", 0.50, 0.38),
+        mkST("st_pg1","ST", "G", 0.44, 0.38),
+        mkST("st_pg2","ST", "G", 0.56, 0.38),
+        mkST("st_pt1","ST", "T", 0.36, 0.38),
+        mkST("st_pt2","ST", "T", 0.64, 0.38),
+        mkST("st_pw1","ST", "W", 0.20, 0.38),
+        mkST("st_pw2","ST", "W", 0.88, 0.38),
+        mkST("st_pu1","ST", "U", 0.32, 0.30),
+        mkST("st_pu2","ST", "U", 0.76, 0.30),
+        mkST("st_pp", "ST", "PP", 0.60, 0.18),
+      ],
+    },
+    {
+      key: "st_punt_return",
+      unit: "punt_return",
+      displayName: "Punt Return",
+      description: "Punt return w/ two returners",
+      players: [
+        mkST("st_j1","ST","J",0.12,0.44),
+        mkST("st_j2","ST","J",0.88,0.44),
+        mkST("st_r1","ST","R",0.25,0.50),
+        mkST("st_r2","ST","R",0.40,0.50),
+        mkST("st_r3","ST","R",0.60,0.50),
+        mkST("st_r4","ST","R",0.75,0.50),
+        mkST("st_h1","ST","H",0.30,0.62),
+        mkST("st_h2","ST","H",0.70,0.62),
+        mkST("st_h3","ST","H",0.50,0.62),
+        mkST("st_pr1","ST","PR",0.40,0.88),
+        mkST("st_pr2","ST","PR",0.60,0.88),
+      ],
+    },
+    {
+      key: "st_field_goal",
+      unit: "field_goal",
+      displayName: "Field Goal",
+      description: "FG unit with kicker + holder",
+      players: [
+        mkST("st_k","K","K",0.46,0.20),
+        mkST("st_h","ST","H",0.50,0.30),
+        mkST("st_ls","LS","S",0.50,0.38),
+        mkST("st_g1","ST","G",0.44,0.38),
+        mkST("st_g2","ST","G",0.56,0.38),
+        mkST("st_t1","ST","T",0.38,0.38),
+        mkST("st_t2","ST","T",0.62,0.38),
+        mkST("st_w1","ST","W",0.30,0.38),
+        mkST("st_w2","ST","W",0.70,0.38),
+        mkST("st_u1","ST","U",0.23,0.38),
+        mkST("st_u2","ST","U",0.77,0.38),
+      ],
+    },
+    {
+      key: "st_extra_point",
+      unit: "extra_point",
+      displayName: "Extra Point",
+      description: "PAT unit (same as FG)",
+      players: [
+        mkST("st_k","K","K",0.46,0.22),
+        mkST("st_h","ST","H",0.50,0.32),
+        mkST("st_ls","LS","S",0.50,0.38),
+        mkST("st_g1","ST","G",0.44,0.38),
+        mkST("st_g2","ST","G",0.56,0.38),
+        mkST("st_t1","ST","T",0.38,0.38),
+        mkST("st_t2","ST","T",0.62,0.38),
+        mkST("st_w1","ST","W",0.30,0.38),
+        mkST("st_w2","ST","W",0.70,0.38),
+        mkST("st_u1","ST","U",0.23,0.38),
+        mkST("st_u2","ST","U",0.77,0.38),
+      ],
+    },
+    {
+      key: "st_kickoff",
+      unit: "kickoff",
+      displayName: "Kickoff",
+      description: "Kickoff coverage team",
+      players: [
+        mkST("st_k", "K","K", 0.50, 0.10),
+        mkST("st_c1","ST","C",0.08,0.22),
+        mkST("st_c2","ST","C",0.20,0.22),
+        mkST("st_c3","ST","C",0.32,0.22),
+        mkST("st_c4","ST","C",0.42,0.22),
+        mkST("st_c5","ST","C",0.50,0.22),
+        mkST("st_c6","ST","C",0.58,0.22),
+        mkST("st_c7","ST","C",0.68,0.22),
+        mkST("st_c8","ST","C",0.80,0.22),
+        mkST("st_s1","ST","S",0.26,0.14),
+        mkST("st_s2","ST","S",0.74,0.14),
+      ],
+    },
+    {
+      key: "st_kick_return",
+      unit: "kick_return",
+      displayName: "Kick Return",
+      description: "Kick return w/ two deep returners",
+      players: [
+        mkST("st_f1","ST","F",0.20,0.44),
+        mkST("st_f2","ST","F",0.40,0.44),
+        mkST("st_f3","ST","F",0.60,0.44),
+        mkST("st_f4","ST","F",0.80,0.44),
+        mkST("st_m1","ST","M",0.25,0.58),
+        mkST("st_m2","ST","M",0.50,0.58),
+        mkST("st_m3","ST","M",0.75,0.58),
+        mkST("st_h1","ST","H",0.35,0.72),
+        mkST("st_h2","ST","H",0.65,0.72),
+        mkST("st_r1","ST","R",0.40,0.92),
+        mkST("st_r2","ST","R",0.60,0.92),
+      ],
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/*  v1 → v2 loader                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Migrate a persisted PlayDocument up to the current schema version.
+ * v1 docs predate playType, zones, and defensePlayerCount — default them
+ * so editor/renderer code can treat all docs uniformly.
+ */
+export function migratePlayDocument(
+  raw: PlayDocument & { schemaVersion?: number },
+): PlayDocument {
+  const doc: PlayDocument = { ...raw, schemaVersion: PLAY_DOCUMENT_SCHEMA_VERSION };
+  // Backfill defensePlayerCount on the sportProfile (mirror offense by default).
+  if (typeof (doc.sportProfile as SportProfile).defensePlayerCount !== "number") {
+    const canonical = sportProfileForVariant(doc.sportProfile.variant);
+    doc.sportProfile = {
+      ...doc.sportProfile,
+      defensePlayerCount: canonical.defensePlayerCount,
+    };
+  }
+  // Default playType = "offense" for legacy docs.
+  if (!doc.metadata.playType) {
+    doc.metadata = { ...doc.metadata, playType: "offense" };
+  }
+  // Default zones layer.
+  if (!doc.layers.zones) {
+    doc.layers = { ...doc.layers, zones: [] };
+  }
+  return doc;
+}

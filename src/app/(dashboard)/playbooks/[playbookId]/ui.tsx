@@ -37,8 +37,19 @@ import {
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
-import type { Player, Route, SportVariant } from "@/domain/play/types";
-import { defaultPlayersForVariant, resolveEndDecoration, resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant } from "@/domain/play/types";
+import {
+  defaultDefendersForVariant,
+  defaultPlayersForVariant,
+  defenseTemplatesForVariant,
+  resolveEndDecoration,
+  resolveRouteStroke,
+  sportProfileForVariant,
+  specialTeamsTemplates,
+  SPORT_VARIANT_LABELS,
+  type DefenseTemplate,
+  type SpecialTeamsTemplate,
+} from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
@@ -111,6 +122,7 @@ export function PlaybookDetailClient({
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
+  const [typeFilter, setTypeFilter] = useState<PlayType | "all">("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("formation");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
@@ -124,11 +136,25 @@ export function PlaybookDetailClient({
   const [availableFormations, setAvailableFormations] = useState<SavedFormation[]>([]);
   const [loadingFormations, setLoadingFormations] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [openSection, setOpenSection] = useState<PlayType>("offense");
+  const defenseTemplates = useMemo(
+    () => defenseTemplatesForVariant(variant),
+    [variant],
+  );
+  const stTemplates = useMemo(
+    () => (variant === "tackle_11" ? specialTeamsTemplates() : []),
+    [variant],
+  );
+  const defaultDefenders = useMemo(
+    () => defaultDefendersForVariant(variant, playbookPlayerCount),
+    [variant, playbookPlayerCount],
+  );
 
   const viewed = initialPlays.filter((p) =>
     view === "archived" ? p.is_archived : !p.is_archived,
   );
   const filtered = viewed.filter((p) => {
+    if (typeFilter !== "all" && p.play_type !== typeFilter) return false;
     const s = q.trim().toLowerCase();
     if (!s) return true;
     return (
@@ -234,17 +260,23 @@ export function PlaybookDetailClient({
     });
   }
 
-  async function createWithFormation(formation?: SavedFormation) {
+  async function createWithFormation(
+    formation?: SavedFormation,
+    opts?: { playType?: PlayType; specialTeamsUnit?: SpecialTeamsUnit | null; initialPlayers?: Player[]; formationName?: string },
+  ) {
     setShowFormationPicker(false);
     setCreating(true);
+    const playType = opts?.playType ?? "offense";
+    const initialPlayers =
+      opts?.initialPlayers ?? formation?.players ?? defaultPlayers;
     const res = await createPlayAction(playbookId, {
-      // Always provide players so the action uses the right variant layout.
-      // Fall back to the variant's computed default when no saved formation is chosen.
-      initialPlayers: formation?.players ?? defaultPlayers,
+      initialPlayers,
       formationId: formation?.id ?? null,
-      formationName: formation?.displayName ?? "",
+      formationName: opts?.formationName ?? formation?.displayName ?? "",
       variant,
       playerCount: playbookPlayerCount,
+      playType,
+      specialTeamsUnit: opts?.specialTeamsUnit ?? null,
     });
     if (res.ok) {
       router.push(`/plays/${res.playId}/edit`);
@@ -252,6 +284,23 @@ export function PlaybookDetailClient({
       setCreating(false);
       toast(res.error, "error");
     }
+  }
+
+  function createFromDefenseTemplate(t: DefenseTemplate) {
+    void createWithFormation(undefined, {
+      playType: "defense",
+      initialPlayers: t.players,
+      formationName: t.displayName,
+    });
+  }
+
+  function createFromSTTemplate(t: SpecialTeamsTemplate) {
+    void createWithFormation(undefined, {
+      playType: "special_teams",
+      specialTeamsUnit: t.unit,
+      initialPlayers: t.players,
+      formationName: t.displayName,
+    });
   }
 
   async function createAndGoToFormationEditor() {
@@ -467,6 +516,31 @@ export function PlaybookDetailClient({
             </div>
 
             <div className="border-t border-border pt-3">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                Type
+              </div>
+              <SegmentedControl
+                size="sm"
+                value={typeFilter}
+                onChange={(v) => setTypeFilter(v as PlayType | "all")}
+                options={
+                  variant === "tackle_11"
+                    ? [
+                        { value: "all", label: "All" },
+                        { value: "offense", label: "Off" },
+                        { value: "defense", label: "Def" },
+                        { value: "special_teams", label: "ST" },
+                      ]
+                    : [
+                        { value: "all", label: "All" },
+                        { value: "offense", label: "Off" },
+                        { value: "defense", label: "Def" },
+                      ]
+                }
+              />
+            </div>
+
+            <div className="border-t border-border pt-3">
               <SegmentedControl
                 size="sm"
                 value={view}
@@ -604,6 +678,9 @@ export function PlaybookDetailClient({
                             <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
                               {p.name}
                             </h3>
+                            {p.play_type !== "offense" && (
+                              <PlayTypeBadge type={p.play_type} />
+                            )}
                           </div>
                           {p.preview && (
                             <div className="mt-2">
@@ -723,77 +800,220 @@ export function PlaybookDetailClient({
               </button>
             </div>
 
-            <div className="max-h-[60vh] overflow-y-auto p-6">
+            <div className="max-h-[70vh] overflow-y-auto p-4">
               {loadingFormations ? (
                 <p className="py-8 text-center text-sm text-muted">Loading formations…</p>
               ) : (
-                <div className="space-y-4">
-                  {/* ── Fixed options ── */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* No specific formation */}
-                    <button
-                      type="button"
-                      className="flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
-                      onClick={() => createWithFormation()}
-                    >
-                      <MiniPlayerDiagram players={defaultPlayers} />
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">No specific formation</p>
-                        <p className="text-xs text-muted">{expectedPlayerCount} default players</p>
-                      </div>
-                    </button>
+                <div className="space-y-2">
+                  <PlayTypeSection
+                    title="Offense"
+                    subtitle={`${expectedPlayerCount} players`}
+                    open={openSection === "offense"}
+                    onToggle={() => setOpenSection(openSection === "offense" ? "offense" : "offense")}
+                    onHeaderClick={() => setOpenSection("offense")}
+                  >
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        className="flex flex-col items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-center transition-colors hover:border-primary hover:bg-primary/10"
+                        onClick={() => createWithFormation()}
+                      >
+                        <MiniPlayerDiagram players={defaultPlayers} />
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">No specific formation</p>
+                          <p className="text-xs text-muted">{expectedPlayerCount} default players</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                        onClick={createAndGoToFormationEditor}
+                      >
+                        <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                          <Plus className="size-7" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Create new formation</p>
+                          <p className="text-xs text-muted">Design from scratch</p>
+                        </div>
+                      </button>
+                    </div>
+                    {(() => {
+                      const off = availableFormations.filter((f) => {
+                        if ((f.kind ?? "offense") !== "offense") return false;
+                        const fv = f.sportProfile?.variant as SportVariant | undefined;
+                        if (fv) return fv === variant;
+                        return f.players.length === expectedPlayerCount;
+                      });
+                      if (off.length === 0) return null;
+                      return (
+                        <>
+                          <SectionDivider>Your formations</SectionDivider>
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {off.map((f) => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                                onClick={() => createWithFormation(f)}
+                              >
+                                <MiniPlayerDiagram players={f.players} />
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                                  <p className="text-xs text-muted">{f.players.length} players</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </PlayTypeSection>
 
-                    {/* Create new formation */}
-                    <button
-                      type="button"
-                      className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                      onClick={createAndGoToFormationEditor}
-                    >
-                      <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
-                        <Plus className="size-7" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Create new formation</p>
-                        <p className="text-xs text-muted">Design from scratch</p>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* ── Saved formations ── */}
-                  {availableFormations.filter((f) => {
-                    const fv = f.sportProfile?.variant as SportVariant | undefined;
-                    if (fv) return fv === variant;
-                    return f.players.length === expectedPlayerCount;
-                  }).length > 0 && (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">Your formations</span>
-                        <div className="h-px flex-1 bg-border" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {availableFormations
-                          .filter((f) => {
-                            const fv = f.sportProfile?.variant as SportVariant | undefined;
-                            if (fv) return fv === variant;
-                            return f.players.length === expectedPlayerCount;
+                  <PlayTypeSection
+                    title="Defense"
+                    subtitle={`${sportProfileForVariant(variant).defensePlayerCount} defenders`}
+                    open={openSection === "defense"}
+                    onHeaderClick={() => setOpenSection("defense")}
+                  >
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                        onClick={() =>
+                          createWithFormation(undefined, {
+                            playType: "defense",
+                            initialPlayers: defaultDefenders,
+                            formationName: "",
                           })
-                          .map((f) => (
+                        }
+                      >
+                        <MiniPlayerDiagram players={defaultDefenders} />
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">No specific formation</p>
+                          <p className="text-xs text-muted">{defaultDefenders.length} default defenders</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                        onClick={() => {
+                          setShowFormationPicker(false);
+                          router.push(`/formations/new?variant=${variant}&kind=defense`);
+                        }}
+                      >
+                        <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
+                          <Plus className="size-7" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Create new formation</p>
+                          <p className="text-xs text-muted">Design from scratch</p>
+                        </div>
+                      </button>
+                    </div>
+                    {defenseTemplates.length > 0 && (
+                      <>
+                        <SectionDivider>Common schemes</SectionDivider>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {defenseTemplates.map((t) => (
                             <button
-                              key={f.id}
+                              key={t.key}
                               type="button"
                               className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                              onClick={() => createWithFormation(f)}
+                              onClick={() => createFromDefenseTemplate(t)}
+                              title={t.description}
                             >
-                              <MiniPlayerDiagram players={f.players} />
+                              <MiniPlayerDiagram players={t.players} />
                               <div>
-                                <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
-                                <p className="text-xs text-muted">{f.players.length} players</p>
+                                <p className="text-sm font-semibold text-foreground">{t.displayName}</p>
+                                <p className="text-xs text-muted">{t.players.length} defenders</p>
                               </div>
                             </button>
                           ))}
+                        </div>
+                      </>
+                    )}
+                    {(() => {
+                      const def = availableFormations.filter((f) => f.kind === "defense");
+                      if (def.length === 0) return null;
+                      return (
+                        <>
+                          <SectionDivider>Your formations</SectionDivider>
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {def.map((f) => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                                onClick={() =>
+                                  createWithFormation(f, { playType: "defense" })
+                                }
+                              >
+                                <MiniPlayerDiagram players={f.players} />
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                                  <p className="text-xs text-muted">{f.players.length} players</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </PlayTypeSection>
+
+                  {variant === "tackle_11" && (
+                    <PlayTypeSection
+                      title="Special Teams"
+                      subtitle="Punt, kickoff, field goal, returns"
+                      open={openSection === "special_teams"}
+                      onHeaderClick={() => setOpenSection("special_teams")}
+                    >
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {stTemplates.map((t) => (
+                          <button
+                            key={t.key}
+                            type="button"
+                            className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                            onClick={() => createFromSTTemplate(t)}
+                            title={t.description}
+                          >
+                            <MiniPlayerDiagram players={t.players} />
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{t.displayName}</p>
+                              <p className="text-xs text-muted">{t.players.length} players</p>
+                            </div>
+                          </button>
+                        ))}
                       </div>
-                    </>
+                      {(() => {
+                        const st = availableFormations.filter((f) => f.kind === "special_teams");
+                        if (st.length === 0) return null;
+                        return (
+                          <>
+                            <SectionDivider>Your formations</SectionDivider>
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                              {st.map((f) => (
+                                <button
+                                  key={f.id}
+                                  type="button"
+                                  className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                                  onClick={() =>
+                                    createWithFormation(f, { playType: "special_teams" })
+                                  }
+                                >
+                                  <MiniPlayerDiagram players={f.players} />
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground">{f.displayName}</p>
+                                    <p className="text-xs text-muted">{f.players.length} players</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </PlayTypeSection>
                   )}
                 </div>
               )}
@@ -1615,18 +1835,86 @@ function MiniPlayerDiagram({ players }: { players: Player[] | null }) {
       {players.map((pl) => {
         const cx = pl.position.x * SIZE;
         const cy = (1 - pl.position.y) * SIZE;
-        return (
-          <circle
-            key={pl.id}
-            cx={cx}
-            cy={cy}
-            r={DOT_R}
-            fill={pl.style.fill}
-            stroke={pl.style.stroke}
-            strokeWidth={1}
-          />
-        );
+        const common = {
+          fill: pl.style.fill,
+          stroke: pl.style.stroke,
+          strokeWidth: 1,
+        } as const;
+        if (pl.shape === "triangle") {
+          const pts = `${cx},${cy - DOT_R} ${cx - DOT_R},${cy + DOT_R} ${cx + DOT_R},${cy + DOT_R}`;
+          return <polygon key={pl.id} points={pts} {...common} />;
+        }
+        if (pl.shape === "square") {
+          return (
+            <rect
+              key={pl.id}
+              x={cx - DOT_R}
+              y={cy - DOT_R}
+              width={DOT_R * 2}
+              height={DOT_R * 2}
+              {...common}
+            />
+          );
+        }
+        return <circle key={pl.id} cx={cx} cy={cy} r={DOT_R} {...common} />;
       })}
     </svg>
+  );
+}
+
+function PlayTypeBadge({ type }: { type: PlayType }) {
+  const cfg: Record<PlayType, { label: string; className: string }> = {
+    offense: { label: "OFF", className: "bg-primary/10 text-primary" },
+    defense: { label: "DEF", className: "bg-red-500/10 text-red-700 dark:text-red-400" },
+    special_teams: { label: "ST", className: "bg-sky-500/10 text-sky-700 dark:text-sky-400" },
+  };
+  const { label, className } = cfg[type];
+  return (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function PlayTypeSection({
+  title,
+  subtitle,
+  open,
+  onHeaderClick,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  open: boolean;
+  onToggle?: () => void;
+  onHeaderClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface-raised">
+      <button
+        type="button"
+        onClick={onHeaderClick}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-foreground">{title}</p>
+          <p className="text-xs text-muted">{subtitle}</p>
+        </div>
+        <span className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && <div className="space-y-3 border-t border-border p-4">{children}</div>}
+    </div>
+  );
+}
+
+function SectionDivider({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <div className="h-px flex-1 bg-border" />
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
   );
 }

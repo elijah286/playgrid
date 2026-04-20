@@ -1,6 +1,6 @@
 /** Normalized field coordinates: origin bottom-left, x right, y up; range typically 0–1 */
 
-export const PLAY_DOCUMENT_SCHEMA_VERSION = 1 as const;
+export const PLAY_DOCUMENT_SCHEMA_VERSION = 2 as const;
 
 export type SportVariant =
   | "flag_5v5"
@@ -8,7 +8,27 @@ export type SportVariant =
   | "tackle_11"
   | "other";
 
-export type PlayerRole = "QB" | "RB" | "WR" | "TE" | "C" | "OTHER";
+/** Which side of the ball / phase of play this is. */
+export type PlayType = "offense" | "defense" | "special_teams";
+
+/** Special-teams unit (only meaningful when playType === "special_teams"). */
+export type SpecialTeamsUnit =
+  | "punt"
+  | "punt_left"
+  | "punt_right"
+  | "punt_return"
+  | "field_goal"
+  | "extra_point"
+  | "kickoff"
+  | "kick_return";
+
+export type PlayerRole =
+  | "QB" | "RB" | "WR" | "TE" | "C"
+  // Defensive roles
+  | "DL" | "LB" | "CB" | "S" | "NB"
+  // Special teams
+  | "K" | "P" | "LS" | "ST"
+  | "OTHER";
 
 export type PlayerShape = "circle" | "square" | "diamond" | "triangle" | "star";
 
@@ -146,9 +166,26 @@ export type FormationState = {
 export type SportProfile = {
   variant: SportVariant;
   offensePlayerCount: number;
+  /** Number of defensive players per side. Mirrors offense for standard variants. */
+  defensePlayerCount: number;
   fieldWidthYds: number;
   fieldLengthYds: number;
   motionMustNotAdvanceTowardGoal?: boolean;
+};
+
+/**
+ * Defensive coverage zone (hook, flat, deep thirds, etc). Rendered as a
+ * translucent rectangle or ellipse with an optional label.
+ */
+export type Zone = {
+  id: string;
+  kind: "rectangle" | "ellipse";
+  /** Center point of the zone, in normalized field coords. */
+  center: Point2;
+  /** Half-extents (rectangle half-width/half-height; ellipse rx/ry). */
+  size: { w: number; h: number };
+  label: string;
+  style: { fill: string; stroke: string };
 };
 
 export type PrintVisibility = {
@@ -188,12 +225,23 @@ export type PlayMetadata = {
   formationId?: string | null;
   /** Short modifier tag (e.g. "Under Center", "Open"). */
   formationTag?: string | null;
+  /** Side of the ball / phase of play. Defaults to "offense". */
+  playType?: PlayType;
+  /** When playType === "special_teams", which unit this is. */
+  specialTeamsUnit?: SpecialTeamsUnit | null;
+  /**
+   * FK to formations.id of the opposing side to overlay in gray (no routes
+   * or zones). Lets coaches visualize their play against a specific look.
+   */
+  opponentFormationId?: string | null;
 };
 
 export type PlayLayers = {
   players: Player[];
   routes: Route[];
   annotations: Annotation[];
+  /** Defensive coverage zones. Empty for offensive plays. */
+  zones?: Zone[];
 };
 
 export type PlayTimeline = {

@@ -3,7 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
-import type { Player, SportProfile } from "@/domain/play/types";
+import type { PlayType, Player, SportProfile } from "@/domain/play/types";
+
+export type FormationKind = PlayType; // "offense" | "defense" | "special_teams"
 
 export type SavedFormation = {
   id: string;
@@ -11,6 +13,7 @@ export type SavedFormation = {
   players: Player[];
   sportProfile: Partial<SportProfile>;
   isSystem: boolean;
+  kind: FormationKind;
   /**
    * The lineOfScrimmageY that was active when this formation was saved.
    * Used to convert stored player positions to yards-from-LOS for drift
@@ -42,7 +45,7 @@ export async function listFormationsAction(): Promise<
 
   const { data, error } = await supabase
     .from("formations")
-    .select("id, team_id, is_system, params")
+    .select("id, team_id, is_system, params, kind")
     .or(`team_id.eq.${teamId},is_system.eq.true`)
     .order("is_system", { ascending: true });
 
@@ -66,6 +69,7 @@ export async function listFormationsAction(): Promise<
         players: p.players,
         sportProfile: p.sportProfile ?? {},
         isSystem: Boolean(row.is_system),
+        kind: ((row.kind as FormationKind | null) ?? "offense") as FormationKind,
         losY: typeof p.lineOfScrimmageY === "number" ? p.lineOfScrimmageY : 0.4,
       };
     });
@@ -78,6 +82,7 @@ export async function saveFormationAction(
   players: Player[],
   sportProfile: Partial<SportProfile>,
   losY = 0.4,
+  kind: FormationKind = "offense",
 ): Promise<{ ok: true; formationId: string } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) {
     return { ok: false, error: "Supabase is not configured." };
@@ -105,6 +110,7 @@ export async function saveFormationAction(
       is_system: false,
       semantic_key: `custom_${Date.now()}`,
       params: params as unknown as Record<string, unknown>,
+      kind,
     })
     .select("id")
     .single();
