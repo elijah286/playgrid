@@ -783,15 +783,12 @@ export function PlaybookDetailClient({
                           className="flex flex-1 flex-col p-4"
                           aria-label={`Open ${p.name}`}
                         >
-                          <div className="flex items-start gap-2 pr-16">
+                          <div className="pr-16">
                             <EditablePlayTitle
                               name={p.name}
                               onRename={(next) => onRenamePlayInline(p.id, next)}
                               className="font-semibold"
                             />
-                            {p.play_type !== "offense" && (
-                              <PlayTypeBadge type={p.play_type} />
-                            )}
                           </div>
                           {p.preview && (
                             <div className="mt-2">
@@ -816,6 +813,11 @@ export function PlaybookDetailClient({
                         <div className="absolute right-2 top-2 flex items-center gap-1">
                           <ActionMenu items={buildItems(p)} />
                         </div>
+                        {p.play_type !== "offense" && (
+                          <div className="pointer-events-none absolute bottom-2 right-2">
+                            <PlayTypeBadge type={p.play_type} />
+                          </div>
+                        )}
                       </Card>
                     ))}
                   </div>
