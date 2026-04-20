@@ -242,6 +242,99 @@ export function EditorCanvas({
   };
   const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
 
+  // Ref holding the latest values the stable native contextmenu listener needs.
+  // Assigned directly during render (safe for refs).
+  const nativeMenuCtxRef = useRef({
+    players: doc.layers.players,
+    fieldAspect,
+    mode,
+    onSelectPlayer,
+    onSelectRoute,
+    onSelectNode,
+    onSelectSegment,
+  });
+  nativeMenuCtxRef.current = {
+    players: doc.layers.players,
+    fieldAspect,
+    mode,
+    onSelectPlayer,
+    onSelectRoute,
+    onSelectNode,
+    onSelectSegment,
+  };
+
+  // Native contextmenu listener on the SVG — fires before React's synthetic
+  // events (React 17+ delegates to the root container, making onContextMenu
+  // on SVG child shapes fire too late / unreliably on macOS Ctrl+click).
+  useEffect(() => {
+    const svg = svgRef.current;
+    const wrapper = wrapperRef.current;
+    if (!svg || !wrapper) return;
+
+    function handleContextMenu(e: MouseEvent) {
+      // Always suppress the browser's native right-click menu on the canvas.
+      e.preventDefault();
+
+      const {
+        players,
+        fieldAspect: fa,
+        mode: m,
+        onSelectPlayer: osp,
+        onSelectRoute: osr,
+        onSelectNode: osn,
+        onSelectSegment: oss,
+      } = nativeMenuCtxRef.current;
+
+      if (m === "formation") return;
+
+      // Convert screen coords → normalised field coords via the SVG's CTM.
+      const ctm = svg!.getScreenCTM();
+      if (!ctm) return;
+      const inv = ctm.inverse();
+      const svgX = inv.a * e.clientX + inv.c * e.clientY + inv.e;
+      const svgY = inv.b * e.clientX + inv.d * e.clientY + inv.f;
+      const normX = Math.min(1, Math.max(0, svgX / fa));
+      const normY = Math.min(1, Math.max(0, 1 - svgY));
+
+      // Hit-test players. Player visual radius is 0.028 SVG units; use 0.055
+      // normalised for a generous click target.
+      const HIT_RADIUS = 0.055;
+      const hitPlayer = players.find((p) => {
+        const dx = p.position.x - normX;
+        const dy = p.position.y - normY;
+        return Math.hypot(dx, dy) < HIT_RADIUS;
+      });
+
+      if (!hitPlayer) {
+        // Not over a player — let the event bubble so segment onContextMenu fires.
+        return;
+      }
+
+      // Stop native bubbling so React's root contextmenu handler doesn't also fire.
+      e.stopPropagation();
+
+      const rect = wrapper!.getBoundingClientRect();
+      const MENU_W = 180;
+      const MENU_H = 90;
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      setPlayerMenu({
+        screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+        screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+        playerId: hitPlayer.id,
+      });
+      setSegmentMenu(null);
+      setAnchorMenu(null);
+      osp(hitPlayer.id);
+      osr(null);
+      osn(null);
+      oss(null);
+    }
+
+    svg.addEventListener("contextmenu", handleContextMenu);
+    return () => svg.removeEventListener("contextmenu", handleContextMenu);
+  }, []); // stable — reads exclusively from nativeMenuCtxRef
+
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
     if (!segmentMenu && !anchorMenu && !playerMenu) return;
@@ -1419,30 +1512,8 @@ export function EditorCanvas({
           style: { cursor: isDragging ? "grabbing" : "grab" } as React.CSSProperties,
           onPointerDown: (e: React.PointerEvent) => {
             e.stopPropagation();
-            if (e.button === 2) {
-              // Right-click → open player context menu.
-              // The SVG-level onContextMenu already calls e.preventDefault() so
-              // the browser's native menu is suppressed; we just set our state here.
-              const wrap = wrapperRef.current;
-              if (!wrap) return;
-              const rect = wrap.getBoundingClientRect();
-              const MENU_W = 180;
-              const MENU_H = 90;
-              const localX = e.clientX - rect.left;
-              const localY = e.clientY - rect.top;
-              setPlayerMenu({
-                screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
-                screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
-                playerId: pl.id,
-              });
-              setSegmentMenu(null);
-              setAnchorMenu(null);
-              onSelectPlayer(pl.id);
-              onSelectRoute(null);
-              onSelectNode(null);
-              onSelectSegment(null);
-              return;
-            }
+            // Right-clicks are handled by the native contextmenu listener above.
+            // startInteraction already guards button !== 0, so pass through always.
             startInteraction(e, { kind: "player", playerId: pl.id });
           },
         };
