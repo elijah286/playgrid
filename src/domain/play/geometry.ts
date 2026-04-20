@@ -129,10 +129,11 @@ function zigzagPoints(from: Point2, to: Point2, zigCount?: number): Point2[] {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy);
-  // Tight motion marks: fixed amplitude in normalized field coords and
-  // wavelength scaled to segment length (min 10 zigs, ~1 zig per 2.5% field).
+  // Fixed wavelength in normalized field coords so the zig-zag frequency
+  // stays constant as the segment extends or the anchor moves.
   const amplitude = 0.012;
-  const zigs = zigCount ?? Math.max(14, Math.round(len / 0.018));
+  const wavelength = 0.018;
+  const zigs = zigCount ?? Math.max(2, Math.round(len / wavelength));
   const nx = -dy / (len || 1);
   const ny = dx / (len || 1);
   const pts: Point2[] = [from];
