@@ -287,9 +287,11 @@ export function PlaybookDetailClient({
     <div className="space-y-4">
       {/* Sticky header region: back link + playbook identity + slim top bar.
           Stays pinned below the global dashboard header (h ≈ 56px = top-14)
-          while plays scroll beneath. Negative margin + padding extend the
-          backdrop to the page edges so scrolling plays don't bleed through. */}
-      <div className="sticky top-14 z-20 -mx-6 space-y-4 bg-surface/90 px-6 pb-4 pt-4 backdrop-blur-lg">
+          while plays scroll beneath. `-mt-8` cancels the dashboard `<main>`
+          py-8 top padding so the pre-scroll layout matches the scrolled
+          (compact) layout — same spacing in both states. Solid bg (not
+          blur) avoids the "appearing header" flicker when scroll begins. */}
+      <div className="sticky top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
         {pageHeader}
         {/* Slim top bar: search, print, new */}
         <div className="flex flex-wrap items-end gap-3">
