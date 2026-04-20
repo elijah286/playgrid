@@ -504,8 +504,9 @@ function renderWristbandTile(
       if (len > 1e-4) {
         const ux = dxS / len;
         const uy = dyS / len;
+        const fieldMin = Math.min(fieldW, fieldH);
         if (deco === "arrow") {
-          const aLen = Math.max(1.4, strokeW * 4.5);
+          const aLen = Math.max(strokeW * 2, Math.min(strokeW * 4.5, fieldMin * 0.07));
           const cos = Math.cos(Math.PI / 6);
           const sin = Math.sin(Math.PI / 6);
           const bx = -ux;
@@ -517,7 +518,7 @@ function renderWristbandTile(
           routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r1x}" y2="${tipY + aLen * r1y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
           routes += `<line x1="${tipX}" y1="${tipY}" x2="${tipX + aLen * r2x}" y2="${tipY + aLen * r2y}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
         } else if (deco === "t") {
-          const half = Math.max(1.1, strokeW * 3.5);
+          const half = Math.max(strokeW * 1.5, Math.min(strokeW * 3.5, fieldMin * 0.055));
           const perpX = -uy;
           const perpY = ux;
           routes += `<line x1="${tipX + perpX * half}" y1="${tipY + perpY * half}" x2="${tipX - perpX * half}" y2="${tipY - perpY * half}" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round"/>`;
