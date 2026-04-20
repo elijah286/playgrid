@@ -118,23 +118,17 @@ export function compilePlayToSvg(
     const geometry = routeToPathGeometry(r);
     const segments = geometry.segments;
     const d = segments
-      .map((seg, i) => {
-        if (seg.type === "line") {
-          const fx = fieldX + seg.from.x * fieldW;
-          const fy = fieldY + (1 - seg.from.y) * fieldH;
-          const tx = fieldX + seg.to.x * fieldW;
-          const ty = fieldY + (1 - seg.to.y) * fieldH;
-          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
-        }
+      .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
         const tx = fieldX + seg.to.x * fieldW;
         const ty = fieldY + (1 - seg.to.y) * fieldH;
-        return i === 0
-          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
-          : `Q ${cx} ${cy} ${tx} ${ty}`;
+        if (seg.type === "line") {
+          return `M ${fx} ${fy} L ${tx} ${ty}`;
+        }
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
     routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.35}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
@@ -278,23 +272,17 @@ function renderPlayCellSvg(
     const geometry = routeToPathGeometry(r);
     const segments = geometry.segments;
     const d = segments
-      .map((seg, i) => {
-        if (seg.type === "line") {
-          const fx = fieldX + seg.from.x * fieldW;
-          const fy = fieldY + (1 - seg.from.y) * fieldH;
-          const tx = fieldX + seg.to.x * fieldW;
-          const ty = fieldY + (1 - seg.to.y) * fieldH;
-          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
-        }
+      .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
         const tx = fieldX + seg.to.x * fieldW;
         const ty = fieldY + (1 - seg.to.y) * fieldH;
-        return i === 0
-          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
-          : `Q ${cx} ${cy} ${tx} ${ty}`;
+        if (seg.type === "line") {
+          return `M ${fx} ${fy} L ${tx} ${ty}`;
+        }
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
     routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.28}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
@@ -486,23 +474,17 @@ function renderWristbandTile(
     const geometry = routeToPathGeometry(r);
     const segs = geometry.segments;
     const d = segs
-      .map((seg, i) => {
-        if (seg.type === "line") {
-          const fx = fieldX + seg.from.x * fieldW;
-          const fy = fieldY + (1 - seg.from.y) * fieldH;
-          const tx = fieldX + seg.to.x * fieldW;
-          const ty = fieldY + (1 - seg.to.y) * fieldH;
-          return i === 0 ? `M ${fx} ${fy} L ${tx} ${ty}` : `L ${tx} ${ty}`;
-        }
+      .map((seg) => {
         const fx = fieldX + seg.from.x * fieldW;
         const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
         const tx = fieldX + seg.to.x * fieldW;
         const ty = fieldY + (1 - seg.to.y) * fieldH;
-        return i === 0
-          ? `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`
-          : `Q ${cx} ${cy} ${tx} ${ty}`;
+        if (seg.type === "line") {
+          return `M ${fx} ${fy} L ${tx} ${ty}`;
+        }
+        const cx = fieldX + seg.control.x * fieldW;
+        const cy = fieldY + (1 - seg.control.y) * fieldH;
+        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
       })
       .join(" ");
     const stroke = resolveRouteStroke(r, doc.layers.players);
