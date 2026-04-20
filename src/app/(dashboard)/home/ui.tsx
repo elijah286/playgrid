@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   Archive,
   BookOpen,
   Copy,
   Inbox,
   Layers,
+  Link2,
   Palette,
   Pencil,
   Plus,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react";
@@ -23,6 +25,7 @@ import {
   duplicatePlaybookAction,
   renamePlaybookAction,
   updatePlaybookAppearanceAction,
+  uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
 import type { SportVariant } from "@/domain/play/types";
@@ -40,6 +43,102 @@ import {
 } from "@/components/ui";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
+
+function LogoPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<"upload" | "url">("upload");
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await uploadPlaybookLogoAction(fd);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      onChange(res.url);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+          Logo <span className="font-normal normal-case text-muted">(optional)</span>
+        </label>
+        <SegmentedControl
+          size="sm"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "upload", label: "Upload", icon: Upload },
+            { value: "url", label: "URL", icon: Link2 },
+          ]}
+        />
+      </div>
+
+      {mode === "upload" ? (
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={Upload}
+            onClick={() => fileRef.current?.click()}
+            loading={uploading}
+            disabled={disabled || uploading}
+          >
+            {value ? "Replace image" : "Choose image"}
+          </Button>
+          {value && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange("")}
+              disabled={disabled || uploading}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+      ) : (
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://example.com/logo.png"
+          disabled={disabled}
+        />
+      )}
+      <p className="text-xs text-muted">
+        PNG, JPG, WebP, SVG, or GIF — up to 2 MB.
+      </p>
+    </div>
+  );
+}
 
 function colorFor(tile: DashboardPlaybookTile): string {
   if (tile.color) return tile.color;
@@ -469,17 +568,7 @@ function CreatePlaybookDialog({
             </div>
           </div>
 
-          {/* Logo URL */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Logo URL <span className="font-normal normal-case text-muted">(optional)</span>
-            </label>
-            <Input
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://example.com/logo.png"
-            />
-          </div>
+          <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={pending} />
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
@@ -620,20 +709,7 @@ function AppearanceDialog({
             </div>
           </div>
 
-          {/* Logo URL */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Logo URL
-            </label>
-            <Input
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://example.com/logo.png"
-            />
-            <p className="text-xs text-muted">
-              Paste an image URL. Leave blank to show the playbook initials.
-            </p>
-          </div>
+          <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={saving} />
         </div>
 
         <div className="flex items-center justify-between border-t border-border px-5 py-3">
