@@ -423,13 +423,7 @@ export function PlaybookDetailClient({
               {
                 label: "Duplicate",
                 icon: Copy,
-                onSelect: () =>
-                  handle(
-                    () => duplicatePlayAction(p.id),
-                    (res) => {
-                      if (res.ok) router.push(`/plays/${res.playId}/edit`);
-                    },
-                  ),
+                onSelect: () => handle(() => duplicatePlayAction(p.id)),
               },
               p.is_archived
                 ? {
