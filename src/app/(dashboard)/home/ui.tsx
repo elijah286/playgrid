@@ -253,12 +253,15 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     variant: SportVariant;
     color: string | null;
     logo_url: string | null;
+    customOffenseCount: number | null;
   }) {
     startTransition(async () => {
-      const res = await createPlaybookAction(config.name, config.variant, {
-        color: config.color,
-        logo_url: config.logo_url,
-      });
+      const res = await createPlaybookAction(
+        config.name,
+        config.variant,
+        { color: config.color, logo_url: config.logo_url },
+        config.customOffenseCount,
+      );
       if (!res.ok) {
         toast(res.error, "error");
         return;
@@ -445,12 +448,14 @@ function CreatePlaybookDialog({
     variant: SportVariant;
     color: string | null;
     logo_url: string | null;
+    customOffenseCount: number | null;
   }) => void;
 }) {
   const [name, setName] = useState("");
   const [variant, setVariant] = useState<SportVariant>("flag_7v7");
   const [color, setColor] = useState<string>(PALETTE[0]);
   const [logoUrl, setLogoUrl] = useState("");
+  const [otherCount, setOtherCount] = useState<number>(6);
 
   const initials =
     name
@@ -470,6 +475,7 @@ function CreatePlaybookDialog({
       variant,
       color,
       logo_url: logoUrl.trim() || null,
+      customOffenseCount: variant === "six_man" ? otherCount : null,
     });
   }
 
@@ -535,6 +541,28 @@ function CreatePlaybookDialog({
               onChange={setVariant}
               size="sm"
             />
+            {variant === "six_man" && (
+              <div className="flex items-center gap-3 pt-1">
+                <label
+                  htmlFor="other-player-count"
+                  className="text-xs font-medium text-muted"
+                >
+                  Players per side
+                </label>
+                <select
+                  id="other-player-count"
+                  value={otherCount}
+                  onChange={(e) => setOtherCount(Number(e.target.value))}
+                  className="rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {[4, 5, 6, 7, 8, 9, 10, 11].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Color */}
