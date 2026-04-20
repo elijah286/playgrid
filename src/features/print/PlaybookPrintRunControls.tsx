@@ -226,15 +226,44 @@ export function PlaybookPrintRunControls({ config, onChange }: Props) {
             ]}
           />
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={config.wristbandColorCoding}
-              onChange={(e) => patch({ wristbandColorCoding: e.target.checked })}
-            />
-            Color-code labels by tag
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.wristbandShowLos}
+                onChange={(e) => patch({ wristbandShowLos: e.target.checked })}
+              />
+              Show line of scrimmage
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.wristbandShowYardMarkers}
+                onChange={(e) => patch({ wristbandShowYardMarkers: e.target.checked })}
+              />
+              Show yard markers
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.wristbandShowPlayerLabels}
+                onChange={(e) => patch({ wristbandShowPlayerLabels: e.target.checked })}
+              />
+              Show player letters
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={config.wristbandColorCoding}
+                onChange={(e) => patch({ wristbandColorCoding: e.target.checked })}
+              />
+              Color-code labels by tag
+            </label>
+          </div>
 
           <div>
             <span className="text-sm text-muted">Group / sort for export</span>

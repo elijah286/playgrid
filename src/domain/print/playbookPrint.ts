@@ -57,6 +57,12 @@ export type PlaybookPrintRunConfig = {
   wristbandPlayerShape: WristbandPlayerShape;
   /** Wristband: color-code labels by group/formation */
   wristbandColorCoding: boolean;
+  /** Wristband: draw LOS line on each tile */
+  wristbandShowLos: boolean;
+  /** Wristband: draw faint yard-line guides on each tile */
+  wristbandShowYardMarkers: boolean;
+  /** Wristband: show letter labels inside player markers */
+  wristbandShowPlayerLabels: boolean;
   wristbandGrouping: PlaysheetGrouping;
 };
 
@@ -78,6 +84,9 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandLabels: "number",
   wristbandPlayerShape: "circle",
   wristbandColorCoding: true,
+  wristbandShowLos: true,
+  wristbandShowYardMarkers: true,
+  wristbandShowPlayerLabels: true,
   wristbandGrouping: "manual",
 };
 
