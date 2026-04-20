@@ -56,8 +56,8 @@ function applyFormationPositions(
       nodes: r.nodes.map((n) => ({
         ...n,
         position: {
-          x: Math.min(1, Math.max(0, n.position.x + u.dx)),
-          y: Math.min(1, Math.max(0, n.position.y + u.dy)),
+          x: n.position.x + u.dx,
+          y: n.position.y + u.dy,
         },
       })),
     };
@@ -111,8 +111,8 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
           nodes: r.nodes.map((n) => ({
             ...n,
             position: {
-              x: Math.min(1, Math.max(0, n.position.x + dx)),
-              y: Math.min(1, Math.max(0, n.position.y + dy)),
+              x: n.position.x + dx,
+              y: n.position.y + dy,
             },
           })),
         };

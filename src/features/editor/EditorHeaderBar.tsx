@@ -114,8 +114,23 @@ export function EditorHeaderBar({
   const formationTag = doc.metadata.formationTag ?? null;
   const debouncedDoc = useDebouncedDoc(doc);
   const hasDrift = computeDrift(debouncedDoc, linkedFormation ?? null);
-  const showDriftPrompt = hasDrift && !formationTag;
   const formationId = doc.metadata.formationId;
+
+  // Gate the drift prompt so it doesn't flash right after picking a formation:
+  // require drift to persist for a beat, and reset immediately on formation change.
+  const [stableDrift, setStableDrift] = useState(false);
+  useEffect(() => {
+    if (!hasDrift) {
+      setStableDrift(false);
+      return;
+    }
+    const t = setTimeout(() => setStableDrift(true), 500);
+    return () => clearTimeout(t);
+  }, [hasDrift]);
+  useEffect(() => {
+    setStableDrift(false);
+  }, [formationId]);
+  const showDriftPrompt = stableDrift && !formationTag;
 
   function reapplyFormation() {
     if (!linkedFormation) return;
@@ -264,11 +279,7 @@ export function EditorHeaderBar({
         </div>
       </div>
 
-      <div
-        className={`flex flex-wrap items-center gap-1.5 rounded-lg px-3 py-2 ${
-          showDriftPrompt ? "bg-warning/10 ring-1 ring-warning/25" : ""
-        }`}
-      >
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg px-3 py-2">
         {tags.map((t) => (
           <Badge key={t} variant="default" className="inline-flex items-center gap-1">
             {t}
@@ -308,25 +319,6 @@ export function EditorHeaderBar({
           className="h-7 w-[160px] text-xs"
         />
 
-        {showDriftPrompt && (
-          <>
-            <span className="ml-1 text-[11px] font-semibold text-warning">
-              Formation drifted —
-            </span>
-            <span className="text-[11px] text-muted">tag this variation:</span>
-            {FORMATION_TAG_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setFormationTag(preset)}
-                className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
-              >
-                {preset}
-              </button>
-            ))}
-          </>
-        )}
-
         {formationId && (
           <div className="ml-auto flex items-center gap-1">
             {linkedFormation && (
@@ -352,6 +344,34 @@ export function EditorHeaderBar({
           </div>
         )}
       </div>
+
+      {formationId && (
+        <div
+          aria-live="polite"
+          className={`flex h-7 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg px-3 ${
+            showDriftPrompt ? "bg-warning/10 ring-1 ring-warning/25" : ""
+          }`}
+        >
+          {showDriftPrompt && (
+            <>
+              <span className="text-[11px] font-semibold text-warning">
+                Formation drifted —
+              </span>
+              <span className="text-[11px] text-muted">tag this variation:</span>
+              {FORMATION_TAG_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setFormationTag(preset)}
+                  className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                >
+                  {preset}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
     </header>
   );
 }
