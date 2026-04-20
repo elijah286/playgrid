@@ -155,7 +155,7 @@ export function generateOtherVariantPlayers(count: number): Player[] {
  *   y=0.28 ≈ 3 yds back
  *   y=0.20 ≈ 5 yds back (shotgun / RB depth)
  */
-export function defaultPlayersForVariant(variant: SportVariant): Player[] {
+export function defaultPlayersForVariant(variant: SportVariant, playerCount?: number): Player[] {
   switch (variant) {
     case "flag_5v5":
       return [
@@ -168,7 +168,7 @@ export function defaultPlayersForVariant(variant: SportVariant): Player[] {
     case "flag_7v7":
       return defaultFlagSevenPlayers();
     case "other":
-      return generateOtherVariantPlayers(6);
+      return generateOtherVariantPlayers(playerCount ?? 6);
     case "tackle_11":
       return [
         mkPlayer("p_qb", "QB",    "Q", 0.50, 0.34),        // under center, 1.5 yds back
