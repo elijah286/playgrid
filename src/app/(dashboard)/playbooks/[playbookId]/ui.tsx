@@ -41,6 +41,7 @@ import type { Player, Route, SportVariant } from "@/domain/play/types";
 import { defaultPlayersForVariant, resolveEndDecoration, resolveRouteStroke, sportProfileForVariant, SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
+import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
 import {
   ActionMenu,
   Badge,
@@ -71,6 +72,7 @@ export function PlaybookDetailClient({
   playerCount: playbookPlayerCount,
   initialPlays,
   initialGroups,
+  initialRoster,
   pageHeader,
 }: {
   playbookId: string;
@@ -78,10 +80,12 @@ export function PlaybookDetailClient({
   playerCount?: number;
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
+  initialRoster: PlaybookRosterMember[];
   // Back link + playbook identity block. Rendered inside the sticky header
   // region so it stays pinned while plays scroll.
   pageHeader?: React.ReactNode;
 }) {
+  const [tab, setTab] = useState<"plays" | "roster">("plays");
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
   const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
@@ -293,7 +297,40 @@ export function PlaybookDetailClient({
           blur) avoids the "appearing header" flicker when scroll begins. */}
       <div className="sticky top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
         {pageHeader}
-        {/* Slim top bar: search, print, new */}
+
+        <div className="-mb-2 border-b border-border">
+          <nav className="-mb-px flex gap-1" aria-label="Playbook sections">
+            {(
+              [
+                { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length },
+                { key: "roster" as const, label: "Roster", count: initialRoster.length },
+              ]
+            ).map((t) => {
+              const active = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  aria-current={active ? "page" : undefined}
+                  className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                    active
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted hover:border-border hover:text-foreground"
+                  }`}
+                >
+                  {t.label}
+                  <span className="rounded-full bg-surface-inset px-1.5 py-0.5 text-[10px] text-muted">
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {tab === "plays" && (
+        /* Slim top bar: search, print, new */
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1">
             <Input
@@ -325,8 +362,14 @@ export function PlaybookDetailClient({
             </Link>
           </div>
         </div>
+        )}
       </div>
 
+      {tab === "roster" && (
+        <RosterPanel members={initialRoster} />
+      )}
+
+      {tab === "plays" && (
       <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
         {/* Side rail — sticks under the page-header block above. The top
             offset is approximate (covers ~56px global header + ~176px sticky
@@ -625,6 +668,8 @@ export function PlaybookDetailClient({
         </div>
       </div>
 
+      )}
+
       {showManageGroups && (
         <ManageGroupsDialog
           playbookId={playbookId}
@@ -741,6 +786,69 @@ export function PlaybookDetailClient({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RosterPanel({ members }: { members: PlaybookRosterMember[] }) {
+  if (members.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
+        <p className="text-sm font-semibold text-foreground">No one on the roster yet</p>
+        <p className="mt-1 text-xs text-muted">
+          Inviting players is coming next. For now, anyone you share this playbook with will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  const roleLabel = (r: PlaybookRosterMember["role"]) =>
+    r === "owner" ? "Coach (owner)" : r === "editor" ? "Coach" : "Player";
+  const roleVariant = (r: PlaybookRosterMember["role"]) =>
+    r === "owner" ? "primary" : r === "editor" ? "default" : "default";
+
+  return (
+    <div className="rounded-xl border border-border bg-surface-raised">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
+            <tr>
+              <th className="px-4 py-2.5 font-semibold">Name</th>
+              <th className="px-4 py-2.5 font-semibold">Role</th>
+              <th className="px-4 py-2.5 font-semibold">Jersey</th>
+              <th className="px-4 py-2.5 font-semibold">Position</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {members.map((m) => {
+              const name = m.label || m.display_name || "—";
+              return (
+                <tr key={m.user_id}>
+                  <td className="px-4 py-2.5 font-medium text-foreground">
+                    <span className="inline-flex items-center gap-2">
+                      {name}
+                      {m.is_minor && (
+                        <Badge variant="warning" className="text-[10px]">
+                          Minor
+                        </Badge>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge variant={roleVariant(m.role)} className="text-[10px]">
+                      {roleLabel(m.role)}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-muted">
+                    {m.jersey_number ? `#${m.jersey_number}` : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-muted">{m.position || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

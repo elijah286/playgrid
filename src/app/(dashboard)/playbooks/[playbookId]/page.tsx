@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { listPlaysAction } from "@/app/actions/plays";
+import { listPlaybookRosterAction } from "@/app/actions/playbook-roster";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { PlaybookDetailClient } from "./ui";
@@ -32,6 +33,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   if (error || !book) notFound();
 
   const listed = await listPlaysAction(playbookId, { includeArchived: true });
+  const rosterRes = await listPlaybookRosterAction(playbookId);
 
   const variantLabel =
     SPORT_VARIANT_LABELS[book.sport_variant as SportVariant] ?? book.sport_variant ?? "";
@@ -79,6 +81,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       playerCount={(book.player_count as number | null) ?? undefined}
       initialPlays={listed.ok ? listed.plays : []}
       initialGroups={listed.ok ? listed.groups : []}
+      initialRoster={rosterRes.ok ? rosterRes.members : []}
       pageHeader={pageHeader}
     />
   );
