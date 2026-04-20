@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
 import { ToastProvider } from "@/components/ui/Toast";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,11 +23,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`h-full antialiased ${inter.variable}`}>
+      <head>
+        {/* Apply color scheme before hydration to avoid flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var k='playgrid-color-scheme';var v=localStorage.getItem(k);if(v!=='light'&&v!=='dark'&&v!=='system')v='system';var d=v==='dark'||(v==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full bg-surface text-foreground font-sans">
-        <ToastProvider>
-          <ConfigBanner />
-          {children}
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <ConfigBanner />
+            {children}
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
