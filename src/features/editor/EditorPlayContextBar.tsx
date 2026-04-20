@@ -10,12 +10,36 @@ import {
   listPlaybookPlaysForNavigationAction,
   setPlayGroupAction,
 } from "@/app/actions/plays";
+import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { formatPlayFullLabel } from "@/domain/print/playbookPrint";
 import { Badge, Button, IconButton, Input } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
+import { FORMATION_TAG_PRESETS } from "./Inspector";
+
+const DRIFT_THRESHOLD_YDS = 2;
+const FORM_FIELD_LEN = 25;
+
+function computeDrift(doc: PlayDocument, linked: SavedFormation | null): boolean {
+  const formationId = doc.metadata.formationId;
+  if (!formationId || !linked) return false;
+  const formLosY = linked.losY ?? 0.4;
+  const playLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
+  const playFieldLen = doc.sportProfile.fieldLengthYds;
+  const playFieldW = doc.sportProfile.fieldWidthYds;
+  const fpMap = new Map(linked.players.map((p) => [p.id, p.position]));
+  return doc.layers.players.some((p) => {
+    const fp = fpMap.get(p.id);
+    if (!fp) return false;
+    const playYds = (p.position.y - playLosY) * playFieldLen;
+    const formYds = (fp.y - formLosY) * FORM_FIELD_LEN;
+    const dyYds = playYds - formYds;
+    const dxYds = (p.position.x - fp.x) * playFieldW;
+    return Math.hypot(dxYds, dyYds) > DRIFT_THRESHOLD_YDS;
+  });
+}
 
 type Props = {
   playId: string;
@@ -25,6 +49,7 @@ type Props = {
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
   onDuplicate: () => void;
+  linkedFormation?: SavedFormation | null;
 };
 
 export function EditorPlayContextBar({
@@ -35,6 +60,7 @@ export function EditorPlayContextBar({
   initialNav,
   initialGroups,
   onDuplicate,
+  linkedFormation,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -46,6 +72,10 @@ export function EditorPlayContextBar({
   const [busy, startTransition] = useTransition();
 
   const tags = doc.metadata.tags;
+  const formationTag = doc.metadata.formationTag ?? null;
+  const hasDrift = computeDrift(doc, linkedFormation ?? null);
+  // Show drift prompt only when players have drifted and no variation tag is set yet
+  const showDriftPrompt = hasDrift && !formationTag;
 
   function addTag(raw: string) {
     const cleaned = raw
@@ -63,6 +93,14 @@ export function EditorPlayContextBar({
       type: "document.setMetadata",
       patch: { tags: tags.filter((x) => x !== t) },
     });
+  }
+
+  function setFormationTag(tag: string) {
+    dispatch({ type: "document.setFormationTag", formationTag: tag || null });
+  }
+
+  function clearFormationTag() {
+    dispatch({ type: "document.setFormationTag", formationTag: null });
   }
 
   useEffect(() => {
@@ -190,11 +228,14 @@ export function EditorPlayContextBar({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+      {/* ── Tags row ── */}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
         <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
           <Tags className="size-3.5" />
           Tags
         </span>
+
+        {/* Regular play tags */}
         {tags.map((t) => (
           <Badge key={t} variant="default" className="inline-flex items-center gap-1">
             {t}
@@ -208,6 +249,22 @@ export function EditorPlayContextBar({
             </button>
           </Badge>
         ))}
+
+        {/* Formation variation tag — distinct primary-color pill */}
+        {formationTag && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+            {formationTag}
+            <button
+              type="button"
+              onClick={clearFormationTag}
+              className="rounded hover:text-primary/60"
+              aria-label="Remove variation tag"
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        )}
+
         <Input
           value={tagDraft}
           onChange={(e) => setTagDraft(e.target.value)}
@@ -218,9 +275,27 @@ export function EditorPlayContextBar({
             }
           }}
           placeholder="Add tag (press Enter)…"
-          className="h-7 w-[200px] text-xs"
+          className="h-7 w-[180px] text-xs"
         />
       </div>
+
+      {/* ── Formation drift prompt ── */}
+      {showDriftPrompt && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 ring-1 ring-warning/25">
+          <span className="text-[11px] font-semibold text-warning">Formation drifted —</span>
+          <span className="text-[11px] text-muted">tag this variation:</span>
+          {FORMATION_TAG_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => setFormationTag(preset)}
+              className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      )}
 
       <details className="group border-t border-border pt-2 text-xs">
         <summary className="cursor-pointer list-none font-medium text-muted [&::-webkit-details-marker]:hidden">

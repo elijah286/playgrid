@@ -365,6 +365,7 @@ export function PlayEditorClient({
         initialNav={initialNav}
         initialGroups={initialGroups}
         onDuplicate={duplicate}
+        linkedFormation={linkedFormation}
       />
 
       {/* Routes */}
