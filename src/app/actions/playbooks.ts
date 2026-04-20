@@ -111,6 +111,7 @@ export async function createPlaybookAction(
   name: string,
   sportVariant: SportVariant = "flag_7v7",
   appearance?: { color?: string | null; logo_url?: string | null },
+  customOffenseCount?: number | null,
 ) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -128,6 +129,17 @@ export async function createPlaybookAction(
   }
   if (logo && !/^https?:\/\//i.test(logo)) {
     return { ok: false as const, error: "Logo must be an http(s) URL." };
+  }
+
+  // Only the "Other" (six_man) variant carries a custom player count. Clamp
+  // to 4–11 and ignore the value for fixed variants.
+  let offenseCount: number | null = null;
+  if (sportVariant === "six_man" && typeof customOffenseCount === "number") {
+    const n = Math.round(customOffenseCount);
+    if (!Number.isFinite(n) || n < 4 || n > 11) {
+      return { ok: false as const, error: "Player count must be between 4 and 11." };
+    }
+    offenseCount = n;
   }
 
   let teamId: string;
@@ -149,6 +161,7 @@ export async function createPlaybookAction(
       sport_variant: sportVariant,
       color,
       logo_url: logo,
+      custom_offense_count: offenseCount,
     })
     .select("id")
     .single();
