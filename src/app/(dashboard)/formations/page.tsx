@@ -1,4 +1,5 @@
 import { listFormationsAction } from "@/app/actions/formations";
+import { DashboardTabs } from "@/components/layout/DashboardTabs";
 import { FormationsClient } from "./ui";
 
 export const metadata = { title: "Formations — PlayGrid" };
@@ -9,6 +10,7 @@ export default async function FormationsPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardTabs active="formations" />
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Formations</h1>
         <p className="mt-1 text-sm text-muted">

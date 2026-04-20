@@ -54,20 +54,6 @@ export default async function DashboardLayout({
           <Link href="/home" className="text-lg font-extrabold tracking-tight text-primary">
             PlayGrid
           </Link>
-          <nav className="hidden gap-1 sm:flex">
-            <Link
-              href="/home"
-              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-            >
-              Playbooks
-            </Link>
-            <Link
-              href="/formations"
-              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-            >
-              Formations
-            </Link>
-          </nav>
           <UserMenu
             email={user.email ?? ""}
             displayName={displayName}
