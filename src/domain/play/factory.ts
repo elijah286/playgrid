@@ -49,6 +49,24 @@ export function resolveFieldZone(doc: PlayDocument): "midfield" | "red_zone" {
   return doc.fieldZone ?? "midfield";
 }
 
+/**
+ * Yards shown behind the LOS in the current display window.
+ * Default: 10 (LOS at 0.4 of 25-yd window).
+ */
+export function resolveBackfieldYards(doc: PlayDocument): number {
+  const losY = resolveLineOfScrimmageY(doc);
+  return Math.round(losY * doc.sportProfile.fieldLengthYds);
+}
+
+/**
+ * Yards shown downfield from the LOS in the current display window.
+ * Default: 15 (LOS at 0.4 of 25-yd window).
+ */
+export function resolveDownfieldYards(doc: PlayDocument): number {
+  const losY = resolveLineOfScrimmageY(doc);
+  return Math.round((1 - losY) * doc.sportProfile.fieldLengthYds);
+}
+
 /** Route end-decoration, defaulting to arrow. */
 export function resolveEndDecoration(route: Route): EndDecoration {
   return route.endDecoration ?? "arrow";
@@ -299,10 +317,16 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
   const canonical = sportProfileForVariant(doc.sportProfile.variant);
 
   // For "other" variant, preserve the user's custom player count.
+  // Also preserve fieldLengthYds if the user has customized it — but
+  // treat the old stale value of 40 as "not set" and reset to canonical 25.
+  const storedFieldLength = doc.sportProfile.fieldLengthYds;
+  const effectiveFieldLength =
+    storedFieldLength === 40 ? canonical.fieldLengthYds : storedFieldLength;
+
   const sportProfile =
     doc.sportProfile.variant === "other"
-      ? { ...canonical, offensePlayerCount: doc.sportProfile.offensePlayerCount }
-      : canonical;
+      ? { ...canonical, offensePlayerCount: doc.sportProfile.offensePlayerCount, fieldLengthYds: effectiveFieldLength }
+      : { ...canonical, fieldLengthYds: effectiveFieldLength };
 
   // If the stored LOS is the old 0.5 default (no explicit value was ever
   // saved), migrate player positions so they remain in the backfield relative
@@ -311,7 +335,8 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
   const needsPlayerMigration =
     typeof storedLos !== "number" || storedLos === 0.5;
   const oldLos = 0.5;
-  const newLos = 0.4;
+  // If no migration needed, preserve the user's stored LOS (e.g. from yard spinners).
+  const effectiveLos = needsPlayerMigration ? 0.4 : storedLos;
 
   const players = needsPlayerMigration
     ? doc.layers.players.map((p) => ({
@@ -320,7 +345,7 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
           x: p.position.x,
           // Shift y by the same delta the LOS moved, preserving relative
           // distance from the line.  Clamp to [0, 1].
-          y: Math.max(0, Math.min(1, p.position.y - (oldLos - newLos))),
+          y: Math.max(0, Math.min(1, p.position.y - (oldLos - effectiveLos))),
         },
       }))
     : doc.layers.players;
@@ -328,7 +353,7 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
   return {
     ...doc,
     sportProfile,
-    lineOfScrimmageY: newLos,
+    lineOfScrimmageY: effectiveLos,
     layers: {
       ...doc.layers,
       players,

@@ -82,8 +82,29 @@ export type PlayCommand =
   | { type: "document.setShowHashMarks"; showHashMarks: boolean }
   | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" }
   | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" }
-  | { type: "document.setFormationLink"; formationId: string | null; formationName: string }
-  | { type: "document.setFormationTag"; formationTag: string | null };
+  | {
+      type: "document.setFormationLink";
+      formationId: string | null;
+      formationName: string;
+      /** When provided, snap player positions to these formation players (by id). */
+      players?: Player[];
+    }
+  | { type: "document.setFormationTag"; formationTag: string | null }
+  | {
+      /** Snap all player positions back to the linked formation's canonical layout. */
+      type: "document.reapplyFormation";
+      players: Player[];
+    }
+  | {
+      /**
+       * Change the yards shown above and below the LOS.
+       * Rescales all player/route/annotation y-coordinates so every element
+       * retains its real yardage distance from the line of scrimmage.
+       */
+      type: "field.setYardage";
+      backfieldYards: number;
+      downfieldYards: number;
+    };
 
 export type CommandMeta = {
   id: string;
