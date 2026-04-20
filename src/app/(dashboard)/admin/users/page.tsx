@@ -14,7 +14,7 @@ export default async function AdminUsersPage() {
     return (
       <div>
         <p className="text-sm text-red-700">{res.error}</p>
-        <Link href="/playbooks" className="mt-4 inline-block text-sm text-pg-signal">
+        <Link href="/home" className="mt-4 inline-block text-sm text-pg-signal">
           Back
         </Link>
       </div>
@@ -25,7 +25,7 @@ export default async function AdminUsersPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Link href="/playbooks" className="text-sm text-pg-subtle hover:text-pg-ink">
+          <Link href="/home" className="text-sm text-pg-subtle hover:text-pg-ink">
             ← Playbooks
           </Link>
           <h1 className="mt-2 text-2xl font-semibold text-pg-ink">Site admin</h1>

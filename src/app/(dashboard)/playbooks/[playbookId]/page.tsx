@@ -34,11 +34,11 @@ export default async function PlaybookDetailPage({ params }: Props) {
     <div className="space-y-6">
       <div>
         <Link
-          href="/playbooks"
+          href="/home"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
         >
           <ArrowLeft className="size-4" />
-          Playbooks
+          Home
         </Link>
         <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">{book.name}</h1>
       </div>

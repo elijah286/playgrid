@@ -20,7 +20,7 @@ export default async function EditorLayout({ children }: { children: React.React
     <div className="flex min-h-full flex-col">
       <header className="border-b border-border bg-surface-dark px-6 py-2.5">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link href="/playbooks" className="text-sm font-extrabold tracking-tight text-primary">
+          <Link href="/home" className="text-sm font-extrabold tracking-tight text-primary">
             PlayGrid
           </Link>
           <form action={signOutAction}>

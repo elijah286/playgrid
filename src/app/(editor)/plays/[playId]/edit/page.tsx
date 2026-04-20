@@ -13,7 +13,7 @@ export default async function PlayEditPage({ params }: Props) {
     return (
       <div className="rounded-xl bg-white p-6 ring-1 ring-slate-200">
         <p className="text-sm text-slate-600">Configure Supabase to edit plays.</p>
-        <Link href="/playbooks" className="mt-4 inline-block text-sm text-indigo-600">
+        <Link href="/home" className="mt-4 inline-block text-sm text-indigo-600">
           Back to playbooks
         </Link>
       </div>
