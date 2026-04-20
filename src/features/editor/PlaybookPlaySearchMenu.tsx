@@ -80,7 +80,6 @@ export function PlaybookPlaySearchMenu({
         p.wristband_code.toLowerCase().includes(s) ||
         p.shorthand.toLowerCase().includes(s) ||
         p.formation_name.toLowerCase().includes(s) ||
-        p.concept.toLowerCase().includes(s) ||
         p.tags.some((t) => t.toLowerCase().includes(s)) ||
         (p.group_name && p.group_name.toLowerCase().includes(s))
       );

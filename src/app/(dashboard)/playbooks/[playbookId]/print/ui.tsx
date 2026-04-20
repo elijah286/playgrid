@@ -56,7 +56,6 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
         n.wristband_code.toLowerCase().includes(s) ||
         n.shorthand.toLowerCase().includes(s) ||
         n.formation_name.toLowerCase().includes(s) ||
-        n.concept.toLowerCase().includes(s) ||
         n.tags.some((t) => t.toLowerCase().includes(s))
       );
     });
@@ -289,7 +288,6 @@ export function PrintPlaybookClient({ playbookId, initialPack, initialGroups, lo
                       </div>
                       <div className="mt-0.5 flex flex-wrap gap-1 text-xs text-muted">
                         {r.nav.formation_name && <span>{r.nav.formation_name}</span>}
-                        {r.nav.concept && <span>· {r.nav.concept}</span>}
                         {group && <span>· {group}</span>}
                       </div>
                       {r.nav.tags.length > 0 && (

@@ -227,7 +227,6 @@ export function formatPlayFullLabel(doc: PlayDocument): string {
     m.formation && `Formation: ${m.formation}`,
     tagLabel,
     m.wristbandCode && `#${m.wristbandCode}`,
-    m.concept && `Concept: ${m.concept}`,
   ].filter(Boolean);
   return parts.join(" · ");
 }

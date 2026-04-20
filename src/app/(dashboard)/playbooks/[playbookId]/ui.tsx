@@ -180,7 +180,6 @@ export function PlaybookDetailClient({
       p.name.toLowerCase().includes(s) ||
       (p.wristband_code && p.wristband_code.toLowerCase().includes(s)) ||
       (p.shorthand && p.shorthand.toLowerCase().includes(s)) ||
-      (p.concept && p.concept.toLowerCase().includes(s)) ||
       (p.formation_name && p.formation_name.toLowerCase().includes(s)) ||
       p.tags.some((t) => t.toLowerCase().includes(s))
     );
@@ -796,7 +795,7 @@ export function PlaybookDetailClient({
                             </div>
                           )}
                           <p className="mt-2 truncate text-xs text-muted">
-                            {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
+                            {p.formation_name ||
                               p.shorthand ||
                               "No details"}
                           </p>
@@ -848,7 +847,7 @@ export function PlaybookDetailClient({
                             className="text-sm font-medium"
                           />
                           <span className="truncate text-xs text-muted">
-                            {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
+                            {p.formation_name ||
                               p.shorthand ||
                               ""}
                           </span>
