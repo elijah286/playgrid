@@ -11,6 +11,22 @@ import {
 } from "@/app/actions/admin-users";
 import { Modal } from "@/components/ui";
 
+function formatLastSignIn(iso: string | null): string {
+  if (!iso) return "Never";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diffMs = Date.now() - then;
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 export type AdminUserRow = {
   id: string;
   email: string;
@@ -108,13 +124,14 @@ export function UsersAdminClient({
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Last sign in</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -133,6 +150,12 @@ export function UsersAdminClient({
                     {u.displayName ?? <span className="text-muted-light">—</span>}
                   </td>
                   <td className="px-4 py-3 align-middle text-muted">{u.role}</td>
+                  <td
+                    className="px-4 py-3 align-middle text-xs text-muted"
+                    title={u.lastSignIn ?? ""}
+                  >
+                    {formatLastSignIn(u.lastSignIn)}
+                  </td>
                   <td className="px-4 py-3 align-middle">
                     <div className="flex justify-end gap-1.5">
                       <button

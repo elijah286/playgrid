@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, CreditCard } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { AccountClient } from "./ui";
 
 export default async function AccountPage() {
   if (!hasSupabaseEnv()) redirect("/login");
@@ -12,6 +14,21 @@ export default async function AccountPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  let displayName: string | null = null;
+  let avatarUrl: string | null = null;
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("profiles")
+      .select("display_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle();
+    displayName = (data?.display_name as string | null) ?? null;
+    avatarUrl = (data?.avatar_url as string | null) ?? null;
+  } catch {
+    /* best effort */
+  }
 
   return (
     <div className="space-y-6">
@@ -29,16 +46,11 @@ export default async function AccountPage() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border bg-surface-raised p-8 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-surface-inset">
-          <CreditCard className="size-6 text-muted" />
-        </div>
-        <h2 className="mt-4 text-base font-semibold text-foreground">Billing &amp; plan</h2>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-          Payment plans and billing management will live here. Nothing to configure yet — PlayGrid
-          is free while we&rsquo;re in early access.
-        </p>
-      </div>
+      <AccountClient
+        email={user.email ?? ""}
+        displayName={displayName}
+        avatarUrl={avatarUrl}
+      />
     </div>
   );
 }
