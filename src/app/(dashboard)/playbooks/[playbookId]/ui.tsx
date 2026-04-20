@@ -876,44 +876,11 @@ export function PlaybookDetailClient({
                     open={openSection === "defense"}
                     onHeaderClick={() => setOpenSection("defense")}
                   >
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                        onClick={() =>
-                          createWithFormation(undefined, {
-                            playType: "defense",
-                            initialPlayers: defaultDefenders,
-                            formationName: "",
-                          })
-                        }
-                      >
-                        <MiniPlayerDiagram players={defaultDefenders} />
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">No specific formation</p>
-                          <p className="text-xs text-muted">{defaultDefenders.length} default defenders</p>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface-inset p-4 text-center transition-colors hover:border-primary hover:bg-primary/5"
-                        onClick={() => {
-                          setShowFormationPicker(false);
-                          router.push(`/formations/new?variant=${variant}&kind=defense`);
-                        }}
-                      >
-                        <div className="flex size-20 items-center justify-center rounded-md bg-surface-raised text-muted">
-                          <Plus className="size-7" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">Create new formation</p>
-                          <p className="text-xs text-muted">Design from scratch</p>
-                        </div>
-                      </button>
-                    </div>
                     {defenseTemplates.length > 0 && (
                       <>
-                        <SectionDivider>Common schemes</SectionDivider>
+                        <p className="mb-2 text-xs font-medium text-muted">
+                          Select a template to start with
+                        </p>
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                           {defenseTemplates.map((t) => (
                             <button

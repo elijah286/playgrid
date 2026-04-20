@@ -13,6 +13,8 @@ import {
   FlipHorizontal,
   Star,
   Trash2,
+  Square,
+  Circle,
 } from "lucide-react";
 import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { SegmentedControl, IconButton, Button } from "@/components/ui";
@@ -45,6 +47,10 @@ type Props = {
   playerRouteCount?: number;
   onClearPlayerRoutes?: () => void;
   onFlipHorizontal?: () => void;
+  /** Defensive plays hide motion stroke and show zone-add buttons instead. */
+  isDefense?: boolean;
+  onAddRectZone?: () => void;
+  onAddEllipseZone?: () => void;
 };
 
 const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
@@ -52,11 +58,16 @@ const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[
   { value: "curve", label: "Curve", icon: Spline },
 ];
 
-const STROKE_OPTIONS: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
+const STROKE_OPTIONS_OFFENSE: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
   { value: "solid", label: "Solid" },
   { value: "dashed", label: "Dashed" },
   { value: "dotted", label: "Dotted" },
   { value: "motion", label: "Motion", icon: Waves },
+];
+const STROKE_OPTIONS_DEFENSE: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
+  { value: "solid", label: "Solid" },
+  { value: "dashed", label: "Dashed" },
+  { value: "dotted", label: "Dotted" },
 ];
 
 const END_OPTIONS: { value: EndDecoration; label: string; icon: typeof ArrowRight }[] = [
@@ -105,6 +116,9 @@ export function RouteToolbar({
   playerRouteCount = 0,
   onClearPlayerRoutes,
   onFlipHorizontal,
+  isDefense = false,
+  onAddRectZone,
+  onAddEllipseZone,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
@@ -118,13 +132,25 @@ export function RouteToolbar({
 
       <div className="h-5 w-px bg-border" />
 
-      {/* Stroke pattern */}
+      {/* Stroke pattern (no motion on defense) */}
       <SegmentedControl
-        options={STROKE_OPTIONS}
-        value={strokePattern}
+        options={isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE}
+        value={strokePattern === "motion" && isDefense ? "solid" : strokePattern}
         onChange={onStrokePatternChange}
         size="sm"
       />
+
+      {isDefense && onAddRectZone && onAddEllipseZone && (
+        <>
+          <div className="h-5 w-px bg-border" />
+          <Tooltip content="Add rectangular zone">
+            <IconButton icon={Square} variant="ghost" size="sm" onClick={onAddRectZone} />
+          </Tooltip>
+          <Tooltip content="Add elliptical zone">
+            <IconButton icon={Circle} variant="ghost" size="sm" onClick={onAddEllipseZone} />
+          </Tooltip>
+        </>
+      )}
 
       <div className="h-5 w-px bg-border" />
 
@@ -220,7 +246,7 @@ export function RouteToolbar({
         </Tooltip>
       )}
 
-      {hasSelectedPlayer && (
+      {hasSelectedPlayer && !isDefense && (
         <>
           <div className="h-5 w-px bg-border" />
           <Tooltip content={isHotRoute ? "Remove hot route" : "Mark as hot route"}>

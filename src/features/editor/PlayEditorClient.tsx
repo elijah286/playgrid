@@ -367,6 +367,13 @@ export function PlayEditorClient({
                     dispatch({ type: "route.remove", routeId: r.id });
                   }
                 }}
+                isDefense={doc.metadata.playType === "defense"}
+                onAddRectZone={() =>
+                  dispatch({ type: "zone.add", zone: mkZone("rectangle", "") })
+                }
+                onAddEllipseZone={() =>
+                  dispatch({ type: "zone.add", zone: mkZone("ellipse", "") })
+                }
               />
             </div>
 
@@ -398,11 +405,6 @@ export function PlayEditorClient({
               <PlayControls anim={anim} />
             </div>
 
-            {/* Zones panel (defensive plays) */}
-            {doc.metadata.playType === "defense" && (
-              <ZonesBar doc={doc} dispatch={dispatch} />
-            )}
-
             {/* Field size controls (below canvas) */}
             <FieldSizeControls doc={doc} dispatch={dispatch} />
 
@@ -427,77 +429,6 @@ export function PlayEditorClient({
           </aside>
       </div>
 
-    </div>
-  );
-}
-
-function ZonesBar({
-  doc,
-  dispatch,
-}: {
-  doc: PlayDocument;
-  dispatch: (c: import("@/domain/play/commands").PlayCommand) => void;
-}) {
-  const zones = doc.layers.zones ?? [];
-  return (
-    <div className="rounded-xl border border-border bg-surface-raised p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-foreground">Zones</span>
-        <button
-          type="button"
-          onClick={() =>
-            dispatch({ type: "zone.add", zone: mkZone("rectangle", "Flat") })
-          }
-          className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-inset"
-        >
-          + Rectangle
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            dispatch({ type: "zone.add", zone: mkZone("ellipse", "Hook") })
-          }
-          className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-inset"
-        >
-          + Ellipse
-        </button>
-        {zones.length > 0 && (
-          <span className="text-[11px] text-muted">
-            Drag a zone on the field to reposition.
-          </span>
-        )}
-      </div>
-      {zones.length > 0 && (
-        <ul className="mt-2 flex flex-wrap gap-1.5">
-          {zones.map((z) => (
-            <li
-              key={z.id}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-foreground"
-            >
-              <input
-                value={z.label}
-                onChange={(e) =>
-                  dispatch({
-                    type: "zone.update",
-                    zoneId: z.id,
-                    patch: { label: e.target.value },
-                  })
-                }
-                className="w-20 bg-transparent text-[11px] focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => dispatch({ type: "zone.remove", zoneId: z.id })}
-                className="text-muted hover:text-danger"
-                aria-label={`Remove ${z.label}`}
-                title="Remove"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

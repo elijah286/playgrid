@@ -690,10 +690,20 @@ export function EditorCanvas({
       }
 
       if (state.type === "dragging_player") {
-        // Offensive players are not allowed past the line of scrimmage —
-        // clamp the drag y to the LOS.
+        // Offensive players can't cross the LOS into defensive territory;
+        // defensive players can't cross the LOS into offensive territory.
         const raw = toNorm(e);
-        const clamped: Point2 = { x: raw.x, y: Math.min(raw.y, losY) };
+        const isDefender =
+          doc.metadata.playType === "defense" ||
+          doc.layers.players.find((p) => p.id === state.playerId)?.role === "DL" ||
+          doc.layers.players.find((p) => p.id === state.playerId)?.role === "LB" ||
+          doc.layers.players.find((p) => p.id === state.playerId)?.role === "CB" ||
+          doc.layers.players.find((p) => p.id === state.playerId)?.role === "S" ||
+          doc.layers.players.find((p) => p.id === state.playerId)?.role === "NB";
+        const clamped: Point2 = {
+          x: raw.x,
+          y: isDefender ? Math.max(raw.y, losY) : Math.min(raw.y, losY),
+        };
         dispatch({
           type: "player.move",
           playerId: state.playerId,
@@ -1222,6 +1232,39 @@ export function EditorCanvas({
         );
       })()}
 
+      {/* Rush line (flag defense): dashed line at losY + rushLineYards / fieldLengthYds. */}
+      {doc.metadata.playType === "defense" && (() => {
+        const rushYds = doc.rushLineYards ?? 7;
+        const rushY = losY + rushYds / fieldLengthYds;
+        if (rushY >= 1) return null;
+        const rushSvgY = fy(rushY);
+        return (
+          <g pointerEvents="none">
+            <line
+              x1={0}
+              y1={rushSvgY}
+              x2={fieldAspect}
+              y2={rushSvgY}
+              stroke={losColor}
+              strokeWidth={1.25}
+              strokeDasharray="3 6"
+              vectorEffect="non-scaling-stroke"
+              opacity={0.7}
+            />
+            <text
+              x={0.01}
+              y={rushSvgY - 0.004}
+              fontSize={0.018}
+              fontWeight={600}
+              fill={losColor}
+              opacity={0.85}
+            >
+              Rush {rushYds}y
+            </text>
+          </g>
+        );
+      })()}
+
       {/* Coverage zones (defense). Rendered above the field, below routes/players. */}
       {!hideRoutesAndPlayers &&
         (doc.layers.zones ?? []).map((z) => {
@@ -1288,18 +1331,93 @@ export function EditorCanvas({
                   vectorEffect="non-scaling-stroke"
                 />
               )}
-              <text
-                x={cx}
-                y={cy}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={0.03}
-                fontWeight={600}
-                fill="#1f2937"
-                style={{ fontFamily: "Inter, system-ui, sans-serif", userSelect: "none" }}
-              >
-                {z.label}
-              </text>
+
+              {/* Resize handles. Rectangle: 4 corners. Ellipse: +x and +y radius anchors. */}
+              {(() => {
+                const handleR = 0.012;
+                const startResize = (
+                  ev: React.PointerEvent,
+                  axis: "rect-nw" | "rect-ne" | "rect-sw" | "rect-se" | "ellipse-x" | "ellipse-y",
+                ) => {
+                  ev.stopPropagation();
+                  const svg = svgRef.current;
+                  if (!svg) return;
+                  const rect = svg.getBoundingClientRect();
+                  const startX = ev.clientX;
+                  const startY = ev.clientY;
+                  const startW = z.size.w;
+                  const startH = z.size.h;
+                  (ev.currentTarget as Element).setPointerCapture?.(ev.pointerId);
+                  const onMove = (m: PointerEvent) => {
+                    const dx = (m.clientX - startX) / rect.width / fieldAspect;
+                    const dy = -(m.clientY - startY) / rect.height;
+                    let nw = startW;
+                    let nh = startH;
+                    if (axis === "rect-ne" || axis === "rect-se") nw = startW + dx;
+                    if (axis === "rect-nw" || axis === "rect-sw") nw = startW - dx;
+                    if (axis === "rect-ne" || axis === "rect-nw") nh = startH + dy;
+                    if (axis === "rect-se" || axis === "rect-sw") nh = startH - dy;
+                    if (axis === "ellipse-x") nw = startW + dx;
+                    if (axis === "ellipse-y") nh = startH + dy;
+                    dispatch({
+                      type: "zone.update",
+                      zoneId: z.id,
+                      patch: {
+                        size: {
+                          w: Math.max(0.02, Math.min(0.5, nw)),
+                          h: Math.max(0.02, Math.min(0.5, nh)),
+                        },
+                      },
+                    });
+                  };
+                  const onUp = () => {
+                    window.removeEventListener("pointermove", onMove);
+                    window.removeEventListener("pointerup", onUp);
+                  };
+                  window.addEventListener("pointermove", onMove);
+                  window.addEventListener("pointerup", onUp);
+                };
+                const Handle = ({
+                  hx,
+                  hy,
+                  axis,
+                  cursor,
+                }: {
+                  hx: number;
+                  hy: number;
+                  axis: Parameters<typeof startResize>[1];
+                  cursor: string;
+                }) => (
+                  <rect
+                    x={hx - handleR}
+                    y={hy - handleR}
+                    width={handleR * 2}
+                    height={handleR * 2}
+                    fill="#ffffff"
+                    stroke={z.style.stroke}
+                    strokeWidth={1.25}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ cursor }}
+                    onPointerDown={(e) => startResize(e, axis)}
+                  />
+                );
+                if (z.kind === "rectangle") {
+                  return (
+                    <>
+                      <Handle hx={cx - w} hy={cy - h} axis="rect-nw" cursor="nwse-resize" />
+                      <Handle hx={cx + w} hy={cy - h} axis="rect-ne" cursor="nesw-resize" />
+                      <Handle hx={cx - w} hy={cy + h} axis="rect-sw" cursor="nesw-resize" />
+                      <Handle hx={cx + w} hy={cy + h} axis="rect-se" cursor="nwse-resize" />
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <Handle hx={cx + w} hy={cy} axis="ellipse-x" cursor="ew-resize" />
+                    <Handle hx={cx} hy={cy - h} axis="ellipse-y" cursor="ns-resize" />
+                  </>
+                );
+              })()}
             </g>
           );
         })}
@@ -1747,8 +1865,8 @@ export function EditorCanvas({
             />
           );
         } else {
-          // triangle
-          const pts = `${px},${py - r} ${px + r},${py + r} ${px - r},${py + r}`;
+          // triangle — point toward offense (down on screen, since defense sits up-field)
+          const pts = `${px},${py + r} ${px + r},${py - r} ${px - r},${py - r}`;
           shapeEl = (
             <polygon
               points={pts}

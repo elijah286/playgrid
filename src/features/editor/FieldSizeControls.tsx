@@ -62,6 +62,8 @@ function YardSpinner({
 export function FieldSizeControls({ doc, dispatch }: Props) {
   const backfield = resolveBackfieldYards(doc);
   const downfield = resolveDownfieldYards(doc);
+  const isDefense = doc.metadata.playType === "defense";
+  const rushLineYards = doc.rushLineYards ?? 7;
 
   const handleYards = (bk: number, dn: number) => {
     dispatch({ type: "field.setYardage", backfieldYards: bk, downfieldYards: dn });
@@ -135,6 +137,21 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
           }
         />
       </div>
+
+      {isDefense && (
+        <>
+          <div className="h-4 w-px bg-border" />
+          <YardSpinner
+            label="Rush"
+            value={rushLineYards}
+            min={6}
+            max={8}
+            onChange={(v) =>
+              dispatch({ type: "document.setRushLineYards", rushLineYards: v })
+            }
+          />
+        </>
+      )}
 
       {/* Field zone */}
       <div className="flex items-center gap-1.5">

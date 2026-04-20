@@ -287,4 +287,10 @@ export type PlayDocument = {
    *   - "red_zone": offense is driving toward the goal, numbers descend (25, 20, 15, 10)
    */
   fieldZone?: "midfield" | "red_zone";
+  /**
+   * Yards past the LOS where rushers must start on defensive plays (flag
+   * football rule). Default = 7. Range 6–8. Only rendered when
+   * metadata.playType === "defense".
+   */
+  rushLineYards?: number;
 };

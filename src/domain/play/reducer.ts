@@ -429,6 +429,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setFieldZone":
       return { ...doc, fieldZone: cmd.fieldZone };
 
+    case "document.setRushLineYards":
+      return { ...doc, rushLineYards: cmd.rushLineYards };
+
     case "document.setFormationLink": {
       const metadata = {
         ...doc.metadata,

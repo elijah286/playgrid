@@ -77,8 +77,8 @@ export function Inspector({
         </section>
       )}
 
-      {/* Quick routes: shown when a player is selected and no route is being edited */}
-      {player && !route && (
+      {/* Quick routes: hidden on defensive plays — those just draw direction arrows. */}
+      {player && !route && doc.metadata.playType !== "defense" && (
         <QuickRoutes player={player} dispatch={dispatch} activeStyle={activeStyle} />
       )}
 

@@ -95,6 +95,7 @@ export type PlayCommand =
   | { type: "document.setShowYardNumbers"; showYardNumbers: boolean }
   | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" }
   | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" }
+  | { type: "document.setRushLineYards"; rushLineYards: number }
   | {
       type: "document.setFormationLink";
       formationId: string | null;
