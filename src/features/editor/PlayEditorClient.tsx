@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Undo2,
-  Redo2,
   FlipHorizontal,
   Share2,
   CheckCircle2,
@@ -30,8 +28,7 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorPlayContextBar } from "./EditorPlayContextBar";
-import { IconButton, Kbd, useToast } from "@/components/ui";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { IconButton, useToast } from "@/components/ui";
 
 type Props = {
   playId: string;
@@ -318,17 +315,6 @@ export function PlayEditorClient({
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 rounded-lg bg-surface-inset p-1">
-            <Tooltip content={<span className="flex items-center gap-2">Undo <Kbd keys="Ctrl+Z" /></span>}>
-              <IconButton icon={Undo2} variant="ghost" disabled={!canUndo} onClick={undo} />
-            </Tooltip>
-            <Tooltip content={<span className="flex items-center gap-2">Redo <Kbd keys="Ctrl+Shift+Z" /></span>}>
-              <IconButton icon={Redo2} variant="ghost" disabled={!canRedo} onClick={redo} />
-            </Tooltip>
-          </div>
-
-          <div className="mx-1 h-6 w-px bg-border" />
-
           <IconButton
             icon={FlipHorizontal}
             tooltip="Flip horizontal"

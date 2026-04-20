@@ -28,6 +28,13 @@ export type PlayCommand =
   | { type: "player.setStyle"; playerId: string; style: PlayerStyle }
   | { type: "player.setRole"; playerId: string; role: PlayerRole }
   | { type: "player.setHotRoute"; playerId: string; isHotRoute: boolean }
+  | { type: "player.clearRoutes"; playerId: string }
+  | {
+      /** Mirror all route nodes for this player's routes over the vertical axis
+       *  through the player's x position (i.e. flip left↔right around the player). */
+      type: "player.flipRoutes";
+      playerId: string;
+    }
   /* ---- Route-level ---- */
   | { type: "route.add"; route: Route }
   | { type: "route.remove"; routeId: string }

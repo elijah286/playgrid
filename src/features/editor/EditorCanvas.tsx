@@ -235,9 +235,16 @@ export function EditorCanvas({
   };
   const [anchorMenu, setAnchorMenu] = useState<AnchorMenu | null>(null);
 
+  type PlayerMenu = {
+    screenX: number;
+    screenY: number;
+    playerId: string;
+  };
+  const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
+
   // Dismiss the menu on any outside click / Escape
   useEffect(() => {
-    if (!segmentMenu && !anchorMenu) return;
+    if (!segmentMenu && !anchorMenu && !playerMenu) return;
     function onDocPointer(e: PointerEvent) {
       const target = e.target as Node | null;
       const wrap = wrapperRef.current;
@@ -249,6 +256,7 @@ export function EditorCanvas({
       // Any other click closes the menu.
       setSegmentMenu(null);
       setAnchorMenu(null);
+      setPlayerMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
       // from blocking it.
@@ -258,6 +266,7 @@ export function EditorCanvas({
       if (e.key === "Escape") {
         setSegmentMenu(null);
         setAnchorMenu(null);
+        setPlayerMenu(null);
       }
     }
     document.addEventListener("pointerdown", onDocPointer, true);
@@ -1417,12 +1426,36 @@ export function EditorCanvas({
         const selectionRingColor = pl.style?.stroke ?? "#1C1C1E";
         const shape = pl.shape ?? "circle";
 
+        const openPlayerMenu = (e: React.MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const wrap = wrapperRef.current;
+          if (!wrap) return;
+          const rect = wrap.getBoundingClientRect();
+          const MENU_W = 180;
+          const MENU_H = 90;
+          const localX = e.clientX - rect.left;
+          const localY = e.clientY - rect.top;
+          setPlayerMenu({
+            screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
+            screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+            playerId: pl.id,
+          });
+          setSegmentMenu(null);
+          setAnchorMenu(null);
+          onSelectPlayer(pl.id);
+          onSelectRoute(null);
+          onSelectNode(null);
+          onSelectSegment(null);
+        };
+
         const pointerHandlers = {
           style: { cursor: isDragging ? "grabbing" : "grab" } as React.CSSProperties,
           onPointerDown: (e: React.PointerEvent) => {
             e.stopPropagation();
             startInteraction(e, { kind: "player", playerId: pl.id });
           },
+          onContextMenu: openPlayerMenu,
         };
 
         let shapeEl: React.ReactNode;
@@ -1630,6 +1663,44 @@ export function EditorCanvas({
           </button>
         </div>
       )}
+
+      {/* Player context menu */}
+      {playerMenu && mode !== "formation" && (() => {
+        const hasRoutes = doc.layers.routes.some(
+          (r) => r.carrierPlayerId === playerMenu.playerId,
+        );
+        return (
+          <div
+            data-segment-menu
+            className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
+            style={{ left: playerMenu.screenX, top: playerMenu.screenY }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              disabled={!hasRoutes}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                dispatch({ type: "player.flipRoutes", playerId: playerMenu.playerId });
+                setPlayerMenu(null);
+              }}
+            >
+              Flip route
+            </button>
+            <button
+              type="button"
+              disabled={!hasRoutes}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => {
+                dispatch({ type: "player.clearRoutes", playerId: playerMenu.playerId });
+                setPlayerMenu(null);
+              }}
+            >
+              Clear all routes
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
