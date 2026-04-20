@@ -82,6 +82,5 @@ export async function listFeedbackForAdminAction() {
     createdAt: r.created_at as string,
   }));
 
-  revalidatePath("/settings");
   return { ok: true as const, items };
 }
