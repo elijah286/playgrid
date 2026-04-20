@@ -297,6 +297,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setShowHashMarks":
       return { ...doc, showHashMarks: cmd.showHashMarks };
 
+    case "document.setShowYardNumbers":
+      return { ...doc, showYardNumbers: cmd.showYardNumbers };
+
     case "document.setLineOfScrimmage":
       return { ...doc, lineOfScrimmage: cmd.lineOfScrimmage };
 
