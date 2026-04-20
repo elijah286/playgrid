@@ -4,12 +4,23 @@ import { useState } from "react";
 import { KeyRound, MessageCircle, Users } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
+import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import { SegmentedControl } from "@/components/ui";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
+  | { ok: false; error: string };
+
+type ResendProps =
+  | {
+      ok: true;
+      configured: boolean;
+      statusLabel: string;
+      fromEmail: string | null;
+      updatedAt: string | null;
+    }
   | { ok: false; error: string };
 
 type Tab = "users" | "integrations" | "feedback";
@@ -19,6 +30,7 @@ export function SettingsClient({
   initialUsers,
   usersError,
   integration,
+  resend,
   initialFeedback,
   feedbackError,
 }: {
@@ -26,6 +38,7 @@ export function SettingsClient({
   initialUsers: AdminUserRow[];
   usersError: string | null;
   integration: IntegrationProps;
+  resend: ResendProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
 }) {
@@ -63,7 +76,7 @@ export function SettingsClient({
       )}
 
       {tab === "integrations" && (
-        <div>
+        <div className="space-y-8">
           {integration.ok ? (
             <OpenAISettingsClient
               initial={{
@@ -80,6 +93,19 @@ export function SettingsClient({
                 app server so secrets are not exposed to browsers.
               </p>
             </div>
+          )}
+
+          {resend.ok ? (
+            <ResendSettingsClient
+              initial={{
+                configured: resend.configured,
+                statusLabel: resend.statusLabel,
+                fromEmail: resend.fromEmail,
+                updatedAt: resend.updatedAt,
+              }}
+            />
+          ) : (
+            <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
           )}
         </div>
       )}
