@@ -49,6 +49,7 @@ export async function listPlaybooksAction(opts?: {
 export async function createPlaybookAction(
   name: string,
   sportVariant: SportVariant = "flag_7v7",
+  appearance?: { color?: string | null; logo_url?: string | null },
 ) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -58,6 +59,15 @@ export async function createPlaybookAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const color = appearance?.color?.trim() || null;
+  const logo = appearance?.logo_url?.trim() || null;
+  if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+    return { ok: false as const, error: "Color must be a hex like #RRGGBB." };
+  }
+  if (logo && !/^https?:\/\//i.test(logo)) {
+    return { ok: false as const, error: "Logo must be an http(s) URL." };
+  }
 
   let teamId: string;
   try {
@@ -72,7 +82,13 @@ export async function createPlaybookAction(
 
   const { data, error } = await supabase
     .from("playbooks")
-    .insert({ team_id: teamId, name: name || "New playbook", sport_variant: sportVariant })
+    .insert({
+      team_id: teamId,
+      name: name || "New playbook",
+      sport_variant: sportVariant,
+      color,
+      logo_url: logo,
+    })
     .select("id")
     .single();
 
