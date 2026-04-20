@@ -12,6 +12,7 @@ import {
   Copy,
   Link2Off,
   PencilLine,
+  Plus,
   RefreshCcw,
   Search,
   X,
@@ -65,6 +66,7 @@ type Props = {
   initialGroups: PlaybookGroupRow[];
   onDuplicate: () => void;
   onNavigateToPlay: (playId: string) => void;
+  onSaveAsNewFormation: (name: string) => void | Promise<void>;
   linkedFormation?: SavedFormation | null;
   opponentFormation?: SavedFormation | null;
   allFormations?: SavedFormation[];
@@ -79,6 +81,7 @@ export function EditorHeaderBar({
   initialGroups,
   onDuplicate,
   onNavigateToPlay,
+  onSaveAsNewFormation,
   linkedFormation,
   opponentFormation,
   allFormations = [],
@@ -200,6 +203,7 @@ export function EditorHeaderBar({
                   currentName={formation ?? ""}
                   allFormations={allFormations}
                   dispatch={dispatch}
+                  onSaveAsNewFormation={onSaveAsNewFormation}
                 />
               ) : formation ? (
                 <span className="text-muted">{formation} · </span>
@@ -359,11 +363,13 @@ function FormationTitlePicker({
   currentName,
   allFormations,
   dispatch,
+  onSaveAsNewFormation,
 }: {
   currentId: string | null;
   currentName: string;
   allFormations: SavedFormation[];
   dispatch: (c: PlayCommand) => void;
+  onSaveAsNewFormation: (name: string) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -429,6 +435,19 @@ function FormationTitlePicker({
                 className="w-full rounded-md border border-border bg-surface-inset py-1.5 pl-7 pr-2 text-xs font-normal text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
               />
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                const name = window.prompt("Name for the new formation");
+                if (!name || !name.trim()) return;
+                setOpen(false);
+                void onSaveAsNewFormation(name.trim());
+              }}
+              className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-xs font-medium text-primary hover:bg-primary/5"
+            >
+              <Plus className="size-3.5" />
+              Save current layout as new formation
+            </button>
             {currentId && (
               <button
                 type="button"

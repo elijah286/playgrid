@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
+import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
@@ -111,6 +112,33 @@ export function PlayEditorClient({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isSaving]);
+
+  const saveAsNewFormation = useCallback(
+    async (name: string) => {
+      const res = await saveFormationAction(
+        name,
+        doc.layers.players,
+        doc.sportProfile,
+        typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+        "offense",
+      );
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      dispatch({
+        type: "document.setFormationLink",
+        formationId: res.formationId,
+        formationName: name,
+        players: doc.layers.players,
+        formationLosY:
+          typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+      });
+      toast(`Saved "${name}" as a new formation`, "success");
+      router.refresh();
+    },
+    [doc, dispatch, router, toast],
+  );
 
   const navigateToPlay = useCallback(
     (targetPlayId: string) => {
@@ -351,6 +379,7 @@ export function PlayEditorClient({
         initialGroups={initialGroups}
         onDuplicate={duplicate}
         onNavigateToPlay={navigateToPlay}
+        onSaveAsNewFormation={saveAsNewFormation}
         linkedFormation={linkedFormation}
         opponentFormation={opponentFormation ?? null}
         allFormations={allFormations}
