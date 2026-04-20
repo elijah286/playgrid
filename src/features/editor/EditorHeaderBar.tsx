@@ -9,9 +9,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Link2Off,
   Loader2,
   PencilLine,
   Redo2,
+  RefreshCcw,
   Undo2,
   X,
 } from "lucide-react";
@@ -27,6 +29,15 @@ import { FORMATION_TAG_PRESETS } from "./Inspector";
 
 const DRIFT_THRESHOLD_YDS = 2;
 const FORM_FIELD_LEN = 25;
+
+function useDebouncedDoc(doc: PlayDocument, delay = 200): PlayDocument {
+  const [debounced, setDebounced] = useState(doc);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(doc), delay);
+    return () => clearTimeout(t);
+  }, [doc, delay]);
+  return debounced;
+}
 
 function computeDrift(doc: PlayDocument, linked: SavedFormation | null): boolean {
   const formationId = doc.metadata.formationId;
@@ -106,8 +117,22 @@ export function EditorHeaderBar({
   const formation = doc.metadata.formation?.trim();
   const code = doc.metadata.wristbandCode?.trim();
   const formationTag = doc.metadata.formationTag ?? null;
-  const hasDrift = computeDrift(doc, linkedFormation ?? null);
+  const debouncedDoc = useDebouncedDoc(doc);
+  const hasDrift = computeDrift(debouncedDoc, linkedFormation ?? null);
   const showDriftPrompt = hasDrift && !formationTag;
+  const formationId = doc.metadata.formationId;
+
+  function reapplyFormation() {
+    if (!linkedFormation) return;
+    dispatch({
+      type: "document.reapplyFormation",
+      players: linkedFormation.players,
+      formationLosY: linkedFormation.losY,
+    });
+  }
+  function unlinkFormation() {
+    dispatch({ type: "document.setFormationLink", formationId: null, formationName: "" });
+  }
 
   function setFormationTag(tag: string) {
     dispatch({ type: "document.setFormationTag", formationTag: tag || null });
@@ -244,7 +269,11 @@ export function EditorHeaderBar({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div
+        className={`flex flex-wrap items-center gap-1.5 rounded-lg px-3 py-2 ${
+          showDriftPrompt ? "bg-warning/10 ring-1 ring-warning/25" : ""
+        }`}
+      >
         {tags.map((t) => (
           <Badge key={t} variant="default" className="inline-flex items-center gap-1">
             {t}
@@ -283,24 +312,51 @@ export function EditorHeaderBar({
           placeholder={tags.length === 0 ? "Add tag (press Enter)…" : "Add tag…"}
           className="h-7 w-[160px] text-xs"
         />
-      </div>
 
-      {showDriftPrompt && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 ring-1 ring-warning/25">
-          <span className="text-[11px] font-semibold text-warning">Formation drifted —</span>
-          <span className="text-[11px] text-muted">tag this variation:</span>
-          {FORMATION_TAG_PRESETS.map((preset) => (
+        {showDriftPrompt && (
+          <>
+            <span className="ml-1 text-[11px] font-semibold text-warning">
+              Formation drifted —
+            </span>
+            <span className="text-[11px] text-muted">tag this variation:</span>
+            {FORMATION_TAG_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setFormationTag(preset)}
+                className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+              >
+                {preset}
+              </button>
+            ))}
+          </>
+        )}
+
+        {formationId && (
+          <div className="ml-auto flex items-center gap-1">
+            {linkedFormation && (
+              <button
+                type="button"
+                title="Reapply formation (snap players back)"
+                onClick={reapplyFormation}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-raised px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
+              >
+                <RefreshCcw className="size-3" />
+                Reapply
+              </button>
+            )}
             <button
-              key={preset}
               type="button"
-              onClick={() => setFormationTag(preset)}
-              className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+              title="Unlink formation"
+              onClick={unlinkFormation}
+              className="flex size-6 items-center justify-center rounded text-muted hover:text-foreground"
+              aria-label="Unlink formation"
             >
-              {preset}
+              <Link2Off className="size-3.5" />
             </button>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </header>
   );
 }
