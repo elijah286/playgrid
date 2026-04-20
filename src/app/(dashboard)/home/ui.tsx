@@ -433,7 +433,7 @@ const SPORT_OPTIONS: { value: SportVariant; label: string }[] = [
   { value: "flag_5v5", label: SPORT_VARIANT_LABELS.flag_5v5 },
   { value: "flag_7v7", label: SPORT_VARIANT_LABELS.flag_7v7 },
   { value: "tackle_11", label: SPORT_VARIANT_LABELS.tackle_11 },
-  { value: "six_man", label: SPORT_VARIANT_LABELS.six_man },
+  { value: "other", label: SPORT_VARIANT_LABELS.other },
 ];
 
 function CreatePlaybookDialog({
@@ -475,7 +475,7 @@ function CreatePlaybookDialog({
       variant,
       color,
       logo_url: logoUrl.trim() || null,
-      customOffenseCount: variant === "six_man" ? otherCount : null,
+      customOffenseCount: variant === "other" ? otherCount : null,
     });
   }
 
@@ -541,7 +541,7 @@ function CreatePlaybookDialog({
               onChange={setVariant}
               size="sm"
             />
-            {variant === "six_man" && (
+            {variant === "other" && (
               <div className="flex items-center gap-3 pt-1">
                 <label
                   htmlFor="other-player-count"

@@ -134,7 +134,7 @@ export async function createPlaybookAction(
   // Only the "Other" (six_man) variant carries a custom player count. Clamp
   // to 4–11 and ignore the value for fixed variants.
   let offenseCount: number | null = null;
-  if (sportVariant === "six_man" && typeof customOffenseCount === "number") {
+  if (sportVariant === "other" && typeof customOffenseCount === "number") {
     const n = Math.round(customOffenseCount);
     if (!Number.isFinite(n) || n < 4 || n > 11) {
       return { ok: false as const, error: "Player count must be between 4 and 11." };
