@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { signOutAction } from "@/app/actions/auth";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { UserMenu } from "@/components/layout/UserMenu";
 
 export default async function DashboardLayout({
   children,
@@ -34,6 +34,19 @@ export default async function DashboardLayout({
   const role = await getCachedUserRole(user.id);
   const isAdmin = role === "admin";
 
+  let displayName: string | null = null;
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    displayName = (data?.display_name as string | null) ?? null;
+  } catch {
+    /* profile lookup is best-effort for the avatar */
+  }
+
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-30 border-b border-border bg-surface-raised/80 backdrop-blur-lg">
@@ -54,32 +67,12 @@ export default async function DashboardLayout({
             >
               Formations
             </Link>
-            {isAdmin && (
-              <>
-                <Link
-                  href="/admin/users"
-                  className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-                >
-                  Admin
-                </Link>
-                <Link
-                  href="/admin/integrations"
-                  className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-                >
-                  Integrations
-                </Link>
-              </>
-            )}
           </nav>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted hover:text-foreground hover:bg-surface-inset transition-colors"
-            >
-              <LogOut className="size-4" />
-              Sign out
-            </button>
-          </form>
+          <UserMenu
+            email={user.email ?? ""}
+            displayName={displayName}
+            isAdmin={isAdmin}
+          />
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">

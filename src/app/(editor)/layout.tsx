@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { signOutAction } from "@/app/actions/auth";
+import { getCachedUserRole } from "@/lib/auth/profile-cache";
+import { UserMenu } from "@/components/layout/UserMenu";
 
 export default async function EditorLayout({ children }: { children: React.ReactNode }) {
   if (!hasSupabaseEnv()) {
@@ -16,6 +17,21 @@ export default async function EditorLayout({ children }: { children: React.React
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const role = await getCachedUserRole(user.id);
+  const isAdmin = role === "admin";
+  let displayName: string | null = null;
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    displayName = (data?.display_name as string | null) ?? null;
+  } catch {
+    /* best effort */
+  }
+
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b border-border bg-surface-dark px-6 py-2.5">
@@ -23,15 +39,12 @@ export default async function EditorLayout({ children }: { children: React.React
           <Link href="/home" className="text-sm font-extrabold tracking-tight text-primary">
             PlayGrid
           </Link>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
-            >
-              <LogOut className="size-3.5" />
-              Sign out
-            </button>
-          </form>
+          <UserMenu
+            email={user.email ?? ""}
+            displayName={displayName}
+            isAdmin={isAdmin}
+            compact
+          />
         </div>
       </header>
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-5">
