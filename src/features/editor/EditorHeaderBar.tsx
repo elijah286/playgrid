@@ -205,8 +205,6 @@ export function EditorHeaderBar({
                   dispatch={dispatch}
                   onSaveAsNewFormation={onSaveAsNewFormation}
                 />
-              ) : formation ? (
-                <span className="text-muted">{formation} · </span>
               ) : null}
               <button
                 type="button"

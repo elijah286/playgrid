@@ -66,6 +66,7 @@ export function PlayEditorClient({
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
 
   // Transient opponent overlay (never saved, resets on navigation)
   const [opponentPlayers, setOpponentPlayers] = useState<Player[] | null>(null);
@@ -149,8 +150,10 @@ export function PlayEditorClient({
     [router, startNavTransition],
   );
 
-  // Show toolbar when a player OR route is selected
-  const showToolbar = selectedPlayerId != null || selectedRouteId != null;
+  // Show toolbar when a player, route, or zone is selected
+  const showToolbar =
+    selectedPlayerId != null || selectedRouteId != null || selectedZoneId != null;
+  const selectedZone = (doc.layers.zones ?? []).find((z) => z.id === selectedZoneId) ?? null;
 
   const selectedRoute = doc.layers.routes.find((r) => r.id === selectedRouteId);
   const selectedSeg = selectedRoute?.segments.find((s) => s.id === selectedSegmentId);
@@ -237,7 +240,24 @@ export function PlayEditorClient({
   const handleColorChange = useCallback(
     (color: string) => {
       setActiveColor(color);
-      if (selectedRouteId && selectedRoute) {
+      if (selectedZone) {
+        // Convert hex swatch to translucent fill + solid stroke pair.
+        const m = color.match(/^#([0-9a-f]{6})$/i);
+        let fill = color;
+        let stroke = color;
+        if (m) {
+          const r = parseInt(m[1].slice(0, 2), 16);
+          const g = parseInt(m[1].slice(2, 4), 16);
+          const b = parseInt(m[1].slice(4, 6), 16);
+          fill = `rgba(${r},${g},${b},0.18)`;
+          stroke = `rgba(${r},${g},${b},0.75)`;
+        }
+        dispatch({
+          type: "zone.update",
+          zoneId: selectedZone.id,
+          patch: { style: { fill, stroke } },
+        });
+      } else if (selectedRouteId && selectedRoute) {
         dispatch({
           type: "route.setStyle",
           routeId: selectedRouteId,
@@ -251,7 +271,7 @@ export function PlayEditorClient({
         });
       }
     },
-    [dispatch, selectedRouteId, selectedRoute, selectedPlayer],
+    [dispatch, selectedRouteId, selectedRoute, selectedPlayer, selectedZone],
   );
 
   const handleWidthChange = useCallback(
@@ -481,10 +501,12 @@ export function PlayEditorClient({
                 selectedRouteId={selectedRouteId}
                 selectedNodeId={selectedNodeId}
                 selectedSegmentId={selectedSegmentId}
+                selectedZoneId={selectedZoneId}
                 onSelectPlayer={setSelectedPlayerId}
                 onSelectRoute={setSelectedRouteId}
                 onSelectNode={setSelectedNodeId}
                 onSelectSegment={setSelectedSegmentId}
+                onSelectZone={setSelectedZoneId}
                 activeShape={activeShape}
                 activeStrokePattern={activeStrokePattern}
                 activeColor={activeColor}

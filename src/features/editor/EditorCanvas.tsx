@@ -133,10 +133,12 @@ type Props = {
   selectedRouteId: string | null;
   selectedNodeId: string | null;
   selectedSegmentId: string | null;
+  selectedZoneId?: string | null;
   onSelectPlayer: (id: string | null) => void;
   onSelectRoute: (id: string | null) => void;
   onSelectNode: (id: string | null) => void;
   onSelectSegment: (id: string | null) => void;
+  onSelectZone?: (id: string | null) => void;
   activeShape: import("@/domain/play/types").SegmentShape;
   activeStrokePattern: import("@/domain/play/types").StrokePattern;
   activeColor: string;
@@ -199,10 +201,12 @@ export function EditorCanvas({
   selectedRouteId,
   selectedNodeId,
   selectedSegmentId,
+  selectedZoneId = null,
   onSelectPlayer,
   onSelectRoute,
   onSelectNode,
   onSelectSegment,
+  onSelectZone,
   activeShape,
   activeStrokePattern,
   activeColor,
@@ -603,9 +607,10 @@ export function EditorCanvas({
         onSelectRoute(null);
         onSelectNode(null);
         onSelectSegment(null);
+        onSelectZone?.(null);
       }
     },
-    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment],
+    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone],
   );
 
   const handlePointerDown = useCallback(
@@ -788,11 +793,13 @@ export function EditorCanvas({
           onSelectNode(target.nodeId);
           onSelectSegment(null);
           onSelectPlayer(null);
+          onSelectZone?.(null);
         } else if (target.kind === "route_segment") {
           onSelectRoute(target.routeId);
           onSelectSegment(target.segmentId);
           onSelectNode(null);
           onSelectPlayer(null);
+          onSelectZone?.(null);
         } else if (target.kind === "canvas") {
           if (mode === "formation") {
             // Formation mode: clicking canvas adds a player. Clamp to LOS
@@ -833,6 +840,7 @@ export function EditorCanvas({
               onSelectRoute(null);
               onSelectNode(null);
               onSelectSegment(null);
+              onSelectZone?.(null);
             }
           }
         }
@@ -1310,6 +1318,12 @@ export function EditorCanvas({
               onPointerDown={(e) => {
                 if (mode === "formation") return;
                 e.stopPropagation();
+                // Select this zone and clear other selections.
+                onSelectZone?.(z.id);
+                onSelectPlayer(null);
+                onSelectRoute(null);
+                onSelectNode(null);
+                onSelectSegment(null);
                 const svg = svgRef.current;
                 if (!svg) return;
                 const rect = svg.getBoundingClientRect();
@@ -1345,7 +1359,7 @@ export function EditorCanvas({
                   height={h * 2}
                   fill={z.style.fill}
                   stroke={z.style.stroke}
-                  strokeWidth={1.5}
+                  strokeWidth={selectedZoneId === z.id ? 2.5 : 1.5}
                   strokeDasharray="6 4"
                   vectorEffect="non-scaling-stroke"
                   rx={0.01}
@@ -1358,7 +1372,7 @@ export function EditorCanvas({
                   ry={h}
                   fill={z.style.fill}
                   stroke={z.style.stroke}
-                  strokeWidth={1.5}
+                  strokeWidth={selectedZoneId === z.id ? 2.5 : 1.5}
                   strokeDasharray="6 4"
                   vectorEffect="non-scaling-stroke"
                 />

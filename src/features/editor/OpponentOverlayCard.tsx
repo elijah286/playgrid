@@ -116,7 +116,7 @@ export function OpponentOverlayCard({
     filteredFormations.length === 0 && filteredPlays.length === 0;
 
   return (
-    <div className="flex min-h-[280px] flex-1 flex-col rounded-xl border border-border bg-surface-inset/50">
+    <div className="flex max-h-[420px] min-h-0 flex-col rounded-xl border border-border bg-surface-inset/50">
       <div className="flex items-center justify-between gap-2 px-3 pt-3">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted">
           Opponent
@@ -162,7 +162,7 @@ export function OpponentOverlayCard({
         </div>
       )}
 
-      <div className="mt-2 min-h-[180px] flex-1 overflow-y-auto px-1 pb-2">
+      <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
         {empty && (
           <p className="px-3 py-6 text-center text-xs text-muted">
             {q ? "No matches." : "No eligible plays or formations yet."}
