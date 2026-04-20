@@ -231,7 +231,10 @@ export function PlaybookDetailClient({
       if (groupBy === "group") return a.sortOrder - b.sortOrder;
       return a.label.localeCompare(b.label);
     });
-    for (const s of arr) s.plays.sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name));
+    for (const s of arr)
+      s.plays.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }),
+      );
     return arr;
   }, [filtered, groupBy, groupById, initialGroups]);
 
