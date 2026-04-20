@@ -290,10 +290,6 @@ export function PlayEditorClient({
         initialNav={initialNav}
         initialGroups={initialGroups}
         onDuplicate={duplicate}
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={canUndo}
-        canRedo={canRedo}
         saveStatus={saveStatus}
         linkedFormation={linkedFormation}
       />

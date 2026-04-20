@@ -12,9 +12,7 @@ import {
   Link2Off,
   Loader2,
   PencilLine,
-  Redo2,
   RefreshCcw,
-  Undo2,
   X,
 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
@@ -22,8 +20,7 @@ import type { PlayDocument } from "@/domain/play/types";
 import { listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
-import { Badge, IconButton, Input, Kbd } from "@/components/ui";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { Badge, Button, Input } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
 import { FORMATION_TAG_PRESETS } from "./Inspector";
 
@@ -68,10 +65,6 @@ type Props = {
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
   onDuplicate: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
   saveStatus: SaveStatus;
   linkedFormation?: SavedFormation | null;
 };
@@ -84,10 +77,6 @@ export function EditorHeaderBar({
   initialNav,
   initialGroups,
   onDuplicate,
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
   saveStatus,
   linkedFormation,
 }: Props) {
@@ -176,8 +165,13 @@ export function EditorHeaderBar({
   return (
     <header className="flex flex-col gap-2 border-b border-border pb-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/playbooks/${playbookId}`}>
-          <IconButton icon={ArrowLeft} tooltip="Back to playbook" size="sm" />
+        <Link
+          href={`/playbooks/${playbookId}`}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted ring-1 ring-border hover:bg-surface-inset hover:text-foreground"
+          aria-label="Back to playbook"
+        >
+          <ArrowLeft className="size-3.5" />
+          Playbook
         </Link>
 
         {editingName ? (
@@ -219,40 +213,27 @@ export function EditorHeaderBar({
         )}
 
         <div className="ml-auto flex flex-wrap items-center gap-1">
-          <Tooltip content="Previous play">
-            <IconButton
-              icon={ChevronLeft}
-              variant="ghost"
-              size="sm"
-              aria-label="Previous play"
-              disabled={!prevPlay}
-              onClick={() => prevPlay && router.push(`/plays/${prevPlay.id}/edit`)}
-            />
-          </Tooltip>
-          <Tooltip content="Next play">
-            <IconButton
-              icon={ChevronRight}
-              variant="ghost"
-              size="sm"
-              aria-label="Next play"
-              disabled={!nextPlay}
-              onClick={() => nextPlay && router.push(`/plays/${nextPlay.id}/edit`)}
-            />
-          </Tooltip>
-          <Tooltip content="Duplicate play">
-            <IconButton icon={Copy} variant="ghost" size="sm" onClick={onDuplicate} />
-          </Tooltip>
-
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            leftIcon={ChevronLeft}
+            disabled={!prevPlay}
+            onClick={() => prevPlay && router.push(`/plays/${prevPlay.id}/edit`)}
+          >
+            Previous play
+          </Button>
           <PlaybookPlaySearchMenu plays={nav} groups={groups} currentPlayId={playId} />
-
-          <div className="mx-1 h-5 w-px bg-border" />
-
-          <Tooltip content={<span className="flex items-center gap-2">Undo <Kbd keys="Ctrl+Z" /></span>}>
-            <IconButton icon={Undo2} variant="ghost" size="sm" disabled={!canUndo} onClick={onUndo} />
-          </Tooltip>
-          <Tooltip content={<span className="flex items-center gap-2">Redo <Kbd keys="Ctrl+Shift+Z" /></span>}>
-            <IconButton icon={Redo2} variant="ghost" size="sm" disabled={!canRedo} onClick={onRedo} />
-          </Tooltip>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            rightIcon={ChevronRight}
+            disabled={!nextPlay}
+            onClick={() => nextPlay && router.push(`/plays/${nextPlay.id}/edit`)}
+          >
+            Next play
+          </Button>
 
           {saveStatus === "saving" && (
             <span className="ml-1 flex items-center gap-1 text-xs text-muted">
@@ -266,6 +247,17 @@ export function EditorHeaderBar({
               Saved
             </span>
           )}
+
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            leftIcon={Copy}
+            onClick={onDuplicate}
+            className="ml-1"
+          >
+            Copy
+          </Button>
         </div>
       </div>
 
