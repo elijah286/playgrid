@@ -43,6 +43,15 @@ import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
 import {
+  approveMemberAction,
+  denyMemberAction,
+} from "@/app/actions/playbook-roster";
+import {
+  createInviteAction,
+  revokeInviteAction,
+  type PlaybookInvite,
+} from "@/app/actions/invites";
+import {
   ActionMenu,
   Badge,
   Button,
@@ -73,6 +82,7 @@ export function PlaybookDetailClient({
   initialPlays,
   initialGroups,
   initialRoster,
+  initialInvites,
   pageHeader,
 }: {
   playbookId: string;
@@ -81,6 +91,7 @@ export function PlaybookDetailClient({
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
   initialRoster: PlaybookRosterMember[];
+  initialInvites: PlaybookInvite[];
   // Back link + playbook identity block. Rendered inside the sticky header
   // region so it stays pinned while plays scroll.
   pageHeader?: React.ReactNode;
@@ -366,7 +377,11 @@ export function PlaybookDetailClient({
       </div>
 
       {tab === "roster" && (
-        <RosterPanel members={initialRoster} />
+        <RosterPanel
+          playbookId={playbookId}
+          members={initialRoster}
+          invites={initialInvites}
+        />
       )}
 
       {tab === "plays" && (
@@ -790,64 +805,389 @@ export function PlaybookDetailClient({
   );
 }
 
-function RosterPanel({ members }: { members: PlaybookRosterMember[] }) {
-  if (members.length === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
-        <p className="text-sm font-semibold text-foreground">No one on the roster yet</p>
-        <p className="mt-1 text-xs text-muted">
-          Inviting players is coming next. For now, anyone you share this playbook with will appear here.
-        </p>
-      </div>
-    );
-  }
+function RosterPanel({
+  playbookId,
+  members,
+  invites,
+}: {
+  playbookId: string;
+  members: PlaybookRosterMember[];
+  invites: PlaybookInvite[];
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const pending = members.filter((m) => m.status === "pending");
+  const active = members.filter((m) => m.status === "active");
+  const activeInvites = invites.filter(
+    (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
+  );
 
   const roleLabel = (r: PlaybookRosterMember["role"]) =>
     r === "owner" ? "Coach (owner)" : r === "editor" ? "Coach" : "Player";
-  const roleVariant = (r: PlaybookRosterMember["role"]) =>
-    r === "owner" ? "primary" : r === "editor" ? "default" : "default";
+
+  async function approve(userId: string) {
+    setPendingId(userId);
+    const res = await approveMemberAction(playbookId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Approve failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function deny(userId: string) {
+    setPendingId(userId);
+    const res = await denyMemberAction(playbookId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function revoke(inviteId: string) {
+    const res = await revokeInviteAction(inviteId, playbookId);
+    if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
+    else router.refresh();
+  }
 
   return (
-    <div className="rounded-xl border border-border bg-surface-raised">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
-            <tr>
-              <th className="px-4 py-2.5 font-semibold">Name</th>
-              <th className="px-4 py-2.5 font-semibold">Role</th>
-              <th className="px-4 py-2.5 font-semibold">Jersey</th>
-              <th className="px-4 py-2.5 font-semibold">Position</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {members.map((m) => {
-              const name = m.label || m.display_name || "—";
-              return (
-                <tr key={m.user_id}>
-                  <td className="px-4 py-2.5 font-medium text-foreground">
-                    <span className="inline-flex items-center gap-2">
-                      {name}
-                      {m.is_minor && (
-                        <Badge variant="warning" className="text-[10px]">
-                          Minor
-                        </Badge>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge variant={roleVariant(m.role)} className="text-[10px]">
-                      {roleLabel(m.role)}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted">
-                    {m.jersey_number ? `#${m.jersey_number}` : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted">{m.position || "—"}</td>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Roster</h2>
+          <p className="text-xs text-muted">Players and coaches with access to this playbook.</p>
+        </div>
+        <Button
+          variant="primary"
+          leftIcon={Plus}
+          onClick={() => setShowInviteModal(true)}
+        >
+          Invite
+        </Button>
+      </div>
+
+      {pending.length > 0 && (
+        <section className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Pending approvals
+            <span className="ml-2 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] text-warning">
+              {pending.length}
+            </span>
+          </h3>
+          <ul className="divide-y divide-border">
+            {pending.map((m) => (
+              <li key={m.user_id} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {m.label || m.display_name || m.user_id.slice(0, 8)}
+                  </p>
+                  <p className="text-xs text-muted">Requested {roleLabel(m.role)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    leftIcon={Check}
+                    loading={pendingId === m.user_id}
+                    onClick={() => approve(m.user_id)}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={X}
+                    disabled={pendingId === m.user_id}
+                    onClick={() => deny(m.user_id)}
+                  >
+                    Deny
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {active.length === 0 ? (
+        <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
+          <p className="text-sm font-semibold text-foreground">No one on the roster yet</p>
+          <p className="mt-1 text-xs text-muted">Use Invite to share this playbook with a player or coach.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-surface-raised">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
+                <tr>
+                  <th className="px-4 py-2.5 font-semibold">Name</th>
+                  <th className="px-4 py-2.5 font-semibold">Role</th>
+                  <th className="px-4 py-2.5 font-semibold">Jersey</th>
+                  <th className="px-4 py-2.5 font-semibold">Position</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {active.map((m) => {
+                  const name = m.label || m.display_name || "—";
+                  return (
+                    <tr key={m.user_id}>
+                      <td className="px-4 py-2.5 font-medium text-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          {name}
+                          {m.is_minor && (
+                            <Badge variant="warning" className="text-[10px]">
+                              Minor
+                            </Badge>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant={m.role === "owner" ? "primary" : "default"} className="text-[10px]">
+                          {roleLabel(m.role)}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted">
+                        {m.jersey_number ? `#${m.jersey_number}` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted">{m.position || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeInvites.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">Active invite links</h3>
+          <ul className="space-y-2">
+            {activeInvites.map((inv) => (
+              <InviteRow key={inv.id} invite={inv} onRevoke={() => revoke(inv.id)} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {showInviteModal && (
+        <InviteModal
+          playbookId={playbookId}
+          onClose={() => {
+            setShowInviteModal(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InviteRow({ invite, onRevoke }: { invite: PlaybookInvite; onRevoke: () => void }) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const url =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/invite/${invite.token}`
+      : `/invite/${invite.token}`;
+
+  const expiresLabel = new Date(invite.expires_at).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const usesLabel = invite.max_uses
+    ? `${invite.uses_count}/${invite.max_uses} used`
+    : `${invite.uses_count} used`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast("Copy failed — copy the link manually.", "error");
+    }
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <Badge variant="default" className="text-[10px]">
+            {invite.role === "viewer" ? "Player" : "Coach"}
+          </Badge>
+          {invite.email && <span className="truncate text-xs text-muted">→ {invite.email}</span>}
+          {invite.note && <span className="truncate text-xs text-muted">· {invite.note}</span>}
+        </div>
+        <p className="mt-0.5 text-[11px] text-muted">
+          {usesLabel} · expires {expiresLabel}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button size="sm" variant="ghost" leftIcon={copied ? Check : Copy} onClick={copy}>
+          {copied ? "Copied" : "Copy link"}
+        </Button>
+        <Button size="sm" variant="ghost" leftIcon={X} onClick={onRevoke}>
+          Revoke
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () => void }) {
+  const { toast } = useToast();
+  const [role, setRole] = useState<"viewer" | "editor">("viewer");
+  const [expiresInDays, setExpiresInDays] = useState(14);
+  const [maxUses, setMaxUses] = useState<string>("25");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function create() {
+    setCreating(true);
+    const parsedMax = maxUses.trim() === "" ? null : Math.max(1, Math.floor(Number(maxUses)));
+    const res = await createInviteAction({
+      playbookId,
+      role,
+      expiresInDays,
+      maxUses: parsedMax,
+      email: email || null,
+      note: note || null,
+    });
+    setCreating(false);
+    if (!res.ok) {
+      toast(`Could not create invite: ${res.error}`, "error");
+      return;
+    }
+    const url = `${window.location.origin}/invite/${res.invite.token}`;
+    setCreatedUrl(url);
+  }
+
+  async function copy() {
+    if (!createdUrl) return;
+    try {
+      await navigator.clipboard.writeText(createdUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast("Copy failed — copy the link manually.", "error");
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Create invite link</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              You&apos;ll still need to approve them after they sign up.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
+            onClick={onClose}
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 py-4">
+          {createdUrl ? (
+            <>
+              <p className="text-sm text-foreground">
+                Link is ready — share it however you like (text, group chat, email).
+              </p>
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-inset px-3 py-2">
+                <code className="flex-1 truncate text-xs text-foreground">{createdUrl}</code>
+                <Button size="sm" variant="primary" leftIcon={copied ? Check : Copy} onClick={copy}>
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <Button variant="secondary" onClick={onClose} className="w-full">
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
+                <SegmentedControl
+                  value={role}
+                  onChange={(v) => setRole(v as "viewer" | "editor")}
+                  options={[
+                    { value: "viewer", label: "Player (view)" },
+                    { value: "editor", label: "Coach (edit)" },
+                  ]}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-muted">Expires in</label>
+                  <select
+                    value={expiresInDays}
+                    onChange={(e) => setExpiresInDays(Number(e.target.value))}
+                    className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                  >
+                    <option value={1}>1 day</option>
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days (max)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-muted">Max uses</label>
+                  <Input
+                    value={maxUses}
+                    onChange={(e) => setMaxUses(e.target.value)}
+                    placeholder="Leave blank = unlimited"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">
+                  Email (optional, for your records)
+                </label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="player@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">
+                  Note (optional)
+                </label>
+                <Input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="e.g. Jamal, parents text chain, etc."
+                />
+              </div>
+
+              <Button
+                variant="primary"
+                loading={creating}
+                onClick={create}
+                className="w-full"
+              >
+                Create link
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

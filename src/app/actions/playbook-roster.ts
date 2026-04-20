@@ -1,11 +1,13 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 export type PlaybookRosterMember = {
   user_id: string;
   role: "owner" | "editor" | "viewer";
+  status: "pending" | "active";
   label: string | null;
   jersey_number: string | null;
   position: string | null;
@@ -30,7 +32,7 @@ export async function listPlaybookRosterAction(
   const { data, error } = await supabase
     .from("playbook_members")
     .select(
-      "user_id, role, label, jersey_number, position, is_minor, created_at, profiles:user_id(display_name)",
+      "user_id, role, status, label, jersey_number, position, is_minor, created_at, profiles:user_id(display_name)",
     )
     .eq("playbook_id", playbookId)
     .order("created_at", { ascending: true });
@@ -46,6 +48,7 @@ export async function listPlaybookRosterAction(
     return {
       user_id: row.user_id,
       role: row.role,
+      status: row.status,
       label: row.label,
       jersey_number: row.jersey_number,
       position: row.position,
@@ -56,4 +59,36 @@ export async function listPlaybookRosterAction(
   });
 
   return { ok: true, members };
+}
+
+export async function approveMemberAction(
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("playbook_members")
+    .update({ status: "active" })
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+export async function denyMemberAction(
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("playbook_members")
+    .delete()
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
 }
