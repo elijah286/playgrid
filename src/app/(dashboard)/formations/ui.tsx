@@ -28,7 +28,7 @@ const FILTER_OPTIONS: { value: SportFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "flag_5v5", label: "Flag 5v5" },
   { value: "flag_7v7", label: "Flag 7v7" },
-  { value: "six_man", label: "6-Man" },
+  { value: "other", label: "Other" },
   { value: "tackle_11", label: "11-Man" },
 ];
 
@@ -142,7 +142,7 @@ function FormationCard({
 const VARIANT_ORDER: SportVariant[] = [
   "flag_5v5",
   "flag_7v7",
-  "six_man",
+  "other",
   "tackle_11",
 ];
 

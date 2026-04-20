@@ -303,6 +303,22 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setFieldZone":
       return { ...doc, fieldZone: cmd.fieldZone };
 
+    case "document.setFormationLink":
+      return {
+        ...doc,
+        metadata: {
+          ...doc.metadata,
+          formationId: cmd.formationId,
+          formation: cmd.formationName,
+          formationTag: null, // clear tag when re-linking
+        },
+      };
+    case "document.setFormationTag":
+      return {
+        ...doc,
+        metadata: { ...doc.metadata, formationTag: cmd.formationTag },
+      };
+
     case "document.flip": {
       const axis = cmd.axis;
       return {

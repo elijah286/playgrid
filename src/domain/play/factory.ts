@@ -10,9 +10,11 @@ import {
 
 /** Whether hash marks should render by default for a given sport variant.
  *  Flag football plays a smaller, cleaner field — hash marks are noise.
- *  Tackle/6-man plays on a real field — hash marks are expected. */
+ *  Tackle plays on a real field — hash marks are expected. */
 export function shouldShowHashMarksDefault(variant: SportVariant): boolean {
-  return variant === "tackle_11" || variant === "six_man";
+  if (variant === "tackle_11") return true;
+  if (variant === "other") return false;
+  return false;
 }
 
 /** Resolve the effective hash-mark setting: explicit override wins,
@@ -83,7 +85,7 @@ export function sportProfileForVariant(variant: SportVariant): SportProfile {
       return { variant, offensePlayerCount: 5,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_7v7":
       return { variant, offensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
-    case "six_man":
+    case "other":
       return { variant, offensePlayerCount: 6,  fieldWidthYds: 40, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
     case "tackle_11":
       return { variant, offensePlayerCount: 11, fieldWidthYds: 53, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: false };
@@ -94,7 +96,7 @@ export function sportProfileForVariant(variant: SportVariant): SportProfile {
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
   flag_5v5: "Flag",
   flag_7v7: "7v7",
-  six_man: "Other",
+  other: "Other",
   tackle_11: "Tackle",
 };
 
@@ -114,6 +116,33 @@ function mkPlayer(
     eligible,
     style: { fill: "#f8fafc", stroke: "#0f172a", labelColor: "#0f172a" },
   };
+}
+
+/**
+ * Generate a generic offensive formation for a custom player count.
+ * Always includes QB (shotgun) and C (center on LOS). Remaining players
+ * are spread as WRs evenly across the width, outside players on the line
+ * and inside/slot players slightly behind.
+ */
+export function generateOtherVariantPlayers(count: number): Player[] {
+  const players: Player[] = [];
+  players.push(mkPlayer("p_qb", "QB", "Q", 0.50, 0.20));
+  players.push(mkPlayer("p_c",  "C",  "C", 0.50, 0.38, false));
+
+  const remaining = Math.max(0, count - 2);
+  if (remaining === 0) return players;
+
+  const labels = ["X", "Y", "Z", "A", "H", "S", "W", "R", "V", "U"].slice(0, remaining);
+  // Spread evenly from left (0.08) to right (0.92)
+  for (let i = 0; i < remaining; i++) {
+    const x = remaining === 1
+      ? 0.50
+      : 0.08 + (i / (remaining - 1)) * 0.84;
+    const isOutside = x < 0.25 || x > 0.75;
+    const y = isOutside ? 0.38 : 0.34;
+    players.push(mkPlayer(`p_r${i}`, "WR", labels[i], x, y));
+  }
+  return players;
 }
 
 /**
@@ -138,15 +167,8 @@ export function defaultPlayersForVariant(variant: SportVariant): Player[] {
       ];
     case "flag_7v7":
       return defaultFlagSevenPlayers();
-    case "six_man":
-      return [
-        mkPlayer("p_qb", "QB",    "Q", 0.50, 0.20),        // shotgun QB, 5 yds back
-        mkPlayer("p_c",  "C",     "C", 0.50, 0.38, false), // center on line
-        mkPlayer("p_lt", "OTHER", "T", 0.38, 0.38, false), // left tackle on line
-        mkPlayer("p_rt", "OTHER", "E", 0.62, 0.38),        // right end on line
-        mkPlayer("p_x",  "WR",    "X", 0.12, 0.34),        // wide left, 1.5 yds back
-        mkPlayer("p_z",  "WR",    "Z", 0.88, 0.34),        // wide right, 1.5 yds back
-      ];
+    case "other":
+      return generateOtherVariantPlayers(6);
     case "tackle_11":
       return [
         mkPlayer("p_qb", "QB",    "Q", 0.50, 0.34),        // under center, 1.5 yds back
@@ -214,18 +236,20 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
     sportProfile: sportProfileForVariant(variant),
     lineOfScrimmageY: 0.4,
     metadata: {
-      coachName: "Trips Right — Stick",
-      shorthand: "TR STK",
+      coachName: "New Play",
+      shorthand: "",
       wristbandCode: "",
       mnemonic: "",
-      sheetAbbrev: "TR STK",
-      formation: "Trips Right",
-      concept: "Stick",
+      sheetAbbrev: "",
+      formation: "",
+      concept: "",
       tags: [],
+      formationId: null,
+      formationTag: null,
     },
     formation: {
-      semantic: { key: "trips_right", strength: "right" },
-      layout: { presetId: "trips_right", playerAnchors: anchors },
+      semantic: { key: "" },
+      layout: { playerAnchors: anchors },
     },
     layers: {
       players,
@@ -274,6 +298,12 @@ export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): Play
 export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
   const canonical = sportProfileForVariant(doc.sportProfile.variant);
 
+  // For "other" variant, preserve the user's custom player count.
+  const sportProfile =
+    doc.sportProfile.variant === "other"
+      ? { ...canonical, offensePlayerCount: doc.sportProfile.offensePlayerCount }
+      : canonical;
+
   // If the stored LOS is the old 0.5 default (no explicit value was ever
   // saved), migrate player positions so they remain in the backfield relative
   // to the new default (0.4).
@@ -297,7 +327,7 @@ export function normalizePlayDocument(doc: PlayDocument): PlayDocument {
 
   return {
     ...doc,
-    sportProfile: canonical,
+    sportProfile,
     lineOfScrimmageY: newLos,
     layers: {
       ...doc.layers,

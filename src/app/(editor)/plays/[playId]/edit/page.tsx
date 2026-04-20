@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlayForEditorAction, listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
+import { listFormationsAction } from "@/app/actions/formations";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import type { SavedFormation } from "@/app/actions/formations";
 
 type Props = { params: Promise<{ playId: string }> };
 
@@ -23,7 +25,17 @@ export default async function PlayEditPage({ params }: Props) {
   const res = await getPlayForEditorAction(playId);
   if (!res.ok) notFound();
 
-  const nav = await listPlaybookPlaysForNavigationAction(res.play.playbook_id);
+  const [nav, formationsRes] = await Promise.all([
+    listPlaybookPlaysForNavigationAction(res.play.playbook_id),
+    listFormationsAction(),
+  ]);
+
+  // If the document has a linked formation, find it from the loaded formations list
+  let linkedFormation: SavedFormation | null = null;
+  const formationId = res.document.metadata.formationId;
+  if (formationId && formationsRes.ok) {
+    linkedFormation = formationsRes.formations.find((f) => f.id === formationId) ?? null;
+  }
 
   return (
     <PlayEditorClient
@@ -32,6 +44,7 @@ export default async function PlayEditPage({ params }: Props) {
       initialDocument={res.document}
       initialNav={nav.ok ? nav.plays : []}
       initialGroups={nav.ok ? nav.groups : []}
+      linkedFormation={linkedFormation}
     />
   );
 }

@@ -249,3 +249,107 @@ export async function deleteFormationAction(
 
   return { ok: true };
 }
+
+export async function countLinkedPlaysAction(
+  formationId: string,
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { count, error } = await supabase
+    .from("plays")
+    .select("id", { count: "exact", head: true })
+    .eq("formation_id", formationId)
+    .is("formation_tag", null); // exclude intentionally-tagged plays
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, count: count ?? 0 };
+}
+
+/**
+ * Update a formation and optionally propagate player position changes to
+ * all linked plays that have no formation tag (untagged = still using the
+ * base formation).
+ */
+export async function updateFormationAndPropagateAction(
+  formationId: string,
+  name: string,
+  players: Player[],
+  sportProfile: Partial<SportProfile>,
+  propagate: boolean,
+): Promise<{ ok: true; updatedPlays: number } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+
+  // First update the formation itself
+  const updateRes = await updateFormationAction(formationId, name, players, sportProfile);
+  if (!updateRes.ok) return updateRes;
+
+  if (!propagate) return { ok: true, updatedPlays: 0 };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Find all play_versions for plays linked to this formation (no tag)
+  const { data: linkedPlays } = await supabase
+    .from("plays")
+    .select("id, current_version_id")
+    .eq("formation_id", formationId)
+    .is("formation_tag", null);
+
+  if (!linkedPlays || linkedPlays.length === 0) return { ok: true, updatedPlays: 0 };
+
+  const versionIds = linkedPlays
+    .map((p) => p.current_version_id as string | null)
+    .filter((id): id is string => typeof id === "string");
+
+  if (versionIds.length === 0) return { ok: true, updatedPlays: 0 };
+
+  const { data: versions } = await supabase
+    .from("play_versions")
+    .select("id, play_id, document")
+    .in("id", versionIds);
+
+  let updatedPlays = 0;
+  for (const ver of versions ?? []) {
+    const doc = ver.document as import("@/domain/play/types").PlayDocument;
+    if (!doc) continue;
+
+    // Replace player positions from the updated formation, matching by player id
+    const playerMap = new Map(players.map((p) => [p.id, p]));
+    const updatedPlayers = doc.layers.players.map((p) => {
+      const fp = playerMap.get(p.id);
+      return fp ? { ...p, position: fp.position } : p;
+    });
+
+    const updatedDoc = {
+      ...doc,
+      layers: { ...doc.layers, players: updatedPlayers },
+    };
+
+    const { data: newVer } = await supabase
+      .from("play_versions")
+      .insert({
+        play_id: ver.play_id,
+        schema_version: 1,
+        document: updatedDoc as unknown as Record<string, unknown>,
+        parent_version_id: ver.id,
+        label: `formation updated`,
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (newVer) {
+      await supabase
+        .from("plays")
+        .update({ current_version_id: newVer.id })
+        .eq("id", ver.play_id);
+      updatedPlays++;
+    }
+  }
+
+  return { ok: true, updatedPlays };
+}
