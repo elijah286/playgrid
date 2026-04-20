@@ -81,7 +81,9 @@ export type PlayCommand =
   | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" }
   | { type: "document.setShowHashMarks"; showHashMarks: boolean }
   | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" }
-  | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" };
+  | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" }
+  | { type: "document.setFormationLink"; formationId: string | null; formationName: string }
+  | { type: "document.setFormationTag"; formationTag: string | null };
 
 export type CommandMeta = {
   id: string;

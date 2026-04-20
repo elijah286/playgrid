@@ -3,12 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import {
-  createEmptyPlayDocument,
-  normalizePlayDocument,
-  sportProfileForVariant,
-} from "@/domain/play/factory";
-import type { PlayDocument, Player, Route, SportVariant } from "@/domain/play/types";
+import { createEmptyPlayDocument, generateOtherVariantPlayers, normalizePlayDocument } from "@/domain/play/factory";
+import type { PlayDocument, Player, Route } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -120,15 +116,15 @@ export async function listPlaysAction(
   };
 }
 
-/**
- * Create a play.
- *
- * `initialPlayers` semantics:
- *   - undefined → use the playbook variant's default formation
- *   - non-empty array → use those players (from a chosen saved formation)
- *   - empty array → "no formation": start with zero players
- */
-export async function createPlayAction(playbookId: string, initialPlayers?: Player[]) {
+export async function createPlayAction(
+  playbookId: string,
+  opts?: {
+    initialPlayers?: Player[];
+    formationId?: string | null;
+    formationName?: string;
+    playerCount?: number;       // for "other" variant
+  },
+) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
@@ -138,25 +134,19 @@ export async function createPlayAction(playbookId: string, initialPlayers?: Play
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  // The playbook's sport variant determines field dimensions + the default
-  // formation when the caller didn't pick one.
-  const { data: book } = await supabase
-    .from("playbooks")
-    .select("sport_variant")
-    .eq("id", playbookId)
-    .maybeSingle();
-  const variant = ((book?.sport_variant as SportVariant | undefined) ?? "flag_7v7") as SportVariant;
-  const sportProfile = sportProfileForVariant(variant);
-
-  const overrides: Partial<PlayDocument> = { sportProfile };
-  if (initialPlayers !== undefined) {
-    overrides.layers = {
-      players: initialPlayers,
-      routes: [],
-      annotations: [],
-    };
+  // Determine players: use provided initialPlayers, or generate for playerCount, or default
+  let players: Player[] | undefined = opts?.initialPlayers;
+  if (!players && opts?.playerCount != null) {
+    players = generateOtherVariantPlayers(opts.playerCount);
   }
-  const doc = createEmptyPlayDocument(overrides);
+
+  const doc = players
+    ? createEmptyPlayDocument({ layers: { players, routes: [], annotations: [] } })
+    : createEmptyPlayDocument();
+
+  // Patch metadata with formation link
+  doc.metadata.formationId = opts?.formationId ?? null;
+  doc.metadata.formation = opts?.formationName ?? "";
   const { data: sortRow } = await supabase
     .from("plays")
     .select("sort_order")
@@ -193,6 +183,8 @@ export async function createPlayAction(playbookId: string, initialPlayers?: Play
       tag: doc.metadata.tags[0] ?? "",
       display_abbrev: doc.metadata.sheetAbbrev,
       sort_order: nextSort,
+      formation_id: opts?.formationId ?? null,
+      formation_tag: null,
     })
     .select("id")
     .single();
@@ -231,7 +223,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag",
     )
     .eq("id", playId)
     .single();
@@ -250,11 +242,23 @@ export async function getPlayForEditorAction(playId: string) {
 
   if (vErr || !ver) return { ok: false as const, error: vErr?.message ?? "Version missing" };
 
+  const normalizedDoc = normalizePlayDocument(ver.document as PlayDocument);
+
+  // Backfill formation link from plays row if not already in document
+  const docWithLink: PlayDocument = {
+    ...normalizedDoc,
+    metadata: {
+      ...normalizedDoc.metadata,
+      formationId: normalizedDoc.metadata.formationId ?? ((play.formation_id as string | null) ?? null),
+      formationTag: normalizedDoc.metadata.formationTag ?? ((play.formation_tag as string | null) ?? null),
+    },
+  };
+
   return {
     ok: true as const,
     play,
     version: ver,
-    document: normalizePlayDocument(ver.document as PlayDocument),
+    document: docWithLink,
   };
 }
 
@@ -306,6 +310,8 @@ export async function savePlayVersionAction(
       tags: document.metadata.tags,
       tag: document.metadata.tags[0] ?? "",
       display_abbrev: document.metadata.sheetAbbrev,
+      formation_id: document.metadata.formationId ?? null,
+      formation_tag: document.metadata.formationTag ?? null,
     })
     .eq("id", playId);
 
@@ -446,7 +452,7 @@ export async function quickCreatePlayAction(initialPlayers?: Player[]) {
 
   const { teamId } = await ensureDefaultWorkspace(supabase, user.id);
   const inboxId = await getOrCreateInboxPlaybook(supabase, teamId);
-  return createPlayAction(inboxId, initialPlayers);
+  return createPlayAction(inboxId, initialPlayers ? { initialPlayers } : undefined);
 }
 
 export type DashboardPlaybookTile = {

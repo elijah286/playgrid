@@ -6,7 +6,7 @@ export type SportVariant =
   | "flag_5v5"
   | "flag_7v7"
   | "tackle_11"
-  | "six_man";
+  | "other";
 
 export type PlayerRole = "QB" | "RB" | "WR" | "TE" | "C" | "OTHER";
 
@@ -184,6 +184,10 @@ export type PlayMetadata = {
   tags: string[];
   /** Free-form notes explaining how to read/execute the play. */
   notes?: string;
+  /** FK to formations.id; null/undefined = no specific formation. */
+  formationId?: string | null;
+  /** Short modifier tag (e.g. "Under Center", "Open"). */
+  formationTag?: string | null;
 };
 
 export type PlayLayers = {

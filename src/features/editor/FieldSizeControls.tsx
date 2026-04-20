@@ -46,9 +46,9 @@ const PRESETS: Preset[] = [
     offensePlayerCount: 7,
   },
   {
-    key: "six_man",
-    label: "6-man",
-    variant: "six_man",
+    key: "other",
+    label: "Other",
+    variant: "other" as SportVariant,
     fieldLengthYds: 25,
     fieldWidthYds: 40,
     offensePlayerCount: 6,

@@ -22,7 +22,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, sport_variant, custom_offense_count")
+    .select("id, name, sport_variant")
     .eq("id", playbookId)
     .single();
 
@@ -45,7 +45,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
       <PlaybookDetailClient
         playbookId={playbookId}
         sportVariant={book.sport_variant as string}
-        customOffenseCount={(book.custom_offense_count as number | null) ?? null}
         initialPlays={listed.ok ? listed.plays : []}
         initialGroups={listed.ok ? listed.groups : []}
       />
