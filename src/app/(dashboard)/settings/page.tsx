@@ -6,6 +6,7 @@ import { listUsersForAdminAction } from "@/app/actions/admin-users";
 import { getOpenAIIntegrationStatusAction } from "@/app/actions/admin-integrations";
 import { getResendStatusAction } from "@/app/actions/admin-resend";
 import { listFeedbackForAdminAction } from "@/app/actions/feedback";
+import { listCoachInvitationsAction } from "@/app/actions/coach-invitations";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -13,11 +14,12 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
   if (profile?.role !== "admin") redirect("/home");
 
-  const [usersRes, integrationRes, resendRes, feedbackRes] = await Promise.all([
+  const [usersRes, integrationRes, resendRes, feedbackRes, invitesRes] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
     getResendStatusAction(),
     listFeedbackForAdminAction(),
+    listCoachInvitationsAction(),
   ]);
 
   return (
@@ -61,6 +63,8 @@ export default async function SettingsPage() {
         }
         initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
         feedbackError={feedbackRes.ok ? null : feedbackRes.error}
+        initialInvites={invitesRes.ok ? invitesRes.items : []}
+        invitesError={invitesRes.ok ? null : invitesRes.error}
       />
     </div>
   );

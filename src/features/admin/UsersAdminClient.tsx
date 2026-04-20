@@ -31,7 +31,7 @@ export type AdminUserRow = {
   id: string;
   email: string;
   displayName: string | null;
-  role: "user" | "admin";
+  role: "user" | "admin" | "coach";
   createdAt: string;
   lastSignIn: string | null;
 };
@@ -255,7 +255,7 @@ function AddUserDialog({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState<"user" | "admin">("user");
+  const [role, setRole] = useState<"user" | "admin" | "coach">("user");
   const [pending, startTransition] = useTransition();
 
   const valid = email.trim().length > 0 && password.length >= 8;
@@ -326,10 +326,11 @@ function AddUserDialog({
         <Field label="Role">
           <select
             value={role}
-            onChange={(e) => setRole(e.target.value as "user" | "admin")}
+            onChange={(e) => setRole(e.target.value as "user" | "admin" | "coach")}
             className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="user">User</option>
+            <option value="coach">Coach</option>
             <option value="admin">Admin</option>
           </select>
         </Field>
@@ -353,7 +354,7 @@ function EditUserDialog({
 }) {
   const [email, setEmail] = useState(user.email);
   const [displayName, setDisplayName] = useState(user.displayName ?? "");
-  const [role, setRole] = useState<"user" | "admin">(user.role);
+  const [role, setRole] = useState<"user" | "admin" | "coach">(user.role);
   const [pending, startTransition] = useTransition();
 
   const changed =
@@ -418,10 +419,11 @@ function EditUserDialog({
         <Field label="Role">
           <select
             value={role}
-            onChange={(e) => setRole(e.target.value as "user" | "admin")}
+            onChange={(e) => setRole(e.target.value as "user" | "admin" | "coach")}
             className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="user">User</option>
+            <option value="coach">Coach</option>
             <option value="admin">Admin</option>
           </select>
           {!canDemoteSelf && role === "admin" && (

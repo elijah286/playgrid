@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import { LoginForm } from "./ui";
 
@@ -20,7 +21,9 @@ export default function LoginPage() {
           Sign in to your PlayGrid account to access your playbooks.
         </p>
       </div>
-      <LoginForm />
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }
