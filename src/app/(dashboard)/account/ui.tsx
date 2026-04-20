@@ -11,6 +11,7 @@ import {
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
+import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 
 const THEME_OPTIONS: { value: ColorSchemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -72,12 +73,12 @@ function PasswordCard() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const tooShort = pw.length > 0 && pw.length < 8;
+  const pwError = pw.length > 0 ? validatePassword(pw) : null;
   const mismatch = confirm.length > 0 && pw !== confirm;
-  const disabled = pending || pw.length < 8 || pw !== confirm;
+  const disabled = pending || !!validatePassword(pw) || pw !== confirm;
 
   return (
-    <Card icon={KeyRound} title="Change password" description="Minimum 8 characters.">
+    <Card icon={KeyRound} title="Change password" description={PASSWORD_RULES_LABEL}>
       <div className="space-y-3">
         <label className="block text-sm">
           <span className="text-muted">New password</span>
@@ -99,7 +100,7 @@ function PasswordCard() {
             className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
           />
         </label>
-        {tooShort && <p className="text-xs text-amber-600">Must be at least 8 characters.</p>}
+        {pwError && <p className="text-xs text-amber-600">{pwError}</p>}
         {mismatch && <p className="text-xs text-amber-600">Passwords do not match.</p>}
         {msg && (
           <p className={cn("text-xs", msg.ok ? "text-emerald-600" : "text-red-600")}>{msg.text}</p>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { validatePassword } from "@/lib/auth/password";
 
 const AVATAR_BUCKET = "avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -16,9 +17,8 @@ const ALLOWED_AVATAR_TYPES = new Set([
 
 export async function changePasswordAction(input: { password: string }) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
-  if (!input.password || input.password.length < 8) {
-    return { ok: false as const, error: "Password must be at least 8 characters." };
-  }
+  const pwError = validatePassword(input.password ?? "");
+  if (pwError) return { ok: false as const, error: pwError };
 
   const supabase = await createClient();
   const {
