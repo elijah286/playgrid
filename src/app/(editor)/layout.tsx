@@ -5,6 +5,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 
 export default async function EditorLayout({ children }: { children: React.ReactNode }) {
   if (!hasSupabaseEnv()) {
@@ -52,6 +53,7 @@ export default async function EditorLayout({ children }: { children: React.React
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-5">
         {children}
       </div>
+      <FeedbackWidget />
     </div>
   );
 }
