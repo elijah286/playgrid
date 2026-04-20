@@ -392,6 +392,10 @@ export function PlaybookDetailClient({
     handle(() => renamePlayAction(id, next));
   }
 
+  function onRenamePlayInline(id: string, next: string) {
+    handle(() => renamePlayAction(id, next));
+  }
+
   function onDropToGroup(groupKey: string, playId: string) {
     const target = groupKey === UNASSIGNED ? null : groupKey;
     handle(() => setPlayGroupAction(playId, target));
@@ -764,9 +768,11 @@ export function PlaybookDetailClient({
                           aria-label={`Open ${p.name}`}
                         >
                           <div className="flex items-start gap-2 pr-16">
-                            <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
-                              {p.name}
-                            </h3>
+                            <EditablePlayTitle
+                              name={p.name}
+                              onRename={(next) => onRenamePlayInline(p.id, next)}
+                              className="font-semibold"
+                            />
                             {p.play_type !== "offense" && (
                               <PlayTypeBadge type={p.play_type} />
                             )}
@@ -818,9 +824,11 @@ export function PlaybookDetailClient({
                           href={`/plays/${p.id}/edit`}
                           className="flex min-w-0 flex-1 items-center gap-3 py-2 hover:opacity-80"
                         >
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                            {p.name}
-                          </span>
+                          <EditablePlayTitle
+                            name={p.name}
+                            onRename={(next) => onRenamePlayInline(p.id, next)}
+                            className="text-sm font-medium"
+                          />
                           <span className="truncate text-xs text-muted">
                             {[p.formation_name, p.concept].filter(Boolean).join(" · ") ||
                               p.shorthand ||
@@ -2014,6 +2022,84 @@ function PlayTypeSection({
         </div>
       )}
     </div>
+  );
+}
+
+function EditablePlayTitle({
+  name,
+  onRename,
+  className = "",
+}: {
+  name: string;
+  onRename: (next: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const savedRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setValue(name);
+  }, [name, editing]);
+
+  function stop(e: React.SyntheticEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function commit() {
+    if (savedRef.current) return;
+    savedRef.current = true;
+    const next = value.trim();
+    if (next && next !== name) onRename(next);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onClick={stop}
+        onMouseDown={stop}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            savedRef.current = true;
+            setValue(name);
+            setEditing(false);
+          }
+        }}
+        onBlur={commit}
+        className={`min-w-0 flex-1 truncate rounded-md border border-primary bg-surface px-1.5 py-0 text-foreground focus:outline-none ${className}`}
+        aria-label="Rename play"
+      />
+    );
+  }
+
+  return (
+    <span className="group/title flex min-w-0 flex-1 items-center gap-1">
+      <span className={`min-w-0 truncate text-foreground ${className}`}>{name}</span>
+      <button
+        type="button"
+        onClick={(e) => {
+          stop(e);
+          savedRef.current = false;
+          setValue(name);
+          setEditing(true);
+        }}
+        className="shrink-0 rounded p-0.5 text-muted opacity-0 transition-opacity hover:bg-surface-inset hover:text-foreground group-hover/title:opacity-100 focus:opacity-100"
+        aria-label="Rename play"
+        title="Rename"
+      >
+        <Pencil className="size-3.5" />
+      </button>
+    </span>
   );
 }
 
