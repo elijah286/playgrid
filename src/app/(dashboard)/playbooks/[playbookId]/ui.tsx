@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Archive,
@@ -39,6 +39,7 @@ import {
 } from "@/app/actions/plays";
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
+import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -96,6 +97,7 @@ export function PlaybookDetailClient({
   initialGroups,
   initialRoster,
   initialInvites,
+  initialFormations,
   pageHeader,
 }: {
   playbookId: string;
@@ -105,11 +107,20 @@ export function PlaybookDetailClient({
   initialGroups: PlaybookGroupRow[];
   initialRoster: PlaybookRosterMember[];
   initialInvites: PlaybookInvite[];
+  initialFormations: SavedFormation[];
   // Back link + playbook identity block. Rendered inside the sticky header
   // region so it stays pinned while plays scroll.
   pageHeader?: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<"plays" | "roster">("plays");
+  const searchParams = useSearchParams();
+  const initialTab = (() => {
+    const t = searchParams?.get("tab");
+    if (t === "formations" || t === "roster" || t === "staff") return t;
+    return "plays";
+  })();
+  const [tab, setTab] = useState<"plays" | "formations" | "roster" | "staff">(
+    initialTab,
+  );
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
   const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
@@ -406,6 +417,7 @@ export function PlaybookDetailClient({
             {(
               [
                 { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length },
+                { key: "formations" as const, label: "Formations", count: initialFormations.length },
                 { key: "roster" as const, label: "Roster", count: initialRoster.length },
               ]
             ).map((t) => {
@@ -570,22 +582,14 @@ export function PlaybookDetailClient({
               Print playbook
             </Button>
           </Link>
-          <div className="relative">
-            <Button
-              variant="primary"
-              leftIcon={Plus}
-              loading={creating}
-              onClick={openFormationPicker}
-            >
-              New play
-            </Button>
-            <Link
-              href={`/formations/new?variant=${variant}`}
-              className="absolute right-0 top-full mt-1 whitespace-nowrap text-xs text-muted hover:text-primary hover:underline"
-            >
-              + New formation
-            </Link>
-          </div>
+          <Button
+            variant="primary"
+            leftIcon={Plus}
+            loading={creating}
+            onClick={openFormationPicker}
+          >
+            New play
+          </Button>
         </div>
         )}
       </div>
@@ -595,6 +599,14 @@ export function PlaybookDetailClient({
           playbookId={playbookId}
           members={initialRoster}
           invites={initialInvites}
+        />
+      )}
+
+      {tab === "formations" && (
+        <PlaybookFormationsTab
+          playbookId={playbookId}
+          variant={variant}
+          initial={initialFormations}
         />
       )}
 
@@ -1091,8 +1103,10 @@ function RosterPanel({
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const pending = members.filter((m) => m.status === "pending");
-  const active = members.filter((m) => m.status === "active");
+  // Roster tab is player-only; coaches (owner/editor) live in the Staff tab.
+  const players = members.filter((m) => m.role === "viewer");
+  const pending = players.filter((m) => m.status === "pending");
+  const active = players.filter((m) => m.status === "active");
   const activeInvites = invites.filter(
     (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
   );

@@ -267,6 +267,133 @@ export async function deleteFormationAction(
   return { ok: true };
 }
 
+/**
+ * Formations visible to a given playbook: every formation whose variant equals
+ * the playbook's `sport_variant`, minus rows listed in
+ * `playbook_formation_exclusions`. Legacy formations missing a variant default
+ * to "flag_7v7" to match the picker's existing fallback.
+ */
+export async function listFormationsForPlaybookAction(
+  playbookId: string,
+): Promise<{ ok: true; formations: SavedFormation[] } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: pb, error: pbErr } = await supabase
+    .from("playbooks")
+    .select("sport_variant")
+    .eq("id", playbookId)
+    .single();
+  if (pbErr || !pb) return { ok: false, error: pbErr?.message ?? "Playbook not found." };
+
+  const variant = ((pb.sport_variant as string | null) ?? "flag_7v7") as string;
+
+  const all = await listFormationsAction();
+  if (!all.ok) return all;
+
+  const { data: excl } = await supabase
+    .from("playbook_formation_exclusions")
+    .select("formation_id")
+    .eq("playbook_id", playbookId);
+  const excluded = new Set((excl ?? []).map((r) => r.formation_id as string));
+
+  const formations = all.formations.filter((f) => {
+    const v = (f.sportProfile?.variant as string | undefined) ?? "flag_7v7";
+    return v === variant && !excluded.has(f.id);
+  });
+
+  return { ok: true, formations };
+}
+
+/**
+ * For the global formations page's three-dot "Available in playbooks" menu:
+ * every playbook whose sport_variant matches this formation's variant, paired
+ * with whether the formation is currently excluded from it.
+ */
+export async function listCompatiblePlaybooksForFormationAction(
+  formationId: string,
+): Promise<
+  | { ok: true; playbooks: Array<{ id: string; name: string; excluded: boolean }> }
+  | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: fRow, error: fErr } = await supabase
+    .from("formations")
+    .select("params")
+    .eq("id", formationId)
+    .single();
+  if (fErr || !fRow) return { ok: false, error: fErr?.message ?? "Formation not found." };
+
+  const params = (fRow.params as { sportProfile?: { variant?: string } } | null) ?? null;
+  const variant = params?.sportProfile?.variant ?? "flag_7v7";
+
+  const { data: books, error: pbErr } = await supabase
+    .from("playbooks")
+    .select("id, name, sport_variant")
+    .eq("sport_variant", variant)
+    .order("name", { ascending: true });
+  if (pbErr) return { ok: false, error: pbErr.message };
+
+  const ids = (books ?? []).map((b) => b.id as string);
+  let excluded = new Set<string>();
+  if (ids.length > 0) {
+    const { data: excl } = await supabase
+      .from("playbook_formation_exclusions")
+      .select("playbook_id")
+      .eq("formation_id", formationId)
+      .in("playbook_id", ids);
+    excluded = new Set((excl ?? []).map((r) => r.playbook_id as string));
+  }
+
+  return {
+    ok: true,
+    playbooks: (books ?? []).map((b) => ({
+      id: b.id as string,
+      name: b.name as string,
+      excluded: excluded.has(b.id as string),
+    })),
+  };
+}
+
+/**
+ * Toggle a formation's availability in a given playbook. `include=false`
+ * inserts an exclusion row; `include=true` removes one.
+ */
+export async function setFormationPlaybookInclusionAction(
+  formationId: string,
+  playbookId: string,
+  include: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  if (include) {
+    const { error } = await supabase
+      .from("playbook_formation_exclusions")
+      .delete()
+      .eq("playbook_id", playbookId)
+      .eq("formation_id", formationId);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("playbook_formation_exclusions")
+      .upsert(
+        { playbook_id: playbookId, formation_id: formationId },
+        { onConflict: "playbook_id,formation_id" },
+      );
+    if (error) return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 export async function countLinkedPlaysAction(
   formationId: string,
 ): Promise<{ ok: true; count: number } | { ok: false; error: string }> {

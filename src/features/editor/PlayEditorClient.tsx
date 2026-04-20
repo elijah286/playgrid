@@ -34,7 +34,10 @@ type Props = {
   initialGroups: PlaybookGroupRow[];
   linkedFormation?: SavedFormation | null;
   opponentFormation?: SavedFormation | null;
+  /** Formations offered in the title-bar picker. Scoped to this playbook. */
   allFormations?: SavedFormation[];
+  /** Full cross-variant, cross-playbook list. Used only by the opponent overlay. */
+  opponentFormations?: SavedFormation[];
   playbookSettings?: PlaybookSettings;
 };
 
@@ -47,6 +50,7 @@ export function PlayEditorClient({
   linkedFormation,
   opponentFormation,
   allFormations = [],
+  opponentFormations,
   playbookSettings,
 }: Props) {
   const router = useRouter();
@@ -71,47 +75,51 @@ export function PlayEditorClient({
   const [activeColor, setActiveColor] = useState("#FFFFFF");
   const [activeWidth, setActiveWidth] = useState(2.5);
 
+  const [isNavPending, startNavTransition] = useTransition();
   const [, startTransition] = useTransition();
 
   /* ---------- Auto-save ---------- */
-  type SaveStatus = "idle" | "saving" | "saved";
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [isSaving, setIsSaving] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstDocRender = useRef(true);
 
   useEffect(() => {
-    // Skip the initial population of the document (nothing has changed yet).
     if (isFirstDocRender.current) {
       isFirstDocRender.current = false;
       return;
     }
-    // Debounce: reset the timer on every doc change, fire 1.5 s after the last one.
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
-      setSaveStatus("saving");
+      setIsSaving(true);
       const res = await savePlayVersionAction(playId, doc);
       if (res.ok) {
-        setSaveStatus("saved");
         router.refresh();
-        setTimeout(() => setSaveStatus("idle"), 2500);
       } else {
         toast(res.error, "error");
-        setSaveStatus("idle");
       }
+      setIsSaving(false);
     }, 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
 
-  // Warn before unload if a save is in flight
   useEffect(() => {
-    if (saveStatus === "idle") return;
+    if (!isSaving) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [saveStatus]);
+  }, [isSaving]);
+
+  const navigateToPlay = useCallback(
+    (targetPlayId: string) => {
+      startNavTransition(() => {
+        router.push(`/plays/${targetPlayId}/edit`);
+      });
+    },
+    [router, startNavTransition],
+  );
 
   // Show toolbar when a player OR route is selected
   const showToolbar = selectedPlayerId != null || selectedRouteId != null;
@@ -301,7 +309,39 @@ export function PlayEditorClient({
   }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-3">
+      {isNavPending && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex items-center gap-2 rounded-lg bg-surface-raised px-4 py-3 shadow-lg ring-1 ring-border">
+            <svg
+              className="size-5 animate-spin text-primary"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeOpacity="0.25"
+              />
+              <path
+                d="M22 12a10 10 0 0 1-10 10"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="text-sm font-medium text-foreground">Loading play…</span>
+          </div>
+        </div>
+      )}
       <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}
@@ -310,7 +350,7 @@ export function PlayEditorClient({
         initialNav={initialNav}
         initialGroups={initialGroups}
         onDuplicate={duplicate}
-        saveStatus={saveStatus}
+        onNavigateToPlay={navigateToPlay}
         linkedFormation={linkedFormation}
         opponentFormation={opponentFormation ?? null}
         allFormations={allFormations}
@@ -447,7 +487,7 @@ export function PlayEditorClient({
                 currentPlayId={playId}
                 playType={doc.metadata.playType ?? "offense"}
                 nav={initialNav}
-                allFormations={allFormations}
+                allFormations={opponentFormations ?? allFormations}
                 hasSelection={opponentPlayers != null}
                 onChange={setOpponentPlayers}
               />

@@ -7,10 +7,13 @@ export const metadata = { title: "Edit Formation — PlayGrid" };
 
 export default async function EditFormationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnToPlaybook?: string }>;
 }) {
   const { id } = await params;
+  const { returnToPlaybook = null } = await searchParams;
   const result = await listFormationsAction();
   if (!result.ok) notFound();
 
@@ -30,6 +33,7 @@ export default async function EditFormationPage({
       initialName={formation.displayName}
       initialVariant={variant}
       initialPlayers={formation.players}
+      returnToPlaybook={returnToPlaybook}
     />
   );
 }

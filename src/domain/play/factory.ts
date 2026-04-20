@@ -134,6 +134,24 @@ export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
   tackle_11: "Tackle",
 };
 
+/**
+ * Position-aware default style. Keeps the offensive formation readable at
+ * a glance: C (black) and Q (white) anchor the backfield; skill positions
+ * are colored by label; OL defaults to gray so the 11-man front doesn't
+ * drown the skill guys in identical circles.
+ */
+function styleForRole(role: Player["role"], label: string): Player["style"] {
+  if (role === "C") return { fill: "#1C1C1E", stroke: "#0f172a", labelColor: "#FFFFFF" };
+  if (role === "OTHER") return { fill: "#94A3B8", stroke: "#0f172a", labelColor: "#1C1C1E" };
+  if (label === "Q") return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
+  if (label === "X") return { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
+  if (label === "Y" || role === "TE") return { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
+  if (label === "Z") return { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
+  if (label === "S" || label === "A") return { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
+  if (label === "H" || label === "F" || label === "B") return { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
+  return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
+}
+
 function mkPlayer(
   id: string,
   role: Player["role"],
@@ -148,7 +166,7 @@ function mkPlayer(
     label,
     position: { x, y },
     eligible,
-    style: { fill: "#f8fafc", stroke: "#0f172a", labelColor: "#0f172a" },
+    style: styleForRole(role, label),
   };
 }
 
@@ -262,33 +280,14 @@ export function mkZone(
 
 /** Default 7v7 offensive positions — normalized field box */
 export function defaultFlagSevenPlayers(): Player[] {
-  const mk = (
-    id: string,
-    role: Player["role"],
-    label: string,
-    x: number,
-    y: number,
-  ): Player => ({
-    id,
-    role,
-    label,
-    position: { x, y },
-    eligible: true,
-    style: {
-      fill: "#f8fafc",
-      stroke: "#0f172a",
-      labelColor: "#0f172a",
-    },
-  });
-
   return [
-    mk("p_qb", "QB", "Q", 0.50, 0.20),  // shotgun QB, 5 yds back
-    mk("p_c",  "C",  "C", 0.50, 0.38),  // center on line
-    mk("p_s",  "WR", "S", 0.28, 0.34),  // slot left, 1.5 yds back
-    mk("p_x",  "WR", "X", 0.10, 0.38),  // wide left, on line
-    mk("p_y",  "WR", "Y", 0.66, 0.34),  // slot right, 1.5 yds back
-    mk("p_z",  "WR", "Z", 0.90, 0.38),  // wide right, on line
-    mk("p_f",  "RB", "F", 0.50, 0.28),  // flex/RB, 3 yds back
+    mkPlayer("p_qb", "QB", "Q", 0.50, 0.20),  // shotgun QB, 5 yds back
+    mkPlayer("p_c",  "C",  "C", 0.50, 0.38),  // center on line
+    mkPlayer("p_s",  "WR", "S", 0.28, 0.34),  // slot left, 1.5 yds back
+    mkPlayer("p_x",  "WR", "X", 0.10, 0.38),  // wide left, on line
+    mkPlayer("p_y",  "WR", "Y", 0.66, 0.34),  // slot right, 1.5 yds back
+    mkPlayer("p_z",  "WR", "Z", 0.90, 0.38),  // wide right, on line
+    mkPlayer("p_f",  "RB", "F", 0.50, 0.28),  // flex/RB, 3 yds back
   ];
 }
 

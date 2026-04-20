@@ -6,13 +6,11 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
   Link2Off,
-  Loader2,
   PencilLine,
   RefreshCcw,
   Search,
@@ -58,8 +56,6 @@ function computeDrift(doc: PlayDocument, linked: SavedFormation | null): boolean
   });
 }
 
-type SaveStatus = "idle" | "saving" | "saved";
-
 type Props = {
   playId: string;
   playbookId: string;
@@ -68,7 +64,7 @@ type Props = {
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
   onDuplicate: () => void;
-  saveStatus: SaveStatus;
+  onNavigateToPlay: (playId: string) => void;
   linkedFormation?: SavedFormation | null;
   opponentFormation?: SavedFormation | null;
   allFormations?: SavedFormation[];
@@ -82,7 +78,7 @@ export function EditorHeaderBar({
   initialNav,
   initialGroups,
   onDuplicate,
-  saveStatus,
+  onNavigateToPlay,
   linkedFormation,
   opponentFormation,
   allFormations = [],
@@ -198,7 +194,7 @@ export function EditorHeaderBar({
         ) : (
           <div className="inline-flex min-w-0 items-center gap-1">
             <h1 className="flex min-w-0 items-center text-base font-bold text-foreground">
-              {(doc.metadata.playType ?? "offense") === "offense" && (formation || formationId) ? (
+              {(doc.metadata.playType ?? "offense") === "offense" ? (
                 <FormationTitlePicker
                   currentId={formationId ?? null}
                   currentName={formation ?? ""}
@@ -231,34 +227,27 @@ export function EditorHeaderBar({
             variant="ghost"
             leftIcon={ChevronLeft}
             disabled={!prevPlay}
-            onClick={() => prevPlay && router.push(`/plays/${prevPlay.id}/edit`)}
+            onClick={() => prevPlay && onNavigateToPlay(prevPlay.id)}
           >
             Previous play
           </Button>
-          <PlaybookPlaySearchMenu plays={nav} groups={groups} currentPlayId={playId} />
+          <PlaybookPlaySearchMenu
+            plays={nav}
+            groups={groups}
+            currentPlayId={playId}
+            onNavigatePlay={onNavigateToPlay}
+          />
           <Button
             type="button"
             size="sm"
             variant="ghost"
             rightIcon={ChevronRight}
             disabled={!nextPlay}
-            onClick={() => nextPlay && router.push(`/plays/${nextPlay.id}/edit`)}
+            onClick={() => nextPlay && onNavigateToPlay(nextPlay.id)}
           >
             Next play
           </Button>
 
-          {saveStatus === "saving" && (
-            <span className="ml-1 flex items-center gap-1 text-xs text-muted">
-              <Loader2 className="size-3.5 animate-spin" />
-              Saving…
-            </span>
-          )}
-          {saveStatus === "saved" && (
-            <span className="ml-1 flex items-center gap-1 text-xs text-muted">
-              <CheckCircle2 className="size-3.5 text-success" />
-              Saved
-            </span>
-          )}
 
           <Button
             type="button"

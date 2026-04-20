@@ -34,6 +34,8 @@ type Props =
       initialVariant?: SportVariant;
       /** Play ID to return to after saving (from ?returnToPlay= query param). */
       returnToPlay?: string | null;
+      /** Playbook ID to return to after saving (from ?returnToPlaybook=). */
+      returnToPlaybook?: string | null;
     }
   | {
       mode: "edit";
@@ -41,6 +43,8 @@ type Props =
       initialName: string;
       initialVariant: SportVariant;
       initialPlayers: Player[];
+      /** Playbook ID to return to after saving (from ?returnToPlaybook=). */
+      returnToPlaybook?: string | null;
     };
 
 export function FormationEditorClient(props: Props) {
@@ -127,11 +131,15 @@ export function FormationEditorClient(props: Props) {
       props.mode === "edit" ? "Formation updated" : "Formation saved",
       "success",
     );
-    // If we came from "create new formation" in a playbook context, return to
-    // that play's editor; otherwise go to the formations list.
-    const returnTo =
-      props.mode === "new" && props.returnToPlay
-        ? `/plays/${props.returnToPlay}/edit`
+    // Return precedence: specific play editor > playbook Formations tab >
+    // global formations list. Keeps users in the context they started from.
+    const returnToPlay = props.mode === "new" ? props.returnToPlay : null;
+    const returnToPlaybook =
+      (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook : null;
+    const returnTo = returnToPlay
+      ? `/plays/${returnToPlay}/edit`
+      : returnToPlaybook
+        ? `/playbooks/${returnToPlaybook}?tab=formations`
         : "/formations";
     router.push(returnTo);
   }
@@ -139,13 +147,20 @@ export function FormationEditorClient(props: Props) {
   const fieldAspect =
     doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
 
+  const returnToPlaybookId =
+    (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook : null;
+  const backHref = returnToPlaybookId
+    ? `/playbooks/${returnToPlaybookId}?tab=formations`
+    : "/formations";
+  const backLabel = returnToPlaybookId ? "Playbook" : "Formations";
+
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
       <header className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
-        <Link href="/formations">
+        <Link href={backHref}>
           <Button variant="ghost" size="sm" leftIcon={ArrowLeft}>
-            Formations
+            {backLabel}
           </Button>
         </Link>
         <h1 className="text-lg font-bold text-foreground">

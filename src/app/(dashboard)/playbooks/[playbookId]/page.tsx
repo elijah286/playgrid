@@ -4,6 +4,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { listPlaysAction } from "@/app/actions/plays";
 import { listPlaybookRosterAction } from "@/app/actions/playbook-roster";
 import { listInvitesAction } from "@/app/actions/invites";
+import { listFormationsForPlaybookAction } from "@/app/actions/formations";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -32,9 +33,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   if (error || !book) notFound();
 
-  const listed = await listPlaysAction(playbookId, { includeArchived: true });
-  const rosterRes = await listPlaybookRosterAction(playbookId);
-  const invitesRes = await listInvitesAction(playbookId);
+  const [listed, rosterRes, invitesRes, formationsRes] = await Promise.all([
+    listPlaysAction(playbookId, { includeArchived: true }),
+    listPlaybookRosterAction(playbookId),
+    listInvitesAction(playbookId),
+    listFormationsForPlaybookAction(playbookId),
+  ]);
 
   const {
     data: { user },
@@ -86,6 +90,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       initialGroups={listed.ok ? listed.groups : []}
       initialRoster={rosterRes.ok ? rosterRes.members : []}
       initialInvites={invitesRes.ok ? invitesRes.invites : []}
+      initialFormations={formationsRes.ok ? formationsRes.formations : []}
       pageHeader={pageHeader}
     />
   );

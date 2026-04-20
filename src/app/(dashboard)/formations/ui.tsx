@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Copy, Plus, Trash2, Users } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { BookOpen, Copy, Plus, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   deleteFormationAction,
   duplicateFormationAction,
+  listCompatiblePlaybooksForFormationAction,
+  setFormationPlaybookInclusionAction,
   type SavedFormation,
 } from "@/app/actions/formations";
 import {
@@ -171,8 +173,14 @@ function FormationCard({
   onDuplicate: (id: string) => void;
 }) {
   const router = useRouter();
+  const [playbookMenuOpen, setPlaybookMenuOpen] = useState(false);
 
   const items: ActionMenuItem[] = [
+    {
+      label: "Available in playbooks…",
+      icon: BookOpen,
+      onSelect: () => setPlaybookMenuOpen(true),
+    },
     {
       label: "Duplicate",
       icon: Copy,
@@ -235,7 +243,119 @@ function FormationCard({
       <div className="absolute right-2 top-2">
         <ActionMenu items={items} />
       </div>
+
+      {playbookMenuOpen && (
+        <AvailableInPlaybooksDialog
+          formationId={formation.id}
+          formationName={formation.displayName}
+          onClose={() => setPlaybookMenuOpen(false)}
+        />
+      )}
     </Card>
+  );
+}
+
+function AvailableInPlaybooksDialog({
+  formationId,
+  formationName,
+  onClose,
+}: {
+  formationId: string;
+  formationName: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<
+    Array<{ id: string; name: string; excluded: boolean }>
+  >([]);
+  const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await listCompatiblePlaybooksForFormationAction(formationId);
+      if (cancelled) return;
+      if (res.ok) {
+        setRows(res.playbooks);
+      } else {
+        toast(res.error, "error");
+        onClose();
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formationId]);
+
+  function toggle(id: string, nextIncluded: boolean) {
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, excluded: !nextIncluded } : r)),
+    );
+    startTransition(async () => {
+      const res = await setFormationPlaybookInclusionAction(
+        formationId,
+        id,
+        nextIncluded,
+      );
+      if (!res.ok) {
+        toast(res.error, "error");
+        setRows((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, excluded: nextIncluded } : r)),
+        );
+      }
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl border border-border bg-surface-raised shadow-elevated"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-border px-4 py-3">
+          <h3 className="truncate font-semibold text-foreground">
+            Available in playbooks
+          </h3>
+          <p className="truncate text-xs text-muted">{formationName}</p>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto p-2">
+          {loading ? (
+            <p className="px-3 py-6 text-center text-xs text-muted">Loading…</p>
+          ) : rows.length === 0 ? (
+            <p className="px-3 py-6 text-center text-xs text-muted">
+              No playbooks match this formation&apos;s sport type yet.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {rows.map((r) => (
+                <li key={r.id}>
+                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-sm hover:bg-surface-inset">
+                    <span className="truncate text-foreground">{r.name}</span>
+                    <input
+                      type="checkbox"
+                      checked={!r.excluded}
+                      onChange={(e) => toggle(r.id, e.target.checked)}
+                      className="size-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="flex justify-end border-t border-border px-4 py-3">
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

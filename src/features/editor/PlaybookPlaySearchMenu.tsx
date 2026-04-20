@@ -37,6 +37,7 @@ type Props = {
   onPrintToggle?: (playId: string, next: boolean) => void;
   onToggleGroup?: (groupId: string | null, next: boolean) => void;
   triggerClassName?: string;
+  onNavigatePlay?: (playId: string) => void;
 };
 
 export function PlaybookPlaySearchMenu({
@@ -48,6 +49,7 @@ export function PlaybookPlaySearchMenu({
   onPrintToggle,
   onToggleGroup,
   triggerClassName,
+  onNavigatePlay,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -188,6 +190,7 @@ export function PlaybookPlaySearchMenu({
                     printSelectedIds={printSelectedIds}
                     onPrintToggle={onPrintToggle}
                     onNavigate={() => setOpen(false)}
+                    onNavigatePlay={onNavigatePlay}
                   />
                 ))}
               </div>
@@ -209,6 +212,7 @@ function PlayRow({
   printSelectedIds,
   onPrintToggle,
   onNavigate,
+  onNavigatePlay,
 }: {
   p: PlaybookPlayNavItem;
   currentPlayId: string;
@@ -216,6 +220,7 @@ function PlayRow({
   printSelectedIds?: Set<string>;
   onPrintToggle?: (playId: string, next: boolean) => void;
   onNavigate: () => void;
+  onNavigatePlay?: (playId: string) => void;
 }) {
   const active = p.id === currentPlayId;
   const checked = printMode && printSelectedIds ? printSelectedIds.has(p.id) : true;
@@ -238,6 +243,27 @@ function PlayRow({
         >
           {checked ? <Check className="size-3" strokeWidth={3} /> : null}
         </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium text-foreground">{p.name}</span>
+          <span className="block truncate text-xs text-muted">{formatPlayNavSubtitle(p)}</span>
+        </span>
+      </button>
+    );
+  }
+
+  if (onNavigatePlay) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onNavigate();
+          onNavigatePlay(p.id);
+        }}
+        className={cn(
+          "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-inset",
+          active && "bg-primary/5",
+        )}
+      >
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium text-foreground">{p.name}</span>
           <span className="block truncate text-xs text-muted">{formatPlayNavSubtitle(p)}</span>

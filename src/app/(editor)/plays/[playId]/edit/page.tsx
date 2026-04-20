@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlayForEditorAction, listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
 import { getPlaybookSettingsAction } from "@/app/actions/playbooks";
-import { listFormationsAction } from "@/app/actions/formations";
+import { listFormationsAction, listFormationsForPlaybookAction } from "@/app/actions/formations";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
@@ -27,8 +27,12 @@ export default async function PlayEditPage({ params }: Props) {
   const res = await getPlayForEditorAction(playId);
   if (!res.ok) notFound();
 
-  const [nav, formationsRes, settingsRes] = await Promise.all([
+  const [nav, formationsRes, allFormationsRes, settingsRes] = await Promise.all([
     listPlaybookPlaysForNavigationAction(res.play.playbook_id),
+    listFormationsForPlaybookAction(res.play.playbook_id),
+    // Fallback list — used only to resolve the play's currently-linked or
+    // opponent formation when it isn't in the playbook-scoped list (e.g.
+    // defense/special-teams formations, or one the coach removed later).
     listFormationsAction(),
     getPlaybookSettingsAction(res.play.playbook_id),
   ]);
@@ -36,20 +40,26 @@ export default async function PlayEditPage({ params }: Props) {
     ? settingsRes.settings
     : defaultSettingsForVariant("flag_7v7");
 
-  // If the document has a linked formation, find it from the loaded formations list
+  const allFormationsForLookup = allFormationsRes.ok ? allFormationsRes.formations : [];
+
+  // If the document has a linked formation, find it from the global list so
+  // it still resolves even when excluded from this playbook.
   let linkedFormation: SavedFormation | null = null;
   const formationId = res.document.metadata.formationId;
-  if (formationId && formationsRes.ok) {
-    linkedFormation = formationsRes.formations.find((f) => f.id === formationId) ?? null;
+  if (formationId) {
+    linkedFormation = allFormationsForLookup.find((f) => f.id === formationId) ?? null;
   }
 
   let opponentFormation: SavedFormation | null = null;
   const opponentFormationId = res.document.metadata.opponentFormationId;
-  if (opponentFormationId && formationsRes.ok) {
+  if (opponentFormationId) {
     opponentFormation =
-      formationsRes.formations.find((f) => f.id === opponentFormationId) ?? null;
+      allFormationsForLookup.find((f) => f.id === opponentFormationId) ?? null;
   }
 
+  // Picker options: formations scoped to this playbook (variant match, not
+  // excluded). OpponentOverlayCard does its own cross-variant filtering so
+  // we feed it the full list.
   const allFormations = formationsRes.ok ? formationsRes.formations : [];
 
   return (
@@ -62,6 +72,7 @@ export default async function PlayEditPage({ params }: Props) {
       linkedFormation={linkedFormation}
       opponentFormation={opponentFormation}
       allFormations={allFormations}
+      opponentFormations={allFormationsForLookup}
       playbookSettings={playbookSettings}
     />
   );
