@@ -42,7 +42,7 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
 
           return (
             <g key={f.routeId}>
-              {/* Gray trail: visible from 0 → s */}
+              {/* Gray trail: visible 0 → s (dash s, gap covers the remainder) */}
               {s > 0 && (
                 <path
                   d={f.fullD}
@@ -56,7 +56,8 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
                   vectorEffect="non-scaling-stroke"
                 />
               )}
-              {/* Colored remainder: visible from s → L */}
+              {/* Colored remainder: visible s → L. Pattern [dash (L-s), gap s]
+                  with offset (L-s) shifts the dash to start at arc-pos s. */}
               {s < L && (
                 <path
                   d={f.fullD}
@@ -66,8 +67,8 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
                   strokeWidth={route.style.strokeWidth}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeDasharray={`${L - s} ${L}`}
-                  strokeDashoffset={-s}
+                  strokeDasharray={`${L - s} ${s || 0.0001}`}
+                  strokeDashoffset={L - s}
                   vectorEffect="non-scaling-stroke"
                 />
               )}
