@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode: `dark:` utilities activate when any
+   ancestor (or the <html> element) has the `.dark` class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #F26522;
   --color-primary-hover: #E05A1B;
@@ -42,6 +46,37 @@
   --radius-full: 9999px;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dark-mode token overrides. Every surface/foreground/border/etc. utility
+   in the app reads these variables, so flipping `.dark` re-skins the
+   whole site. Brand + status colors stay the same; only neutrals and
+   tinted backgrounds shift. */
+.dark {
+  --color-surface: #0F1115;
+  --color-surface-raised: #171A21;
+  --color-surface-inset: #1F2330;
+
+  --color-foreground: #E5E7EB;
+  --color-muted: #9CA3AF;
+  --color-muted-light: #6B7280;
+
+  --color-border: #2A2F3A;
+  --color-border-light: #1F2330;
+
+  --color-primary-light: rgba(242, 101, 34, 0.16);
+  --color-danger-light: rgba(220, 38, 38, 0.18);
+  --color-warning-light: rgba(245, 158, 11, 0.16);
+  --color-success-light: rgba(22, 163, 74, 0.18);
+  --color-accent-light: rgba(37, 99, 235, 0.18);
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
