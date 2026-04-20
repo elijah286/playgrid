@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import {
   duplicatePlayAction,
+  installDefenseVsPlayAction,
   savePlayVersionAction,
 } from "@/app/actions/plays";
 import { usePlayEditor } from "./usePlayEditor";
@@ -25,6 +26,7 @@ import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
+import { VsPlayCard } from "./VsPlayCard";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 type Props = {
@@ -57,7 +59,25 @@ export function PlayEditorClient({
   const router = useRouter();
   const { toast } = useToast();
   const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
-  const anim = usePlayAnimation(doc);
+
+  const vsSnapshot = doc.metadata.vsPlaySnapshot ?? null;
+  const isDefense = (doc.metadata.playType ?? "offense") === "defense";
+
+  // Merge snapshot players/routes into the doc we hand to the animation so
+  // playback runs both sides on the same clock. The snapshot is read-only;
+  // the editable `doc` still only contains the defensive side.
+  const animDoc = useMemo<PlayDocument>(() => {
+    if (!vsSnapshot) return doc;
+    return {
+      ...doc,
+      layers: {
+        ...doc.layers,
+        players: [...doc.layers.players, ...vsSnapshot.players],
+        routes: [...doc.layers.routes, ...vsSnapshot.routes],
+      },
+    };
+  }, [doc, vsSnapshot]);
+  const anim = usePlayAnimation(animDoc);
   const fieldAspect =
     doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
 
@@ -515,9 +535,9 @@ export function PlayEditorClient({
                 fieldBackground={doc.fieldBackground}
                 hideRoutesAndPlayers={anim.phase !== "idle"}
                 opponentFormation={opponentFormation ?? null}
-                opponentPlayers={opponentPlayers}
+                opponentPlayers={opponentPlayers ?? vsSnapshot?.players ?? null}
               />
-              <AnimationOverlay doc={doc} anim={anim} fieldAspect={fieldAspect} />
+              <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
             </div>
 
             {/* Field size controls (below canvas) */}
@@ -533,7 +553,24 @@ export function PlayEditorClient({
           </div>
           <aside className="flex min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4">
             {!showToolbar && <PlayControlsPanel anim={anim} />}
-            {!showToolbar && (
+            {!showToolbar && isDefense && vsSnapshot ? (
+              <VsPlayCard
+                playId={playId}
+                snapshot={vsSnapshot}
+                onSnapshotReplaced={(snap: VsPlaySnapshot) =>
+                  dispatch({
+                    type: "document.setMetadata",
+                    patch: { vsPlaySnapshot: snap },
+                  })
+                }
+                onUnlinked={() =>
+                  dispatch({
+                    type: "document.setMetadata",
+                    patch: { vsPlayId: null, vsPlaySnapshot: null },
+                  })
+                }
+              />
+            ) : !showToolbar ? (
               <OpponentOverlayCard
                 currentPlayId={playId}
                 playType={doc.metadata.playType ?? "offense"}
@@ -541,8 +578,23 @@ export function PlayEditorClient({
                 allFormations={opponentFormations ?? allFormations}
                 hasSelection={opponentPlayers != null}
                 onChange={setOpponentPlayers}
+                onInstallVsPlay={
+                  isDefense
+                    ? async (offId: string) => {
+                        const res = await installDefenseVsPlayAction(
+                          playId,
+                          offId,
+                        );
+                        if (!res.ok) {
+                          toast(res.error, "error");
+                          return;
+                        }
+                        router.push(`/plays/${res.playId}/edit`);
+                      }
+                    : undefined
+                }
               />
-            )}
+            ) : null}
             <Inspector
               doc={doc}
               dispatch={dispatch}

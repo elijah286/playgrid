@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Search, Users, X } from "lucide-react";
+import { Search, Swords, Users, X } from "lucide-react";
 import type { PlayDocument, Player } from "@/domain/play/types";
 import type { PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import type { SavedFormation } from "@/app/actions/formations";
@@ -15,6 +15,12 @@ type Props = {
   allFormations: SavedFormation[];
   hasSelection: boolean;
   onChange: (players: Player[] | null) => void;
+  /**
+   * Defense-only. When provided, the card exposes an "Install vs this play"
+   * button for the currently-selected offensive play. The handler is
+   * expected to snapshot the offense into a new matchup play and navigate.
+   */
+  onInstallVsPlay?: (offensivePlayId: string) => Promise<void> | void;
 };
 
 type Selection =
@@ -35,11 +41,13 @@ export function OpponentOverlayCard({
   allFormations,
   hasSelection,
   onChange,
+  onInstallVsPlay,
 }: Props) {
   const { toast } = useToast();
   const [selection, setSelection] = useState<Selection>({ kind: "none" });
   const [query, setQuery] = useState("");
   const [pending, startTransition] = useTransition();
+  const [installing, startInstall] = useTransition();
 
   const wantKinds: Array<"offense" | "defense" | "special_teams"> =
     playType === "offense"
@@ -151,14 +159,32 @@ export function OpponentOverlayCard({
       </div>
 
       {selection.kind !== "none" && (
-        <div className="mx-3 mt-2 flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs">
-          <span className="min-w-0 truncate text-foreground">
-            <span className="mr-1 text-[10px] uppercase text-primary">
-              {selection.kind === "formation" ? "Form" : "Play"}
+        <div className="mx-3 mt-2 flex flex-col gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="min-w-0 truncate text-foreground">
+              <span className="mr-1 text-[10px] uppercase text-primary">
+                {selection.kind === "formation" ? "Form" : "Play"}
+              </span>
+              {selection.label}
             </span>
-            {selection.label}
-          </span>
-          {pending && <span className="text-[10px] text-muted">loading…</span>}
+            {pending && <span className="text-[10px] text-muted">loading…</span>}
+          </div>
+          {selection.kind === "play" && onInstallVsPlay && (
+            <button
+              type="button"
+              disabled={installing}
+              onClick={() => {
+                const offId = selection.id;
+                startInstall(async () => {
+                  await onInstallVsPlay(offId);
+                });
+              }}
+              className="inline-flex items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              <Swords className="size-3" />
+              {installing ? "Installing…" : "Install vs this play"}
+            </button>
+          )}
         </div>
       )}
 

@@ -234,6 +234,28 @@ export type PlayMetadata = {
    * or zones). Lets coaches visualize their play against a specific look.
    */
   opponentFormationId?: string | null;
+  /**
+   * Defense-only. FK to plays.id of the offensive play this defense was
+   * "installed against". When set, the play renders and animates alongside
+   * the frozen offensive snapshot stored in `vsPlaySnapshot`.
+   */
+  vsPlayId?: string | null;
+  /**
+   * Frozen copy of the vs play's players/routes, captured at install (and
+   * rewritten by "Re-sync"). Source of truth for rendering — later edits to
+   * the offense do not leak into the matchup until resync.
+   */
+  vsPlaySnapshot?: VsPlaySnapshot | null;
+};
+
+export type VsPlaySnapshot = {
+  players: Player[];
+  routes: Route[];
+  lineOfScrimmageY: number;
+  sourceVersionId: string;
+  snapshotAt: string;
+  sourceName: string;
+  sourceFormationName: string;
 };
 
 export type PlayLayers = {

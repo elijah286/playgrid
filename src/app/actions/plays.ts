@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
-import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
+import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, VsPlaySnapshot, Zone } from "@/domain/play/types";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -246,7 +246,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot",
     )
     .eq("id", playId)
     .single();
@@ -279,6 +279,11 @@ export async function getPlayForEditorAction(playId: string) {
         normalizedDoc.metadata.specialTeamsUnit ?? ((play.special_teams_unit as SpecialTeamsUnit | null) ?? null),
       opponentFormationId:
         normalizedDoc.metadata.opponentFormationId ?? ((play.opponent_formation_id as string | null) ?? null),
+      vsPlayId:
+        normalizedDoc.metadata.vsPlayId ?? ((play.vs_play_id as string | null) ?? null),
+      vsPlaySnapshot:
+        normalizedDoc.metadata.vsPlaySnapshot ??
+        ((play.vs_play_snapshot as VsPlaySnapshot | null) ?? null),
     },
   };
 
@@ -343,10 +348,184 @@ export async function savePlayVersionAction(
       play_type: document.metadata.playType ?? "offense",
       special_teams_unit: document.metadata.specialTeamsUnit ?? null,
       opponent_formation_id: document.metadata.opponentFormationId ?? null,
+      vs_play_id: document.metadata.vsPlayId ?? null,
+      vs_play_snapshot: (document.metadata.vsPlaySnapshot ?? null) as unknown as Record<string, unknown> | null,
     })
     .eq("id", playId);
 
   return { ok: true as const, versionId: ver.id };
+}
+
+/* ---------- Defense "install vs offense" ---------- */
+
+/**
+ * Snapshots an offensive play and creates a new defensive play cloned from
+ * a base defense scheme, linked to that offense. The snapshot is frozen at
+ * install time; callers must use `resyncDefenseVsPlayAction` to pick up
+ * later edits to the offense.
+ */
+export async function installDefenseVsPlayAction(
+  defensePlayId: string,
+  offensivePlayId: string,
+) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const [defenseLoaded, offenseLoaded] = await Promise.all([
+    getPlayForEditorAction(defensePlayId),
+    getPlayForEditorAction(offensivePlayId),
+  ]);
+  if (!defenseLoaded.ok) return { ok: false as const, error: defenseLoaded.error };
+  if (!offenseLoaded.ok) return { ok: false as const, error: offenseLoaded.error };
+
+  if ((defenseLoaded.document.metadata.playType ?? "offense") !== "defense") {
+    return { ok: false as const, error: "Base play must be a defensive play." };
+  }
+
+  const { data: defenseRow, error: defErr } = await supabase
+    .from("plays")
+    .select("playbook_id, group_id, special_teams_unit")
+    .eq("id", defensePlayId)
+    .single();
+  if (defErr || !defenseRow) return { ok: false as const, error: defErr?.message ?? "Defense row missing" };
+
+  const snapshot: VsPlaySnapshot = {
+    players: offenseLoaded.document.layers.players,
+    routes: offenseLoaded.document.layers.routes,
+    lineOfScrimmageY:
+      typeof offenseLoaded.document.lineOfScrimmageY === "number"
+        ? offenseLoaded.document.lineOfScrimmageY
+        : 0.4,
+    sourceVersionId: offenseLoaded.version.id as string,
+    snapshotAt: new Date().toISOString(),
+    sourceName: offenseLoaded.document.metadata.coachName || "Untitled",
+    sourceFormationName: offenseLoaded.document.metadata.formation ?? "",
+  };
+
+  const doc = structuredClone(defenseLoaded.document) as PlayDocument;
+  const baseName = doc.metadata.coachName || "Defense";
+  doc.metadata.coachName = `${baseName} vs ${snapshot.sourceName}`;
+  doc.metadata.vsPlayId = offensivePlayId;
+  doc.metadata.vsPlaySnapshot = snapshot;
+
+  // Wristband code: auto-assign a new one for this playbook.
+  const { data: codeRows } = await supabase
+    .from("plays")
+    .select("wristband_code")
+    .eq("playbook_id", defenseRow.playbook_id);
+  const maxCode = (codeRows ?? [])
+    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
+    .filter((n): n is number => Number.isFinite(n))
+    .reduce((m, n) => Math.max(m, n), 0);
+  doc.metadata.wristbandCode = String(maxCode + 1).padStart(2, "0");
+
+  const { data: sortRow } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", defenseRow.playbook_id)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
+  const { data: play, error: playErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: defenseRow.playbook_id,
+      name: doc.metadata.coachName,
+      shorthand: doc.metadata.shorthand,
+      wristband_code: doc.metadata.wristbandCode,
+      formation_name: doc.metadata.formation,
+      concept: "",
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
+      display_abbrev: doc.metadata.sheetAbbrev,
+      group_id: defenseRow.group_id,
+      sort_order: nextSort,
+      formation_id: doc.metadata.formationId ?? null,
+      formation_tag: null,
+      play_type: "defense",
+      special_teams_unit: (defenseRow.special_teams_unit as SpecialTeamsUnit | null) ?? null,
+      vs_play_id: offensivePlayId,
+      vs_play_snapshot: snapshot as unknown as Record<string, unknown>,
+    })
+    .select("id")
+    .single();
+  if (playErr) return { ok: false as const, error: playErr.message };
+
+  const { data: ver, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: play.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "installed vs offense",
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (verErr) return { ok: false as const, error: verErr.message };
+
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
+
+  return { ok: true as const, playId: play.id };
+}
+
+/**
+ * Rewrites the vs_play_snapshot for a defense play by pulling the current
+ * offensive play's players/routes again. Fails if the play isn't linked.
+ */
+export async function resyncDefenseVsPlayAction(defensePlayId: string) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const loaded = await getPlayForEditorAction(defensePlayId);
+  if (!loaded.ok) return { ok: false as const, error: loaded.error };
+
+  const vsId = loaded.document.metadata.vsPlayId;
+  if (!vsId) return { ok: false as const, error: "This play isn't linked to an offense." };
+
+  const offense = await getPlayForEditorAction(vsId);
+  if (!offense.ok) return { ok: false as const, error: offense.error };
+
+  const snapshot: VsPlaySnapshot = {
+    players: offense.document.layers.players,
+    routes: offense.document.layers.routes,
+    lineOfScrimmageY:
+      typeof offense.document.lineOfScrimmageY === "number"
+        ? offense.document.lineOfScrimmageY
+        : 0.4,
+    sourceVersionId: offense.version.id as string,
+    snapshotAt: new Date().toISOString(),
+    sourceName: offense.document.metadata.coachName || "Untitled",
+    sourceFormationName: offense.document.metadata.formation ?? "",
+  };
+
+  const doc = structuredClone(loaded.document) as PlayDocument;
+  doc.metadata.vsPlaySnapshot = snapshot;
+
+  const res = await savePlayVersionAction(defensePlayId, doc, "resync vs offense");
+  if (!res.ok) return res;
+  return { ok: true as const, snapshot };
+}
+
+export async function unlinkDefenseVsPlayAction(defensePlayId: string) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const loaded = await getPlayForEditorAction(defensePlayId);
+  if (!loaded.ok) return { ok: false as const, error: loaded.error };
+  const doc = structuredClone(loaded.document) as PlayDocument;
+  doc.metadata.vsPlayId = null;
+  doc.metadata.vsPlaySnapshot = null;
+  return savePlayVersionAction(defensePlayId, doc, "unlink vs offense");
 }
 
 export async function duplicatePlayAction(playId: string) {
