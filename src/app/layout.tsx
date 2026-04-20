@@ -12,9 +12,52 @@ const inter = Inter({
   variable: "--font-sans",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
+
 export const metadata: Metadata = {
-  title: "PlayGrid",
-  description: "Football play designer for coaches and athletes — design, print, and carry your playbook.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "PlayGrid — Football play designer for coaches",
+    template: "%s · PlayGrid",
+  },
+  description:
+    "PlayGrid is a football play designer for coaches and athletes. Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+  applicationName: "PlayGrid",
+  authors: [{ name: "PlayGrid LLC" }],
+  creator: "PlayGrid LLC",
+  publisher: "PlayGrid LLC",
+  keywords: [
+    "football playbook",
+    "play designer",
+    "football plays",
+    "flag football",
+    "7v7",
+    "youth football",
+    "wristband",
+    "coach tools",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "PlayGrid",
+    title: "PlayGrid — Football play designer for coaches",
+    description:
+      "Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PlayGrid — Football play designer for coaches",
+    description:
+      "Design plays, organize them into playbooks, and carry your playbook to the field.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  category: "sports",
 };
 
 export default function RootLayout({
