@@ -16,14 +16,13 @@ export default function AboutPage() {
           whiteboards, or napkin sketches.
         </p>
         <p>
-          I&apos;ve been coaching for five years across youth flag football,
-          youth tackle, and middle school 7v7. All three of my kids are
-          quarterbacks, so we spend a lot of time studying plays together —
-          at the kitchen table, in the backyard, and on the drive home from
-          practice. PlayGrid grew out of wanting a better tool for that:
-          something fast enough to sketch on the sideline, clean enough to
-          print on a wristband, and shareable enough to send to a 10-year-old
-          QB&apos;s phone.
+          I&apos;ve been coaching for years across flag football, youth tackle
+          and middle school 7v7. All three of my kids are quarterbacks, so we
+          spend a lot of time studying plays together — at the kitchen table,
+          in the backyard, and on the drive home from practice. PlayGrid grew
+          out of wanting a better tool for that: something fast enough to
+          sketch on the sideline, clean enough to print on a wristband, and
+          easy to share with the entire team.
         </p>
         <p>
           The goal is simple — make it easy to design plays, organize them
