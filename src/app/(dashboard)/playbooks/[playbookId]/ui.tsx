@@ -1010,7 +1010,7 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                         {showPlayNumbers && position != null && !selectionMode && (
-                          <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex h-6 min-w-[26px] items-center justify-center rounded bg-primary px-1.5 text-[12px] font-bold tabular-nums text-primary-foreground shadow-sm">
+                          <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex h-4 min-w-[18px] items-center justify-center rounded bg-primary px-1 text-[9px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
                             {String(position).padStart(2, "0")}
                           </div>
                         )}
@@ -1020,7 +1020,7 @@ export function PlaybookDetailClient({
                           aria-label={`Open ${p.name}`}
                           tabIndex={selectionMode ? -1 : 0}
                         >
-                          <div className="pr-16">
+                          <div className={`pr-16 ${showPlayNumbers && position != null && !selectionMode ? "pl-6" : ""}`}>
                             <p className="mb-0.5 truncate text-[11px] text-muted">
                               {p.formation_name || p.shorthand || "\u00A0"}
                             </p>
