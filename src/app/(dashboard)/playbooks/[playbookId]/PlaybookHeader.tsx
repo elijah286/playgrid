@@ -23,7 +23,8 @@ import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import {
   createInviteAction,
-  sendPlaybookInviteEmailAction,
+  sharePlaybookWithEmailsAction,
+  type ShareResultRow,
 } from "@/app/actions/invites";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
@@ -540,15 +541,17 @@ function InviteTeamMemberDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
+  const [mode, setMode] = useState<"choose" | "email" | "link">("choose");
   const [role, setRole] = useState<"viewer" | "editor">("viewer");
   const [creating, setCreating] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<"link" | "qr" | "email">("link");
+  const [linkTab, setLinkTab] = useState<"link" | "qr">("link");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
+  const [emailInput, setEmailInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [shareResults, setShareResults] = useState<ShareResultRow[] | null>(null);
 
   async function generate() {
     setCreating(true);
@@ -595,13 +598,20 @@ function InviteTeamMemberDialog({
     }
   }
 
-  async function sendEmail() {
-    if (!inviteUrl) return;
+  async function shareByEmails() {
+    const emails = emailInput
+      .split(/[\s,;]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      toast("Enter at least one email.", "error");
+      return;
+    }
     setSending(true);
-    const res = await sendPlaybookInviteEmailAction({
+    const res = await sharePlaybookWithEmailsAction({
       playbookId,
-      toEmail: email,
-      inviteUrl,
+      role,
+      emails,
       teamName,
       senderName,
     });
@@ -610,8 +620,18 @@ function InviteTeamMemberDialog({
       toast(res.error, "error");
       return;
     }
-    setSent(true);
-    toast(`Invite sent to ${email}.`, "success");
+    setShareResults(res.results);
+    const added = res.results.filter((r) => r.kind === "added").length;
+    const invited = res.results.filter((r) => r.kind === "invited").length;
+    const already = res.results.filter((r) => r.kind === "already_member").length;
+    const failed = res.results.filter((r) => r.kind === "failed").length;
+    const bits: string[] = [];
+    if (added) bits.push(`${added} added`);
+    if (invited) bits.push(`${invited} invited`);
+    if (already) bits.push(`${already} already a member`);
+    if (failed) bits.push(`${failed} failed`);
+    toast(bits.join(" · ") || "Done.", failed ? "error" : "success");
+    if (added > 0) router.refresh();
   }
 
   return (
@@ -637,8 +657,131 @@ function InviteTeamMemberDialog({
         </div>
 
         <div className="space-y-4 p-5">
-          {!inviteUrl ? (
+          {mode === "choose" && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setMode("email")}
+                className="flex w-full items-start gap-3 rounded-lg border border-border bg-surface-inset p-4 text-left hover:border-primary hover:bg-primary/5"
+              >
+                <Mail className="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Share by email</div>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Add one or more people by email. Existing users get instant access;
+                    new users receive a sign-up link.
+                  </p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("link")}
+                className="flex w-full items-start gap-3 rounded-lg border border-border bg-surface-inset p-4 text-left hover:border-primary hover:bg-primary/5"
+              >
+                <Copy className="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Create share link</div>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Generate a link (or QR code) anyone can use to request access.
+                    You still approve each person.
+                  </p>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {mode === "email" && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("choose");
+                  setShareResults(null);
+                  setEmailInput("");
+                }}
+                className="-mt-1 flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-3" /> Back
+              </button>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
+                <SegmentedControl
+                  value={role}
+                  onChange={(v) => setRole(v as "viewer" | "editor")}
+                  options={[
+                    { value: "viewer", label: "Player (view)" },
+                    { value: "editor", label: "Coach (edit)" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">
+                  Emails
+                </label>
+                <textarea
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setShareResults(null);
+                  }}
+                  placeholder="alex@example.com, jamie@example.com"
+                  rows={3}
+                  disabled={sending}
+                  className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <p className="mt-1 text-xs text-muted">
+                  Separate with commas, spaces, or new lines.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                leftIcon={Mail}
+                onClick={shareByEmails}
+                loading={sending}
+                disabled={!emailInput.trim()}
+                className="w-full"
+              >
+                Share playbook
+              </Button>
+
+              {shareResults && shareResults.length > 0 && (
+                <ul className="space-y-1 rounded-lg border border-border bg-surface-inset p-3 text-xs">
+                  {shareResults.map((r) => (
+                    <li key={r.email} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-foreground">{r.email}</span>
+                      <span
+                        className={
+                          r.kind === "failed"
+                            ? "shrink-0 text-danger"
+                            : r.kind === "already_member"
+                              ? "shrink-0 text-muted"
+                              : "shrink-0 text-field"
+                        }
+                      >
+                        {r.kind === "added"
+                          ? "Added"
+                          : r.kind === "invited"
+                            ? "Invite sent"
+                            : r.kind === "already_member"
+                              ? "Already a member"
+                              : `Failed: ${r.error}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {mode === "link" && !inviteUrl && (
             <>
+              <button
+                type="button"
+                onClick={() => setMode("choose")}
+                className="-mt-1 flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-3" /> Back
+              </button>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
                 <SegmentedControl
@@ -658,23 +801,24 @@ function InviteTeamMemberDialog({
                 Create invite link
               </Button>
             </>
-          ) : (
+          )}
+
+          {mode === "link" && inviteUrl && (
             <>
               <div className="flex gap-1 rounded-lg border border-border bg-surface-inset p-1">
                 {(
                   [
                     { key: "link" as const, label: "Copy link", icon: Copy },
                     { key: "qr" as const, label: "QR code", icon: QrCode },
-                    { key: "email" as const, label: "Email", icon: Mail },
                   ]
                 ).map((t) => {
                   const Icon = t.icon;
-                  const active = tab === t.key;
+                  const active = linkTab === t.key;
                   return (
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => setTab(t.key)}
+                      onClick={() => setLinkTab(t.key)}
                       className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
                         active
                           ? "bg-surface-raised text-foreground shadow-sm"
@@ -688,7 +832,7 @@ function InviteTeamMemberDialog({
                 })}
               </div>
 
-              {tab === "link" && (
+              {linkTab === "link" && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-inset px-3 py-2">
                     <code className="flex-1 truncate text-xs text-foreground">{inviteUrl}</code>
@@ -702,7 +846,7 @@ function InviteTeamMemberDialog({
                 </div>
               )}
 
-              {tab === "qr" && (
+              {linkTab === "qr" && (
                 <div className="flex flex-col items-center gap-3">
                   {qrDataUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -719,36 +863,6 @@ function InviteTeamMemberDialog({
                   <p className="text-center text-xs text-muted">
                     Scan with a phone camera to open the invite link.
                   </p>
-                </div>
-              )}
-
-              {tab === "email" && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-muted">
-                      Recipient email
-                    </label>
-                    <Input
-                      type="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setSent(false);
-                      }}
-                      placeholder="player@example.com"
-                      disabled={sending}
-                    />
-                  </div>
-                  <Button
-                    variant="primary"
-                    leftIcon={sent ? Check : Mail}
-                    onClick={sendEmail}
-                    loading={sending}
-                    disabled={!email.trim()}
-                    className="w-full"
-                  >
-                    {sent ? "Sent" : "Send invite"}
-                  </Button>
                 </div>
               )}
             </>

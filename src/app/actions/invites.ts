@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 
@@ -191,6 +192,210 @@ export async function sendPlaybookInviteEmailAction(input: {
   }
 
   return { ok: true };
+}
+
+export type ShareResultRow =
+  | { email: string; kind: "added"; userId: string }
+  | { email: string; kind: "already_member" }
+  | { email: string; kind: "invited"; inviteUrl: string }
+  | { email: string; kind: "failed"; error: string };
+
+/**
+ * Share a playbook with a list of emails in one call.
+ *
+ * For each email:
+ * - If the address already has a PlayGrid account, upsert an active
+ *   `playbook_members` row so the playbook appears on their dashboard
+ *   immediately, then email them a heads-up link.
+ * - Otherwise fall back to the invite-link flow: create a scoped invite
+ *   and send the existing invite email.
+ */
+export async function sharePlaybookWithEmailsAction(input: {
+  playbookId: string;
+  role: "viewer" | "editor";
+  emails: string[];
+  teamName: string;
+  senderName?: string | null;
+}): Promise<
+  | { ok: true; results: ShareResultRow[] }
+  | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Authorize: caller must be an owner/editor of this playbook. RLS on
+  // playbook_members enforces this for the select below.
+  const { data: callerMem, error: callerErr } = await supabase
+    .from("playbook_members")
+    .select("role, status")
+    .eq("playbook_id", input.playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (callerErr) return { ok: false, error: callerErr.message };
+  if (!callerMem || callerMem.status !== "active" || !["owner", "editor"].includes(callerMem.role)) {
+    return { ok: false, error: "You don't have permission to share this playbook." };
+  }
+
+  const cleaned = Array.from(
+    new Set(
+      input.emails
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => EMAIL_RE.test(e)),
+    ),
+  );
+  if (cleaned.length === 0) return { ok: false, error: "Enter at least one valid email." };
+
+  const admin = createServiceRoleClient();
+  const { SITE_URL } = await getSiteUrl();
+  const results: ShareResultRow[] = [];
+
+  for (const email of cleaned) {
+    try {
+      const { data: uidData, error: uidErr } = await admin.rpc("email_to_user_id", {
+        p_email: email,
+      });
+      if (uidErr) {
+        results.push({ email, kind: "failed", error: uidErr.message });
+        continue;
+      }
+      const userId = (uidData as string | null) ?? null;
+
+      if (userId) {
+        // Already a member? Treat as success (surface clearly).
+        const { data: existing } = await admin
+          .from("playbook_members")
+          .select("role, status")
+          .eq("playbook_id", input.playbookId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (existing && existing.status === "active") {
+          results.push({ email, kind: "already_member" });
+          continue;
+        }
+        // Direct add / upgrade an existing pending row.
+        const { error: upErr } = await admin
+          .from("playbook_members")
+          .upsert(
+            {
+              playbook_id: input.playbookId,
+              user_id: userId,
+              role: input.role,
+              status: "active",
+            },
+            { onConflict: "playbook_id,user_id" },
+          );
+        if (upErr) {
+          results.push({ email, kind: "failed", error: upErr.message });
+          continue;
+        }
+        const playbookUrl = `${SITE_URL}/playbooks/${input.playbookId}`;
+        await sendSharedExistingUserEmail({
+          to: email,
+          playbookUrl,
+          teamName: input.teamName,
+          senderName: input.senderName ?? null,
+          role: input.role,
+        }).catch(() => {
+          /* non-fatal */
+        });
+        results.push({ email, kind: "added", userId });
+      } else {
+        // Create a scoped invite for this email and send the invite email.
+        const inv = await createInviteAction({
+          playbookId: input.playbookId,
+          role: input.role,
+          expiresInDays: 14,
+          maxUses: 1,
+          email,
+          note: null,
+        });
+        if (!inv.ok) {
+          results.push({ email, kind: "failed", error: inv.error });
+          continue;
+        }
+        const inviteUrl = `${SITE_URL}/invite/${inv.invite.token}`;
+        const sendRes = await sendPlaybookInviteEmailAction({
+          playbookId: input.playbookId,
+          toEmail: email,
+          inviteUrl,
+          teamName: input.teamName,
+          senderName: input.senderName ?? null,
+        });
+        if (!sendRes.ok) {
+          // Invite row still exists; user can copy link from the history tab.
+          results.push({ email, kind: "failed", error: sendRes.error });
+          continue;
+        }
+        results.push({ email, kind: "invited", inviteUrl });
+      }
+    } catch (e) {
+      results.push({
+        email,
+        kind: "failed",
+        error: e instanceof Error ? e.message : "Unknown error",
+      });
+    }
+  }
+
+  revalidatePath(`/playbooks/${input.playbookId}`);
+  return { ok: true, results };
+}
+
+async function getSiteUrl(): Promise<{ SITE_URL: string }> {
+  return { SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us" };
+}
+
+async function sendSharedExistingUserEmail(input: {
+  to: string;
+  playbookUrl: string;
+  teamName: string;
+  senderName: string | null;
+  role: "viewer" | "editor";
+}): Promise<void> {
+  const cfg = await getStoredResendConfig().catch(() => ({
+    apiKey: null as string | null,
+    fromEmail: null as string | null,
+    contactToEmail: null as string | null,
+  }));
+  const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
+  const fromEmail = cfg.fromEmail ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  if (!apiKey) return;
+
+  const team = input.teamName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const sender = (input.senderName ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const roleLabel = input.role === "editor" ? "as a coach" : "as a player";
+  const subject = `${input.teamName} was shared with you on PlayGrid`;
+  const text = [
+    sender
+      ? `${input.senderName} shared ${input.teamName} with you on PlayGrid ${roleLabel}.`
+      : `${input.teamName} was shared with you on PlayGrid ${roleLabel}.`,
+    "",
+    `Open the playbook: ${input.playbookUrl}`,
+  ].join("\n");
+  const html = `<!doctype html>
+<html><body style="font-family:ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+    <tr><td style="padding:24px">
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">${team} was shared with you</h1>
+      <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5">
+        ${sender ? `${sender} added you` : `You were added`} to ${team} on PlayGrid ${roleLabel}. It&rsquo;s already on your dashboard — open it below.
+      </p>
+      <p style="margin:0 0 20px">
+        <a href="${input.playbookUrl}" style="display:inline-block;padding:10px 16px;background:#16a34a;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+          Open playbook
+        </a>
+      </p>
+      <p style="margin:0;color:#64748b;font-size:12px;word-break:break-all">Or paste this link: ${input.playbookUrl}</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  const resend = new Resend(apiKey);
+  await resend.emails.send({ from: fromEmail, to: input.to, subject, text, html });
 }
 
 export async function acceptInviteAction(
