@@ -4,9 +4,8 @@ import { Trash2 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
-import { Select, Badge, Button } from "@/components/ui";
+import { Select, Button } from "@/components/ui";
 import { QuickRoutes } from "./QuickRoutes";
-import type { SavedFormation } from "@/app/actions/formations";
 
 type Props = {
   doc: PlayDocument;
@@ -15,7 +14,6 @@ type Props = {
   selectedRouteId: string | null;
   selectedSegmentId: string | null;
   activeStyle?: Partial<RouteStyle>;
-  linkedFormation?: SavedFormation | null;
 };
 
 const routeOptions = [
@@ -35,7 +33,6 @@ export function Inspector({
   selectedRouteId,
   selectedSegmentId,
   activeStyle,
-  linkedFormation,
 }: Props) {
   const warnings = evaluateSportWarnings(doc);
   const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
@@ -51,29 +48,6 @@ export function Inspector({
               <li key={w}>{w}</li>
             ))}
           </ul>
-        </section>
-      )}
-
-      {player && (
-        <section>
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-            Player
-          </h3>
-          <div className="mt-2 flex items-center gap-2">
-            <Badge variant="primary">{player.role}</Badge>
-            <span className="font-semibold text-foreground">{player.label}</span>
-          </div>
-
-          {(() => {
-            const playerRouteCount = doc.layers.routes.filter(
-              (r) => r.carrierPlayerId === player.id,
-            ).length;
-            return playerRouteCount > 0 ? (
-              <div className="mt-2 text-xs text-muted">
-                {playerRouteCount} route{playerRouteCount !== 1 ? "s" : ""}
-              </div>
-            ) : null;
-          })()}
         </section>
       )}
 

@@ -90,37 +90,26 @@ export function TagsCard({ doc, dispatch, linkedFormation }: Props) {
     dispatch({ type: "document.setFormationTag", formationTag: null });
   }
 
+  function reapplyFormation() {
+    if (!linkedFormation) return;
+    dispatch({
+      type: "document.reapplyFormation",
+      players: linkedFormation.players,
+      formationLosY: linkedFormation.losY ?? 0.4,
+    });
+  }
+
+  function unlinkFormation() {
+    dispatch({
+      type: "document.setFormationLink",
+      formationId: null,
+      formationName: "",
+    });
+  }
+
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Tags</h3>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {tags.map((t) => (
-          <Badge key={t} variant="default" className="inline-flex items-center gap-1">
-            {t}
-            <button
-              type="button"
-              onClick={() => removeTag(t)}
-              className="rounded hover:text-danger"
-              aria-label={`Remove tag ${t}`}
-            >
-              <X className="size-3" />
-            </button>
-          </Badge>
-        ))}
-        {formationTag && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-            {formationTag}
-            <button
-              type="button"
-              onClick={clearFormationTag}
-              className="rounded hover:text-primary/60"
-              aria-label="Remove variation tag"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        )}
-      </div>
+    <section className="flex flex-col gap-2 rounded-xl border border-border bg-surface-inset/50 p-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">Tags</h3>
       <Input
         value={tagDraft}
         onChange={(e) => setTagDraft(e.target.value)}
@@ -133,25 +122,77 @@ export function TagsCard({ doc, dispatch, linkedFormation }: Props) {
         placeholder={tags.length === 0 ? "Add tag (press Enter)…" : "Add tag…"}
         className="h-7 text-xs"
       />
+      {(tags.length > 0 || formationTag) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {tags.map((t) => (
+            <Badge key={t} variant="default" className="inline-flex items-center gap-1">
+              {t}
+              <button
+                type="button"
+                onClick={() => removeTag(t)}
+                className="rounded hover:text-danger"
+                aria-label={`Remove tag ${t}`}
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          ))}
+          {formationTag && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+              {formationTag}
+              <button
+                type="button"
+                onClick={clearFormationTag}
+                className="rounded hover:text-primary/60"
+                aria-label="Remove variation tag"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
       {formationId && showDriftPrompt && (
         <div
           aria-live="polite"
-          className="flex flex-wrap items-center gap-1.5 rounded-lg bg-warning/10 p-2 ring-1 ring-warning/25"
+          className="flex flex-col gap-2 rounded-lg bg-warning/10 p-2 ring-1 ring-warning/25"
         >
-          <span className="text-[11px] font-semibold text-warning">
-            Formation drifted —
-          </span>
-          <span className="text-[11px] text-muted">tag this variation:</span>
-          {FORMATION_TAG_PRESETS.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => setFormationTag(preset)}
-              className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
-            >
-              {preset}
-            </button>
-          ))}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-warning">Formation drifted</span>
+            <div className="flex items-center gap-1">
+              {linkedFormation && (
+                <button
+                  type="button"
+                  onClick={reapplyFormation}
+                  className="rounded-md border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50 hover:text-primary"
+                  title="Snap players back to the linked formation"
+                >
+                  Reapply
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={unlinkFormation}
+                className="rounded-md border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground hover:border-danger/60 hover:text-danger"
+                title="Unlink this formation"
+              >
+                Unlink
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-muted">tag this variation:</span>
+            {FORMATION_TAG_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setFormationTag(preset)}
+                className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </section>

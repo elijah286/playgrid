@@ -361,6 +361,23 @@ export function PlayEditorClient({
     setSelectedPlayerId(null);
   }, []);
 
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selectedPlayerId == null && selectedRouteId == null && selectedZoneId == null) return;
+    function onDocPointer(e: PointerEvent) {
+      const root = rootRef.current;
+      if (!root) return;
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (root.contains(target)) return;
+      handleDone();
+      setSelectedZoneId(null);
+    }
+    document.addEventListener("pointerdown", onDocPointer, true);
+    return () => document.removeEventListener("pointerdown", onDocPointer, true);
+  }, [selectedPlayerId, selectedRouteId, selectedZoneId, handleDone]);
+
   /* ---------- Keyboard shortcuts ---------- */
 
   useEffect(() => {
@@ -415,7 +432,7 @@ export function PlayEditorClient({
   }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col gap-2">
+    <div ref={rootRef} className="relative flex min-h-0 flex-1 flex-col gap-2">
       {isNavPending && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]"
@@ -640,6 +657,9 @@ export function PlayEditorClient({
             } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
           >
             {!showToolbar && <PlayControlsPanel anim={anim} />}
+            {showToolbar && selectedPlayerId != null && (
+              <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
+            )}
             {!showToolbar && (
               <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
             )}
@@ -692,7 +712,6 @@ export function PlayEditorClient({
               selectedRouteId={selectedRouteId}
               selectedSegmentId={selectedSegmentId}
               activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
-              linkedFormation={linkedFormation}
             />
           </aside>
       </div>
