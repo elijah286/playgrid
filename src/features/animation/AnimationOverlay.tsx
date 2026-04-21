@@ -49,17 +49,17 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
           const s = Math.max(0, Math.min(L, raw - f.motionBoundary));
           if (s <= 0) return null;
           const route = routeById.get(f.routeId);
-          // Slightly thicker than the route's stroke so the gray fully covers
-          // the underlying colored route (no color halo peeking out).
-          const baseW = route?.style.strokeWidth ?? 3;
-          const trailW = baseW + 1;
+          // Match the route's stroke width exactly so the gray trail replaces
+          // the colored route 1:1 — not a pixel wider. A wider trail would
+          // eat into yard numbers, hashes, and the LOS where routes cross.
+          const trailW = route?.style.strokeWidth ?? 3;
           return (
             <path
               key={f.routeId}
               d={f.postMotionD}
               pathLength={L}
               fill="none"
-              stroke="rgba(148, 163, 184, 0.95)"
+              stroke="#9CA3AF"
               strokeWidth={trailW}
               strokeLinecap="butt"
               strokeLinejoin="round"

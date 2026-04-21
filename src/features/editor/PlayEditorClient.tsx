@@ -83,6 +83,14 @@ export function PlayEditorClient({
   const fieldAspect =
     doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
 
+  // Stable set: changes only on phase transitions (not every RAF frame), so
+  // EditorCanvas doesn't receive a new prop reference 60× per second and
+  // re-rasterize its SVG text with shimmering subpixel alignment.
+  const animatingPlayerIds = useMemo(() => {
+    if (anim.phase === "idle") return null;
+    return new Set(anim.flats.map((f) => f.carrierPlayerId));
+  }, [anim.phase, anim.flats]);
+
   // Selection state
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -576,11 +584,7 @@ export function PlayEditorClient({
                 activeWidth={activeWidth}
                 fieldAspect={fieldAspect}
                 fieldBackground={doc.fieldBackground}
-                animatingPlayerIds={
-                  anim.phase !== "idle"
-                    ? new Set(anim.flats.map((f) => f.carrierPlayerId))
-                    : null
-                }
+                animatingPlayerIds={animatingPlayerIds}
                 opponentFormation={opponentFormation ?? null}
                 opponentPlayers={opponentPlayers ?? vsSnapshot?.players ?? null}
               />
