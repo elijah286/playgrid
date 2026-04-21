@@ -6,6 +6,7 @@ type Props = {
   value: PlaybookSettings;
   onChange: (next: PlaybookSettings) => void;
   disabled?: boolean;
+  hideHeader?: boolean;
 };
 
 /**
@@ -13,15 +14,17 @@ type Props = {
  * to edit rushing/handoffs/blocking/max-players. Stateless — the parent owns
  * the PlaybookSettings value and decides what defaults to pre-fill.
  */
-export function PlaybookRulesForm({ value, onChange, disabled }: Props) {
+export function PlaybookRulesForm({ value, onChange, disabled, hideHeader }: Props) {
   const set = <K extends keyof PlaybookSettings>(key: K, v: PlaybookSettings[K]) =>
     onChange({ ...value, [key]: v });
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-inset/40 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-        Game rules
-      </p>
+      {!hideHeader && (
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+          Game rules
+        </p>
+      )}
 
       <Row
         label="Rushing allowed"

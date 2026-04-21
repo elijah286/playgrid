@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Link2,
   Palette,
@@ -455,18 +457,18 @@ function CreatePlaybookDialog({
   const [variant, setVariant] = useState<SportVariant>("flag_7v7");
   const [color, setColor] = useState<string>(PALETTE[0]);
   const [logoUrl, setLogoUrl] = useState("");
-  const [otherCount, setOtherCount] = useState<number>(6);
   const [season, setSeason] = useState("");
   const [settings, setSettings] = useState<PlaybookSettings>(() =>
     defaultSettingsForVariant("flag_7v7"),
   );
+  const [rulesOpen, setRulesOpen] = useState(false);
   const touchedSettingsRef = useRef(false);
 
   // Sync settings to variant defaults until the user edits them directly.
   useEffect(() => {
     if (touchedSettingsRef.current) return;
-    setSettings(defaultSettingsForVariant(variant, variant === "other" ? otherCount : null));
-  }, [variant, otherCount]);
+    setSettings(defaultSettingsForVariant(variant, null));
+  }, [variant]);
 
   const initials =
     name
@@ -486,7 +488,7 @@ function CreatePlaybookDialog({
       variant,
       color,
       logo_url: logoUrl.trim() || null,
-      customOffenseCount: variant === "other" ? otherCount : null,
+      customOffenseCount: variant === "other" ? settings.maxPlayers : null,
       season: season.trim() || null,
       settings,
     });
@@ -499,7 +501,7 @@ function CreatePlaybookDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated sm:max-w-3xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">New playbook</h2>
           <button
@@ -511,130 +513,133 @@ function CreatePlaybookDialog({
           </button>
         </div>
 
-        <div className="space-y-4 p-5">
-          {/* Preview */}
-          <div
-            className="flex h-28 items-center justify-center rounded-lg"
-            style={{ backgroundColor: color }}
-          >
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" className="h-20 w-20 object-contain" />
-            ) : (
-              <span className="text-3xl font-black tracking-tight text-white drop-shadow">
-                {initials}
-              </span>
-            )}
-          </div>
-
-          {/* Name */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Name
-            </label>
-            <Input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-              }}
-              placeholder="e.g. Varsity 2026"
-            />
-          </div>
-
-          {/* Season */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Season <span className="font-normal normal-case text-muted-light">(optional)</span>
-            </label>
-            <Input
-              value={season}
-              onChange={(e) => setSeason(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-              }}
-              placeholder="e.g. Spring 2026"
-            />
-          </div>
-
-          {/* Sport variant */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Game type
-            </label>
-            <SegmentedControl
-              options={SPORT_OPTIONS}
-              value={variant}
-              onChange={setVariant}
-              size="sm"
-            />
-            {variant === "other" && (
-              <div className="flex items-center gap-3 pt-1">
-                <label
-                  htmlFor="other-player-count"
-                  className="text-xs font-medium text-muted"
+        <div className="grid gap-5 overflow-y-auto p-5 sm:grid-cols-2">
+          {/* Left: appearance */}
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-surface-inset/40 p-3">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                    Team color
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PALETTE.map((c) => {
+                      const active = color.toLowerCase() === c.toLowerCase();
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setColor(c)}
+                          className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                            active ? "border-foreground scale-110" : "border-border"
+                          }`}
+                          style={{ backgroundColor: c }}
+                          aria-label={c}
+                        />
+                      );
+                    })}
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="h-6 w-6 cursor-pointer rounded-full border-2 border-border"
+                      aria-label="Custom color"
+                    />
+                  </div>
+                </div>
+                <div
+                  className="flex h-20 w-24 shrink-0 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: color }}
                 >
-                  Players per side
-                </label>
-                <select
-                  id="other-player-count"
-                  value={otherCount}
-                  onChange={(e) => setOtherCount(Number(e.target.value))}
-                  className="rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  {[4, 5, 6, 7, 8, 9, 10, 11].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoUrl} alt="" className="h-16 w-16 object-contain" />
+                  ) : (
+                    <span className="text-2xl font-black tracking-tight text-white drop-shadow">
+                      {initials}
+                    </span>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-
-          {/* Game rules */}
-          <PlaybookRulesForm
-            value={settings}
-            onChange={(s) => {
-              touchedSettingsRef.current = true;
-              setSettings(s);
-            }}
-            disabled={pending}
-          />
-
-          {/* Color */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Team color
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {PALETTE.map((c) => {
-                const active = color.toLowerCase() === c.toLowerCase();
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setColor(c)}
-                    className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                      active ? "border-foreground scale-110" : "border-border"
-                    }`}
-                    style={{ backgroundColor: c }}
-                    aria-label={c}
-                  />
-                );
-              })}
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded-full border-2 border-border"
-                aria-label="Custom color"
-              />
+              <div className="mt-3 border-t border-border pt-3">
+                <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={pending} />
+              </div>
             </div>
           </div>
 
-          <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={pending} />
+          {/* Right: details */}
+          <div className="space-y-4">
+            {/* Name */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Name
+              </label>
+              <Input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                }}
+                placeholder="e.g. Varsity 2026"
+              />
+            </div>
+
+            {/* Season */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Season <span className="font-normal normal-case text-muted-light">(optional)</span>
+              </label>
+              <Input
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                }}
+                placeholder="e.g. Spring 2026"
+              />
+            </div>
+
+            {/* Sport variant */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Game type
+              </label>
+              <SegmentedControl
+                options={SPORT_OPTIONS}
+                value={variant}
+                onChange={setVariant}
+                size="sm"
+              />
+            </div>
+
+            {/* Game rules — collapsed by default */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setRulesOpen((v) => !v)}
+                className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted hover:text-foreground"
+              >
+                <span>Game rules</span>
+                {rulesOpen ? (
+                  <ChevronDown className="size-4" />
+                ) : (
+                  <ChevronRight className="size-4" />
+                )}
+              </button>
+              {rulesOpen && (
+                <PlaybookRulesForm
+                  value={settings}
+                  onChange={(s) => {
+                    touchedSettingsRef.current = true;
+                    setSettings(s);
+                  }}
+                  disabled={pending}
+                  hideHeader
+                />
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
