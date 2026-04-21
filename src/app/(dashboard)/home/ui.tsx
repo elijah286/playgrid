@@ -290,15 +290,20 @@ function PlaybookBookTile({
   function handleEnter() {
     const el = wrapperRef.current;
     if (el) {
-      // Cover flips around its left spine, so the open book occupies
-      // [center - W, center + W/2] (scaled). Slide X so nothing gets
-      // cropped by the viewport.
+      // The wrapper scales by SCALE about its center, then the cover
+      // flips -180° about its own (already scaled) left edge. Working in
+      // the final-rendered coordinate space:
+      //   wrapper scaled → [cx - W/2, cx + W/2]  (W = scaled width)
+      //   cover flipped  → [cx - 1.5W, cx - 0.5W]
+      //   plays page     → [cx - 0.5W, cx + 0.5W]
+      // So the open book occupies [cx - 1.5W, cx + 0.5W]. Slide X just
+      // enough to keep that inside the viewport.
       const r = el.getBoundingClientRect();
       const SCALE = 1.35;
       const W = r.width * SCALE;
       const cx = r.left + r.width / 2;
-      const openLeft = cx - W;
-      const openRight = cx + W / 2;
+      const openLeft = cx - 1.5 * W;
+      const openRight = cx + 0.5 * W;
       const MARGIN = 12;
       let shift = 0;
       if (openLeft < MARGIN) shift = MARGIN - openLeft;
