@@ -615,8 +615,8 @@ function iconRadiusProportional(size: WristbandIconSize, fieldMin: number): numb
 }
 
 function routeStrokeProportional(weight: WristbandRouteWeight, fieldMin: number): number {
-  const frac = weight === "thin" ? 0.018 : weight === "thick" ? 0.04 : 0.026;
-  return Math.max(0.25, fieldMin * frac);
+  const frac = weight === "thin" ? 0.009 : weight === "thick" ? 0.026 : 0.018;
+  return Math.max(0.12, fieldMin * frac);
 }
 
 export type WristbandGridOptions = {
@@ -658,9 +658,9 @@ function iconRadius(size: WristbandIconSize): number {
 }
 
 function routeStrokeMm(weight: WristbandRouteWeight): number {
-  if (weight === "thin") return 0.35;
-  if (weight === "thick") return 0.9;
-  return 0.6;
+  if (weight === "thin") return 0.18;
+  if (weight === "thick") return 0.6;
+  return 0.35;
 }
 
 function labelFontMm(style: WristbandLabelStyle): { title: number; meta: number } {
