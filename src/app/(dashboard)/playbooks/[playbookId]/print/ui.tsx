@@ -873,7 +873,7 @@ export function PrintPlaybookClient({
           )}
         </div>
         {pageCount > 0 ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="flex min-h-0 flex-1 items-start justify-center">
             <button
               type="button"
               className="block w-full max-h-full overflow-hidden rounded-xl border border-border bg-surface-raised p-3 text-left [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
