@@ -40,31 +40,14 @@ export async function emailHasAccountAction(
   }
 
   const admin = createServiceRoleClient();
-  // Supabase admin listUsers doesn't take an email filter, but we can
-  // look up via the GoTrue REST endpoint with a `filter` query. The JS
-  // SDK surfaces this through listUsers({ perPage, page }) only, so we
-  // fall back to a direct fetch against the admin users endpoint.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const resp = await fetch(
-    `${url}/auth/v1/admin/users?filter=${encodeURIComponent(`email = "${trimmed}"`)}`,
-    {
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-      },
-      cache: "no-store",
-    },
-  );
-  if (!resp.ok) {
-    // If the filter query fails (older GoTrue), fall back to listing.
-    const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-    const match = data?.users?.some((u) => u.email?.toLowerCase() === trimmed);
-    const hasPassword = match ? await lookupHasPassword(admin, trimmed) : false;
-    return { ok: true, exists: Boolean(match), hasPassword };
-  }
-  const json = (await resp.json()) as { users?: { email?: string }[] };
-  const exists = Array.isArray(json.users) && json.users.length > 0;
+  // Go direct to auth.users via our own RPC. The GoTrue admin `filter`
+  // endpoint returns HTTP 200 with an empty users array on some versions
+  // even when the address exists, so we can't rely on it.
+  const { data: existsData, error: existsErr } = await admin.rpc("email_exists", {
+    p_email: trimmed,
+  });
+  if (existsErr) return { ok: false, error: existsErr.message };
+  const exists = Boolean(existsData);
   const hasPassword = exists ? await lookupHasPassword(admin, trimmed) : false;
   return { ok: true, exists, hasPassword };
 }
