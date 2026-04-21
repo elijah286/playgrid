@@ -428,6 +428,19 @@ export function PrintPlaybookClient({
   const pageCount = previewPages.length;
   const currentPageIdx = Math.min(previewPage, Math.max(0, pageCount - 1));
   const stripXmlProlog = (s: string) => s.replace(/^\s*<\?xml[^?]*\?>\s*/, "");
+  // Strip the intrinsic width/height on the root <svg> so CSS can size the
+  // preview. Without this, the SVG renders at its mm-based natural size
+  // (~816×1056px for Letter portrait) which is usually taller than the
+  // preview column — producing a vertical gap when combined with
+  // `items-center justify-center`. The viewBox is preserved so content
+  // still scales correctly via preserveAspectRatio="xMidYMid meet".
+  const stripSvgSize = (s: string) =>
+    s.replace(/<svg\b([^>]*)>/, (_m, attrs: string) =>
+      `<svg${attrs.replace(/\s(width|height)="[^"]*"/g, "")}>`,
+    );
+  const previewHtml = (s: string) => stripSvgSize(stripXmlProlog(s));
+  const isPortrait = config.sheetOrientation === "portrait";
+  const pageAspect = isPortrait ? "215.9 / 279.4" : "279.4 / 215.9";
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
@@ -859,17 +872,20 @@ export function PrintPlaybookClient({
           )}
         </div>
         {pageCount > 0 ? (
-          <button
-            type="button"
-            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface-raised p-3 text-left [&_svg]:h-auto [&_svg]:max-h-full [&_svg]:w-auto [&_svg]:max-w-full"
-            onClick={() => setFullscreen(true)}
-            aria-label="Open preview fullscreen"
-            dangerouslySetInnerHTML={{
-              __html: stripXmlProlog(
-                previewPages[currentPageIdx] ?? previewPages[0] ?? "",
-              ),
-            }}
-          />
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <button
+              type="button"
+              className="block max-h-full max-w-full overflow-hidden rounded-xl border border-border bg-surface-raised p-3 text-left [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
+              style={{ aspectRatio: pageAspect, height: "100%" }}
+              onClick={() => setFullscreen(true)}
+              aria-label="Open preview fullscreen"
+              dangerouslySetInnerHTML={{
+                __html: previewHtml(
+                  previewPages[currentPageIdx] ?? previewPages[0] ?? "",
+                ),
+              }}
+            />
+          </div>
         ) : (
           <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border p-8">
             <p className="text-sm text-muted">Select a play to preview.</p>
@@ -905,7 +921,7 @@ export function PrintPlaybookClient({
               <div
                 key={i}
                 className="mx-auto w-full max-w-[900px] rounded-xl border border-border bg-surface-raised p-4"
-                dangerouslySetInnerHTML={{ __html: stripXmlProlog(svg) }}
+                dangerouslySetInnerHTML={{ __html: previewHtml(svg) }}
               />
             ))}
           </div>
