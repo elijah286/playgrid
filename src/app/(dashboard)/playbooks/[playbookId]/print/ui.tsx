@@ -92,6 +92,9 @@ export function PrintPlaybookClient({
   const [numberPlaysInOrder, setNumberPlaysInOrder] = useState<boolean>(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [previewPage, setPreviewPage] = useState(0);
+  const [wristbandPreviewMode, setWristbandPreviewMode] = useState<
+    "card" | "sheet"
+  >("card");
   const [fullscreen, setFullscreen] = useState(false);
 
 
@@ -368,10 +371,14 @@ export function PrintPlaybookClient({
         return d;
       });
       if (docs.length === 0) return [];
-      // Preview always shows the card itself (one grid per page), regardless
-      // of whether the export is configured for sheet-of-cards or single
-      // bands. Showing the Letter sheet around a tiny wristband makes the
-      // preview mostly empty paper.
+      if (wristbandPreviewMode === "sheet") {
+        return compileWristbandSheetPdfPages(
+          docs,
+          wristbandGridOpts,
+          config.wristbandCopiesPerSheet,
+          watermark,
+        );
+      }
       const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
       const pages: string[] = [];
       for (let i = 0; i < docs.length; i += tiles) {
@@ -419,7 +426,7 @@ export function PrintPlaybookClient({
       config.playsheetIncludeHeader ? team : null,
       watermark,
     );
-  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById]);
+  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById, wristbandPreviewMode]);
 
   const pageCount = previewPages.length;
   const currentPageIdx = Math.min(previewPage, Math.max(0, pageCount - 1));
@@ -438,7 +445,9 @@ export function PrintPlaybookClient({
   const isPortrait = config.sheetOrientation === "portrait";
   const pageAspect =
     config.product === "wristband"
-      ? `${config.wristbandWidthIn} / ${config.wristbandHeightIn}`
+      ? wristbandPreviewMode === "sheet"
+        ? "215.9 / 279.4"
+        : `${config.wristbandWidthIn} / ${config.wristbandHeightIn}`
       : isPortrait
         ? "215.9 / 279.4"
         : "279.4 / 215.9";
@@ -826,11 +835,25 @@ export function PrintPlaybookClient({
 
       <div className="flex min-h-0 flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">
-            {config.product === "wristband"
-              ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"${config.wristbandSheet === "sheet" ? " · letter sheet" : ""}`
-              : `Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
-          </p>
+          {config.product === "wristband" ? (
+            <div className="min-w-0">
+              <SegmentedControl
+                options={[
+                  { value: "card" as const, label: "Individual band" },
+                  { value: "sheet" as const, label: "On paper" },
+                ]}
+                value={wristbandPreviewMode}
+                onChange={(v) => {
+                  setWristbandPreviewMode(v);
+                  setPreviewPage(0);
+                }}
+              />
+            </div>
+          ) : (
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">
+              {`Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
+            </p>
+          )}
           {pageCount > 0 && (
             <div className="flex shrink-0 items-center gap-2">
               {pageCount > 1 && (
