@@ -394,10 +394,25 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     return { ok: false as const, error: "The owner has disabled duplication for this playbook." };
   }
 
+  // The copy lives in the duplicator's own workspace so they own it, and so
+  // the insert passes playbooks RLS (which gates on org ownership of the
+  // target team). Duplicating into the source's team would only work for
+  // its org owner.
+  let targetTeamId: string;
+  try {
+    const ws = await ensureDefaultWorkspace(supabase, user.id);
+    targetTeamId = ws.teamId;
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Could not resolve workspace.",
+    };
+  }
+
   const { data: newBook, error: pbErr } = await supabase
     .from("playbooks")
     .insert({
-      team_id: src.team_id,
+      team_id: targetTeamId,
       name: (newName?.trim() || `${src.name} (copy)`).slice(0, 120),
       sport_variant: src.sport_variant,
       custom_offense_count: src.custom_offense_count,

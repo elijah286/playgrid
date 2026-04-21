@@ -779,6 +779,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState<DashboardPlaybookTile | null>(null);
+  const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [view, setView] = useDashboardView();
 
   const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
@@ -874,13 +875,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
       {
         label: "Duplicate",
         icon: Copy,
-        onSelect: () =>
-          handle(
-            () => duplicatePlaybookAction(tile.id),
-            (res) => {
-              if (res.ok) router.push(`/playbooks/${res.id}`);
-            },
-          ),
+        onSelect: () => setDuplicating(tile),
       },
       {
         label: tile.allow_duplication ? "Disallow duplication" : "Allow duplication",
@@ -921,13 +916,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
       items.push({
         label: "Duplicate",
         icon: Copy,
-        onSelect: () =>
-          handle(
-            () => duplicatePlaybookAction(tile.id),
-            (res) => {
-              if (res.ok) router.push(`/playbooks/${res.id}`);
-            },
-          ),
+        onSelect: () => setDuplicating(tile),
       });
     }
     items.push({
@@ -1045,6 +1034,23 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
             </section>
           )}
         </>
+      )}
+
+      {duplicating && (
+        <DuplicatePlaybookDialog
+          tile={duplicating}
+          onClose={() => setDuplicating(null)}
+          onDuplicate={(name) => {
+            const tileId = duplicating.id;
+            setDuplicating(null);
+            handle(
+              () => duplicatePlaybookAction(tileId, name),
+              (res) => {
+                if (res.ok) router.push(`/playbooks/${res.id}`);
+              },
+            );
+          }}
+        />
       )}
 
       {editingAppearance && (
@@ -1304,6 +1310,73 @@ const PALETTE = [
   "#F26522", "#EF4444", "#EAB308", "#22C55E",
   "#3B82F6", "#A855F7", "#EC4899", "#1C1C1E",
 ];
+
+function DuplicatePlaybookDialog({
+  tile,
+  onClose,
+  onDuplicate,
+}: {
+  tile: DashboardPlaybookTile;
+  onClose: () => void;
+  onDuplicate: (name: string) => void;
+}) {
+  const [name, setName] = useState(`${tile.name} (copy)`);
+
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onDuplicate(trimmed);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-base font-bold text-foreground">Duplicate playbook</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <p className="text-sm text-muted">
+            This will copy every play in <span className="font-medium text-foreground">{tile.name}</span> into a new
+            playbook you own. You can rename it before creating.
+          </p>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">Name</label>
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={!name.trim()}>
+            Create copy
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AppearanceDialog({
   tile,
