@@ -83,6 +83,7 @@ const COLOR_PRESETS = [
   "#EF4444",
   "#FACC15",
   "#22C55E",
+  "#A855F7",
 ];
 
 const WIDTH_OPTIONS: { value: number; label: string; px: number }[] = [

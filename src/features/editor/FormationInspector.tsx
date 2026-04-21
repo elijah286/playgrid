@@ -29,6 +29,7 @@ const FILL_COLORS = [
   "#EF4444",
   "#22C55E",
   "#FACC15",
+  "#A855F7",
 ];
 
 const LABEL_COLORS = ["#FFFFFF", "#1C1C1E"];
