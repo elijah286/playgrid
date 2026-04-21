@@ -18,7 +18,10 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
  */
 export async function emailHasAccountAction(
   email: string,
-): Promise<{ ok: true; exists: boolean } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; exists: boolean; hasPassword: boolean }
+  | { ok: false; error: string }
+> {
   if (!hasSupabaseEnv()) {
     return { ok: false, error: "Supabase is not configured." };
   }
@@ -57,9 +60,22 @@ export async function emailHasAccountAction(
     // If the filter query fails (older GoTrue), fall back to listing.
     const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
     const match = data?.users?.some((u) => u.email?.toLowerCase() === trimmed);
-    return { ok: true, exists: Boolean(match) };
+    const hasPassword = match ? await lookupHasPassword(admin, trimmed) : false;
+    return { ok: true, exists: Boolean(match), hasPassword };
   }
   const json = (await resp.json()) as { users?: { email?: string }[] };
   const exists = Array.isArray(json.users) && json.users.length > 0;
-  return { ok: true, exists };
+  const hasPassword = exists ? await lookupHasPassword(admin, trimmed) : false;
+  return { ok: true, exists, hasPassword };
+}
+
+async function lookupHasPassword(
+  admin: ReturnType<typeof createServiceRoleClient>,
+  email: string,
+): Promise<boolean> {
+  const { data, error } = await admin.rpc("email_has_password", {
+    p_email: email,
+  });
+  if (error) return false;
+  return Boolean(data);
 }

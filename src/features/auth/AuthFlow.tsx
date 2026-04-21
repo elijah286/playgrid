@@ -108,10 +108,10 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
     try {
       const res = await emailHasAccountAction(trimmed);
       if (!res.ok) throw new Error(res.error);
-      if (res.exists) {
+      if (res.exists && res.hasPassword) {
         setStep("password");
       } else {
-        await sendCode({ isNewUser: true, silent: true });
+        await sendCode({ isNewUser: !res.exists, silent: true });
         setStep("code");
       }
     } catch (e: unknown) {
