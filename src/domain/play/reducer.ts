@@ -103,7 +103,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         p.id === cmd.playerId ? { ...p, position: cmd.position } : p,
       );
 
-      // Translate all nodes in routes owned by this player
+      // Translate all nodes in routes owned by this player. Also translate
+      // any manually-set quadratic control offsets on the route's segments
+      // so curved segments move rigidly with the player instead of bending.
       const routes = doc.layers.routes.map((r) => {
         if (r.carrierPlayerId !== cmd.playerId) return r;
         return {
@@ -115,6 +117,17 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
               y: n.position.y + dy,
             },
           })),
+          segments: r.segments.map((s) =>
+            s.controlOffset
+              ? {
+                  ...s,
+                  controlOffset: {
+                    x: s.controlOffset.x + dx,
+                    y: s.controlOffset.y + dy,
+                  },
+                }
+              : s,
+          ),
         };
       });
 
