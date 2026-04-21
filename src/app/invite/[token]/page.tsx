@@ -125,24 +125,28 @@ function PreviewCard({
       style={{ borderTopWidth: 4, borderTopColor: color }}
     >
       <div className="flex items-center gap-4 p-6">
-        {logoUrl ? (
-          <Image
-            src={logoUrl}
-            alt=""
-            width={72}
-            height={72}
-            className="size-18 rounded-xl object-cover"
-            style={{ width: 72, height: 72 }}
-            unoptimized
-          />
-        ) : (
-          <div
-            className="flex items-center justify-center rounded-xl text-2xl font-extrabold text-white"
-            style={{ width: 72, height: 72, backgroundColor: color }}
-          >
-            {(teamName ?? playbookName).slice(0, 1).toUpperCase()}
-          </div>
-        )}
+        <div
+          className="relative shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-black/10"
+          style={{ width: 72, height: 72 }}
+        >
+          {logoUrl ? (
+            <Image
+              src={logoUrl}
+              alt=""
+              fill
+              sizes="72px"
+              className="object-contain p-1.5"
+              unoptimized
+            />
+          ) : (
+            <div
+              className="flex h-full w-full items-center justify-center text-2xl font-extrabold text-white"
+              style={{ backgroundColor: color }}
+            >
+              {playbookName.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             You&rsquo;re invited to
