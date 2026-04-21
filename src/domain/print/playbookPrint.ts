@@ -12,7 +12,7 @@ export type PlaysheetPageBreak = "continuous" | "group";
 
 export type PlaysheetNoteLines = 1 | 2 | 3;
 
-export type WristbandGridLayout = "10" | "8" | "6" | "4" | "4col" | "3";
+export type WristbandGridLayout = "12" | "10" | "8" | "6" | "4" | "4col" | "3";
 export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
 export type WristbandIconSize = "small" | "medium" | "large";
 export type WristbandRouteWeight = "thin" | "medium" | "thick";
@@ -156,6 +156,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {
   switch (layout) {
+    case "12":
+      return { rows: 3, cols: 4 };
     case "10":
       return { rows: 2, cols: 5 };
     case "8":

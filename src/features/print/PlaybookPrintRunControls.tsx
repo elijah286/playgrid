@@ -353,7 +353,8 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 value={config.wristbandGridLayout}
                 onChange={(v) => patch({ wristbandGridLayout: v })}
                 options={[
-                  { value: "10" as WristbandGridLayout, label: "10 plays" },
+                  { value: "12" as WristbandGridLayout, label: "12 plays" },
+              { value: "10" as WristbandGridLayout, label: "10 plays" },
                   { value: "8" as WristbandGridLayout, label: "8 plays" },
                   { value: "6" as WristbandGridLayout, label: "6 plays" },
                   { value: "4" as WristbandGridLayout, label: "4 plays" },

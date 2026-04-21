@@ -741,6 +741,7 @@ function renderWristbandTile(
   cw: number,
   ch: number,
   opts: WristbandGridOptions,
+  watermark?: Watermark | null,
 ): string {
   const vis = doc.printProfile.visibility;
   const zoom = opts.zoom / 100;
@@ -801,11 +802,20 @@ function renderWristbandTile(
     guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="0.35"/>`;
   }
 
+  let wm = "";
+  if (watermark && watermark.logoUrl) {
+    const size = Math.min(fieldW, fieldH) * 0.85;
+    const wx = fieldX + (fieldW - size) / 2;
+    const wy = fieldY + (fieldH - size) / 2;
+    wm = `<image href="${escSvgText(watermark.logoUrl)}" x="${wx}" y="${wy}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" opacity="${watermark.opacity}"/>`;
+  }
+
   return `
   <g>
     <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.25"/>
     ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.25"/>
+    ${wm}
     ${guides}
     ${routes}
     ${players}
@@ -833,7 +843,7 @@ export function compileWristbandGridSvg(
     const ox = pad + col * cellW;
     const oy = pad + row * cellH;
     if (doc) {
-      body += renderWristbandTile(doc, ox, oy, cellW, cellH, opts);
+      body += renderWristbandTile(doc, ox, oy, cellW, cellH, opts, watermark ?? null);
     } else {
       body += `<rect x="${ox}" y="${oy}" width="${cellW}" height="${cellH}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.25" stroke-dasharray="1 1"/>`;
     }
@@ -843,7 +853,6 @@ export function compileWristbandGridSvg(
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#f1f5f9"/>
   ${body}
-  ${watermarkSvg(w, h, watermark ?? null)}
 </svg>`;
 
   return { templateKind: "wristband", svgMarkup: svg, width: w, height: h };
