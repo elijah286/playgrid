@@ -100,6 +100,17 @@ export function PlayEditorClient({
   const [isNavPending, startNavTransition] = useTransition();
   const [, startTransition] = useTransition();
 
+  // Mobile defaults to view-only so a coach can just watch the play on a
+  // phone without tripping over edit controls. Desktop always renders the
+  // full editor regardless of this state (see `editOnlyCls` below).
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(min-width: 640px)").matches) {
+      setMode("edit");
+    }
+  }, []);
+
   /* ---------- Auto-save ---------- */
   const [isSaving, setIsSaving] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -445,11 +456,11 @@ export function PlayEditorClient({
                 don't apply yet. */}
             <div
               data-toolbar-slot
-              className={
-                showToolbar
-                  ? ""
-                  : "opacity-60 [&_button]:cursor-default"
-              }
+              className={`${
+                mode === "edit" ? "" : "hidden sm:block"
+              } ${
+                showToolbar ? "" : "opacity-60 [&_button]:cursor-default"
+              }`}
             >
               <RouteToolbar
                 shape={displayShape}
@@ -555,18 +566,53 @@ export function PlayEditorClient({
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
             </div>
 
+            {/* Mobile view-mode controls: play/animate + Edit toggle. Shown
+                only on mobile when the user hasn't switched to edit mode.
+                Desktop always renders the full editor instead. */}
+            {mode === "view" && (
+              <div className="flex flex-col gap-3 sm:hidden">
+                <div className="rounded-xl border border-border bg-surface-raised p-4">
+                  <PlayControlsPanel anim={anim} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMode("edit")}
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-semibold text-foreground hover:bg-surface"
+                >
+                  Edit play
+                </button>
+              </div>
+            )}
+            {mode === "edit" && (
+              <button
+                type="button"
+                onClick={() => setMode("view")}
+                className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-lg border border-border bg-surface-raised px-3 text-xs font-semibold text-muted hover:text-foreground sm:hidden"
+              >
+                Done editing
+              </button>
+            )}
+
             {/* Field size controls (below canvas) */}
-            <FieldSizeControls doc={doc} dispatch={dispatch} />
+            <div className={mode === "edit" ? "" : "hidden sm:block"}>
+              <FieldSizeControls doc={doc} dispatch={dispatch} />
+            </div>
 
             {/* Play notes */}
-            <PlayNotesCard
-              value={doc.metadata.notes ?? ""}
-              onChange={(notes) =>
-                dispatch({ type: "document.setMetadata", patch: { notes } })
-              }
-            />
+            <div className={mode === "edit" ? "" : "hidden sm:block"}>
+              <PlayNotesCard
+                value={doc.metadata.notes ?? ""}
+                onChange={(notes) =>
+                  dispatch({ type: "document.setMetadata", patch: { notes } })
+                }
+              />
+            </div>
           </div>
-          <aside className="flex min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4">
+          <aside
+            className={`${
+              mode === "edit" ? "flex" : "hidden sm:flex"
+            } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
+          >
             {!showToolbar && <PlayControlsPanel anim={anim} />}
             {!showToolbar && isDefense && vsSnapshot ? (
               <VsPlayCard
