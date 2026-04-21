@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, CheckSquare, Copy, Home, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
@@ -78,6 +78,19 @@ export function PlaybookHeader({
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (!canManage) return;
+    if (searchParams?.get("share") === "1") {
+      setInviteOpen(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("share");
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+    }
+  }, [canManage, searchParams, router]);
 
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";

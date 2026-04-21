@@ -10,6 +10,7 @@ import {
   Palette,
   Pencil,
   Plus,
+  Share2,
   Trash2,
   Upload,
   Users,
@@ -168,7 +169,8 @@ function PlaybookTile({
     .slice(0, 2) || "PB";
 
   return (
-    <Card hover className="group relative overflow-hidden p-0">
+    <div className="group relative">
+      <Card hover className="overflow-hidden p-0">
       <Link href={`/playbooks/${tile.id}`} className="flex h-full flex-col">
         <div
           className="flex h-32 items-center justify-center"
@@ -204,12 +206,13 @@ function PlaybookTile({
           </p>
         </div>
       </Link>
+      </Card>
       {actions.length > 0 && (
-        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
           <ActionMenu items={actions} />
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -310,6 +313,11 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
 
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
     return [
+      {
+        label: "Share playbook",
+        icon: Share2,
+        onSelect: () => router.push(`/playbooks/${tile.id}?share=1`),
+      },
       { label: "Rename", icon: Pencil, onSelect: () => onRenameBook(tile.id, tile.name) },
       {
         label: tile.season ? "Edit season" : "Set season",
