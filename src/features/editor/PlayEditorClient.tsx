@@ -597,6 +597,7 @@ export function PlayEditorClient({
                 onSelectZone={setSelectedZoneId}
                 activeShape={activeShape}
                 activeStrokePattern={activeStrokePattern}
+                onActiveStrokePatternChange={setActiveStrokePattern}
                 activeColor={activeColor}
                 activeWidth={activeWidth}
                 fieldAspect={fieldAspect}
