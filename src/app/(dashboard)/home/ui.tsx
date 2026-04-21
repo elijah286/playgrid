@@ -289,6 +289,17 @@ function PlaybookBookTile({
   const [shiftX, setShiftX] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const mouseInsideRef = useRef(false);
+
+  // When the action menu closes (via click-outside or selection), if the
+  // mouse has already left the tile, collapse the book too.
+  useEffect(() => {
+    if (menuOpen) return;
+    if (!mouseInsideRef.current) {
+      setHover(false);
+      setShiftX(0);
+    }
+  }, [menuOpen]);
 
   function handleEnter() {
     const el = wrapperRef.current;
@@ -315,10 +326,12 @@ function PlaybookBookTile({
       }
       setShiftX(shift);
     }
+    mouseInsideRef.current = true;
     setHover(true);
   }
 
   function handleLeave() {
+    mouseInsideRef.current = false;
     if (menuOpen) return;
     setHover(false);
     setShiftX(0);
