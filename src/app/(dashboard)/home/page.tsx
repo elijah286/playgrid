@@ -9,9 +9,13 @@ export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery } = await searchParams;
   const res = await getDashboardSummaryAction();
 
-  // First-run: user has no plays at all → send them straight into the editor.
-  // Also covers the case where a brand-new account just logged in.
-  if (res.ok && res.data.totalPlays === 0) {
+  // First-run shortcut: only send editors/owners straight into the editor.
+  // Viewers (invited with read-only access) should see the dashboard even
+  // when empty, so they don't get dropped into an editor they can't use.
+  const canEditSomewhere = res.ok
+    ? res.data.playbooks.some((p) => p.role === "owner" || p.role === "editor")
+    : false;
+  if (res.ok && res.data.totalPlays === 0 && canEditSomewhere) {
     redirect("/plays/new");
   }
 

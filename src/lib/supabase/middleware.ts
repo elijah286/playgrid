@@ -1,6 +1,33 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Paths accessible without authentication. Everything else is redirected
+ * to /login when the caller has no Supabase session.
+ *
+ * New routes are protected by default — add here if they should be public.
+ */
+const PUBLIC_EXACT = new Set<string>([
+  "/",
+  "/login",
+  "/privacy",
+  "/terms",
+  "/about",
+  "/contact",
+]);
+
+const PUBLIC_PREFIXES = [
+  "/invite/", // invite landing page (pre-login preview)
+  "/api/contact",
+  "/api/health",
+  "/monitoring", // Sentry tunnel
+];
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_EXACT.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -32,10 +59,20 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
+  let user: { id: string } | null = null;
   try {
-    await supabase.auth.getUser();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
   } catch {
-    /* Bad Supabase URL/key or network; do not block the dev server or pages */
+    /* Bad Supabase URL/key or network; fall through and let public paths work */
+  }
+
+  const { pathname, search } = request.nextUrl;
+  if (!user && !isPublicPath(pathname)) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.search = `?next=${encodeURIComponent(pathname + search)}`;
+    return NextResponse.redirect(loginUrl);
   }
 
   return supabaseResponse;
