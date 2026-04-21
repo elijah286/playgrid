@@ -401,7 +401,10 @@ function FormationTitlePicker({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-50 mt-1 w-[480px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
+          <div
+            style={{ width: 480 }}
+            className="absolute left-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg"
+          >
             <div className="relative border-b border-border p-2">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
               <input

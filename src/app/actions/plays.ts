@@ -331,7 +331,7 @@ export async function savePlayVersionAction(
 
   if (verErr) return { ok: false as const, error: verErr.message };
 
-  await supabase
+  const { error: updErr } = await supabase
     .from("plays")
     .update({
       current_version_id: ver.id,
@@ -352,6 +352,11 @@ export async function savePlayVersionAction(
       vs_play_snapshot: (document.metadata.vsPlaySnapshot ?? null) as unknown as Record<string, unknown> | null,
     })
     .eq("id", playId);
+
+  if (updErr) {
+    console.error("[savePlayVersionAction] plays update failed", { playId, error: updErr });
+    return { ok: false as const, error: `Saved version but could not update play: ${updErr.message}` };
+  }
 
   return { ok: true as const, versionId: ver.id };
 }
