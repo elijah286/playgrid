@@ -12,13 +12,13 @@ type Props = { params: Promise<{ token: string }> };
 
 function buildInviteTitle(preview: {
   playbook_name: string;
-  team_name: string | null;
   sport_variant: string | null;
   season: string | null;
 }): string {
-  const parts: string[] = [];
-  const team = preview.team_name?.trim();
-  parts.push(team && team.length > 0 ? team : preview.playbook_name);
+  // playbook_name is the team's real display name as set by the owner.
+  // teams.name is a stale default ("Varsity") the user can't edit from the
+  // playbook UI, so we never show it.
+  const parts: string[] = [preview.playbook_name];
   const variantLabel = preview.sport_variant
     ? SPORT_VARIANT_LABELS[preview.sport_variant as SportVariant]
     : null;

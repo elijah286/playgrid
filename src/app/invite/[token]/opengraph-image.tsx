@@ -41,7 +41,9 @@ export default async function InviteOgImage({ params }: Props) {
   if (!res.ok || res.preview.revoked || res.preview.expired) return fallback();
   const p = res.preview;
 
-  const team = p.team_name?.trim() || p.playbook_name;
+  // playbook_name is the owner-managed display name; teams.name is a
+  // stale "Varsity" default and never shown.
+  const team = p.playbook_name;
   const variantLabel = p.sport_variant
     ? SPORT_VARIANT_LABELS[p.sport_variant as SportVariant]
     : null;
