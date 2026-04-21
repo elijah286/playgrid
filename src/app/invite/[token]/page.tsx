@@ -115,7 +115,10 @@ function PreviewCard({
   roleLabel: string;
   headCoachName: string | null;
 }) {
-  const subline = [teamName, season].filter(Boolean).join(" · ");
+  // teamName comes from teams.name, which the user can't edit from the
+  // playbook UI and is often stale ("Varsity" default). Only show season.
+  void teamName;
+  const subline = season ?? "";
   return (
     <div
       className="overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated"
