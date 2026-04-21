@@ -876,8 +876,8 @@ export function PrintPlaybookClient({
           <div className="flex min-h-0 flex-1 items-center justify-center">
             <button
               type="button"
-              className="block max-h-full max-w-full overflow-hidden rounded-xl border border-border bg-surface-raised p-3 text-left [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
-              style={{ aspectRatio: pageAspect, height: "100%" }}
+              className="block w-full max-h-full overflow-hidden rounded-xl border border-border bg-surface-raised p-3 text-left [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
+              style={{ aspectRatio: pageAspect }}
               onClick={() => setFullscreen(true)}
               aria-label="Open preview fullscreen"
               dangerouslySetInnerHTML={{
