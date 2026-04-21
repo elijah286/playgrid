@@ -13,6 +13,7 @@ import {
   WATERMARK_MIN_PCT,
   type PlaybookGroupRow,
   type PlaybookPrintRunConfig,
+  type PlaysheetGrouping,
 } from "@/domain/print/playbookPrint";
 import {
   compilePlaysheetPdfPages,
@@ -282,9 +283,11 @@ export function PrintPlaybookClient({
       }
       return pages;
     }
+    const printGrouping: PlaysheetGrouping =
+      sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
     const navOrder = sortNavPlaysForPrint(
       pool.map((r) => r.nav),
-      config.playsheetGrouping,
+      printGrouping,
     );
     const ordered = navOrder
       .map((n) => pool.find((r) => r.id === n.id))
@@ -298,7 +301,7 @@ export function PrintPlaybookClient({
       config.playsheetIncludeHeader ? team : null,
       watermark,
     );
-  }, [initialPack, selected, typeFilter, config, wristbandGridOpts, playsheetOpts, team, watermark]);
+  }, [initialPack, selected, typeFilter, sortBy, config, wristbandGridOpts, playsheetOpts, team, watermark]);
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
@@ -310,8 +313,8 @@ export function PrintPlaybookClient({
       toast("Select at least one play to print", "error");
       return null;
     }
-    const grouping =
-      config.product === "playsheet" ? config.playsheetGrouping : config.wristbandGrouping;
+    const grouping: PlaysheetGrouping =
+      sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
     const navOrder = sortNavPlaysForPrint(
       rows.map((r) => r.nav),
       grouping,
