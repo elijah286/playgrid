@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -1024,6 +1025,7 @@ export async function reorderPlaysAction(
       .eq("playbook_id", playbookId);
     if (error) return { ok: false as const, error: error.message };
   }
+  revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const };
 }
 

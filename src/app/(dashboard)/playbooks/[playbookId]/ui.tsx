@@ -189,6 +189,8 @@ export function PlaybookDetailClient({
     setLocalPlays(initialPlays);
   }, [initialPlays]);
   const [draggingPlayId, setDraggingPlayId] = useState<string | null>(null);
+  const [editingNumberPlayId, setEditingNumberPlayId] = useState<string | null>(null);
+  const [numberInputValue, setNumberInputValue] = useState<string>("");
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -491,6 +493,30 @@ export function PlaybookDetailClient({
       next.splice(tgt, 0, moved);
       // Rewrite sort_order to match new positions so the sections memo reflects it.
       return next.map((p, i) => ({ ...p, sort_order: i }));
+    });
+  }
+
+  // Move a play to 1-based target position. Shifts other plays to fill the gap
+  // (so typing 2 on play #5 makes it #2 and bumps old #2,3,4 down to 3,4,5).
+  function renumberPlay(sourceId: string, target1Based: number) {
+    setEditingNumberPlayId(null);
+    setNumberInputValue("");
+    const src = localPlays.findIndex((p) => p.id === sourceId);
+    if (src < 0) return;
+    const tgt = Math.max(0, Math.min(localPlays.length - 1, target1Based - 1));
+    if (src === tgt) return;
+    const next = [...localPlays];
+    const [moved] = next.splice(src, 1);
+    next.splice(tgt, 0, moved);
+    const reordered = next.map((p, i) => ({ ...p, sort_order: i }));
+    setLocalPlays(reordered);
+    const orderedIds = reordered.map((p) => p.id);
+    startTransition(async () => {
+      const res = await reorderPlaysAction(playbookId, orderedIds);
+      if (!res.ok) {
+        toast(res.error ?? "Could not save play order.", "error");
+        router.refresh();
+      }
     });
   }
 
@@ -1113,9 +1139,48 @@ export function PlaybookDetailClient({
                           </span>
                         )}
                         {showPlayNumbers && position != null && (
-                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-primary/15 px-1.5 text-[11px] font-bold tabular-nums text-primary">
-                            {String(position).padStart(2, "0")}
-                          </span>
+                          editingNumberPlayId === p.id ? (
+                            <input
+                              type="number"
+                              min={1}
+                              max={localPlays.length}
+                              autoFocus
+                              value={numberInputValue}
+                              onChange={(e) => setNumberInputValue(e.target.value)}
+                              onBlur={() => {
+                                const n = parseInt(numberInputValue, 10);
+                                if (Number.isFinite(n) && n >= 1) renumberPlay(p.id, n);
+                                else {
+                                  setEditingNumberPlayId(null);
+                                  setNumberInputValue("");
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  (e.currentTarget as HTMLInputElement).blur();
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  setEditingNumberPlayId(null);
+                                  setNumberInputValue("");
+                                }
+                              }}
+                              className="h-5 w-11 shrink-0 rounded bg-primary/15 px-1 text-center text-[11px] font-bold tabular-nums text-primary outline-none ring-1 ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          ) : (
+                            <span
+                              className="inline-flex h-5 shrink-0 cursor-text items-center justify-center rounded bg-primary/15 px-1.5 text-[11px] font-bold tabular-nums text-primary"
+                              title="Double-click to renumber"
+                              onDoubleClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEditingNumberPlayId(p.id);
+                                setNumberInputValue(String(position));
+                              }}
+                            >
+                              {String(position).padStart(2, "0")}
+                            </span>
+                          )
                         )}
                         {selectionMode && (
                           <button
