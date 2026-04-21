@@ -298,7 +298,7 @@ export function PrintPlaybookClient({
       config.playsheetIncludeHeader ? team : null,
       watermark,
     );
-  }, [initialPack, selected, config, wristbandGridOpts, playsheetOpts, team, watermark]);
+  }, [initialPack, selected, typeFilter, config, wristbandGridOpts, playsheetOpts, team, watermark]);
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
