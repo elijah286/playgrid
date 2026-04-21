@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import {
@@ -141,6 +141,9 @@ type Props = {
   onSelectZone?: (id: string | null) => void;
   activeShape: import("@/domain/play/types").SegmentShape;
   activeStrokePattern: import("@/domain/play/types").StrokePattern;
+  /** Called after a segment has been drawn so the editor can reset one-shot
+   *  strokes (motion) back to solid. */
+  onActiveStrokePatternChange?: (p: import("@/domain/play/types").StrokePattern) => void;
   activeColor: string;
   activeWidth: number;
   /** Field aspect ratio (width / length) for the SVG viewBox */
@@ -197,7 +200,7 @@ function readableLabelColor(fill: string, preferred?: string): string {
   return preferred;
 }
 
-export function EditorCanvas({
+function EditorCanvasImpl({
   doc,
   dispatch,
   selectedPlayerId,
@@ -212,6 +215,7 @@ export function EditorCanvas({
   onSelectZone,
   activeShape,
   activeStrokePattern,
+  onActiveStrokePatternChange,
   activeColor,
   activeWidth,
   fieldAspect = 1,
@@ -502,7 +506,10 @@ export function EditorCanvas({
       if (simplified.length < 2) return;
 
       if (extendingRouteId && extendFromNodeId) {
-        // Append new nodes onto existing route (skip index 0 = anchor position)
+        // Append new nodes onto existing route (skip index 0 = anchor position).
+        // Motion only applies to the first segment of a brand-new route — when
+        // extending, force solid.
+        const extendStroke = activeStrokePattern === "motion" ? "solid" : activeStrokePattern;
         let prevNodeId = extendFromNodeId;
         let lastAddedId = prevNodeId;
         for (let i = 1; i < simplified.length; i++) {
@@ -513,7 +520,7 @@ export function EditorCanvas({
             node: newNode,
             afterNodeId: prevNodeId,
             shape: activeShape,
-            strokePattern: activeStrokePattern,
+            strokePattern: extendStroke,
           });
           prevNodeId = newNode.id;
           lastAddedId = newNode.id;
@@ -521,22 +528,26 @@ export function EditorCanvas({
         onSelectRoute(extendingRouteId);
         onSelectNode(lastAddedId);
         onSelectSegment(null);
+        if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
         return;
       }
 
-      // Create new route
+      // Create new route. Motion applies only to the first segment; the rest
+      // fall back to solid.
       const nodes: RouteNode[] = simplified.map((pt) => ({
         id: uid("node"),
         position: pt,
       }));
       const segments: RouteSegment[] = [];
       for (let i = 0; i < nodes.length - 1; i++) {
+        const segStroke =
+          activeStrokePattern === "motion" && i > 0 ? "solid" : activeStrokePattern;
         segments.push({
           id: uid("seg"),
           fromNodeId: nodes[i].id,
           toNodeId: nodes[i + 1].id,
           shape: activeShape,
-          strokePattern: activeStrokePattern,
+          strokePattern: segStroke,
           controlOffset: null,
         });
       }
@@ -552,8 +563,9 @@ export function EditorCanvas({
       onSelectRoute(route.id);
       onSelectNode(nodes[nodes.length - 1].id);
       onSelectSegment(null);
+      if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle, doc.layers.players],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, onActiveStrokePatternChange, buildRouteStyle, doc.layers.players],
   );
 
   /* ---------- Create a 2-node line route (single click, no existing route) ---------- */
@@ -583,8 +595,9 @@ export function EditorCanvas({
       onSelectRoute(route.id);
       onSelectNode(endNode.id); // so next click extends from here
       onSelectSegment(null);
+      if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, buildRouteStyle, doc.layers.players],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, onActiveStrokePatternChange, buildRouteStyle, doc.layers.players],
   );
 
   /* ---------- Pointer handlers ---------- */
@@ -825,7 +838,9 @@ export function EditorCanvas({
             // Canvas click (no drag) — route mode
             const anchor = getAnchor();
             if (anchor) {
-              // Extend existing route: add a node connected to anchor
+              // Extend existing route: add a node connected to anchor.
+              // Motion is one-shot — force solid when extending and reset.
+              const extendStroke = activeStrokePattern === "motion" ? "solid" : activeStrokePattern;
               const newNode: RouteNode = { id: uid("node"), position: state.origin };
               dispatch({
                 type: "route.addNode",
@@ -833,8 +848,9 @@ export function EditorCanvas({
                 node: newNode,
                 afterNodeId: anchor.nodeId,
                 shape: activeShape,
-                strokePattern: activeStrokePattern,
+                strokePattern: extendStroke,
               });
+              if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
               onSelectNode(newNode.id);
             } else if (selectedPlayerId) {
               // Start new route from player
@@ -871,6 +887,7 @@ export function EditorCanvas({
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
+      onActiveStrokePatternChange,
     ],
   );
 
@@ -978,14 +995,18 @@ export function EditorCanvas({
     // at an existing anchor. The new node lands at the click position, and
     // we select it so the user can immediately drag or extend it.
     const newNode: RouteNode = { id: uid("node"), position };
+    // Motion is one-shot — a branch counts as a new segment extension, so
+    // force solid and reset the active pattern.
+    const branchStroke = activeStrokePattern === "motion" ? "solid" : activeStrokePattern;
     dispatch({
       type: "route.addBranch",
       routeId,
       fromNodeId: seg.fromNodeId,
       toNode: newNode,
       shape: activeShape,
-      strokePattern: activeStrokePattern,
+      strokePattern: branchStroke,
     });
+    if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
     onSelectRoute(routeId);
     onSelectNode(newNode.id);
     onSelectSegment(null);
@@ -999,6 +1020,7 @@ export function EditorCanvas({
     onSelectRoute,
     onSelectNode,
     onSelectSegment,
+    onActiveStrokePatternChange,
   ]);
 
   /* ---------- Dynamic cursor ---------- */
@@ -2191,3 +2213,10 @@ export function EditorCanvas({
     </div>
   );
 }
+
+/**
+ * Memoized to prevent re-renders on every RAF tick when the parent re-renders
+ * for animation progress. All callers pass stable references (dispatch,
+ * setState setters, useMemo'd sets) so shallow prop compare is sufficient.
+ */
+export const EditorCanvas = memo(EditorCanvasImpl);
