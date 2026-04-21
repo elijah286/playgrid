@@ -152,7 +152,7 @@ export function compilePlayToSvg(
     const pr = Math.max(1.8, 2.2 * doc.printProfile.fontScale);
     playerCircles += `<circle cx="${px}" cy="${py}" r="${pr}" fill="${p.style.fill}" stroke="${p.style.stroke}" stroke-width="0.35"/>`;
     if (vis.showPlayerLabels) {
-      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif">${escSvgText(p.label)}</text>`;
+      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -187,13 +187,13 @@ export function compilePlayToSvg(
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="system-ui,sans-serif" fill="#111827">${title}</text>
-  ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#64748b">${code}</text>` : ""}
+  <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="Helvetica,Arial,sans-serif" fill="#111827">${title}</text>
+  ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="Helvetica,Arial,sans-serif" fill="#64748b">${code}</text>` : ""}
   <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#d1d5db" stroke-width="0.3"/>
   ${yardMarkersSvg(fieldX, fieldY, fieldW, fieldH)}
   ${playerCircles}
   ${routePaths}
-  ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="system-ui,sans-serif" fill="#334155">${notes}</text>` : ""}
+  ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="Helvetica,Arial,sans-serif" fill="#334155">${notes}</text>` : ""}
 </svg>`;
 
   return { templateKind: kind, svgMarkup: svg, width: w, height: h };
@@ -317,14 +317,14 @@ function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin:
   const initial = (header.teamName || "").trim().charAt(0).toUpperCase() || "?";
   const logoMarkup = header.logoUrl
     ? `<image href="${escSvgText(header.logoUrl)}" x="${logoX + 1}" y="${logoY + 1}" width="${logoSize - 2}" height="${logoSize - 2}" preserveAspectRatio="xMidYMid meet"/>`
-    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="800" font-family="system-ui,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
+    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="800" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
   return `
   <g>
     <rect x="0" y="0" width="${w}" height="${hH}" fill="${accent}"/>
     <rect x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" rx="1.8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="0.2"/>
     ${logoMarkup}
-    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="800" font-family="system-ui,sans-serif" fill="${textColor}">${name}</text>
-    ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="system-ui,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
+    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="800" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
+    ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="Helvetica,Arial,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
   </g>`;
 }
 
@@ -441,14 +441,14 @@ function renderPlaysheetCell(
   let header = "";
   if (showName) {
     const name = escSvgText(doc.metadata.coachName || "");
-    header += `<text x="${ox + cw / 2}" y="${oy + padTop + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="system-ui,sans-serif" fill="${labelColor}">${name}</text>`;
+    header += `<text x="${ox + cw / 2}" y="${oy + padTop + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
   }
   if (showCode) {
     const code = escSvgText(doc.metadata.wristbandCode || "");
     const cy = showName
       ? oy + padTop + fonts.title * 0.95 + fonts.meta * 1.15
       : oy + padTop + fonts.meta * 1.1;
-    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="system-ui,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
+    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="Helvetica,Arial,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
   }
 
   const field = renderFieldContents(doc, fieldX, fieldY, fieldW, fieldH, opts);
@@ -466,7 +466,7 @@ function renderPlaysheetCell(
     notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
     notes += `<g clip-path="url(#${clipId})">`;
     wrapped.forEach((line, i) => {
-      notes += `<text x="${ox + padX}" y="${ny + lineH * (i + 1)}" font-size="${fontNote}" font-family="system-ui,sans-serif" fill="#334155">${escSvgText(line)}</text>`;
+      notes += `<text x="${ox + padX}" y="${ny + lineH * (i + 1)}" font-size="${fontNote}" font-family="Helvetica,Arial,sans-serif" fill="#334155">${escSvgText(line)}</text>`;
     });
     notes += `</g>`;
     notes += `<line x1="${ox + padX}" y1="${ny + notesH - 0.5}" x2="${ox + cw - padX}" y2="${ny + notesH - 0.5}" stroke="#e5e7eb" stroke-width="0.2"/>`;
@@ -522,7 +522,7 @@ function renderFieldContents(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
     if (look.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -662,7 +662,7 @@ function playsheetFooterSvg(w: number, h: number): string {
   const y = h - bandH;
   return `<g>
     <rect x="0" y="${y}" width="${w}" height="${bandH}" fill="#f97316" opacity="0.95"/>
-    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="2.2" fill="#ffffff" font-weight="600" letter-spacing="0.2">Powered by Playgrid · playgrid.us · © 2026</text>
+    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="600" letter-spacing="0.2">Powered by Playgrid · playgrid.us · © 2026</text>
   </g>`;
 }
 
@@ -783,12 +783,12 @@ function renderWristbandTile(
   let header = "";
   if (showName) {
     const name = escSvgText(doc.metadata.coachName || "");
-    header += `<text x="${ox + cw / 2}" y="${oy + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="system-ui,sans-serif" fill="${labelColor}">${name}</text>`;
+    header += `<text x="${ox + cw / 2}" y="${oy + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
   }
   if (showCode) {
     const code = escSvgText(doc.metadata.wristbandCode || "");
     const cy = showName ? oy + fonts.title * 0.95 + fonts.meta * 1.1 : oy + fonts.meta * 1.1;
-    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="system-ui,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
+    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="Helvetica,Arial,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
   }
 
   const fit = computeFitScale(doc);
@@ -799,7 +799,7 @@ function renderWristbandTile(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="system-ui,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
     }
   }
 

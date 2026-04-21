@@ -22,18 +22,18 @@ function escXml(s: string): string {
 
 function listColumn(title: string, items: string[], x: number, y0: number, ink: string, muted: string) {
   let y = y0 + 5;
-  let block = `<text x="${x}" y="${y}" font-size="3.6" font-weight="600" fill="${ink}" font-family="system-ui,sans-serif">${escXml(title)}</text>`;
+  let block = `<text x="${x}" y="${y}" font-size="3.6" font-weight="600" fill="${ink}" font-family="Helvetica,Arial,sans-serif">${escXml(title)}</text>`;
   y += 8;
   if (items.length === 0) {
-    block += `<text x="${x}" y="${y}" font-size="3.2" fill="${muted}" font-family="system-ui,sans-serif">—</text>`;
+    block += `<text x="${x}" y="${y}" font-size="3.2" fill="${muted}" font-family="Helvetica,Arial,sans-serif">—</text>`;
     return block;
   }
   for (const item of items.slice(0, 18)) {
-    block += `<text x="${x}" y="${y}" font-size="3.1" fill="${muted}" font-family="system-ui,sans-serif">• ${escXml(item)}</text>`;
+    block += `<text x="${x}" y="${y}" font-size="3.1" fill="${muted}" font-family="Helvetica,Arial,sans-serif">• ${escXml(item)}</text>`;
     y += 5.2;
   }
   if (items.length > 18) {
-    block += `<text x="${x}" y="${y}" font-size="2.8" fill="${muted}" font-family="system-ui,sans-serif">… +${items.length - 18} more</text>`;
+    block += `<text x="${x}" y="${y}" font-size="2.8" fill="${muted}" font-family="Helvetica,Arial,sans-serif">… +${items.length - 18} more</text>`;
   }
   return block;
 }
@@ -73,18 +73,18 @@ export function compileCoverPageSvg(input: CoverPageInput): {
   <rect width="100%" height="100%" fill="url(#coverBg)"/>
   <rect x="14" y="14" width="${COVER_W - 28}" height="${COVER_H - 28}" rx="4" ry="4" fill="${pageBg}" fill-opacity="0.92" filter="url(#softShadow)"/>
   <rect x="14" y="14" width="${COVER_W - 28}" height="10" rx="4" ry="4" fill="${primary}" />
-  <text x="${COVER_W / 2}" y="${COVER_H * 0.14}" text-anchor="middle" font-size="5.5" font-weight="700" fill="${ink}" font-family="system-ui,sans-serif" letter-spacing="0.04em">${escXml(playbookName)}</text>
-  <text x="${COVER_W / 2}" y="${COVER_H * 0.2}" text-anchor="middle" font-size="3.4" fill="${accent}" font-family="system-ui,sans-serif" font-weight="600">${escXml(teamName)}</text>
+  <text x="${COVER_W / 2}" y="${COVER_H * 0.14}" text-anchor="middle" font-size="5.5" font-weight="700" fill="${ink}" font-family="Helvetica,Arial,sans-serif" letter-spacing="0.04em">${escXml(playbookName)}</text>
+  <text x="${COVER_W / 2}" y="${COVER_H * 0.2}" text-anchor="middle" font-size="3.4" fill="${accent}" font-family="Helvetica,Arial,sans-serif" font-weight="600">${escXml(teamName)}</text>
   ${
     playTitle
-      ? `<text x="${COVER_W / 2}" y="${COVER_H * 0.265}" text-anchor="middle" font-size="3" fill="${muted}" font-family="system-ui,sans-serif">${escXml(playTitle)}</text>`
+      ? `<text x="${COVER_W / 2}" y="${COVER_H * 0.265}" text-anchor="middle" font-size="3" fill="${muted}" font-family="Helvetica,Arial,sans-serif">${escXml(playTitle)}</text>`
       : ""
   }
   <line x1="28" y1="${COVER_H * 0.31}" x2="${COVER_W - 28}" y2="${COVER_H * 0.31}" stroke="${surface}" stroke-width="0.5" opacity="0.9"/>
-  <text x="${COVER_W / 2}" y="${COVER_H * 0.36}" text-anchor="middle" font-size="2.6" fill="${muted}" font-family="system-ui,sans-serif" letter-spacing="0.25em">PLAYGRID</text>
+  <text x="${COVER_W / 2}" y="${COVER_H * 0.36}" text-anchor="middle" font-size="2.6" fill="${muted}" font-family="Helvetica,Arial,sans-serif" letter-spacing="0.25em">PLAYGRID</text>
   ${listColumn("Staff", roster.staff, leftX, rosterY, ink, muted)}
   ${listColumn("Players", roster.players, rightX, rosterY, ink, muted)}
-  <text x="${COVER_W / 2}" y="${COVER_H - 16}" text-anchor="middle" font-size="2.5" fill="${muted}" font-family="system-ui,sans-serif">Official playbook · ${new Date().getFullYear()}</text>
+  <text x="${COVER_W / 2}" y="${COVER_H - 16}" text-anchor="middle" font-size="2.5" fill="${muted}" font-family="Helvetica,Arial,sans-serif">Official playbook · ${new Date().getFullYear()}</text>
 </svg>`;
 
   return { svgMarkup: svg, width: COVER_W, height: COVER_H };
