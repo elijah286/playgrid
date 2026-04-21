@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { PlayNumberBadge } from "@/features/editor/PlayNumberBadge";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -1107,8 +1108,8 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                         {showPlayNumbers && position != null && !selectionMode && (
-                          <div className="pointer-events-none absolute left-2 bottom-2 z-10 inline-flex h-4 min-w-[20px] items-center justify-center rounded bg-primary px-1.5 text-[9px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
-                            {String(position).padStart(2, "0")}
+                          <div className="pointer-events-none absolute left-2 bottom-2 z-10">
+                            <PlayNumberBadge value={position} />
                           </div>
                         )}
                         <Link
@@ -1236,11 +1237,11 @@ export function PlaybookDetailClient({
                                   setNumberInputValue("");
                                 }
                               }}
-                              className="h-5 w-11 shrink-0 rounded bg-primary/15 px-1 text-center text-[11px] font-bold tabular-nums text-primary outline-none ring-1 ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              className="h-[22px] w-14 shrink-0 rounded-[4px] bg-primary px-1.5 text-center font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white outline-none ring-2 ring-primary/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                           ) : (
                             <span
-                              className="inline-flex h-5 shrink-0 cursor-text items-center justify-center rounded bg-primary/15 px-1.5 text-[11px] font-bold tabular-nums text-primary"
+                              className="shrink-0 cursor-text"
                               title="Double-click to renumber"
                               onDoubleClick={(e) => {
                                 e.preventDefault();
@@ -1249,7 +1250,7 @@ export function PlaybookDetailClient({
                                 setNumberInputValue(String(position));
                               }}
                             >
-                              {String(position).padStart(2, "0")}
+                              <PlayNumberBadge value={position} />
                             </span>
                           )
                         )}

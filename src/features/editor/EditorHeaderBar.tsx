@@ -22,6 +22,7 @@ import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { Button, Input } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
+import { PlayNumberBadge } from "./PlayNumberBadge";
 
 type Props = {
   playId: string;
@@ -69,8 +70,8 @@ export function EditorHeaderBar({
 
   const name = doc.metadata.coachName || "Untitled play";
   const formation = doc.metadata.formation?.trim();
-  const code = doc.metadata.wristbandCode?.trim();
   const formationId = doc.metadata.formationId;
+  const playNumber = ix >= 0 ? ix + 1 : null;
 
   // Refresh the sibling nav when this play is renamed (server-side ordering may
   // change). Cheap best-effort; ignore result if it fails.
@@ -96,6 +97,8 @@ export function EditorHeaderBar({
           <ArrowLeft className="size-3.5" />
           Playbook
         </Link>
+
+        {playNumber != null && <PlayNumberBadge value={playNumber} />}
 
         {editingName ? (
           <Input
@@ -133,9 +136,6 @@ export function EditorHeaderBar({
                 <PencilLine className="size-3.5 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
             </h1>
-            {code ? (
-              <span className="text-xs font-semibold text-muted">#{code}</span>
-            ) : null}
           </div>
         )}
 
