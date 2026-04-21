@@ -145,6 +145,7 @@ export function PlaybookDetailClient({
     logoUrl: string | null;
     accentColor: string;
     canManage: boolean;
+    canShare: boolean;
     senderName: string | null;
     ownerDisplayName: string | null;
   };
@@ -613,6 +614,7 @@ export function PlaybookDetailClient({
           logoUrl={headerProps.logoUrl}
           accentColor={headerProps.accentColor}
           canManage={headerProps.canManage}
+          canShare={headerProps.canShare}
           senderName={headerProps.senderName}
           ownerDisplayName={headerProps.ownerDisplayName}
           playActions={{

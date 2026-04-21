@@ -63,6 +63,7 @@ export function PlaybookHeader({
   logoUrl,
   accentColor,
   canManage,
+  canShare,
   senderName,
   ownerDisplayName,
   playActions,
@@ -75,6 +76,7 @@ export function PlaybookHeader({
   logoUrl: string | null;
   accentColor: string;
   canManage: boolean;
+  canShare: boolean;
   senderName?: string | null;
   ownerDisplayName?: string | null;
   playActions?: PlaybookHeaderPlayActions;
@@ -85,7 +87,7 @@ export function PlaybookHeader({
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canShare) return;
     if (searchParams?.get("share") === "1") {
       setInviteOpen(true);
       const params = new URLSearchParams(searchParams.toString());
@@ -93,7 +95,7 @@ export function PlaybookHeader({
       const qs = params.toString();
       router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
     }
-  }, [canManage, searchParams, router]);
+  }, [canShare, searchParams, router]);
 
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
@@ -156,28 +158,28 @@ export function PlaybookHeader({
             >
               PlayGrid
             </Link>
-            {canManage && (
-              <>
-                <Button
-                  size="sm"
-                  leftIcon={UserPlus}
-                  onClick={() => setInviteOpen(true)}
-                  className={`hidden sm:inline-flex ${
-                    isLightBg
-                      ? "!bg-slate-900 !text-white hover:!bg-slate-800"
-                      : "!bg-white !text-slate-900 hover:!bg-white/90"
-                  }`}
-                >
-                  Invite Team Member
-                </Button>
-                <HeaderMenu
-                  onAccent={onAccent}
-                  onAccentHover={onAccentHover}
-                  onCustomize={() => setCustomizeOpen(true)}
-                  onInvite={() => setInviteOpen(true)}
-                  playActions={playActions}
-                />
-              </>
+            {canShare && (
+              <Button
+                size="sm"
+                leftIcon={UserPlus}
+                onClick={() => setInviteOpen(true)}
+                className={`hidden sm:inline-flex ${
+                  isLightBg
+                    ? "!bg-slate-900 !text-white hover:!bg-slate-800"
+                    : "!bg-white !text-slate-900 hover:!bg-white/90"
+                }`}
+              >
+                Invite Team Member
+              </Button>
+            )}
+            {(canShare || canManage || playActions) && (
+              <HeaderMenu
+                onAccent={onAccent}
+                onAccentHover={onAccentHover}
+                onCustomize={canManage ? () => setCustomizeOpen(true) : null}
+                onInvite={canShare ? () => setInviteOpen(true) : null}
+                playActions={playActions}
+              />
             )}
           </div>
         </div>
@@ -217,8 +219,8 @@ function HeaderMenu({
 }: {
   onAccent: string;
   onAccentHover: string;
-  onCustomize: () => void;
-  onInvite: () => void;
+  onCustomize: (() => void) | null;
+  onInvite: (() => void) | null;
   playActions?: PlaybookHeaderPlayActions;
 }) {
   const [open, setOpen] = useState(false);
@@ -266,18 +268,20 @@ function HeaderMenu({
             <Home className="size-4" />
             <span>Home</span>
           </Link>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onInvite();
-            }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
-          >
-            <UserPlus className="size-4" />
-            <span>Invite team member</span>
-          </button>
+          {onInvite && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onInvite();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+            >
+              <UserPlus className="size-4" />
+              <span>Invite team member</span>
+            </button>
+          )}
           {playActions && (
             <>
               <div className="my-1 h-px bg-border sm:hidden" />
@@ -327,18 +331,20 @@ function HeaderMenu({
               <div className="my-1 h-px bg-border sm:hidden" />
             </>
           )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onCustomize();
-            }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
-          >
-            <Settings2 className="size-4" />
-            <span>Customize team</span>
-          </button>
+          {onCustomize && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onCustomize();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+            >
+              <Settings2 className="size-4" />
+              <span>Customize team</span>
+            </button>
+          )}
         </div>
       )}
     </div>

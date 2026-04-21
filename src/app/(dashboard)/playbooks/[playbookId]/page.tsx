@@ -93,9 +93,11 @@ export default async function PlaybookDetailPage({ params }: Props) {
     }
   }
 
-  // Only owners can invite/customize. Editors and viewers see a read-style
-  // header without the management controls.
+  // Owners can customize everything. Editors (coaches) can share the
+  // playbook with teammates but can't rename/recolor/delete. Viewers get a
+  // read-only header.
   const canManage = viewerRole === "owner";
+  const canShare = viewerRole === "owner" || viewerRole === "editor";
 
   return (
     <PlaybookDetailClient
@@ -116,6 +118,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         logoUrl,
         accentColor,
         canManage,
+        canShare,
         senderName,
         ownerDisplayName,
       }}

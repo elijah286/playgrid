@@ -897,6 +897,13 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
 
   function buildSharedActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
     const items: ActionMenuItem[] = [];
+    if (tile.role === "editor") {
+      items.push({
+        label: "Share playbook",
+        icon: Share2,
+        onSelect: () => router.push(`/playbooks/${tile.id}?share=1`),
+      });
+    }
     if (tile.allow_duplication) {
       items.push({
         label: "Duplicate",
