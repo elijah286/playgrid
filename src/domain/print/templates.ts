@@ -654,7 +654,7 @@ function watermarkSvg(w: number, h: number, wm: Watermark | null): string {
   const size = Math.min(w, h) * scale;
   const x = (w - size) / 2;
   const y = (h - size) / 2;
-  return `<image href="${escSvgText(wm.logoUrl)}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" opacity="${wm.opacity}"/>`;
+  return `<g opacity="${wm.opacity}" style="mix-blend-mode:multiply"><image href="${escSvgText(wm.logoUrl)}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"/></g>`;
 }
 
 function playsheetFooterSvg(w: number, h: number): string {
