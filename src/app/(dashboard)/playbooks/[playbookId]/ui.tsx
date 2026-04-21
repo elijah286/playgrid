@@ -76,8 +76,6 @@ import {
 } from "@/app/actions/invites";
 import {
   ActionMenu,
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
   Badge,
   Button,
   Card,
@@ -87,6 +85,8 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
 
 type GroupBy = "none" | "formation" | "group";
 
