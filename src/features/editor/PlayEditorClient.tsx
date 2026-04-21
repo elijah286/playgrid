@@ -358,7 +358,10 @@ export function PlayEditorClient({
     function handleKeyDown(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey;
       const active = document.activeElement;
-      const isInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+      const isInput =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable);
 
       if (mod && e.shiftKey && e.key === "z") {
         e.preventDefault();
