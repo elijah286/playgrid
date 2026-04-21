@@ -53,9 +53,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const accentColor = (book.color as string | null) || "#134e2a";
   const logoUrl = (book.logo_url as string | null) ?? null;
 
-  const canManage = !!user;
-
   let senderName: string | null = null;
+  let viewerRole: "owner" | "editor" | "viewer" | null = null;
+  let ownerDisplayName: string | null = null;
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -64,7 +64,38 @@ export default async function PlaybookDetailPage({ params }: Props) {
       .maybeSingle();
     senderName =
       (profile?.display_name as string | null) || user.email || null;
+
+    const { data: membership } = await supabase
+      .from("playbook_members")
+      .select("role")
+      .eq("playbook_id", playbookId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    viewerRole = (membership?.role as typeof viewerRole) ?? null;
+
+    if (viewerRole && viewerRole !== "owner") {
+      const { data: ownerRow } = await supabase
+        .from("playbook_members")
+        .select("user_id")
+        .eq("playbook_id", playbookId)
+        .eq("role", "owner")
+        .limit(1)
+        .maybeSingle();
+      const ownerId = (ownerRow?.user_id as string | null) ?? null;
+      if (ownerId) {
+        const { data: ownerProfile } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", ownerId)
+          .maybeSingle();
+        ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
+      }
+    }
   }
+
+  // Only owners can invite/customize. Editors and viewers see a read-style
+  // header without the management controls.
+  const canManage = viewerRole === "owner";
 
   return (
     <PlaybookDetailClient
@@ -86,6 +117,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         accentColor,
         canManage,
         senderName,
+        ownerDisplayName,
       }}
     />
   );

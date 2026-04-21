@@ -9,11 +9,14 @@ import {
   ChevronRight,
   Copy,
   Link2,
+  LogOut,
+  Lock,
   Palette,
   Pencil,
   Plus,
   Share2,
   Trash2,
+  Unlock,
   Upload,
   X,
 } from "lucide-react";
@@ -23,7 +26,9 @@ import {
   updatePlaybookSeasonAction,
   deletePlaybookAction,
   duplicatePlaybookAction,
+  leavePlaybookAction,
   renamePlaybookAction,
+  setPlaybookAllowDuplicationAction,
   updatePlaybookAppearanceAction,
   uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
@@ -227,9 +232,7 @@ function PlaybookTile({
               {tile.name}
             </h3>
             {tile.role !== "owner" && (
-              <Badge variant={tile.role === "editor" ? "primary" : "default"}>
-                {tile.role === "editor" ? "Editor" : "Viewer"}
-              </Badge>
+              <Badge variant="default">Shared</Badge>
             )}
           </div>
           <p className="text-xs text-muted">
@@ -867,6 +870,14 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           ),
       },
       {
+        label: tile.allow_duplication ? "Disallow duplication" : "Allow duplication",
+        icon: tile.allow_duplication ? Lock : Unlock,
+        onSelect: () =>
+          handle(() =>
+            setPlaybookAllowDuplicationAction(tile.id, !tile.allow_duplication),
+          ),
+      },
+      {
         label: "Archive",
         icon: Archive,
         onSelect: () => handle(() => archivePlaybookAction(tile.id, true)),
@@ -882,6 +893,34 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           ),
       },
     ];
+  }
+
+  function buildSharedActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
+    const items: ActionMenuItem[] = [];
+    if (tile.allow_duplication) {
+      items.push({
+        label: "Duplicate",
+        icon: Copy,
+        onSelect: () =>
+          handle(
+            () => duplicatePlaybookAction(tile.id),
+            (res) => {
+              if (res.ok) router.push(`/playbooks/${res.id}`);
+            },
+          ),
+      });
+    }
+    items.push({
+      label: "Unsubscribe",
+      icon: LogOut,
+      danger: true,
+      onSelect: () =>
+        confirmAnd(
+          `Remove "${tile.name}" from your dashboard? The owner can re-share it later.`,
+          () => handle(() => leavePlaybookAction(tile.id)),
+        ),
+    });
+    return items;
   }
 
   return (
@@ -953,7 +992,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
               <div className="flex flex-wrap justify-center gap-3">
                 {shared.map((b) => (
                   <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                    <PlaybookBookTile tile={b} actions={[]} />
+                    <PlaybookBookTile tile={b} actions={buildSharedActions(b)} />
                   </div>
                 ))}
               </div>
@@ -980,7 +1019,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
             <section>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {shared.map((b) => (
-                  <PlaybookTile key={b.id} tile={b} actions={[]} />
+                  <PlaybookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
                 ))}
               </div>
             </section>

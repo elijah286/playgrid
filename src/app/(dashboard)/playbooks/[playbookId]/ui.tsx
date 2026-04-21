@@ -146,6 +146,7 @@ export function PlaybookDetailClient({
     accentColor: string;
     canManage: boolean;
     senderName: string | null;
+    ownerDisplayName: string | null;
   };
 }) {
   const searchParams = useSearchParams();
@@ -613,6 +614,7 @@ export function PlaybookDetailClient({
           accentColor={headerProps.accentColor}
           canManage={headerProps.canManage}
           senderName={headerProps.senderName}
+          ownerDisplayName={headerProps.ownerDisplayName}
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {

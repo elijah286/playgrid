@@ -64,6 +64,7 @@ export function PlaybookHeader({
   accentColor,
   canManage,
   senderName,
+  ownerDisplayName,
   playActions,
 }: {
   playbookId: string;
@@ -75,6 +76,7 @@ export function PlaybookHeader({
   accentColor: string;
   canManage: boolean;
   senderName?: string | null;
+  ownerDisplayName?: string | null;
   playActions?: PlaybookHeaderPlayActions;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -132,7 +134,13 @@ export function PlaybookHeader({
               {name}
             </h1>
             <p className={`truncate text-[11px] font-medium sm:text-sm ${onAccentMuted}`}>
-              {[season, variantLabel, senderName].filter(Boolean).join(" · ") || variantLabel}
+              {[
+                season,
+                variantLabel,
+                ownerDisplayName ? `Shared by ${ownerDisplayName}` : senderName,
+              ]
+                .filter(Boolean)
+                .join(" · ") || variantLabel}
             </p>
           </div>
 

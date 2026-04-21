@@ -364,6 +364,9 @@ export async function deletePlaybookAction(playbookId: string) {
 /**
  * Deep-copy a playbook: duplicates every non-archived play and its current version document.
  * New playbook is created in the same team as the source.
+ *
+ * Non-owners can only duplicate if the owner has left `allow_duplication`
+ * on (default). Owners can always duplicate their own books.
  */
 export async function duplicatePlaybookAction(playbookId: string, newName?: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
@@ -375,10 +378,21 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
 
   const { data: src, error: srcErr } = await supabase
     .from("playbooks")
-    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season")
+    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season, allow_duplication")
     .eq("id", playbookId)
     .single();
   if (srcErr || !src) return { ok: false as const, error: srcErr?.message ?? "Not found" };
+
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isOwner = membership?.role === "owner";
+  if (!isOwner && src.allow_duplication === false) {
+    return { ok: false as const, error: "The owner has disabled duplication for this playbook." };
+  }
 
   const { data: newBook, error: pbErr } = await supabase
     .from("playbooks")
@@ -456,4 +470,69 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
   }
 
   return { ok: true as const, id: newBook.id };
+}
+
+/**
+ * Owner-only: toggle whether shared members can duplicate this playbook.
+ */
+export async function setPlaybookAllowDuplicationAction(
+  playbookId: string,
+  allow: boolean,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (membership?.role !== "owner") {
+    return { ok: false as const, error: "Only the owner can change this setting." };
+  }
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ allow_duplication: allow })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+/**
+ * Remove the caller's membership from a playbook they don't own. Used by
+ * the dashboard "Unsubscribe" action on shared books. Owners cannot leave
+ * their own books — they must delete instead.
+ */
+export async function leavePlaybookAction(playbookId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!membership) return { ok: false as const, error: "You're not a member of this playbook." };
+  if (membership.role === "owner") {
+    return { ok: false as const, error: "Owners can't unsubscribe — delete the playbook instead." };
+  }
+
+  const { error } = await supabase
+    .from("playbook_members")
+    .delete()
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
 }
