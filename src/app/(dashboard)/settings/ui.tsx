@@ -36,6 +36,7 @@ export function SettingsClient({
   resend,
   initialFeedback,
   feedbackError,
+  initialFeedbackWidgetEnabled,
   initialInvites,
   invitesError,
 }: {
@@ -46,6 +47,7 @@ export function SettingsClient({
   resend: ResendProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
+  initialFeedbackWidgetEnabled: boolean;
   initialInvites: CoachInvitationRow[];
   invitesError: string | null;
 }) {
@@ -87,6 +89,7 @@ export function SettingsClient({
         <FeedbackAdminClient
           initialItems={initialFeedback}
           initialError={feedbackError}
+          initialWidgetEnabled={initialFeedbackWidgetEnabled}
         />
       )}
 

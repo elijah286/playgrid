@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import {
+  getFeedbackWidgetEnabled,
+  setFeedbackWidgetEnabled,
+} from "@/lib/site/feedback-config";
 
 export type FeedbackRow = {
   id: string;
@@ -110,4 +114,39 @@ export async function deleteFeedbackAction(id: string) {
 
   revalidatePath("/settings");
   return { ok: true as const };
+}
+
+export async function getFeedbackWidgetEnabledAction() {
+  if (!hasSupabaseEnv()) return { ok: true as const, enabled: true };
+  const enabled = await getFeedbackWidgetEnabled();
+  return { ok: true as const, enabled };
+}
+
+export async function setFeedbackWidgetEnabledAction(enabled: boolean) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") {
+    return { ok: false as const, error: "Forbidden." };
+  }
+
+  try {
+    await setFeedbackWidgetEnabled(enabled);
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true as const, enabled };
 }

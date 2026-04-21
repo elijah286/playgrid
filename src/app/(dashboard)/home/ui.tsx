@@ -242,6 +242,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
 
   const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const shared = data.playbooks.filter((b) => b.role !== "owner");
+  const viewerOnly = owned.length === 0 && shared.length > 0;
 
   function refresh() {
     router.refresh();
@@ -368,7 +369,12 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
       </div>
 
       {/* Owned */}
-      <section>
+      <section className="space-y-3">
+        {viewerOnly && (
+          <p className="rounded-lg bg-surface-inset px-3 py-2 text-sm text-muted ring-1 ring-border">
+            Coaching your own team? Create a playbook to start drawing plays — it&rsquo;s free for personal use.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <NewPlaybookTile onClick={() => setShowCreate(true)} />
           {owned.map((b) => (

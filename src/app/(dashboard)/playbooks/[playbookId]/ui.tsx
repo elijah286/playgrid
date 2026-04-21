@@ -119,6 +119,7 @@ export function PlaybookDetailClient({
   playerCount: playbookPlayerCount,
   initialPlays,
   initialGroups,
+  truncated,
   initialRoster,
   initialInvites,
   initialFormations,
@@ -129,6 +130,7 @@ export function PlaybookDetailClient({
   playerCount?: number;
   initialPlays: PlaybookDetailPlayRow[];
   initialGroups: PlaybookGroupRow[];
+  truncated?: boolean;
   initialRoster: PlaybookRosterMember[];
   initialInvites: PlaybookInvite[];
   initialFormations: SavedFormation[];
@@ -896,6 +898,11 @@ export function PlaybookDetailClient({
 
       {tab === "plays" && (
       <div>
+        {truncated && (
+          <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
+            Showing the 2000 most-recent plays. Archive or delete older plays to see more.
+          </p>
+        )}
         {/* Section jump pills — only shown when grouping is active and there's
             more than one section. Horizontal scroll on overflow so this stays
             tidy on mobile and doesn't introduce a separate sidebar. */}

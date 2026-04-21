@@ -3,23 +3,46 @@
 import { useState, useTransition } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { IconButton } from "@/components/ui";
+import { IconButton, useToast } from "@/components/ui";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import {
   deleteFeedbackAction,
   listFeedbackForAdminAction,
+  setFeedbackWidgetEnabledAction,
 } from "@/app/actions/feedback";
 
 export function FeedbackAdminClient({
   initialItems,
   initialError,
+  initialWidgetEnabled,
 }: {
   initialItems: FeedbackRow[];
   initialError: string | null;
+  initialWidgetEnabled: boolean;
 }) {
+  const { toast } = useToast();
   const [items, setItems] = useState(initialItems);
   const [err, setErr] = useState<string | null>(initialError);
+  const [widgetEnabled, setWidgetEnabled] = useState(initialWidgetEnabled);
+  const [widgetPending, startWidgetTransition] = useTransition();
   const [pending, startTransition] = useTransition();
+
+  function toggleWidget(next: boolean) {
+    const prev = widgetEnabled;
+    setWidgetEnabled(next);
+    startWidgetTransition(async () => {
+      const res = await setFeedbackWidgetEnabledAction(next);
+      if (!res.ok) {
+        setWidgetEnabled(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next ? "Feedback pill is visible to users." : "Feedback pill hidden.",
+        "success",
+      );
+    });
+  }
 
   function refresh() {
     startTransition(async () => {
@@ -48,6 +71,27 @@ export function FeedbackAdminClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Floating “Send feedback” pill
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            When off, the draggable feedback button is hidden for everyone.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={widgetEnabled}
+            disabled={widgetPending}
+            onChange={(e) => toggleWidget(e.target.checked)}
+          />
+          <span>{widgetEnabled ? "On" : "Off"}</span>
+        </label>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">

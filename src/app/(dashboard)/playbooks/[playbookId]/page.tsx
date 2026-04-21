@@ -73,6 +73,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       playerCount={(book.player_count as number | null) ?? undefined}
       initialPlays={listed.ok ? listed.plays : []}
       initialGroups={listed.ok ? listed.groups : []}
+      truncated={listed.truncated}
       initialRoster={rosterRes.ok ? rosterRes.members : []}
       initialInvites={invitesRes.ok ? invitesRes.invites : []}
       initialFormations={formationsRes.ok ? formationsRes.formations : []}

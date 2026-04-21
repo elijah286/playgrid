@@ -35,21 +35,29 @@ export type PlaybookDetailPlayRow = {
   hasNotes: boolean;
 };
 
+const PLAYS_LIST_CAP = 2000;
+
 export async function listPlaysAction(
   playbookId: string,
   opts?: { includeArchived?: boolean },
 ): Promise<
-  | { ok: true; plays: PlaybookDetailPlayRow[]; groups: PlaybookGroupRow[] }
-  | { ok: false; error: string; plays: PlaybookDetailPlayRow[]; groups: PlaybookGroupRow[] }
+  | { ok: true; plays: PlaybookDetailPlayRow[]; groups: PlaybookGroupRow[]; truncated: boolean }
+  | {
+      ok: false;
+      error: string;
+      plays: PlaybookDetailPlayRow[];
+      groups: PlaybookGroupRow[];
+      truncated: boolean;
+    }
 > {
   if (!hasSupabaseEnv()) {
-    return { ok: false, error: "Supabase is not configured.", plays: [], groups: [] };
+    return { ok: false, error: "Supabase is not configured.", plays: [], groups: [], truncated: false };
   }
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in.", plays: [], groups: [] };
+  if (!user) return { ok: false, error: "Not signed in.", plays: [], groups: [], truncated: false };
 
   let playsQ = supabase
     .from("plays")
@@ -58,7 +66,7 @@ export async function listPlaysAction(
     )
     .eq("playbook_id", playbookId)
     .order("updated_at", { ascending: false })
-    .limit(2000);
+    .limit(PLAYS_LIST_CAP + 1);
 
   if (!opts?.includeArchived) playsQ = playsQ.eq("is_archived", false);
 
@@ -71,10 +79,14 @@ export async function listPlaysAction(
       .order("sort_order", { ascending: true }),
   ]);
 
-  if (playsRes.error) return { ok: false, error: playsRes.error.message, plays: [], groups: [] };
-  if (groupsRes.error) return { ok: false, error: groupsRes.error.message, plays: [], groups: [] };
+  if (playsRes.error)
+    return { ok: false, error: playsRes.error.message, plays: [], groups: [], truncated: false };
+  if (groupsRes.error)
+    return { ok: false, error: groupsRes.error.message, plays: [], groups: [], truncated: false };
 
-  const rawRows = playsRes.data ?? [];
+  const allRows = playsRes.data ?? [];
+  const truncated = allRows.length > PLAYS_LIST_CAP;
+  const rawRows = truncated ? allRows.slice(0, PLAYS_LIST_CAP) : allRows;
   const versionIds = rawRows
     .map((r) => r.current_version_id as string | null)
     .filter((id): id is string => typeof id === "string" && id.length > 0);
@@ -129,6 +141,7 @@ export async function listPlaysAction(
     ok: true,
     plays,
     groups: (groupsRes.data ?? []) as PlaybookGroupRow[],
+    truncated,
   };
 }
 
