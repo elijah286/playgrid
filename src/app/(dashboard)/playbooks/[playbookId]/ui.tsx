@@ -1043,13 +1043,13 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                         {showPlayNumbers && position != null && !selectionMode && (
-                          <div className="pointer-events-none absolute left-1.5 bottom-8 z-10 inline-flex h-3 min-w-[14px] items-center justify-center rounded bg-primary px-1 text-[7px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
+                          <div className="pointer-events-none absolute left-2 bottom-2 z-10 inline-flex h-4 min-w-[20px] items-center justify-center rounded bg-primary px-1.5 text-[9px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
                             {String(position).padStart(2, "0")}
                           </div>
                         )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className={`flex flex-1 flex-col p-4 ${selectionMode ? "pointer-events-none" : ""}`}
+                          className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode ? "pointer-events-none" : ""}`}
                           aria-label={`Open ${p.name}`}
                           tabIndex={selectionMode ? -1 : 0}
                         >
