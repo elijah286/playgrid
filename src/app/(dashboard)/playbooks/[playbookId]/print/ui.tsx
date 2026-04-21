@@ -368,14 +368,10 @@ export function PrintPlaybookClient({
         return d;
       });
       if (docs.length === 0) return [];
-      if (config.wristbandSheet === "sheet") {
-        return compileWristbandSheetPdfPages(
-          docs,
-          wristbandGridOpts,
-          config.wristbandCopiesPerSheet,
-          watermark,
-        );
-      }
+      // Preview always shows the card itself (one grid per page), regardless
+      // of whether the export is configured for sheet-of-cards or single
+      // bands. Showing the Letter sheet around a tiny wristband makes the
+      // preview mostly empty paper.
       const tiles = wristbandTilesPerBand(config.wristbandGridLayout);
       const pages: string[] = [];
       for (let i = 0; i < docs.length; i += tiles) {
@@ -440,7 +436,12 @@ export function PrintPlaybookClient({
     );
   const previewHtml = (s: string) => stripSvgSize(stripXmlProlog(s));
   const isPortrait = config.sheetOrientation === "portrait";
-  const pageAspect = isPortrait ? "215.9 / 279.4" : "279.4 / 215.9";
+  const pageAspect =
+    config.product === "wristband"
+      ? `${config.wristbandWidthIn} / ${config.wristbandHeightIn}`
+      : isPortrait
+        ? "215.9 / 279.4"
+        : "279.4 / 215.9";
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
