@@ -164,7 +164,7 @@ export function TagsCard({ doc, dispatch, linkedFormation }: Props) {
                 <button
                   type="button"
                   onClick={reapplyFormation}
-                  className="rounded-md border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50 hover:text-primary"
+                  className="rounded-md bg-green-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm hover:bg-green-700"
                   title="Snap players back to the linked formation"
                 >
                   Reapply
@@ -173,7 +173,7 @@ export function TagsCard({ doc, dispatch, linkedFormation }: Props) {
               <button
                 type="button"
                 onClick={unlinkFormation}
-                className="rounded-md border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground hover:border-danger/60 hover:text-danger"
+                className="rounded-md bg-danger px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm hover:bg-red-700"
                 title="Unlink this formation"
               >
                 Unlink

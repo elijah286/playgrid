@@ -128,181 +128,188 @@ export function RouteToolbar({
   totalRouteCount = 0,
   onClearAllRoutes,
 }: Props) {
+  const showPlayerActions = !isDefense;
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
-      {/* Line shape */}
-      <SegmentedControl
-        options={SHAPE_OPTIONS}
-        value={shape}
-        onChange={onShapeChange}
-        size="sm"
-      />
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
+      {/* Row 1: shape / stroke / width / color (top-right) */}
+      <div className="flex items-center gap-2">
+        <SegmentedControl
+          options={SHAPE_OPTIONS}
+          value={shape}
+          onChange={onShapeChange}
+          size="sm"
+        />
 
-      <div className="h-5 w-px bg-border" />
+        <div className="h-5 w-px bg-border" />
 
-      {/* Stroke pattern (no motion on defense) */}
-      <SegmentedControl
-        options={isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE}
-        value={strokePattern === "motion" && isDefense ? "solid" : strokePattern}
-        onChange={onStrokePatternChange}
-        size="sm"
-      />
+        <SegmentedControl
+          options={isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE}
+          value={strokePattern === "motion" && isDefense ? "solid" : strokePattern}
+          onChange={onStrokePatternChange}
+          size="sm"
+        />
 
-      {isDefense && onAddRectZone && onAddEllipseZone && (
-        <>
-          <div className="h-5 w-px bg-border" />
-          <Tooltip content="Add rectangular zone">
-            <IconButton icon={Square} variant="ghost" size="sm" onClick={onAddRectZone} />
-          </Tooltip>
-          <Tooltip content="Add elliptical zone">
-            <IconButton icon={Circle} variant="ghost" size="sm" onClick={onAddEllipseZone} />
-          </Tooltip>
-        </>
-      )}
+        {isDefense && onAddRectZone && onAddEllipseZone && (
+          <>
+            <div className="h-5 w-px bg-border" />
+            <Tooltip content="Add rectangular zone">
+              <IconButton icon={Square} variant="ghost" size="sm" onClick={onAddRectZone} />
+            </Tooltip>
+            <Tooltip content="Add elliptical zone">
+              <IconButton icon={Circle} variant="ghost" size="sm" onClick={onAddEllipseZone} />
+            </Tooltip>
+          </>
+        )}
 
-      <div className="h-5 w-px bg-border" />
+        <div className="h-5 w-px bg-border" />
 
-      {/* Line width */}
-      <div className="flex items-center gap-1">
-        {WIDTH_OPTIONS.map((w) => {
-          const active = w.value === width;
-          return (
+        <div className="flex items-center gap-1">
+          {WIDTH_OPTIONS.map((w) => {
+            const active = w.value === width;
+            return (
+              <button
+                key={w.value}
+                type="button"
+                onClick={() => onWidthChange(w.value)}
+                title={w.label}
+                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                  active
+                    ? "bg-surface-inset text-foreground shadow-sm"
+                    : "text-muted hover:bg-surface-inset/50 hover:text-foreground"
+                }`}
+              >
+                <div
+                  className="rounded-full bg-current"
+                  style={{ width: 14, height: w.px }}
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="ml-auto flex items-center gap-0.5">
+          {COLOR_PRESETS.map((c) => (
             <button
-              key={w.value}
+              key={c}
               type="button"
-              onClick={() => onWidthChange(w.value)}
-              title={w.label}
-              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                active
-                  ? "bg-surface-inset text-foreground shadow-sm"
-                  : "text-muted hover:bg-surface-inset/50 hover:text-foreground"
+              onClick={() => onColorChange(c)}
+              className={`size-4 rounded-full border-2 transition-transform ${
+                c === color ? "scale-110 border-primary" : "border-transparent hover:scale-105"
               }`}
-            >
-              <div
-                className="rounded-full bg-current"
-                style={{ width: 14, height: w.px }}
-              />
-            </button>
-          );
-        })}
+              style={{ backgroundColor: c }}
+              title={c}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="h-5 w-px bg-border" />
-
-      {/* Color swatches */}
-      <div className="flex items-center gap-1">
-        {COLOR_PRESETS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => onColorChange(c)}
-            className={`size-5 rounded-full border-2 transition-transform ${
-              c === color ? "scale-110 border-primary" : "border-transparent hover:scale-105"
-            }`}
-            style={{ backgroundColor: c }}
-            title={c}
-          />
-        ))}
-      </div>
-
-      <div className="h-5 w-px bg-border" />
-
-      {/* End-of-route decoration */}
-      <SegmentedControl
-        options={END_OPTIONS}
-        value={endDecoration}
-        onChange={onEndDecorationChange}
-        size="sm"
-      />
-
-      <div className="h-5 w-px bg-border" />
-
-      <Tooltip content="Smooth curve">
-        <IconButton
-          icon={Sparkles}
-          variant="ghost"
-          disabled={!canSmooth}
-          onClick={onSmooth}
+      {/* Row 2: end decoration / history / player actions / done */}
+      <div className="flex items-center gap-2">
+        <SegmentedControl
+          options={END_OPTIONS}
+          value={endDecoration}
+          onChange={onEndDecorationChange}
+          size="sm"
         />
-      </Tooltip>
 
-      <Tooltip content="Undo">
-        <IconButton
-          icon={Undo2}
-          variant="ghost"
-          disabled={!canUndo}
-          onClick={onUndo}
-        />
-      </Tooltip>
+        <div className="h-5 w-px bg-border" />
 
-      <Tooltip content="Redo">
-        <IconButton
-          icon={Redo2}
-          variant="ghost"
-          disabled={!canRedo}
-          onClick={onRedo}
-        />
-      </Tooltip>
-
-      {onFlipHorizontal && (
-        <Tooltip content="Flip horizontal">
+        <Tooltip content="Smooth curve">
           <IconButton
-            icon={FlipHorizontal}
+            icon={Sparkles}
             variant="ghost"
-            onClick={onFlipHorizontal}
+            disabled={!canSmooth}
+            onClick={onSmooth}
           />
         </Tooltip>
-      )}
 
-      {onClearAllRoutes && (
-        <Tooltip
-          content={
-            totalRouteCount > 0
-              ? `Clear all ${totalRouteCount} route${totalRouteCount !== 1 ? "s" : ""}`
-              : "No routes to clear"
-          }
-        >
+        <Tooltip content="Undo">
           <IconButton
-            icon={Eraser}
+            icon={Undo2}
             variant="ghost"
-            disabled={totalRouteCount === 0}
-            onClick={onClearAllRoutes}
-            className="text-danger hover:bg-danger/10 hover:text-danger"
+            disabled={!canUndo}
+            onClick={onUndo}
           />
         </Tooltip>
-      )}
 
-      {hasSelectedPlayer && !isDefense && (
-        <>
-          <div className="h-5 w-px bg-border" />
-          <Tooltip content={isHotRoute ? "Remove hot route" : "Mark as hot route"}>
+        <Tooltip content="Redo">
+          <IconButton
+            icon={Redo2}
+            variant="ghost"
+            disabled={!canRedo}
+            onClick={onRedo}
+          />
+        </Tooltip>
+
+        {onFlipHorizontal && (
+          <Tooltip content="Flip horizontal">
             <IconButton
-              icon={Star}
+              icon={FlipHorizontal}
               variant="ghost"
-              size="sm"
-              onClick={onToggleHotRoute}
-              className={isHotRoute ? "text-amber-400 hover:text-amber-300" : undefined}
-              aria-pressed={isHotRoute}
+              onClick={onFlipHorizontal}
             />
           </Tooltip>
-          <Tooltip content={playerRouteCount > 0 ? `Clear ${playerRouteCount} route${playerRouteCount !== 1 ? "s" : ""}` : "No routes to clear"}>
+        )}
+
+        {onClearAllRoutes && (
+          <Tooltip
+            content={
+              totalRouteCount > 0
+                ? `Clear all ${totalRouteCount} route${totalRouteCount !== 1 ? "s" : ""}`
+                : "No routes to clear"
+            }
+          >
             <IconButton
-              icon={Trash2}
+              icon={Eraser}
               variant="ghost"
-              size="sm"
-              disabled={playerRouteCount === 0}
-              onClick={onClearPlayerRoutes}
+              disabled={totalRouteCount === 0}
+              onClick={onClearAllRoutes}
               className="text-danger hover:bg-danger/10 hover:text-danger"
             />
           </Tooltip>
-        </>
-      )}
+        )}
 
-      <div className="ml-auto" />
+        {showPlayerActions && (
+          <>
+            <div className="h-5 w-px bg-border" />
+            <Tooltip content={hasSelectedPlayer ? (isHotRoute ? "Remove hot route" : "Mark as hot route") : "Select a player to toggle hot route"}>
+              <IconButton
+                icon={Star}
+                variant="ghost"
+                size="sm"
+                disabled={!hasSelectedPlayer}
+                onClick={onToggleHotRoute}
+                className={hasSelectedPlayer && isHotRoute ? "text-amber-400 hover:text-amber-300" : undefined}
+                aria-pressed={isHotRoute}
+              />
+            </Tooltip>
+            <Tooltip
+              content={
+                !hasSelectedPlayer
+                  ? "Select a player to clear their routes"
+                  : playerRouteCount > 0
+                    ? `Clear ${playerRouteCount} route${playerRouteCount !== 1 ? "s" : ""}`
+                    : "No routes to clear"
+              }
+            >
+              <IconButton
+                icon={Trash2}
+                variant="ghost"
+                size="sm"
+                disabled={!hasSelectedPlayer || playerRouteCount === 0}
+                onClick={onClearPlayerRoutes}
+                className="text-danger hover:bg-danger/10 hover:text-danger"
+              />
+            </Tooltip>
+          </>
+        )}
 
-      <Button variant="primary" size="sm" leftIcon={Check} onClick={onDone}>
-        {doneLabel}
-      </Button>
+        <div className="ml-auto" />
+
+        <Button variant="primary" size="sm" leftIcon={Check} onClick={onDone}>
+          {doneLabel}
+        </Button>
+      </div>
     </div>
   );
 }
