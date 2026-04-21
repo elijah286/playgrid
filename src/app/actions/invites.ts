@@ -272,37 +272,57 @@ export async function sharePlaybookWithEmailsAction(input: {
           .eq("playbook_id", input.playbookId)
           .eq("user_id", userId)
           .maybeSingle();
-        if (existing && existing.status === "active") {
-          results.push({ email, kind: "already_member" });
-          continue;
+        const alreadyActive = !!existing && existing.status === "active";
+        if (!alreadyActive) {
+          // Direct add / upgrade an existing pending row.
+          const { error: upErr } = await admin
+            .from("playbook_members")
+            .upsert(
+              {
+                playbook_id: input.playbookId,
+                user_id: userId,
+                role: input.role,
+                status: "active",
+              },
+              { onConflict: "playbook_id,user_id" },
+            );
+          if (upErr) {
+            results.push({ email, kind: "failed", error: upErr.message });
+            continue;
+          }
         }
-        // Direct add / upgrade an existing pending row.
-        const { error: upErr } = await admin
-          .from("playbook_members")
-          .upsert(
-            {
-              playbook_id: input.playbookId,
-              user_id: userId,
-              role: input.role,
-              status: "active",
-            },
-            { onConflict: "playbook_id,user_id" },
-          );
-        if (upErr) {
-          results.push({ email, kind: "failed", error: upErr.message });
-          continue;
-        }
+        // Always send a "was shared with you" email, even on re-share, so
+        // the recipient sees the signal. Surface email send errors instead
+        // of swallowing them silently.
         const playbookUrl = `${SITE_URL}/playbooks/${input.playbookId}`;
-        await sendSharedExistingUserEmail({
-          to: email,
-          playbookUrl,
-          teamName: input.teamName,
-          senderName: input.senderName ?? null,
-          role: input.role,
-        }).catch(() => {
-          /* non-fatal */
+        try {
+          await sendSharedExistingUserEmail({
+            to: email,
+            playbookUrl,
+            teamName: input.teamName,
+            senderName: input.senderName ?? null,
+            role: input.role,
+          });
+        } catch (e) {
+          console.error("[sharePlaybookWithEmailsAction] send failed", {
+            email,
+            playbookId: input.playbookId,
+            error: e instanceof Error ? e.message : e,
+          });
+          results.push({
+            email,
+            kind: "failed",
+            error:
+              "Added to the playbook, but the notification email could not be sent: " +
+              (e instanceof Error ? e.message : "unknown error"),
+          });
+          continue;
+        }
+        results.push({
+          email,
+          kind: alreadyActive ? "already_member" : "added",
+          userId,
         });
-        results.push({ email, kind: "added", userId });
       } else {
         // Create a scoped invite for this email and send the invite email.
         const inv = await createInviteAction({
@@ -363,7 +383,9 @@ async function sendSharedExistingUserEmail(input: {
   }));
   const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
   const fromEmail = cfg.fromEmail ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-  if (!apiKey) return;
+  if (!apiKey) {
+    throw new Error("Resend API key not configured — set it in Site Admin or RESEND_API_KEY.");
+  }
 
   const team = input.teamName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const sender = (input.senderName ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -395,7 +417,20 @@ async function sendSharedExistingUserEmail(input: {
 </body></html>`;
 
   const resend = new Resend(apiKey);
-  await resend.emails.send({ from: fromEmail, to: input.to, subject, text, html });
+  const res = await resend.emails.send({
+    from: fromEmail,
+    to: input.to,
+    subject,
+    text,
+    html,
+  });
+  if (res.error) {
+    throw new Error(
+      typeof res.error === "string"
+        ? res.error
+        : res.error.message || JSON.stringify(res.error),
+    );
+  }
 }
 
 export async function acceptInviteAction(
