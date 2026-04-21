@@ -75,6 +75,8 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
+
 type GroupBy = "none" | "formation" | "group";
 
 const UNASSIGNED = "__unassigned__";
@@ -1229,10 +1231,7 @@ function InviteRow({ invite, onRevoke }: { invite: PlaybookInvite; onRevoke: () 
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
-  const url =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/invite/${invite.token}`
-      : `/invite/${invite.token}`;
+  const url = `${SITE_URL}/invite/${invite.token}`;
 
   const expiresLabel = new Date(invite.expires_at).toLocaleDateString(undefined, {
     month: "short",
@@ -1305,7 +1304,7 @@ function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () 
       toast(`Could not create invite: ${res.error}`, "error");
       return;
     }
-    const url = `${window.location.origin}/invite/${res.invite.token}`;
+    const url = `${SITE_URL}/invite/${res.invite.token}`;
     setCreatedUrl(url);
   }
 
