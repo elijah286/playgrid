@@ -1043,7 +1043,7 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                         {showPlayNumbers && position != null && !selectionMode && (
-                          <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 inline-flex h-3 min-w-[14px] items-center justify-center rounded bg-primary px-1 text-[7px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
+                          <div className="pointer-events-none absolute left-1.5 bottom-1.5 z-10 inline-flex h-3 min-w-[14px] items-center justify-center rounded bg-primary px-1 text-[7px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
                             {String(position).padStart(2, "0")}
                           </div>
                         )}
@@ -1053,7 +1053,7 @@ export function PlaybookDetailClient({
                           aria-label={`Open ${p.name}`}
                           tabIndex={selectionMode ? -1 : 0}
                         >
-                          <div className={`pr-16 ${showPlayNumbers && position != null && !selectionMode ? "pl-6" : ""}`}>
+                          <div>
                             <p className="mb-0.5 truncate text-[11px] text-muted">
                               {p.formation_name || p.shorthand || "\u00A0"}
                             </p>
@@ -1064,7 +1064,7 @@ export function PlaybookDetailClient({
                             />
                           </div>
                           {p.preview && (
-                            <div className="mt-2">
+                            <div className="mt-1">
                               <PlayPreview preview={p.preview} />
                             </div>
                           )}
@@ -2808,7 +2808,7 @@ function EditablePlayTitle({
           }
         }}
         onBlur={commit}
-        className={`min-w-0 flex-1 truncate rounded-md border border-primary bg-surface px-1.5 py-0 text-foreground focus:outline-none ${className}`}
+        className={`min-w-0 w-full rounded-md border border-primary bg-surface px-1.5 py-0.5 text-xs text-foreground focus:outline-none ${className}`}
         aria-label="Rename play"
       />
     );
