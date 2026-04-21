@@ -925,11 +925,9 @@ export function PlaybookDetailClient({
                           tabIndex={selectionMode ? -1 : 0}
                         >
                           <div className="pr-16">
-                            {(p.formation_name || p.shorthand) && (
-                              <p className="mb-0.5 truncate text-[11px] text-muted">
-                                {p.formation_name || p.shorthand}
-                              </p>
-                            )}
+                            <p className="mb-0.5 truncate text-[11px] text-muted">
+                              {p.formation_name || p.shorthand || "\u00A0"}
+                            </p>
                             <EditablePlayTitle
                               name={p.name}
                               onRename={(next) => onRenamePlayInline(p.id, next)}
@@ -1922,6 +1920,17 @@ function PlayPreview({
       const sy = 1 - n.position.y;
       if (sy < minSvgY) minSvgY = sy;
       if (sy > maxSvgY) maxSvgY = sy;
+    }
+    // Curve control points can sit outside the node bbox — include them so
+    // the bezier belly doesn't get clipped by the thumbnail overflow.
+    for (const seg of r.segments) {
+      if (seg.shape === "curve" && seg.controlOffset) {
+        if (seg.controlOffset.x < minX) minX = seg.controlOffset.x;
+        if (seg.controlOffset.x > maxX) maxX = seg.controlOffset.x;
+        const sy = 1 - seg.controlOffset.y;
+        if (sy < minSvgY) minSvgY = sy;
+        if (sy > maxSvgY) maxSvgY = sy;
+      }
     }
   }
   if (!isFinite(minSvgY) || !isFinite(maxSvgY) || !isFinite(minX) || !isFinite(maxX)) {
