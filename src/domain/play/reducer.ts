@@ -1,5 +1,5 @@
 import type { PlayCommand } from "./commands";
-import type { PlayDocument, Point2, RouteSegment } from "./types";
+import type { PlayDocument, PlayerShape, Point2, RouteSegment } from "./types";
 import { uid } from "./factory";
 
 /**
@@ -168,7 +168,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     }
     case "player.setHotRoute": {
       const players = doc.layers.players.map((p) =>
-        p.id === cmd.playerId ? { ...p, isHotRoute: cmd.isHotRoute } : p,
+        p.id === cmd.playerId
+          ? { ...p, isHotRoute: cmd.isHotRoute, shape: (cmd.isHotRoute ? "star" : "circle") as PlayerShape }
+          : p,
       );
       return { ...doc, layers: { ...doc.layers, players } };
     }
