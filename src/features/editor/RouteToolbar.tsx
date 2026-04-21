@@ -15,6 +15,7 @@ import {
   Trash2,
   Square,
   Circle,
+  Eraser,
 } from "lucide-react";
 import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { SegmentedControl, IconButton, Button } from "@/components/ui";
@@ -51,6 +52,9 @@ type Props = {
   isDefense?: boolean;
   onAddRectZone?: () => void;
   onAddEllipseZone?: () => void;
+  /** Clear every route in the play. Disabled when there are none. */
+  totalRouteCount?: number;
+  onClearAllRoutes?: () => void;
 };
 
 const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
@@ -120,6 +124,8 @@ export function RouteToolbar({
   isDefense = false,
   onAddRectZone,
   onAddEllipseZone,
+  totalRouteCount = 0,
+  onClearAllRoutes,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
@@ -243,6 +249,24 @@ export function RouteToolbar({
             icon={FlipHorizontal}
             variant="ghost"
             onClick={onFlipHorizontal}
+          />
+        </Tooltip>
+      )}
+
+      {onClearAllRoutes && (
+        <Tooltip
+          content={
+            totalRouteCount > 0
+              ? `Clear all ${totalRouteCount} route${totalRouteCount !== 1 ? "s" : ""}`
+              : "No routes to clear"
+          }
+        >
+          <IconButton
+            icon={Eraser}
+            variant="ghost"
+            disabled={totalRouteCount === 0}
+            onClick={onClearAllRoutes}
+            className="text-danger hover:bg-danger/10 hover:text-danger"
           />
         </Tooltip>
       )}
