@@ -304,6 +304,22 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                   />
                   Color-code labels by tag
                 </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Yards behind line of scrimmage · {config.backfieldYards}
+                  </span>
+                  <input
+                    type="range"
+                    min={5}
+                    max={15}
+                    step={1}
+                    value={config.backfieldYards}
+                    onChange={(e) =>
+                      patch({ backfieldYards: Number(e.target.value) })
+                    }
+                    className="accent-primary"
+                  />
+                </label>
               </div>
             </>
           )}
