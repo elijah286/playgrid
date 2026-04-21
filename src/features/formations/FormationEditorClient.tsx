@@ -144,9 +144,8 @@ export function FormationEditorClient(props: Props) {
     router.push(returnTo);
   }
 
-  const VIEWPORT_LENGTH_YDS = 25;
   const fieldAspect =
-    doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+    doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
 
   const returnToPlaybookId =
     (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook : null;

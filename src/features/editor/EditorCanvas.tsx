@@ -1085,21 +1085,29 @@ function EditorCanvasImpl({
     return String(v);
   };
   const showYardNumbers = resolveShowYardNumbers(doc);
-  for (let yd = yardInterval; yd < fieldLengthYds; yd += yardInterval) {
+  // Iterate 5-yard marks anchored to the LOS (not the bottom of the window),
+  // so the LOS always sits on a yard line and the numbers always appear at
+  // the expected ±5, ±10, ... offsets regardless of where the LOS lands.
+  const firstBelowLos = losYd - Math.floor(losYd / yardInterval) * yardInterval;
+  for (let yd = firstBelowLos; yd < fieldLengthYds; yd += yardInterval) {
+    if (yd <= 0) continue;
     const y = yd / fieldLengthYds;
     const svgY = fy(y);
-    yardLines.push(
-      <line
-        key={`h${yd}`}
-        x1={0}
-        y1={svgY}
-        x2={fieldAspect}
-        y2={svgY}
-        stroke={lineColor}
-        strokeWidth={1.5}
-        vectorEffect="non-scaling-stroke"
-      />,
-    );
+    // Skip the solid stripe exactly at LOS — the dashed LOS line draws there.
+    if (yd !== losYd) {
+      yardLines.push(
+        <line
+          key={`h${yd}`}
+          x1={0}
+          y1={svgY}
+          x2={fieldAspect}
+          y2={svgY}
+          stroke={lineColor}
+          strokeWidth={1.5}
+          vectorEffect="non-scaling-stroke"
+        />,
+      );
+    }
     const label = yardLabel(yd);
     if (label && showYardNumbers) {
       // Numbers sit just inside each hash column — the same location they

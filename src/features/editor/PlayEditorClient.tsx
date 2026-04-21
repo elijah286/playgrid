@@ -80,12 +80,12 @@ export function PlayEditorClient({
     };
   }, [doc, vsSnapshot]);
   const anim = usePlayAnimation(animDoc);
-  // Viewport aspect is fixed so resizing field yardage just compresses or
-  // expands the distance between yard lines — the drawable area on screen
-  // doesn't reshape when the user changes e.g. backfield depth.
-  const VIEWPORT_LENGTH_YDS = 25;
+  // Aspect scales with fieldLengthYds so pixels-per-yard stays constant:
+  // adding backfield yards makes the container taller instead of compressing
+  // yard lines into the same box. LOS stays pinned at the same pixel offset
+  // from the top since losY_normalized = yardsFromBottom / fieldLengthYds.
   const fieldAspect =
-    doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+    doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
 
   // Stable set: changes only on phase transitions (not every RAF frame), so
   // EditorCanvas doesn't receive a new prop reference 60× per second and
