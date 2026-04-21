@@ -49,6 +49,20 @@ type TabKey = "plays" | "layout" | "visuals" | "presets";
 type SortKey = "position" | "alpha" | "group" | "tag";
 type TypeFilter = "all" | "offense" | "defense" | "special_teams";
 
+function compareByWristbandNumber(a: PlaybookPrintPackRow, b: PlaybookPrintPackRow) {
+  const ca = (a.nav.wristband_code ?? "").trim();
+  const cb = (b.nav.wristband_code ?? "").trim();
+  if (ca && cb) {
+    const cmp = ca.localeCompare(cb, undefined, { numeric: true, sensitivity: "base" });
+    if (cmp !== 0) return cmp;
+  } else if (ca) {
+    return -1;
+  } else if (cb) {
+    return 1;
+  }
+  return a.nav.sort_order - b.nav.sort_order;
+}
+
 export function PrintPlaybookClient({
   playbookId,
   initialPack,
@@ -108,7 +122,7 @@ export function PrintPlaybookClient({
       });
 
     if (sortBy === "position") {
-      const rows = [...filtered].sort((a, b) => a.nav.sort_order - b.nav.sort_order);
+      const rows = [...filtered].sort(compareByWristbandNumber);
       if (rows.length === 0) return [];
       return [{ key: "__all__", name: "All plays", rows }];
     }
@@ -301,7 +315,7 @@ export function PrintPlaybookClient({
       sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
     const ordered =
       sortBy === "position"
-        ? [...pool].sort((a, b) => a.nav.sort_order - b.nav.sort_order)
+        ? [...pool].sort(compareByWristbandNumber)
         : (() => {
             const navOrder = sortNavPlaysForPrint(
               pool.map((r) => r.nav),
@@ -343,7 +357,7 @@ export function PrintPlaybookClient({
       sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
     const ordered =
       sortBy === "position"
-        ? [...rows].sort((a, b) => a.nav.sort_order - b.nav.sort_order)
+        ? [...rows].sort(compareByWristbandNumber)
         : (() => {
             const navOrder = sortNavPlaysForPrint(
               rows.map((r) => r.nav),
