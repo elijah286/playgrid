@@ -146,6 +146,7 @@ export function PlaybookDetailClient({
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   // Per-playbook persisted view prefs. Read once on mount to seed state,
   // then mirror every change back to localStorage. Search query is
   // intentionally ephemeral.
@@ -461,6 +462,35 @@ export function PlaybookDetailClient({
 
   return (
     <div className="space-y-4">
+      {duplicatingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 shadow-xl">
+            <svg
+              className="size-5 animate-spin text-primary"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="3"
+                opacity="0.25"
+              />
+              <path
+                d="M22 12a10 10 0 0 1-10 10"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="text-sm font-medium text-foreground">
+              Duplicating play…
+            </span>
+          </div>
+        </div>
+      )}
       {/* Sticky header region: back link + playbook identity + slim top bar.
           Stays pinned below the global dashboard header (h ≈ 56px = top-14)
           while plays scroll beneath. `-mt-8` cancels the dashboard `<main>`
@@ -765,14 +795,18 @@ export function PlaybookDetailClient({
               {
                 label: "Duplicate",
                 icon: Copy,
-                onSelect: () =>
-                  handle(
-                    () => duplicatePlayAction(p.id),
-                    (res) => {
-                      const r = res as { ok: true; playId: string };
-                      router.push(`/plays/${r.playId}/edit`);
-                    },
-                  ),
+                onSelect: () => {
+                  setDuplicatingId(p.id);
+                  startTransition(async () => {
+                    const res = await duplicatePlayAction(p.id);
+                    if (!res.ok) {
+                      setDuplicatingId(null);
+                      toast(res.error ?? "Could not duplicate play.", "error");
+                      return;
+                    }
+                    router.push(`/plays/${res.playId}/edit`);
+                  });
+                },
               },
               p.is_archived
                 ? {
