@@ -13,10 +13,13 @@ export function LoginForm() {
 
   const [step, setStep] = useState<Step>("email");
 
-  // Headline flips from "Get started" to "Welcome back" once AuthFlow detects
-  // the typed email already has an account (step advances to "password"). In
-  // sign-in mode we always show "Welcome back".
-  const showWelcomeBack = !isSignup || step !== "email";
+  // "Welcome back" once AuthFlow advances to the password step (we've
+  // confirmed the email has an account) or any existing-user follow-ups.
+  // "Get started" for the email step in signup mode and for the code step
+  // (which new signups always land on).
+  const welcomeSteps: Step[] = ["password", "offer-reset", "set-new-password"];
+  const showWelcomeBack =
+    welcomeSteps.includes(step) || (step === "email" && !isSignup);
   const title = showWelcomeBack ? "Welcome back" : "Get started";
   const subtitle = showWelcomeBack
     ? "Sign in to your PlayGrid account to access your playbooks."
