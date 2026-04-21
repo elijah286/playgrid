@@ -120,10 +120,13 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
     try {
       const res = await emailHasAccountAction(trimmed);
       if (!res.ok) throw new Error(res.error);
-      if (res.exists && res.hasPassword) {
+      if (res.exists) {
+        // Existing accounts always land on the password step. OTP-only
+        // users can fall through via the "Use a one-time passcode instead"
+        // link under the password input.
         setStep("password");
       } else {
-        await sendCode({ isNewUser: !res.exists, silent: true });
+        await sendCode({ isNewUser: true, silent: true });
         setStep("code");
       }
     } catch (e: unknown) {
@@ -553,7 +556,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
               disabled={pending}
               className="block w-full text-center text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
             >
-              Use one-time code instead
+              Use a one-time passcode instead
             </button>
           )}
 
