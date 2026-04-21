@@ -839,6 +839,20 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     if (window.confirm(msg)) fn();
   }
 
+  function DupStatePill({ allowed }: { allowed: boolean }) {
+    return (
+      <span
+        className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${
+          allowed
+            ? "bg-success-light text-success"
+            : "bg-surface-inset text-muted"
+        }`}
+      >
+        {allowed ? "On" : "Off"}
+      </span>
+    );
+  }
+
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
     return [
       {
@@ -857,10 +871,9 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         onSelect: () => setDuplicating(tile),
       },
       {
-        label: tile.allow_coach_duplication
-          ? "Disallow coach duplication"
-          : "Allow coach duplication",
-        icon: tile.allow_coach_duplication ? Lock : Unlock,
+        label: "Coach duplication",
+        icon: tile.allow_coach_duplication ? Unlock : Lock,
+        trailing: <DupStatePill allowed={tile.allow_coach_duplication} />,
         onSelect: () =>
           handle(() =>
             setPlaybookAllowDuplicationAction(
@@ -871,10 +884,9 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           ),
       },
       {
-        label: tile.allow_player_duplication
-          ? "Disallow player duplication"
-          : "Allow player duplication",
-        icon: tile.allow_player_duplication ? Lock : Unlock,
+        label: "Player duplication",
+        icon: tile.allow_player_duplication ? Unlock : Lock,
+        trailing: <DupStatePill allowed={tile.allow_player_duplication} />,
         onSelect: () =>
           handle(() =>
             setPlaybookAllowDuplicationAction(

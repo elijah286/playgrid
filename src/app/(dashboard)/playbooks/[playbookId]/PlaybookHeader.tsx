@@ -353,6 +353,20 @@ function DuplicatePlaybookDialog({
   );
 }
 
+function DupStatePill({ allowed }: { allowed: boolean }) {
+  return (
+    <span
+      className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${
+        allowed
+          ? "bg-success-light text-success"
+          : "bg-surface-inset text-muted"
+      }`}
+    >
+      {allowed ? "On" : "Off"}
+    </span>
+  );
+}
+
 function HeaderMenu({
   onAccent,
   onAccentHover,
@@ -532,15 +546,12 @@ function HeaderMenu({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
                 >
                   {allowCoachDuplication ? (
-                    <Lock className="size-4" />
+                    <Unlock className="size-4 shrink-0" />
                   ) : (
-                    <Unlock className="size-4" />
+                    <Lock className="size-4 shrink-0" />
                   )}
-                  <span>
-                    {allowCoachDuplication
-                      ? "Disallow coach duplication"
-                      : "Allow coach duplication"}
-                  </span>
+                  <span className="flex-1">Coach duplication</span>
+                  <DupStatePill allowed={allowCoachDuplication} />
                 </button>
               )}
               {onTogglePlayerDup && (
@@ -554,15 +565,12 @@ function HeaderMenu({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
                 >
                   {allowPlayerDuplication ? (
-                    <Lock className="size-4" />
+                    <Unlock className="size-4 shrink-0" />
                   ) : (
-                    <Unlock className="size-4" />
+                    <Lock className="size-4 shrink-0" />
                   )}
-                  <span>
-                    {allowPlayerDuplication
-                      ? "Disallow player duplication"
-                      : "Allow player duplication"}
-                  </span>
+                  <span className="flex-1">Player duplication</span>
+                  <DupStatePill allowed={allowPlayerDuplication} />
                 </button>
               )}
               {onArchive && (

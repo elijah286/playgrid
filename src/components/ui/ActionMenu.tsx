@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
@@ -12,6 +13,7 @@ export type ActionMenuItem = {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
+  trailing?: React.ReactNode;
 };
 
 /**
@@ -132,8 +134,11 @@ export function ActionMenu({
                       : "text-foreground hover:bg-surface-inset",
                   )}
                 >
-                  {Icon && <Icon className="size-4" />}
-                  <span>{item.label}</span>
+                  {Icon && <Icon className="size-4 shrink-0" />}
+                  <span className="flex-1">{item.label}</span>
+                  {item.trailing != null && (
+                    <span className="ml-2 shrink-0">{item.trailing}</span>
+                  )}
                 </button>
               );
             })}
