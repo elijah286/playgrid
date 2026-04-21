@@ -47,7 +47,7 @@ export function playerChipHtml(
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const fs = player.label.length > 1 ? 9 : 11;
   return (
-    `<svg width="${size}" height="${size}" viewBox="0 0 20 20" style="display:inline-block;vertical-align:-2px" aria-hidden="true">` +
+    `<svg width="${size}" height="${size}" viewBox="0 0 20 20" style="display:inline-block;vertical-align:middle" aria-hidden="true">` +
     `<circle cx="10" cy="10" r="9" fill="${esc(player.style.fill)}" stroke="${esc(player.style.stroke)}" stroke-width="1.5"></circle>` +
     `<text x="10" y="10" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="700" fill="${esc(player.style.labelColor)}">${esc(player.label)}</text>` +
     `</svg>`
