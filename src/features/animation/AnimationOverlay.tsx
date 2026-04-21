@@ -33,6 +33,10 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
       viewBox={`0 0 ${fieldAspect} 1`}
       preserveAspectRatio="xMidYMin meet"
       className="pointer-events-none absolute inset-0 h-full w-full"
+      // Promote the overlay to its own compositor layer so its 60fps repaints
+      // don't invalidate the (memoized) canvas beneath it, which would cause
+      // routes, yard numbers, and LOS dashes to flicker during playback.
+      style={{ willChange: "transform", transform: "translateZ(0)" }}
     >
       {anim.flats.map((f) => {
         const pl = playerById.get(f.carrierPlayerId);
@@ -50,9 +54,15 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
  * coords (wrapper applies x-aspect scaling).
  */
 function renderPlayerToken(pl: Player, pos: Point2, fieldAspect: number) {
+  // Shape geometry is defined around the ORIGIN so the only thing that changes
+  // per frame is the parent <g>'s translate() — browsers can promote transform
+  // changes to the compositor and avoid re-painting the whole SVG. Updating
+  // cx/cy/x/y attributes instead would cause full-SVG paint invalidation,
+  // which is what made adjacent field elements (routes, yard numbers, LOS)
+  // appear to flicker during playback.
   const r = 0.028;
-  const px = pos.x * fieldAspect;
-  const py = 1 - pos.y;
+  const tx = pos.x * fieldAspect;
+  const ty = 1 - pos.y;
   const fillColor = pl.style?.fill ?? "#FFFFFF";
   const strokeColor = pl.style?.stroke ?? "rgba(0,0,0,0.6)";
   const labelColor = readableLabelColor(fillColor, pl.style?.labelColor);
@@ -61,39 +71,16 @@ function renderPlayerToken(pl: Player, pos: Point2, fieldAspect: number) {
   let shapeEl: React.ReactNode;
   if (shape === "circle") {
     shapeEl = (
-      <circle
-        cx={px}
-        cy={py}
-        r={r}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth={1.5}
-        vectorEffect="non-scaling-stroke"
-      />
+      <circle cx={0} cy={0} r={r} fill={fillColor} stroke={strokeColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
     );
   } else if (shape === "square") {
     shapeEl = (
-      <rect
-        x={px - r}
-        y={py - r}
-        width={r * 2}
-        height={r * 2}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth={1.5}
-        vectorEffect="non-scaling-stroke"
-      />
+      <rect x={-r} y={-r} width={r * 2} height={r * 2} fill={fillColor} stroke={strokeColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
     );
   } else if (shape === "diamond") {
-    const pts = `${px},${py - r} ${px + r},${py} ${px},${py + r} ${px - r},${py}`;
+    const pts = `0,${-r} ${r},0 0,${r} ${-r},0`;
     shapeEl = (
-      <polygon
-        points={pts}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth={1.5}
-        vectorEffect="non-scaling-stroke"
-      />
+      <polygon points={pts} fill={fillColor} stroke={strokeColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
     );
   } else if (shape === "star") {
     const outer = r * 1.15;
@@ -101,37 +88,24 @@ function renderPlayerToken(pl: Player, pos: Point2, fieldAspect: number) {
     const pts = Array.from({ length: 10 }, (_, i) => {
       const angle = -Math.PI / 2 + (i * Math.PI) / 5;
       const rad = i % 2 === 0 ? outer : inner;
-      return `${px + rad * Math.cos(angle)},${py + rad * Math.sin(angle)}`;
+      return `${rad * Math.cos(angle)},${rad * Math.sin(angle)}`;
     }).join(" ");
     shapeEl = (
-      <polygon
-        points={pts}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <polygon points={pts} fill={fillColor} stroke={strokeColor} strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     );
   } else {
-    const pts = `${px},${py + r} ${px + r},${py - r} ${px - r},${py - r}`;
+    const pts = `0,${r} ${r},${-r} ${-r},${-r}`;
     shapeEl = (
-      <polygon
-        points={pts}
-        fill={fillColor}
-        stroke={strokeColor}
-        strokeWidth={1.5}
-        vectorEffect="non-scaling-stroke"
-      />
+      <polygon points={pts} fill={fillColor} stroke={strokeColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
     );
   }
 
   return (
-    <g key={pl.id}>
+    <g key={pl.id} transform={`translate(${tx} ${ty})`}>
       {shapeEl}
       <text
-        x={px}
-        y={py + 0.01}
+        x={0}
+        y={0.01}
         textAnchor="middle"
         fontSize={0.022}
         fontWeight={700}
