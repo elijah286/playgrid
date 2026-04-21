@@ -35,6 +35,7 @@ type Props = {
   onNavigateToPlay: (playId: string) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
   allFormations?: SavedFormation[];
+  canEdit?: boolean;
 };
 
 export function EditorHeaderBar({
@@ -48,6 +49,7 @@ export function EditorHeaderBar({
   onNavigateToPlay,
   onSaveAsNewFormation,
   allFormations = [],
+  canEdit = true,
 }: Props) {
   const [nav, setNav] = useState(initialNav);
   const [groups, setGroups] = useState(initialGroups);
@@ -118,23 +120,36 @@ export function EditorHeaderBar({
           <div className="inline-flex min-w-0 items-center gap-1">
             <h1 className="flex min-w-0 items-center text-base font-bold text-foreground">
               {(doc.metadata.playType ?? "offense") === "offense" ? (
-                <FormationTitlePicker
-                  currentId={formationId ?? null}
-                  currentName={formation ?? ""}
-                  allFormations={allFormations}
-                  dispatch={dispatch}
-                  onSaveAsNewFormation={onSaveAsNewFormation}
-                />
+                canEdit ? (
+                  <FormationTitlePicker
+                    currentId={formationId ?? null}
+                    currentName={formation ?? ""}
+                    allFormations={allFormations}
+                    dispatch={dispatch}
+                    onSaveAsNewFormation={onSaveAsNewFormation}
+                  />
+                ) : (
+                  <span className="inline-flex items-center px-1 py-0.5 text-muted">
+                    <span>{formation || "No formation"}</span>
+                    <span className="mx-1">·</span>
+                  </span>
+                )
               ) : null}
-              <button
-                type="button"
-                onClick={() => setEditingName(true)}
-                className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-surface-inset"
-                title="Rename play"
-              >
-                <span className="truncate">{name}</span>
-                <PencilLine className="size-3.5 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
-              </button>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingName(true)}
+                  className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-surface-inset"
+                  title="Rename play"
+                >
+                  <span className="truncate">{name}</span>
+                  <PencilLine className="size-3.5 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+              ) : (
+                <span className="inline-flex min-w-0 items-center px-1 py-0.5">
+                  <span className="truncate">{name}</span>
+                </span>
+              )}
             </h1>
           </div>
         )}
@@ -168,16 +183,18 @@ export function EditorHeaderBar({
           </Button>
 
 
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            leftIcon={Copy}
-            onClick={onDuplicate}
-            className="ml-1"
-          >
-            Copy
-          </Button>
+          {canEdit && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              leftIcon={Copy}
+              onClick={onDuplicate}
+              className="ml-1"
+            >
+              Copy
+            </Button>
+          )}
         </div>
       </div>
     </header>

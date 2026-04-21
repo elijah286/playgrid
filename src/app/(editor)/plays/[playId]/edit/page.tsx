@@ -5,6 +5,7 @@ import { getPlaybookSettingsAction } from "@/app/actions/playbooks";
 import { listFormationsAction, listFormationsForPlaybookAction } from "@/app/actions/formations";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import type { SavedFormation } from "@/app/actions/formations";
 
@@ -62,6 +63,26 @@ export default async function PlayEditPage({ params }: Props) {
   // we feed it the full list.
   const allFormations = formationsRes.ok ? formationsRes.formations : [];
 
+  // Viewers (read-only members) see the play + playback + opponent overlay
+  // but no editing surfaces. Owners/editors get the full editor. If the
+  // user somehow isn't a member at all we fall back to read-only — the
+  // server actions already enforce writes via RLS.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let canEdit = false;
+  if (user) {
+    const { data: membership } = await supabase
+      .from("playbook_members")
+      .select("role")
+      .eq("playbook_id", res.play.playbook_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const role = membership?.role as "owner" | "editor" | "viewer" | undefined;
+    canEdit = role === "owner" || role === "editor";
+  }
+
   return (
     <PlayEditorClient
       playId={res.play.id}
@@ -74,6 +95,7 @@ export default async function PlayEditPage({ params }: Props) {
       allFormations={allFormations}
       opponentFormations={allFormationsForLookup}
       playbookSettings={playbookSettings}
+      canEdit={canEdit}
     />
   );
 }

@@ -44,6 +44,10 @@ type Props = {
   /** Full cross-variant, cross-playbook list. Used only by the opponent overlay. */
   opponentFormations?: SavedFormation[];
   playbookSettings?: PlaybookSettings;
+  /** When false, the viewer only has read + playback + opponent-overlay
+   *  access. Toolbars, inspectors, tag inputs, rename, copy, and auto-save
+   *  are all suppressed. */
+  canEdit?: boolean;
 };
 
 export function PlayEditorClient({
@@ -57,6 +61,7 @@ export function PlayEditorClient({
   allFormations = [],
   opponentFormations,
   playbookSettings,
+  canEdit = true,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -151,6 +156,7 @@ export function PlayEditorClient({
   const isFirstDocRender = useRef(true);
 
   useEffect(() => {
+    if (!canEdit) return;
     if (isFirstDocRender.current) {
       isFirstDocRender.current = false;
       return;
@@ -167,7 +173,7 @@ export function PlayEditorClient({
       setIsSaving(false);
     }, 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc]);
+  }, [doc, canEdit]);
 
   useEffect(() => {
     if (!isSaving) return;
@@ -500,6 +506,7 @@ export function PlayEditorClient({
         onNavigateToPlay={navigateToPlay}
         onSaveAsNewFormation={saveAsNewFormation}
         allFormations={allFormations}
+        canEdit={canEdit}
       />
 
       {playbookSettings &&
@@ -520,6 +527,7 @@ export function PlayEditorClient({
                 route drawn, so the toolbar is never dead UI. Opacity
                 signals that the selection-specific actions (Done, Smooth)
                 don't apply yet. */}
+            {canEdit && (
             <div
               data-toolbar-slot
               className={`${
@@ -601,9 +609,12 @@ export function PlayEditorClient({
                 }}
               />
             </div>
+            )}
 
             <div
-              className="relative w-full overflow-hidden"
+              className={`relative w-full overflow-hidden ${
+                !canEdit ? "pointer-events-none select-none" : ""
+              }`}
               style={{ aspectRatio: `${fieldAspect} / 1` }}
             >
               <EditorCanvas
@@ -635,22 +646,25 @@ export function PlayEditorClient({
 
             {/* Mobile view-mode controls: play/animate + Edit toggle. Shown
                 only on mobile when the user hasn't switched to edit mode.
-                Desktop always renders the full editor instead. */}
+                Desktop always renders the full editor instead. Viewers
+                never get an edit toggle — they see only playback. */}
             {mode === "view" && (
               <div className="flex flex-col gap-3 sm:hidden">
                 <div className="rounded-xl border border-border bg-surface-raised p-4">
                   <PlayControlsPanel anim={anim} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setMode("edit")}
-                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-semibold text-foreground hover:bg-surface"
-                >
-                  Edit play
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setMode("edit")}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-semibold text-foreground hover:bg-surface"
+                  >
+                    Edit play
+                  </button>
+                )}
               </div>
             )}
-            {mode === "edit" && (
+            {canEdit && mode === "edit" && (
               <button
                 type="button"
                 onClick={() => setMode("view")}
@@ -661,15 +675,18 @@ export function PlayEditorClient({
             )}
 
             {/* Field size controls (below canvas) */}
-            <div className={mode === "edit" ? "" : "hidden sm:block"}>
-              <FieldSizeControls doc={doc} dispatch={dispatch} />
-            </div>
+            {canEdit && (
+              <div className={mode === "edit" ? "" : "hidden sm:block"}>
+                <FieldSizeControls doc={doc} dispatch={dispatch} />
+              </div>
+            )}
 
             {/* Play notes */}
             <div className={mode === "edit" ? "" : "hidden sm:block"}>
               <PlayNotesCard
                 value={doc.metadata.notes ?? ""}
                 players={doc.layers.players}
+                readOnly={!canEdit}
                 onChange={(notes) =>
                   dispatch({ type: "document.setMetadata", patch: { notes } })
                 }
@@ -681,11 +698,11 @@ export function PlayEditorClient({
               mode === "edit" ? "flex" : "hidden sm:flex"
             } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
           >
-            {!showToolbar && <PlayControlsPanel anim={anim} />}
-            {showToolbar && selectedPlayerId != null && (
+            {(!showToolbar || !canEdit) && <PlayControlsPanel anim={anim} />}
+            {canEdit && showToolbar && selectedPlayerId != null && (
               <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
             )}
-            {!showToolbar && (
+            {canEdit && !showToolbar && (
               <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
             )}
             {!showToolbar && isDefense && vsSnapshot ? (
@@ -730,14 +747,16 @@ export function PlayEditorClient({
                 }
               />
             ) : null}
-            <Inspector
-              doc={doc}
-              dispatch={dispatch}
-              selectedPlayerId={selectedPlayerId}
-              selectedRouteId={selectedRouteId}
-              selectedSegmentId={selectedSegmentId}
-              activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
-            />
+            {canEdit && (
+              <Inspector
+                doc={doc}
+                dispatch={dispatch}
+                selectedPlayerId={selectedPlayerId}
+                selectedRouteId={selectedRouteId}
+                selectedSegmentId={selectedSegmentId}
+                activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
+              />
+            )}
           </aside>
       </div>
 
@@ -772,12 +791,17 @@ function PlayNotesCard({
   value,
   players,
   onChange,
+  readOnly = false,
 }: {
   value: string;
   players: Player[];
   onChange: (next: string) => void;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(value.length > 0);
+  // Read-only viewers with no notes at all have nothing to show — collapse
+  // the card entirely so the sidebar stays uncluttered.
+  if (readOnly && !value.trim()) return null;
   return (
     <div className="mt-3 rounded-xl border border-border bg-surface-raised">
       <button
@@ -798,12 +822,16 @@ function PlayNotesCard({
       </button>
       {open && (
         <div className="border-t border-border px-4 py-3">
-          <PlayerMentionEditor
-            value={value}
-            onChange={onChange}
-            players={players}
-            placeholder={'Type notes for players here. Try typing "@F" or "@Q" to link notes to specific players.'}
-          />
+          {readOnly ? (
+            <p className="whitespace-pre-wrap text-sm text-foreground">{value}</p>
+          ) : (
+            <PlayerMentionEditor
+              value={value}
+              onChange={onChange}
+              players={players}
+              placeholder={'Type notes for players here. Try typing "@F" or "@Q" to link notes to specific players.'}
+            />
+          )}
         </div>
       )}
     </div>
