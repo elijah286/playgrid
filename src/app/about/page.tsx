@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 
 export const metadata: Metadata = {
   title: "About · PlayGrid",
@@ -31,6 +32,17 @@ export default function AboutPage() {
         <p className="pt-4 text-sm">
           <em>Created by Elijah Kerry from Cedar Park.</em>
         </p>
+      </div>
+      <div className="mt-8 overflow-hidden rounded-lg">
+        <Image
+          src="/about/montage.jpg"
+          alt="Coaching moments across flag football, youth tackle, and 7v7"
+          width={1400}
+          height={466}
+          sizes="(min-width: 768px) 672px, 100vw"
+          className="h-auto w-full"
+          priority={false}
+        />
       </div>
     </article>
   );
