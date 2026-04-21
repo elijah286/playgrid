@@ -331,6 +331,22 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                     className="accent-primary"
                   />
                 </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Yards downfield · {config.downfieldYards}
+                  </span>
+                  <input
+                    type="range"
+                    min={10}
+                    max={25}
+                    step={1}
+                    value={config.downfieldYards}
+                    onChange={(e) =>
+                      patch({ downfieldYards: Number(e.target.value) })
+                    }
+                    className="accent-primary"
+                  />
+                </label>
               </div>
             </>
           )}
@@ -539,6 +555,20 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 step={1}
                 value={config.backfieldYards}
                 onChange={(e) => patch({ backfieldYards: Number(e.target.value) })}
+                className="accent-primary"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted">
+                Yards downfield · {config.downfieldYards}
+              </span>
+              <input
+                type="range"
+                min={10}
+                max={25}
+                step={1}
+                value={config.downfieldYards}
+                onChange={(e) => patch({ downfieldYards: Number(e.target.value) })}
                 className="accent-primary"
               />
             </label>

@@ -199,6 +199,40 @@ export function compilePlayToSvg(
   return { templateKind: kind, svgMarkup: svg, width: w, height: h };
 }
 
+/** Real 5-yard lines, placed in true yardage coordinates off the LOS.
+ *  Every 10yd line is slightly thicker; intensity fades the stroke/opacity. */
+function realYardLinesSvg(
+  doc: PlayDocument,
+  fx: number,
+  fy: number,
+  fw: number,
+  fh: number,
+  intensity: number,
+  fieldMin: number,
+  baseWidth = 0.004,
+): string {
+  if (intensity <= 0) return "";
+  const total = doc.sportProfile.fieldLengthYds;
+  const losY = doc.lineOfScrimmageY ?? 0.5;
+  if (!Number.isFinite(total) || total <= 0) return "";
+  const backYd = losY * total;
+  const fwdYd = (1 - losY) * total;
+  const step = 5;
+  let out = "";
+  const draw = (yardsFromLos: number) => {
+    const yNorm = losY + yardsFromLos / total;
+    if (yNorm <= 0 || yNorm >= 1) return;
+    const gy = fy + (1 - yNorm) * fh;
+    const isTen = Math.abs(yardsFromLos) % 10 === 0;
+    const w = Math.max(0.08, fieldMin * baseWidth * intensity * (isTen ? 1.35 : 1));
+    const op = intensity * (isTen ? 1 : 0.7);
+    out += `<line x1="${fx}" y1="${gy}" x2="${fx + fw}" y2="${gy}" stroke="#94a3b8" stroke-width="${w}" opacity="${op}"/>`;
+  };
+  for (let y = step; y <= backYd + 0.01; y += step) draw(-y);
+  for (let y = step; y <= fwdYd + 0.01; y += step) draw(y);
+  return out;
+}
+
 function yardMarkersSvg(fx: number, fy: number, fw: number, fh: number): string {
   const lines: string[] = [];
   // Horizontal yard lines every ~10% of field height (approx every 2.5 yds in 25-yd view)
@@ -511,13 +545,7 @@ function renderFieldContents(
 
   const ymI = Math.max(0, Math.min(1, look.yardMarkersIntensity));
   const losI = Math.max(0, Math.min(1, look.losIntensity));
-  let guides = "";
-  if (ymI > 0) {
-    for (let i = 1; i < 5; i++) {
-      const gy = fieldY + (fieldH * i) / 5;
-      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#94a3b8" stroke-width="${Math.max(0.1, fieldMin * 0.004 * ymI)}" opacity="${ymI}"/>`;
-    }
-  }
+  let guides = realYardLinesSvg(doc, fieldX, fieldY, fieldW, fieldH, ymI, fieldMin);
   if (losI > 0) {
     const losY = doc.lineOfScrimmageY ?? 0.5;
     const ly = fieldY + (1 - losY) * fieldH;
@@ -821,13 +849,7 @@ function renderWristbandTile(
 
   const ymI = Math.max(0, Math.min(1, opts.yardMarkersIntensity));
   const losI = Math.max(0, Math.min(1, opts.losIntensity));
-  let guides = "";
-  if (ymI > 0) {
-    for (let i = 1; i < 5; i++) {
-      const gy = fieldY + (fieldH * i) / 5;
-      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#94a3b8" stroke-width="${0.15 * ymI}" opacity="${ymI}"/>`;
-    }
-  }
+  let guides = realYardLinesSvg(doc, fieldX, fieldY, fieldW, fieldH, ymI, Math.min(fieldW, fieldH), 0.0035);
   if (losI > 0) {
     const losY = doc.lineOfScrimmageY ?? 0.5;
     const ly = fieldY + (1 - losY) * fieldH;
