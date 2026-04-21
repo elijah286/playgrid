@@ -104,7 +104,16 @@ export function OpponentOverlayCard({
         setSelection({ kind: "none" });
         return;
       }
-      onChange(res.document.layers.players);
+      const players = res.document.layers.players ?? [];
+      if (players.length === 0) {
+        toast(
+          `"${p.name}" has no player positions saved — open it and place defenders first.`,
+          "error",
+        );
+        setSelection({ kind: "none" });
+        return;
+      }
+      onChange(players);
     });
   };
 
