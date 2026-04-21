@@ -143,10 +143,21 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
         },
       };
     case "player.setLabel": {
+      const prev = doc.layers.players.find((p) => p.id === cmd.playerId);
+      const oldLabel = prev?.label ?? "";
       const players = doc.layers.players.map((p) =>
         p.id === cmd.playerId ? { ...p, label: cmd.label } : p,
       );
-      return { ...doc, layers: { ...doc.layers, players } };
+      let metadata = doc.metadata;
+      if (metadata.notes && oldLabel && oldLabel !== cmd.label) {
+        const escaped = oldLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`@${escaped}(?![A-Za-z0-9])`, "g");
+        const nextNotes = metadata.notes.replace(re, `@${cmd.label}`);
+        if (nextNotes !== metadata.notes) {
+          metadata = { ...metadata, notes: nextNotes };
+        }
+      }
+      return { ...doc, layers: { ...doc.layers, players }, metadata };
     }
     case "player.setShape": {
       const players = doc.layers.players.map((p) =>
@@ -155,10 +166,19 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return { ...doc, layers: { ...doc.layers, players } };
     }
     case "player.setStyle": {
+      const prev = doc.layers.players.find((p) => p.id === cmd.playerId);
       const players = doc.layers.players.map((p) =>
         p.id === cmd.playerId ? { ...p, style: cmd.style } : p,
       );
-      return { ...doc, layers: { ...doc.layers, players } };
+      const fillChanged = prev?.style.fill !== cmd.style.fill;
+      const routes = fillChanged
+        ? doc.layers.routes.map((r) =>
+            r.carrierPlayerId === cmd.playerId
+              ? { ...r, style: { ...r.style, stroke: cmd.style.fill } }
+              : r,
+          )
+        : doc.layers.routes;
+      return { ...doc, layers: { ...doc.layers, players, routes } };
     }
     case "player.setRole": {
       const players = doc.layers.players.map((p) =>

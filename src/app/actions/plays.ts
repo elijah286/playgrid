@@ -32,6 +32,7 @@ export type PlaybookDetailPlayRow = {
     zones: Zone[];
     lineOfScrimmageY: number;
   } | null;
+  hasNotes: boolean;
 };
 
 export async function listPlaysAction(
@@ -81,6 +82,7 @@ export async function listPlaysAction(
     string,
     { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number }
   >();
+  const notesByVersion = new Map<string, boolean>();
   if (versionIds.length > 0) {
     const { data: versions } = await supabase
       .from("play_versions")
@@ -95,6 +97,7 @@ export async function listPlaysAction(
         zones: doc.layers?.zones ?? [],
         lineOfScrimmageY: typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
       });
+      notesByVersion.set(v.id as string, Boolean(doc.metadata?.notes?.trim()));
     }
   }
 
@@ -117,6 +120,7 @@ export async function listPlaysAction(
       play_type: ((r.play_type as PlayType | null) ?? "offense"),
       special_teams_unit: (r.special_teams_unit as SpecialTeamsUnit | null) ?? null,
       preview: vid ? previewByVersion.get(vid) ?? null : null,
+      hasNotes: vid ? notesByVersion.get(vid) ?? false : false,
     };
   });
 
@@ -577,7 +581,10 @@ export async function unlinkDefenseVsPlayAction(defensePlayId: string) {
   return savePlayVersionAction(defensePlayId, doc, "unlink vs offense");
 }
 
-export async function duplicatePlayAction(playId: string) {
+export async function duplicatePlayAction(
+  playId: string,
+  opts?: { clearNotes?: boolean },
+) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
@@ -601,6 +608,7 @@ export async function duplicatePlayAction(playId: string) {
 
   const doc = structuredClone(loaded.document);
   doc.metadata.coachName = `${doc.metadata.coachName} (copy)`;
+  if (opts?.clearNotes) doc.metadata.notes = "";
 
   const { data: sortDup } = await supabase
     .from("plays")

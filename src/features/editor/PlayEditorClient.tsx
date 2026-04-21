@@ -21,12 +21,13 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorHeaderBar } from "./EditorHeaderBar";
-import { useToast } from "@/components/ui";
+import { useToast, Modal, Button } from "@/components/ui";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
 import { VsPlayCard } from "./VsPlayCard";
+import { PlayerMentionEditor } from "./PlayerMentionEditor";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 type Props = {
@@ -203,16 +204,30 @@ export function PlayEditorClient({
   const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
   const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
 
+  const [duplicatePrompt, setDuplicatePrompt] = useState(false);
+
+  const runDuplicate = useCallback(
+    (clearNotes: boolean) => {
+      setDuplicatePrompt(false);
+      startTransition(async () => {
+        const res = await duplicatePlayAction(playId, { clearNotes });
+        if (!res.ok) toast(res.error, "error");
+        else {
+          toast("Play duplicated", "success");
+          router.push(`/plays/${res.playId}/edit`);
+        }
+      });
+    },
+    [playId, router, toast],
+  );
+
   const duplicate = useCallback(() => {
-    startTransition(async () => {
-      const res = await duplicatePlayAction(playId);
-      if (!res.ok) toast(res.error, "error");
-      else {
-        toast("Play duplicated", "success");
-        router.push(`/plays/${res.playId}/edit`);
-      }
-    });
-  }, [playId, router, toast]);
+    if ((doc.metadata.notes ?? "").trim()) {
+      setDuplicatePrompt(true);
+    } else {
+      runDuplicate(false);
+    }
+  }, [doc.metadata.notes, runDuplicate]);
 
   /* ---------- Toolbar handlers ---------- */
 
@@ -602,6 +617,7 @@ export function PlayEditorClient({
             <div className={mode === "edit" ? "" : "hidden sm:block"}>
               <PlayNotesCard
                 value={doc.metadata.notes ?? ""}
+                players={doc.layers.players}
                 onChange={(notes) =>
                   dispatch({ type: "document.setMetadata", patch: { notes } })
                 }
@@ -668,15 +684,40 @@ export function PlayEditorClient({
           </aside>
       </div>
 
+      <Modal
+        open={duplicatePrompt}
+        onClose={() => setDuplicatePrompt(false)}
+        title="Duplicate play"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDuplicatePrompt(false)}>
+              Cancel
+            </Button>
+            <Button variant="ghost" onClick={() => runDuplicate(true)}>
+              Clear notes
+            </Button>
+            <Button onClick={() => runDuplicate(false)}>Keep notes</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground">
+          This play has notes. Do you want to keep them on the duplicate, or start fresh?
+        </p>
+        <p className="mt-2 text-xs text-muted">
+          The notes on the original play will not be modified either way.
+        </p>
+      </Modal>
     </div>
   );
 }
 
 function PlayNotesCard({
   value,
+  players,
   onChange,
 }: {
   value: string;
+  players: Player[];
   onChange: (next: string) => void;
 }) {
   const [open, setOpen] = useState(value.length > 0);
@@ -700,11 +741,11 @@ function PlayNotesCard({
       </button>
       {open && (
         <div className="border-t border-border px-4 py-3">
-          <textarea
+          <PlayerMentionEditor
             value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Explain how to read this play — progressions, keys, coaching points…"
-            className="min-h-[120px] w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+            onChange={onChange}
+            players={players}
+            placeholder={'Type notes for players here. Try typing "@F" or "@Q" to link notes to specific players.'}
           />
         </div>
       )}

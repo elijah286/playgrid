@@ -82,6 +82,7 @@ const END_OPTIONS: { value: EndDecoration; label: string; icon: typeof ArrowRigh
 
 const COLOR_PRESETS = [
   "#FFFFFF",
+  "#000000",
   "#F26522",
   "#3B82F6",
   "#EF4444",

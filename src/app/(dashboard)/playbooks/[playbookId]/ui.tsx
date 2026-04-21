@@ -932,9 +932,16 @@ export function PlaybookDetailClient({
                 label: "Duplicate",
                 icon: Copy,
                 onSelect: () => {
+                  let clearNotes = false;
+                  if (p.hasNotes) {
+                    const keep = window.confirm(
+                      `"${p.name}" has notes.\n\nOK = keep notes on the duplicate.\nCancel = clear notes on the duplicate.\n\nThe original play's notes will not be modified either way.`,
+                    );
+                    clearNotes = !keep;
+                  }
                   setDuplicatingId(p.id);
                   startTransition(async () => {
-                    const res = await duplicatePlayAction(p.id);
+                    const res = await duplicatePlayAction(p.id, { clearNotes });
                     if (!res.ok) {
                       setDuplicatingId(null);
                       toast(res.error ?? "Could not duplicate play.", "error");
