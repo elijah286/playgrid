@@ -6,8 +6,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
   Copy,
-  Inbox,
-  Layers,
   Link2,
   Palette,
   Pencil,
@@ -244,7 +242,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
 
   const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const shared = data.playbooks.filter((b) => b.role !== "owner");
-  const inbox = data.playbooks.find((b) => b.is_default && b.role === "owner");
 
   function refresh() {
     router.refresh();
@@ -393,32 +390,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           </div>
         </section>
       )}
-
-      {/* Footer links: Formations + Inbox */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Link href="/formations">
-          <Card hover className="flex items-center gap-3 p-4">
-            <Layers className="size-5 text-muted" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">Formations</p>
-              <p className="text-xs text-muted">Reusable starting alignments</p>
-            </div>
-          </Card>
-        </Link>
-        {inbox && (
-          <Link href={`/playbooks/${inbox.id}`}>
-            <Card hover className="flex items-center gap-3 p-4">
-              <Inbox className="size-5 text-muted" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">Inbox</p>
-                <p className="text-xs text-muted">
-                  {inbox.play_count} unfiled play{inbox.play_count === 1 ? "" : "s"}
-                </p>
-              </div>
-            </Card>
-          </Link>
-        )}
-      </section>
 
       {editingAppearance && (
         <AppearanceDialog
