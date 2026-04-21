@@ -316,12 +316,55 @@ export async function savePlayVersionAction(
     .single();
   if (pErr || !play) return { ok: false as const, error: pErr?.message ?? "Not found" };
 
+  // Drop stale FKs: if the linked formation or opponent play was deleted,
+  // writing the stored UUID back to plays fails the FK. Verify they exist
+  // and scrub both the document metadata and the columns below.
+  let formationId = document.metadata.formationId ?? null;
+  let opponentFormationId = document.metadata.opponentFormationId ?? null;
+  let vsPlayId = document.metadata.vsPlayId ?? null;
+
+  if (formationId) {
+    const { data: f } = await supabase
+      .from("formations")
+      .select("id")
+      .eq("id", formationId)
+      .maybeSingle();
+    if (!f) formationId = null;
+  }
+  if (opponentFormationId) {
+    const { data: f } = await supabase
+      .from("formations")
+      .select("id")
+      .eq("id", opponentFormationId)
+      .maybeSingle();
+    if (!f) opponentFormationId = null;
+  }
+  if (vsPlayId) {
+    const { data: p } = await supabase
+      .from("plays")
+      .select("id")
+      .eq("id", vsPlayId)
+      .maybeSingle();
+    if (!p) vsPlayId = null;
+  }
+
+  const sanitizedDoc: PlayDocument = {
+    ...document,
+    metadata: {
+      ...document.metadata,
+      formationId,
+      formationTag: formationId ? document.metadata.formationTag ?? null : null,
+      opponentFormationId,
+      vsPlayId,
+    },
+  };
+
   const { data: ver, error: verErr } = await supabase
     .from("play_versions")
     .insert({
       play_id: playId,
       schema_version: 2,
-      document: document as unknown as Record<string, unknown>,
+      document: sanitizedDoc as unknown as Record<string, unknown>,
       parent_version_id: play.current_version_id,
       label: label ?? `save ${new Date().toISOString()}`,
       created_by: user.id,
@@ -343,12 +386,12 @@ export async function savePlayVersionAction(
       tags: document.metadata.tags,
       tag: document.metadata.tags[0] ?? "",
       display_abbrev: document.metadata.sheetAbbrev,
-      formation_id: document.metadata.formationId ?? null,
-      formation_tag: document.metadata.formationTag ?? null,
+      formation_id: formationId,
+      formation_tag: formationId ? document.metadata.formationTag ?? null : null,
       play_type: document.metadata.playType ?? "offense",
       special_teams_unit: document.metadata.specialTeamsUnit ?? null,
-      opponent_formation_id: document.metadata.opponentFormationId ?? null,
-      vs_play_id: document.metadata.vsPlayId ?? null,
+      opponent_formation_id: opponentFormationId,
+      vs_play_id: vsPlayId,
       vs_play_snapshot: (document.metadata.vsPlaySnapshot ?? null) as unknown as Record<string, unknown> | null,
     })
     .eq("id", playId);
