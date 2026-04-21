@@ -1029,6 +1029,44 @@ export async function reorderPlaysAction(
   return { ok: true as const };
 }
 
+export async function swapPlaySortOrderAction(
+  playbookId: string,
+  aId: string,
+  bId: string,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+  const { data: rows, error: readErr } = await supabase
+    .from("plays")
+    .select("id, sort_order")
+    .eq("playbook_id", playbookId)
+    .in("id", [aId, bId]);
+  if (readErr) return { ok: false as const, error: readErr.message };
+  const a = rows?.find((r) => r.id === aId);
+  const b = rows?.find((r) => r.id === bId);
+  if (!a || !b) return { ok: false as const, error: "Plays not found." };
+  const aOrder = (a.sort_order as number | null) ?? 0;
+  const bOrder = (b.sort_order as number | null) ?? 0;
+  const { error: e1 } = await supabase
+    .from("plays")
+    .update({ sort_order: bOrder })
+    .eq("id", aId)
+    .eq("playbook_id", playbookId);
+  if (e1) return { ok: false as const, error: e1.message };
+  const { error: e2 } = await supabase
+    .from("plays")
+    .update({ sort_order: aOrder })
+    .eq("id", bId)
+    .eq("playbook_id", playbookId);
+  if (e2) return { ok: false as const, error: e2.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true as const };
+}
+
 export async function setPlayGroupAction(playId: string, groupId: string | null) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();

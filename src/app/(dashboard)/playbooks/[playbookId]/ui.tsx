@@ -39,6 +39,7 @@ import {
   renamePlaybookGroupAction,
   reorderPlaybookGroupsAction,
   reorderPlaysAction,
+  swapPlaySortOrderAction,
   setPlayGroupAction,
   type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
@@ -497,20 +498,26 @@ export function PlaybookDetailClient({
   }
 
   // Swap a play's position with whichever play currently holds target1Based.
+  // Only the two affected rows' sort_order change; everyone else stays put.
   function renumberPlay(sourceId: string, target1Based: number) {
     setEditingNumberPlayId(null);
     setNumberInputValue("");
-    const src = localPlays.findIndex((p) => p.id === sourceId);
-    if (src < 0) return;
-    const tgt = Math.max(0, Math.min(localPlays.length - 1, target1Based - 1));
-    if (src === tgt) return;
-    const next = [...localPlays];
-    [next[src], next[tgt]] = [next[tgt]!, next[src]!];
-    const reordered = next.map((p, i) => ({ ...p, sort_order: i }));
-    setLocalPlays(reordered);
-    const orderedIds = reordered.map((p) => p.id);
+    const viewedOrdered = [...viewed].sort((a, b) => a.sort_order - b.sort_order);
+    const tgtIdx = Math.max(0, Math.min(viewedOrdered.length - 1, target1Based - 1));
+    const target = viewedOrdered[tgtIdx];
+    const source = localPlays.find((p) => p.id === sourceId);
+    if (!source || !target || source.id === target.id) return;
+    const aOrder = source.sort_order;
+    const bOrder = target.sort_order;
+    setLocalPlays((prev) =>
+      prev.map((p) => {
+        if (p.id === source.id) return { ...p, sort_order: bOrder };
+        if (p.id === target.id) return { ...p, sort_order: aOrder };
+        return p;
+      }),
+    );
     startTransition(async () => {
-      const res = await reorderPlaysAction(playbookId, orderedIds);
+      const res = await swapPlaySortOrderAction(playbookId, source.id, target.id);
       if (!res.ok) {
         toast(res.error ?? "Could not save play order.", "error");
         router.refresh();
