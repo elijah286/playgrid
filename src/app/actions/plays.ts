@@ -667,6 +667,35 @@ export async function renamePlayAction(playId: string, name: string) {
 
   const { error } = await supabase.from("plays").update({ name: trimmed }).eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
+
+  // Keep the canonical PlayDocument in sync with the denormalized `plays.name`
+  // so renders that read from `play_versions.document.metadata.coachName`
+  // (print preview, PDF export) don't show the old name.
+  const { data: playRow } = await supabase
+    .from("plays")
+    .select("current_version_id")
+    .eq("id", playId)
+    .maybeSingle();
+  const currentVersionId = playRow?.current_version_id as string | null | undefined;
+  if (currentVersionId) {
+    const { data: versionRow } = await supabase
+      .from("play_versions")
+      .select("document")
+      .eq("id", currentVersionId)
+      .maybeSingle();
+    const doc = versionRow?.document as PlayDocument | undefined;
+    if (doc) {
+      const nextDoc: PlayDocument = {
+        ...doc,
+        metadata: { ...doc.metadata, coachName: trimmed },
+      };
+      await supabase
+        .from("play_versions")
+        .update({ document: nextDoc })
+        .eq("id", currentVersionId);
+    }
+  }
+
   return { ok: true as const };
 }
 

@@ -295,6 +295,9 @@ export function PrintPlaybookClient({
             ? String(pos).padStart(2, "0")
             : d.metadata.wristbandCode;
         d.metadata = { ...d.metadata, wristbandCode: label };
+        if (d.metadata.coachName !== "\u200b") {
+          d.metadata = { ...d.metadata, coachName: r.nav.name };
+        }
         if (numberPlaysInOrder) d.printProfile.visibility.showWristbandCode = true;
         return d;
       });
@@ -340,6 +343,9 @@ export function PrintPlaybookClient({
           ? String(pos).padStart(2, "0")
           : d.metadata.wristbandCode;
       d.metadata = { ...d.metadata, wristbandCode: label };
+      if (d.metadata.coachName !== "\u200b") {
+        d.metadata = { ...d.metadata, coachName: r.nav.name };
+      }
       if (numberPlaysInOrder) d.printProfile.visibility.showWristbandCode = true;
       return d;
     });
@@ -386,6 +392,9 @@ export function PrintPlaybookClient({
           ? String(pos).padStart(2, "0")
           : d.metadata.wristbandCode;
       d.metadata = { ...d.metadata, wristbandCode: label };
+      if (d.metadata.coachName !== "\u200b") {
+        d.metadata = { ...d.metadata, coachName: r.nav.name };
+      }
       if (numberPlaysInOrder) d.printProfile.visibility.showWristbandCode = true;
       return d;
     });
