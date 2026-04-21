@@ -36,7 +36,7 @@ function renderValueToHtml(value: string, players: Player[]): string {
     if (!player) continue;
     if (m.index > lastIdx) out.push(escapeHtml(value.slice(lastIdx, m.index)));
     out.push(
-      `<span ${MENTION_ATTR}="${escapeHtml(label)}" contenteditable="false" class="pme-chip" style="display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 2px;margin:0 1px;border-radius:9999px;background:var(--surface-inset,rgba(0,0,0,0.06));line-height:1;vertical-align:middle;">${playerChipHtml(player, 14)}<span style="font-size:11px;font-weight:600;">${escapeHtml(label)}</span></span>`,
+      `<span ${MENTION_ATTR}="${escapeHtml(label)}" contenteditable="false" class="pme-chip" style="display:inline-block;margin:0 1px;line-height:1;vertical-align:middle;">${playerChipHtml(player, 16)}</span>`,
     );
     lastIdx = m.index + m[0].length;
   }
@@ -314,7 +314,7 @@ export function PlayerMentionEditor({
 
       // Build chip span
       const wrapper = document.createElement("span");
-      wrapper.innerHTML = `<span ${MENTION_ATTR}="${player.label}" contenteditable="false" class="pme-chip" style="display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 2px;margin:0 1px;border-radius:9999px;background:var(--surface-inset,rgba(0,0,0,0.06));line-height:1;vertical-align:middle;">${playerChipHtml(player, 14)}<span style="font-size:11px;font-weight:600;">${player.label}</span></span>`;
+      wrapper.innerHTML = `<span ${MENTION_ATTR}="${player.label}" contenteditable="false" class="pme-chip" style="display:inline-block;margin:0 1px;line-height:1;vertical-align:middle;">${playerChipHtml(player, 16)}</span>`;
       const chip = wrapper.firstElementChild as HTMLElement;
       const spaceNode = document.createTextNode("\u00A0");
       r.insertNode(spaceNode);
