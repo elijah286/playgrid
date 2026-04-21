@@ -11,25 +11,21 @@ import {
   Link2,
   LogOut,
   Lock,
-  Palette,
-  Pencil,
   Plus,
-  Share2,
+  Settings2,
   Trash2,
   Unlock,
   Upload,
+  UserPlus,
   X,
 } from "lucide-react";
 import {
   archivePlaybookAction,
   createPlaybookAction,
-  updatePlaybookSeasonAction,
   deletePlaybookAction,
   duplicatePlaybookAction,
   leavePlaybookAction,
-  renamePlaybookAction,
   setPlaybookAllowDuplicationAction,
-  updatePlaybookAppearanceAction,
   uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
@@ -778,7 +774,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
-  const [editingAppearance, setEditingAppearance] = useState<DashboardPlaybookTile | null>(null);
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [view, setView] = useDashboardView();
 
@@ -840,12 +835,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     });
   }
 
-  function onRenameBook(bookId: string, current: string) {
-    const next = window.prompt("Rename playbook", current);
-    if (next == null) return;
-    handle(() => renamePlaybookAction(bookId, next));
-  }
-
   function confirmAnd(msg: string, fn: () => void) {
     if (window.confirm(msg)) fn();
   }
@@ -853,24 +842,14 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
     return [
       {
-        label: "Share playbook",
-        icon: Share2,
+        label: "Invite",
+        icon: UserPlus,
         onSelect: () => router.push(`/playbooks/${tile.id}?share=1`),
       },
-      { label: "Rename", icon: Pencil, onSelect: () => onRenameBook(tile.id, tile.name) },
       {
-        label: tile.season ? "Edit season" : "Set season",
-        icon: Pencil,
-        onSelect: () => {
-          const next = window.prompt("Season (e.g. Spring 2026)", tile.season ?? "");
-          if (next == null) return;
-          handle(() => updatePlaybookSeasonAction(tile.id, next));
-        },
-      },
-      {
-        label: "Edit appearance",
-        icon: Palette,
-        onSelect: () => setEditingAppearance(tile),
+        label: "Customize",
+        icon: Settings2,
+        onSelect: () => router.push(`/playbooks/${tile.id}?customize=1`),
       },
       {
         label: "Duplicate",
@@ -878,11 +857,31 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         onSelect: () => setDuplicating(tile),
       },
       {
-        label: tile.allow_duplication ? "Disallow duplication" : "Allow duplication",
-        icon: tile.allow_duplication ? Lock : Unlock,
+        label: tile.allow_coach_duplication
+          ? "Disallow coach duplication"
+          : "Allow coach duplication",
+        icon: tile.allow_coach_duplication ? Lock : Unlock,
         onSelect: () =>
           handle(() =>
-            setPlaybookAllowDuplicationAction(tile.id, !tile.allow_duplication),
+            setPlaybookAllowDuplicationAction(
+              tile.id,
+              "coach",
+              !tile.allow_coach_duplication,
+            ),
+          ),
+      },
+      {
+        label: tile.allow_player_duplication
+          ? "Disallow player duplication"
+          : "Allow player duplication",
+        icon: tile.allow_player_duplication ? Lock : Unlock,
+        onSelect: () =>
+          handle(() =>
+            setPlaybookAllowDuplicationAction(
+              tile.id,
+              "player",
+              !tile.allow_player_duplication,
+            ),
           ),
       },
       {
@@ -907,12 +906,16 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
     const items: ActionMenuItem[] = [];
     if (tile.role === "editor") {
       items.push({
-        label: "Share playbook",
-        icon: Share2,
+        label: "Invite",
+        icon: UserPlus,
         onSelect: () => router.push(`/playbooks/${tile.id}?share=1`),
       });
     }
-    if (tile.allow_duplication) {
+    const duplicationAllowed =
+      tile.role === "editor"
+        ? tile.allow_coach_duplication
+        : tile.allow_player_duplication;
+    if (duplicationAllowed) {
       items.push({
         label: "Duplicate",
         icon: Copy,
@@ -1049,17 +1052,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
                 if (res.ok) router.push(`/playbooks/${res.id}`);
               },
             );
-          }}
-        />
-      )}
-
-      {editingAppearance && (
-        <AppearanceDialog
-          tile={editingAppearance}
-          onClose={() => setEditingAppearance(null)}
-          onSaved={() => {
-            setEditingAppearance(null);
-            refresh();
           }}
         />
       )}
@@ -1378,138 +1370,3 @@ function DuplicatePlaybookDialog({
   );
 }
 
-function AppearanceDialog({
-  tile,
-  onClose,
-  onSaved,
-}: {
-  tile: DashboardPlaybookTile;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { toast } = useToast();
-  const [logoUrl, setLogoUrl] = useState(tile.logo_url ?? "");
-  const [color, setColor] = useState<string>(tile.color ?? colorFor(tile));
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    setSaving(true);
-    const res = await updatePlaybookAppearanceAction(tile.id, {
-      logo_url: logoUrl || null,
-      color: color || null,
-    });
-    setSaving(false);
-    if (!res.ok) {
-      toast(res.error, "error");
-      return;
-    }
-    onSaved();
-  }
-
-  async function clear() {
-    setSaving(true);
-    const res = await updatePlaybookAppearanceAction(tile.id, {
-      logo_url: null,
-      color: null,
-    });
-    setSaving(false);
-    if (!res.ok) {
-      toast(res.error, "error");
-      return;
-    }
-    onSaved();
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-base font-bold text-foreground">Edit appearance</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="space-y-4 p-5">
-          {/* Preview */}
-          <div
-            className="flex h-28 items-center justify-center rounded-lg"
-            style={{ backgroundColor: color }}
-          >
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" className="h-20 w-20 object-contain" />
-            ) : (
-              <span className="text-3xl font-black tracking-tight text-white drop-shadow">
-                {tile.name
-                  .split(/\s+/)
-                  .slice(0, 2)
-                  .map((s) => s[0])
-                  .filter(Boolean)
-                  .join("")
-                  .toUpperCase()
-                  .slice(0, 2) || "PB"}
-              </span>
-            )}
-          </div>
-
-          {/* Color */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Team color
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {PALETTE.map((c) => {
-                const active = color.toLowerCase() === c.toLowerCase();
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setColor(c)}
-                    className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                      active ? "border-foreground scale-110" : "border-border"
-                    }`}
-                    style={{ backgroundColor: c }}
-                    aria-label={c}
-                  />
-                );
-              })}
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer rounded-full border-2 border-border"
-                aria-label="Custom color"
-              />
-            </div>
-          </div>
-
-          <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={saving} />
-        </div>
-
-        <div className="flex items-center justify-between border-t border-border px-5 py-3">
-          <Button variant="ghost" size="sm" onClick={clear} disabled={saving}>
-            Reset
-          </Button>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={save} loading={saving}>
-              Save
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

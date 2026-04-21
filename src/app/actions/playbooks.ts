@@ -378,7 +378,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
 
   const { data: src, error: srcErr } = await supabase
     .from("playbooks")
-    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season, allow_duplication")
+    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season, allow_coach_duplication, allow_player_duplication")
     .eq("id", playbookId)
     .single();
   if (srcErr || !src) return { ok: false as const, error: srcErr?.message ?? "Not found" };
@@ -390,8 +390,17 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     .eq("user_id", user.id)
     .maybeSingle();
   const isOwner = membership?.role === "owner";
-  if (!isOwner && src.allow_duplication === false) {
-    return { ok: false as const, error: "The owner has disabled duplication for this playbook." };
+  if (!isOwner) {
+    const role = membership?.role;
+    if (role === "editor" && src.allow_coach_duplication === false) {
+      return { ok: false as const, error: "The owner has disabled duplication for coaches." };
+    }
+    if (role === "viewer" && src.allow_player_duplication === false) {
+      return { ok: false as const, error: "The owner has disabled duplication for players." };
+    }
+    if (!role) {
+      return { ok: false as const, error: "You don't have access to this playbook." };
+    }
   }
 
   // The copy lives in the duplicator's own workspace so they own it, and so
@@ -488,10 +497,12 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
 }
 
 /**
- * Owner-only: toggle whether shared members can duplicate this playbook.
+ * Owner-only: toggle whether members of a given role (coach/player) may
+ * duplicate this playbook. Coaches = editor role, players = viewer role.
  */
 export async function setPlaybookAllowDuplicationAction(
   playbookId: string,
+  target: "coach" | "player",
   allow: boolean,
 ) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
@@ -511,9 +522,11 @@ export async function setPlaybookAllowDuplicationAction(
     return { ok: false as const, error: "Only the owner can change this setting." };
   }
 
+  const column =
+    target === "coach" ? "allow_coach_duplication" : "allow_player_duplication";
   const { error } = await supabase
     .from("playbooks")
-    .update({ allow_duplication: allow })
+    .update({ [column]: allow })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };

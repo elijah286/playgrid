@@ -26,7 +26,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings")
+    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication")
     .eq("id", playbookId)
     .single();
 
@@ -121,6 +121,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
         canShare,
         senderName,
         ownerDisplayName,
+        allowCoachDuplication: (book.allow_coach_duplication as boolean | null) ?? true,
+        allowPlayerDuplication: (book.allow_player_duplication as boolean | null) ?? true,
       }}
     />
   );

@@ -148,6 +148,8 @@ export function PlaybookDetailClient({
     canShare: boolean;
     senderName: string | null;
     ownerDisplayName: string | null;
+    allowCoachDuplication: boolean;
+    allowPlayerDuplication: boolean;
   };
 }) {
   const searchParams = useSearchParams();
@@ -617,6 +619,8 @@ export function PlaybookDetailClient({
           canShare={headerProps.canShare}
           senderName={headerProps.senderName}
           ownerDisplayName={headerProps.ownerDisplayName}
+          allowCoachDuplication={headerProps.allowCoachDuplication}
+          allowPlayerDuplication={headerProps.allowPlayerDuplication}
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {

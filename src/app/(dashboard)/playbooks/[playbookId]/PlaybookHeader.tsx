@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Check, CheckSquare, Copy, Home, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, UserPlus, X } from "lucide-react";
+import { Archive, ArrowLeft, Check, CheckSquare, Copy, Home, Lock, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -14,7 +14,11 @@ import {
   useToast,
 } from "@/components/ui";
 import {
+  archivePlaybookAction,
+  deletePlaybookAction,
+  duplicatePlaybookAction,
   renamePlaybookAction,
+  setPlaybookAllowDuplicationAction,
   updatePlaybookAppearanceAction,
   updatePlaybookSeasonAction,
   updatePlaybookSettingsAction,
@@ -66,6 +70,8 @@ export function PlaybookHeader({
   canShare,
   senderName,
   ownerDisplayName,
+  allowCoachDuplication,
+  allowPlayerDuplication,
   playActions,
 }: {
   playbookId: string;
@@ -79,23 +85,82 @@ export function PlaybookHeader({
   canShare: boolean;
   senderName?: string | null;
   ownerDisplayName?: string | null;
+  allowCoachDuplication?: boolean;
+  allowPlayerDuplication?: boolean;
   playActions?: PlaybookHeaderPlayActions;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!canShare) return;
-    if (searchParams?.get("share") === "1") {
+    if (!searchParams) return;
+    let changed = false;
+    const params = new URLSearchParams(searchParams.toString());
+    if (canShare && searchParams.get("share") === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydrate from URL query param
       setInviteOpen(true);
-      const params = new URLSearchParams(searchParams.toString());
       params.delete("share");
+      changed = true;
+    }
+    if (canManage && searchParams.get("customize") === "1") {
+      setCustomizeOpen(true);
+      params.delete("customize");
+      changed = true;
+    }
+    if (changed) {
       const qs = params.toString();
       router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
     }
-  }, [canShare, searchParams, router]);
+  }, [canManage, canShare, searchParams, router]);
+
+  function run(
+    fn: () => Promise<{ ok: boolean; error?: string } | { ok: true; id?: string }>,
+    onOk?: (r: { ok: true; id?: string }) => void,
+  ) {
+    fn().then((res) => {
+      if (!res.ok) {
+        toast(("error" in res && res.error) || "Something went wrong.", "error");
+        return;
+      }
+      onOk?.(res as { ok: true; id?: string });
+      router.refresh();
+    });
+  }
+
+  function handleDuplicate(newName: string) {
+    setDuplicateOpen(false);
+    run(
+      () => duplicatePlaybookAction(playbookId, newName),
+      (res) => {
+        if (res.id) router.push(`/playbooks/${res.id}`);
+      },
+    );
+  }
+
+  function handleToggleCoachDup() {
+    run(() =>
+      setPlaybookAllowDuplicationAction(playbookId, "coach", !allowCoachDuplication),
+    );
+  }
+
+  function handleTogglePlayerDup() {
+    run(() =>
+      setPlaybookAllowDuplicationAction(playbookId, "player", !allowPlayerDuplication),
+    );
+  }
+
+  function handleArchive() {
+    run(() => archivePlaybookAction(playbookId, true), () => router.push("/home"));
+  }
+
+  function handleDelete() {
+    if (!window.confirm(`Delete "${name}" and all its plays? This can't be undone.`)) return;
+    run(() => deletePlaybookAction(playbookId), () => router.push("/home"));
+  }
 
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
@@ -176,8 +241,16 @@ export function PlaybookHeader({
               <HeaderMenu
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
-                onCustomize={canManage ? () => setCustomizeOpen(true) : null}
+                canManage={canManage}
                 onInvite={canShare ? () => setInviteOpen(true) : null}
+                onCustomize={canManage ? () => setCustomizeOpen(true) : null}
+                onDuplicate={canManage ? () => setDuplicateOpen(true) : null}
+                onToggleCoachDup={canManage ? handleToggleCoachDup : null}
+                onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
+                onArchive={canManage ? handleArchive : null}
+                onDelete={canManage ? handleDelete : null}
+                allowCoachDuplication={allowCoachDuplication ?? true}
+                allowPlayerDuplication={allowPlayerDuplication ?? true}
                 playActions={playActions}
               />
             )}
@@ -206,21 +279,107 @@ export function PlaybookHeader({
           onClose={() => setInviteOpen(false)}
         />
       )}
+
+      {duplicateOpen && (
+        <DuplicatePlaybookDialog
+          playbookName={name}
+          onClose={() => setDuplicateOpen(false)}
+          onDuplicate={handleDuplicate}
+        />
+      )}
     </>
+  );
+}
+
+function DuplicatePlaybookDialog({
+  playbookName,
+  onClose,
+  onDuplicate,
+}: {
+  playbookName: string;
+  onClose: () => void;
+  onDuplicate: (name: string) => void;
+}) {
+  const [name, setName] = useState(`${playbookName} (copy)`);
+  function submit() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onDuplicate(trimmed);
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-base font-bold text-foreground">Duplicate playbook</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="space-y-3 p-5">
+          <p className="text-sm text-muted">
+            This will copy every play in <span className="font-medium text-foreground">{playbookName}</span> into a new playbook you own.
+          </p>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">Name</label>
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={!name.trim()}>
+            Create copy
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function HeaderMenu({
   onAccent,
   onAccentHover,
-  onCustomize,
+  canManage,
   onInvite,
+  onCustomize,
+  onDuplicate,
+  onToggleCoachDup,
+  onTogglePlayerDup,
+  onArchive,
+  onDelete,
+  allowCoachDuplication,
+  allowPlayerDuplication,
   playActions,
 }: {
   onAccent: string;
   onAccentHover: string;
-  onCustomize: (() => void) | null;
+  canManage: boolean;
   onInvite: (() => void) | null;
+  onCustomize: (() => void) | null;
+  onDuplicate: (() => void) | null;
+  onToggleCoachDup: (() => void) | null;
+  onTogglePlayerDup: (() => void) | null;
+  onArchive: (() => void) | null;
+  onDelete: (() => void) | null;
+  allowCoachDuplication: boolean;
+  allowPlayerDuplication: boolean;
   playActions?: PlaybookHeaderPlayActions;
 }) {
   const [open, setOpen] = useState(false);
@@ -331,19 +490,110 @@ function HeaderMenu({
               <div className="my-1 h-px bg-border sm:hidden" />
             </>
           )}
-          {onCustomize && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onCustomize();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
-            >
-              <Settings2 className="size-4" />
-              <span>Customize team</span>
-            </button>
+          {canManage && (onCustomize || onDuplicate || onArchive || onDelete) && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              {onCustomize && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onCustomize();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  <Settings2 className="size-4" />
+                  <span>Customize</span>
+                </button>
+              )}
+              {onDuplicate && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onDuplicate();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  <Copy className="size-4" />
+                  <span>Duplicate</span>
+                </button>
+              )}
+              {onToggleCoachDup && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onToggleCoachDup();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  {allowCoachDuplication ? (
+                    <Lock className="size-4" />
+                  ) : (
+                    <Unlock className="size-4" />
+                  )}
+                  <span>
+                    {allowCoachDuplication
+                      ? "Disallow coach duplication"
+                      : "Allow coach duplication"}
+                  </span>
+                </button>
+              )}
+              {onTogglePlayerDup && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onTogglePlayerDup();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  {allowPlayerDuplication ? (
+                    <Lock className="size-4" />
+                  ) : (
+                    <Unlock className="size-4" />
+                  )}
+                  <span>
+                    {allowPlayerDuplication
+                      ? "Disallow player duplication"
+                      : "Allow player duplication"}
+                  </span>
+                </button>
+              )}
+              {onArchive && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onArchive();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  <Archive className="size-4" />
+                  <span>Archive</span>
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onDelete();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger-light"
+                >
+                  <Trash2 className="size-4" />
+                  <span>Delete</span>
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -443,7 +693,7 @@ function CustomizeTeamDialog({
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-base font-bold text-foreground">Customize team</h2>
+          <h2 className="text-base font-bold text-foreground">Customize playbook</h2>
           <button
             type="button"
             onClick={onClose}

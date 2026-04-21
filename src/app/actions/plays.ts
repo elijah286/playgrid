@@ -818,7 +818,8 @@ export type DashboardPlaybookTile = {
   /** Display name of the playbook owner when the current viewer is not the
    *  owner (shared playbook). Null for your own playbooks. */
   shared_by_name: string | null;
-  allow_duplication: boolean;
+  allow_coach_duplication: boolean;
+  allow_player_duplication: boolean;
   previews: {
     players: Player[];
     routes: Route[];
@@ -907,7 +908,7 @@ export async function getDashboardSummaryAction(): Promise<
   const { data: memberRows, error: memErr } = await supabase
     .from("playbook_members")
     .select(
-      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, allow_duplication, plays(count))",
+      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, allow_coach_duplication, allow_player_duplication, plays(count))",
     )
     .eq("user_id", user.id)
     .eq("playbooks.is_archived", false)
@@ -923,7 +924,8 @@ export async function getDashboardSummaryAction(): Promise<
     logo_url: string | null;
     color: string | null;
     season: string | null;
-    allow_duplication: boolean | null;
+    allow_coach_duplication: boolean | null;
+    allow_player_duplication: boolean | null;
     plays: { count: number }[] | { count: number } | null;
   };
   type MemberJoin = {
@@ -947,7 +949,8 @@ export async function getDashboardSummaryAction(): Promise<
         season: b.season,
         role: r.role,
         shared_by_name: null,
-        allow_duplication: b.allow_duplication ?? true,
+        allow_coach_duplication: b.allow_coach_duplication ?? true,
+        allow_player_duplication: b.allow_player_duplication ?? true,
         previews: [],
       } as DashboardPlaybookTile;
     })
