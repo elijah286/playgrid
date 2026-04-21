@@ -75,7 +75,7 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
 
 type GroupBy = "none" | "formation" | "group";
 
