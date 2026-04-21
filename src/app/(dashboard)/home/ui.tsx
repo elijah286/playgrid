@@ -284,15 +284,50 @@ function PlaybookBookTile({
   const sheetPlays = tile.previews.slice(0, 12);
   const hasPreviews = sheetPlays.length > 0;
   const [hover, setHover] = useState(false);
+  const [shiftX, setShiftX] = useState(0);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  function handleEnter() {
+    const el = wrapperRef.current;
+    if (el) {
+      // Cover flips around its left spine, so the open book occupies
+      // [center - W, center + W/2] (scaled). Slide X so nothing gets
+      // cropped by the viewport.
+      const r = el.getBoundingClientRect();
+      const SCALE = 1.35;
+      const W = r.width * SCALE;
+      const cx = r.left + r.width / 2;
+      const openLeft = cx - W;
+      const openRight = cx + W / 2;
+      const MARGIN = 12;
+      let shift = 0;
+      if (openLeft < MARGIN) shift = MARGIN - openLeft;
+      else if (openRight > window.innerWidth - MARGIN) {
+        shift = window.innerWidth - MARGIN - openRight;
+      }
+      setShiftX(shift);
+    }
+    setHover(true);
+  }
+
+  function handleLeave() {
+    setHover(false);
+    setShiftX(0);
+  }
 
   return (
     <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className={`group relative z-0 transition-transform duration-500 ease-out ${
-        hover ? "z-20 -translate-y-2 scale-[1.35]" : ""
-      }`}
-      style={{ perspective: "1600px" }}
+      ref={wrapperRef}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      className="group relative z-0 transition-transform duration-500 ease-out"
+      style={{
+        perspective: "1600px",
+        zIndex: hover ? 20 : 0,
+        transform: hover
+          ? `translate3d(${shiftX}px, -8px, 0) scale(1.35)`
+          : "translate3d(0, 0, 0) scale(1)",
+      }}
     >
       <Link
         href={`/playbooks/${tile.id}`}
