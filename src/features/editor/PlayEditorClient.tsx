@@ -21,6 +21,7 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorHeaderBar } from "./EditorHeaderBar";
+import { TagsCard } from "./TagsCard";
 import { useToast, Modal, Button } from "@/components/ui";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
@@ -406,7 +407,7 @@ export function PlayEditorClient({
   }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col gap-3">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-2">
       {isNavPending && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]"
@@ -449,8 +450,6 @@ export function PlayEditorClient({
         onDuplicate={duplicate}
         onNavigateToPlay={navigateToPlay}
         onSaveAsNewFormation={saveAsNewFormation}
-        linkedFormation={linkedFormation}
-        opponentFormation={opponentFormation ?? null}
         allFormations={allFormations}
       />
 
@@ -633,6 +632,9 @@ export function PlayEditorClient({
             } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
           >
             {!showToolbar && <PlayControlsPanel anim={anim} />}
+            {!showToolbar && (
+              <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
+            )}
             {!showToolbar && isDefense && vsSnapshot ? (
               <VsPlayCard
                 playId={playId}

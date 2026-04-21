@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -14,7 +13,6 @@ import {
   PencilLine,
   Plus,
   Search,
-  X,
 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
@@ -22,40 +20,8 @@ import { FormationThumbnail } from "@/app/(dashboard)/playbooks/[playbookId]/Pla
 import { listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
-import { Badge, Button, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
-import { FORMATION_TAG_PRESETS } from "./Inspector";
-
-const DRIFT_THRESHOLD_YDS = 2;
-const FORM_FIELD_LEN = 25;
-
-function useDebouncedDoc(doc: PlayDocument, delay = 200): PlayDocument {
-  const [debounced, setDebounced] = useState(doc);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(doc), delay);
-    return () => clearTimeout(t);
-  }, [doc, delay]);
-  return debounced;
-}
-
-function computeDrift(doc: PlayDocument, linked: SavedFormation | null): boolean {
-  const formationId = doc.metadata.formationId;
-  if (!formationId || !linked) return false;
-  const formLosY = linked.losY ?? 0.4;
-  const playLosY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
-  const playFieldLen = doc.sportProfile.fieldLengthYds;
-  const playFieldW = doc.sportProfile.fieldWidthYds;
-  const fpMap = new Map(linked.players.map((p) => [p.id, p.position]));
-  return doc.layers.players.some((p) => {
-    const fp = fpMap.get(p.id);
-    if (!fp) return false;
-    const playYds = (p.position.y - playLosY) * playFieldLen;
-    const formYds = (fp.y - formLosY) * FORM_FIELD_LEN;
-    const dyYds = playYds - formYds;
-    const dxYds = (p.position.x - fp.x) * playFieldW;
-    return Math.hypot(dxYds, dyYds) > DRIFT_THRESHOLD_YDS;
-  });
-}
 
 type Props = {
   playId: string;
@@ -67,8 +33,6 @@ type Props = {
   onDuplicate: () => void;
   onNavigateToPlay: (playId: string) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
-  linkedFormation?: SavedFormation | null;
-  opponentFormation?: SavedFormation | null;
   allFormations?: SavedFormation[];
 };
 
@@ -82,15 +46,11 @@ export function EditorHeaderBar({
   onDuplicate,
   onNavigateToPlay,
   onSaveAsNewFormation,
-  linkedFormation,
-  opponentFormation,
   allFormations = [],
 }: Props) {
-  const router = useRouter();
   const [nav, setNav] = useState(initialNav);
   const [groups, setGroups] = useState(initialGroups);
   const [editingName, setEditingName] = useState(false);
-  const [tagDraft, setTagDraft] = useState("");
   const [, startTransition] = useTransition();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -107,56 +67,10 @@ export function EditorHeaderBar({
   const prevPlay = ix > 0 ? nav[ix - 1] : null;
   const nextPlay = ix >= 0 && ix < nav.length - 1 ? nav[ix + 1] : null;
 
-  const tags = doc.metadata.tags;
   const name = doc.metadata.coachName || "Untitled play";
   const formation = doc.metadata.formation?.trim();
   const code = doc.metadata.wristbandCode?.trim();
-  const formationTag = doc.metadata.formationTag ?? null;
-  const debouncedDoc = useDebouncedDoc(doc);
-  const hasDrift = computeDrift(debouncedDoc, linkedFormation ?? null);
   const formationId = doc.metadata.formationId;
-
-  // Gate the drift prompt so it doesn't flash right after picking a formation:
-  // require drift to persist for a beat, and reset immediately on formation change.
-  const [stableDrift, setStableDrift] = useState(false);
-  useEffect(() => {
-    if (!hasDrift) {
-      setStableDrift(false);
-      return;
-    }
-    const t = setTimeout(() => setStableDrift(true), 500);
-    return () => clearTimeout(t);
-  }, [hasDrift]);
-  useEffect(() => {
-    setStableDrift(false);
-  }, [formationId]);
-  const showDriftPrompt = stableDrift && !formationTag;
-
-  function setFormationTag(tag: string) {
-    dispatch({ type: "document.setFormationTag", formationTag: tag || null });
-  }
-
-  function clearFormationTag() {
-    dispatch({ type: "document.setFormationTag", formationTag: null });
-  }
-
-  function addTag(raw: string) {
-    const cleaned = raw
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-    if (cleaned.length === 0) return;
-    const next = Array.from(new Set([...tags, ...cleaned]));
-    dispatch({ type: "document.setMetadata", patch: { tags: next } });
-    setTagDraft("");
-  }
-
-  function removeTag(t: string) {
-    dispatch({
-      type: "document.setMetadata",
-      patch: { tags: tags.filter((x) => x !== t) },
-    });
-  }
 
   // Refresh the sibling nav when this play is renamed (server-side ordering may
   // change). Cheap best-effort; ignore result if it fails.
@@ -172,7 +86,7 @@ export function EditorHeaderBar({
   }, [playId]);
 
   return (
-    <header className="flex flex-col gap-2 border-b border-border pb-3">
+    <header className="flex flex-col border-b border-border pb-1">
       <div className="flex flex-wrap items-center gap-2">
         <Link
           href={`/playbooks/${playbookId}`}
@@ -266,76 +180,6 @@ export function EditorHeaderBar({
           </Button>
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg px-3 py-2">
-        {tags.map((t) => (
-          <Badge key={t} variant="default" className="inline-flex items-center gap-1">
-            {t}
-            <button
-              type="button"
-              onClick={() => removeTag(t)}
-              className="rounded hover:text-danger"
-              aria-label={`Remove tag ${t}`}
-            >
-              <X className="size-3" />
-            </button>
-          </Badge>
-        ))}
-        {formationTag && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-            {formationTag}
-            <button
-              type="button"
-              onClick={clearFormationTag}
-              className="rounded hover:text-primary/60"
-              aria-label="Remove variation tag"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        )}
-        <Input
-          value={tagDraft}
-          onChange={(e) => setTagDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              addTag(tagDraft);
-            }
-          }}
-          placeholder={tags.length === 0 ? "Add tag (press Enter)…" : "Add tag…"}
-          className="h-7 w-[160px] text-xs"
-        />
-
-      </div>
-
-      {formationId && (
-        <div
-          aria-live="polite"
-          className={`flex h-7 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg px-3 ${
-            showDriftPrompt ? "bg-warning/10 ring-1 ring-warning/25" : ""
-          }`}
-        >
-          {showDriftPrompt && (
-            <>
-              <span className="text-[11px] font-semibold text-warning">
-                Formation drifted —
-              </span>
-              <span className="text-[11px] text-muted">tag this variation:</span>
-              {FORMATION_TAG_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setFormationTag(preset)}
-                  className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
-                >
-                  {preset}
-                </button>
-              ))}
-            </>
-          )}
-        </div>
-      )}
     </header>
   );
 }

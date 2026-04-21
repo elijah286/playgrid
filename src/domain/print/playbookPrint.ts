@@ -1,4 +1,4 @@
-import type { PlayDocument } from "@/domain/play/types";
+import type { PlayDocument, Player, Route, Zone } from "@/domain/play/types";
 
 export type PrintProductKind = "playsheet" | "wristband";
 
@@ -211,6 +211,12 @@ export type PlaybookPlayNavItem = {
   group_sort_order: number | null;
   current_version_id: string | null;
   play_type: "offense" | "defense" | "special_teams";
+  preview?: {
+    players: Player[];
+    routes: Route[];
+    zones: Zone[];
+    lineOfScrimmageY: number;
+  } | null;
 };
 
 export function compareNavPlays(a: PlaybookPlayNavItem, b: PlaybookPlayNavItem): number {

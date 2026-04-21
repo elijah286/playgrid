@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button, Input } from "@/components/ui";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { compareNavPlays, formatPlayNavSubtitle } from "@/domain/print/playbookPrint";
+import { PlayThumbnail } from "./PlayThumbnail";
 
 type Section = {
   title: string | null;
@@ -110,7 +111,7 @@ export function PlaybookPlaySearchMenu({
         {printMode ? "Plays in print" : "All plays"}
       </Button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-[min(100vw-2rem,380px)] overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated">
+        <div className="absolute right-0 z-30 mt-1 w-[min(100vw-2rem,640px)] overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated">
           <div className="border-b border-border p-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -158,10 +159,10 @@ export function PlaybookPlaySearchMenu({
               </div>
             )}
           </div>
-          <div className="max-h-[min(60vh,420px)] overflow-y-auto py-1 text-sm">
+          <div className="max-h-[min(70vh,520px)] overflow-y-auto py-1 text-sm">
             {sections.map((sec) => (
               <div key={sec.groupId ?? "ungrouped"} className="border-b border-border last:border-0">
-                <div className="flex items-center justify-between gap-2 px-4 py-2">
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted">
                     {sec.title ?? "Ungrouped"}
                   </span>
@@ -180,18 +181,20 @@ export function PlaybookPlaySearchMenu({
                     </Button>
                   )}
                 </div>
-                {sec.plays.map((p) => (
-                  <PlayRow
-                    key={p.id}
-                    p={p}
-                    currentPlayId={currentPlayId}
-                    printMode={printMode}
-                    printSelectedIds={printSelectedIds}
-                    onPrintToggle={onPrintToggle}
-                    onNavigate={() => setOpen(false)}
-                    onNavigatePlay={onNavigatePlay}
-                  />
-                ))}
+                <div className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-3">
+                  {sec.plays.map((p) => (
+                    <PlayTile
+                      key={p.id}
+                      p={p}
+                      currentPlayId={currentPlayId}
+                      printMode={printMode}
+                      printSelectedIds={printSelectedIds}
+                      onPrintToggle={onPrintToggle}
+                      onNavigate={() => setOpen(false)}
+                      onNavigatePlay={onNavigatePlay}
+                    />
+                  ))}
+                </div>
               </div>
             ))}
             {sections.length === 0 && (
@@ -204,7 +207,7 @@ export function PlaybookPlaySearchMenu({
   );
 }
 
-function PlayRow({
+function PlayTile({
   p,
   currentPlayId,
   printMode,
@@ -224,28 +227,48 @@ function PlayRow({
   const active = p.id === currentPlayId;
   const checked = printMode && printSelectedIds ? printSelectedIds.has(p.id) : true;
 
+  const tileInner = (
+    <>
+      <div className="relative">
+        {p.preview ? (
+          <PlayThumbnail preview={p.preview} />
+        ) : (
+          <div className="flex aspect-[16/10] w-full items-center justify-center rounded-lg border border-border bg-surface-inset text-[10px] text-muted">
+            no preview
+          </div>
+        )}
+        {printMode && (
+          <span
+            className={cn(
+              "absolute right-1 top-1 flex size-5 items-center justify-center rounded border border-border bg-surface-raised",
+              checked && "border-primary bg-primary text-white",
+            )}
+          >
+            {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+          </span>
+        )}
+        {active && (
+          <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+            Current
+          </span>
+        )}
+      </div>
+      <div className="min-w-0 px-1 pb-1 pt-1.5">
+        <span className="block truncate text-xs font-semibold text-foreground">{p.name}</span>
+        <span className="block truncate text-[10px] text-muted">{formatPlayNavSubtitle(p)}</span>
+      </div>
+    </>
+  );
+
+  const tileCls = cn(
+    "flex flex-col overflow-hidden rounded-md border p-1 text-left transition-colors hover:border-primary/50 hover:bg-surface-inset",
+    active ? "border-primary/60 ring-1 ring-primary/30" : "border-border",
+  );
+
   if (printMode && onPrintToggle) {
     return (
-      <button
-        type="button"
-        onClick={() => onPrintToggle(p.id, !checked)}
-        className={cn(
-          "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-inset",
-          active && "bg-primary/5",
-        )}
-      >
-        <span
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center rounded border border-border",
-            checked && "border-primary bg-primary text-white",
-          )}
-        >
-          {checked ? <Check className="size-3" strokeWidth={3} /> : null}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-foreground">{p.name}</span>
-          <span className="block truncate text-xs text-muted">{formatPlayNavSubtitle(p)}</span>
-        </span>
+      <button type="button" onClick={() => onPrintToggle(p.id, !checked)} className={tileCls}>
+        {tileInner}
       </button>
     );
   }
@@ -258,32 +281,16 @@ function PlayRow({
           onNavigate();
           onNavigatePlay(p.id);
         }}
-        className={cn(
-          "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-inset",
-          active && "bg-primary/5",
-        )}
+        className={tileCls}
       >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-foreground">{p.name}</span>
-          <span className="block truncate text-xs text-muted">{formatPlayNavSubtitle(p)}</span>
-        </span>
+        {tileInner}
       </button>
     );
   }
 
   return (
-    <Link
-      href={`/plays/${p.id}/edit`}
-      onClick={onNavigate}
-      className={cn(
-        "flex w-full items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-inset",
-        active && "bg-primary/5",
-      )}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium text-foreground">{p.name}</span>
-        <span className="block truncate text-xs text-muted">{formatPlayNavSubtitle(p)}</span>
-      </span>
+    <Link href={`/plays/${p.id}/edit`} onClick={onNavigate} className={tileCls}>
+      {tileInner}
     </Link>
   );
 }

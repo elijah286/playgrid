@@ -871,12 +871,38 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
   if (gErr) return { ok: false as const, error: gErr.message, plays: [], groups: [] };
   if (pErr) return { ok: false as const, error: pErr.message, plays: [], groups: [] };
 
+  const versionIds = (rows ?? [])
+    .map((r) => r.current_version_id as string | null)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  const previewByVersion = new Map<
+    string,
+    { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number }
+  >();
+  if (versionIds.length > 0) {
+    const { data: versions } = await supabase
+      .from("play_versions")
+      .select("id, document")
+      .in("id", versionIds);
+    for (const v of versions ?? []) {
+      const doc = v.document as PlayDocument | null;
+      if (!doc) continue;
+      previewByVersion.set(v.id as string, {
+        players: doc.layers?.players ?? [],
+        routes: doc.layers?.routes ?? [],
+        zones: doc.layers?.zones ?? [],
+        lineOfScrimmageY:
+          typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+      });
+    }
+  }
+
   const gMap = new Map((groups ?? []).map((g) => [g.id as string, g as PlaybookGroupRow]));
   const items: PlaybookPlayNavItem[] = (rows ?? []).map((row) => {
     const gid = (row.group_id as string | null) ?? null;
     const g = gid ? gMap.get(gid) : undefined;
     const tagsArr = Array.isArray(row.tags) ? (row.tags as string[]) : [];
     const legacyTag = (row.tag as string | null) ?? "";
+    const vid = (row.current_version_id as string | null) ?? null;
     return {
       id: row.id as string,
       name: row.name as string,
@@ -889,8 +915,9 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
       sort_order: (row.sort_order as number) ?? 0,
       group_name: g?.name ?? null,
       group_sort_order: g?.sort_order ?? null,
-      current_version_id: (row.current_version_id as string) ?? null,
+      current_version_id: vid,
       play_type: ((row.play_type as "offense" | "defense" | "special_teams" | null) ?? "offense"),
+      preview: vid ? previewByVersion.get(vid) ?? null : null,
     };
   });
   items.sort(compareNavPlays);
