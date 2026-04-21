@@ -622,6 +622,7 @@ export function PlaybookDetailClient({
             selectionMode,
             creating,
             printHref: `/playbooks/${playbookId}/print`,
+            newFormationHref: `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`,
           }}
         />
 

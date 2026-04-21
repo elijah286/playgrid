@@ -107,7 +107,10 @@ export function PlaybookFormationsTab({
             placeholder="Search formations…"
           />
         </div>
-        <Link href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}>
+        <Link
+          href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}
+          className="hidden sm:inline-flex"
+        >
           <Button variant="primary" leftIcon={Plus}>
             New formation
           </Button>
