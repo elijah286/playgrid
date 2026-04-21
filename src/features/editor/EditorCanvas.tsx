@@ -14,6 +14,8 @@ import {
   resolveLineOfScrimmageY,
   resolveRouteStroke,
   resolveShowHashMarks,
+  resolveHashStyle,
+  hashColumnsForStyle,
   resolveShowYardNumbers,
   uid,
 } from "@/domain/play/factory";
@@ -1151,8 +1153,9 @@ function EditorCanvasImpl({
   const showHash = resolveShowHashMarks(doc);
   const hashMarks: React.ReactNode[] = [];
   if (showHash) {
-    const HASH_X_LEFT = 0.38 * fieldAspect;
-    const HASH_X_RIGHT = 0.62 * fieldAspect;
+    const [leftFrac, rightFrac] = hashColumnsForStyle(resolveHashStyle(doc));
+    const HASH_X_LEFT = leftFrac * fieldAspect;
+    const HASH_X_RIGHT = rightFrac * fieldAspect;
     const TICK_HALF = 0.010; // half-length of each tick in field-units
     const N_TICKS = 20; // 20 ticks along the length ≈ every 5%
     for (let i = 1; i < N_TICKS; i++) {

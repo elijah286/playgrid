@@ -22,8 +22,34 @@ export function shouldShowHashMarksDefault(variant: SportVariant): boolean {
 /** Resolve the effective hash-mark setting: explicit override wins,
  *  otherwise derive from sport variant. */
 export function resolveShowHashMarks(doc: PlayDocument): boolean {
-  if (typeof doc.showHashMarks === "boolean") return doc.showHashMarks;
-  return shouldShowHashMarksDefault(doc.sportProfile.variant);
+  return resolveHashStyle(doc) !== "none";
+}
+
+export type HashStyle = "narrow" | "normal" | "wide" | "none";
+
+/** Hash-mark width style. `hashStyle` wins when set; otherwise fall back to
+ *  the legacy boolean (normal = on, none = off) and variant default. */
+export function resolveHashStyle(doc: PlayDocument): HashStyle {
+  if (doc.hashStyle) return doc.hashStyle;
+  const on =
+    typeof doc.showHashMarks === "boolean"
+      ? doc.showHashMarks
+      : shouldShowHashMarksDefault(doc.sportProfile.variant);
+  return on ? "normal" : "none";
+}
+
+/** Hash-column x positions as fractions of field width (left, right). */
+export function hashColumnsForStyle(style: HashStyle): [number, number] {
+  switch (style) {
+    case "narrow":
+      return [0.442, 0.558];
+    case "wide":
+      return [0.333, 0.667];
+    case "none":
+    case "normal":
+    default:
+      return [0.375, 0.625];
+  }
 }
 
 /** Effective yard-number setting. Defaults to true when unset. */

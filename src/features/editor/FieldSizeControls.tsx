@@ -1,14 +1,16 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
 import {
   resolveBackfieldYards,
   resolveDownfieldYards,
   resolveFieldZone,
+  resolveHashStyle,
   resolveLineOfScrimmage,
-  resolveShowHashMarks,
   resolveShowYardNumbers,
+  type HashStyle,
 } from "@/domain/play/factory";
 import { SegmentedControl } from "@/components/ui";
 
@@ -90,21 +92,8 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
 
       <div className="h-4 w-px bg-border" />
 
-      {/* Hash marks */}
-      <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
-        <input
-          type="checkbox"
-          className="size-3.5 cursor-pointer accent-primary"
-          checked={resolveShowHashMarks(doc)}
-          onChange={(e) =>
-            dispatch({
-              type: "document.setShowHashMarks",
-              showHashMarks: e.target.checked,
-            })
-          }
-        />
-        <span>Hashes</span>
-      </label>
+      {/* Hash marks — short click toggles on/off; long-press opens width picker. */}
+      <HashesControl doc={doc} dispatch={dispatch} />
 
       {/* Yard numbers */}
       <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
@@ -185,6 +174,170 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
           }
         />
       </div>
+    </div>
+  );
+}
+
+const HASH_OPTIONS: {
+  value: Exclude<HashStyle, "none">;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "narrow", label: "Narrow", hint: "NFL" },
+  { value: "normal", label: "Normal", hint: "College" },
+  { value: "wide", label: "Wide", hint: "High School / Youth" },
+];
+
+function HashesControl({
+  doc,
+  dispatch,
+}: {
+  doc: PlayDocument;
+  dispatch: (c: PlayCommand) => void;
+}) {
+  const style = resolveHashStyle(doc);
+  const on = style !== "none";
+  const [open, setOpen] = useState(false);
+  const lastNonNone = useRef<Exclude<HashStyle, "none">>(
+    style === "none" ? "normal" : style,
+  );
+  useEffect(() => {
+    if (style !== "none") lastNonNone.current = style;
+  }, [style]);
+
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClick = useRef(false);
+
+  const startPress = () => {
+    suppressClick.current = false;
+    pressTimer.current = setTimeout(() => {
+      suppressClick.current = true;
+      setOpen(true);
+    }, 450);
+  };
+  const endPress = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const setStyle = (s: HashStyle) => {
+    dispatch({ type: "document.setHashStyle", hashStyle: s });
+    setOpen(false);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted"
+        onMouseDown={startPress}
+        onMouseUp={endPress}
+        onMouseLeave={endPress}
+        onTouchStart={startPress}
+        onTouchEnd={endPress}
+        onTouchCancel={endPress}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setOpen(true);
+        }}
+        onClick={() => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
+          setStyle(on ? "none" : lastNonNone.current);
+        }}
+        title="Click to toggle. Hold (or right-click) for width options."
+      >
+        <span
+          aria-hidden
+          className={`flex size-3.5 items-center justify-center rounded-[3px] border ${
+            on
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-surface-inset"
+          }`}
+        >
+          {on && (
+            <svg viewBox="0 0 12 12" className="size-2.5" fill="none">
+              <path
+                d="M2.5 6.5l2.5 2.5 4.5-5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </span>
+        <span>Hashes</span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-20 mt-1 min-w-[10rem] rounded-md border border-border bg-surface-raised p-1 shadow-lg"
+        >
+          {HASH_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={style === opt.value}
+              onClick={() => setStyle(opt.value)}
+              className={`flex w-full items-center justify-between gap-3 rounded px-2 py-1.5 text-left text-xs hover:bg-surface-inset ${
+                style === opt.value ? "text-foreground" : "text-muted"
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className={`size-1.5 rounded-full ${
+                    style === opt.value ? "bg-primary" : "bg-border"
+                  }`}
+                />
+                {opt.label}
+              </span>
+              <span className="text-[10px] text-muted">{opt.hint}</span>
+            </button>
+          ))}
+          <div className="my-1 h-px bg-border" />
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={style === "none"}
+            onClick={() => setStyle("none")}
+            className={`flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs hover:bg-surface-inset ${
+              style === "none" ? "text-foreground" : "text-muted"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`size-1.5 rounded-full ${
+                style === "none" ? "bg-primary" : "bg-border"
+              }`}
+            />
+            None
+          </button>
+        </div>
+      )}
     </div>
   );
 }

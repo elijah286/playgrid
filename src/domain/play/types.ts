@@ -287,6 +287,14 @@ export type PlayDocument = {
    */
   showHashMarks?: boolean;
   /**
+   * Hash-mark lateral position. When set, overrides `showHashMarks` —
+   * "none" hides, the others choose the column width:
+   *   narrow = NFL-style (44% / 56%)
+   *   normal = college/NCAA (37.5% / 62.5%)
+   *   wide   = high school & youth (33.3% / 66.7%)
+   */
+  hashStyle?: "narrow" | "normal" | "wide" | "none";
+  /**
    * Whether to render the yard numbers (5, 10, 15…) painted on the field.
    * Defaults to `true`.
    */

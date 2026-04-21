@@ -92,6 +92,7 @@ export type PlayCommand =
   | { type: "document.setTimeline"; timeline: PlayTimeline }
   | { type: "document.setFieldBackground"; background: "green" | "white" | "black" | "gray" }
   | { type: "document.setShowHashMarks"; showHashMarks: boolean }
+  | { type: "document.setHashStyle"; hashStyle: "narrow" | "normal" | "wide" | "none" }
   | { type: "document.setShowYardNumbers"; showYardNumbers: boolean }
   | { type: "document.setLineOfScrimmage"; lineOfScrimmage: "line" | "football" | "none" }
   | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" }

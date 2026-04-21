@@ -455,6 +455,9 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setShowHashMarks":
       return { ...doc, showHashMarks: cmd.showHashMarks };
 
+    case "document.setHashStyle":
+      return { ...doc, hashStyle: cmd.hashStyle };
+
     case "document.setShowYardNumbers":
       return { ...doc, showYardNumbers: cmd.showYardNumbers };
 
