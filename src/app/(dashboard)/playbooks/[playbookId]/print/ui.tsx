@@ -255,7 +255,11 @@ export function PrintPlaybookClient({
   }, [config.watermarkEnabled, config.watermarkOpacityPct, logoUrl]);
 
   const previewPages = useMemo<string[]>(() => {
-    const chosen = initialPack.filter((r) => selected.has(r.id));
+    const chosen = initialPack.filter(
+      (r) =>
+        selected.has(r.id) &&
+        (typeFilter === "all" || r.nav.play_type === typeFilter),
+    );
     const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
     if (config.product === "wristband") {
       const docs = pool.map((r) => applyExportPresentation(r.document, config));
@@ -297,7 +301,11 @@ export function PrintPlaybookClient({
   }, [initialPack, selected, config, wristbandGridOpts, playsheetOpts, team, watermark]);
 
   async function compileForExport(): Promise<string[] | null> {
-    const rows = initialPack.filter((r) => selected.has(r.id));
+    const rows = initialPack.filter(
+      (r) =>
+        selected.has(r.id) &&
+        (typeFilter === "all" || r.nav.play_type === typeFilter),
+    );
     if (rows.length === 0) {
       toast("Select at least one play to print", "error");
       return null;

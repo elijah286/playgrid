@@ -209,7 +209,10 @@ export function compareNavPlays(a: PlaybookPlayNavItem, b: PlaybookPlayNavItem):
   const gb = b.group_sort_order ?? 0;
   if (ga !== gb) return ga - gb;
   if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-  return a.name.localeCompare(b.name);
+  return a.name.localeCompare(b.name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 export function sortNavPlaysForPrint(
