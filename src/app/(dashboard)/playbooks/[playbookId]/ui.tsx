@@ -1119,9 +1119,14 @@ export function PlaybookDetailClient({
                           tabIndex={selectionMode ? -1 : 0}
                         >
                           <div>
-                            <p className="mb-0.5 truncate text-[11px] text-muted">
-                              {p.formation_name || p.shorthand || "\u00A0"}
-                            </p>
+                            <div className="mb-0.5 flex items-center gap-1">
+                              <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
+                                {p.formation_name || p.shorthand || "\u00A0"}
+                              </p>
+                              {p.tags.length > 0 && (
+                                <PlayTagChips tags={p.tags} />
+                              )}
+                            </div>
                             <EditablePlayTitle
                               name={p.name}
                               onRename={(next) => onRenamePlayInline(p.id, next)}
@@ -1131,15 +1136,6 @@ export function PlaybookDetailClient({
                           {p.preview && (
                             <div className="mt-1">
                               <PlayThumbnail preview={p.preview} />
-                            </div>
-                          )}
-                          {p.tags.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {p.tags.map((t) => (
-                                <Badge key={t} variant="default">
-                                  {t}
-                                </Badge>
-                              ))}
                             </div>
                           )}
                         </Link>
@@ -2209,6 +2205,32 @@ function MiniPlayerDiagram({ players }: { players: Player[] | null }) {
         return <circle key={pl.id} cx={cx} cy={cy} r={DOT_R} {...common} />;
       })}
     </svg>
+  );
+}
+
+function PlayTagChips({ tags, max = 2 }: { tags: string[]; max?: number }) {
+  const shown = tags.slice(0, max);
+  const overflow = tags.slice(max);
+  return (
+    <div className="flex min-w-0 shrink items-center justify-end gap-1 overflow-hidden">
+      {shown.map((t) => (
+        <span
+          key={t}
+          className="max-w-[80px] shrink truncate rounded-full border border-border bg-surface-inset px-1.5 py-0.5 text-[10px] font-medium text-muted"
+          title={t}
+        >
+          {t}
+        </span>
+      ))}
+      {overflow.length > 0 && (
+        <span
+          className="shrink-0 rounded-full border border-border bg-surface-inset px-1.5 py-0.5 text-[10px] font-medium text-muted"
+          title={overflow.join(", ")}
+        >
+          +{overflow.length}
+        </span>
+      )}
+    </div>
   );
 }
 
