@@ -381,9 +381,9 @@ function renderPlaysheetPage(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  ${watermarkSvg(w, h, watermark)}
   ${headerSvg}
   ${body}
+  ${watermarkSvg(w, h, watermark)}
 </svg>`;
 }
 
@@ -813,8 +813,8 @@ export function compileWristbandGridSvg(
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#f1f5f9"/>
-  ${watermarkSvg(w, h, watermark ?? null)}
   ${body}
+  ${watermarkSvg(w, h, watermark ?? null)}
 </svg>`;
 
   return { templateKind: "wristband", svgMarkup: svg, width: w, height: h };
