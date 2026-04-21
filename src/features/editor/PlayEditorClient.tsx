@@ -80,12 +80,14 @@ export function PlayEditorClient({
     };
   }, [doc, vsSnapshot]);
   const anim = usePlayAnimation(animDoc);
-  // Aspect scales with fieldLengthYds so pixels-per-yard stays constant:
-  // adding backfield yards makes the container taller instead of compressing
-  // yard lines into the same box. LOS stays pinned at the same pixel offset
-  // from the top since losY_normalized = yardsFromBottom / fieldLengthYds.
+  // Viewport aspect is fixed — the on-screen box doesn't change size when
+  // the user edits field yardage. Adding yards compresses the distance
+  // between yard lines (more yards in the same pixels); removing yards
+  // expands it. The reducer already rescales player/LOS positions to
+  // preserve yards-from-LOS so the LOS stays on the same yard marker.
+  const VIEWPORT_LENGTH_YDS = 25;
   const fieldAspect =
-    doc.sportProfile.fieldWidthYds / (doc.sportProfile.fieldLengthYds * 0.75);
+    doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
 
   // Stable set: changes only on phase transitions (not every RAF frame), so
   // EditorCanvas doesn't receive a new prop reference 60× per second and
