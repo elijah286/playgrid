@@ -9,7 +9,6 @@ import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookDetailClient } from "./ui";
-import { PlaybookHeader } from "./PlaybookHeader";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -67,20 +66,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
       (profile?.display_name as string | null) || user.email || null;
   }
 
-  const pageHeader = (
-    <PlaybookHeader
-      playbookId={playbookId}
-      name={book.name as string}
-      season={(book.season as string | null) ?? null}
-      variantLabel={variantLabel}
-      settings={playbookSettings}
-      logoUrl={logoUrl}
-      accentColor={accentColor}
-      canManage={canManage}
-      senderName={senderName}
-    />
-  );
-
   return (
     <PlaybookDetailClient
       playbookId={playbookId}
@@ -91,7 +76,16 @@ export default async function PlaybookDetailPage({ params }: Props) {
       initialRoster={rosterRes.ok ? rosterRes.members : []}
       initialInvites={invitesRes.ok ? invitesRes.invites : []}
       initialFormations={formationsRes.ok ? formationsRes.formations : []}
-      pageHeader={pageHeader}
+      headerProps={{
+        name: book.name as string,
+        season: (book.season as string | null) ?? null,
+        variantLabel,
+        settings: playbookSettings,
+        logoUrl,
+        accentColor,
+        canManage,
+        senderName,
+      }}
     />
   );
 }

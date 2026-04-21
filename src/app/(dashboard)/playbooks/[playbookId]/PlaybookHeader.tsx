@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Copy, Home, Mail, MoreVertical, QrCode, Settings2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Check, CheckSquare, Copy, Home, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -44,6 +44,14 @@ function hexLuminance(hex: string): number {
   return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
 }
 
+export type PlaybookHeaderPlayActions = {
+  onNewPlay: () => void;
+  onToggleSelect: () => void;
+  selectionMode: boolean;
+  creating: boolean;
+  printHref: string;
+};
+
 export function PlaybookHeader({
   playbookId,
   name,
@@ -54,6 +62,7 @@ export function PlaybookHeader({
   accentColor,
   canManage,
   senderName,
+  playActions,
 }: {
   playbookId: string;
   name: string;
@@ -64,6 +73,7 @@ export function PlaybookHeader({
   accentColor: string;
   canManage: boolean;
   senderName?: string | null;
+  playActions?: PlaybookHeaderPlayActions;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -111,28 +121,42 @@ export function PlaybookHeader({
             </p>
           </div>
 
-          {canManage && (
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                size="sm"
-                leftIcon={UserPlus}
-                onClick={() => setInviteOpen(true)}
-                className={`hidden sm:inline-flex ${
-                  isLightBg
-                    ? "!bg-slate-900 !text-white hover:!bg-slate-800"
-                    : "!bg-white !text-slate-900 hover:!bg-white/90"
-                }`}
-              >
-                Invite Team Member
-              </Button>
-              <HeaderMenu
-                onAccent={onAccent}
-                onAccentHover={onAccentHover}
-                onCustomize={() => setCustomizeOpen(true)}
-                onInvite={() => setInviteOpen(true)}
-              />
-            </div>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Mobile-only PlayGrid brand chip. Desktop already shows the
+                real SiteHeader; on mobile that header is hidden to save
+                vertical space, so this chip keeps the brand present and
+                doubles as a nav link back to /home. */}
+            <Link
+              href="/home"
+              aria-label="PlayGrid home"
+              className="sm:hidden inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white ring-2 ring-white/90"
+            >
+              PlayGrid
+            </Link>
+            {canManage && (
+              <>
+                <Button
+                  size="sm"
+                  leftIcon={UserPlus}
+                  onClick={() => setInviteOpen(true)}
+                  className={`hidden sm:inline-flex ${
+                    isLightBg
+                      ? "!bg-slate-900 !text-white hover:!bg-slate-800"
+                      : "!bg-white !text-slate-900 hover:!bg-white/90"
+                  }`}
+                >
+                  Invite Team Member
+                </Button>
+                <HeaderMenu
+                  onAccent={onAccent}
+                  onAccentHover={onAccentHover}
+                  onCustomize={() => setCustomizeOpen(true)}
+                  onInvite={() => setInviteOpen(true)}
+                  playActions={playActions}
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -166,11 +190,13 @@ function HeaderMenu({
   onAccentHover,
   onCustomize,
   onInvite,
+  playActions,
 }: {
   onAccent: string;
   onAccentHover: string;
   onCustomize: () => void;
   onInvite: () => void;
+  playActions?: PlaybookHeaderPlayActions;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -229,6 +255,46 @@ function HeaderMenu({
             <UserPlus className="size-4" />
             <span>Invite team member</span>
           </button>
+          {playActions && (
+            <>
+              <div className="my-1 h-px bg-border sm:hidden" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={playActions.creating}
+                onClick={() => {
+                  setOpen(false);
+                  playActions.onNewPlay();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset disabled:opacity-50 sm:hidden"
+              >
+                <Plus className="size-4" />
+                <span>New play</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  playActions.onToggleSelect();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+              >
+                <CheckSquare className="size-4" />
+                <span>{playActions.selectionMode ? "Cancel selection" : "Select plays"}</span>
+              </button>
+              <Link
+                href={playActions.printHref}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+              >
+                <Printer className="size-4" />
+                <span>Print playbook</span>
+              </Link>
+              <div className="my-1 h-px bg-border sm:hidden" />
+            </>
+          )}
           <button
             type="button"
             role="menuitem"

@@ -154,6 +154,7 @@ export function FeedbackWidget() {
       style={style}
       className={cn(
         "fixed z-40 print:hidden select-none",
+        "hidden sm:block",
         dragging && "cursor-grabbing",
       )}
     >

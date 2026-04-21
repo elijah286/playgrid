@@ -85,6 +85,8 @@ import {
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
+import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
+import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
 
@@ -118,7 +120,7 @@ export function PlaybookDetailClient({
   initialRoster,
   initialInvites,
   initialFormations,
-  pageHeader,
+  headerProps,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -128,9 +130,19 @@ export function PlaybookDetailClient({
   initialRoster: PlaybookRosterMember[];
   initialInvites: PlaybookInvite[];
   initialFormations: SavedFormation[];
-  // Back link + playbook identity block. Rendered inside the sticky header
-  // region so it stays pinned while plays scroll.
-  pageHeader?: React.ReactNode;
+  // Data for the playbook banner. Rendered inside the sticky header region
+  // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
+  // the client can wire play-action callbacks into the banner's menu.
+  headerProps: {
+    name: string;
+    season: string | null;
+    variantLabel: string;
+    settings: PlaybookSettings;
+    logoUrl: string | null;
+    accentColor: string;
+    canManage: boolean;
+    senderName: string | null;
+  };
 }) {
   const searchParams = useSearchParams();
   const initialTab = (() => {
@@ -582,12 +594,42 @@ export function PlaybookDetailClient({
           Mobile: the global header is hidden, so pin to the very top (top-0).
           `-mt-8` cancels the dashboard `<main>` py-8 top padding so the
           pre-scroll layout matches the scrolled (compact) layout — same
-          spacing in both states. Solid bg (not blur) avoids the "appearing
-          header" flicker when scroll begins. */}
+          spacing in both states. Sticky's `pt-3` and PlaybookHeader's
+          `-mt-3` cancel to land the banner flush with the sticky's top.
+          Solid bg (not blur) avoids the "appearing header" flicker when
+          scroll begins. */}
       <div className="sticky top-0 sm:top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
-        {pageHeader}
+        <PlaybookHeader
+          playbookId={playbookId}
+          name={headerProps.name}
+          season={headerProps.season}
+          variantLabel={headerProps.variantLabel}
+          settings={headerProps.settings}
+          logoUrl={headerProps.logoUrl}
+          accentColor={headerProps.accentColor}
+          canManage={headerProps.canManage}
+          senderName={headerProps.senderName}
+          playActions={{
+            onNewPlay: openFormationPicker,
+            onToggleSelect: () => {
+              if (selectionMode) {
+                setSelectionMode(false);
+                setSelectedPlayIds(new Set());
+              } else {
+                setSelectionMode(true);
+              }
+            },
+            selectionMode,
+            creating,
+            printHref: `/playbooks/${playbookId}/print`,
+          }}
+        />
 
-        <div className="border-b border-border">
+        {/* Tabs: on mobile, scroll horizontally so Staff stays reachable
+            at narrow widths. Edge-to-edge via -mx-6 + px-6 so the first
+            tab aligns with the banner content. */}
+        <div className="-mx-6 overflow-x-auto px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="border-b border-border min-w-max sm:min-w-0">
           <nav className="-mb-px flex gap-6" aria-label="Playbook sections">
             {(
               [
@@ -604,7 +646,7 @@ export function PlaybookDetailClient({
                   type="button"
                   onClick={() => setTab(t.key)}
                   aria-current={active ? "page" : undefined}
-                  className={`relative inline-flex items-center gap-2 border-b-[3px] px-1 pb-3 pt-1 text-base font-bold tracking-tight transition-colors ${
+                  className={`relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap border-b-[3px] px-1 pb-3 pt-1 text-base font-bold tracking-tight transition-colors ${
                     active
                       ? "border-primary text-foreground"
                       : "border-transparent text-muted hover:text-foreground"
@@ -622,6 +664,7 @@ export function PlaybookDetailClient({
               );
             })}
           </nav>
+        </div>
         </div>
 
         {tab === "plays" && (
@@ -785,8 +828,8 @@ export function PlaybookDetailClient({
           </div>
 
           {/* Desktop: Select / Print / New play as dedicated buttons.
-              Mobile: hidden — consolidated into the overflow menu below so
-              the toolbar stays focused on viewing plays. */}
+              Mobile: all three live in the team-banner kebab menu so the
+              toolbar stays focused on viewing and filtering plays. */}
           <Button
             variant={selectionMode ? "primary" : "secondary"}
             leftIcon={CheckSquare}
@@ -816,37 +859,6 @@ export function PlaybookDetailClient({
           >
             New play
           </Button>
-          {/* Mobile-only overflow menu for less common coach actions. */}
-          <div className="sm:hidden">
-            <ActionMenu
-              label="More playbook actions"
-              items={[
-                {
-                  label: selectionMode ? "Cancel selection" : "Select plays",
-                  icon: CheckSquare,
-                  onSelect: () => {
-                    if (selectionMode) {
-                      setSelectionMode(false);
-                      setSelectedPlayIds(new Set());
-                    } else {
-                      setSelectionMode(true);
-                    }
-                  },
-                },
-                {
-                  label: "New play",
-                  icon: Plus,
-                  onSelect: openFormationPicker,
-                  disabled: creating,
-                },
-                {
-                  label: "Print playbook",
-                  icon: Printer,
-                  onSelect: () => router.push(`/playbooks/${playbookId}/print`),
-                },
-              ]}
-            />
-          </div>
         </div>
         )}
       </div>
