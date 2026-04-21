@@ -325,8 +325,14 @@ export function PrintPlaybookClient({
   }
 
   return (
-    <div className="grid gap-6 grid-cols-[minmax(280px,20%)_1fr]">
-      <div className="space-y-4 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto pr-1">
+    <div
+      className="grid gap-6"
+      style={{ gridTemplateColumns: "minmax(280px, 30%) 1fr" }}
+    >
+      <div
+        className="space-y-4 sticky top-4 self-start overflow-y-auto pr-1"
+        style={{ maxHeight: "calc(100vh - 2rem)" }}
+      >
         <SegmentedControl
           options={[
             { value: "plays" as const, label: `Plays (${selected.size})` },
