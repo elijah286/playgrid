@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ColorModeToggle } from "@/components/theme/ColorModeToggle";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -47,7 +46,6 @@ export function SiteHeader() {
           >
             Privacy
           </Link>
-          <ColorModeToggle />
         </nav>
       </div>
     </header>
