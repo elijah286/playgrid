@@ -427,6 +427,7 @@ export function PrintPlaybookClient({
 
   const pageCount = previewPages.length;
   const currentPageIdx = Math.min(previewPage, Math.max(0, pageCount - 1));
+  const stripXmlProlog = (s: string) => s.replace(/^\s*<\?xml[^?]*\?>\s*/, "");
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
@@ -864,7 +865,9 @@ export function PrintPlaybookClient({
             onClick={() => setFullscreen(true)}
             aria-label="Open preview fullscreen"
             dangerouslySetInnerHTML={{
-              __html: previewPages[currentPageIdx] ?? previewPages[0] ?? "",
+              __html: stripXmlProlog(
+                previewPages[currentPageIdx] ?? previewPages[0] ?? "",
+              ),
             }}
           />
         ) : (
@@ -902,7 +905,7 @@ export function PrintPlaybookClient({
               <div
                 key={i}
                 className="mx-auto w-full max-w-[900px] rounded-xl border border-border bg-surface-raised p-4"
-                dangerouslySetInnerHTML={{ __html: svg }}
+                dangerouslySetInnerHTML={{ __html: stripXmlProlog(svg) }}
               />
             ))}
           </div>
