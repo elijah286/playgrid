@@ -33,6 +33,7 @@ export type InvitePreview = {
   logo_url: string | null;
   color: string | null;
   play_count: number;
+  head_coach_name: string | null;
   role: "owner" | "editor" | "viewer";
   expires_at: string;
   exhausted: boolean;

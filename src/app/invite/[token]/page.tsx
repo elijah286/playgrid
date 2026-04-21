@@ -60,7 +60,7 @@ export default async function InvitePage({ params }: Props) {
   const accent = preview.color || "#2563eb";
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-12">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-5 px-6 pb-16 pt-10 sm:pt-16">
       <PreviewCard
         playbookName={preview.playbook_name}
         teamName={preview.team_name}
@@ -69,6 +69,7 @@ export default async function InvitePage({ params }: Props) {
         color={accent}
         playCount={preview.play_count}
         roleLabel={roleLabel}
+        headCoachName={preview.head_coach_name}
       />
 
       {user ? (
@@ -103,6 +104,7 @@ function PreviewCard({
   color,
   playCount,
   roleLabel,
+  headCoachName,
 }: {
   playbookName: string;
   teamName: string | null;
@@ -111,7 +113,9 @@ function PreviewCard({
   color: string;
   playCount: number;
   roleLabel: string;
+  headCoachName: string | null;
 }) {
+  const subline = [teamName, season].filter(Boolean).join(" · ");
   return (
     <div
       className="overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated"
@@ -122,50 +126,74 @@ function PreviewCard({
           <Image
             src={logoUrl}
             alt=""
-            width={64}
-            height={64}
-            className="size-16 rounded-xl object-cover"
+            width={72}
+            height={72}
+            className="size-18 rounded-xl object-cover"
+            style={{ width: 72, height: 72 }}
             unoptimized
           />
         ) : (
           <div
-            className="flex size-16 items-center justify-center rounded-xl text-2xl font-extrabold text-white"
-            style={{ backgroundColor: color }}
+            className="flex items-center justify-center rounded-xl text-2xl font-extrabold text-white"
+            style={{ width: 72, height: 72, backgroundColor: color }}
           >
             {(teamName ?? playbookName).slice(0, 1).toUpperCase()}
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             You&rsquo;re invited to
           </p>
-          <h1 className="truncate text-xl font-extrabold tracking-tight text-foreground">
+          <h1 className="mt-0.5 truncate text-xl font-extrabold tracking-tight text-foreground">
             {playbookName}
           </h1>
-          {teamName && (
-            <p className="truncate text-sm text-muted">
-              {teamName}
-              {season ? ` · ${season}` : ""}
-            </p>
+          {subline && (
+            <p className="truncate text-sm text-muted">{subline}</p>
           )}
         </div>
       </div>
-      <div className="flex items-center justify-between border-t border-border bg-surface px-6 py-3 text-xs text-muted">
-        <span>
-          <span className="font-semibold text-foreground">{playCount}</span>{" "}
-          {playCount === 1 ? "play" : "plays"}
-        </span>
-        <span>
-          Role: <span className="font-semibold text-foreground">{roleLabel}</span>
-        </span>
-      </div>
+      <dl className="grid grid-cols-3 divide-x divide-border border-t border-border bg-surface text-xs">
+        <Stat label="Plays" value={String(playCount)} />
+        <Stat
+          label="Head coach"
+          value={headCoachName ?? "—"}
+          mutedWhenDash={!headCoachName}
+        />
+        <Stat label="Your role" value={roleLabel} />
+      </dl>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  mutedWhenDash = false,
+}: {
+  label: string;
+  value: string;
+  mutedWhenDash?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-0.5 px-3 py-3 text-center">
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+        {label}
+      </dt>
+      <dd
+        className={`truncate text-sm font-semibold ${
+          mutedWhenDash ? "text-muted" : "text-foreground"
+        }`}
+        title={value}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
 
 function Frame({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
+    <div className="mx-auto w-full max-w-md px-6 pb-16 pt-10 sm:pt-16">
       <div className="rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
         <h1 className="text-xl font-extrabold tracking-tight text-foreground">{title}</h1>
         <div className="mt-3">{children}</div>
