@@ -1043,7 +1043,7 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                         {showPlayNumbers && position != null && !selectionMode && (
-                          <div className="pointer-events-none absolute left-1.5 bottom-1.5 z-10 inline-flex h-3 min-w-[14px] items-center justify-center rounded bg-primary px-1 text-[7px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
+                          <div className="pointer-events-none absolute left-1.5 bottom-8 z-10 inline-flex h-3 min-w-[14px] items-center justify-center rounded bg-primary px-1 text-[7px] font-bold leading-none tabular-nums text-primary-foreground shadow-sm">
                             {String(position).padStart(2, "0")}
                           </div>
                         )}
