@@ -424,11 +424,10 @@ async function sendSharedExistingUserEmail(input: {
     text,
     html,
   });
-  if (res.error) {
+  const err = res.error as { message?: string } | string | null | undefined;
+  if (err) {
     throw new Error(
-      typeof res.error === "string"
-        ? res.error
-        : res.error.message || JSON.stringify(res.error),
+      typeof err === "string" ? err : err.message || JSON.stringify(err),
     );
   }
 }
