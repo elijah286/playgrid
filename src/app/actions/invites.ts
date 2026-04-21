@@ -67,6 +67,16 @@ export async function createInviteAction(input: {
   const days = Math.max(1, Math.min(MAX_EXPIRY_DAYS, Math.floor(input.expiresInDays || 14)));
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
+  // Snapshot the sharer's current view prefs so the invitee inherits the
+  // same starting view on first visit. Best-effort — if there are no prefs
+  // yet, we store null and the invitee just sees defaults.
+  const { data: myPrefs } = await supabase
+    .from("playbook_view_preferences")
+    .select("preferences")
+    .eq("user_id", user.id)
+    .eq("playbook_id", input.playbookId)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("playbook_invites")
     .insert({
@@ -78,6 +88,7 @@ export async function createInviteAction(input: {
       max_uses: input.maxUses,
       expires_at: expiresAt,
       created_by: user.id,
+      filters_snapshot: myPrefs?.preferences ?? null,
     })
     .select("*")
     .single();
@@ -291,6 +302,23 @@ export async function sharePlaybookWithEmailsAction(input: {
             results.push({ email, kind: "failed", error: upErr.message });
             continue;
           }
+          // Seed recipient's view prefs from the sharer's current prefs,
+          // first-visit-only (insert-or-nothing). Best-effort; silently
+          // skip on error so it never blocks the share.
+          const { data: myPrefs } = await supabase
+            .from("playbook_view_preferences")
+            .select("preferences")
+            .eq("user_id", user.id)
+            .eq("playbook_id", input.playbookId)
+            .maybeSingle();
+          await admin
+            .from("playbook_view_preferences")
+            .insert({
+              user_id: userId,
+              playbook_id: input.playbookId,
+              preferences: myPrefs?.preferences ?? {},
+            })
+            .then(() => undefined, () => undefined);
         }
         // Always send a "was shared with you" email, even on re-share, so
         // the recipient sees the signal. Surface email send errors instead
@@ -443,6 +471,15 @@ export async function acceptInviteAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
+  // Pull the invite's filters snapshot before accepting, so we can seed
+  // the accepter's view prefs on first visit. Looked up by token so it
+  // works even before the accept RPC completes.
+  const { data: inviteRow } = await supabase
+    .from("playbook_invites")
+    .select("playbook_id, filters_snapshot")
+    .eq("token", token)
+    .maybeSingle();
+
   const { data, error } = await supabase.rpc("accept_invite", { p_token: token });
   if (error) {
     if (error.message.includes("invite_email_mismatch")) {
@@ -454,5 +491,20 @@ export async function acceptInviteAction(
     return { ok: false, error: error.message };
   }
   if (!data) return { ok: false, error: "Invite is invalid, expired, or fully used." };
-  return { ok: true, playbookId: data as string };
+
+  const playbookId = data as string;
+  // First-visit-only seed. Insert-or-nothing so a returning user who
+  // already customized their view is left alone.
+  if (inviteRow?.playbook_id === playbookId) {
+    await supabase
+      .from("playbook_view_preferences")
+      .insert({
+        user_id: user.id,
+        playbook_id: playbookId,
+        preferences: inviteRow.filters_snapshot ?? {},
+      })
+      .then(() => undefined, () => undefined);
+  }
+
+  return { ok: true, playbookId };
 }

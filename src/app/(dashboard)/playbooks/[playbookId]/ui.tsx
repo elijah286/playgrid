@@ -77,6 +77,10 @@ import {
   type PlaybookInvite,
 } from "@/app/actions/invites";
 import {
+  setPlaybookViewPrefsAction,
+  type PlaybookViewPrefs,
+} from "@/app/actions/playbook-view-prefs";
+import {
   ActionMenu,
   Badge,
   Button,
@@ -99,6 +103,7 @@ const UNASSIGNED = "__unassigned__";
 type ThumbSize = "small" | "medium" | "large";
 
 type PlaybookPrefs = {
+  tab?: "plays" | "formations" | "roster" | "staff";
   view: "active" | "archived";
   typeFilter: PlayType | "all";
   groupBy: GroupBy;
@@ -123,6 +128,7 @@ export function PlaybookDetailClient({
   initialRoster,
   initialInvites,
   initialFormations,
+  initialPrefs,
   headerProps,
 }: {
   playbookId: string;
@@ -134,6 +140,7 @@ export function PlaybookDetailClient({
   initialRoster: PlaybookRosterMember[];
   initialInvites: PlaybookInvite[];
   initialFormations: SavedFormation[];
+  initialPrefs: PlaybookViewPrefs | null;
   // Data for the playbook banner. Rendered inside the sticky header region
   // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
   // the client can wire play-action callbacks into the banner's menu.
@@ -154,8 +161,19 @@ export function PlaybookDetailClient({
 }) {
   const searchParams = useSearchParams();
   const initialTab = (() => {
+    // Explicit ?tab= in the URL wins over saved prefs — this is how deep
+    // links (e.g. "Invite" routing to ?tab=roster) keep working. Otherwise
+    // fall back to the user's last-viewed tab, else "plays".
     const t = searchParams?.get("tab");
     if (t === "formations" || t === "roster" || t === "staff") return t;
+    if (
+      initialPrefs?.tab === "formations" ||
+      initialPrefs?.tab === "roster" ||
+      initialPrefs?.tab === "staff" ||
+      initialPrefs?.tab === "plays"
+    ) {
+      return initialPrefs.tab;
+    }
     return "plays";
   })();
   const [tab, setTab] = useState<"plays" | "formations" | "roster" | "staff">(
@@ -174,38 +192,33 @@ export function PlaybookDetailClient({
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-  // Per-playbook persisted view prefs. State starts with defaults (so server
-  // and first client paint match) and we hydrate from localStorage in an
-  // effect after mount. Search query is intentionally ephemeral.
-  const prefsKey = `playbook:${playbookId}:prefs`;
+  // Per-playbook persisted view prefs. Server preloads the row in page.tsx
+  // and passes it in as initialPrefs, so state initializes directly from
+  // server state — no pre-hydration flash and no per-device drift. Search
+  // query is intentionally ephemeral.
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"active" | "archived">("active");
-  const [typeFilter, setTypeFilter] = useState<PlayType | "all">("all");
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [view, setView] = useState<"active" | "archived">(
+    initialPrefs?.view === "archived" ? "archived" : "active",
+  );
+  const [typeFilter, setTypeFilter] = useState<PlayType | "all">(
+    (initialPrefs?.typeFilter as PlayType | "all" | undefined) ?? "all",
+  );
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    (initialPrefs?.groupBy as GroupBy | undefined) ?? "none",
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelRef = useRef<HTMLDivElement | null>(null);
-  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
-  const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
-  const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(true);
-  const [prefsHydrated, setPrefsHydrated] = useState(false);
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(prefsKey);
-      if (raw) {
-        const seeded = JSON.parse(raw) as Partial<PlaybookPrefs>;
-        if (seeded.view) setView(seeded.view);
-        if (seeded.typeFilter) setTypeFilter(seeded.typeFilter);
-        if (seeded.groupBy) setGroupBy(seeded.groupBy);
-        if (seeded.viewMode) setViewMode(seeded.viewMode);
-        if (seeded.thumbSize) setThumbSize(seeded.thumbSize);
-        if (typeof seeded.showPlayNumbers === "boolean")
-          setShowPlayNumbers(seeded.showPlayNumbers);
-      }
-    } catch {
-      /* ignore parse/storage errors */
-    }
-    setPrefsHydrated(true);
-  }, [prefsKey]);
+  const [viewMode, setViewMode] = useState<"cards" | "list">(
+    initialPrefs?.viewMode === "list" ? "list" : "cards",
+  );
+  const [thumbSize, setThumbSize] = useState<ThumbSize>(
+    (initialPrefs?.thumbSize as ThumbSize | undefined) ?? "medium",
+  );
+  const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
+    typeof initialPrefs?.showPlayNumbers === "boolean"
+      ? initialPrefs.showPlayNumbers
+      : true,
+  );
   const [selectionMode, setSelectionMode] = useState(false);
   // Local optimistic order. Mirrors initialPlays but can be mutated during drag
   // so other rows slide into place in real time. Committed to the server on drop.
@@ -220,22 +233,30 @@ export function PlaybookDetailClient({
     () => new Set(),
   );
 
+  // Debounced server save. Skips the very first effect run so we don't
+  // save on mount (state already equals server state). Also skips the
+  // first URL-tab override so a deep-link doesn't silently overwrite the
+  // saved tab with the linked one.
+  const didMountPrefsRef = useRef(false);
   useEffect(() => {
-    if (!prefsHydrated) return;
-    const prefs: PlaybookPrefs = {
+    if (!didMountPrefsRef.current) {
+      didMountPrefsRef.current = true;
+      return;
+    }
+    const prefs: PlaybookViewPrefs = {
+      tab,
       view,
-      typeFilter,
+      typeFilter: typeFilter as PlaybookViewPrefs["typeFilter"],
       groupBy,
       viewMode,
       thumbSize,
       showPlayNumbers,
     };
-    try {
-      window.localStorage.setItem(prefsKey, JSON.stringify(prefs));
-    } catch {
-      /* ignore quota/storage errors */
-    }
-  }, [prefsHydrated, prefsKey, view, typeFilter, groupBy, viewMode, thumbSize, showPlayNumbers]);
+    const handle = window.setTimeout(() => {
+      void setPlaybookViewPrefsAction(playbookId, prefs);
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [playbookId, tab, view, typeFilter, groupBy, viewMode, thumbSize, showPlayNumbers]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showManageGroups, setShowManageGroups] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);

@@ -5,6 +5,7 @@ import { listPlaysAction } from "@/app/actions/plays";
 import { listPlaybookRosterAction } from "@/app/actions/playbook-roster";
 import { listInvitesAction } from "@/app/actions/invites";
 import { listFormationsForPlaybookAction } from "@/app/actions/formations";
+import { getPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -32,11 +33,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   if (error || !book) notFound();
 
-  const [listed, rosterRes, invitesRes, formationsRes] = await Promise.all([
+  const [listed, rosterRes, invitesRes, formationsRes, prefsRes] = await Promise.all([
     listPlaysAction(playbookId, { includeArchived: true }),
     listPlaybookRosterAction(playbookId),
     listInvitesAction(playbookId),
     listFormationsForPlaybookAction(playbookId),
+    getPlaybookViewPrefsAction(playbookId),
   ]);
 
   const {
@@ -110,6 +112,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       initialRoster={rosterRes.ok ? rosterRes.members : []}
       initialInvites={invitesRes.ok ? invitesRes.invites : []}
       initialFormations={formationsRes.ok ? formationsRes.formations : []}
+      initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
       headerProps={{
         name: book.name as string,
         season: (book.season as string | null) ?? null,
