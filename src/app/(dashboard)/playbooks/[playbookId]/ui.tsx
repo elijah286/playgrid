@@ -496,8 +496,7 @@ export function PlaybookDetailClient({
     });
   }
 
-  // Move a play to 1-based target position. Shifts other plays to fill the gap
-  // (so typing 2 on play #5 makes it #2 and bumps old #2,3,4 down to 3,4,5).
+  // Swap a play's position with whichever play currently holds target1Based.
   function renumberPlay(sourceId: string, target1Based: number) {
     setEditingNumberPlayId(null);
     setNumberInputValue("");
@@ -506,8 +505,7 @@ export function PlaybookDetailClient({
     const tgt = Math.max(0, Math.min(localPlays.length - 1, target1Based - 1));
     if (src === tgt) return;
     const next = [...localPlays];
-    const [moved] = next.splice(src, 1);
-    next.splice(tgt, 0, moved);
+    [next[src], next[tgt]] = [next[tgt]!, next[src]!];
     const reordered = next.map((p, i) => ({ ...p, sort_order: i }));
     setLocalPlays(reordered);
     const orderedIds = reordered.map((p) => p.id);
