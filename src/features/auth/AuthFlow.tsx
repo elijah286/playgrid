@@ -495,28 +495,16 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
             {primaryLabel}
           </Button>
 
-          {/* Contextual helpers under the primary button */}
+          {/* Contextual helper under the primary button */}
           {step === "password" && (
-            <div className="flex items-center justify-between text-xs">
-              <button
-                type="button"
-                onClick={handleForgot}
-                disabled={pending}
-                className="font-medium text-muted hover:text-foreground disabled:opacity-50"
-              >
-                Forgot password?
-              </button>
-              <button
-                type="button"
-                onClick={() => void sendCode({ isNewUser: false })}
-                disabled={pending || resendCountdown > 0}
-                className="font-medium text-primary hover:text-primary-hover disabled:opacity-50"
-              >
-                {resendCountdown > 0
-                  ? `Email me a code (${resendCountdown}s)`
-                  : "Email me a 6-digit code"}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleForgot}
+              disabled={pending}
+              className="block w-full text-center text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+            >
+              Use one-time code instead
+            </button>
           )}
 
           {(step === "code" || step === "password") && (
