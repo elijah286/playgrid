@@ -578,12 +578,13 @@ export function PlaybookDetailClient({
         </div>
       )}
       {/* Sticky header region: back link + playbook identity + slim top bar.
-          Stays pinned below the global dashboard header (h ≈ 56px = top-14)
-          while plays scroll beneath. `-mt-8` cancels the dashboard `<main>`
-          py-8 top padding so the pre-scroll layout matches the scrolled
-          (compact) layout — same spacing in both states. Solid bg (not
-          blur) avoids the "appearing header" flicker when scroll begins. */}
-      <div className="sticky top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
+          Desktop: pinned below the global dashboard header (h ≈ 56px = top-14).
+          Mobile: the global header is hidden, so pin to the very top (top-0).
+          `-mt-8` cancels the dashboard `<main>` py-8 top padding so the
+          pre-scroll layout matches the scrolled (compact) layout — same
+          spacing in both states. Solid bg (not blur) avoids the "appearing
+          header" flicker when scroll begins. */}
+      <div className="sticky top-0 sm:top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
         {pageHeader}
 
         <div className="border-b border-border">
@@ -783,6 +784,9 @@ export function PlaybookDetailClient({
             )}
           </div>
 
+          {/* Desktop: Select / Print / New play as dedicated buttons.
+              Mobile: hidden — consolidated into the overflow menu below so
+              the toolbar stays focused on viewing plays. */}
           <Button
             variant={selectionMode ? "primary" : "secondary"}
             leftIcon={CheckSquare}
@@ -794,10 +798,11 @@ export function PlaybookDetailClient({
                 setSelectionMode(true);
               }
             }}
+            className="hidden sm:inline-flex"
           >
             {selectionMode ? "Cancel" : "Select"}
           </Button>
-          <Link href={`/playbooks/${playbookId}/print`}>
+          <Link href={`/playbooks/${playbookId}/print`} className="hidden sm:inline-flex">
             <Button variant="secondary" leftIcon={Printer}>
               Print playbook
             </Button>
@@ -807,9 +812,41 @@ export function PlaybookDetailClient({
             leftIcon={Plus}
             loading={creating}
             onClick={openFormationPicker}
+            className="hidden sm:inline-flex"
           >
             New play
           </Button>
+          {/* Mobile-only overflow menu for less common coach actions. */}
+          <div className="sm:hidden">
+            <ActionMenu
+              label="More playbook actions"
+              items={[
+                {
+                  label: selectionMode ? "Cancel selection" : "Select plays",
+                  icon: CheckSquare,
+                  onSelect: () => {
+                    if (selectionMode) {
+                      setSelectionMode(false);
+                      setSelectedPlayIds(new Set());
+                    } else {
+                      setSelectionMode(true);
+                    }
+                  },
+                },
+                {
+                  label: "New play",
+                  icon: Plus,
+                  onSelect: openFormationPicker,
+                  disabled: creating,
+                },
+                {
+                  label: "Print playbook",
+                  icon: Printer,
+                  onSelect: () => router.push(`/playbooks/${playbookId}/print`),
+                },
+              ]}
+            />
+          </div>
         </div>
         )}
       </div>
