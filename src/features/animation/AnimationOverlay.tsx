@@ -1,6 +1,6 @@
 "use client";
 
-import type { PlayDocument, Player, Point2, Route } from "@/domain/play/types";
+import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
 import type { PlayAnimation } from "./usePlayAnimation";
 
 type Props = {
@@ -12,26 +12,20 @@ type Props = {
 /**
  * Overlay rendered on top of the static canvas during playback.
  *
- * The static canvas keeps drawing the full play exactly as it does at rest
- * (routes, decorations, zones, defense, non-animating players). This overlay
- * adds only two things:
- *   1. A gray "trail" on top of the already-traveled portion of each route,
- *      so the colored route appears to gray out behind the moving player.
- *   2. The animated player tokens — rendered with the same shape/style as the
- *      static token so there is no visual pop when playback starts.
+ * The static canvas keeps drawing the full play unchanged (routes,
+ * decorations, zones, defense, non-animating players). This overlay just
+ * moves the player tokens along their routes — no trail, no route
+ * modifications. Previous attempts at a gray trail caused aliasing on the
+ * route itself and bled into adjacent field artwork (yard numbers, LOS).
  *
- * Using a single overlay path per route (instead of splitting the route into
- * gray + colored halves) avoids linecap-seam artifacts and pathLength rounding
- * glitches that produced the prior "disappearing lines / white boxes" look.
+ * Player tokens are rendered with the same shape/style as the static token
+ * so there is no visual pop when playback starts.
  */
 export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
   if (anim.phase === "idle") return null;
 
   const playerById = new Map<string, Player>(
     doc.layers.players.map((p) => [p.id, p]),
-  );
-  const routeById = new Map<string, Route>(
-    doc.layers.routes.map((r) => [r.id, r]),
   );
 
   return (
@@ -40,39 +34,6 @@ export function AnimationOverlay({ doc, anim, fieldAspect }: Props) {
       preserveAspectRatio="xMidYMin meet"
       className="pointer-events-none absolute inset-0 h-full w-full"
     >
-      {/* Gray trails on top of already-traveled route portions. */}
-      <g transform={`scale(${fieldAspect}, 1)`}>
-        {anim.flats.map((f) => {
-          if (!f.postMotionD || f.postMotionLength <= 0) return null;
-          const raw = anim.progress.get(f.routeId) ?? 0;
-          const L = f.postMotionLength;
-          const s = Math.max(0, Math.min(L, raw - f.motionBoundary));
-          if (s <= 0) return null;
-          const route = routeById.get(f.routeId);
-          // Match the route's stroke width exactly so the gray trail replaces
-          // the colored route 1:1 — not a pixel wider. A wider trail would
-          // eat into yard numbers, hashes, and the LOS where routes cross.
-          const trailW = route?.style.strokeWidth ?? 3;
-          return (
-            <path
-              key={f.routeId}
-              d={f.postMotionD}
-              pathLength={L}
-              fill="none"
-              stroke="#9CA3AF"
-              strokeWidth={trailW}
-              strokeLinecap="butt"
-              strokeLinejoin="round"
-              strokeDasharray={`${s} ${L}`}
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })}
-      </g>
-
-      {/* Animated player tokens. x-coords are pre-scaled by fieldAspect so we
-          do NOT wrap in a scale group — wrapping would stretch the text
-          glyphs horizontally. Matches the static canvas's player render. */}
       {anim.flats.map((f) => {
         const pl = playerById.get(f.carrierPlayerId);
         if (!pl) return null;
