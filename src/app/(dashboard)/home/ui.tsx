@@ -15,7 +15,6 @@ import {
   Share2,
   Trash2,
   Upload,
-  Users,
   X,
 } from "lucide-react";
 import {
@@ -768,7 +767,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
 
   const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const shared = data.playbooks.filter((b) => b.role !== "owner");
-  const viewerOnly = owned.length === 0 && shared.length > 0;
   const isEmpty = owned.length === 0 && shared.length === 0;
 
   function refresh() {
@@ -921,12 +919,6 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         )}
       </div>
 
-      {viewerOnly && (
-        <p className="rounded-lg bg-surface-inset px-3 py-2 text-sm text-muted ring-1 ring-border">
-          Coaching your own team? Create a playbook to start drawing plays — it&rsquo;s free for personal use.
-        </p>
-      )}
-
       {isEmpty ? (
         <div className="mx-auto w-60 pt-4 sm:w-64">
           <MarketingPlaybookTile onCreate={() => setShowCreate(true)} />
@@ -957,10 +949,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           </section>
 
           {shared.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
-                <Users className="size-3.5" /> Shared with you
-              </h2>
+            <section>
               <div className="flex flex-wrap justify-center gap-3">
                 {shared.map((b) => (
                   <div key={b.id} className="w-40 sm:w-48 lg:w-56">
@@ -988,10 +977,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           </section>
 
           {shared.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
-                <Users className="size-3.5" /> Shared with you
-              </h2>
+            <section>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {shared.map((b) => (
                   <PlaybookTile key={b.id} tile={b} actions={[]} />

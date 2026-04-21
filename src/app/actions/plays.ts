@@ -815,6 +815,9 @@ export type DashboardPlaybookTile = {
   color: string | null;
   season: string | null;
   role: "owner" | "editor" | "viewer";
+  /** Display name of the playbook owner when the current viewer is not the
+   *  owner (shared playbook). Null for your own playbooks. */
+  shared_by_name: string | null;
   previews: {
     players: Player[];
     routes: Route[];
@@ -941,11 +944,51 @@ export async function getDashboardSummaryAction(): Promise<
         color: b.color,
         season: b.season,
         role: r.role,
+        shared_by_name: null,
         previews: [],
       } as DashboardPlaybookTile;
     })
     .filter((r): r is DashboardPlaybookTile => r !== null)
     .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+
+  // For shared playbooks, resolve the owner's display name so tiles can
+  // show a "Shared by …" corner badge. Use the service-role client so we
+  // can read other users' playbook_members rows (RLS hides them from the
+  // caller).
+  const sharedIds = playbooks.filter((b) => b.role !== "owner").map((b) => b.id);
+  if (sharedIds.length > 0) {
+    const svc = createServiceRoleClient();
+    const { data: ownerRows } = await svc
+      .from("playbook_members")
+      .select("playbook_id, user_id")
+      .in("playbook_id", sharedIds)
+      .eq("role", "owner")
+      .eq("status", "active");
+    const ownerIds = Array.from(
+      new Set((ownerRows ?? []).map((r) => r.user_id as string)),
+    );
+    const nameByUser = new Map<string, string>();
+    if (ownerIds.length > 0) {
+      const { data: profileRows } = await svc
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", ownerIds);
+      for (const p of profileRows ?? []) {
+        const name = (p.display_name as string | null) ?? "";
+        if (name.trim()) nameByUser.set(p.id as string, name);
+      }
+    }
+    const ownerByBook = new Map<string, string>();
+    for (const r of ownerRows ?? []) {
+      const name = nameByUser.get(r.user_id as string);
+      if (name) ownerByBook.set(r.playbook_id as string, name);
+    }
+    for (const book of playbooks) {
+      if (book.role !== "owner") {
+        book.shared_by_name = ownerByBook.get(book.id) ?? null;
+      }
+    }
+  }
 
   // Load up to 12 recent offensive play previews per playbook. This is
   // cached per-book for ~20 minutes — cover/book tile art doesn't need to be
