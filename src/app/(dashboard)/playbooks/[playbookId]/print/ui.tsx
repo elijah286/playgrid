@@ -259,15 +259,76 @@ export function PrintPlaybookClient({
     [config],
   );
 
+  // svg2pdf / jsPDF don't honour CSS `mix-blend-mode`, so any non-transparent
+  // pixels in the team logo render as an opaque box in the exported PDF.
+  // Preprocess the logo through a canvas once: knock near-white pixels down
+  // to alpha 0, so the watermark blends cleanly in both preview and PDF.
+  const [alphaKeyedLogoUrl, setAlphaKeyedLogoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!logoUrl) {
+      setAlphaKeyedLogoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const px = data.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const r = px[i]!;
+          const g = px[i + 1]!;
+          const b = px[i + 2]!;
+          // Fade light pixels to transparent; the closer to white, the more
+          // transparent. Anything below ~230 luminance keeps its alpha so
+          // the logo detail stays intact.
+          const maxC = Math.max(r, g, b);
+          if (maxC > 230) {
+            const t = (maxC - 230) / 25; // 230..255 → 0..1
+            px[i + 3] = Math.round(px[i + 3]! * (1 - Math.min(1, t)));
+          }
+        }
+        ctx.putImageData(data, 0, 0);
+        setAlphaKeyedLogoUrl(canvas.toDataURL("image/png"));
+      } catch {
+        // Cross-origin tainted canvas or other failure — fall back to raw.
+        setAlphaKeyedLogoUrl(logoUrl);
+      }
+    };
+    img.onerror = () => {
+      if (!cancelled) setAlphaKeyedLogoUrl(logoUrl);
+    };
+    img.src = logoUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [logoUrl]);
+
   const watermark: Watermark | null = useMemo(() => {
-    if (!config.watermarkEnabled || !logoUrl) return null;
+    if (!config.watermarkEnabled) return null;
+    const src = alphaKeyedLogoUrl ?? logoUrl;
+    if (!src) return null;
     const pct = Math.max(
       WATERMARK_MIN_PCT,
       Math.min(WATERMARK_MAX_PCT, config.watermarkOpacityPct),
     );
     const scale = Math.max(0.1, Math.min(1, config.watermarkScale ?? 0.6));
-    return { logoUrl, opacity: pct / 100, scale };
-  }, [config.watermarkEnabled, config.watermarkOpacityPct, config.watermarkScale, logoUrl]);
+    return { logoUrl: src, opacity: pct / 100, scale };
+  }, [
+    config.watermarkEnabled,
+    config.watermarkOpacityPct,
+    config.watermarkScale,
+    alphaKeyedLogoUrl,
+    logoUrl,
+  ]);
 
   // Playbook-position (1..N) for each play, matching the orange glyph on the
   // playbook detail page. Used as the "Number" label on tiles.
