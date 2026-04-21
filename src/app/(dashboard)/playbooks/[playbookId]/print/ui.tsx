@@ -267,6 +267,15 @@ export function PrintPlaybookClient({
     return { logoUrl, opacity: pct / 100 };
   }, [config.watermarkEnabled, config.watermarkOpacityPct, logoUrl]);
 
+  // Playbook-position (1..N) for each play, matching the orange glyph on the
+  // playbook detail page. Used as the "Number" label on tiles.
+  const playbookPositionById = useMemo(() => {
+    const sorted = [...initialPack].sort((a, b) => a.nav.sort_order - b.nav.sort_order);
+    const m = new Map<string, number>();
+    sorted.forEach((r, i) => m.set(r.id, i + 1));
+    return m;
+  }, [initialPack]);
+
   const previewPages = useMemo<string[]>(() => {
     const chosen = initialPack.filter(
       (r) =>
@@ -277,10 +286,14 @@ export function PrintPlaybookClient({
     if (config.product === "wristband") {
       const docs = pool.map((r, i) => {
         const d = applyExportPresentation(r.document, config);
-        if (numberPlaysInOrder) {
-          d.metadata = { ...d.metadata, wristbandCode: String(i + 1).padStart(2, "0") };
-          d.printProfile.visibility.showWristbandCode = true;
-        }
+        const pos = playbookPositionById.get(r.id);
+        const label = numberPlaysInOrder
+          ? String(i + 1).padStart(2, "0")
+          : pos != null
+            ? String(pos).padStart(2, "0")
+            : d.metadata.wristbandCode;
+        d.metadata = { ...d.metadata, wristbandCode: label };
+        if (numberPlaysInOrder) d.printProfile.visibility.showWristbandCode = true;
         return d;
       });
       if (docs.length === 0) return [];
@@ -318,10 +331,14 @@ export function PrintPlaybookClient({
           })();
     const docs = ordered.map((r, i) => {
       const d = applyExportPresentation(r.document, config);
-      if (numberPlaysInOrder) {
-        d.metadata = { ...d.metadata, wristbandCode: String(i + 1).padStart(2, "0") };
-        d.printProfile.visibility.showWristbandCode = true;
-      }
+      const pos = playbookPositionById.get(r.id);
+      const label = numberPlaysInOrder
+        ? String(i + 1).padStart(2, "0")
+        : pos != null
+          ? String(pos).padStart(2, "0")
+          : d.metadata.wristbandCode;
+      d.metadata = { ...d.metadata, wristbandCode: label };
+      if (numberPlaysInOrder) d.printProfile.visibility.showWristbandCode = true;
       return d;
     });
     const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
@@ -332,7 +349,7 @@ export function PrintPlaybookClient({
       config.playsheetIncludeHeader ? team : null,
       watermark,
     );
-  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark]);
+  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById]);
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
@@ -360,10 +377,14 @@ export function PrintPlaybookClient({
           })();
     const docs = ordered.map((r, i) => {
       const d = applyExportPresentation(r.document, config);
-      if (numberPlaysInOrder) {
-        d.metadata = { ...d.metadata, wristbandCode: String(i + 1).padStart(2, "0") };
-        d.printProfile.visibility.showWristbandCode = true;
-      }
+      const pos = playbookPositionById.get(r.id);
+      const label = numberPlaysInOrder
+        ? String(i + 1).padStart(2, "0")
+        : pos != null
+          ? String(pos).padStart(2, "0")
+          : d.metadata.wristbandCode;
+      d.metadata = { ...d.metadata, wristbandCode: label };
+      if (numberPlaysInOrder) d.printProfile.visibility.showWristbandCode = true;
       return d;
     });
 
