@@ -21,12 +21,22 @@ export function ActionMenu({
   items,
   label = "More actions",
   className,
+  open: openProp,
+  onOpenChange,
 }: {
   items: ActionMenuItem[];
   label?: string;
   className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openProp ?? openInternal;
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const resolved = typeof next === "function" ? next(open) : next;
+    if (openProp === undefined) setOpenInternal(resolved);
+    onOpenChange?.(resolved);
+  };
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

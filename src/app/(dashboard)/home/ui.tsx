@@ -285,6 +285,7 @@ function PlaybookBookTile({
   const hasPreviews = sheetPlays.length > 0;
   const [hover, setHover] = useState(false);
   const [shiftX, setShiftX] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   function handleEnter() {
@@ -318,6 +319,7 @@ function PlaybookBookTile({
   function handleLeave() {
     setHover(false);
     setShiftX(0);
+    setMenuOpen(false);
   }
 
   return (
@@ -500,8 +502,14 @@ function PlaybookBookTile({
       </Link>
 
       {actions.length > 0 && (
-        <div className="absolute right-2 top-2 z-10 rounded-full bg-surface-raised shadow-sm ring-1 ring-border opacity-0 transition-opacity group-hover:opacity-100">
-          <ActionMenu items={actions} />
+        <div
+          className="absolute right-2 top-2 z-10 rounded-full bg-surface-raised shadow-sm ring-1 ring-border opacity-0 transition-[transform,opacity] group-hover:opacity-100"
+          style={{
+            transform: hover ? `scale(${1 / 1.35})` : "scale(1)",
+            transformOrigin: "top right",
+          }}
+        >
+          <ActionMenu items={actions} open={menuOpen} onOpenChange={setMenuOpen} />
         </div>
       )}
     </div>
@@ -906,7 +914,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
               onChange={setView}
               options={[
                 { value: "preview", label: "Preview" },
-                { value: "classic", label: "Classic" },
+                { value: "classic", label: "Simple" },
               ]}
             />
           </div>
