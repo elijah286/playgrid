@@ -232,6 +232,7 @@ export function PrintPlaybookClient({
       showYardMarkers: config.wristbandShowYardMarkers,
       showPlayerLabels: config.wristbandShowPlayerLabels,
       playerOutline: config.wristbandPlayerOutline,
+      cellPadding: config.wristbandCellPadding,
     }),
     [config],
   );

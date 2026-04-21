@@ -383,6 +383,23 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 onChange={(v) => patch({ wristbandZoom: v as WristbandZoom })}
                 options={WRISTBAND_ZOOMS.map((n) => ({ value: n, label: `${n}%` }))}
               />
+
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">
+                  Padding between plays · {Math.round(config.wristbandCellPadding * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(config.wristbandCellPadding * 100)}
+                  onChange={(e) =>
+                    patch({ wristbandCellPadding: Number(e.target.value) / 100 })
+                  }
+                  className="accent-primary"
+                />
+              </label>
             </>
           )}
 

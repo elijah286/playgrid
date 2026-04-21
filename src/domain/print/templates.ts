@@ -634,6 +634,8 @@ export type WristbandGridOptions = {
   showYardMarkers: boolean;
   showPlayerLabels: boolean;
   playerOutline: boolean;
+  /** 0 = tiles flush together with no internal padding, 1 = default. */
+  cellPadding?: number;
 };
 
 /** Optional page-level watermark rendered behind the print content. */
@@ -750,10 +752,11 @@ function renderWristbandTile(
   const showCode = opts.labels !== "name" && vis.showWristbandCode;
   const labelColor = opts.colorCoding ? groupLabelColor(doc) : "#111827";
 
+  const padScale = opts.cellPadding ?? 1;
   const headerH = showName || showCode ? (opts.labelStyle === "prominent" ? 5 : 3.6) : 0;
-  const fieldPadX = cw * 0.04;
+  const fieldPadX = cw * 0.04 * padScale;
   const fieldPadTop = headerH;
-  const fieldPadBottom = cw * 0.03;
+  const fieldPadBottom = cw * 0.03 * padScale;
   const fieldOuterW = cw - fieldPadX * 2;
   const fieldOuterH = ch - fieldPadTop - fieldPadBottom;
   const fieldW = fieldOuterW * zoom;
@@ -831,7 +834,7 @@ export function compileWristbandGridSvg(
   const w = opts.widthIn * IN_TO_MM;
   const h = opts.heightIn * IN_TO_MM;
   const { rows, cols } = wristbandGridDims(opts.layout);
-  const pad = 1.5;
+  const pad = 1.5 * (opts.cellPadding ?? 1);
   const cellW = (w - pad * 2) / cols;
   const cellH = (h - pad * 2) / rows;
 
