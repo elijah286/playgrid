@@ -26,7 +26,7 @@ import {
   sendPlaybookInviteEmailAction,
 } from "@/app/actions/invites";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
 
 const PALETTE = [
   "#F26522", "#EF4444", "#EAB308", "#22C55E",

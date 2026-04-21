@@ -13,7 +13,7 @@ const inter = Inter({
   variable: "--font-sans",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
