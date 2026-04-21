@@ -226,8 +226,12 @@ export type PlayTileLookOptions = {
   labelStyle: WristbandLabelStyle;
   labels: WristbandLabelMode;
   colorCoding: boolean;
-  showLos: boolean;
-  showYardMarkers: boolean;
+  /** 0 = hide LOS, 1 = full stroke/opacity. */
+  losIntensity: number;
+  /** 0 = hide yard-line guides, 1 = full stroke/opacity. */
+  yardMarkersIntensity: number;
+  /** Play-tile border thickness multiplier (0 = invisible, 1 = default). */
+  borderThickness: number;
   showPlayerLabels: boolean;
   playerOutline: boolean;
 };
@@ -472,15 +476,19 @@ function renderPlaysheetCell(
     notes += `<line x1="${ox + padX}" y1="${ny + notesH - 0.5}" x2="${ox + cw - padX}" y2="${ny + notesH - 0.5}" stroke="#e5e7eb" stroke-width="0.2"/>`;
   }
 
+  const bt = Math.max(0, Math.min(2, opts.borderThickness ?? 1));
+  const outerStroke = bt === 0 ? "none" : "#e2e8f0";
+  const outerW = bt === 0 ? 0 : padScale > 0 ? 0.3 * bt : 0.15 * bt;
   const outerBorder =
     padScale > 0
-      ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.3" rx="1.2"/>`
-      : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.15"/>`;
+      ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
+      : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
+  const innerStroke = bt === 0 ? "none" : "#e5e7eb";
   return `
   <g>
     ${outerBorder}
     ${header}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#e5e7eb" stroke-width="0.25"/>
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
     ${field}
     ${notes}
   </g>`;
@@ -501,17 +509,19 @@ function renderFieldContents(
   const strokeW = routeStrokeProportional(look.routeWeight, fieldMin);
   const fit = computeFitScale(doc);
 
+  const ymI = Math.max(0, Math.min(1, look.yardMarkersIntensity));
+  const losI = Math.max(0, Math.min(1, look.losIntensity));
   let guides = "";
-  if (look.showYardMarkers) {
+  if (ymI > 0) {
     for (let i = 1; i < 5; i++) {
       const gy = fieldY + (fieldH * i) / 5;
-      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#e5e7eb" stroke-width="${Math.max(0.1, fieldMin * 0.004)}"/>`;
+      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#94a3b8" stroke-width="${Math.max(0.1, fieldMin * 0.004 * ymI)}" opacity="${ymI}"/>`;
     }
   }
-  if (look.showLos) {
+  if (losI > 0) {
     const losY = doc.lineOfScrimmageY ?? 0.5;
     const ly = fieldY + (1 - losY) * fieldH;
-    guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="${Math.max(0.2, fieldMin * 0.008)}"/>`;
+    guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#475569" stroke-width="${Math.max(0.2, fieldMin * 0.008 * losI)}" opacity="${losI}"/>`;
   }
 
   const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin, look.arrowSize, fit);
@@ -631,8 +641,12 @@ export type WristbandGridOptions = {
   labelStyle: WristbandLabelStyle;
   labels: WristbandLabelMode;
   colorCoding: boolean;
-  showLos: boolean;
-  showYardMarkers: boolean;
+  /** 0 = hide LOS, 1 = full stroke/opacity. */
+  losIntensity: number;
+  /** 0 = hide yard-line guides, 1 = full stroke/opacity. */
+  yardMarkersIntensity: number;
+  /** Tile border thickness multiplier (0 = invisible, 1 = default). */
+  borderThickness: number;
   showPlayerLabels: boolean;
   playerOutline: boolean;
   /** 0 = tiles flush together with no internal padding, 1 = default. */
@@ -805,24 +819,29 @@ function renderWristbandTile(
 
   const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, Math.min(fieldW, fieldH), opts.arrowSize, fit);
 
+  const ymI = Math.max(0, Math.min(1, opts.yardMarkersIntensity));
+  const losI = Math.max(0, Math.min(1, opts.losIntensity));
   let guides = "";
-  if (opts.showYardMarkers) {
+  if (ymI > 0) {
     for (let i = 1; i < 5; i++) {
       const gy = fieldY + (fieldH * i) / 5;
-      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#e5e7eb" stroke-width="0.15"/>`;
+      guides += `<line x1="${fieldX}" y1="${gy}" x2="${fieldX + fieldW}" y2="${gy}" stroke="#94a3b8" stroke-width="${0.15 * ymI}" opacity="${ymI}"/>`;
     }
   }
-  if (opts.showLos) {
+  if (losI > 0) {
     const losY = doc.lineOfScrimmageY ?? 0.5;
     const ly = fieldY + (1 - losY) * fieldH;
-    guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="0.35"/>`;
+    guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#475569" stroke-width="${0.35 * losI}" opacity="${losI}"/>`;
   }
 
+  const bt = Math.max(0, Math.min(2, opts.borderThickness ?? 1));
+  const outerStroke = bt === 0 ? "none" : "#cbd5e1";
+  const innerStroke = bt === 0 ? "none" : "#e2e8f0";
   return `
   <g>
-    <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.25"/>
+    <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${0.25 * bt}"/>
     ${header}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.25"/>
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
     ${guides}
     ${routes}
     ${players}

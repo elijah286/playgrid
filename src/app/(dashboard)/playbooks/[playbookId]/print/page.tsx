@@ -60,8 +60,8 @@ export default async function PlaybookPrintPage({ params }: Props) {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
         <Link
           href={`/playbooks/${playbookId}`}
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
@@ -69,12 +69,9 @@ export default async function PlaybookPrintPage({ params }: Props) {
           <ArrowLeft className="size-4" />
           {book.name}
         </Link>
-        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">
+        <h1 className="text-lg font-extrabold tracking-tight text-foreground">
           Print playbook
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          Choose plays and configure a wrist coach or playcard export.
-        </p>
       </div>
       <PrintPlaybookClient
         playbookId={playbookId}

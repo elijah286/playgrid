@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, FileDown, Printer, Save, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FileDown,
+  Maximize2,
+  Printer,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { PlaybookPrintPackRow } from "@/app/actions/plays";
 import {
   applyExportPresentation,
@@ -81,12 +91,9 @@ export function PrintPlaybookClient({
   const [sortBy, setSortBy] = useState<SortKey>("position");
   const [numberPlaysInOrder, setNumberPlaysInOrder] = useState<boolean>(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [previewPage, setPreviewPage] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
 
-  const groupNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const g of initialGroups) m.set(g.id, g.name);
-    return m;
-  }, [initialGroups]);
 
   // Grouped tree for Plays tab — group ID (or null for ungrouped) → plays.
   type TreeNode = { key: string; name: string; rows: PlaybookPrintPackRow[] };
@@ -166,16 +173,17 @@ export function PrintPlaybookClient({
     return nodes;
   }, [initialPack, initialGroups, q, sortBy, typeFilter]);
 
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
-  // Default-expand groups when searching, or when alpha sort (single node).
-  useEffect(() => {
-    if (!q.trim() && sortBy !== "alpha") return;
-    setOpenGroups(new Set(tree.map((n) => n.key)));
-  }, [q, tree, sortBy]);
+  const [userOpenGroups, setUserOpenGroups] = useState<Set<string>>(() => new Set());
+  const autoOpenAll = q.trim().length > 0 || sortBy === "alpha";
+  const openGroups = useMemo(
+    () => (autoOpenAll ? new Set(tree.map((n) => n.key)) : userOpenGroups),
+    [autoOpenAll, tree, userOpenGroups],
+  );
 
   function toggleGroupOpen(k: string) {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
+    setUserOpenGroups((prev) => {
+      const base = autoOpenAll ? new Set(tree.map((n) => n.key)) : prev;
+      const next = new Set(base);
       if (next.has(k)) next.delete(k);
       else next.add(k);
       return next;
@@ -228,8 +236,9 @@ export function PrintPlaybookClient({
       labelStyle: config.wristbandLabelStyle,
       labels: config.wristbandLabels,
       colorCoding: config.wristbandColorCoding,
-      showLos: config.wristbandShowLos,
-      showYardMarkers: config.wristbandShowYardMarkers,
+      losIntensity: config.wristbandShowLos ? 0.5 : 0,
+      yardMarkersIntensity: config.wristbandShowYardMarkers ? 0.3 : 0,
+      borderThickness: 1,
       showPlayerLabels: config.wristbandShowPlayerLabels,
       playerOutline: config.wristbandPlayerOutline,
       cellPadding: config.wristbandCellPadding,
@@ -251,8 +260,9 @@ export function PrintPlaybookClient({
       labelStyle: config.playsheetLabelStyle,
       labels: config.playsheetLabels,
       colorCoding: config.playsheetColorCoding,
-      showLos: config.playsheetShowLos,
-      showYardMarkers: config.playsheetShowYardMarkers,
+      losIntensity: config.playsheetLosIntensity,
+      yardMarkersIntensity: config.playsheetYardMarkersIntensity,
+      borderThickness: config.playsheetBorderThickness,
       showPlayerLabels: config.playsheetShowPlayerLabels,
       playerOutline: config.playsheetPlayerOutline,
     }),
@@ -263,12 +273,9 @@ export function PrintPlaybookClient({
   // pixels in the team logo render as an opaque box in the exported PDF.
   // Preprocess the logo through a canvas once: knock near-white pixels down
   // to alpha 0, so the watermark blends cleanly in both preview and PDF.
-  const [alphaKeyedLogoUrl, setAlphaKeyedLogoUrl] = useState<string | null>(null);
+  const [alphaCache, setAlphaCache] = useState<{ src: string; value: string } | null>(null);
   useEffect(() => {
-    if (!logoUrl) {
-      setAlphaKeyedLogoUrl(null);
-      return;
-    }
+    if (!logoUrl) return;
     let cancelled = false;
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -287,30 +294,28 @@ export function PrintPlaybookClient({
           const r = px[i]!;
           const g = px[i + 1]!;
           const b = px[i + 2]!;
-          // Fade light pixels to transparent; the closer to white, the more
-          // transparent. Anything below ~230 luminance keeps its alpha so
-          // the logo detail stays intact.
           const maxC = Math.max(r, g, b);
           if (maxC > 230) {
-            const t = (maxC - 230) / 25; // 230..255 → 0..1
+            const t = (maxC - 230) / 25;
             px[i + 3] = Math.round(px[i + 3]! * (1 - Math.min(1, t)));
           }
         }
         ctx.putImageData(data, 0, 0);
-        setAlphaKeyedLogoUrl(canvas.toDataURL("image/png"));
+        setAlphaCache({ src: logoUrl, value: canvas.toDataURL("image/png") });
       } catch {
-        // Cross-origin tainted canvas or other failure — fall back to raw.
-        setAlphaKeyedLogoUrl(logoUrl);
+        setAlphaCache({ src: logoUrl, value: logoUrl });
       }
     };
     img.onerror = () => {
-      if (!cancelled) setAlphaKeyedLogoUrl(logoUrl);
+      if (!cancelled) setAlphaCache({ src: logoUrl, value: logoUrl });
     };
     img.src = logoUrl;
     return () => {
       cancelled = true;
     };
   }, [logoUrl]);
+  const alphaKeyedLogoUrl =
+    logoUrl && alphaCache && alphaCache.src === logoUrl ? alphaCache.value : null;
 
   const watermark: Watermark | null = useMemo(() => {
     if (!config.watermarkEnabled) return null;
@@ -420,6 +425,9 @@ export function PrintPlaybookClient({
     );
   }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById]);
 
+  const pageCount = previewPages.length;
+  const currentPageIdx = Math.min(previewPage, Math.max(0, pageCount - 1));
+
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
       (r) =>
@@ -516,14 +524,11 @@ export function PrintPlaybookClient({
 
   return (
     <div
-      className="grid gap-6"
-      style={{ gridTemplateColumns: "minmax(360px, 40%) 1fr" }}
+      className="flex flex-col gap-3"
+      style={{ height: "calc(100vh - 180px)", minHeight: "520px" }}
     >
-      <div
-        className="sticky top-4 self-start overflow-y-auto pr-1"
-        style={{ maxHeight: "calc(100vh - 2rem)" }}
-      >
-        <div className="sticky top-0 z-10 -mx-1 bg-background px-1 pb-3">
+      <Card className="flex items-center gap-3 p-2">
+        <div className="flex-1 min-w-0">
           <SegmentedControl
             options={[
               { value: "plays" as const, label: `Plays (${selected.size})` },
@@ -535,6 +540,31 @@ export function PrintPlaybookClient({
             onChange={setTab}
           />
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="secondary"
+            leftIcon={Printer}
+            onClick={printNow}
+            loading={printing}
+          >
+            Print
+          </Button>
+          <Button
+            variant="primary"
+            leftIcon={FileDown}
+            onClick={exportPdf}
+            loading={pending}
+          >
+            PDF
+          </Button>
+        </div>
+      </Card>
+
+      <div
+        className="grid min-h-0 flex-1 gap-4"
+        style={{ gridTemplateColumns: "minmax(340px, 38%) 1fr" }}
+      >
+      <div className="min-h-0 overflow-y-auto pr-1">
         <div className="space-y-4">
 
         {tab === "plays" && (
@@ -776,47 +806,108 @@ export function PrintPlaybookClient({
           />
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="secondary"
-            leftIcon={Printer}
-            onClick={printNow}
-            loading={printing}
-          >
-            Print
-          </Button>
-          <Button
-            variant="primary"
-            leftIcon={FileDown}
-            onClick={exportPdf}
-            loading={pending}
-          >
-            PDF
-          </Button>
-        </div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          {config.product === "wristband"
-            ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"${config.wristbandSheet === "sheet" ? " · letter sheet" : ""}`
-            : `Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
-        </p>
-        {previewPages.length > 0 ? (
-          <div className="space-y-4">
+      <div className="flex min-h-0 flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">
+            {config.product === "wristband"
+              ? `Live preview · ${config.wristbandWidthIn}" × ${config.wristbandHeightIn}"${config.wristbandSheet === "sheet" ? " · letter sheet" : ""}`
+              : `Live preview · ${config.playsheetColumns} col${config.playsheetColumns === 1 ? "" : "s"} · ${config.sheetOrientation}${config.playsheetPageBreak === "group" ? " · per-group pages" : ""}`}
+          </p>
+          {pageCount > 0 && (
+            <div className="flex shrink-0 items-center gap-2">
+              {pageCount > 1 && (
+                <div className="flex items-center gap-1 text-xs text-muted">
+                  <button
+                    type="button"
+                    className="rounded p-1 hover:bg-surface-raised disabled:opacity-40"
+                    disabled={currentPageIdx === 0}
+                    onClick={() => setPreviewPage((p) => Math.max(0, p - 1))}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                  <span className="tabular-nums">
+                    {currentPageIdx + 1} / {pageCount}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded p-1 hover:bg-surface-raised disabled:opacity-40"
+                    disabled={currentPageIdx >= pageCount - 1}
+                    onClick={() =>
+                      setPreviewPage((p) => Math.min(pageCount - 1, p + 1))
+                    }
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted hover:bg-surface-raised"
+                onClick={() => setFullscreen(true)}
+                aria-label="Expand preview"
+              >
+                <Maximize2 className="size-3.5" />
+                Expand
+              </button>
+            </div>
+          )}
+        </div>
+        {pageCount > 0 ? (
+          <button
+            type="button"
+            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface-raised p-3 text-left [&_svg]:h-auto [&_svg]:max-h-full [&_svg]:w-auto [&_svg]:max-w-full"
+            onClick={() => setFullscreen(true)}
+            aria-label="Open preview fullscreen"
+            dangerouslySetInnerHTML={{
+              __html: previewPages[currentPageIdx] ?? previewPages[0] ?? "",
+            }}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border p-8">
+            <p className="text-sm text-muted">Select a play to preview.</p>
+          </div>
+        )}
+      </div>
+      </div>
+
+      {fullscreen && pageCount > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur"
+          role="dialog"
+          aria-modal="true"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setFullscreen(false);
+          }}
+        >
+          <div className="flex items-center justify-between border-b border-border px-4 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Preview · {pageCount} page{pageCount === 1 ? "" : "s"}
+            </p>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted hover:bg-surface-raised hover:text-foreground"
+              onClick={() => setFullscreen(false)}
+              aria-label="Close preview"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+          <div className="flex-1 space-y-6 overflow-auto p-6 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-[900px]">
             {previewPages.map((svg, i) => (
               <div
                 key={i}
-                className="overflow-auto rounded-xl border border-border bg-surface-raised p-4 [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full"
+                className="mx-auto w-full max-w-[900px] rounded-xl border border-border bg-surface-raised p-4"
                 dangerouslySetInnerHTML={{ __html: svg }}
               />
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-muted">Select a play to preview.</p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

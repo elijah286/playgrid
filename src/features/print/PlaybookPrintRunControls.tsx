@@ -1,6 +1,6 @@
 "use client";
 
-import { SegmentedControl, Select } from "@/components/ui";
+import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
   PLAYSHEET_COLUMN_OPTIONS,
@@ -10,7 +10,6 @@ import {
   type ArrowSize,
   type PlaybookPrintRunConfig,
   type PlaysheetColumns,
-  type PlaysheetGrouping,
   type PlaysheetNoteLines,
   type PlaysheetPageBreak,
   type WristbandGridLayout,
@@ -37,14 +36,6 @@ type Props = {
    */
   section?: "layout" | "visuals" | "all";
 };
-
-const groupingOptions: { value: PlaysheetGrouping; label: string }[] = [
-  { value: "manual", label: "Manual order" },
-  { value: "group", label: "Group" },
-  { value: "formation", label: "Formation" },
-  { value: "name", label: "Name" },
-  { value: "number", label: "Number / code" },
-];
 
 type PillOption<T extends string | number> = { value: T; label: string };
 
@@ -134,16 +125,6 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                   { value: "landscape" as const, label: "Landscape" },
                 ]}
               />
-
-              <div>
-                <span className="text-sm text-muted">Group / sort plays for export</span>
-                <Select
-                  className="mt-1"
-                  value={config.playsheetGrouping}
-                  onChange={(v) => patch({ playsheetGrouping: v as PlaysheetGrouping })}
-                  options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
-                />
-              </div>
 
               <PillGroup
                 label="Page breaks"
@@ -259,23 +240,53 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
               />
 
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Line of scrimmage · {Math.round(config.playsheetLosIntensity * 100)}%
+                  </span>
                   <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={config.playsheetShowLos}
-                    onChange={(e) => patch({ playsheetShowLos: e.target.checked })}
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round(config.playsheetLosIntensity * 100)}
+                    onChange={(e) =>
+                      patch({ playsheetLosIntensity: Number(e.target.value) / 100 })
+                    }
+                    className="accent-primary"
                   />
-                  Show line of scrimmage
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Yard markers · {Math.round(config.playsheetYardMarkersIntensity * 100)}%
+                  </span>
                   <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={config.playsheetShowYardMarkers}
-                    onChange={(e) => patch({ playsheetShowYardMarkers: e.target.checked })}
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round(config.playsheetYardMarkersIntensity * 100)}
+                    onChange={(e) =>
+                      patch({ playsheetYardMarkersIntensity: Number(e.target.value) / 100 })
+                    }
+                    className="accent-primary"
                   />
-                  Show yard markers
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Play border thickness · {Math.round(config.playsheetBorderThickness * 100)}%
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={200}
+                    step={10}
+                    value={Math.round(config.playsheetBorderThickness * 100)}
+                    onChange={(e) =>
+                      patch({ playsheetBorderThickness: Number(e.target.value) / 100 })
+                    }
+                    className="accent-primary"
+                  />
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -517,16 +528,20 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
               />
               Color-code labels by tag
             </label>
-          </div>
-
-          <div>
-            <span className="text-sm text-muted">Group / sort for export</span>
-            <Select
-              className="mt-1"
-              value={config.wristbandGrouping}
-              onChange={(v) => patch({ wristbandGrouping: v as PlaysheetGrouping })}
-              options={groupingOptions.map((o) => ({ value: o.value, label: o.label }))}
-            />
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted">
+                Yards behind line of scrimmage · {config.backfieldYards}
+              </span>
+              <input
+                type="range"
+                min={5}
+                max={15}
+                step={1}
+                value={config.backfieldYards}
+                onChange={(e) => patch({ backfieldYards: Number(e.target.value) })}
+                className="accent-primary"
+              />
+            </label>
           </div>
             </>
           )}

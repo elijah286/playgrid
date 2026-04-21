@@ -36,7 +36,6 @@ export type PlaybookPrintRunConfig = {
   /** Playsheet: columns across a letter page (1–5). */
   playsheetColumns: PlaysheetColumns;
   sheetOrientation: "portrait" | "landscape";
-  playsheetGrouping: PlaysheetGrouping;
   /** Playsheet: continuous packing or force a new page per group. */
   playsheetPageBreak: PlaysheetPageBreak;
   /** Playsheet: fixed-height notes strip under each play. */
@@ -55,8 +54,12 @@ export type PlaybookPrintRunConfig = {
   playsheetLabelStyle: WristbandLabelStyle;
   playsheetLabels: WristbandLabelMode;
   playsheetColorCoding: boolean;
-  playsheetShowLos: boolean;
-  playsheetShowYardMarkers: boolean;
+  /** LOS line intensity 0–1 (0 hides it, 1 = full stroke + opacity). */
+  playsheetLosIntensity: number;
+  /** Yard-line guide intensity 0–1 (0 hides them, 1 = full). */
+  playsheetYardMarkersIntensity: number;
+  /** Play-tile border thickness multiplier (0 = invisible, 1 = default). */
+  playsheetBorderThickness: number;
   playsheetShowPlayerLabels: boolean;
   playsheetPlayerOutline: boolean;
   /** Visual emphasis only for now (feeds print compiler) */
@@ -89,7 +92,6 @@ export type PlaybookPrintRunConfig = {
   wristbandShowYardMarkers: boolean;
   /** Wristband: show letter labels inside player markers */
   wristbandShowPlayerLabels: boolean;
-  wristbandGrouping: PlaysheetGrouping;
   /**
    * Wristband layout mode. "single" (legacy) = one narrow strip per PDF page.
    * "sheet" = pack as many identical strips as fit onto letter-size pages, top
@@ -119,7 +121,6 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   product: "playsheet",
   playsheetColumns: 3,
   sheetOrientation: "portrait",
-  playsheetGrouping: "number",
   playsheetPageBreak: "continuous",
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
@@ -132,8 +133,9 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetLabelStyle: "compact",
   playsheetLabels: "both",
   playsheetColorCoding: false,
-  playsheetShowLos: true,
-  playsheetShowYardMarkers: true,
+  playsheetLosIntensity: 0.5,
+  playsheetYardMarkersIntensity: 0.3,
+  playsheetBorderThickness: 1,
   playsheetShowPlayerLabels: true,
   playsheetPlayerOutline: false,
   backfieldYards: 10,
@@ -152,7 +154,6 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandShowLos: true,
   wristbandShowYardMarkers: true,
   wristbandShowPlayerLabels: true,
-  wristbandGrouping: "number",
   wristbandSheet: "sheet",
   wristbandCopiesPerSheet: "auto",
   watermarkEnabled: true,
