@@ -11,6 +11,7 @@ export type PlaybookRosterMember = {
   label: string | null;
   jersey_number: string | null;
   position: string | null;
+  positions: string[];
   is_minor: boolean;
   is_head_coach: boolean;
   coach_title: string | null;
@@ -34,7 +35,7 @@ export async function listPlaybookRosterAction(
   const { data, error } = await supabase
     .from("playbook_members")
     .select(
-      "user_id, role, status, label, jersey_number, position, is_minor, is_head_coach, coach_title, created_at, profiles:user_id(display_name)",
+      "user_id, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, profiles:user_id(display_name)",
     )
     .eq("playbook_id", playbookId)
     .order("created_at", { ascending: true });
@@ -54,6 +55,7 @@ export async function listPlaybookRosterAction(
       label: row.label,
       jersey_number: row.jersey_number,
       position: row.position,
+      positions: Array.isArray(row.positions) ? (row.positions as string[]) : [],
       is_minor: row.is_minor,
       is_head_coach: Boolean(row.is_head_coach),
       coach_title: (row.coach_title as string | null) ?? null,
@@ -141,6 +143,36 @@ export async function setCoachTitleAction(
     .update({ coach_title: cleaned.length > 0 ? cleaned : null })
     .eq("playbook_id", playbookId)
     .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+/** Player self-service: set the positions list on your own membership row.
+ *  Used by the invite-accept flow so players can declare positions up front. */
+export async function setMyPositionsAction(
+  playbookId: string,
+  positions: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const cleaned = Array.from(
+    new Set(
+      positions
+        .map((p) => (typeof p === "string" ? p.trim() : ""))
+        .filter((p) => p.length > 0 && p.length <= 12),
+    ),
+  ).slice(0, 8);
+
+  const { error } = await supabase.rpc("set_my_positions", {
+    p_playbook_id: playbookId,
+    p_positions: cleaned,
+  });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };

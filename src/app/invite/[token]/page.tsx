@@ -81,7 +81,10 @@ export default async function InvitePage({ params }: Props) {
             After you accept, the coach will approve your access before you can see plays.
           </p>
           <div className="mt-4">
-            <AcceptInviteButton token={token} />
+            <AcceptInviteButton
+              token={token}
+              askPositions={preview.role === "viewer"}
+            />
           </div>
         </div>
       ) : (

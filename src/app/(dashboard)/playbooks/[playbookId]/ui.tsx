@@ -1742,7 +1742,11 @@ function RosterPanel({
                       <td className="px-4 py-2.5 text-muted">
                         {m.jersey_number ? `#${m.jersey_number}` : "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-muted">{m.position || "—"}</td>
+                      <td className="px-4 py-2.5 text-muted">
+                        {m.positions && m.positions.length > 0
+                          ? m.positions.join(", ")
+                          : m.position || "—"}
+                      </td>
                     </tr>
                   );
                 })}
