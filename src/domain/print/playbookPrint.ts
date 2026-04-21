@@ -241,7 +241,8 @@ export function sortNavPlaysForPrint(
   base.sort((a, b) => {
     const ka = key(a);
     const kb = key(b);
-    if (ka !== kb) return ka.localeCompare(kb);
+    if (ka !== kb)
+      return ka.localeCompare(kb, undefined, { numeric: true, sensitivity: "base" });
     return compareNavPlays(a, b);
   });
   return base;
