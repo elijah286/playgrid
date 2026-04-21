@@ -372,7 +372,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
 
       {/* Owned */}
       <section>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <NewPlaybookTile onClick={() => setShowCreate(true)} />
           {owned.map((b) => (
             <PlaybookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
@@ -386,7 +386,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
             <Users className="size-3.5" /> Shared with you
           </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shared.map((b) => (
               <PlaybookTile key={b.id} tile={b} actions={[]} />
             ))}
