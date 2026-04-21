@@ -3,14 +3,23 @@ import { routeToPathGeometry, routeToPrintGroups } from "../play/geometry";
 
 /** Dash patterns come from the editor in pixel units (assuming ~2px stroke).
  *  In print the stroke is in mm (~0.3-1mm), so pixel dashes render huge.
- *  Rescale proportional to actual stroke width. */
+ *  Rescale to tight, frequent patterns that stay readable on small tiles. */
 function scaleDashForPrint(dash: string | undefined, strokeWidth: number): string | undefined {
   if (!dash) return undefined;
   const parts = dash.trim().split(/\s+/).map((n) => parseFloat(n));
-  if (parts.some((n) => !Number.isFinite(n))) return dash;
-  // Editor assumes a 2px stroke; scale values so the dash:stroke ratio is preserved.
-  const factor = strokeWidth / 2;
-  return parts.map((n) => Math.max(0.05, n * factor).toFixed(2)).join(" ");
+  if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return dash;
+  const [on, off] = parts as [number, number];
+  // Dotted (on << off, e.g. "1 7"): tiny dots with round linecap, small gap.
+  if (on <= 2 && off / on >= 3) {
+    const dot = Math.max(0.01, strokeWidth * 0.05);
+    const gap = Math.max(0.3, strokeWidth * 1.2);
+    return `${dot.toFixed(2)} ${gap.toFixed(2)}`;
+  }
+  // Dashed (roughly comparable on/off, e.g. "10 6"): short dashes, tight gaps.
+  const ratio = off / on;
+  const dashLen = Math.max(0.4, strokeWidth * 1.6);
+  const gapLen = Math.max(0.25, dashLen * ratio);
+  return `${dashLen.toFixed(2)} ${gapLen.toFixed(2)}`;
 }
 import { resolveRouteStroke } from "../play/factory";
 import {
