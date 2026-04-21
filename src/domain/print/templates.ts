@@ -317,13 +317,13 @@ function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin:
   const initial = (header.teamName || "").trim().charAt(0).toUpperCase() || "?";
   const logoMarkup = header.logoUrl
     ? `<image href="${escSvgText(header.logoUrl)}" x="${logoX + 1}" y="${logoY + 1}" width="${logoSize - 2}" height="${logoSize - 2}" preserveAspectRatio="xMidYMid meet"/>`
-    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="800" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
+    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="bold" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
   return `
   <g>
     <rect x="0" y="0" width="${w}" height="${hH}" fill="${accent}"/>
     <rect x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" rx="1.8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="0.2"/>
     ${logoMarkup}
-    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="800" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
+    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="bold" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
     ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="Helvetica,Arial,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
   </g>`;
 }
@@ -441,7 +441,7 @@ function renderPlaysheetCell(
   let header = "";
   if (showName) {
     const name = escSvgText(doc.metadata.coachName || "");
-    header += `<text x="${ox + cw / 2}" y="${oy + padTop + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
+    header += `<text x="${ox + cw / 2}" y="${oy + padTop + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? "bold" : "normal"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
   }
   if (showCode) {
     const code = escSvgText(doc.metadata.wristbandCode || "");
@@ -522,7 +522,7 @@ function renderFieldContents(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
     if (look.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -662,7 +662,7 @@ function playsheetFooterSvg(w: number, h: number): string {
   const y = h - bandH;
   return `<g>
     <rect x="0" y="${y}" width="${w}" height="${bandH}" fill="#f97316" opacity="0.95"/>
-    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="600" letter-spacing="0.2">Powered by Playgrid · playgrid.us · © 2026</text>
+    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="bold" letter-spacing="0.2">Powered by Playgrid · playgrid.us · © 2026</text>
   </g>`;
 }
 
@@ -783,7 +783,7 @@ function renderWristbandTile(
   let header = "";
   if (showName) {
     const name = escSvgText(doc.metadata.coachName || "");
-    header += `<text x="${ox + cw / 2}" y="${oy + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? 700 : 500}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
+    header += `<text x="${ox + cw / 2}" y="${oy + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? "bold" : "normal"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
   }
   if (showCode) {
     const code = escSvgText(doc.metadata.wristbandCode || "");
@@ -799,7 +799,7 @@ function renderWristbandTile(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="600">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
     }
   }
 

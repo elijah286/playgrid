@@ -22,7 +22,7 @@ function escXml(s: string): string {
 
 function listColumn(title: string, items: string[], x: number, y0: number, ink: string, muted: string) {
   let y = y0 + 5;
-  let block = `<text x="${x}" y="${y}" font-size="3.6" font-weight="600" fill="${ink}" font-family="Helvetica,Arial,sans-serif">${escXml(title)}</text>`;
+  let block = `<text x="${x}" y="${y}" font-size="3.6" font-weight="bold" fill="${ink}" font-family="Helvetica,Arial,sans-serif">${escXml(title)}</text>`;
   y += 8;
   if (items.length === 0) {
     block += `<text x="${x}" y="${y}" font-size="3.2" fill="${muted}" font-family="Helvetica,Arial,sans-serif">—</text>`;
@@ -73,8 +73,8 @@ export function compileCoverPageSvg(input: CoverPageInput): {
   <rect width="100%" height="100%" fill="url(#coverBg)"/>
   <rect x="14" y="14" width="${COVER_W - 28}" height="${COVER_H - 28}" rx="4" ry="4" fill="${pageBg}" fill-opacity="0.92" filter="url(#softShadow)"/>
   <rect x="14" y="14" width="${COVER_W - 28}" height="10" rx="4" ry="4" fill="${primary}" />
-  <text x="${COVER_W / 2}" y="${COVER_H * 0.14}" text-anchor="middle" font-size="5.5" font-weight="700" fill="${ink}" font-family="Helvetica,Arial,sans-serif" letter-spacing="0.04em">${escXml(playbookName)}</text>
-  <text x="${COVER_W / 2}" y="${COVER_H * 0.2}" text-anchor="middle" font-size="3.4" fill="${accent}" font-family="Helvetica,Arial,sans-serif" font-weight="600">${escXml(teamName)}</text>
+  <text x="${COVER_W / 2}" y="${COVER_H * 0.14}" text-anchor="middle" font-size="5.5" font-weight="bold" fill="${ink}" font-family="Helvetica,Arial,sans-serif" letter-spacing="0.04em">${escXml(playbookName)}</text>
+  <text x="${COVER_W / 2}" y="${COVER_H * 0.2}" text-anchor="middle" font-size="3.4" fill="${accent}" font-family="Helvetica,Arial,sans-serif" font-weight="bold">${escXml(teamName)}</text>
   ${
     playTitle
       ? `<text x="${COVER_W / 2}" y="${COVER_H * 0.265}" text-anchor="middle" font-size="3" fill="${muted}" font-family="Helvetica,Arial,sans-serif">${escXml(playTitle)}</text>`
