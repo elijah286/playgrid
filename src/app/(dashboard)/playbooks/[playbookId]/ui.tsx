@@ -670,25 +670,29 @@ export function PlaybookDetailClient({
         {tab === "plays" && (
         /* Slim top bar: type tabs, search, filters, print, new */
         <div className="flex flex-wrap items-end gap-3">
-          <SegmentedControl
-            value={typeFilter}
-            onChange={(v) => setTypeFilter(v as PlayType | "all")}
-            options={
-              variant === "tackle_11"
-                ? [
-                    { value: "all", label: "All" },
-                    { value: "offense", label: "Offense" },
-                    { value: "defense", label: "Defense" },
-                    { value: "special_teams", label: "Special teams" },
-                  ]
-                : [
-                    { value: "all", label: "All" },
-                    { value: "offense", label: "Offense" },
-                    { value: "defense", label: "Defense" },
-                  ]
-            }
-          />
-          <div className="min-w-[200px] flex-1">
+          {/* Type filter lives in the Filters panel on mobile to save a
+              row of vertical space; shown inline on desktop for fast
+              switching. */}
+          <div className="hidden sm:block">
+            <SegmentedControl
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v as PlayType | "all")}
+              options={
+                variant === "tackle_11"
+                  ? [
+                      { value: "all", label: "All" },
+                      { value: "offense", label: "Offense" },
+                      { value: "defense", label: "Defense" },
+                      { value: "special_teams", label: "Special teams" },
+                    ]
+                  : [
+                      { value: "all", label: "All" },
+                      { value: "offense", label: "Offense" },
+                      { value: "defense", label: "Defense" },
+                    ]
+              }
+            />
+          </div>          <div className="min-w-[200px] flex-1">
             <Input
               leftIcon={Search}
               value={q}
