@@ -1119,8 +1119,8 @@ export function PlaybookDetailClient({
                           tabIndex={selectionMode ? -1 : 0}
                         >
                           <div>
-                            <div className="mb-0.5 flex items-center gap-1">
-                              <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
+                            <div className="mb-0.5 flex items-center gap-1.5 pr-7">
+                              <p className="min-w-0 max-w-[60%] truncate text-[11px] text-muted">
                                 {p.formation_name || p.shorthand || "\u00A0"}
                               </p>
                               {p.tags.length > 0 && (
@@ -2212,7 +2212,7 @@ function PlayTagChips({ tags, max = 2 }: { tags: string[]; max?: number }) {
   const shown = tags.slice(0, max);
   const overflow = tags.slice(max);
   return (
-    <div className="flex min-w-0 shrink items-center justify-end gap-1 overflow-hidden">
+    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
       {shown.map((t) => (
         <span
           key={t}
