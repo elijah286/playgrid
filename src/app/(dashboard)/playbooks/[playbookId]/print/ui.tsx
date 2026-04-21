@@ -50,11 +50,6 @@ type SortKey = "position" | "alpha" | "group" | "tag";
 type TypeFilter = "all" | "offense" | "defense" | "special_teams";
 
 function compareByWristbandNumber(a: PlaybookPrintPackRow, b: PlaybookPrintPackRow) {
-  const cmp = a.nav.name.localeCompare(b.nav.name, undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-  if (cmp !== 0) return cmp;
   return a.nav.sort_order - b.nav.sort_order;
 }
 
@@ -248,6 +243,7 @@ export function PrintPlaybookClient({
       pageBreak: config.playsheetPageBreak,
       showNotes: config.playsheetShowNotes,
       noteLines: config.playsheetNoteLines,
+      cellPadding: config.playsheetCellPadding,
       iconSize: config.playsheetIconSize,
       routeWeight: config.playsheetRouteWeight,
       arrowSize: config.playsheetArrowSize,

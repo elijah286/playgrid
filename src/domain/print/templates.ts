@@ -1,5 +1,17 @@
 import type { PlayDocument, PlayerShape } from "../play/types";
 import { routeToPathGeometry, routeToPrintGroups } from "../play/geometry";
+
+/** Dash patterns come from the editor in pixel units (assuming ~2px stroke).
+ *  In print the stroke is in mm (~0.3-1mm), so pixel dashes render huge.
+ *  Rescale proportional to actual stroke width. */
+function scaleDashForPrint(dash: string | undefined, strokeWidth: number): string | undefined {
+  if (!dash) return undefined;
+  const parts = dash.trim().split(/\s+/).map((n) => parseFloat(n));
+  if (parts.some((n) => !Number.isFinite(n))) return dash;
+  // Editor assumes a 2px stroke; scale values so the dash:stroke ratio is preserved.
+  const factor = strokeWidth / 2;
+  return parts.map((n) => Math.max(0.05, n * factor).toFixed(2)).join(" ");
+}
 import { resolveRouteStroke } from "../play/factory";
 import {
   IN_TO_MM,
@@ -153,7 +165,7 @@ export function compilePlayToSvg(
           return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
         })
         .join(" ");
-      const dash = grp.dash ?? r.style.dash;
+      const dash = scaleDashForPrint(grp.dash ?? r.style.dash, sw);
       routePaths += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" ${dash ? `stroke-dasharray="${dash}"` : ""}/>`;
     }
   }
@@ -255,6 +267,8 @@ export type PlaysheetOptions = PlayTileLookOptions & {
   pageBreak: PlaysheetPageBreak;
   showNotes: boolean;
   noteLines: PlaysheetNoteLines;
+  /** 0 = cells flush together with no internal padding, 1 = default. */
+  cellPadding?: number;
 };
 
 export type PlaysheetHeader = {
@@ -369,13 +383,14 @@ function renderPlaysheetPage(
   },
 ): string {
   const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header, watermark } = layout;
+  const pad = opts.cellPadding ?? 1;
   let body = "";
   for (let i = 0; i < docs.length; i++) {
     const col = i % opts.columns;
     const row = Math.floor(i / opts.columns);
     const ox = margin + col * cellW;
     const oy = topOffset + row * cellH;
-    body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts);
+    body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts, pad);
   }
   const headerSvg = header ? renderPlaysheetHeaderBanner(w, header, margin) : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -395,10 +410,11 @@ function renderPlaysheetCell(
   ch: number,
   notesH: number,
   opts: PlaysheetOptions,
+  padScale: number = 1,
 ): string {
-  const padX = 2;
-  const padTop = 1.5;
-  const padBelowField = 1.5;
+  const padX = 2 * padScale;
+  const padTop = 1.5 * padScale;
+  const padBelowField = 1.5 * padScale;
   const tileH = ch - notesH;
   const fonts = labelFontMm(opts.labelStyle);
   const vis = doc.printProfile.visibility;
@@ -446,9 +462,13 @@ function renderPlaysheetCell(
     notes += `<line x1="${ox + padX}" y1="${ny + notesH - 0.5}" x2="${ox + cw - padX}" y2="${ny + notesH - 0.5}" stroke="#e5e7eb" stroke-width="0.2"/>`;
   }
 
+  const outerBorder =
+    padScale > 0
+      ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.3" rx="1.2"/>`
+      : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.15"/>`;
   return `
   <g>
-    <rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.3" rx="1.2"/>
+    ${outerBorder}
     ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#e5e7eb" stroke-width="0.25"/>
     ${field}
@@ -531,7 +551,7 @@ function renderRoutesAndArrows(
           return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
         })
         .join(" ");
-      const dash = grp.dash ?? r.style.dash;
+      const dash = scaleDashForPrint(grp.dash ?? r.style.dash, strokeW);
       out += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${dash ? `stroke-dasharray="${dash}"` : ""}/>`;
     }
 
