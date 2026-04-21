@@ -57,6 +57,7 @@ export default async function SettingsPage() {
                 configured: resendRes.configured,
                 statusLabel: resendRes.statusLabel,
                 fromEmail: resendRes.fromEmail,
+                contactToEmail: resendRes.contactToEmail,
                 updatedAt: resendRes.updatedAt,
               }
             : { ok: false, error: resendRes.error }

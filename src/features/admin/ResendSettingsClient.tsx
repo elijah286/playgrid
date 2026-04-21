@@ -12,6 +12,7 @@ type Initial = {
   configured: boolean;
   statusLabel: string;
   fromEmail: string | null;
+  contactToEmail: string | null;
   updatedAt: string | null;
 };
 
@@ -19,6 +20,7 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
   const [configured, setConfigured] = useState(initial.configured);
   const [statusLabel, setStatusLabel] = useState(initial.statusLabel);
   const [fromEmail, setFromEmail] = useState(initial.fromEmail ?? "");
+  const [contactToEmail, setContactToEmail] = useState(initial.contactToEmail ?? "");
   const [updatedAt, setUpdatedAt] = useState(initial.updatedAt);
   const [draftKey, setDraftKey] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
       setConfigured(res.configured);
       setStatusLabel(res.statusLabel);
       setFromEmail(res.fromEmail ?? "");
+      setContactToEmail(res.contactToEmail ?? "");
       setUpdatedAt(res.updatedAt);
     });
   }
@@ -122,6 +125,26 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
           </span>
         </label>
 
+        <label className="mt-4 block text-sm font-medium text-pg-ink dark:text-pg-chalk">
+          Contact-form recipient
+          <input
+            type="email"
+            autoComplete="off"
+            value={contactToEmail}
+            onChange={(e) => {
+              setContactToEmail(e.target.value);
+              setMsg(null);
+              setOkMsg(null);
+            }}
+            placeholder="you@yourdomain.com"
+            className="mt-1 w-full max-w-xl rounded-lg border border-pg-line/80 bg-white px-3 py-2 font-mono text-sm text-pg-ink outline-none ring-pg-turf focus:ring-2 dark:border-pg-line/50 dark:bg-pg-turf-deep/40 dark:text-pg-chalk"
+          />
+          <span className="mt-1 block text-xs text-pg-muted">
+            Where messages from the public contact form are delivered. Leave blank to fall back to
+            the <span className="font-mono">CONTACT_TO_EMAIL</span> environment variable.
+          </span>
+        </label>
+
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
@@ -165,7 +188,9 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
         <div className="mt-6 flex flex-wrap gap-2 border-t border-pg-line/60 pt-6 dark:border-pg-line/30">
           <button
             type="button"
-            disabled={pending || (!draftKey.trim() && !fromEmail.trim())}
+            disabled={
+              pending || (!draftKey.trim() && !fromEmail.trim() && !contactToEmail.trim())
+            }
             onClick={() => {
               setMsg(null);
               setOkMsg(null);
@@ -173,6 +198,7 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
                 const res = await saveResendConfigAction({
                   apiKey: draftKey,
                   fromEmail,
+                  contactToEmail,
                 });
                 if (!res.ok) {
                   setMsg(res.error);

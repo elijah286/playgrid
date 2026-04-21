@@ -21,6 +21,7 @@ type ResendProps =
       configured: boolean;
       statusLabel: string;
       fromEmail: string | null;
+      contactToEmail: string | null;
       updatedAt: string | null;
     }
   | { ok: false; error: string };
@@ -115,6 +116,7 @@ export function SettingsClient({
                 configured: resend.configured,
                 statusLabel: resend.statusLabel,
                 fromEmail: resend.fromEmail,
+                contactToEmail: resend.contactToEmail,
                 updatedAt: resend.updatedAt,
               }}
             />

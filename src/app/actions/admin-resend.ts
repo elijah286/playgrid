@@ -33,16 +33,21 @@ export async function getResendStatusAction() {
     const admin = createServiceRoleClient();
     const { data, error } = await admin
       .from("site_settings")
-      .select("resend_api_key, resend_from_email, updated_at")
+      .select("resend_api_key, resend_from_email, contact_to_email, updated_at")
       .eq("id", SITE_ROW_ID)
       .maybeSingle();
     if (error) return { ok: false as const, error: error.message };
     const preview = previewResendConfig(data?.resend_api_key, data?.resend_from_email);
+    const contactToEmail =
+      typeof data?.contact_to_email === "string" && data.contact_to_email.trim().length > 0
+        ? data.contact_to_email.trim()
+        : null;
     return {
       ok: true as const,
       configured: preview.configured,
       statusLabel: preview.statusLabel,
       fromEmail: preview.fromEmail,
+      contactToEmail,
       updatedAt: data?.updated_at ?? null,
     };
   } catch (e) {
@@ -51,15 +56,23 @@ export async function getResendStatusAction() {
   }
 }
 
-export async function saveResendConfigAction(input: { apiKey: string; fromEmail: string }) {
+export async function saveResendConfigAction(input: {
+  apiKey: string;
+  fromEmail: string;
+  contactToEmail?: string;
+}) {
   const gate = await assertAdmin();
   if (!gate.ok) return { ok: false as const, error: gate.error };
 
   const apiKey = input.apiKey.trim();
   const fromEmail = input.fromEmail.trim();
+  const contactToEmail = (input.contactToEmail ?? "").trim();
 
-  if (!apiKey && !fromEmail) {
-    return { ok: false as const, error: "Enter a key or a from-address, or use Remove to clear." };
+  if (!apiKey && !fromEmail && !contactToEmail) {
+    return {
+      ok: false as const,
+      error: "Enter a value to save, or use Remove to clear.",
+    };
   }
 
   const patch: Record<string, string | null> = { updated_at: new Date().toISOString() };
@@ -84,6 +97,16 @@ export async function saveResendConfigAction(input: { apiKey: string; fromEmail:
     patch.resend_from_email = fromEmail;
   }
 
+  if (contactToEmail) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactToEmail)) {
+      return {
+        ok: false as const,
+        error: "Contact recipient must be a plain email address.",
+      };
+    }
+    patch.contact_to_email = contactToEmail;
+  }
+
   try {
     const admin = createServiceRoleClient();
     const { error } = await admin.from("site_settings").update(patch).eq("id", SITE_ROW_ID);
@@ -106,6 +129,7 @@ export async function clearResendConfigAction() {
       .update({
         resend_api_key: null,
         resend_from_email: null,
+        contact_to_email: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", SITE_ROW_ID);
