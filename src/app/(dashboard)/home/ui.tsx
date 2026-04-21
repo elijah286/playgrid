@@ -319,9 +319,9 @@ function PlaybookBookTile({
   }
 
   function handleLeave() {
+    if (menuOpen) return;
     setHover(false);
     setShiftX(0);
-    setMenuOpen(false);
   }
 
   return (
