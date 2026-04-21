@@ -55,7 +55,7 @@ export default async function InvitePage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const roleLabel = preview.role === "viewer" ? "Player (view-only)" : "Coach (edit)";
+  const roleLabel = preview.role === "viewer" ? "Player" : "Coach";
   const next = `/invite/${token}`;
   const accent = preview.color || "#2563eb";
 
