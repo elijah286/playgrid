@@ -2582,11 +2582,24 @@ function EditablePlayTitle({
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
+  const [pending, setPending] = useState<string | null>(null);
   const savedRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setValue(name);
   }, [name, editing]);
+
+  // Clear the optimistic pending label once the server round-trip lands
+  // (name prop catches up) or after a safety timeout.
+  useEffect(() => {
+    if (pending == null) return;
+    if (name === pending) {
+      setPending(null);
+      return;
+    }
+    const t = setTimeout(() => setPending(null), 5000);
+    return () => clearTimeout(t);
+  }, [name, pending]);
 
   function stop(e: React.SyntheticEvent) {
     e.preventDefault();
@@ -2597,7 +2610,10 @@ function EditablePlayTitle({
     if (savedRef.current) return;
     savedRef.current = true;
     const next = value.trim();
-    if (next && next !== name) onRename(next);
+    if (next && next !== name) {
+      setPending(next);
+      onRename(next);
+    }
     setEditing(false);
   }
 
@@ -2628,23 +2644,35 @@ function EditablePlayTitle({
     );
   }
 
+  const displayName = pending ?? name;
   return (
     <span className="group/title flex min-w-0 flex-1 items-center gap-1">
-      <span className={`min-w-0 truncate text-foreground ${className}`}>{name}</span>
-      <button
-        type="button"
-        onClick={(e) => {
-          stop(e);
-          savedRef.current = false;
-          setValue(name);
-          setEditing(true);
-        }}
-        className="shrink-0 rounded p-0.5 text-muted opacity-0 transition-opacity hover:bg-surface-inset hover:text-foreground group-hover/title:opacity-100 focus:opacity-100"
-        aria-label="Rename play"
-        title="Rename"
+      <span
+        className={`min-w-0 truncate text-foreground ${pending ? "opacity-60" : ""} ${className}`}
       >
-        <Pencil className="size-3.5" />
-      </button>
+        {displayName}
+      </span>
+      {pending ? (
+        <Loader2
+          className="size-3.5 shrink-0 animate-spin text-muted"
+          aria-label="Saving…"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => {
+            stop(e);
+            savedRef.current = false;
+            setValue(name);
+            setEditing(true);
+          }}
+          className="shrink-0 rounded p-0.5 text-muted opacity-0 transition-opacity hover:bg-surface-inset hover:text-foreground group-hover/title:opacity-100 focus:opacity-100"
+          aria-label="Rename play"
+          title="Rename"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+      )}
     </span>
   );
 }
