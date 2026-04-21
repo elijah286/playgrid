@@ -154,36 +154,38 @@ export function PlaybookDetailClient({
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-  // Per-playbook persisted view prefs. Read once on mount to seed state,
-  // then mirror every change back to localStorage. Search query is
-  // intentionally ephemeral.
+  // Per-playbook persisted view prefs. State starts with defaults (so server
+  // and first client paint match) and we hydrate from localStorage in an
+  // effect after mount. Search query is intentionally ephemeral.
   const prefsKey = `playbook:${playbookId}:prefs`;
-  const seeded = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = window.localStorage.getItem(prefsKey);
-      return raw ? (JSON.parse(raw) as Partial<PlaybookPrefs>) : null;
-    } catch {
-      return null;
-    }
-  }, [prefsKey]);
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"active" | "archived">(seeded?.view ?? "active");
-  const [typeFilter, setTypeFilter] = useState<PlayType | "all">(
-    seeded?.typeFilter ?? "all",
-  );
-  const [groupBy, setGroupBy] = useState<GroupBy>(seeded?.groupBy ?? "none");
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [typeFilter, setTypeFilter] = useState<PlayType | "all">("all");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelRef = useRef<HTMLDivElement | null>(null);
-  const [viewMode, setViewMode] = useState<"cards" | "list">(
-    seeded?.viewMode ?? "cards",
-  );
-  const [thumbSize, setThumbSize] = useState<ThumbSize>(
-    seeded?.thumbSize ?? "medium",
-  );
-  const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
-    seeded?.showPlayNumbers ?? true,
-  );
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+  const [thumbSize, setThumbSize] = useState<ThumbSize>("medium");
+  const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(true);
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(prefsKey);
+      if (raw) {
+        const seeded = JSON.parse(raw) as Partial<PlaybookPrefs>;
+        if (seeded.view) setView(seeded.view);
+        if (seeded.typeFilter) setTypeFilter(seeded.typeFilter);
+        if (seeded.groupBy) setGroupBy(seeded.groupBy);
+        if (seeded.viewMode) setViewMode(seeded.viewMode);
+        if (seeded.thumbSize) setThumbSize(seeded.thumbSize);
+        if (typeof seeded.showPlayNumbers === "boolean")
+          setShowPlayNumbers(seeded.showPlayNumbers);
+      }
+    } catch {
+      /* ignore parse/storage errors */
+    }
+    setPrefsHydrated(true);
+  }, [prefsKey]);
   const [selectionMode, setSelectionMode] = useState(false);
   // Local optimistic order. Mirrors initialPlays but can be mutated during drag
   // so other rows slide into place in real time. Committed to the server on drop.
@@ -199,7 +201,7 @@ export function PlaybookDetailClient({
   );
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!prefsHydrated) return;
     const prefs: PlaybookPrefs = {
       view,
       typeFilter,
@@ -213,7 +215,7 @@ export function PlaybookDetailClient({
     } catch {
       /* ignore quota/storage errors */
     }
-  }, [prefsKey, view, typeFilter, groupBy, viewMode, thumbSize, showPlayNumbers]);
+  }, [prefsHydrated, prefsKey, view, typeFilter, groupBy, viewMode, thumbSize, showPlayNumbers]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showManageGroups, setShowManageGroups] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
