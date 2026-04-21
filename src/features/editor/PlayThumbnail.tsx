@@ -9,7 +9,20 @@ export type PlayThumbnailInput = {
   lineOfScrimmageY: number;
 };
 
-export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
+export function PlayThumbnail({
+  preview,
+  thin,
+}: {
+  preview: PlayThumbnailInput;
+  thin?: boolean;
+}) {
+  const routeSW = thin ? 0.9 : 1.8;
+  const arrowSW = thin ? 0.5 : 0.8;
+  const playerSW = thin ? 0.6 : 1;
+  const zoneSW = thin ? 0.6 : 1;
+  const losSW = thin ? 0.75 : 1.25;
+  const gridSW = thin ? 0.6 : 1;
+  const tSW = thin ? 1 : 1.8;
   const R = 0.032;
   const PAD = R * 1.4;
   let minX = Infinity;
@@ -86,9 +99,9 @@ export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
         preserveAspectRatio="none"
       >
         <g>
-          <line x1={vbX} x2={vbX + vbW} y1={losY} y2={losY} stroke="rgba(100,116,139,0.45)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
-          <line x1={vbX} x2={vbX + vbW} y1={fiveY} y2={fiveY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
-          <line x1={vbX} x2={vbX + vbW} y1={tenY} y2={tenY} stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+          <line x1={vbX} x2={vbX + vbW} y1={losY} y2={losY} stroke="rgba(100,116,139,0.45)" strokeWidth={losSW} vectorEffect="non-scaling-stroke" />
+          <line x1={vbX} x2={vbX + vbW} y1={fiveY} y2={fiveY} stroke="rgba(100,116,139,0.3)" strokeWidth={gridSW} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+          <line x1={vbX} x2={vbX + vbW} y1={tenY} y2={tenY} stroke="rgba(100,116,139,0.3)" strokeWidth={gridSW} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
           {(preview.zones ?? []).map((z) => {
             const cx = z.center.x;
             const cy = 1 - z.center.y;
@@ -96,11 +109,11 @@ export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
             const h = z.size.h;
             if (z.kind === "rectangle") {
               return (
-                <rect key={z.id} x={cx - w} y={cy - h} width={w * 2} height={h * 2} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                <rect key={z.id} x={cx - w} y={cy - h} width={w * 2} height={h * 2} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={zoneSW} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
               );
             }
             return (
-              <ellipse key={z.id} cx={cx} cy={cy} rx={w} ry={h} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+              <ellipse key={z.id} cx={cx} cy={cy} rx={w} ry={h} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={zoneSW} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
             );
           })}
           {preview.routes.map((r) => {
@@ -109,7 +122,7 @@ export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
             return (
               <g key={r.id}>
                 {rendered.map((rs) => (
-                  <path key={rs.segmentId} d={rs.d} fill="none" stroke={stroke} strokeWidth={1.8} strokeDasharray={rs.dash} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  <path key={rs.segmentId} d={rs.d} fill="none" stroke={stroke} strokeWidth={routeSW} strokeDasharray={rs.dash} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                 ))}
               </g>
             );
@@ -153,7 +166,7 @@ export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
                     const p2x = tipX + arrowLen * r2x;
                     const p2y = tipY + arrowLen * r2y;
                     return (
-                      <polygon key={seg.id} points={`${tipX},${tipY} ${p1x},${p1y} ${p2x},${p2y}`} fill={stroke} stroke={stroke} strokeWidth={0.8} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                      <polygon key={seg.id} points={`${tipX},${tipY} ${p1x},${p1y} ${p2x},${p2y}`} fill={stroke} stroke={stroke} strokeWidth={arrowSW} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                     );
                   }
                   if (decoration === "t") {
@@ -161,7 +174,7 @@ export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
                     const perpX = -uy;
                     const perpY = ux;
                     return (
-                      <line key={seg.id} x1={tipX + perpX * halfLen} y1={tipY + perpY * halfLen} x2={tipX - perpX * halfLen} y2={tipY - perpY * halfLen} stroke={stroke} strokeWidth={1.8} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                      <line key={seg.id} x1={tipX + perpX * halfLen} y1={tipY + perpY * halfLen} x2={tipX - perpX * halfLen} y2={tipY - perpY * halfLen} stroke={stroke} strokeWidth={tSW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                     );
                   }
                   return null;
@@ -175,7 +188,7 @@ export function PlayThumbnail({ preview }: { preview: PlayThumbnailInput }) {
             const shape = p.shape ?? "circle";
             const fill = p.style.fill;
             const strokeColor = p.style.stroke;
-            const common = { fill, stroke: strokeColor, strokeWidth: 1, vectorEffect: "non-scaling-stroke" as const };
+            const common = { fill, stroke: strokeColor, strokeWidth: playerSW, vectorEffect: "non-scaling-stroke" as const };
             let shapeEl: React.ReactNode;
             if (shape === "square") {
               shapeEl = <rect x={-R} y={-R} width={R * 2} height={R * 2} {...common} />;

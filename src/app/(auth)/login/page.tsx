@@ -14,12 +14,6 @@ export default function LoginPage() {
           <ArrowLeft className="size-4" />
           Home
         </Link>
-        <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-foreground">
-          Welcome back
-        </h1>
-        <p className="mt-2 text-sm text-muted">
-          Sign in to your PlayGrid account to access your playbooks.
-        </p>
       </div>
       <Suspense fallback={null}>
         <LoginForm />

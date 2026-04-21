@@ -29,13 +29,15 @@ import {
   uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
-import type { SportVariant } from "@/domain/play/types";
+import type { Player, Route, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultSettingsForVariant,
   type PlaybookSettings,
 } from "@/domain/playbook/settings";
 import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import { SAMPLE_FAN_PREVIEWS } from "@/features/dashboard/sampleFan";
+import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import {
   ActionMenu,
   Badge,
@@ -48,6 +50,35 @@ import {
 } from "@/components/ui";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
+
+type DashboardView = "preview" | "classic";
+const VIEW_STORAGE_KEY = "dashboard.view";
+
+function useDashboardView(): [DashboardView, (v: DashboardView) => void] {
+  const [view, setView] = useState<DashboardView>("preview");
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+      if (stored === "preview" || stored === "classic") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating user preference from localStorage
+        setView(stored);
+        return;
+      }
+      // No explicit preference: default to Classic on small screens because
+      // the open-book layout needs the horizontal room to read.
+      if (window.matchMedia("(max-width: 767px)").matches) {
+        setView("classic");
+      }
+    } catch {}
+  }, []);
+  const update = (v: DashboardView) => {
+    setView(v);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, v);
+    } catch {}
+  };
+  return [view, update];
+}
 
 function LogoPicker({
   value,
@@ -218,6 +249,447 @@ function PlaybookTile({
   );
 }
 
+/**
+ * Playbook rendered as a closed book at rest (front cover showing, centered
+ * on a subtle "table" surface). On hover, the cover swings open to the left
+ * (CSS `rotateY`) revealing a 2-page playsheet of up to 6 offensive plays.
+ *
+ * All animation is GPU-cheap: `transform` + `opacity` only, driven by CSS
+ * `group-hover` with a custom property. No JS per frame.
+ */
+function PlaybookBookTile({
+  tile,
+  actions,
+}: {
+  tile: DashboardPlaybookTile;
+  actions: ActionMenuItem[];
+}) {
+  const color = colorFor(tile);
+  const initials = tile.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "PB";
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount gate to skip SSR for SVG trig that differs between server/client
+    setMounted(true);
+  }, []);
+
+  const thickness = Math.min(6, Math.max(2, Math.round(tile.play_count / 4)));
+  const sheetPlays = tile.previews.slice(0, 12);
+  const hasPreviews = sheetPlays.length > 0;
+  const [hover, setHover] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className={`group relative z-0 transition-transform duration-500 ease-out ${
+        hover ? "z-20 -translate-y-2 scale-[1.35]" : ""
+      }`}
+      style={{ perspective: "1600px" }}
+    >
+      <Link
+        href={`/playbooks/${tile.id}`}
+        className="relative block aspect-[3/4] w-full"
+      >
+        {/* ------------------------------------------------------------ */}
+        {/* Right page — sits where the cover was; revealed on hover      */}
+        {/* ------------------------------------------------------------ */}
+        <div
+          className="absolute inset-0 overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-border transition-opacity duration-500 ease-out"
+          style={{ opacity: hover ? 1 : 0 }}
+        >
+          {/* Page-edge stripes top/bottom suggesting book thickness */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-3 top-0 flex flex-col gap-[1px] py-0.5"
+          >
+            {Array.from({ length: thickness }).map((_, i) => (
+              <div
+                key={i}
+                className="h-px rounded-full bg-gradient-to-r from-transparent via-border to-transparent"
+                style={{ opacity: 1 - i * 0.12 }}
+              />
+            ))}
+          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-3 bottom-0 flex flex-col-reverse gap-[1px] py-0.5"
+          >
+            {Array.from({ length: thickness }).map((_, i) => (
+              <div
+                key={i}
+                className="h-px rounded-full bg-gradient-to-r from-transparent via-border to-transparent"
+                style={{ opacity: 1 - i * 0.12 }}
+              />
+            ))}
+          </div>
+          {/* Binding shading on the left edge (against the spine) */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/15 to-transparent"
+          />
+
+          <div className="flex h-full w-full p-2">
+            <PlaysheetColumn
+              plays={sheetPlays.slice(6, 12)}
+              blanks={Math.max(0, 6 - sheetPlays.slice(6, 12).length)}
+              mounted={mounted && hasPreviews}
+            />
+          </div>
+
+          {!hasPreviews && mounted && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-muted">
+              <div className="flex flex-col items-center gap-1">
+                <Plus className="size-5 opacity-60" />
+                <span>No offensive plays yet</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ------------------------------------------------------------ */}
+        {/* Cover — swings open 180° around its left spine                */}
+        {/* Front face: cover art. Back face: page 1 of plays.            */}
+        {/* ------------------------------------------------------------ */}
+        <div
+          className="absolute inset-0 rounded-xl transition-transform duration-700"
+          style={{
+            transform: hover ? "rotateY(-180deg)" : "rotateY(0deg)",
+            transformOrigin: "left center",
+            transformStyle: "preserve-3d",
+            transitionTimingFunction: "cubic-bezier(.25,.75,.35,1)",
+          }}
+        >
+          {/* Front face — cover art */}
+          <div
+            className="absolute inset-0 rounded-xl shadow-elevated ring-1 ring-black/10"
+            style={{
+              backgroundColor: color,
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+            }}
+          >
+            {/* Spine highlight on the left edge */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-2 rounded-l-xl bg-gradient-to-r from-black/40 to-transparent"
+            />
+            {/* Page-edge stripes on the right (closed edge) */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-2 right-0 flex w-1 flex-col gap-[1px]"
+            >
+              {Array.from({ length: thickness }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex-1 bg-white/55"
+                  style={{ opacity: 1 - i * 0.1 }}
+                />
+              ))}
+            </div>
+
+            <div className="flex h-full flex-col justify-between p-5 text-white">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
+                  Playbook
+                </span>
+                {tile.role !== "owner" && (
+                  <Badge variant={tile.role === "editor" ? "primary" : "default"}>
+                    {tile.role === "editor" ? "Editor" : "Viewer"}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex flex-1 items-center justify-center">
+                {tile.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={tile.logo_url}
+                    alt=""
+                    className="h-28 w-28 object-contain drop-shadow"
+                  />
+                ) : (
+                  <span className="text-7xl font-black tracking-tight drop-shadow">
+                    {initials}
+                  </span>
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <h3 className="truncate text-lg font-extrabold leading-tight drop-shadow-sm">
+                  {tile.name}
+                </h3>
+                <p className="mt-0.5 truncate text-xs font-medium text-white/80">
+                  {tile.season ? `${tile.season} · ` : ""}
+                  {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Back face — page 1 of plays (visible once cover opens) */}
+          <div
+            className="absolute inset-0 overflow-hidden rounded-xl bg-surface shadow-elevated ring-1 ring-border"
+            style={{
+              transform: "rotateY(180deg)",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+            }}
+          >
+            {/* Binding shading on the right edge (meets the spine) */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-black/15 to-transparent"
+            />
+            <div className="flex h-full w-full p-2">
+              <PlaysheetColumn
+                plays={sheetPlays.slice(0, 6)}
+                blanks={Math.max(0, 6 - sheetPlays.slice(0, 6).length)}
+                mounted={mounted && hasPreviews}
+              />
+            </div>
+          </div>
+        </div>
+      </Link>
+
+      {actions.length > 0 && (
+        <div className="absolute right-2 top-2 z-10 rounded-full bg-surface-raised shadow-sm ring-1 ring-border opacity-0 transition-opacity group-hover:opacity-100">
+          <ActionMenu items={actions} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaysheetColumn({
+  plays,
+  blanks,
+  mounted,
+}: {
+  plays: { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number }[];
+  blanks: number;
+  mounted: boolean;
+}) {
+  return (
+    <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-1.5">
+      {mounted &&
+        plays.map((p, i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-sm bg-white ring-1 ring-border/70"
+          >
+            <PlayThumbnail preview={p} thin />
+          </div>
+        ))}
+      {Array.from({ length: blanks }).map((_, i) => (
+        <div
+          key={`blank-${i}`}
+          className="rounded-sm border border-dashed border-border/70 bg-surface-inset/40"
+        />
+      ))}
+    </div>
+  );
+}
+
+function currentSeasonLabel(): string {
+  const d = new Date();
+  const m = d.getMonth();
+  const y = d.getFullYear();
+  const season =
+    m <= 1 || m === 11 ? "Winter" : m <= 4 ? "Spring" : m <= 7 ? "Summer" : "Fall";
+  return `${season} ${y}`;
+}
+
+/**
+ * Marketing tile shown when a coach has no playbooks yet. Looks like a real
+ * PlaybookBookTile (opens on hover), but it's fake — samples preview plays,
+ * a generic lion logo, and clicking opens the Create Playbook dialog.
+ */
+function MarketingPlaybookTile({ onCreate }: { onCreate: () => void }) {
+  const color = "#B91C1C"; // Chiefs-ish red
+  const thickness = 4;
+  const [mounted, setMounted] = useState(false);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount gate to skip SSR for SVG trig that differs between server/client
+    setMounted(true);
+  }, []);
+  const season = currentSeasonLabel();
+
+  // Repeat the sample fan so each page has 6 thumbs.
+  const sheetPlays = [
+    ...SAMPLE_FAN_PREVIEWS,
+    ...SAMPLE_FAN_PREVIEWS,
+    ...SAMPLE_FAN_PREVIEWS,
+  ]
+    .slice(0, 12)
+    .map((p) => ({
+      players: p.players,
+      routes: p.routes,
+      zones: p.zones ?? [],
+      lineOfScrimmageY: p.lineOfScrimmageY,
+    }));
+
+  const grayWrap = "opacity-70 [&_svg]:grayscale";
+
+  return (
+    <button
+      type="button"
+      onClick={onCreate}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      aria-label="Create your first playbook"
+      className={`relative z-0 block w-full cursor-pointer text-left transition-transform duration-500 ease-out ${
+        hover ? "z-20 -translate-y-2 translate-x-[50%] scale-[1.15]" : ""
+      }`}
+      style={{ perspective: "1800px" }}
+    >
+      <div className="relative block aspect-[3/4] w-full">
+        {/* Right page — reveals where cover was */}
+        <div
+          className={`absolute inset-0 overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-border transition-opacity duration-500 ease-out ${grayWrap}`}
+          style={{ opacity: hover ? 1 : 0 }}
+        >
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/15 to-transparent"
+          />
+          <div className="flex h-full w-full p-2">
+            <PlaysheetColumn
+              plays={sheetPlays.slice(6, 12)}
+              blanks={0}
+              mounted={mounted}
+            />
+          </div>
+        </div>
+
+        {/* Cover — rotates -180° around left spine */}
+        <div
+          className="absolute inset-0 rounded-xl transition-transform duration-700"
+          style={{
+            transform: hover ? "rotateY(-180deg)" : "rotateY(0deg)",
+            transformOrigin: "left center",
+            transformStyle: "preserve-3d",
+            transitionTimingFunction: "cubic-bezier(.25,.75,.35,1)",
+          }}
+        >
+          {/* Front face */}
+          <div
+            className="absolute inset-0 rounded-xl shadow-elevated ring-1 ring-black/10"
+            style={{
+              backgroundColor: color,
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+            }}
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-2 rounded-l-xl bg-gradient-to-r from-black/40 to-transparent"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-2 right-0 flex w-1 flex-col gap-[1px]"
+            >
+              {Array.from({ length: thickness }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex-1 bg-white/55"
+                  style={{ opacity: 1 - i * 0.1 }}
+                />
+              ))}
+            </div>
+
+            <div className="flex h-full flex-col justify-between p-5 text-white">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
+                Playbook
+              </span>
+              <div
+                className="flex flex-1 items-center justify-center"
+                aria-hidden
+              >
+                <svg
+                  viewBox="0 0 100 120"
+                  className="h-28 w-28 drop-shadow-lg"
+                >
+                  <path
+                    d="M50 6 L92 22 V58 Q92 94 50 114 Q8 94 8 58 V22 Z"
+                    fill="#fff"
+                    stroke="rgba(0,0,0,0.18)"
+                    strokeWidth="2"
+                  />
+                  <polygon
+                    points="50,28 58,50 81,50 62,64 70,87 50,73 30,87 38,64 19,50 42,50"
+                    fill={color}
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <h3 className="truncate text-lg font-extrabold leading-tight drop-shadow-sm">
+                  Your New Playbook
+                </h3>
+                <p className="mt-0.5 truncate text-xs font-medium text-white/80">
+                  {season}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Back face — page 1 of sample plays, grayed */}
+          <div
+            className={`absolute inset-0 overflow-hidden rounded-xl bg-surface shadow-elevated ring-1 ring-border ${grayWrap}`}
+            style={{
+              transform: "rotateY(180deg)",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+            }}
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-black/15 to-transparent"
+            />
+            <div className="flex h-full w-full p-2">
+              <PlaysheetColumn
+                plays={sheetPlays.slice(0, 6)}
+                blanks={0}
+                mounted={mounted}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* CTA overlay — centered over the open book, appears on hover */}
+        <div
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity ease-out"
+          style={{
+            opacity: hover ? 1 : 0,
+            transitionDuration: "200ms",
+            transitionDelay: hover ? "200ms" : "0ms",
+          }}
+          aria-hidden
+        >
+          <div
+            className="rounded-xl bg-surface-raised px-5 py-3 text-center shadow-elevated ring-1 ring-border"
+            style={{ transform: "translateX(-50%)" }}
+          >
+            <p className="text-sm font-bold text-foreground">
+              Click here to start creating your playbook
+            </p>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function NewPlaybookTile({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -244,10 +716,12 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState<DashboardPlaybookTile | null>(null);
+  const [view, setView] = useDashboardView();
 
   const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const shared = data.playbooks.filter((b) => b.role !== "owner");
   const viewerOnly = owned.length === 0 && shared.length > 0;
+  const isEmpty = owned.length === 0 && shared.length === 0;
 
   function refresh() {
     router.refresh();
@@ -376,35 +850,108 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
             Pick a playbook to edit plays, add notes, or share with your team.
           </p>
         </div>
+        {!isEmpty && (
+          <div className="flex items-center gap-3">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={Plus}
+              onClick={() => setShowCreate(true)}
+            >
+              New playbook
+            </Button>
+            <SegmentedControl
+              size="sm"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "preview", label: "Preview" },
+                { value: "classic", label: "Classic" },
+              ]}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Owned */}
-      <section className="space-y-3">
-        {viewerOnly && (
-          <p className="rounded-lg bg-surface-inset px-3 py-2 text-sm text-muted ring-1 ring-border">
-            Coaching your own team? Create a playbook to start drawing plays — it&rsquo;s free for personal use.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <NewPlaybookTile onClick={() => setShowCreate(true)} />
-          {owned.map((b) => (
-            <PlaybookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
-          ))}
-        </div>
-      </section>
+      {viewerOnly && (
+        <p className="rounded-lg bg-surface-inset px-3 py-2 text-sm text-muted ring-1 ring-border">
+          Coaching your own team? Create a playbook to start drawing plays — it&rsquo;s free for personal use.
+        </p>
+      )}
 
-      {/* Shared with you */}
-      {shared.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
-            <Users className="size-3.5" /> Shared with you
-          </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {shared.map((b) => (
-              <PlaybookTile key={b.id} tile={b} actions={[]} />
-            ))}
-          </div>
-        </section>
+      {isEmpty ? (
+        <div className="mx-auto w-60 pt-4 sm:w-64">
+          <MarketingPlaybookTile onCreate={() => setShowCreate(true)} />
+        </div>
+      ) : view === "preview" ? (
+        <>
+          {/* Owned — book mode */}
+          <section>
+            {owned.length === 1 ? (
+              <div className="mx-auto w-64 sm:w-72">
+                <PlaybookBookTile
+                  tile={owned[0]}
+                  actions={buildOwnerActions(owned[0])}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-wrap justify-center gap-3">
+                {owned.map((b) => (
+                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
+                    <PlaybookBookTile
+                      tile={b}
+                      actions={buildOwnerActions(b)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {shared.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                <Users className="size-3.5" /> Shared with you
+              </h2>
+              <div className="flex flex-wrap justify-center gap-3">
+                {shared.map((b) => (
+                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
+                    <PlaybookBookTile tile={b} actions={[]} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Classic grid */}
+          <section>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <NewPlaybookTile onClick={() => setShowCreate(true)} />
+              {owned.map((b) => (
+                <PlaybookTile
+                  key={b.id}
+                  tile={b}
+                  actions={buildOwnerActions(b)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {shared.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                <Users className="size-3.5" /> Shared with you
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {shared.map((b) => (
+                  <PlaybookTile key={b.id} tile={b} actions={[]} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {editingAppearance && (

@@ -62,6 +62,24 @@ export function PlayEditorClient({
   const { toast } = useToast();
   const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
 
+  // Bump a localStorage counter of distinct plays this user has opened. The
+  // feedback widget gates itself on this to avoid showing for brand-new users.
+  useEffect(() => {
+    try {
+      const KEY = "playgrid:plays-viewed-count";
+      const SEEN_KEY = "playgrid:plays-viewed-ids";
+      const raw = localStorage.getItem(SEEN_KEY);
+      const seen: string[] = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(seen) && !seen.includes(playId)) {
+        const next = [...seen, playId].slice(-50);
+        localStorage.setItem(SEEN_KEY, JSON.stringify(next));
+        localStorage.setItem(KEY, String(next.length));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [playId]);
+
   const vsSnapshot = doc.metadata.vsPlaySnapshot ?? null;
   const isDefense = (doc.metadata.playType ?? "offense") === "defense";
 

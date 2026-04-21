@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock, Mail, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -25,9 +24,14 @@ export type AuthFlowProps = {
   subheading?: string;
   /** Hidden invite code to pass through the signup metadata. */
   inviteCode?: string;
+  /** Notifies the parent whenever the internal step changes. Used by the
+   *  login page to swap the big heading between "Get started" and
+   *  "Welcome back" depending on whether the entered email already has an
+   *  account. */
+  onStepChange?: (step: Step) => void;
 };
 
-type Step =
+export type Step =
   | "email"
   | "password"
   | "code"
@@ -47,8 +51,7 @@ function isInvalidCredentials(err: unknown): boolean {
   );
 }
 
-export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProps) {
-  const router = useRouter();
+export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }: AuthFlowProps) {
   const { toast } = useToast();
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
@@ -62,6 +65,11 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
 
   const [pending, setPending] = useState(false);
+  // Synchronous guard against concurrent submits. React state updates are
+  // batched and async — a fast double-click can fire two submits before
+  // `pending` flips to true. The ref flips synchronously so the second entry
+  // bails out immediately.
+  const submittingRef = useRef(false);
   const [badPassword, setBadPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [resendCountdown, setResendCountdown] = useState(0);
@@ -78,6 +86,10 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
     const t = setTimeout(() => setResendCountdown((n) => n - 1), 1000);
     return () => clearTimeout(t);
   }, [resendCountdown]);
+
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [step, onStepChange]);
 
   const startCooldown = useCallback(() => {
     setResendCountdown(RESEND_COOLDOWN_SECONDS);
@@ -122,20 +134,23 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
   }
 
   async function submitPassword() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setPending(true);
     clearErrors();
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      router.push(safeNext);
-      router.refresh();
+      window.location.assign(safeNext);
+      return;
     } catch (e: unknown) {
       if (isInvalidCredentials(e)) {
         setBadPassword(true);
       } else {
         setFormError(e instanceof Error ? e.message : "Sign-in failed.");
       }
+      submittingRef.current = false;
     } finally {
       setPending(false);
     }
@@ -217,7 +232,29 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
     }
   }
 
+  // Supabase rejects `updateUser({ password })` with "New password should be
+  // different from the old password" when the submitted password matches the
+  // one already on file. That happens if the user double-clicks "Create
+  // account" — the first call succeeded, the second hits this guard. Treat it
+  // as a no-op success so the user isn't confused by a red error after their
+  // account is already set up.
+  function isSamePasswordErr(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const m = err.message.toLowerCase();
+    return m.includes("should be different from the old password");
+  }
+
+  // Hard browser navigation. Fresh HTTP request means the new auth cookies
+  // from updateUser/verifyOtp are sent to middleware on the very next request,
+  // so we never get redirected back to /login by the default-deny middleware.
+  // `router.push` keeps the existing client runtime which sometimes misses
+  // the cookie update.
+  function hardNavigate(to: string) {
+    window.location.assign(to);
+  }
+
   async function completeNewUserProfile() {
+    if (submittingRef.current) return;
     const trimmedName = name.trim();
     if (trimmedName.length < 2) {
       setFormError("Enter your name.");
@@ -232,6 +269,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
       setFormError("Passwords do not match.");
       return;
     }
+    submittingRef.current = true;
     setPending(true);
     clearErrors();
     try {
@@ -240,18 +278,19 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
         password: newPassword,
         data: { display_name: trimmedName },
       });
-      if (error) throw error;
+      if (error && !isSamePasswordErr(error)) throw error;
       toast("Welcome to PlayGrid!", "success");
-      router.push(safeNext);
-      router.refresh();
+      hardNavigate(safeNext);
+      return; // keep pending=true through navigation to block double-clicks
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Could not finish sign-up.");
-    } finally {
       setPending(false);
+      submittingRef.current = false;
     }
   }
 
   async function setNewPasswordSubmit() {
+    if (submittingRef.current) return;
     const pwErr = validatePassword(newPassword);
     if (pwErr) {
       setFormError(pwErr);
@@ -261,25 +300,25 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
       setFormError("Passwords do not match.");
       return;
     }
+    submittingRef.current = true;
     setPending(true);
     clearErrors();
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      if (error && !isSamePasswordErr(error)) throw error;
       toast("Password updated.", "success");
-      router.push(safeNext);
-      router.refresh();
+      hardNavigate(safeNext);
+      return; // keep pending=true through navigation to block double-clicks
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : "Could not update password.");
-    } finally {
       setPending(false);
+      submittingRef.current = false;
     }
   }
 
   function continueWithoutReset() {
-    router.push(safeNext);
-    router.refresh();
+    window.location.assign(safeNext);
   }
 
   function handleForgot() {
@@ -297,7 +336,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (pending) return;
+    if (pending || submittingRef.current) return;
     if (step === "email") return void submitEmail();
     if (step === "password") return void submitPassword();
     if (step === "code") return void verifyCode({ cameFromForgot: false });
@@ -307,8 +346,19 @@ export function AuthFlow({ next, heading, subheading, inviteCode }: AuthFlowProp
 
   // ---------- Per-step UI ----------
 
-  const primaryLabel =
-    step === "email"
+  const primaryLabel = pending
+    ? step === "email"
+      ? "Checking…"
+      : step === "password"
+        ? "Signing in…"
+        : step === "code"
+          ? "Verifying…"
+          : step === "new-user-profile"
+            ? "Creating account…"
+            : step === "set-new-password"
+              ? "Updating password…"
+              : "Loading…"
+    : step === "email"
       ? "Continue"
       : step === "password"
         ? "Sign in"

@@ -48,7 +48,7 @@ export default async function HomePage() {
         </div>
         <div className="flex flex-wrap gap-4">
           <Link
-            href="/login"
+            href="/login?mode=signup"
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-primary-hover"
           >
             Get started

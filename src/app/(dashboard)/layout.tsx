@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
+import { userHasCreatedPlayAction } from "@/app/actions/plays";
 
 export default async function DashboardLayout({
   children,
@@ -29,12 +30,15 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const feedbackEnabled = await getFeedbackWidgetEnabled();
+  const [feedbackEnabled, hasCreatedPlay] = await Promise.all([
+    getFeedbackWidgetEnabled(),
+    userHasCreatedPlayAction(),
+  ]);
 
   return (
     <div className="min-h-full">
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
-      {feedbackEnabled && <FeedbackWidget />}
+      {feedbackEnabled && <FeedbackWidget hasCreatedPlay={hasCreatedPlay} />}
     </div>
   );
 }

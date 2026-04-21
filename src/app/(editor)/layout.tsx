@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
+import { userHasCreatedPlayAction } from "@/app/actions/plays";
 
 export default async function EditorLayout({ children }: { children: React.ReactNode }) {
   if (!hasSupabaseEnv()) {
@@ -15,14 +16,17 @@ export default async function EditorLayout({ children }: { children: React.React
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const feedbackEnabled = await getFeedbackWidgetEnabled();
+  const [feedbackEnabled, hasCreatedPlay] = await Promise.all([
+    getFeedbackWidgetEnabled(),
+    userHasCreatedPlayAction(),
+  ]);
 
   return (
     <div className="flex min-h-full flex-col bg-surface-inset">
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-5">
         {children}
       </div>
-      {feedbackEnabled && <FeedbackWidget />}
+      {feedbackEnabled && <FeedbackWidget hasCreatedPlay={hasCreatedPlay} />}
     </div>
   );
 }

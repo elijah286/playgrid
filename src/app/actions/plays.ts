@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
@@ -11,6 +12,42 @@ import {
   type PlaybookGroupRow,
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
+
+/**
+ * Returns true if the signed-in user has created at least one play in a
+ * playbook they own (excluding the auto-created default workspace). Used to
+ * gate the feedback widget so brand-new users don't see it until they've
+ * engaged with the product.
+ */
+export async function userHasCreatedPlayAction(): Promise<boolean> {
+  if (!hasSupabaseEnv()) return false;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data: owned } = await supabase
+    .from("playbook_members")
+    .select("playbook_id, playbooks!inner(is_default)")
+    .eq("user_id", user.id)
+    .eq("role", "owner");
+  const ownedIds = (owned ?? [])
+    .filter((r) => {
+      const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+      return pb && !pb.is_default;
+    })
+    .map((r) => r.playbook_id as string);
+  if (ownedIds.length === 0) return false;
+
+  const { count } = await supabase
+    .from("plays")
+    .select("id", { count: "exact", head: true })
+    .in("playbook_id", ownedIds)
+    .eq("is_archived", false)
+    .limit(1);
+  return (count ?? 0) > 0;
+}
 
 export type PlaybookDetailPlayRow = {
   id: string;
@@ -778,7 +815,70 @@ export type DashboardPlaybookTile = {
   color: string | null;
   season: string | null;
   role: "owner" | "editor" | "viewer";
+  previews: {
+    players: Player[];
+    routes: Route[];
+    zones: Zone[];
+    lineOfScrimmageY: number;
+  }[];
 };
+
+const PREVIEWS_PER_BOOK = 12;
+const PREVIEW_CACHE_SECONDS = 20 * 60;
+
+type PreviewPayload = {
+  players: Player[];
+  routes: Route[];
+  zones: Zone[];
+  lineOfScrimmageY: number;
+};
+
+/**
+ * Load up to 12 recent offensive play previews for a single playbook, using
+ * the service-role client and Next.js `unstable_cache` (20 min TTL). The
+ * caller must have already verified the user's access to this playbook.
+ */
+const getCachedPlaybookPreviews = unstable_cache(
+  async (bookId: string): Promise<PreviewPayload[]> => {
+    const svc = createServiceRoleClient();
+    const { data: playRows } = await svc
+      .from("plays")
+      .select("current_version_id, updated_at")
+      .eq("playbook_id", bookId)
+      .eq("is_archived", false)
+      .eq("play_type", "offense")
+      .order("updated_at", { ascending: false })
+      .limit(PREVIEWS_PER_BOOK);
+
+    const versionIds = (playRows ?? [])
+      .map((r) => r.current_version_id as string | null)
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (versionIds.length === 0) return [];
+
+    const { data: versions } = await svc
+      .from("play_versions")
+      .select("id, document")
+      .in("id", versionIds);
+
+    const byVid = new Map<string, PreviewPayload>();
+    for (const v of versions ?? []) {
+      const doc = v.document as PlayDocument | null;
+      if (!doc) continue;
+      byVid.set(v.id as string, {
+        players: doc.layers?.players ?? [],
+        routes: doc.layers?.routes ?? [],
+        zones: doc.layers?.zones ?? [],
+        lineOfScrimmageY:
+          typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+      });
+    }
+    return versionIds
+      .map((vid) => byVid.get(vid))
+      .filter((p): p is PreviewPayload => p != null);
+  },
+  ["dashboard-playbook-previews"],
+  { revalidate: PREVIEW_CACHE_SECONDS },
+);
 
 export type DashboardSummary = {
   playbooks: DashboardPlaybookTile[];
@@ -841,10 +941,21 @@ export async function getDashboardSummaryAction(): Promise<
         color: b.color,
         season: b.season,
         role: r.role,
-      };
+        previews: [],
+      } as DashboardPlaybookTile;
     })
     .filter((r): r is DashboardPlaybookTile => r !== null)
     .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+
+  // Load up to 12 recent offensive play previews per playbook. This is
+  // cached per-book for ~20 minutes — cover/book tile art doesn't need to be
+  // instantaneous after a play edit, and regenerating the preview payload on
+  // every dashboard load gets expensive on large books.
+  await Promise.all(
+    playbooks.map(async (book) => {
+      book.previews = await getCachedPlaybookPreviews(book.id);
+    }),
+  );
 
   const totalPlays = playbooks.reduce((n, b) => n + b.play_count, 0);
 

@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "playgrid:feedback-widget-pos";
+const VIEW_COUNT_KEY = "playgrid:plays-viewed-count";
+const VIEW_COUNT_THRESHOLD = 2;
 const MARGIN = 16;
 const FOOTER_CLEARANCE = 96;
 
@@ -38,7 +40,7 @@ function defaultPosition(size: { w: number; h: number }): Pos {
   };
 }
 
-export function FeedbackWidget() {
+export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
@@ -50,6 +52,25 @@ export function FeedbackWidget() {
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
   const didDragRef = useRef(false);
+
+  // Gate on engagement: user must have created a play OR viewed ≥ N plays.
+  // `hasCreatedPlay` comes from the server; view count is client-only
+  // (localStorage). Mount-gated so SSR doesn't leak a "hidden" state.
+  const [eligible, setEligible] = useState(false);
+  useEffect(() => {
+    if (hasCreatedPlay) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating engagement gate from localStorage
+      setEligible(true);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(VIEW_COUNT_KEY);
+      const n = raw ? parseInt(raw, 10) : 0;
+      if (Number.isFinite(n) && n >= VIEW_COUNT_THRESHOLD) setEligible(true);
+    } catch {
+      /* ignore */
+    }
+  }, [hasCreatedPlay]);
 
   useLayoutEffect(() => {
     if (!rootRef.current) return;
@@ -147,6 +168,8 @@ export function FeedbackWidget() {
   const style: React.CSSProperties = pos
     ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" }
     : { visibility: "hidden" };
+
+  if (!eligible) return null;
 
   return (
     <div
