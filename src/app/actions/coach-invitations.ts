@@ -282,6 +282,7 @@ export async function emailCoachInvitationAction(input: {
   const cfg = await getStoredResendConfig().catch(() => ({
     apiKey: null as string | null,
     fromEmail: null as string | null,
+    contactToEmail: null as string | null,
   }));
   const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
   const fromEmail = cfg.fromEmail ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;

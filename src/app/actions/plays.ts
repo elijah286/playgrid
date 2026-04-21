@@ -57,7 +57,8 @@ export async function listPlaysAction(
       "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived, play_type, special_teams_unit",
     )
     .eq("playbook_id", playbookId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(2000);
 
   if (!opts?.includeArchived) playsQ = playsQ.eq("is_archived", false);
 

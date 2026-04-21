@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
  * Does this email already have an account?
@@ -24,6 +25,15 @@ export async function emailHasAccountAction(
   const trimmed = email.trim().toLowerCase();
   if (!trimmed || !trimmed.includes("@")) {
     return { ok: false, error: "Enter a valid email." };
+  }
+
+  const ip = await clientIp();
+  const allowed = await rateLimit(`auth-lookup:${ip}`, {
+    windowSeconds: 60,
+    max: 10,
+  });
+  if (!allowed) {
+    return { ok: false, error: "Too many attempts. Try again in a minute." };
   }
 
   const admin = createServiceRoleClient();

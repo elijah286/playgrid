@@ -32,19 +32,23 @@ export function previewResendConfig(
 export async function getStoredResendConfig(): Promise<{
   apiKey: string | null;
   fromEmail: string | null;
+  contactToEmail: string | null;
 }> {
   const admin = createServiceRoleClient();
   const { data, error } = await admin
     .from("site_settings")
-    .select("resend_api_key, resend_from_email")
+    .select("resend_api_key, resend_from_email, contact_to_email")
     .eq("id", SITE_ROW_ID)
     .maybeSingle();
   if (error) throw new Error(error.message);
   const apiKey = typeof data?.resend_api_key === "string" ? data.resend_api_key.trim() : "";
   const fromEmail =
     typeof data?.resend_from_email === "string" ? data.resend_from_email.trim() : "";
+  const contactToEmail =
+    typeof data?.contact_to_email === "string" ? data.contact_to_email.trim() : "";
   return {
     apiKey: apiKey.length > 0 ? apiKey : null,
     fromEmail: fromEmail.length > 0 ? fromEmail : null,
+    contactToEmail: contactToEmail.length > 0 ? contactToEmail : null,
   };
 }

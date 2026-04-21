@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-const TO_EMAIL = "Elijah.Kerry@gmail.com";
 const DEFAULT_FROM_EMAIL = "PlayGrid <onboarding@resend.dev>";
 
 export async function POST(req: Request) {
+  const ip = await clientIp();
+  const allowed = await rateLimit(`contact:${ip}`, {
+    windowSeconds: 60 * 60,
+    max: 5,
+  });
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many messages. Please try again later." },
+      { status: 429 },
+    );
+  }
+
   let body: { name?: unknown; email?: unknown; message?: unknown };
   try {
     body = await req.json();
@@ -29,10 +41,12 @@ export async function POST(req: Request) {
 
   let apiKey: string | null = null;
   let fromEmail: string = DEFAULT_FROM_EMAIL;
+  let toEmail: string | null = null;
   try {
     const cfg = await getStoredResendConfig();
     apiKey = cfg.apiKey;
     if (cfg.fromEmail) fromEmail = cfg.fromEmail;
+    toEmail = cfg.contactToEmail;
   } catch {
     /* fall through to env fallback */
   }
@@ -40,10 +54,11 @@ export async function POST(req: Request) {
   if (fromEmail === DEFAULT_FROM_EMAIL && process.env.RESEND_FROM_EMAIL) {
     fromEmail = process.env.RESEND_FROM_EMAIL;
   }
+  if (!toEmail) toEmail = process.env.CONTACT_TO_EMAIL ?? null;
 
-  if (!apiKey) {
+  if (!apiKey || !toEmail) {
     return NextResponse.json(
-      { error: "Email service is not configured. Please try again later." },
+      { error: "Contact form is not configured. Please try again later." },
       { status: 503 },
     );
   }
@@ -54,7 +69,7 @@ export async function POST(req: Request) {
   try {
     const { error } = await resend.emails.send({
       from: fromEmail,
-      to: TO_EMAIL,
+      to: toEmail,
       replyTo: email,
       subject: "Feedback",
       text: `From: ${name} <${email}>\n\n${message}`,

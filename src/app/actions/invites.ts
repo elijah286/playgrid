@@ -94,7 +94,8 @@ export async function listInvitesAction(
     .from("playbook_invites")
     .select("*")
     .eq("playbook_id", playbookId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (error) return { ok: false, error: error.message };
   return { ok: true, invites: (data ?? []) as PlaybookInvite[] };
 }
@@ -146,6 +147,7 @@ export async function sendPlaybookInviteEmailAction(input: {
   const cfg = await getStoredResendConfig().catch(() => ({
     apiKey: null as string | null,
     fromEmail: null as string | null,
+    contactToEmail: null as string | null,
   }));
   const apiKey = cfg.apiKey ?? process.env.RESEND_API_KEY ?? null;
   const fromEmail = cfg.fromEmail ?? process.env.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
@@ -202,7 +204,15 @@ export async function acceptInviteAction(
   if (!user) return { ok: false, error: "Not signed in." };
 
   const { data, error } = await supabase.rpc("accept_invite", { p_token: token });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    if (error.message.includes("invite_email_mismatch")) {
+      return {
+        ok: false,
+        error: "This invite was sent to a different email address. Sign in with that email to accept it.",
+      };
+    }
+    return { ok: false, error: error.message };
+  }
   if (!data) return { ok: false, error: "Invite is invalid, expired, or fully used." };
   return { ok: true, playbookId: data as string };
 }
