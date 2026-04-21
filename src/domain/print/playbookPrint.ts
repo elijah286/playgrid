@@ -123,7 +123,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetPageBreak: "continuous",
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
-  playsheetCellPadding: 1,
+  playsheetCellPadding: 0.5,
   wristbandCellPadding: 1,
   playsheetIncludeHeader: true,
   playsheetIconSize: "medium",
@@ -155,7 +155,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandGrouping: "number",
   wristbandSheet: "sheet",
   wristbandCopiesPerSheet: "auto",
-  watermarkEnabled: false,
+  watermarkEnabled: true,
   watermarkOpacityPct: 10,
   watermarkScale: 0.6,
 };
@@ -293,5 +293,37 @@ export function applyExportPresentation(doc: PlayDocument, run: PlaybookPrintRun
     if (!showCode) out.printProfile.visibility.showWristbandCode = false;
     if (!showName) out.metadata.coachName = "\u200b";
   }
+
+  // Apply the print config's backfield/downfield yards to the doc so the
+  // slider actually moves the line of scrimmage (and players/routes stay
+  // in sync). Mirrors the `field.setYardage` reducer case — kept here so
+  // the export runs without a dispatch.
+  const clampYards = (v: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, Math.round(v)));
+  const bk = clampYards(run.backfieldYards, 2, 30);
+  const dn = clampYards(run.downfieldYards, 5, 50);
+  const newTotal = bk + dn;
+  const newLosY = bk / newTotal;
+  const oldTotal = out.sportProfile.fieldLengthYds;
+  const oldLosY = typeof out.lineOfScrimmageY === "number" ? out.lineOfScrimmageY : 0.4;
+  if (newTotal !== oldTotal || Math.abs(newLosY - oldLosY) > 1e-6) {
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+    const scaleY = (y: number) =>
+      clamp01(newLosY + ((y - oldLosY) * oldTotal) / newTotal);
+    out.lineOfScrimmageY = newLosY;
+    out.sportProfile = { ...out.sportProfile, fieldLengthYds: newTotal };
+    out.layers.players = out.layers.players.map((p) => ({
+      ...p,
+      position: { x: p.position.x, y: scaleY(p.position.y) },
+    }));
+    out.layers.routes = out.layers.routes.map((r) => ({
+      ...r,
+      nodes: r.nodes.map((n) => ({
+        ...n,
+        position: { x: n.position.x, y: scaleY(n.position.y) },
+      })),
+    }));
+  }
+
   return out;
 }

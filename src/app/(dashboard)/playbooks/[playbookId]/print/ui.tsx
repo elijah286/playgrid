@@ -517,22 +517,25 @@ export function PrintPlaybookClient({
   return (
     <div
       className="grid gap-6"
-      style={{ gridTemplateColumns: "minmax(280px, 30%) 1fr" }}
+      style={{ gridTemplateColumns: "minmax(360px, 40%) 1fr" }}
     >
       <div
-        className="space-y-4 sticky top-4 self-start overflow-y-auto pr-1"
+        className="sticky top-4 self-start overflow-y-auto pr-1"
         style={{ maxHeight: "calc(100vh - 2rem)" }}
       >
-        <SegmentedControl
-          options={[
-            { value: "plays" as const, label: `Plays (${selected.size})` },
-            { value: "layout" as const, label: "Layout" },
-            { value: "visuals" as const, label: "Visuals" },
-            { value: "presets" as const, label: "Presets" },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
+        <div className="sticky top-0 z-10 -mx-1 bg-background px-1 pb-3">
+          <SegmentedControl
+            options={[
+              { value: "plays" as const, label: `Plays (${selected.size})` },
+              { value: "layout" as const, label: "Layout" },
+              { value: "visuals" as const, label: "Visuals" },
+              { value: "presets" as const, label: "Presets" },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        </div>
+        <div className="space-y-4">
 
         {tab === "plays" && (
           <Card className="p-4">
@@ -790,6 +793,7 @@ export function PrintPlaybookClient({
           >
             PDF
           </Button>
+        </div>
         </div>
       </div>
 
