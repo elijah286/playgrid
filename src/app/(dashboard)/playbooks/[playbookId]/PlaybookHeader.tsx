@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Copy, Mail, MoreVertical, QrCode, Settings2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, Home, Mail, MoreVertical, QrCode, Settings2, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -81,18 +81,18 @@ export function PlaybookHeader({
         className="relative -mx-6 -mt-3"
         style={{ background: gradient }}
       >
-        <div className="relative mx-auto flex max-w-7xl items-center gap-4 px-6 py-4">
+        <div className="relative mx-auto flex max-w-7xl items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
           <Link
             href="/home"
-            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors ${onAccentMuted} ${onAccentHover}`}
+            className={`hidden sm:inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors ${onAccentMuted} ${onAccentHover}`}
             aria-label="Back to home"
           >
             <ArrowLeft className="size-4" />
             Home
           </Link>
-          <div className={isLightBg ? "h-6 w-px bg-black/20" : "h-6 w-px bg-white/25"} />
+          <div className={`hidden sm:block ${isLightBg ? "h-6 w-px bg-black/20" : "h-6 w-px bg-white/25"}`} />
           <div
-            className={`relative size-11 shrink-0 overflow-hidden rounded-xl flex items-center justify-center text-lg font-extrabold ring-1 ${
+            className={`relative size-9 sm:size-11 shrink-0 overflow-hidden rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg font-extrabold ring-1 ${
               isLightBg ? "bg-white/80 ring-black/10" : "bg-white/20 ring-white/30"
             } ${onAccent}`}
           >
@@ -103,10 +103,10 @@ export function PlaybookHeader({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className={`truncate text-xl font-extrabold tracking-tight sm:text-2xl ${onAccent}`}>
+            <h1 className={`truncate text-base font-extrabold tracking-tight sm:text-2xl ${onAccent}`}>
               {name}
             </h1>
-            <p className={`truncate text-xs font-medium sm:text-sm ${onAccentMuted}`}>
+            <p className={`truncate text-[11px] font-medium sm:text-sm ${onAccentMuted}`}>
               {[season, variantLabel, senderName].filter(Boolean).join(" · ") || variantLabel}
             </p>
           </div>
@@ -117,11 +117,11 @@ export function PlaybookHeader({
                 size="sm"
                 leftIcon={UserPlus}
                 onClick={() => setInviteOpen(true)}
-                className={
+                className={`hidden sm:inline-flex ${
                   isLightBg
                     ? "!bg-slate-900 !text-white hover:!bg-slate-800"
                     : "!bg-white !text-slate-900 hover:!bg-white/90"
-                }
+                }`}
               >
                 Invite Team Member
               </Button>
@@ -129,6 +129,7 @@ export function PlaybookHeader({
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
                 onCustomize={() => setCustomizeOpen(true)}
+                onInvite={() => setInviteOpen(true)}
               />
             </div>
           )}
@@ -164,10 +165,12 @@ function HeaderMenu({
   onAccent,
   onAccentHover,
   onCustomize,
+  onInvite,
 }: {
   onAccent: string;
   onAccentHover: string;
   onCustomize: () => void;
+  onInvite: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -203,8 +206,29 @@ function HeaderMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 min-w-[200px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+          className="absolute right-0 top-full z-30 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
         >
+          <Link
+            href="/home"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+          >
+            <Home className="size-4" />
+            <span>Home</span>
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onInvite();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+          >
+            <UserPlus className="size-4" />
+            <span>Invite team member</span>
+          </button>
           <button
             type="button"
             role="menuitem"
