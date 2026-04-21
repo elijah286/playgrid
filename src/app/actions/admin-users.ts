@@ -172,6 +172,70 @@ export async function setUserPasswordAsAdminAction(input: {
   return { ok: true as const };
 }
 
+export type AdminUserStats = {
+  playbooksOwned: number;
+  playbooksShared: number;
+  playsCreated: number;
+  peopleSharedWith: number;
+};
+
+export async function getAdminUserStatsAction(
+  userId: string,
+): Promise<
+  { ok: true; stats: AdminUserStats } | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const admin = createServiceRoleClient();
+
+  const { data: ownedRows, error: ownedErr } = await admin
+    .from("playbook_members")
+    .select("playbook_id")
+    .eq("user_id", userId)
+    .eq("role", "owner")
+    .eq("status", "active");
+  if (ownedErr) return { ok: false, error: ownedErr.message };
+  const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
+
+  let playbooksShared = 0;
+  const peopleSet = new Set<string>();
+  if (ownedIds.length > 0) {
+    const { data: otherMembers, error: othersErr } = await admin
+      .from("playbook_members")
+      .select("playbook_id, user_id")
+      .in("playbook_id", ownedIds)
+      .neq("user_id", userId)
+      .eq("status", "active");
+    if (othersErr) return { ok: false, error: othersErr.message };
+    const sharedBookSet = new Set<string>();
+    for (const m of otherMembers ?? []) {
+      sharedBookSet.add(m.playbook_id as string);
+      peopleSet.add(m.user_id as string);
+    }
+    playbooksShared = sharedBookSet.size;
+  }
+
+  const { data: versionRows, error: versionsErr } = await admin
+    .from("play_versions")
+    .select("play_id")
+    .eq("created_by", userId);
+  if (versionsErr) return { ok: false, error: versionsErr.message };
+  const playsCreated = new Set(
+    (versionRows ?? []).map((r) => r.play_id as string),
+  ).size;
+
+  return {
+    ok: true,
+    stats: {
+      playbooksOwned: ownedIds.length,
+      playbooksShared,
+      playsCreated,
+      peopleSharedWith: peopleSet.size,
+    },
+  };
+}
+
 export async function deleteUserAsAdminAction(userId: string) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;

@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Search, UserPlus } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import { ChevronRight, Search, UserPlus } from "lucide-react";
 import {
   createUserAsAdminAction,
   deleteUserAsAdminAction,
+  getAdminUserStatsAction,
   listUsersForAdminAction,
   setUserPasswordAsAdminAction,
   updateUserAsAdminAction,
+  type AdminUserStats,
 } from "@/app/actions/admin-users";
 import { Modal } from "@/components/ui";
 
@@ -54,6 +56,7 @@ export function UsersAdminClient({
   const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pending, startTransition] = useTransition();
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -121,6 +124,7 @@ export function UsersAdminClient({
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-inset text-xs font-semibold uppercase tracking-wide text-muted">
             <tr>
+              <th className="w-8 px-2 py-3" />
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Role</th>
@@ -131,13 +135,24 @@ export function UsersAdminClient({
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
             ) : (
-              filtered.map((u) => (
-                <tr key={u.id} className="hover:bg-surface-inset/40">
+              filtered.map((u) => {
+                const isOpen = expanded === u.id;
+                return (
+                <Fragment key={u.id}>
+                <tr
+                  className="cursor-pointer hover:bg-surface-inset/40"
+                  onClick={() => setExpanded((cur) => (cur === u.id ? null : u.id))}
+                >
+                  <td className="px-2 py-3 align-middle text-muted">
+                    <ChevronRight
+                      className={`size-4 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                    />
+                  </td>
                   <td className="px-4 py-3 align-middle font-medium text-foreground">
                     {u.email}
                     {u.id === currentUserId && (
@@ -156,7 +171,10 @@ export function UsersAdminClient({
                   >
                     {formatLastSignIn(u.lastSignIn)}
                   </td>
-                  <td className="px-4 py-3 align-middle">
+                  <td
+                    className="px-4 py-3 align-middle"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex justify-end gap-1.5">
                       <button
                         type="button"
@@ -196,7 +214,16 @@ export function UsersAdminClient({
                     </div>
                   </td>
                 </tr>
-              ))
+                {isOpen && (
+                  <tr className="bg-surface-inset/30">
+                    <td colSpan={6} className="px-4 py-4">
+                      <UserStatsPanel userId={u.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -495,6 +522,52 @@ function ResetPasswordDialog({
         />
       </Field>
     </Modal>
+  );
+}
+
+function UserStatsPanel({ userId }: { userId: string }) {
+  const [stats, setStats] = useState<AdminUserStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStats(null);
+    setError(null);
+    getAdminUserStatsAction(userId).then((res) => {
+      if (cancelled) return;
+      if (res.ok) setStats(res.stats);
+      else setError(res.error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (error) {
+    return <p className="text-xs text-danger">Couldn&rsquo;t load stats: {error}</p>;
+  }
+  const items = [
+    { label: "Playbooks owned", value: stats?.playbooksOwned },
+    { label: "Playbooks shared", value: stats?.playbooksShared },
+    { label: "Plays created", value: stats?.playsCreated },
+    { label: "People shared with", value: stats?.peopleSharedWith },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {items.map((it) => (
+        <div
+          key={it.label}
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+            {it.label}
+          </p>
+          <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
+            {stats ? it.value : "—"}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }
 
