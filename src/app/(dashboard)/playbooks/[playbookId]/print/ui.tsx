@@ -325,8 +325,8 @@ export function PrintPlaybookClient({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-      <div className="space-y-4">
+    <div className="grid gap-6 grid-cols-[minmax(280px,20%)_1fr]">
+      <div className="space-y-4 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto pr-1">
         <SegmentedControl
           options={[
             { value: "plays" as const, label: `Plays (${selected.size})` },
