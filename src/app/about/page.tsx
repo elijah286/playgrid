@@ -29,6 +29,9 @@ export default function AboutPage() {
           The goal is simple — make it easy to design plays, organize them
           into playbooks, and carry them to the field.
         </p>
+        <p className="pt-4 text-sm">
+          <em>Created by Elijah Kerry from Cedar Park.</em>
+        </p>
       </div>
     </article>
   );
