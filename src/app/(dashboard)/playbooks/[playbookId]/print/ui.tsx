@@ -265,8 +265,9 @@ export function PrintPlaybookClient({
       WATERMARK_MIN_PCT,
       Math.min(WATERMARK_MAX_PCT, config.watermarkOpacityPct),
     );
-    return { logoUrl, opacity: pct / 100 };
-  }, [config.watermarkEnabled, config.watermarkOpacityPct, logoUrl]);
+    const scale = Math.max(0.1, Math.min(1, config.watermarkScale ?? 0.6));
+    return { logoUrl, opacity: pct / 100, scale };
+  }, [config.watermarkEnabled, config.watermarkOpacityPct, config.watermarkScale, logoUrl]);
 
   // Playbook-position (1..N) for each play, matching the orange glyph on the
   // playbook detail page. Used as the "Number" label on tiles.
@@ -668,6 +669,21 @@ export function PrintPlaybookClient({
                     value={config.watermarkOpacityPct}
                     onChange={(e) =>
                       setConfig({ ...config, watermarkOpacityPct: Number(e.target.value) })
+                    }
+                    className="mt-1 w-full accent-primary"
+                  />
+                  <label className="mt-2 flex items-center justify-between text-xs text-muted">
+                    <span>Size</span>
+                    <span>{Math.round((config.watermarkScale ?? 0.6) * 100)}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={Math.round((config.watermarkScale ?? 0.6) * 100)}
+                    onChange={(e) =>
+                      setConfig({ ...config, watermarkScale: Number(e.target.value) / 100 })
                     }
                     className="mt-1 w-full accent-primary"
                   />

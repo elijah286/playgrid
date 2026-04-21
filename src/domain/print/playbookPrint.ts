@@ -105,6 +105,8 @@ export type PlaybookPrintRunConfig = {
    * Applied to a centered <image> layer rendered behind the content.
    */
   watermarkOpacityPct: number;
+  /** Watermark image size, 0.1–1 (fraction of available area). */
+  watermarkScale: number;
 };
 
 export type WristbandSheetMode = "single" | "sheet";
@@ -155,6 +157,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandCopiesPerSheet: "auto",
   watermarkEnabled: false,
   watermarkOpacityPct: 10,
+  watermarkScale: 0.6,
 };
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {

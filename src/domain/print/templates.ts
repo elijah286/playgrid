@@ -408,6 +408,7 @@ function renderPlaysheetPage(
   ${headerSvg}
   ${body}
   ${watermarkSvg(w, h, watermark)}
+  ${playsheetFooterSvg(w, h)}
 </svg>`;
 }
 
@@ -643,14 +644,26 @@ export type Watermark = {
   logoUrl: string;
   /** 0–1 opacity. Callers should clamp to the UI's 5–20% range. */
   opacity: number;
+  /** 0.1–1 fraction of min(width, height) used to size the logo. */
+  scale?: number;
 };
 
 function watermarkSvg(w: number, h: number, wm: Watermark | null): string {
   if (!wm || !wm.logoUrl) return "";
-  const size = Math.min(w, h) * 0.6;
+  const scale = Math.max(0.1, Math.min(1, wm.scale ?? 0.6));
+  const size = Math.min(w, h) * scale;
   const x = (w - size) / 2;
   const y = (h - size) / 2;
   return `<image href="${escSvgText(wm.logoUrl)}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" opacity="${wm.opacity}"/>`;
+}
+
+function playsheetFooterSvg(w: number, h: number): string {
+  const bandH = 4.2;
+  const y = h - bandH;
+  return `<g>
+    <rect x="0" y="${y}" width="${w}" height="${bandH}" fill="#f97316" opacity="0.95"/>
+    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="2.2" fill="#ffffff" font-weight="600" letter-spacing="0.2">Powered by Playgrid · playgrid.us · © 2026</text>
+  </g>`;
 }
 
 function iconRadius(size: WristbandIconSize): number {
@@ -805,20 +818,11 @@ function renderWristbandTile(
     guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#94a3b8" stroke-width="0.35"/>`;
   }
 
-  let wm = "";
-  if (watermark && watermark.logoUrl) {
-    const size = Math.min(fieldW, fieldH) * 0.85;
-    const wx = fieldX + (fieldW - size) / 2;
-    const wy = fieldY + (fieldH - size) / 2;
-    wm = `<image href="${escSvgText(watermark.logoUrl)}" x="${wx}" y="${wy}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" opacity="${watermark.opacity}"/>`;
-  }
-
   return `
   <g>
     <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.25"/>
     ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#e2e8f0" stroke-width="0.25"/>
-    ${wm}
     ${guides}
     ${routes}
     ${players}
@@ -856,6 +860,7 @@ export function compileWristbandGridSvg(
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#f1f5f9"/>
   ${body}
+  ${watermarkSvg(w, h, watermark ?? null)}
 </svg>`;
 
   return { templateKind: "wristband", svgMarkup: svg, width: w, height: h };
@@ -918,7 +923,7 @@ export function compileWristbandSheetPdfPages(
       const row = Math.floor(idx / perRow);
       const x = margin + col * (stripW + gutter);
       const y = margin + row * (stripH + gutter);
-      const inner = compileWristbandGridSvg(stripDocs, opts).svgMarkup;
+      const inner = compileWristbandGridSvg(stripDocs, opts, watermark ?? null).svgMarkup;
       // Extract the <svg> children from the inner strip and translate into place.
       const match = /<svg[^>]*>([\s\S]*?)<\/svg>/.exec(inner);
       const innerBody = match ? match[1] : "";
@@ -931,7 +936,6 @@ export function compileWristbandSheetPdfPages(
     pages.push(`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${pageW}mm" height="${pageH}mm" viewBox="0 0 ${pageW} ${pageH}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  ${watermarkSvg(pageW, pageH, watermark ?? null)}
   ${body}
 </svg>`);
   }
