@@ -45,6 +45,8 @@ type Props = {
 };
 
 type TabKey = "plays" | "layout" | "visuals" | "presets";
+type SortKey = "alpha" | "group" | "tag";
+type TypeFilter = "all" | "offense" | "defense" | "special_teams";
 
 export function PrintPlaybookClient({
   playbookId,
@@ -71,6 +73,8 @@ export function PrintPlaybookClient({
   const [config, setConfig] = useState<PlaybookPrintRunConfig>(defaultPlaybookPrintRunConfig);
   const [tab, setTab] = useState<TabKey>("plays");
   const [q, setQ] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("alpha");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
   const groupNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -83,6 +87,7 @@ export function PrintPlaybookClient({
   const tree: TreeNode[] = useMemo(() => {
     const s = q.trim().toLowerCase();
     const match = (r: PlaybookPrintPackRow) => {
+      if (typeFilter !== "all" && r.nav.play_type !== typeFilter) return false;
       if (!s) return true;
       const n = r.nav;
       return (
@@ -93,9 +98,45 @@ export function PrintPlaybookClient({
         n.tags.some((t) => t.toLowerCase().includes(s))
       );
     };
+    const filtered = initialPack.filter(match);
+    const byName = (a: PlaybookPrintPackRow, b: PlaybookPrintPackRow) =>
+      a.nav.name.localeCompare(b.nav.name, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+
+    if (sortBy === "alpha") {
+      const rows = [...filtered].sort(byName);
+      if (rows.length === 0) return [];
+      return [{ key: "__all__", name: "All plays", rows }];
+    }
+
+    if (sortBy === "tag") {
+      const byKey = new Map<string, PlaybookPrintPackRow[]>();
+      for (const r of filtered) {
+        const tags = r.nav.tags && r.nav.tags.length > 0 ? r.nav.tags : [""];
+        for (const t of tags) {
+          const k = t || "__untagged__";
+          const arr = byKey.get(k) ?? [];
+          arr.push(r);
+          byKey.set(k, arr);
+        }
+      }
+      const names = [...byKey.keys()].sort((a, b) => {
+        if (a === "__untagged__") return 1;
+        if (b === "__untagged__") return -1;
+        return a.localeCompare(b, undefined, { sensitivity: "base" });
+      });
+      return names.map((k) => ({
+        key: `tag:${k}`,
+        name: k === "__untagged__" ? "Untagged" : k,
+        rows: [...(byKey.get(k) ?? [])].sort(byName),
+      }));
+    }
+
+    // sortBy === "group"
     const byKey = new Map<string, PlaybookPrintPackRow[]>();
-    for (const r of initialPack) {
-      if (!match(r)) continue;
+    for (const r of filtered) {
       const k = r.nav.group_id ?? "__ungrouped__";
       const arr = byKey.get(k) ?? [];
       arr.push(r);
@@ -104,19 +145,21 @@ export function PrintPlaybookClient({
     const nodes: TreeNode[] = [];
     for (const g of initialGroups) {
       const rows = byKey.get(g.id);
-      if (rows && rows.length > 0) nodes.push({ key: g.id, name: g.name, rows });
+      if (rows && rows.length > 0)
+        nodes.push({ key: g.id, name: g.name, rows: [...rows].sort(byName) });
     }
     const ung = byKey.get("__ungrouped__");
-    if (ung && ung.length > 0) nodes.push({ key: "__ungrouped__", name: "Ungrouped", rows: ung });
+    if (ung && ung.length > 0)
+      nodes.push({ key: "__ungrouped__", name: "Ungrouped", rows: [...ung].sort(byName) });
     return nodes;
-  }, [initialPack, initialGroups, q]);
+  }, [initialPack, initialGroups, q, sortBy, typeFilter]);
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
-  // Default-expand groups that contain search matches.
+  // Default-expand groups when searching, or when alpha sort (single node).
   useEffect(() => {
-    if (!q.trim()) return;
+    if (!q.trim() && sortBy !== "alpha") return;
     setOpenGroups(new Set(tree.map((n) => n.key)));
-  }, [q, tree]);
+  }, [q, tree, sortBy]);
 
   function toggleGroupOpen(k: string) {
     setOpenGroups((prev) => {
@@ -373,6 +416,37 @@ export function PrintPlaybookClient({
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Filter plays…"
               />
+            </div>
+            <div className="mt-3 space-y-2">
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Type
+                </p>
+                <SegmentedControl
+                  options={[
+                    { value: "all" as const, label: "All" },
+                    { value: "offense" as const, label: "Offense" },
+                    { value: "defense" as const, label: "Defense" },
+                    { value: "special_teams" as const, label: "ST" },
+                  ]}
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Sort by
+                </p>
+                <SegmentedControl
+                  options={[
+                    { value: "alpha" as const, label: "A–Z" },
+                    { value: "group" as const, label: "Group" },
+                    { value: "tag" as const, label: "Tag" },
+                  ]}
+                  value={sortBy}
+                  onChange={setSortBy}
+                />
+              </div>
             </div>
             <div className="mt-3 space-y-1">
               {tree.length === 0 && (
