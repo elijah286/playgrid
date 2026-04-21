@@ -1006,6 +1006,27 @@ export async function reorderPlaybookGroupsAction(
   return { ok: true as const };
 }
 
+export async function reorderPlaysAction(
+  playbookId: string,
+  orderedPlayIds: string[],
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+  for (let i = 0; i < orderedPlayIds.length; i++) {
+    const { error } = await supabase
+      .from("plays")
+      .update({ sort_order: i })
+      .eq("id", orderedPlayIds[i])
+      .eq("playbook_id", playbookId);
+    if (error) return { ok: false as const, error: error.message };
+  }
+  return { ok: true as const };
+}
+
 export async function setPlayGroupAction(playId: string, groupId: string | null) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();

@@ -14,6 +14,8 @@ import {
   Crown,
   FileText,
   Folders,
+  GripVertical,
+  Hash,
   LayoutGrid,
   List,
   Loader2,
@@ -36,6 +38,7 @@ import {
   renamePlayAction,
   renamePlaybookGroupAction,
   reorderPlaybookGroupsAction,
+  reorderPlaysAction,
   setPlayGroupAction,
   type PlaybookDetailPlayRow,
 } from "@/app/actions/plays";
@@ -94,6 +97,7 @@ type PlaybookPrefs = {
   groupBy: GroupBy;
   viewMode: "cards" | "list";
   thumbSize: ThumbSize;
+  showPlayNumbers: boolean;
 };
 
 const SIZE_COL_CLASS: Record<ThumbSize, string> = {
@@ -174,7 +178,17 @@ export function PlaybookDetailClient({
   const [thumbSize, setThumbSize] = useState<ThumbSize>(
     seeded?.thumbSize ?? "medium",
   );
+  const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
+    seeded?.showPlayNumbers ?? true,
+  );
   const [selectionMode, setSelectionMode] = useState(false);
+  // Local optimistic order. Mirrors initialPlays but can be mutated during drag
+  // so other rows slide into place in real time. Committed to the server on drop.
+  const [localPlays, setLocalPlays] = useState<PlaybookDetailPlayRow[]>(initialPlays);
+  useEffect(() => {
+    setLocalPlays(initialPlays);
+  }, [initialPlays]);
+  const [draggingPlayId, setDraggingPlayId] = useState<string | null>(null);
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -187,13 +201,14 @@ export function PlaybookDetailClient({
       groupBy,
       viewMode,
       thumbSize,
+      showPlayNumbers,
     };
     try {
       window.localStorage.setItem(prefsKey, JSON.stringify(prefs));
     } catch {
       /* ignore quota/storage errors */
     }
-  }, [prefsKey, view, typeFilter, groupBy, viewMode, thumbSize]);
+  }, [prefsKey, view, typeFilter, groupBy, viewMode, thumbSize, showPlayNumbers]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showManageGroups, setShowManageGroups] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
@@ -218,7 +233,7 @@ export function PlaybookDetailClient({
     [variant, playbookPlayerCount],
   );
 
-  const viewed = initialPlays.filter((p) =>
+  const viewed = localPlays.filter((p) =>
     view === "archived" ? p.is_archived : !p.is_archived,
   );
   const filtered = viewed.filter((p) => {
@@ -283,12 +298,19 @@ export function PlaybookDetailClient({
       if (groupBy === "group") return a.sortOrder - b.sortOrder;
       return a.label.localeCompare(b.label);
     });
-    for (const s of arr)
-      s.plays.sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }),
-      );
+    for (const s of arr) s.plays.sort((a, b) => a.sort_order - b.sort_order);
     return arr;
   }, [filtered, groupBy, groupById, initialGroups]);
+
+  // Flat, 1-based position map across all (non-archived + current filters) plays
+  // sorted by sort_order. Used to render the orange play-number glyph so every
+  // play shows its stable number regardless of which section it's under.
+  const positionByPlayId = useMemo(() => {
+    const ordered = [...viewed].sort((a, b) => a.sort_order - b.sort_order);
+    const m = new Map<string, number>();
+    ordered.forEach((p, i) => m.set(p.id, i + 1));
+    return m;
+  }, [viewed]);
 
   // Close the filters popover on outside click or Escape.
   useEffect(() => {
@@ -454,6 +476,35 @@ export function PlaybookDetailClient({
   function onDropToGroup(groupKey: string, playId: string) {
     const target = groupKey === UNASSIGNED ? null : groupKey;
     handle(() => setPlayGroupAction(playId, target));
+  }
+
+  // Live-reorder the in-memory list so other rows slide into place while the
+  // user is still dragging. Commits to the server on drop via commitPlayOrder.
+  function reorderLocal(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return;
+    setLocalPlays((prev) => {
+      const src = prev.findIndex((p) => p.id === sourceId);
+      const tgt = prev.findIndex((p) => p.id === targetId);
+      if (src < 0 || tgt < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(src, 1);
+      next.splice(tgt, 0, moved);
+      // Rewrite sort_order to match new positions so the sections memo reflects it.
+      return next.map((p, i) => ({ ...p, sort_order: i }));
+    });
+  }
+
+  function commitPlayOrder() {
+    const ordered = [...localPlays]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((p) => p.id);
+    startTransition(async () => {
+      const res = await reorderPlaysAction(playbookId, ordered);
+      if (!res.ok) {
+        toast(res.error ?? "Could not save play order.", "error");
+        router.refresh();
+      }
+    });
   }
 
   function confirmAnd(msg: string, fn: () => void) {
@@ -664,6 +715,19 @@ export function PlaybookDetailClient({
                           ]
                     }
                   />
+                </div>
+                <div>
+                  <label className="flex cursor-pointer items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                      <Hash className="size-3" /> Show play numbers
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={showPlayNumbers}
+                      onChange={(e) => setShowPlayNumbers(e.target.checked)}
+                      className="size-4 accent-primary"
+                    />
+                  </label>
                 </div>
                 <div>
                   <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
@@ -885,20 +949,47 @@ export function PlaybookDetailClient({
 
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
+                      const canReorder = !selectionMode;
+                      const position = positionByPlayId.get(p.id);
+                      const isDragging = draggingPlayId === p.id;
                       return (
                       <Card
                         key={`${section.key}:${p.id}`}
                         hover
-                        className={`relative flex flex-col p-0 ${selectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${isSelected ? "ring-2 ring-primary" : ""}`}
-                        draggable={!selectionMode && isGroupSection}
+                        className={`relative flex flex-col p-0 ${selectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""}`}
+                        draggable={canReorder}
                         onDragStart={
-                          !selectionMode && isGroupSection
+                          canReorder
                             ? (e) => {
                                 e.dataTransfer.setData("text/play-id", p.id);
                                 e.dataTransfer.effectAllowed = "move";
+                                setDraggingPlayId(p.id);
                               }
                             : undefined
                         }
+                        onDragOver={
+                          canReorder
+                            ? (e) => {
+                                if (!draggingPlayId || draggingPlayId === p.id) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.dataTransfer.dropEffect = "move";
+                                reorderLocal(draggingPlayId, p.id);
+                              }
+                            : undefined
+                        }
+                        onDrop={
+                          canReorder
+                            ? (e) => {
+                                if (!draggingPlayId) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDraggingPlayId(null);
+                                commitPlayOrder();
+                              }
+                            : undefined
+                        }
+                        onDragEnd={canReorder ? () => setDraggingPlayId(null) : undefined}
                         onClick={
                           selectionMode
                             ? (e) => {
@@ -916,6 +1007,11 @@ export function PlaybookDetailClient({
                         {selectionMode && (
                           <div className="pointer-events-none absolute left-2 top-2 z-10 flex size-5 items-center justify-center rounded border-2 border-primary bg-surface-raised">
                             {isSelected && <Check className="size-3.5 text-primary" />}
+                          </div>
+                        )}
+                        {showPlayNumbers && position != null && !selectionMode && (
+                          <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex h-6 min-w-[26px] items-center justify-center rounded bg-primary px-1.5 text-[12px] font-bold tabular-nums text-primary-foreground shadow-sm">
+                            {String(position).padStart(2, "0")}
                           </div>
                         )}
                         <Link
@@ -966,20 +1062,61 @@ export function PlaybookDetailClient({
                   <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
+                      const canReorder = !selectionMode;
+                      const position = positionByPlayId.get(p.id);
+                      const isDragging = draggingPlayId === p.id;
                       return (
                       <li
                         key={`${section.key}:${p.id}`}
-                        className={`flex items-center gap-2 pl-8 pr-2 ${!selectionMode && isGroupSection ? "cursor-grab active:cursor-grabbing" : ""} ${isSelected ? "bg-primary/5" : ""}`}
-                        draggable={!selectionMode && isGroupSection}
+                        className={`flex items-center gap-2 pl-2 pr-2 ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""}`}
+                        draggable={canReorder}
                         onDragStart={
-                          !selectionMode && isGroupSection
+                          canReorder
                             ? (e) => {
                                 e.dataTransfer.setData("text/play-id", p.id);
                                 e.dataTransfer.effectAllowed = "move";
+                                setDraggingPlayId(p.id);
                               }
                             : undefined
                         }
+                        onDragOver={
+                          canReorder
+                            ? (e) => {
+                                if (!draggingPlayId || draggingPlayId === p.id) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.dataTransfer.dropEffect = "move";
+                                reorderLocal(draggingPlayId, p.id);
+                              }
+                            : undefined
+                        }
+                        onDrop={
+                          canReorder
+                            ? (e) => {
+                                if (!draggingPlayId) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDraggingPlayId(null);
+                                commitPlayOrder();
+                              }
+                            : undefined
+                        }
+                        onDragEnd={canReorder ? () => setDraggingPlayId(null) : undefined}
                       >
+                        {canReorder && (
+                          <span
+                            className="flex size-5 shrink-0 cursor-grab items-center justify-center text-muted hover:text-foreground active:cursor-grabbing"
+                            aria-label="Drag to reorder"
+                            title="Drag to reorder"
+                          >
+                            <GripVertical className="size-4" />
+                          </span>
+                        )}
+                        {showPlayNumbers && position != null && (
+                          <span className="inline-flex h-5 shrink-0 items-center justify-center rounded bg-primary/15 px-1.5 text-[11px] font-bold tabular-nums text-primary">
+                            {String(position).padStart(2, "0")}
+                          </span>
+                        )}
                         {selectionMode && (
                           <button
                             type="button"

@@ -1,5 +1,5 @@
 import type { PlayDocument, PlayerShape } from "../play/types";
-import { routeToPathGeometry } from "../play/geometry";
+import { routeToPathGeometry, routeToPrintGroups } from "../play/geometry";
 import { resolveRouteStroke } from "../play/factory";
 import {
   IN_TO_MM,
@@ -137,24 +137,25 @@ export function compilePlayToSvg(
 
   let routePaths = "";
   for (const r of doc.layers.routes) {
-    // Convert node-based route to PathGeometry for rendering
-    const geometry = routeToPathGeometry(r);
-    const segments = geometry.segments;
-    const d = segments
-      .map((seg) => {
-        const fx = fieldX + seg.from.x * fieldW;
-        const fy = fieldY + (1 - seg.from.y) * fieldH;
-        const tx = fieldX + seg.to.x * fieldW;
-        const ty = fieldY + (1 - seg.to.y) * fieldH;
-        if (seg.type === "line") {
-          return `M ${fx} ${fy} L ${tx} ${ty}`;
-        }
-        const cx = fieldX + seg.control.x * fieldW;
-        const cy = fieldY + (1 - seg.control.y) * fieldH;
-        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
-      })
-      .join(" ");
-    routePaths += `<path d="${d}" fill="none" stroke="${resolveRouteStroke(r, doc.layers.players)}" stroke-width="${r.style.strokeWidth * 0.35}" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+    const groups = routeToPrintGroups(r);
+    const stroke = resolveRouteStroke(r, doc.layers.players);
+    const sw = r.style.strokeWidth * 0.35;
+    for (const grp of groups) {
+      const d = grp.segments
+        .map((seg) => {
+          const fx = fieldX + seg.from.x * fieldW;
+          const fy = fieldY + (1 - seg.from.y) * fieldH;
+          const tx = fieldX + seg.to.x * fieldW;
+          const ty = fieldY + (1 - seg.to.y) * fieldH;
+          if (seg.type === "line") return `M ${fx} ${fy} L ${tx} ${ty}`;
+          const cx = fieldX + seg.control.x * fieldW;
+          const cy = fieldY + (1 - seg.control.y) * fieldH;
+          return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
+        })
+        .join(" ");
+      const dash = grp.dash ?? r.style.dash;
+      routePaths += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" ${dash ? `stroke-dasharray="${dash}"` : ""}/>`;
+    }
   }
 
   const notes =
@@ -515,23 +516,24 @@ function renderRoutesAndArrows(
   const sy = (y: number) => fieldY + (1 - fitY(y, fit)) * fieldH;
   let out = "";
   for (const r of doc.layers.routes) {
-    const geometry = routeToPathGeometry(r);
-    const d = geometry.segments
-      .map((seg) => {
-        const fx = sx(seg.from.x);
-        const fy = sy(seg.from.y);
-        const tx = sx(seg.to.x);
-        const ty = sy(seg.to.y);
-        if (seg.type === "line") {
-          return `M ${fx} ${fy} L ${tx} ${ty}`;
-        }
-        const cx = sx(seg.control.x);
-        const cy = sy(seg.control.y);
-        return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
-      })
-      .join(" ");
+    const groups = routeToPrintGroups(r);
     const stroke = resolveRouteStroke(r, doc.layers.players);
-    out += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${r.style.dash ? `stroke-dasharray="${r.style.dash}"` : ""}/>`;
+    for (const grp of groups) {
+      const d = grp.segments
+        .map((seg) => {
+          const fx = sx(seg.from.x);
+          const fy = sy(seg.from.y);
+          const tx = sx(seg.to.x);
+          const ty = sy(seg.to.y);
+          if (seg.type === "line") return `M ${fx} ${fy} L ${tx} ${ty}`;
+          const cx = sx(seg.control.x);
+          const cy = sy(seg.control.y);
+          return `M ${fx} ${fy} Q ${cx} ${cy} ${tx} ${ty}`;
+        })
+        .join(" ");
+      const dash = grp.dash ?? r.style.dash;
+      out += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round" ${dash ? `stroke-dasharray="${dash}"` : ""}/>`;
+    }
 
     const deco = r.endDecoration ?? "arrow";
     if (deco === "none") continue;

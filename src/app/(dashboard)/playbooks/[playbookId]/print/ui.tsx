@@ -46,7 +46,7 @@ type Props = {
 };
 
 type TabKey = "plays" | "layout" | "visuals" | "presets";
-type SortKey = "alpha" | "group" | "tag";
+type SortKey = "position" | "alpha" | "group" | "tag";
 type TypeFilter = "all" | "offense" | "defense" | "special_teams";
 
 export function PrintPlaybookClient({
@@ -74,7 +74,8 @@ export function PrintPlaybookClient({
   const [config, setConfig] = useState<PlaybookPrintRunConfig>(defaultPlaybookPrintRunConfig);
   const [tab, setTab] = useState<TabKey>("plays");
   const [q, setQ] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("alpha");
+  const [sortBy, setSortBy] = useState<SortKey>("position");
+  const [numberPlaysInOrder, setNumberPlaysInOrder] = useState<boolean>(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
   const groupNameById = useMemo(() => {
@@ -105,6 +106,12 @@ export function PrintPlaybookClient({
         numeric: true,
         sensitivity: "base",
       });
+
+    if (sortBy === "position") {
+      const rows = [...filtered].sort((a, b) => a.nav.sort_order - b.nav.sort_order);
+      if (rows.length === 0) return [];
+      return [{ key: "__all__", name: "All plays", rows }];
+    }
 
     if (sortBy === "alpha") {
       const rows = [...filtered].sort(byName);
@@ -263,7 +270,14 @@ export function PrintPlaybookClient({
     );
     const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
     if (config.product === "wristband") {
-      const docs = pool.map((r) => applyExportPresentation(r.document, config));
+      const docs = pool.map((r, i) => {
+        const d = applyExportPresentation(r.document, config);
+        if (numberPlaysInOrder) {
+          d.metadata = { ...d.metadata, wristbandCode: String(i + 1).padStart(2, "0") };
+          d.printProfile.visibility.showWristbandCode = true;
+        }
+        return d;
+      });
       if (docs.length === 0) return [];
       if (config.wristbandSheet === "sheet") {
         return compileWristbandSheetPdfPages(
@@ -285,14 +299,26 @@ export function PrintPlaybookClient({
     }
     const printGrouping: PlaysheetGrouping =
       sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
-    const navOrder = sortNavPlaysForPrint(
-      pool.map((r) => r.nav),
-      printGrouping,
-    );
-    const ordered = navOrder
-      .map((n) => pool.find((r) => r.id === n.id))
-      .filter((x): x is PlaybookPrintPackRow => x != null);
-    const docs = ordered.map((r) => applyExportPresentation(r.document, config));
+    const ordered =
+      sortBy === "position"
+        ? [...pool].sort((a, b) => a.nav.sort_order - b.nav.sort_order)
+        : (() => {
+            const navOrder = sortNavPlaysForPrint(
+              pool.map((r) => r.nav),
+              printGrouping,
+            );
+            return navOrder
+              .map((n) => pool.find((r) => r.id === n.id))
+              .filter((x): x is PlaybookPrintPackRow => x != null);
+          })();
+    const docs = ordered.map((r, i) => {
+      const d = applyExportPresentation(r.document, config);
+      if (numberPlaysInOrder) {
+        d.metadata = { ...d.metadata, wristbandCode: String(i + 1).padStart(2, "0") };
+        d.printProfile.visibility.showWristbandCode = true;
+      }
+      return d;
+    });
     const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
     return compilePlaysheetPdfPages(
       docs,
@@ -301,7 +327,7 @@ export function PrintPlaybookClient({
       config.playsheetIncludeHeader ? team : null,
       watermark,
     );
-  }, [initialPack, selected, typeFilter, sortBy, config, wristbandGridOpts, playsheetOpts, team, watermark]);
+  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark]);
 
   async function compileForExport(): Promise<string[] | null> {
     const rows = initialPack.filter(
@@ -315,14 +341,26 @@ export function PrintPlaybookClient({
     }
     const grouping: PlaysheetGrouping =
       sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
-    const navOrder = sortNavPlaysForPrint(
-      rows.map((r) => r.nav),
-      grouping,
-    );
-    const ordered = navOrder
-      .map((n) => rows.find((r) => r.id === n.id))
-      .filter((x): x is PlaybookPrintPackRow => x != null);
-    const docs = ordered.map((r) => applyExportPresentation(r.document, config));
+    const ordered =
+      sortBy === "position"
+        ? [...rows].sort((a, b) => a.nav.sort_order - b.nav.sort_order)
+        : (() => {
+            const navOrder = sortNavPlaysForPrint(
+              rows.map((r) => r.nav),
+              grouping,
+            );
+            return navOrder
+              .map((n) => rows.find((r) => r.id === n.id))
+              .filter((x): x is PlaybookPrintPackRow => x != null);
+          })();
+    const docs = ordered.map((r, i) => {
+      const d = applyExportPresentation(r.document, config);
+      if (numberPlaysInOrder) {
+        d.metadata = { ...d.metadata, wristbandCode: String(i + 1).padStart(2, "0") };
+        d.printProfile.visibility.showWristbandCode = true;
+      }
+      return d;
+    });
 
     if (config.product === "playsheet") {
       const groupKeys = ordered.map((r) => r.nav.group_id ?? null);
@@ -450,6 +488,7 @@ export function PrintPlaybookClient({
                 </p>
                 <SegmentedControl
                   options={[
+                    { value: "position" as const, label: "#" },
                     { value: "alpha" as const, label: "A–Z" },
                     { value: "group" as const, label: "Group" },
                     { value: "tag" as const, label: "Tag" },
@@ -458,6 +497,16 @@ export function PrintPlaybookClient({
                   onChange={setSortBy}
                 />
               </div>
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+                <input
+                  type="checkbox"
+                  checked={numberPlaysInOrder}
+                  onChange={(e) => setNumberPlaysInOrder(e.target.checked)}
+                  className="size-4 accent-primary"
+                />
+                Number plays in order
+                <span className="text-muted">(01–{String(selected.size).padStart(2, "0")})</span>
+              </label>
             </div>
             <div className="mt-3 space-y-1">
               {tree.length === 0 && (

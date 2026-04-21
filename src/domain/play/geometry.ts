@@ -267,6 +267,71 @@ export function routeToRenderedSegments(route: Route): RenderedSegment[] {
 /*  Route → PathGeometry (compat bridge for print/animation)          */
 /* ------------------------------------------------------------------ */
 
+/** Group path segments by their parent route segment, tagging each group with
+ *  the dash pattern derived from `strokePattern`. Used by print compilers that
+ *  need to emit one `<path>` per route segment so dashed/dotted patterns
+ *  survive into the PDF (a single flattened path can only carry one dash). */
+export type RoutePrintGroup = {
+  segments: PathGeometry["segments"];
+  dash: string | undefined;
+};
+
+export function routeToPrintGroups(route: Route): RoutePrintGroup[] {
+  const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
+  const segTo = new Map<string, RouteSegmentType>();
+  const segFrom = new Map<string, RouteSegmentType>();
+  for (const s of route.segments) {
+    if (!segTo.has(s.toNodeId)) segTo.set(s.toNodeId, s);
+    if (!segFrom.has(s.fromNodeId)) segFrom.set(s.fromNodeId, s);
+  }
+  const groups: RoutePrintGroup[] = [];
+  for (const seg of route.segments) {
+    const from = nodeMap.get(seg.fromNodeId);
+    const to = nodeMap.get(seg.toNodeId);
+    if (!from || !to) continue;
+    const dash = strokePatternToDash(seg.strokePattern);
+    const segments: PathGeometry["segments"] = [];
+    if (seg.strokePattern === "motion") {
+      const pts = zigzagPoints(from.position, to.position);
+      for (let i = 0; i < pts.length - 1; i++) {
+        segments.push({ type: "line", from: pts[i], to: pts[i + 1], kind: "clicked" });
+      }
+    } else if (seg.shape === "curve") {
+      let ctrl: Point2;
+      if (seg.controlOffset) {
+        ctrl = seg.controlOffset;
+      } else {
+        const prevSeg = segTo.get(seg.fromNodeId);
+        const nextSeg = segFrom.get(seg.toNodeId);
+        const prevNode = prevSeg ? nodeMap.get(prevSeg.fromNodeId) : undefined;
+        const nextNode = nextSeg ? nodeMap.get(nextSeg.toNodeId) : undefined;
+        ctrl = catmullRomQuadControl(
+          prevNode?.position ?? null,
+          from.position,
+          to.position,
+          nextNode?.position ?? null,
+        );
+      }
+      segments.push({
+        type: "quadratic",
+        from: from.position,
+        control: ctrl,
+        to: to.position,
+        kind: "clicked",
+      });
+    } else if (seg.shape === "zigzag") {
+      const pts = zigzagPoints(from.position, to.position);
+      for (let i = 0; i < pts.length - 1; i++) {
+        segments.push({ type: "line", from: pts[i], to: pts[i + 1], kind: "clicked" });
+      }
+    } else {
+      segments.push({ type: "line", from: from.position, to: to.position, kind: "clicked" });
+    }
+    if (segments.length > 0) groups.push({ segments, dash });
+  }
+  return groups;
+}
+
 export function routeToPathGeometry(route: Route): PathGeometry {
   const nodeMap = new Map(route.nodes.map((n) => [n.id, n]));
 
