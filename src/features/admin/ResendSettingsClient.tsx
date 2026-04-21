@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { CheckCircle2, CircleAlert } from "lucide-react";
+import { Button, Card, Input, useToast } from "@/components/ui";
 import {
   clearResendConfigAction,
   getResendStatusAction,
@@ -17,183 +19,100 @@ type Initial = {
 };
 
 export function ResendSettingsClient({ initial }: { initial: Initial }) {
+  const { toast } = useToast();
   const [configured, setConfigured] = useState(initial.configured);
   const [statusLabel, setStatusLabel] = useState(initial.statusLabel);
+  const [savedFromEmail, setSavedFromEmail] = useState(initial.fromEmail ?? "");
+  const [savedContactToEmail, setSavedContactToEmail] = useState(
+    initial.contactToEmail ?? "",
+  );
   const [fromEmail, setFromEmail] = useState(initial.fromEmail ?? "");
   const [contactToEmail, setContactToEmail] = useState(initial.contactToEmail ?? "");
-  const [updatedAt, setUpdatedAt] = useState(initial.updatedAt);
   const [draftKey, setDraftKey] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const dirty =
+    draftKey.trim().length > 0 ||
+    fromEmail.trim() !== savedFromEmail.trim() ||
+    contactToEmail.trim() !== savedContactToEmail.trim();
 
   function refresh() {
     startTransition(async () => {
       const res = await getResendStatusAction();
       if (!res.ok) {
-        setMsg(res.error);
+        toast(res.error, "error");
         return;
       }
       setConfigured(res.configured);
       setStatusLabel(res.statusLabel);
+      setSavedFromEmail(res.fromEmail ?? "");
+      setSavedContactToEmail(res.contactToEmail ?? "");
       setFromEmail(res.fromEmail ?? "");
       setContactToEmail(res.contactToEmail ?? "");
-      setUpdatedAt(res.updatedAt);
     });
   }
 
   return (
-    <div className="space-y-4">
-      <div
-        className={`rounded-2xl px-4 py-3 text-sm ring-1 ${
-          configured
-            ? "bg-emerald-50 text-emerald-950 ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-100 dark:ring-emerald-800"
-            : "bg-pg-chalk text-pg-muted ring-pg-line/80 dark:bg-pg-turf-deep/40 dark:text-pg-muted dark:ring-pg-line/40"
-        }`}
-        role="status"
-      >
-        <p className="font-medium text-pg-ink dark:text-pg-chalk">{statusLabel}</p>
-        {fromEmail && (
-          <p className="mt-1 text-xs opacity-80">
-            From: <span className="font-mono">{fromEmail}</span>
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Resend</h3>
+          <p className="mt-0.5 text-xs text-muted">
+            Powers the contact form. {statusLabel}
           </p>
-        )}
-        {updatedAt && (
-          <p className="mt-1 text-xs opacity-80">
-            Last updated {new Date(updatedAt).toLocaleString()}
-          </p>
-        )}
+        </div>
+        <StatusDot configured={configured} />
       </div>
 
-      {(msg || okMsg) && (
-        <div className="space-y-2">
-          {msg && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-50 dark:ring-amber-800">
-              {msg}
-            </p>
-          )}
-          {okMsg && (
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-950 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-50 dark:ring-emerald-800">
-              {okMsg}
-            </p>
-          )}
-        </div>
-      )}
-
-      <section className="rounded-2xl bg-white p-6 ring-1 ring-pg-line/80 dark:bg-pg-surface dark:ring-pg-line/40">
-        <h2 className="text-lg font-semibold text-pg-ink dark:text-pg-chalk">
-          Resend (contact form email)
-        </h2>
-        <p className="mt-1 text-sm text-pg-muted">
-          Powers the contact-form email. Stored on the server; keys are never shown back in full
-          after saving.
-        </p>
-
-        <label className="mt-4 block text-sm font-medium text-pg-ink dark:text-pg-chalk">
-          API key
-          <input
+      <div className="mt-4 space-y-3">
+        <Field
+          label="API key"
+          hint={configured ? "Leave blank to keep the current key." : undefined}
+        >
+          <Input
             type="password"
             autoComplete="off"
             value={draftKey}
-            onChange={(e) => {
-              setDraftKey(e.target.value);
-              setMsg(null);
-              setOkMsg(null);
-            }}
-            placeholder={configured ? "Leave blank to keep current key" : "re_…"}
-            className="mt-1 w-full max-w-xl rounded-lg border border-pg-line/80 bg-white px-3 py-2 font-mono text-sm text-pg-ink outline-none ring-pg-turf focus:ring-2 dark:border-pg-line/50 dark:bg-pg-turf-deep/40 dark:text-pg-chalk"
+            onChange={(e) => setDraftKey(e.target.value)}
+            placeholder={configured ? "••••••••••••" : "re_…"}
           />
-        </label>
+        </Field>
 
-        <label className="mt-4 block text-sm font-medium text-pg-ink dark:text-pg-chalk">
-          From email (optional)
-          <input
+        <Field
+          label="From address"
+          hint="Leave blank to use onboarding@resend.dev (only delivers to your Resend account email)."
+        >
+          <Input
             type="text"
             autoComplete="off"
             value={fromEmail}
-            onChange={(e) => {
-              setFromEmail(e.target.value);
-              setMsg(null);
-              setOkMsg(null);
-            }}
+            onChange={(e) => setFromEmail(e.target.value)}
             placeholder="PlayGrid <onboarding@resend.dev>"
-            className="mt-1 w-full max-w-xl rounded-lg border border-pg-line/80 bg-white px-3 py-2 font-mono text-sm text-pg-ink outline-none ring-pg-turf focus:ring-2 dark:border-pg-line/50 dark:bg-pg-turf-deep/40 dark:text-pg-chalk"
           />
-          <span className="mt-1 block text-xs text-pg-muted">
-            Leave blank to use <span className="font-mono">onboarding@resend.dev</span> (only
-            delivers to your Resend account email until you verify a domain).
-          </span>
-        </label>
+        </Field>
 
-        <label className="mt-4 block text-sm font-medium text-pg-ink dark:text-pg-chalk">
-          Contact-form recipient
-          <input
+        <Field
+          label="Contact-form recipient"
+          hint="Where messages from the public contact form are delivered."
+        >
+          <Input
             type="email"
             autoComplete="off"
             value={contactToEmail}
-            onChange={(e) => {
-              setContactToEmail(e.target.value);
-              setMsg(null);
-              setOkMsg(null);
-            }}
+            onChange={(e) => setContactToEmail(e.target.value)}
             placeholder="you@yourdomain.com"
-            className="mt-1 w-full max-w-xl rounded-lg border border-pg-line/80 bg-white px-3 py-2 font-mono text-sm text-pg-ink outline-none ring-pg-turf focus:ring-2 dark:border-pg-line/50 dark:bg-pg-turf-deep/40 dark:text-pg-chalk"
           />
-          <span className="mt-1 block text-xs text-pg-muted">
-            Where messages from the public contact form are delivered. Leave blank to fall back to
-            the <span className="font-mono">CONTACT_TO_EMAIL</span> environment variable.
-          </span>
-        </label>
+        </Field>
+      </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={pending || !draftKey.trim()}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            loading={pending}
+            disabled={pending || !dirty}
             onClick={() => {
-              setMsg(null);
-              setOkMsg(null);
-              startTransition(async () => {
-                const res = await testResendKeyAction(draftKey);
-                if (!res.ok) setMsg(res.error);
-                else setOkMsg(res.message);
-              });
-            }}
-            className="rounded-lg bg-pg-turf px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Test key in field
-          </button>
-
-          <button
-            type="button"
-            disabled={pending || !configured}
-            onClick={() => {
-              setMsg(null);
-              setOkMsg(null);
-              startTransition(async () => {
-                const res = await testResendKeyAction();
-                if (!res.ok) setMsg(res.error);
-                else setOkMsg(res.message);
-              });
-            }}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-pg-ink ring-1 ring-pg-line hover:bg-pg-chalk disabled:cursor-not-allowed disabled:opacity-40 dark:text-pg-chalk dark:ring-pg-line/60 dark:hover:bg-pg-turf-deep/40"
-          >
-            Test saved key
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-pg-muted">
-          Test calls Resend&apos;s <span className="font-mono">/domains</span> endpoint (no email
-          sent).
-        </p>
-
-        <div className="mt-6 flex flex-wrap gap-2 border-t border-pg-line/60 pt-6 dark:border-pg-line/30">
-          <button
-            type="button"
-            disabled={
-              pending || (!draftKey.trim() && !fromEmail.trim() && !contactToEmail.trim())
-            }
-            onClick={() => {
-              setMsg(null);
-              setOkMsg(null);
               startTransition(async () => {
                 const res = await saveResendConfigAction({
                   apiKey: draftKey,
@@ -201,82 +120,112 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
                   contactToEmail,
                 });
                 if (!res.ok) {
-                  setMsg(res.error);
+                  toast(res.error, "error");
                   return;
                 }
                 setDraftKey("");
-                setOkMsg("Saved.");
+                toast("Saved.", "success");
                 refresh();
               });
             }}
-            className="rounded-lg bg-pg-turf px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Save
-          </button>
-
-          <button
-            type="button"
-            disabled={pending || !configured}
+            Save changes
+          </Button>
+          <Button
+            size="sm"
+            disabled={pending || (!draftKey.trim() && !configured)}
             onClick={() => {
-              if (!globalThis.confirm("Remove the saved Resend API key and from-address?")) return;
-              setMsg(null);
-              setOkMsg(null);
+              startTransition(async () => {
+                const res = await testResendKeyAction(draftKey);
+                if (!res.ok) toast(res.error, "error");
+                else toast(res.message, "success");
+              });
+            }}
+          >
+            Test key
+          </Button>
+        </div>
+        {configured && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            onClick={() => {
+              if (!globalThis.confirm("Remove all saved Resend settings?")) return;
               startTransition(async () => {
                 const res = await clearResendConfigAction();
                 if (!res.ok) {
-                  setMsg(res.error);
+                  toast(res.error, "error");
                   return;
                 }
-                setOkMsg("Saved settings removed.");
+                setDraftKey("");
+                toast("Resend settings removed.", "success");
                 refresh();
               });
             }}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-red-700 ring-1 ring-red-200 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300 dark:ring-red-900 dark:hover:bg-red-950/40"
+            className="text-danger hover:bg-danger/10 hover:text-danger"
           >
             Remove
-          </button>
-        </div>
-      </section>
+          </Button>
+        )}
+      </div>
 
-      <section className="rounded-2xl bg-white p-6 ring-1 ring-pg-line/80 dark:bg-pg-surface dark:ring-pg-line/40">
-        <h3 className="text-base font-semibold text-pg-ink dark:text-pg-chalk">Setup instructions</h3>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-pg-muted">
+      <details className="mt-4 text-xs text-muted">
+        <summary className="cursor-pointer select-none hover:text-foreground">
+          Setup instructions
+        </summary>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
             Create a free account at{" "}
             <a
               href="https://resend.com"
               target="_blank"
               rel="noreferrer noopener"
-              className="text-pg-turf underline"
+              className="text-primary underline"
             >
               resend.com
-            </a>{" "}
-            using the same email that should receive contact-form messages.
+            </a>
+            .
           </li>
+          <li>Open API Keys → Create API Key. Paste the <code>re_…</code> key above.</li>
+          <li>Leave From address blank until you verify a domain.</li>
+          <li>Test the key, then Save.</li>
           <li>
-            In the Resend dashboard, open <span className="font-medium">API Keys</span> → <span className="font-medium">Create API Key</span>.
-            Copy the key (starts with <span className="font-mono">re_</span>) and paste it into the <span className="font-medium">API key</span> field above.
-          </li>
-          <li>
-            Leave <span className="font-medium">From email</span> blank to start. Resend&apos;s default{" "}
-            <span className="font-mono">onboarding@resend.dev</span> will only deliver to the email
-            tied to your Resend account — which is fine for feedback from the contact form.
-          </li>
-          <li>
-            Click <span className="font-medium">Test key in field</span> to confirm it works, then
-            click <span className="font-medium">Save</span>.
-          </li>
-          <li>
-            (Optional later) Verify a custom domain in Resend → <span className="font-medium">Domains</span>, then set
-            &quot;From email&quot; above to something like{" "}
-            <span className="font-mono">PlayGrid &lt;feedback@yourdomain.com&gt;</span> to send from your own domain.
+            Later: verify a domain to send from your own address (e.g.{" "}
+            <code>feedback@yourdomain.com</code>).
           </li>
         </ol>
-        <p className="mt-3 text-xs text-pg-muted">
-          The contact form reads this config from the database on every submission — no redeploy
-          needed when you change it.
-        </p>
-      </section>
-    </div>
+      </details>
+    </Card>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-foreground">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
+    </label>
+  );
+}
+
+function StatusDot({ configured }: { configured: boolean }) {
+  return configured ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+      <CheckCircle2 className="size-3" /> Configured
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-full bg-surface-inset px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-border">
+      <CircleAlert className="size-3" /> Not set
+    </span>
   );
 }

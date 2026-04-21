@@ -91,7 +91,7 @@ export function SettingsClient({
       )}
 
       {tab === "integrations" && (
-        <div className="space-y-8">
+        <div className="space-y-4">
           {integration.ok ? (
             <OpenAISettingsClient
               initial={{
