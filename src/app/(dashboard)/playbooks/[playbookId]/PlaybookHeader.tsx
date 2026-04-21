@@ -26,6 +26,8 @@ import {
   sendPlaybookInviteEmailAction,
 } from "@/app/actions/invites";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://playgrid.us";
+
 const PALETTE = [
   "#F26522", "#EF4444", "#EAB308", "#22C55E",
   "#3B82F6", "#A855F7", "#EC4899", "#1C1C1E",
@@ -450,7 +452,7 @@ function InviteTeamMemberDialog({
       toast(`Could not create invite: ${res.error}`, "error");
       return;
     }
-    const url = `${window.location.origin}/invite/${res.invite.token}`;
+    const url = `${SITE_URL}/invite/${res.invite.token}`;
     setInviteUrl(url);
   }
 
