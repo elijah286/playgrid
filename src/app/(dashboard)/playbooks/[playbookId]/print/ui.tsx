@@ -50,16 +50,11 @@ type SortKey = "position" | "alpha" | "group" | "tag";
 type TypeFilter = "all" | "offense" | "defense" | "special_teams";
 
 function compareByWristbandNumber(a: PlaybookPrintPackRow, b: PlaybookPrintPackRow) {
-  const ca = (a.nav.wristband_code ?? "").trim();
-  const cb = (b.nav.wristband_code ?? "").trim();
-  if (ca && cb) {
-    const cmp = ca.localeCompare(cb, undefined, { numeric: true, sensitivity: "base" });
-    if (cmp !== 0) return cmp;
-  } else if (ca) {
-    return -1;
-  } else if (cb) {
-    return 1;
-  }
+  const cmp = a.nav.name.localeCompare(b.nav.name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+  if (cmp !== 0) return cmp;
   return a.nav.sort_order - b.nav.sort_order;
 }
 
