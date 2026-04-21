@@ -576,7 +576,11 @@ export function PlayEditorClient({
                 activeWidth={activeWidth}
                 fieldAspect={fieldAspect}
                 fieldBackground={doc.fieldBackground}
-                hideRoutesAndPlayers={anim.phase !== "idle"}
+                animatingPlayerIds={
+                  anim.phase !== "idle"
+                    ? new Set(anim.flats.map((f) => f.carrierPlayerId))
+                    : null
+                }
                 opponentFormation={opponentFormation ?? null}
                 opponentPlayers={opponentPlayers ?? vsSnapshot?.players ?? null}
               />

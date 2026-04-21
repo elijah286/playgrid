@@ -151,9 +151,12 @@ type Props = {
   onAddPlayer?: (position: import("@/domain/play/types").Point2) => void;
   /** Field background color theme */
   fieldBackground?: "green" | "white" | "black" | "gray";
-  /** When true, suppress rendering of routes, route decorations, and player
-   *  tokens. Used when an animation overlay is drawing them instead. */
-  hideRoutesAndPlayers?: boolean;
+  /** Player IDs whose static tokens should be suppressed because an animation
+   *  overlay is drawing them in motion. Routes, decorations, zones, and
+   *  non-animating players all continue to render normally — the overlay only
+   *  replaces the moving tokens and draws a gray trail on top of traversed
+   *  route portions. */
+  animatingPlayerIds?: ReadonlySet<string> | null;
   /** Optional opposing-side formation to render behind the play, in gray. */
   opponentFormation?: import("@/app/actions/formations").SavedFormation | null;
   /** Optional opposing players (from a play or formation) to render as ghosts. */
@@ -215,7 +218,7 @@ export function EditorCanvas({
   mode = "routes",
   onAddPlayer,
   fieldBackground,
-  hideRoutesAndPlayers = false,
+  animatingPlayerIds = null,
   opponentFormation = null,
   opponentPlayers = null,
 }: Props) {
@@ -1291,8 +1294,7 @@ export function EditorCanvas({
       })()}
 
       {/* Coverage zones (defense). Rendered above the field, below routes/players. */}
-      {!hideRoutesAndPlayers &&
-        (doc.layers.zones ?? []).map((z) => {
+      {(doc.layers.zones ?? []).map((z) => {
           const cx = z.center.x * fieldAspect;
           const cy = 1 - z.center.y;
           const w = z.size.w * fieldAspect;
@@ -1478,7 +1480,7 @@ export function EditorCanvas({
         })}
 
       {/* Opponent play ghost overlay (gray players only, no interaction). */}
-      {opponentPlayers && opponentPlayers.length > 0 && !hideRoutesAndPlayers && (
+      {opponentPlayers && opponentPlayers.length > 0 && (
         <g pointerEvents="none" opacity={0.55}>
           {opponentPlayers.map((pl) => {
             const cx = pl.position.x * fieldAspect;
@@ -1514,7 +1516,7 @@ export function EditorCanvas({
       )}
 
       {/* Opponent formation ghost overlay (gray, no routes, no interaction). */}
-      {opponentFormation && !hideRoutesAndPlayers && (
+      {opponentFormation && (
         <g pointerEvents="none" opacity={0.55}>
           {opponentFormation.players.map((pl) => {
             const cx = pl.position.x * fieldAspect;
@@ -1551,36 +1553,7 @@ export function EditorCanvas({
 
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
       <g transform={`scale(${fieldAspect}, 1)`}>
-        {/* During playback, keep the pre-snap motion zig-zag visible so the
-            motion symbol reads at a glance even while the animated overlay
-            draws a straight line along the same vector. */}
-        {hideRoutesAndPlayers && doc.layers.routes.map((route) => {
-          const segById = new Map(route.segments.map((s) => [s.id, s]));
-          const rendered = routeToRenderedSegments(route);
-          const effectiveStroke = resolveRouteStroke(route, doc.layers.players);
-          return (
-            <g key={`motion-${route.id}`}>
-              {rendered.map((rs) => {
-                const seg = segById.get(rs.segmentId);
-                if (seg?.strokePattern !== "motion") return null;
-                return (
-                  <path
-                    key={rs.segmentId}
-                    d={rs.d}
-                    fill="none"
-                    stroke={effectiveStroke}
-                    strokeWidth={route.style.strokeWidth}
-                    strokeDasharray={rs.dash}
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                    pointerEvents="none"
-                  />
-                );
-              })}
-            </g>
-          );
-        })}
-        {!hideRoutesAndPlayers && doc.layers.routes.map((route) => {
+        {doc.layers.routes.map((route) => {
           const isActive = route.id === selectedRouteId && mode !== "formation";
           const isHovered = route.id === hoveredRouteId && !isActive && mode !== "formation";
           // "Whole-route" selection = route selected but no specific segment.
@@ -1869,8 +1842,8 @@ export function EditorCanvas({
         );
       })}
 
-      {/* Players */}
-      {!hideRoutesAndPlayers && doc.layers.players.map((pl) => {
+      {/* Players — suppress tokens that are being animated by the overlay. */}
+      {doc.layers.players.filter((pl) => !animatingPlayerIds?.has(pl.id)).map((pl) => {
         const sel = pl.id === selectedPlayerId;
         const isDragging =
           interaction.type === "dragging_player" && interaction.playerId === pl.id;

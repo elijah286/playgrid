@@ -94,16 +94,21 @@ export function PlayCarousel({ plays, currentId, document, playbookId }: Props) 
               </linearGradient>
             </defs>
             <rect width={1} height={1} fill="url(#mobileFieldGrad)" />
-            {anim.phase === "idle" && document.layers.routes.map((r) => (
+            {document.layers.routes.map((r) => (
               <path
                 key={r.id}
                 d={pathGeometryToSvgD(routeToPathGeometry(r))}
                 fill="none"
                 stroke={resolveRouteStroke(r, document.layers.players)}
                 strokeWidth={0.004}
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             ))}
-            {anim.phase === "idle" && document.layers.players.map((pl) => (
+            {document.layers.players.filter((pl) => {
+              if (anim.phase === "idle") return true;
+              return !anim.flats.some((f) => f.carrierPlayerId === pl.id);
+            }).map((pl) => (
               <g key={pl.id}>
                 <circle
                   cx={pl.position.x}
