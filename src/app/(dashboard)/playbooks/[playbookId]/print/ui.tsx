@@ -595,9 +595,16 @@ export function PrintPlaybookClient({
                                     <span className="truncate font-medium text-foreground">
                                       {r.nav.name}
                                     </span>
-                                    {r.nav.wristband_code && (
-                                      <Badge variant="primary">{r.nav.wristband_code}</Badge>
-                                    )}
+                                    {(() => {
+                                      const pos = playbookPositionById.get(r.id);
+                                      const label =
+                                        pos != null
+                                          ? String(pos).padStart(2, "0")
+                                          : r.nav.wristband_code;
+                                      return label ? (
+                                        <Badge variant="primary">{label}</Badge>
+                                      ) : null;
+                                    })()}
                                   </div>
                                   {r.nav.formation_name && (
                                     <div className="mt-0.5 text-xs text-muted">
