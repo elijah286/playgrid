@@ -219,7 +219,7 @@ function FormationCard({
   );
 }
 
-function FormationThumbnail({ formation }: { formation: SavedFormation }) {
+export function FormationThumbnail({ formation }: { formation: SavedFormation }) {
   const R = 0.032;
   const PAD = R * 1.6;
 

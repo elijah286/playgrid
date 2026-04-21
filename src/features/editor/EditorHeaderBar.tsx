@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
+import { FormationThumbnail } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookFormationsTab";
 import { listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
@@ -400,7 +401,7 @@ function FormationTitlePicker({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
+          <div className="absolute left-0 top-full z-50 mt-1 w-[480px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
             <div className="relative border-b border-border p-2">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
               <input
@@ -439,31 +440,39 @@ function FormationTitlePicker({
                 Unlink formation
               </button>
             )}
-            <ul className="max-h-64 overflow-y-auto py-1 text-sm font-normal">
-              {filtered.map((f) => (
-                <li key={f.id}>
-                  <button
-                    type="button"
-                    onClick={() => pick(f)}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface-inset ${
-                      f.id === currentId ? "text-foreground" : "text-muted"
-                    }`}
-                  >
-                    {f.id === currentId ? (
-                      <Check className="size-3 shrink-0 text-primary" />
-                    ) : (
-                      <span className="size-3 shrink-0" />
-                    )}
-                    <span className="truncate">{f.displayName}</span>
-                  </button>
-                </li>
-              ))}
-              {filtered.length === 0 && (
-                <li className="px-3 py-3 text-center text-xs text-muted">
+            <div className="max-h-[420px] overflow-y-auto p-2">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-6 text-center text-xs text-muted">
                   {q ? "No matches." : "No saved formations"}
-                </li>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {filtered.map((f) => {
+                    const selected = f.id === currentId;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => pick(f)}
+                        className={`flex flex-col gap-1.5 rounded-md border p-1.5 text-left transition-colors ${
+                          selected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary"
+                            : "border-border hover:bg-surface-inset"
+                        }`}
+                      >
+                        <FormationThumbnail formation={f} />
+                        <div className="flex items-center gap-1">
+                          {selected && <Check className="size-3 shrink-0 text-primary" />}
+                          <span className="truncate text-xs font-medium text-foreground">
+                            {f.displayName}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            </ul>
+            </div>
           </div>
         </>
       )}
