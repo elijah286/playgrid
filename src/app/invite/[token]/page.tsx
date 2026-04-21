@@ -1,11 +1,50 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { previewInviteAction } from "@/app/actions/invites";
 import { AuthFlow } from "@/features/auth/AuthFlow";
+import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import type { SportVariant } from "@/domain/play/types";
 import { AcceptInviteButton } from "./ui";
 
 type Props = { params: Promise<{ token: string }> };
+
+function buildInviteTitle(preview: {
+  playbook_name: string;
+  team_name: string | null;
+  sport_variant: string | null;
+  season: string | null;
+}): string {
+  const parts: string[] = [];
+  const team = preview.team_name?.trim();
+  parts.push(team && team.length > 0 ? team : preview.playbook_name);
+  const variantLabel = preview.sport_variant
+    ? SPORT_VARIANT_LABELS[preview.sport_variant as SportVariant]
+    : null;
+  if (variantLabel) parts.push(variantLabel);
+  if (preview.season) parts.push(preview.season);
+  return `You're invited to the Playbook for ${parts.join(" ")}`;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { token } = await params;
+  if (!hasSupabaseEnv()) return { title: "Invite · PlayGrid" };
+  const res = await previewInviteAction(token);
+  if (!res.ok || res.preview.revoked || res.preview.expired) {
+    return { title: "Invite · PlayGrid" };
+  }
+  const title = buildInviteTitle(res.preview);
+  const description = res.preview.head_coach_name
+    ? `Join ${res.preview.head_coach_name}'s playbook on PlayGrid.`
+    : "Join this team's playbook on PlayGrid.";
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: "website" },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 export default async function InvitePage({ params }: Props) {
   const { token } = await params;

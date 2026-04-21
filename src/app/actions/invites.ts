@@ -31,6 +31,7 @@ export type InvitePreview = {
   playbook_name: string;
   team_name: string | null;
   season: string | null;
+  sport_variant: string | null;
   logo_url: string | null;
   color: string | null;
   play_count: number;
