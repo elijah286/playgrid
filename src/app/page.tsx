@@ -57,12 +57,6 @@ export default async function HomePage() {
             Get started
             <ArrowRight className="size-5" />
           </Link>
-          <Link
-            href="/home"
-            className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-6 py-3 text-base font-medium text-white ring-1 ring-white/20 transition-colors hover:bg-white/20"
-          >
-            Open dashboard
-          </Link>
           {examplesEnabled && (
             <Link
               href="/examples"
