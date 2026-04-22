@@ -11,7 +11,7 @@ export type PlaybookViewPrefs = {
   tab?: "plays" | "formations" | "roster" | "staff";
   view?: "active" | "archived";
   typeFilter?: "all" | "offense" | "defense" | "special_teams";
-  groupBy?: "none" | "formation" | "group";
+  groupBy?: "type" | "formation" | "group" | "none";
   viewMode?: "cards" | "list";
   thumbSize?: "small" | "medium" | "large";
   showPlayNumbers?: boolean;

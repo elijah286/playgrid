@@ -98,7 +98,7 @@ import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
 
-type GroupBy = "none" | "formation" | "group";
+type GroupBy = "type" | "formation" | "group";
 
 const UNASSIGNED = "__unassigned__";
 
@@ -205,9 +205,12 @@ export function PlaybookDetailClient({
   const [typeFilter, setTypeFilter] = useState<PlayType | "all">(
     (initialPrefs?.typeFilter as PlayType | "all" | undefined) ?? "all",
   );
-  const [groupBy, setGroupBy] = useState<GroupBy>(
-    (initialPrefs?.groupBy as GroupBy | undefined) ?? "none",
-  );
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+    const raw = initialPrefs?.groupBy;
+    // Legacy "none" migrates to the new default "type" grouping.
+    if (raw === "formation" || raw === "group") return raw;
+    return "type";
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelRef = useRef<HTMLDivElement | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "list">(
@@ -330,9 +333,20 @@ export function PlaybookDetailClient({
       }
     }
 
+    const typeOrder: Record<PlayType, number> = {
+      offense: 0,
+      defense: 1,
+      special_teams: 2,
+    };
+    const typeLabel: Record<PlayType, string> = {
+      offense: "Offense",
+      defense: "Defense",
+      special_teams: "Special Teams",
+    };
     for (const p of filtered) {
-      if (groupBy === "none") {
-        pushInto("__all__", "", 0, p);
+      if (groupBy === "type") {
+        const order = typeOrder[p.play_type] ?? 99;
+        pushInto(p.play_type, typeLabel[p.play_type] ?? p.play_type, order, p);
       } else if (groupBy === "formation") {
         const label = p.formation_name?.trim() || "Unassigned formation";
         pushInto(label.toLowerCase(), label, 0, p);
@@ -351,7 +365,7 @@ export function PlaybookDetailClient({
       const aUn = a.key === UNASSIGNED;
       const bUn = b.key === UNASSIGNED;
       if (aUn !== bUn) return aUn ? 1 : -1;
-      if (groupBy === "group") return a.sortOrder - b.sortOrder;
+      if (groupBy === "group" || groupBy === "type") return a.sortOrder - b.sortOrder;
       return a.label.localeCompare(b.label);
     });
     for (const s of arr) s.plays.sort((a, b) => a.sort_order - b.sort_order);
@@ -536,8 +550,22 @@ export function PlaybookDetailClient({
 
   // Live-reorder the in-memory list so other rows slide into place while the
   // user is still dragging. Commits to the server on drop via commitPlayOrder.
+  //
+  // Throttled: after a swap, the moved tile sits under the cursor, and any
+  // cross-border jitter would immediately trigger the reverse swap — classic
+  // flip-flop. We gate subsequent swaps behind a short cooldown and suppress
+  // the exact inverse until the cursor moves to a different target.
+  const lastSwapAtRef = useRef(0);
+  const lastSwapPairRef = useRef<{ source: string; target: string } | null>(null);
+  const SWAP_COOLDOWN_MS = 90;
   function reorderLocal(sourceId: string, targetId: string) {
     if (sourceId === targetId) return;
+    const now = Date.now();
+    if (now - lastSwapAtRef.current < SWAP_COOLDOWN_MS) return;
+    const last = lastSwapPairRef.current;
+    if (last && last.source === targetId && last.target === sourceId) return;
+    lastSwapAtRef.current = now;
+    lastSwapPairRef.current = { source: sourceId, target: targetId };
     setLocalPlays((prev) => {
       const src = prev.findIndex((p) => p.id === sourceId);
       const tgt = prev.findIndex((p) => p.id === targetId);
@@ -545,7 +573,6 @@ export function PlaybookDetailClient({
       const next = [...prev];
       const [moved] = next.splice(src, 1);
       next.splice(tgt, 0, moved);
-      // Rewrite sort_order to match new positions so the sections memo reflects it.
       return next.map((p, i) => ({ ...p, sort_order: i }));
     });
   }
@@ -758,7 +785,7 @@ export function PlaybookDetailClient({
               onClick={() => setFiltersOpen((v) => !v)}
               aria-expanded={filtersOpen}
             >
-              {groupBy === "none" && typeFilter === "all" && view === "active"
+              {groupBy === "type" && typeFilter === "all" && view === "active"
                 ? "Filters"
                 : "Filters •"}
             </Button>
@@ -778,11 +805,17 @@ export function PlaybookDetailClient({
                     value={groupBy}
                     onChange={(v) => setGroupBy(v as GroupBy)}
                     options={[
-                      { value: "none", label: "None" },
+                      { value: "type", label: "Type" },
                       { value: "formation", label: "Formation" },
                       { value: "group", label: "Group" },
                     ]}
                   />
+                  <p
+                    className="mt-1.5 text-[11px] leading-snug text-muted"
+                    title="Type groups plays by Offense, Defense, and Special Teams (in that order)."
+                  >
+                    Type groups plays by Offense, Defense, then Special Teams.
+                  </p>
                   {groupBy === "group" && (
                     <button
                       type="button"
@@ -973,7 +1006,7 @@ export function PlaybookDetailClient({
         {/* Section jump pills — only shown when grouping is active and there's
             more than one section. Horizontal scroll on overflow so this stays
             tidy on mobile and doesn't introduce a separate sidebar. */}
-        {groupBy !== "none" && sections.length > 1 && (
+        {sections.length > 1 && (
           <nav
             aria-label="Jump to section"
             className="mb-4 -mx-6 flex gap-1.5 overflow-x-auto px-6 pb-1"
@@ -1118,12 +1151,10 @@ export function PlaybookDetailClient({
                     : undefined
                 }
               >
-                {groupBy !== "none" && (
-                  <div className="flex items-center gap-2 border-b border-border pb-1.5">
-                    <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
-                    <Badge variant="default">{section.plays.length}</Badge>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 border-b border-border pb-1.5">
+                  <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
+                  <Badge variant="default">{section.plays.length}</Badge>
+                </div>
                 {viewMode === "cards" && (
                   <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
 
