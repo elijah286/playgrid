@@ -39,10 +39,10 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
           <Image
             src="/brand/xogridmaker_wordmark.svg"
             alt="xogridmaker"
-            width={160}
-            height={28}
+            width={200}
+            height={36}
             priority
-            className="h-7 w-auto"
+            className="h-9 w-auto"
           />
         </Link>
         {user ? (

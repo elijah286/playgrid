@@ -20,40 +20,8 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-white">
-      {/* Grid backdrop — echoes the logo's play-diagram grid */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #D6DAE0 1px, transparent 1px), linear-gradient(to bottom, #D6DAE0 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-          maskImage:
-            "radial-gradient(ellipse 90% 70% at 50% 40%, #000 50%, transparent 100%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse 90% 70% at 50% 40%, #000 50%, transparent 100%)",
-        }}
-      />
-
-      {/* Soft color bloom accents */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -left-40 top-20 h-[28rem] w-[28rem] rounded-full blur-3xl"
-        style={{ background: `${BRAND_BLUE}18` }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-32 top-40 h-[24rem] w-[24rem] rounded-full blur-3xl"
-        style={{ background: `${BRAND_GREEN}20` }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bottom-0 left-1/3 h-[20rem] w-[20rem] rounded-full blur-3xl"
-        style={{ background: `${BRAND_ORANGE}12` }}
-      />
-
-      <div className="relative mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-center gap-12 px-6 py-20 md:flex-row md:items-center md:gap-12 lg:gap-20">
+    <div className="relative overflow-hidden">
+      <div className="relative mx-auto flex min-h-[calc(100dvh-8rem)] max-w-6xl flex-col items-center gap-10 px-6 py-16 md:flex-row md:items-center md:gap-12 lg:gap-16">
         {/* Left: headline + CTAs */}
         <div className="flex-1">
           <div
@@ -134,15 +102,16 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Right: the logo as a hero visual */}
-        <div className="flex flex-1 items-center justify-center">
+        {/* Right: the logo as a hero visual — smaller than viewport so it sits
+            beside the copy on md+ instead of dropping below the fold. */}
+        <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">
           <Image
             src="/brand/xogridmaker_icon.svg"
             alt="xogridmaker"
-            width={900}
-            height={660}
+            width={850}
+            height={620}
             priority
-            className="h-auto w-full max-w-[640px] drop-shadow-[0_30px_60px_rgba(23,105,255,0.18)]"
+            className="h-auto w-full max-w-[320px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
           />
         </div>
       </div>

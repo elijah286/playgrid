@@ -4,6 +4,7 @@ import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { FieldBackdrop } from "@/components/layout/FieldBackdrop";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import PageViewTracker from "@/components/PageViewTracker";
@@ -122,6 +123,7 @@ export default function RootLayout({
       </head>
       <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans">
         <ThemeProvider>
+          <FieldBackdrop />
           <ToastProvider>
             <ConfigBanner />
             <SiteHeader />
