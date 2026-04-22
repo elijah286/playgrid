@@ -41,7 +41,7 @@ const TIERS: TierDef[] = [
   },
   {
     id: "coach",
-    name: "Coach",
+    name: "Team Coach",
     tagline: "For head coaches running a real program.",
     price: { month: 9, year: 99 },
     features: [
@@ -53,15 +53,15 @@ const TIERS: TierDef[] = [
       "Share notes",
       "Collaborate with assistants",
     ],
-    cta: "Upgrade to Coach",
+    cta: "Upgrade to Team Coach",
   },
   {
     id: "coach_ai",
-    name: "Coach AI",
-    tagline: "Coach + AI tools to move faster.",
+    name: "Team Coach AI",
+    tagline: "Team Coach + AI tools to move faster.",
     price: { month: 25, year: 200 },
     features: [
-      "Everything in Coach",
+      "Everything in Team Coach",
       "AI play suggestions (coming soon)",
       "Scouting report generation",
       "Automatic tagging",
@@ -112,7 +112,20 @@ export function PricingClient({
       window.location.href = "/login?mode=signup";
       return;
     }
+    // Free-tier button when the user is on a paid plan means "downgrade";
+    // route them through the billing portal where Stripe handles it.
     if (t.id === "free") {
+      if (isPaid) {
+        startTransition(async () => {
+          const res = await createBillingPortalSessionAction();
+          if (!res.ok) {
+            setErr(res.error);
+            return;
+          }
+          window.location.href = res.url;
+        });
+        return;
+      }
       window.location.href = "/home";
       return;
     }
@@ -198,30 +211,58 @@ export function PricingClient({
               </ul>
 
               <div className="mt-auto">
-                {isAuthed && isCurrent ? (
-                  <button
-                    type="button"
-                    onClick={() => choose(t)}
-                    disabled={pending || (isCurrent && !isPaid)}
-                    className="w-full rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isPaid ? "Manage billing" : "Current plan"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => choose(t)}
-                    disabled={pending}
-                    className={cn(
-                      "w-full rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50",
-                      !isAuthed || t.id !== "free"
-                        ? "bg-primary text-white hover:bg-primary-hover"
-                        : "border border-border text-foreground hover:bg-surface",
-                    )}
-                  >
-                    {!isAuthed && t.id === "free" ? "Get started" : t.cta}
-                  </button>
-                )}
+                {(() => {
+                  // Unauthed: always "Get started" (orange) → signup.
+                  if (!isAuthed) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => choose(t)}
+                        disabled={pending}
+                        className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        Get started
+                      </button>
+                    );
+                  }
+                  // Authed, viewing current plan.
+                  if (isCurrent) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => choose(t)}
+                        disabled={pending || !isPaid}
+                        className="w-full rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isPaid ? "Manage billing" : "Current plan"}
+                      </button>
+                    );
+                  }
+                  // Authed, viewing free while on a paid plan = Downgrade.
+                  if (t.id === "free" && isPaid) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => choose(t)}
+                        disabled={pending}
+                        className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        Downgrade
+                      </button>
+                    );
+                  }
+                  // Authed, paid tier they don't have = Upgrade (orange).
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => choose(t)}
+                      disabled={pending}
+                      className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {t.cta}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           );
