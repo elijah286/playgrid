@@ -113,7 +113,7 @@ export function BillingAdminClient({
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
           >
             <Plus className="size-3.5" /> New code
           </button>
@@ -318,7 +318,7 @@ function CreateGiftCodeModal({
             type="button"
             onClick={submit}
             disabled={pending}
-            className="rounded-md bg-foreground px-3 py-1.5 text-sm text-background hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
           >
             Create
           </button>
