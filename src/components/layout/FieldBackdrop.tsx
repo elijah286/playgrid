@@ -1,3 +1,7 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+
 /**
  * Site-wide football-field-inspired backdrop.
  *
@@ -10,7 +14,20 @@
  * via Tailwind text utilities. Fixed-positioned, -z-10, pointer-events
  * disabled.
  */
+// Editor routes draw their own field on the canvas — layering the
+// backdrop behind them reads as noise. Suppress on those paths.
+function isEditorPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  if (/^\/plays\/[^/]+\/edit$/.test(pathname)) return true;
+  if (pathname === "/plays/new" || pathname === "/plays/new-preview") return true;
+  if (pathname === "/formations/new") return true;
+  if (/^\/formations\/[^/]+\/edit$/.test(pathname)) return true;
+  return false;
+}
+
 export function FieldBackdrop() {
+  const pathname = usePathname();
+  if (isEditorPath(pathname)) return null;
   return (
     <div
       aria-hidden

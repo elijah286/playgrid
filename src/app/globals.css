@@ -19,7 +19,7 @@
   --color-brand-green: #95CC1F;
   --color-brand-green-hover: #7DAE17;
 
-  --color-surface: #F4F7F1;
+  --color-surface: #FAFAF8;
   --color-surface-raised: #FFFFFF;
   --color-surface-dark: #111318;
   --color-surface-inset: #F3F3F1;
@@ -92,28 +92,7 @@ html.dark {
 body {
   color: var(--color-foreground);
   background-color: var(--color-surface);
-  /* Subtle football-field backdrop: faint horizontal "yard lines" every
-     ~88px with every 5th line slightly darker, over the tinted surface.
-     Cards and editor canvases are opaque, so content stays legible. */
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 159px,
-    rgba(45, 139, 78, 0.05) 159px,
-    rgba(45, 139, 78, 0.05) 160px
-  );
-  background-attachment: fixed;
   font-family: var(--font-sans);
-}
-
-.dark body {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 159px,
-    rgba(149, 204, 31, 0.04) 159px,
-    rgba(149, 204, 31, 0.04) 160px
-  );
 }
 
 /* Smooth focus ring for interactive elements */
