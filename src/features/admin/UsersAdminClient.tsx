@@ -787,11 +787,33 @@ function UserStatsPanel({ userId }: { userId: string }) {
     const rem = m % 60;
     return rem ? `${h}h ${rem}m` : `${h}h`;
   }
+  function firstPlayAge(): string | undefined {
+    if (!stats) return undefined;
+    if (!stats.signupAt) return "—";
+    if (!stats.firstPlayAt) return "never";
+    const ms = new Date(stats.firstPlayAt).getTime() - new Date(stats.signupAt).getTime();
+    if (ms < 0) return "0m";
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 48) return `${hrs}h`;
+    const days = Math.round(hrs / 24);
+    return `${days}d`;
+  }
   const items = [
     { label: "Playbooks owned", value: stats?.playbooksOwned },
     { label: "Playbooks shared", value: stats?.playbooksShared },
     { label: "Plays created", value: stats?.playsCreated },
     { label: "People shared with", value: stats?.peopleSharedWith },
+    { label: "Active days (30d)", value: stats?.activeDaysLast30 },
+    { label: "First-play age", value: firstPlayAge() },
+    {
+      label: "Invites sent",
+      value:
+        stats !== null
+          ? `${stats.invitesAccepted}/${stats.invitesSent}`
+          : undefined,
+    },
     {
       label: "Time on site",
       value: stats ? formatDuration(stats.totalSecondsOnSite) : undefined,
@@ -806,20 +828,51 @@ function UserStatsPanel({ userId }: { userId: string }) {
     },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
-      {items.map((it) => (
-        <div
-          key={it.label}
-          className="rounded-lg border border-border bg-surface px-3 py-2"
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            {it.label}
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
+        {items.map((it) => (
+          <div
+            key={it.label}
+            className="rounded-lg border border-border bg-surface px-3 py-2"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+              {it.label}
+            </p>
+            <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
+              {stats ? (it.value ?? "—") : "—"}
+            </p>
+          </div>
+        ))}
+      </div>
+      {stats && stats.tierHistory.length > 0 && (
+        <div className="rounded-lg border border-border bg-surface px-3 py-2">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            Tier history
           </p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
-            {stats ? it.value : "—"}
-          </p>
+          <ul className="space-y-0.5 text-xs text-foreground">
+            {stats.tierHistory.map((h, i) => {
+              const start = new Date(h.startedAt).toLocaleDateString();
+              const end = h.endedAt
+                ? new Date(h.endedAt).toLocaleDateString()
+                : "now";
+              return (
+                <li key={i} className="tabular-nums">
+                  <span className="font-medium">{TIER_LABELS[h.tier]}</span>{" "}
+                  <span className="rounded bg-surface-inset px-1 text-[10px] uppercase text-muted">
+                    {h.source}
+                  </span>{" "}
+                  <span className="text-muted">
+                    {start} → {end}
+                  </span>
+                  {h.note && (
+                    <span className="ml-2 text-muted">· {h.note}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
-      ))}
+      )}
     </div>
   );
 }

@@ -206,6 +206,18 @@ export type AdminUserStats = {
   peopleSharedWith: number;
   totalSecondsOnSite: number;
   lastActiveAt: string | null;
+  signupAt: string | null;
+  firstPlayAt: string | null;
+  activeDaysLast30: number;
+  invitesSent: number;
+  invitesAccepted: number;
+  tierHistory: Array<{
+    source: "comp" | "stripe";
+    tier: "free" | "coach" | "coach_ai";
+    startedAt: string;
+    endedAt: string | null;
+    note: string | null;
+  }>;
 };
 
 export async function getAdminUserStatsAction(
@@ -260,6 +272,86 @@ export async function getAdminUserStatsAction(
     .eq("id", userId)
     .maybeSingle();
 
+  // Signup + first-play
+  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  const signupAt = authUser?.user?.created_at ?? null;
+  const { data: firstPlayRow } = await admin
+    .from("play_versions")
+    .select("created_at")
+    .eq("created_by", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const firstPlayAt = (firstPlayRow?.created_at as string | null) ?? null;
+
+  // Distinct active days in the last 30
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const { data: activityRows } = await admin
+    .from("user_activity_days")
+    .select("day")
+    .eq("user_id", userId)
+    .gte("day", thirtyDaysAgo);
+  const activeDaysLast30 = (activityRows ?? []).length;
+
+  // Invites sent + accepted (any invite with uses_count > 0 counts as accepted)
+  const { data: inviteRows } = await admin
+    .from("playbook_invites")
+    .select("uses_count, revoked_at")
+    .eq("created_by", userId);
+  const invitesSent = (inviteRows ?? []).length;
+  const invitesAccepted = (inviteRows ?? []).reduce(
+    (n, r) => n + (Number(r.uses_count ?? 0) > 0 ? 1 : 0),
+    0,
+  );
+
+  // Tier history — chronological comp_grants + subscriptions
+  const [{ data: compRows }, { data: subRows }] = await Promise.all([
+    admin
+      .from("comp_grants")
+      .select("tier, granted_at, expires_at, revoked_at, note")
+      .eq("user_id", userId)
+      .order("granted_at", { ascending: true }),
+    admin
+      .from("subscriptions")
+      .select("tier, created_at, updated_at, current_period_end, status")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true }),
+  ]);
+  const tierHistory: AdminUserStats["tierHistory"] = [];
+  for (const g of compRows ?? []) {
+    tierHistory.push({
+      source: "comp",
+      tier: g.tier as "coach" | "coach_ai",
+      startedAt: g.granted_at as string,
+      endedAt:
+        (g.revoked_at as string | null) ??
+        (g.expires_at as string | null) ??
+        null,
+      note: (g.note as string | null) ?? null,
+    });
+  }
+  for (const s of subRows ?? []) {
+    const status = s.status as string;
+    const ended =
+      status === "canceled" ||
+      status === "incomplete_expired" ||
+      status === "unpaid";
+    tierHistory.push({
+      source: "stripe",
+      tier: s.tier as "coach" | "coach_ai",
+      startedAt: s.created_at as string,
+      endedAt: ended
+        ? ((s.updated_at as string | null) ??
+          (s.current_period_end as string | null) ??
+          null)
+        : null,
+      note: status,
+    });
+  }
+  tierHistory.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+
   return {
     ok: true,
     stats: {
@@ -269,6 +361,12 @@ export async function getAdminUserStatsAction(
       peopleSharedWith: peopleSet.size,
       totalSecondsOnSite: Number(profileRow?.total_seconds_on_site ?? 0),
       lastActiveAt: (profileRow?.last_active_at as string | null) ?? null,
+      signupAt,
+      firstPlayAt,
+      activeDaysLast30,
+      invitesSent,
+      invitesAccepted,
+      tierHistory,
     },
   };
 }
