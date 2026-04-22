@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import {
   getExamplesUserId,
   setExamplesUserId,
@@ -144,4 +145,137 @@ export async function setPlaybookPublicExampleAction(
   revalidatePath("/examples");
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const, isPublicExample };
+}
+
+/**
+ * Deep-copy any playbook the admin can read into the examples user's
+ * workspace so the admin can adapt it as a public example. Copies the
+ * playbook metadata, all non-archived plays, and their current version
+ * documents. The copy starts as a private draft (is_public_example=false)
+ * and is owned by the examples user.
+ *
+ * Runs entirely through the service role client — admins don't have RLS
+ * grants to read arbitrary other users' playbooks via their normal
+ * session, and writes against the examples user's workspace need to
+ * bypass membership checks anyway.
+ */
+export async function duplicatePlaybookToExamplesAction(
+  sourcePlaybookId: string,
+  newName?: string,
+) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const examplesUserId = await getExamplesUserId();
+  if (!examplesUserId) {
+    return {
+      ok: false as const,
+      error: "No examples user is configured.",
+    };
+  }
+
+  const svc = createServiceRoleClient();
+
+  const { data: src, error: srcErr } = await svc
+    .from("playbooks")
+    .select(
+      "id, name, sport_variant, custom_offense_count, color, logo_url, season, settings",
+    )
+    .eq("id", sourcePlaybookId)
+    .maybeSingle();
+  if (srcErr) return { ok: false as const, error: srcErr.message };
+  if (!src) return { ok: false as const, error: "Source playbook not found." };
+
+  let targetTeamId: string;
+  try {
+    const ws = await ensureDefaultWorkspace(svc, examplesUserId);
+    targetTeamId = ws.teamId;
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Could not resolve examples workspace.",
+    };
+  }
+
+  const { data: newBook, error: pbErr } = await svc
+    .from("playbooks")
+    .insert({
+      team_id: targetTeamId,
+      name: (newName?.trim() || `${src.name} (example)`).slice(0, 120),
+      sport_variant: src.sport_variant,
+      custom_offense_count: src.custom_offense_count,
+      color: src.color,
+      logo_url: src.logo_url,
+      season: src.season,
+      settings: src.settings,
+      is_public_example: false,
+    })
+    .select("id")
+    .single();
+  if (pbErr || !newBook) {
+    return { ok: false as const, error: pbErr?.message ?? "Failed to create copy." };
+  }
+
+  await svc
+    .from("playbook_members")
+    .insert({ playbook_id: newBook.id, user_id: examplesUserId, role: "owner" });
+
+  const { data: plays, error: playsErr } = await svc
+    .from("plays")
+    .select(
+      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id",
+    )
+    .eq("playbook_id", sourcePlaybookId)
+    .eq("is_archived", false);
+  if (playsErr) return { ok: false as const, error: playsErr.message };
+
+  for (const p of plays ?? []) {
+    const { data: newPlay, error: insErr } = await svc
+      .from("plays")
+      .insert({
+        playbook_id: newBook.id,
+        name: p.name,
+        shorthand: p.shorthand,
+        wristband_code: p.wristband_code,
+        mnemonic: p.mnemonic,
+        display_abbrev: p.display_abbrev,
+        formation_name: p.formation_name,
+        concept: p.concept,
+        tags: p.tags ?? (p.tag ? [p.tag] : []),
+        tag: p.tag,
+      })
+      .select("id")
+      .single();
+    if (insErr || !newPlay) continue;
+
+    if (!p.current_version_id) continue;
+    const { data: srcVer } = await svc
+      .from("play_versions")
+      .select("document")
+      .eq("id", p.current_version_id)
+      .maybeSingle();
+    if (!srcVer) continue;
+
+    const { data: newVer } = await svc
+      .from("play_versions")
+      .insert({
+        play_id: newPlay.id,
+        schema_version: 1,
+        document: srcVer.document,
+        label: "copied",
+        created_by: examplesUserId,
+      })
+      .select("id")
+      .single();
+    if (newVer) {
+      await svc
+        .from("plays")
+        .update({ current_version_id: newVer.id })
+        .eq("id", newPlay.id);
+    }
+  }
+
+  revalidatePath("/home");
+  revalidatePath(`/playbooks/${newBook.id}`);
+  return { ok: true as const, id: newBook.id };
 }

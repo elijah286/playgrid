@@ -13,6 +13,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 import { getExamplesUserId } from "@/lib/site/examples-config";
 import { PublishExampleControl } from "@/features/admin/PublishExampleControl";
+import { DuplicateToExamplesControl } from "@/features/admin/DuplicateToExamplesControl";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -106,11 +107,14 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const canShare = viewerRole === "owner" || viewerRole === "editor";
   const viewerIsCoach = tierAtLeast(await getCurrentEntitlement(), "coach");
 
-  // Render the "publish to /examples" control only for admins looking at a
-  // playbook owned by the configured examples author. The fetch is cheap
-  // and the result is usually null; skip the owner lookup when there's no
-  // examples user configured.
+  // Admins see one of two controls when an examples author is configured:
+  //   * If the playbook is already owned by the examples user → a
+  //     Publish/Draft toggle so they can push it onto /examples.
+  //   * Otherwise → a Duplicate-into-examples button so they can fork
+  //     their own (or any accessible) playbook into the examples
+  //     author's workspace and tweak it there.
   let showPublishExampleControl = false;
+  let showDuplicateToExamplesControl = false;
   const isPublicExample = Boolean(
     (book as unknown as { is_public_example?: boolean | null })
       .is_public_example,
@@ -130,8 +134,11 @@ export default async function PlaybookDetailPage({ params }: Props) {
           .eq("playbook_id", playbookId)
           .eq("role", "owner")
           .maybeSingle();
-        if ((ownerRow?.user_id as string | null) === examplesUserId) {
+        const ownerId = (ownerRow?.user_id as string | null) ?? null;
+        if (ownerId === examplesUserId) {
           showPublishExampleControl = true;
+        } else {
+          showDuplicateToExamplesControl = true;
         }
       }
     }
@@ -143,6 +150,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
       <PublishExampleControl
         playbookId={playbookId}
         initialPublished={isPublicExample}
+      />
+    )}
+    {showDuplicateToExamplesControl && (
+      <DuplicateToExamplesControl
+        playbookId={playbookId}
+        playbookName={book.name as string}
       />
     )}
     <PlaybookDetailClient
