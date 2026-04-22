@@ -17,12 +17,15 @@ import {
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
 import { FormationThumbnail } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookFormationsTab";
-import { listPlaybookPlaysForNavigationAction } from "@/app/actions/plays";
+import {
+  listPlaybookPlaysForNavigationAction,
+  swapPlaySortOrderAction,
+} from "@/app/actions/plays";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { Button, Input } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
-import { PlayNumberBadge } from "./PlayNumberBadge";
+import { EditablePlayNumberBadge } from "./PlayNumberBadge";
 
 type Props = {
   playId: string;
@@ -100,7 +103,30 @@ export function EditorHeaderBar({
           Playbook
         </Link>
 
-        {playNumber != null && <PlayNumberBadge value={playNumber} />}
+        {playNumber != null && (
+          <EditablePlayNumberBadge
+            value={playNumber}
+            max={nav.length}
+            disabled={!canEdit}
+            onChange={(target) => {
+              const targetPlay = nav[target - 1];
+              if (!targetPlay || targetPlay.id === playId) return;
+              startTransition(async () => {
+                const res = await swapPlaySortOrderAction(
+                  playbookId,
+                  playId,
+                  targetPlay.id,
+                );
+                if (!res.ok) return;
+                const refreshed = await listPlaybookPlaysForNavigationAction(playbookId);
+                if (refreshed.ok) {
+                  setNav(refreshed.plays);
+                  setGroups(refreshed.groups);
+                }
+              });
+            }}
+          />
+        )}
 
         {editingName ? (
           <Input

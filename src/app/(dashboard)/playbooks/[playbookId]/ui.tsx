@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
-import { PlayNumberBadge } from "@/features/editor/PlayNumberBadge";
+import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -227,8 +227,6 @@ export function PlaybookDetailClient({
     setLocalPlays(initialPlays);
   }, [initialPlays]);
   const [draggingPlayId, setDraggingPlayId] = useState<string | null>(null);
-  const [editingNumberPlayId, setEditingNumberPlayId] = useState<string | null>(null);
-  const [numberInputValue, setNumberInputValue] = useState<string>("");
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -545,8 +543,6 @@ export function PlaybookDetailClient({
   // Swap a play's position with whichever play currently holds target1Based.
   // Only the two affected rows' sort_order change; everyone else stays put.
   function renumberPlay(sourceId: string, target1Based: number) {
-    setEditingNumberPlayId(null);
-    setNumberInputValue("");
     const viewedOrdered = [...viewed].sort((a, b) => a.sort_order - b.sort_order);
     const tgtIdx = Math.max(0, Math.min(viewedOrdered.length - 1, target1Based - 1));
     const target = viewedOrdered[tgtIdx];
@@ -1144,8 +1140,12 @@ export function PlaybookDetailClient({
                           </div>
                         )}
                         {showPlayNumbers && position != null && !selectionMode && (
-                          <div className="pointer-events-none absolute left-2 bottom-2 z-10">
-                            <PlayNumberBadge value={position} />
+                          <div className="absolute left-2 bottom-2 z-10">
+                            <EditablePlayNumberBadge
+                              value={position}
+                              max={localPlays.length}
+                              onChange={(n) => renumberPlay(p.id, n)}
+                            />
                           </div>
                         )}
                         <Link
@@ -1243,48 +1243,12 @@ export function PlaybookDetailClient({
                           </span>
                         )}
                         {showPlayNumbers && position != null && (
-                          editingNumberPlayId === p.id ? (
-                            <input
-                              type="number"
-                              min={1}
-                              max={localPlays.length}
-                              autoFocus
-                              value={numberInputValue}
-                              onChange={(e) => setNumberInputValue(e.target.value)}
-                              onBlur={() => {
-                                const n = parseInt(numberInputValue, 10);
-                                if (Number.isFinite(n) && n >= 1) renumberPlay(p.id, n);
-                                else {
-                                  setEditingNumberPlayId(null);
-                                  setNumberInputValue("");
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  (e.currentTarget as HTMLInputElement).blur();
-                                } else if (e.key === "Escape") {
-                                  e.preventDefault();
-                                  setEditingNumberPlayId(null);
-                                  setNumberInputValue("");
-                                }
-                              }}
-                              className="h-[22px] w-14 shrink-0 rounded-[4px] bg-primary px-1.5 text-center font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white outline-none ring-2 ring-primary/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                          ) : (
-                            <span
-                              className="shrink-0 cursor-text"
-                              title="Double-click to renumber"
-                              onDoubleClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setEditingNumberPlayId(p.id);
-                                setNumberInputValue(String(position));
-                              }}
-                            >
-                              <PlayNumberBadge value={position} />
-                            </span>
-                          )
+                          <EditablePlayNumberBadge
+                            value={position}
+                            max={localPlays.length}
+                            onChange={(n) => renumberPlay(p.id, n)}
+                            className="shrink-0"
+                          />
                         )}
                         {selectionMode && (
                           <button

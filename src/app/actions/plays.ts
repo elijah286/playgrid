@@ -755,6 +755,15 @@ export async function renamePlayAction(playId: string, name: string) {
     }
   }
 
+  const { data: row } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("id", playId)
+    .maybeSingle();
+  if (row?.playbook_id) {
+    revalidatePath(`/playbooks/${row.playbook_id}`);
+  }
+
   return { ok: true as const };
 }
 
