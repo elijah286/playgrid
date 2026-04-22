@@ -115,10 +115,8 @@ export async function listPlaysAction(
     return { ok: false, error: "Supabase is not configured.", plays: [], groups: [], truncated: false };
   }
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in.", plays: [], groups: [], truncated: false };
+  // No explicit user check — RLS scopes visible plays to members + public
+  // examples, so anon visitors viewing a published example see its plays.
 
   let playsQ = supabase
     .from("plays")
@@ -327,10 +325,8 @@ export async function getPlayForEditorAction(playId: string) {
     return { ok: false as const, error: "Supabase is not configured." };
   }
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
+  // No auth gate — RLS scopes which plays the caller can see, including
+  // the anon-accessible rows on public example playbooks.
 
   const { data: play, error } = await supabase
     .from("plays")
@@ -1122,10 +1118,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
     return { ok: false as const, error: "Supabase is not configured.", plays: [], groups: [] };
   }
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in.", plays: [], groups: [] };
+  // No auth gate — RLS covers access to private vs public-example data.
 
   const [{ data: groups, error: gErr }, { data: rows, error: pErr }] = await Promise.all([
     supabase

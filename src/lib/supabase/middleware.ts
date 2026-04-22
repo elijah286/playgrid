@@ -23,6 +23,11 @@ const PUBLIC_PREFIXES = [
   "/api/contact",
   "/api/health",
   "/monitoring", // Sentry tunnel
+  // Example playbook viewing — pages enforce their own anon/member check
+  // against the `is_public_example` flag, so anon visitors don't bounce.
+  "/playbooks/",
+  "/plays/",
+  "/formations/new",
 ];
 
 function isPublicPath(pathname: string): boolean {

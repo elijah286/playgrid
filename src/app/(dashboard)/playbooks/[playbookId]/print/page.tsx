@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FlaskConical, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { loadPlaybookPrintPackAction } from "@/app/actions/plays";
@@ -27,26 +27,42 @@ export default async function PlaybookPrintPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, logo_url, color")
+    .select("id, name, season, sport_variant, logo_url, color, is_example, is_public_example")
     .eq("id", playbookId)
     .single();
 
   if (error || !book) notFound();
 
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser();
+  let isMember = false;
+  if (currentUser) {
+    const { data: membership } = await supabase
+      .from("playbook_members")
+      .select("role")
+      .eq("playbook_id", playbookId)
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    isMember = membership?.role != null;
+  }
+  const isExamplePreview =
+    !isMember && Boolean(book.is_example || book.is_public_example);
+
+  if (isExamplePreview) {
+    return <PrintPreviewLockedCard playbookName={book.name as string} playbookId={playbookId} />;
+  }
+
   const pack = await loadPlaybookPrintPackAction(playbookId);
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   let coachName: string | null = null;
-  if (user) {
+  if (currentUser) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("display_name")
-      .eq("id", user.id)
+      .eq("id", currentUser.id)
       .maybeSingle();
-    coachName = (profile?.display_name as string | null) || user.email || null;
+    coachName = (profile?.display_name as string | null) || currentUser.email || null;
   }
 
   const variantLabel =
@@ -88,6 +104,59 @@ export default async function PlaybookPrintPage({ params }: Props) {
           await getPlaybookOwnerEntitlement(playbookId),
         )}
       />
+    </div>
+  );
+}
+
+function PrintPreviewLockedCard({
+  playbookName,
+  playbookId,
+}: {
+  playbookName: string;
+  playbookId: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href={`/playbooks/${playbookId}`}
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="size-4" />
+          {playbookName}
+        </Link>
+        <h1 className="text-lg font-extrabold tracking-tight text-foreground">
+          Print playbook
+        </h1>
+      </div>
+      <div className="rounded-2xl border border-border bg-surface-raised p-10 text-center shadow-sm">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Printer className="size-6" />
+        </div>
+        <h2 className="mt-4 text-xl font-extrabold tracking-tight text-foreground">
+          Get started with your first playbook
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+          Printing, wristband cards, and practice packs are part of your own
+          playbook. This is just an example — create your own in under a
+          minute and print from there.
+        </p>
+        <div className="mt-5 flex items-center justify-center gap-2">
+          <Link
+            href="/home"
+            className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
+          >
+            Create your playbook
+          </Link>
+          <Link
+            href={`/playbooks/${playbookId}`}
+            className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <FlaskConical className="size-4" />
+            Keep exploring
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

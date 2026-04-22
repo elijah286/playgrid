@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
@@ -6,6 +5,9 @@ import { TimeOnSiteTracker } from "@/components/TimeOnSiteTracker";
 import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
 import { userHasCreatedPlayAction } from "@/app/actions/plays";
 
+// Auth is not enforced at the layout level — anon visitors may reach
+// the play editor when the play belongs to a public example playbook.
+// Pages enforce auth themselves if they require it.
 export default async function EditorLayout({ children }: { children: React.ReactNode }) {
   if (!hasSupabaseEnv()) {
     return <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>;
@@ -15,11 +17,10 @@ export default async function EditorLayout({ children }: { children: React.React
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const [feedbackEnabled, hasCreatedPlay] = await Promise.all([
     getFeedbackWidgetEnabled(),
-    userHasCreatedPlayAction(),
+    user ? userHasCreatedPlayAction() : Promise.resolve(false),
   ]);
 
   return (

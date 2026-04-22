@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
@@ -8,6 +7,9 @@ import { userHasCreatedPlayAction } from "@/app/actions/plays";
 import { getExpirationNotice } from "@/lib/billing/expiration-notice";
 import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 
+// Auth is NOT enforced here. Anon visitors may reach example-playbook
+// pages under this layout (e.g. /playbooks/[id] for a public example);
+// pages that require auth call `redirect("/login")` themselves.
 export default async function DashboardLayout({
   children,
 }: {
@@ -29,14 +31,10 @@ export default async function DashboardLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
-
   const [feedbackEnabled, hasCreatedPlay, expirationNotice] = await Promise.all([
     getFeedbackWidgetEnabled(),
-    userHasCreatedPlayAction(),
-    getExpirationNotice(),
+    user ? userHasCreatedPlayAction() : Promise.resolve(false),
+    user ? getExpirationNotice() : Promise.resolve(null),
   ]);
 
   return (

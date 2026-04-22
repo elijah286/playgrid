@@ -33,7 +33,9 @@ export async function listFormationsAction(): Promise<
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // Anon visitors viewing a public example have no workspace — return
+  // empty rather than failing so downstream lookups degrade gracefully.
+  if (!user) return { ok: true, formations: [] };
 
   let teamId: string | undefined;
   try {
@@ -278,8 +280,8 @@ export async function listFormationsForPlaybookAction(
 ): Promise<{ ok: true; formations: SavedFormation[] } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
+  // No auth gate — RLS already scopes formation visibility to the
+  // caller's team or public examples.
 
   const { data: pb, error: pbErr } = await supabase
     .from("playbooks")
