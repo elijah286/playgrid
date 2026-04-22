@@ -14,6 +14,7 @@ import {
   getStripeConfigStatusAction,
   listGiftCodesAction,
 } from "@/app/actions/admin-billing";
+import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
     feedbackWidgetRes,
     giftCodesRes,
     stripeStatusRes,
+    coachAiEnabled,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -39,6 +41,7 @@ export default async function SettingsPage() {
     getFeedbackWidgetEnabledAction(),
     listGiftCodesAction(),
     getStripeConfigStatusAction(),
+    getCoachAiTierEnabled(),
   ]);
 
   return (
@@ -105,6 +108,7 @@ export default async function SettingsPage() {
                 },
               }
         }
+        initialCoachAiEnabled={coachAiEnabled}
       />
     </div>
   );

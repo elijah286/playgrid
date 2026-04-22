@@ -88,7 +88,14 @@ function annualSavings(tier: TierDef): number | null {
   return pct > 0 ? pct : null;
 }
 
-export function PricingClient({ entitlement }: { entitlement: Entitlement | null }) {
+export function PricingClient({
+  entitlement,
+  showCoachAi,
+}: {
+  entitlement: Entitlement | null;
+  showCoachAi: boolean;
+}) {
+  const tiers = showCoachAi ? TIERS : TIERS.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -139,8 +146,13 @@ export function PricingClient({ entitlement }: { entitlement: Entitlement | null
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {TIERS.map((t) => {
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4",
+          tiers.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2 max-w-3xl mx-auto",
+        )}
+      >
+        {tiers.map((t) => {
           const isCurrent = t.id === currentTier;
           const suffix = priceSuffix(t, interval);
           const savings = interval === "year" ? annualSavings(t) : null;
