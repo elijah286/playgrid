@@ -242,7 +242,9 @@ export function PlaybookDetailClient({
   // itself is the feedback.
   const [isReordering, setIsReordering] = useState(false);
   const [highlightPlayId, setHighlightPlayId] = useState<string | null>(null);
-  const registerFlipNode = useFlipReorder(localPlays.map((p) => p.id));
+  const { register: registerFlipNode, snap: snapFlip } = useFlipReorder(
+    localPlays.map((p) => p.id),
+  );
 
   // Debounced server save. Skips the very first effect run so we don't
   // save on mount (state already equals server state). Also skips the
@@ -1168,12 +1170,20 @@ export function PlaybookDetailClient({
                                 if (!draggingPlayId) return;
                                 e.preventDefault();
                                 e.stopPropagation();
+                                snapFlip();
                                 setDraggingPlayId(null);
                                 commitPlayOrder();
                               }
                             : undefined
                         }
-                        onDragEnd={canReorder ? () => setDraggingPlayId(null) : undefined}
+                        onDragEnd={
+                          canReorder
+                            ? () => {
+                                snapFlip();
+                                setDraggingPlayId(null);
+                              }
+                            : undefined
+                        }
                         onClick={
                           selectionMode
                             ? (e) => {
@@ -1284,12 +1294,20 @@ export function PlaybookDetailClient({
                                 if (!draggingPlayId) return;
                                 e.preventDefault();
                                 e.stopPropagation();
+                                snapFlip();
                                 setDraggingPlayId(null);
                                 commitPlayOrder();
                               }
                             : undefined
                         }
-                        onDragEnd={canReorder ? () => setDraggingPlayId(null) : undefined}
+                        onDragEnd={
+                          canReorder
+                            ? () => {
+                                snapFlip();
+                                setDraggingPlayId(null);
+                              }
+                            : undefined
+                        }
                       >
                         {canReorder && (
                           <span
