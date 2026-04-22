@@ -1,9 +1,49 @@
+import type { Metadata } from "next";
 import { getSharedPlayByTokenAction } from "@/app/actions/share";
 import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
 import { resolveRouteStroke } from "@/domain/play/factory";
 import { Badge } from "@/components/ui";
 
 type Props = { params: Promise<{ token: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { token } = await params;
+  const res = await getSharedPlayByTokenAction(token);
+
+  if (!res.ok) {
+    return {
+      title: "Shared play",
+      description: "This shared play link is no longer available.",
+      robots: { index: false, follow: false },
+    };
+  }
+
+  const m = res.document.metadata;
+  const name = m.coachName || "Shared play";
+  const parts = [m.formationTag || m.formation, m.concept].filter(Boolean);
+  const subtitle = parts.join(" · ");
+  const description = subtitle
+    ? `${subtitle} — shared from xogridmaker.`
+    : "A football play shared from xogridmaker.";
+  const canonical = `/v/${token}`;
+
+  return {
+    title: `${name} — shared play`,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title: `${name} — shared play`,
+      description,
+      url: canonical,
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${name} — shared play`,
+      description,
+    },
+  };
+}
 
 export default async function SharedPlayPage({ params }: Props) {
   const { token } = await params;
