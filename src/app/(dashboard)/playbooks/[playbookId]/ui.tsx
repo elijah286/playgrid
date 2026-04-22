@@ -769,7 +769,7 @@ export function PlaybookDetailClient({
                     ]
               }
             />
-          </div>          <div className="min-w-0 flex-1 sm:max-w-[280px]">
+          </div>          <div className="min-w-0 flex-1">
             <Input
               leftIcon={Search}
               value={q}
