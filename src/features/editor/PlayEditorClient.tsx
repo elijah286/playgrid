@@ -23,6 +23,7 @@ import type {
 import { EditorHeaderBar } from "./EditorHeaderBar";
 import { TagsCard } from "./TagsCard";
 import { useToast, Modal, Button } from "@/components/ui";
+import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
@@ -137,7 +138,8 @@ export function PlayEditorClient({
   const [activeWidth, setActiveWidth] = useState(2.5);
 
   const [isNavPending, startNavTransition] = useTransition();
-  const [, startTransition] = useTransition();
+  const [isDuplicating, startTransition] = useTransition();
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
   // Mobile defaults to view-only so a coach can just watch the play on a
   // phone without tripping over edit controls. Desktop always renders the
@@ -250,8 +252,17 @@ export function PlayEditorClient({
       setDuplicatePrompt(false);
       startTransition(async () => {
         const res = await duplicatePlayAction(playId, { clearNotes });
-        if (!res.ok) toast(res.error, "error");
-        else {
+        if (!res.ok) {
+          if (/Free tier|capped at/i.test(res.error)) {
+            setUpgradeNotice({
+              title: "Free tier is capped at 12 plays per playbook",
+              message:
+                "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
+            });
+          } else {
+            toast(res.error, "error");
+          }
+        } else {
           toast("Play duplicated", "success");
           router.push(`/plays/${res.playId}/edit`);
         }
@@ -783,6 +794,26 @@ export function PlayEditorClient({
           The notes on the original play will not be modified either way.
         </p>
       </Modal>
+
+      <UpgradeModal
+        open={!!upgradeNotice}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
+
+      {isDuplicating && (
+        <div
+          className="fixed inset-0 z-[55] flex items-center justify-center bg-black/40"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3 rounded-xl bg-surface-raised px-4 py-3 text-sm text-foreground shadow-lg ring-1 ring-border">
+            <span className="inline-block size-4 animate-spin rounded-full border-2 border-muted border-t-transparent" />
+            Duplicating play…
+          </div>
+        </div>
+      )}
     </div>
   );
 }
