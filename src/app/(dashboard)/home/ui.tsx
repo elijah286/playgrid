@@ -67,6 +67,23 @@ const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "
 type DashboardView = "preview" | "classic";
 const VIEW_STORAGE_KEY = "dashboard.view";
 
+function usePersistedFlag(key: string): [boolean, (v: boolean) => void] {
+  const [value, setValue] = useState(false);
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating user preference from localStorage
+      if (window.localStorage.getItem(key) === "1") setValue(true);
+    } catch {}
+  }, [key]);
+  const update = (v: boolean) => {
+    setValue(v);
+    try {
+      window.localStorage.setItem(key, v ? "1" : "0");
+    } catch {}
+  };
+  return [value, update];
+}
+
 function useDashboardView(): [DashboardView, (v: DashboardView) => void] {
   const [view, setView] = useState<DashboardView>("preview");
   useEffect(() => {
@@ -928,8 +945,12 @@ export function DashboardClient({
   const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
   const [storedView, setView] = useDashboardView();
   const view: DashboardView = hideAnimation ? "classic" : storedView;
-  const [showArchived, setShowArchived] = useState(false);
-  const [showExamples, setShowExamples] = useState(false);
+  const [showArchived, setShowArchived] = usePersistedFlag(
+    "dashboard.showArchived",
+  );
+  const [showExamples, setShowExamples] = usePersistedFlag(
+    "dashboard.showExamples",
+  );
 
   const ownedAll = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const sharedAll = data.playbooks.filter((b) => b.role !== "owner");
