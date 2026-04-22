@@ -878,6 +878,7 @@ export type DashboardPlaybookTile = {
    *  free cap (keeps content visible but read-only). Shared playbooks from
    *  Coach+ owners are never locked. */
   is_locked: boolean;
+  is_archived: boolean;
   previews: {
     players: Player[];
     routes: Route[];
@@ -969,7 +970,6 @@ export async function getDashboardSummaryAction(): Promise<
       "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, allow_coach_duplication, allow_player_duplication, plays(count))",
     )
     .eq("user_id", user.id)
-    .eq("playbooks.is_archived", false)
     .eq("playbooks.plays.is_archived", false);
 
   if (memErr) return { ok: false, error: memErr.message };
@@ -978,6 +978,7 @@ export async function getDashboardSummaryAction(): Promise<
     id: string;
     name: string;
     is_default: boolean;
+    is_archived: boolean | null;
     updated_at: string | null;
     logo_url: string | null;
     color: string | null;
@@ -1010,6 +1011,7 @@ export async function getDashboardSummaryAction(): Promise<
         allow_coach_duplication: b.allow_coach_duplication ?? true,
         allow_player_duplication: b.allow_player_duplication ?? true,
         is_locked: false,
+        is_archived: Boolean(b.is_archived),
         previews: [],
       } as DashboardPlaybookTile;
     })

@@ -888,10 +888,14 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [view, setView] = useDashboardView();
+  const [showArchived, setShowArchived] = useState(false);
 
-  const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
-  const shared = data.playbooks.filter((b) => b.role !== "owner");
-  const isEmpty = owned.length === 0 && shared.length === 0;
+  const ownedAll = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
+  const sharedAll = data.playbooks.filter((b) => b.role !== "owner");
+  const owned = ownedAll.filter((b) => !b.is_archived);
+  const shared = sharedAll.filter((b) => !b.is_archived);
+  const archived = [...ownedAll, ...sharedAll].filter((b) => b.is_archived);
+  const isEmpty = owned.length === 0 && shared.length === 0 && archived.length === 0;
 
   function refresh() {
     router.refresh();
@@ -1103,6 +1107,17 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         </div>
         {!isEmpty && (
           <div className="flex items-center gap-3">
+            {archived.length > 0 && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-foreground">
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                  className="size-3.5 accent-primary"
+                />
+                Show archived
+              </label>
+            )}
             <Button
               variant="primary"
               size="sm"
@@ -1129,8 +1144,8 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           <MarketingPlaybookTile onCreate={() => setShowCreate(true)} />
         </div>
       ) : view === "preview" ? (
-        <section>
-          <div className="flex flex-wrap justify-center gap-3">
+        <section className="space-y-6">
+          <div className="flex flex-wrap justify-start gap-3">
             {owned.map((b) => (
               <div key={b.id} className="w-40 sm:w-48 lg:w-56">
                 <PlaybookBookTile tile={b} actions={buildOwnerActions(b)} />
@@ -1142,9 +1157,34 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
               </div>
             ))}
           </div>
+          {showArchived && archived.length > 0 && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Archived · {archived.length}
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="flex flex-wrap justify-start gap-3 opacity-70">
+                {archived.map((b) => (
+                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
+                    <PlaybookBookTile
+                      tile={b}
+                      actions={
+                        b.role === "owner"
+                          ? buildOwnerActions(b)
+                          : buildSharedActions(b)
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       ) : (
-        <section>
+        <section className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <NewPlaybookTile onClick={() => setShowCreate(true)} />
             {owned.map((b) => (
@@ -1158,6 +1198,30 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
               <PlaybookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
             ))}
           </div>
+          {showArchived && archived.length > 0 && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Archived · {archived.length}
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="grid grid-cols-1 gap-4 opacity-70 sm:grid-cols-2 lg:grid-cols-4">
+                {archived.map((b) => (
+                  <PlaybookTile
+                    key={b.id}
+                    tile={b}
+                    actions={
+                      b.role === "owner"
+                        ? buildOwnerActions(b)
+                        : buildSharedActions(b)
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </section>
       )}
 
