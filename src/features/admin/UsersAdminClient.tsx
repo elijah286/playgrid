@@ -779,11 +779,31 @@ function UserStatsPanel({ userId }: { userId: string }) {
   if (error) {
     return <p className="text-xs text-danger">Couldn&rsquo;t load stats: {error}</p>;
   }
+  function formatDuration(seconds: number | undefined): string {
+    if (!seconds || seconds < 60) return `${seconds ?? 0}s`;
+    const m = Math.floor(seconds / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    const rem = m % 60;
+    return rem ? `${h}h ${rem}m` : `${h}h`;
+  }
   const items = [
     { label: "Playbooks owned", value: stats?.playbooksOwned },
     { label: "Playbooks shared", value: stats?.playbooksShared },
     { label: "Plays created", value: stats?.playsCreated },
     { label: "People shared with", value: stats?.peopleSharedWith },
+    {
+      label: "Time on site",
+      value: stats ? formatDuration(stats.totalSecondsOnSite) : undefined,
+    },
+    {
+      label: "Last active",
+      value: stats?.lastActiveAt
+        ? new Date(stats.lastActiveAt).toLocaleDateString()
+        : stats
+          ? "—"
+          : undefined,
+    },
   ];
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

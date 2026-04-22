@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
+import { TimeOnSiteTracker } from "@/components/TimeOnSiteTracker";
 import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
 import { userHasCreatedPlayAction } from "@/app/actions/plays";
 import { getExpirationNotice } from "@/lib/billing/expiration-notice";
@@ -42,6 +43,7 @@ export default async function DashboardLayout({
     <div className="min-h-full">
       {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <TimeOnSiteTracker />
       {feedbackEnabled && <FeedbackWidget hasCreatedPlay={hasCreatedPlay} />}
     </div>
   );

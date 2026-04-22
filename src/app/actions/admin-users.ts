@@ -204,6 +204,8 @@ export type AdminUserStats = {
   playbooksShared: number;
   playsCreated: number;
   peopleSharedWith: number;
+  totalSecondsOnSite: number;
+  lastActiveAt: string | null;
 };
 
 export async function getAdminUserStatsAction(
@@ -252,6 +254,12 @@ export async function getAdminUserStatsAction(
     (versionRows ?? []).map((r) => r.play_id as string),
   ).size;
 
+  const { data: profileRow } = await admin
+    .from("profiles")
+    .select("total_seconds_on_site, last_active_at")
+    .eq("id", userId)
+    .maybeSingle();
+
   return {
     ok: true,
     stats: {
@@ -259,6 +267,8 @@ export async function getAdminUserStatsAction(
       playbooksShared,
       playsCreated,
       peopleSharedWith: peopleSet.size,
+      totalSecondsOnSite: Number(profileRow?.total_seconds_on_site ?? 0),
+      lastActiveAt: (profileRow?.last_active_at as string | null) ?? null,
     },
   };
 }

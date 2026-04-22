@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
+import { TimeOnSiteTracker } from "@/components/TimeOnSiteTracker";
 import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
 import { userHasCreatedPlayAction } from "@/app/actions/plays";
 
@@ -26,6 +27,7 @@ export default async function EditorLayout({ children }: { children: React.React
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-5">
         {children}
       </div>
+      <TimeOnSiteTracker />
       {feedbackEnabled && <FeedbackWidget hasCreatedPlay={hasCreatedPlay} />}
     </div>
   );
