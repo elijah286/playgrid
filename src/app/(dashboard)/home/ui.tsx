@@ -861,14 +861,21 @@ function NewPlaybookTile({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function DashboardClient({ data }: { data: DashboardSummary }) {
+export function DashboardClient({
+  data,
+  hideAnimation = false,
+}: {
+  data: DashboardSummary;
+  hideAnimation?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
-  const [view, setView] = useDashboardView();
+  const [storedView, setView] = useDashboardView();
+  const view: DashboardView = hideAnimation ? "classic" : storedView;
 
   const owned = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const shared = data.playbooks.filter((b) => b.role !== "owner");
@@ -1092,15 +1099,17 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
             >
               New playbook
             </Button>
-            <SegmentedControl
-              size="sm"
-              value={view}
-              onChange={setView}
-              options={[
-                { value: "preview", label: "Preview" },
-                { value: "classic", label: "Simple" },
-              ]}
-            />
+            {!hideAnimation && (
+              <SegmentedControl
+                size="sm"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "preview", label: "Preview" },
+                  { value: "classic", label: "Simple" },
+                ]}
+              />
+            )}
           </div>
         )}
       </div>

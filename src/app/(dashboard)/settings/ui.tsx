@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { CreditCard, KeyRound, MessageCircle, Ticket, Users } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
@@ -12,7 +12,8 @@ import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type { GiftCodeRow } from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
-import { SegmentedControl } from "@/components/ui";
+import { SegmentedControl, useToast } from "@/components/ui";
+import { setHideLobbyAnimationAction } from "@/app/actions/admin-lobby";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
@@ -46,6 +47,7 @@ export function SettingsClient({
   giftCodesError,
   stripeStatus,
   initialCoachAiEnabled,
+  initialHideLobbyAnimation,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -61,8 +63,29 @@ export function SettingsClient({
   giftCodesError: string | null;
   stripeStatus: StripeConfigStatus;
   initialCoachAiEnabled: boolean;
+  initialHideLobbyAnimation: boolean;
 }) {
+  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("users");
+  const [hideLobbyAnimation, setHideLobbyAnimation] = useState(initialHideLobbyAnimation);
+  const [lobbyPending, startLobbyTransition] = useTransition();
+
+  function toggleLobbyAnimation(next: boolean) {
+    const prev = hideLobbyAnimation;
+    setHideLobbyAnimation(next);
+    startLobbyTransition(async () => {
+      const res = await setHideLobbyAnimationAction(next);
+      if (!res.ok) {
+        setHideLobbyAnimation(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next ? "Lobby animation hidden." : "Lobby animation restored.",
+        "success",
+      );
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -107,11 +130,34 @@ export function SettingsClient({
       )}
 
       {tab === "feedback" && (
-        <FeedbackAdminClient
-          initialItems={initialFeedback}
-          initialError={feedbackError}
-          initialWidgetEnabled={initialFeedbackWidgetEnabled}
-        />
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Hide playbook animation on lobby
+              </p>
+              <p className="mt-0.5 text-xs text-muted">
+                When on, the Preview/Simple toggle is hidden and the lobby
+                always renders the simple card view.
+              </p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={hideLobbyAnimation}
+                disabled={lobbyPending}
+                onChange={(e) => toggleLobbyAnimation(e.target.checked)}
+              />
+              <span>{hideLobbyAnimation ? "On" : "Off"}</span>
+            </label>
+          </div>
+          <FeedbackAdminClient
+            initialItems={initialFeedback}
+            initialError={feedbackError}
+            initialWidgetEnabled={initialFeedbackWidgetEnabled}
+          />
+        </div>
       )}
 
       {tab === "integrations" && (
