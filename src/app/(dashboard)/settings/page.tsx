@@ -16,6 +16,8 @@ import {
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
+import { getExamplesUserId } from "@/lib/site/examples-config";
+import { resolveExampleMakerScope } from "@/lib/examples/mode";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { SettingsClient } from "./ui";
 
@@ -35,6 +37,8 @@ export default async function SettingsPage() {
     stripeStatusRes,
     coachAiEnabled,
     hideLobbyAnimation,
+    examplesUserId,
+    exampleMakerScope,
     trafficRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
@@ -47,6 +51,8 @@ export default async function SettingsPage() {
     getStripeConfigStatusAction(),
     getCoachAiTierEnabled(),
     getHideLobbyAnimation(),
+    getExamplesUserId(),
+    resolveExampleMakerScope(),
     getTrafficSummaryAction(30),
   ]);
 
@@ -116,6 +122,8 @@ export default async function SettingsPage() {
         }
         initialCoachAiEnabled={coachAiEnabled}
         initialHideLobbyAnimation={hideLobbyAnimation}
+        initialExamplesUserId={examplesUserId}
+        initialExampleMakerActive={exampleMakerScope.active}
         initialTrafficSummary={
           trafficRes.ok
             ? trafficRes.summary
