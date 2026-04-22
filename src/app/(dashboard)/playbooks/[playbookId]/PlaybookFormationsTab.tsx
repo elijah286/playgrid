@@ -41,20 +41,22 @@ export function PlaybookFormationsTab({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const { blockIfPreview } = useExamplePreview();
+  const { isPreview } = useExamplePreview();
   const [formations, setFormations] = useState(initial);
   const [q, setQ] = useState("");
   const [, startTransition] = useTransition();
 
-  function guardNewFormationHref(e: React.MouseEvent) {
-    if (
-      blockIfPreview(
-        "New formations in an example playbook aren't saved. Start your own playbook to create and keep formations.",
-      )
-    ) {
-      e.preventDefault();
-    }
-  }
+  // In preview mode the link goes to the preview formation editor,
+  // which blocks save with the CTA modal. Otherwise it creates a real
+  // formation as before.
+  const newFormationHref = (() => {
+    const q = new URLSearchParams({
+      variant,
+      returnToPlaybook: playbookId,
+    });
+    if (isPreview) q.set("preview", "1");
+    return `/formations/new?${q.toString()}`;
+  })();
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -119,11 +121,7 @@ export function PlaybookFormationsTab({
             placeholder="Search formations…"
           />
         </div>
-        <Link
-          href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}
-          className="hidden sm:inline-flex"
-          onClick={guardNewFormationHref}
-        >
+        <Link href={newFormationHref} className="hidden sm:inline-flex">
           <Button variant="primary" leftIcon={Plus}>
             New formation
           </Button>
@@ -141,10 +139,7 @@ export function PlaybookFormationsTab({
           }
           action={
             !q ? (
-              <Link
-                href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}
-                onClick={guardNewFormationHref}
-              >
+              <Link href={newFormationHref}>
                 <Button variant="primary" leftIcon={Plus}>
                   New formation
                 </Button>

@@ -215,7 +215,7 @@ function PlaybookDetailClientInner({
   const variantLabel = SPORT_VARIANT_LABELS[variant] ?? variant;
   const router = useRouter();
   const { toast } = useToast();
-  const { blockIfPreview } = useExamplePreview();
+  const { isPreview, blockIfPreview } = useExamplePreview();
   const [pending, startTransition] = useTransition();
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
@@ -481,12 +481,23 @@ function PlaybookDetailClientInner({
     formation?: SavedFormation,
     opts?: { playType?: PlayType; specialTeamsUnit?: SpecialTeamsUnit | null; initialPlayers?: Player[]; formationName?: string; playName?: string },
   ) {
-    if (
-      blockIfPreview(
-        "Creating new plays in an example playbook isn't saved. Start your own playbook to create and keep plays.",
-      )
-    ) {
+    // Preview mode: a visitor in an example playbook gets a scratch
+    // editor with no DB row. Only the formation-based offense flow has
+    // a scratch path today — defense/ST templates carry custom player
+    // arrays we'd need to serialize, so those still surface the CTA.
+    if (isPreview) {
       setShowFormationPicker(false);
+      const isOffenseFromFormation =
+        (opts?.playType ?? "offense") === "offense" && !opts?.initialPlayers;
+      if (isOffenseFromFormation) {
+        const q = new URLSearchParams({ playbookId });
+        if (formation?.id) q.set("formationId", formation.id);
+        router.push(`/plays/new-preview?${q.toString()}`);
+      } else {
+        blockIfPreview(
+          "This flow isn't available in demo mode. Start your own playbook to unlock every template.",
+        );
+      }
       return;
     }
     setCreating(true);
@@ -552,12 +563,16 @@ function PlaybookDetailClientInner({
   }
 
   async function createAndGoToFormationEditor() {
-    if (
-      blockIfPreview(
-        "New formations in an example playbook aren't saved. Start your own playbook to create and keep formations.",
-      )
-    ) {
+    // Preview mode: go straight to the formation editor with a preview
+    // flag — there's no play to anchor returnToPlay against.
+    if (isPreview) {
       setShowFormationPicker(false);
+      const q = new URLSearchParams({
+        preview: "1",
+        variant,
+        returnToPlaybook: playbookId,
+      });
+      router.push(`/formations/new?${q.toString()}`);
       return;
     }
     setCreating(true);
@@ -765,7 +780,7 @@ function PlaybookDetailClientInner({
             selectionMode,
             creating,
             printHref: `/playbooks/${playbookId}/print`,
-            newFormationHref: `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`,
+            newFormationHref: `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}${isPreview ? "&preview=1" : ""}`,
           }}
         />
 
