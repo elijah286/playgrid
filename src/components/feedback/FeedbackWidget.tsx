@@ -81,17 +81,11 @@ export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) 
       setEligible(true);
       return;
     }
-    // Tick while the tab is visible; accumulate total time across sessions.
-    // Cheap and lazy — no server write. Re-checks eligibility each tick.
+    // TimeOnSiteTracker (mounted once at the layout level) writes the
+    // running total to localStorage. The widget only READS here — no own
+    // increment, or we'd double-count.
     const id = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      const next = readNum(TIME_ON_SITE_KEY) + TIME_TICK_SEC;
-      try {
-        localStorage.setItem(TIME_ON_SITE_KEY, String(next));
-      } catch {
-        /* ignore */
-      }
-      if (next >= TIME_ON_SITE_THRESHOLD_SEC) {
+      if (readNum(TIME_ON_SITE_KEY) >= TIME_ON_SITE_THRESHOLD_SEC) {
         setEligible(true);
         window.clearInterval(id);
       }
