@@ -121,3 +121,23 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-muted);
 }
+
+/*
+ * Block printing the in-app UI directly. Printing a playbook is a dedicated
+ * flow that opens a separate popup window (see src/features/print/exportPdf.ts),
+ * so global @media print rules here only affect the main dashboard document —
+ * not the real print popup. If a user hits Cmd+P on any app page, hide the UI
+ * and show a short hint pointing them at the "Print playbook" button.
+ */
+@media print {
+  body > * {
+    display: none !important;
+  }
+  body::before {
+    content: "To print, use the \201CPrint playbook\201D button inside the app.";
+    display: block;
+    padding: 2rem;
+    font: 14px/1.5 system-ui, sans-serif;
+    color: #111;
+  }
+}
