@@ -1,13 +1,14 @@
 /**
  * Site-wide football-field-inspired backdrop.
  *
- * Rendered once in the root layout behind all pages. Uses an SVG pattern
- * of yard-line stripes + hash-mark ticks, softly masked with a radial
- * vignette so edges fade. `currentColor` lets the stroke color flip
- * between light + dark mode via Tailwind text utilities.
+ * Faint yard lines with sparse hash marks (no stitch-looking tick rows),
+ * plus a handful of X/O players with routes + zones scattered across the
+ * field like a play diagram. Layered behind all content at very low
+ * opacity so it reads as texture, not decoration.
  *
- * Fixed-positioned with -z-10 so it sits behind content but above the
- * body background. pointer-events-none so it never eats clicks.
+ * `currentColor` lets the stroke color flip between light + dark mode
+ * via Tailwind text utilities. Fixed-positioned, -z-10, pointer-events
+ * disabled.
  */
 export function FieldBackdrop() {
   return (
@@ -16,13 +17,12 @@ export function FieldBackdrop() {
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
       style={{
         maskImage:
-          "radial-gradient(ellipse 110% 80% at 50% 30%, #000 55%, transparent 100%)",
+          "radial-gradient(ellipse 115% 85% at 50% 30%, #000 60%, transparent 100%)",
         WebkitMaskImage:
-          "radial-gradient(ellipse 110% 80% at 50% 30%, #000 55%, transparent 100%)",
+          "radial-gradient(ellipse 115% 85% at 50% 30%, #000 60%, transparent 100%)",
       }}
     >
-      {/* Soft color blooms — the blue gradient the user liked from the early
-          preview. Kept very low opacity so they read as a tint, not a wash. */}
+      {/* Soft brand-color blooms that tint the whole page. */}
       <div
         className="absolute -left-40 top-20 h-[28rem] w-[28rem] rounded-full blur-3xl"
         style={{ background: "rgba(23, 105, 255, 0.14)" }}
@@ -37,83 +37,113 @@ export function FieldBackdrop() {
       />
 
       <svg
-        className="relative h-full w-full text-[#C7D0DB] dark:text-[#242A37]"
-        xmlns="http://www.w3.org/2000/svg"
+        className="relative h-full w-full text-[#B7C2D0] dark:text-[#2A3140]"
+        viewBox="0 0 1600 1200"
         preserveAspectRatio="xMidYMid slice"
+        xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
+          {/* Yard lines: one horizontal line per 160px, with just two hash ticks
+              at ~1/3 and ~2/3 of the width. Real football fields only mark
+              hash ticks at two column positions — NOT a dense row of ticks. */}
           <pattern
-            id="field-hashes"
-            width="160"
-            height="220"
+            id="yard-lines"
+            width="1600"
+            height="160"
             patternUnits="userSpaceOnUse"
-            patternTransform="rotate(-1.5)"
           >
-            {/* Yard line (horizontal stripe). */}
             <line
               x1="0"
-              y1="110"
-              x2="160"
-              y2="110"
+              y1="80"
+              x2="1600"
+              y2="80"
               stroke="currentColor"
               strokeWidth="1"
-              opacity="0.55"
-            />
-            {/* Four hash-mark ticks along the yard line. */}
-            <line
-              x1="20"
-              y1="104"
-              x2="20"
-              y2="116"
-              stroke="currentColor"
-              strokeWidth="1.5"
+              opacity="0.35"
             />
             <line
-              x1="60"
-              y1="104"
-              x2="60"
-              y2="116"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-            <line
-              x1="100"
-              y1="104"
-              x2="100"
-              y2="116"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-            <line
-              x1="140"
-              y1="104"
-              x2="140"
-              y2="116"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-            {/* Faint intermediate hash row for rhythm without adding a full line. */}
-            <line
-              x1="40"
-              y1="214"
-              x2="40"
-              y2="220"
+              x1="533"
+              y1="73"
+              x2="533"
+              y2="87"
               stroke="currentColor"
               strokeWidth="1"
               opacity="0.5"
             />
             <line
-              x1="120"
-              y1="214"
-              x2="120"
-              y2="220"
+              x1="1067"
+              y1="73"
+              x2="1067"
+              y2="87"
               stroke="currentColor"
               strokeWidth="1"
               opacity="0.5"
             />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#field-hashes)" opacity="0.6" />
+
+        <rect width="1600" height="1200" fill="url(#yard-lines)" />
+
+        {/* Scattered play-diagram motifs: X/O players with routes or zones.
+            Very low opacity so they sit as watermarks under the content. */}
+        <g opacity="0.18" stroke="currentColor" fill="none" strokeLinecap="round">
+          {/* X — go route curling upfield */}
+          <g transform="translate(220 360)">
+            <line x1="-11" y1="-11" x2="11" y2="11" strokeWidth="3" />
+            <line x1="11" y1="-11" x2="-11" y2="11" strokeWidth="3" />
+            <path d="M 0 -14 C 4 -70 -10 -130 30 -180" strokeWidth="2" />
+            <polyline points="22,-172 30,-180 34,-170" strokeWidth="2" />
+          </g>
+
+          {/* O — zone defender with a shallow pass-coverage arc */}
+          <g transform="translate(1260 460)">
+            <circle r="12" strokeWidth="3" />
+            <path
+              d="M -70 -12 Q 0 -72 70 -12"
+              strokeWidth="2"
+              strokeDasharray="5 5"
+            />
+          </g>
+
+          {/* X — curl route */}
+          <g transform="translate(470 820)">
+            <line x1="-11" y1="-11" x2="11" y2="11" strokeWidth="3" />
+            <line x1="11" y1="-11" x2="-11" y2="11" strokeWidth="3" />
+            <path d="M 0 -14 L 0 -90 Q 12 -108 -16 -104" strokeWidth="2" />
+            <polyline points="-9,-98 -16,-104 -10,-111" strokeWidth="2" />
+          </g>
+
+          {/* O — deep-zone defender with a broader coverage ellipse */}
+          <g transform="translate(820 200)">
+            <circle r="12" strokeWidth="3" />
+            <ellipse
+              cx="0"
+              cy="50"
+              rx="95"
+              ry="40"
+              strokeWidth="2"
+              strokeDasharray="6 5"
+            />
+          </g>
+
+          {/* X — slant route */}
+          <g transform="translate(1120 880)">
+            <line x1="-11" y1="-11" x2="11" y2="11" strokeWidth="3" />
+            <line x1="11" y1="-11" x2="-11" y2="11" strokeWidth="3" />
+            <path d="M 0 -14 L 0 -50 L 70 -110" strokeWidth="2" />
+            <polyline points="60,-105 70,-110 66,-100" strokeWidth="2" />
+          </g>
+
+          {/* O — flat-zone with short arc */}
+          <g transform="translate(340 640)">
+            <circle r="12" strokeWidth="3" />
+            <path
+              d="M -55 10 Q 0 -40 55 10"
+              strokeWidth="2"
+              strokeDasharray="5 5"
+            />
+          </g>
+        </g>
       </svg>
     </div>
   );
