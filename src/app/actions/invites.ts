@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
+import { getUserEntitlement } from "@/lib/billing/entitlement";
+import { tierAtLeast } from "@/lib/billing/features";
 
 const DEFAULT_FROM_EMAIL = "PlayGrid <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,6 +69,14 @@ export async function createInviteAction(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
+
+  const entitlement = await getUserEntitlement(user.id);
+  if (!tierAtLeast(entitlement, "coach")) {
+    return {
+      ok: false,
+      error: "Sharing a playbook is a Coach feature. Upgrade to unlock.",
+    };
+  }
 
   const days = Math.max(1, Math.min(MAX_EXPIRY_DAYS, Math.floor(input.expiresInDays || 14)));
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();

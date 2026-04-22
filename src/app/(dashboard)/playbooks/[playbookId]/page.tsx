@@ -9,6 +9,8 @@ import { getPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { tierAtLeast } from "@/lib/billing/features";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -100,6 +102,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   // read-only header.
   const canManage = viewerRole === "owner";
   const canShare = viewerRole === "owner" || viewerRole === "editor";
+  const viewerIsCoach = tierAtLeast(await getCurrentEntitlement(), "coach");
 
   return (
     <PlaybookDetailClient
@@ -122,6 +125,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         accentColor,
         canManage,
         canShare,
+        viewerIsCoach,
         senderName,
         ownerDisplayName,
         allowCoachDuplication: (book.allow_coach_duplication as boolean | null) ?? true,

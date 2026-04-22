@@ -889,7 +889,14 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         if (res && typeof res === "object" && "ok" in res) {
           const r = res as { ok: boolean; error?: string };
           if (!r.ok) {
-            toast(r.error ?? errLabel, "error");
+            if (r.error && /Coach feature|Upgrade to unlock|Free tier/i.test(r.error)) {
+              setUpgradeNotice({
+                title: "Upgrade to Coach",
+                message: r.error,
+              });
+            } else {
+              toast(r.error ?? errLabel, "error");
+            }
             return;
           }
         }
