@@ -11,20 +11,20 @@ import { PricingClient } from "./ui";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Simple PlayGrid plans for coaches and teams. Free to start, with paid tiers that scale as you design more plays, share more playbooks, and coach more athletes.",
+    "Simple xogridmaker plans for coaches and teams. Free to start, with paid tiers that scale as you design more plays, share more playbooks, and coach more athletes.",
   alternates: { canonical: "/pricing" },
   openGraph: {
-    title: "PlayGrid pricing — plans for coaches and teams",
+    title: "xogridmaker pricing — plans for coaches and teams",
     description:
-      "Free to start. Paid plans scale with how you use PlayGrid — more plays, more playbooks, more athletes.",
+      "Free to start. Paid plans scale with how you use xogridmaker — more plays, more playbooks, more athletes.",
     url: "/pricing",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "PlayGrid pricing — plans for coaches and teams",
+    title: "xogridmaker pricing — plans for coaches and teams",
     description:
-      "Free to start. Paid plans scale with how you use PlayGrid.",
+      "Free to start. Paid plans scale with how you use xogridmaker.",
   },
 };
 
@@ -62,7 +62,7 @@ export default async function PricingPage() {
           Pricing
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Simple plans that scale with how you use PlayGrid. Cancel anytime.
+          Simple plans that scale with how you use xogridmaker. Cancel anytime.
         </p>
       </div>
       <PricingClient

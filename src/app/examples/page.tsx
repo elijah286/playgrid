@@ -10,20 +10,20 @@ import type { SportVariant } from "@/domain/play/types";
 export const metadata: Metadata = {
   title: "Example playbooks",
   description:
-    "Browse real football playbooks built in PlayGrid — plays, formations, and wristband cards for flag, youth tackle, and 7v7 coaches. Create your own free in minutes.",
+    "Browse real football playbooks built in xogridmaker — plays, formations, and wristband cards for flag, youth tackle, and 7v7 coaches. Create your own free in minutes.",
   alternates: { canonical: "/examples" },
   openGraph: {
-    title: "Example football playbooks — built in PlayGrid",
+    title: "Example football playbooks — built in xogridmaker",
     description:
-      "Real plays and playbooks coaches have designed with PlayGrid. Browse the examples, then create your own free.",
+      "Real plays and playbooks coaches have designed with xogridmaker. Browse the examples, then create your own free.",
     url: "/examples",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Example football playbooks — built in PlayGrid",
+    title: "Example football playbooks — built in xogridmaker",
     description:
-      "Real plays and playbooks coaches have designed with PlayGrid.",
+      "Real plays and playbooks coaches have designed with xogridmaker.",
   },
 };
 
@@ -135,9 +135,9 @@ export default async function ExamplesPage() {
           Example playbooks
         </h1>
         <p className="mt-3 text-base leading-relaxed text-muted">
-          These are real PlayGrid playbooks — real formations, real routes,
+          These are real xogridmaker playbooks — real formations, real routes,
           real wristband cards. Browse the plays to see how coaches are
-          using PlayGrid for flag football, youth tackle, and 7v7, then
+          using xogridmaker for flag football, youth tackle, and 7v7, then
           create your own free.
         </p>
         <div className="mt-5">

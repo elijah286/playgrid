@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/layout/UserMenu";
@@ -32,9 +33,17 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
         <Link
           href={user ? "/home" : "/"}
-          className="text-lg font-extrabold tracking-tight text-primary"
+          aria-label="xogridmaker home"
+          className="flex items-center"
         >
-          PlayGrid
+          <Image
+            src="/brand/xogridmaker_wordmark.svg"
+            alt="xogridmaker"
+            width={160}
+            height={28}
+            priority
+            className="h-7 w-auto"
+          />
         </Link>
         {user ? (
           <UserMenu

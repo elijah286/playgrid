@@ -6,7 +6,7 @@ export function SiteFooter() {
     <footer className="relative z-10 mt-auto border-t border-border bg-surface-inset text-xs text-muted print:hidden">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-5 sm:flex-row">
         <p className="font-medium">
-          © {year} PlayGrid LLC · Cedar Park, TX
+          © {year} xogridmaker · Cedar Park, TX
         </p>
         <nav className="flex items-center gap-5">
           <Link href="/about" className="hover:text-foreground transition-colors">

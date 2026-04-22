@@ -22,8 +22,8 @@ export function LoginForm() {
     welcomeSteps.includes(step) || (step === "email" && !isSignup);
   const title = showWelcomeBack ? "Welcome back" : "Get started";
   const subtitle = showWelcomeBack
-    ? "Sign in to your PlayGrid account to access your playbooks."
-    : "Create your PlayGrid account to start building playbooks.";
+    ? "Sign in to your xogridmaker account to access your playbooks."
+    : "Create your xogridmaker account to start building playbooks.";
 
   return (
     <div className="space-y-6">

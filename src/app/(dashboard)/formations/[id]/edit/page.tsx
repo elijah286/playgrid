@@ -3,7 +3,7 @@ import { listFormationsAction } from "@/app/actions/formations";
 import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
 import type { SportVariant } from "@/domain/play/types";
 
-export const metadata = { title: "Edit Formation — PlayGrid" };
+export const metadata = { title: "Edit Formation — xogridmaker" };
 
 export default async function EditFormationPage({
   params,

@@ -89,7 +89,7 @@ function NameCard({ initialDisplayName }: { initialDisplayName: string | null })
     <Card
       icon={IdCard}
       title="Display name"
-      description="Shown on invites, playsheets, and throughout PlayGrid."
+      description="Shown on invites, playsheets, and throughout xogridmaker."
     >
       <div className="space-y-3">
         <label className="block text-sm">

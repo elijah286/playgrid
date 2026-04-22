@@ -30,7 +30,7 @@ export function canUseWristbands(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");
 }
 
-/** Playsheet watermark (tiled PlayGrid logo) is shown for free owners. Coach+ removes it. */
+/** Playsheet watermark (tiled xogridmaker logo) is shown for free owners. Coach+ removes it. */
 export function canRemovePlaysheetWatermark(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");
 }

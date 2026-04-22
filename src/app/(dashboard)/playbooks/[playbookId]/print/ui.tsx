@@ -791,7 +791,7 @@ export function PrintPlaybookClient({
               {!canRemovePlaysheetWatermark ? (
                 <div className="flex flex-col items-start gap-3">
                   <p className="text-sm text-foreground">
-                    Free playsheets include a tiled PlayGrid watermark. Upgrade to
+                    Free playsheets include a tiled xogridmaker watermark. Upgrade to
                     Coach to remove it or use your own logo.
                   </p>
                   <Link

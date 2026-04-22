@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ContactForm } from "./ui";
 
 export const metadata: Metadata = {
-  title: "Contact · PlayGrid",
+  title: "Contact · xogridmaker",
   description: "Send feedback, bug reports, or feature requests.",
 };
 

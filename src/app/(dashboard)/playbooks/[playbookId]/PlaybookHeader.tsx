@@ -33,7 +33,7 @@ import {
   type ShareResultRow,
 } from "@/app/actions/invites";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
 const PALETTE = [
   "#F26522", "#EF4444", "#EAB308", "#22C55E",
@@ -251,16 +251,16 @@ export function PlaybookHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {/* Mobile-only PlayGrid brand chip. Desktop already shows the
+            {/* Mobile-only xogridmaker brand chip. Desktop already shows the
                 real SiteHeader; on mobile that header is hidden to save
                 vertical space, so this chip keeps the brand present and
                 doubles as a nav link back to /home. */}
             <Link
               href="/home"
-              aria-label="PlayGrid home"
+              aria-label="xogridmaker home"
               className="sm:hidden inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white ring-2 ring-white/90"
             >
-              PlayGrid
+              xogridmaker
             </Link>
             {canShare && (
               <Button

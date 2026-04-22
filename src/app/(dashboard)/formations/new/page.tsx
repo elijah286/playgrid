@@ -1,7 +1,7 @@
 import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
 import type { SportVariant } from "@/domain/play/types";
 
-export const metadata = { title: "New Formation — PlayGrid" };
+export const metadata = { title: "New Formation — xogridmaker" };
 
 const VALID_VARIANTS: SportVariant[] = ["flag_5v5", "flag_7v7", "other", "tackle_11"];
 

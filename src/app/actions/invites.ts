@@ -10,7 +10,7 @@ import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 
-const DEFAULT_FROM_EMAIL = "PlayGrid <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type PlaybookInvite = {
@@ -187,9 +187,9 @@ export async function sendPlaybookInviteEmailAction(input: {
   const team = input.teamName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const sender = (input.senderName ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const url = input.inviteUrl;
-  const subject = `You're invited to ${input.teamName} on PlayGrid`;
+  const subject = `You're invited to ${input.teamName} on xogridmaker`;
   const text = [
-    sender ? `${input.senderName} invited you to join ${input.teamName} on PlayGrid.` : `You've been invited to join ${input.teamName} on PlayGrid.`,
+    sender ? `${input.senderName} invited you to join ${input.teamName} on xogridmaker.` : `You've been invited to join ${input.teamName} on xogridmaker.`,
     "",
     `Open this link to join: ${url}`,
   ].join("\n");
@@ -197,7 +197,7 @@ export async function sendPlaybookInviteEmailAction(input: {
 <html><body style="font-family:ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px">
   <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
     <tr><td style="padding:24px">
-      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">Join ${team} on PlayGrid</h1>
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">Join ${team} on xogridmaker</h1>
       <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5">
         ${sender ? `${sender} invited you` : `You've been invited`} to view this team's playbook.
       </p>
@@ -232,7 +232,7 @@ export type ShareResultRow =
  * Share a playbook with a list of emails in one call.
  *
  * For each email:
- * - If the address already has a PlayGrid account, upsert an active
+ * - If the address already has a xogridmaker account, upsert an active
  *   `playbook_members` row so the playbook appears on their dashboard
  *   immediately, then email them a heads-up link.
  * - Otherwise fall back to the invite-link flow: create a scoped invite
@@ -413,7 +413,7 @@ export async function sharePlaybookWithEmailsAction(input: {
 }
 
 async function getSiteUrl(): Promise<{ SITE_URL: string }> {
-  return { SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us" };
+  return { SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com" };
 }
 
 async function sendSharedExistingUserEmail(input: {
@@ -437,11 +437,11 @@ async function sendSharedExistingUserEmail(input: {
   const team = input.teamName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const sender = (input.senderName ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const roleLabel = input.role === "editor" ? "as a coach" : "as a player";
-  const subject = `${input.teamName} was shared with you on PlayGrid`;
+  const subject = `${input.teamName} was shared with you on xogridmaker`;
   const text = [
     sender
-      ? `${input.senderName} shared ${input.teamName} with you on PlayGrid ${roleLabel}.`
-      : `${input.teamName} was shared with you on PlayGrid ${roleLabel}.`,
+      ? `${input.senderName} shared ${input.teamName} with you on xogridmaker ${roleLabel}.`
+      : `${input.teamName} was shared with you on xogridmaker ${roleLabel}.`,
     "",
     `Open the playbook: ${input.playbookUrl}`,
   ].join("\n");
@@ -451,7 +451,7 @@ async function sendSharedExistingUserEmail(input: {
     <tr><td style="padding:24px">
       <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">${team} was shared with you</h1>
       <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5">
-        ${sender ? `${sender} added you` : `You were added`} to ${team} on PlayGrid ${roleLabel}. It&rsquo;s already on your dashboard — open it below.
+        ${sender ? `${sender} added you` : `You were added`} to ${team} on xogridmaker ${roleLabel}. It&rsquo;s already on your dashboard — open it below.
       </p>
       <p style="margin:0 0 20px">
         <a href="${input.playbookUrl}" style="display:inline-block;padding:10px 16px;background:#16a34a;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">

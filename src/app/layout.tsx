@@ -15,20 +15,20 @@ const inter = Inter({
   variable: "--font-sans",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "PlayGrid — Football play designer for coaches",
-    template: "%s · PlayGrid",
+    default: "xogridmaker — Football play designer for coaches",
+    template: "%s · xogridmaker",
   },
   description:
-    "PlayGrid is a football play designer for coaches and athletes. Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
-  applicationName: "PlayGrid",
-  authors: [{ name: "PlayGrid LLC" }],
-  creator: "PlayGrid LLC",
-  publisher: "PlayGrid LLC",
+    "xogridmaker is a football play designer for coaches and athletes. Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+  applicationName: "xogridmaker",
+  authors: [{ name: "xogridmaker" }],
+  creator: "xogridmaker",
+  publisher: "xogridmaker",
   keywords: [
     "football playbook",
     "play designer",
@@ -43,15 +43,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: SITE_URL,
-    siteName: "PlayGrid",
-    title: "PlayGrid — Football play designer for coaches",
+    siteName: "xogridmaker",
+    title: "xogridmaker — Football play designer for coaches",
     description:
       "Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "PlayGrid — Football play designer for coaches",
+    title: "xogridmaker — Football play designer for coaches",
     description:
       "Design plays, organize them into playbooks, and carry your playbook to the field.",
   },
@@ -67,16 +67,16 @@ const structuredData = [
   {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "PlayGrid",
-    legalName: "PlayGrid LLC",
+    name: "xogridmaker",
+    legalName: "xogridmaker",
     url: SITE_URL,
     description:
-      "PlayGrid is a football play designer for coaches and athletes — build plays, organize playbooks, and preview wristbands.",
+      "xogridmaker is a football play designer for coaches and athletes — build plays, organize playbooks, and preview wristbands.",
   },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "PlayGrid",
+    name: "xogridmaker",
     url: SITE_URL,
     potentialAction: {
       "@type": "SearchAction",
@@ -87,7 +87,7 @@ const structuredData = [
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "PlayGrid",
+    name: "xogridmaker",
     applicationCategory: "SportsApplication",
     operatingSystem: "Web",
     url: SITE_URL,

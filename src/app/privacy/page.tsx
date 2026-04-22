@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy · PlayGrid",
-  description: "How PlayGrid handles your data.",
+  title: "Privacy Policy · xogridmaker",
+  description: "How xogridmaker handles your data.",
 };
 
 export default function PrivacyPage() {
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>
           <p>
-            PlayGrid LLC (&quot;PlayGrid,&quot; &quot;we,&quot; &quot;us&quot;) cares about your privacy. This
+            xogridmaker LLC (&quot;xogridmaker,&quot; &quot;we,&quot; &quot;us&quot;) cares about your privacy. This
             policy explains what we collect, why, and how it&apos;s protected.
           </p>
         </section>
@@ -88,7 +88,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">Children&apos;s privacy</h2>
           <p className="mt-2">
-            PlayGrid is intended for coaches and adults. We don&apos;t knowingly
+            xogridmaker is intended for coaches and adults. We don&apos;t knowingly
             collect personal information from children under 13. Players
             viewing shared playbooks don&apos;t need to create an account.
           </p>

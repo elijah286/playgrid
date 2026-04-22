@@ -7,7 +7,7 @@ import { LoginForm } from "./ui";
 export const metadata: Metadata = {
   title: "Log in or sign up",
   description:
-    "Log in to PlayGrid or create a free account to design football plays, organize playbooks, and share them with your team.",
+    "Log in to xogridmaker or create a free account to design football plays, organize playbooks, and share them with your team.",
   alternates: { canonical: "/login" },
 };
 
