@@ -111,10 +111,14 @@ export function EditablePlayNumberBadge({
     <span
       role={disabled ? undefined : "button"}
       tabIndex={disabled ? -1 : 0}
-      title={disabled ? undefined : "Double-click to renumber"}
+      title={disabled ? undefined : "Double-click to change play number"}
+      aria-label={
+        disabled ? `Play ${value}` : `Play ${value}, double-click to renumber`
+      }
       className={cn(
-        "inline-flex h-[22px] min-w-[28px] items-center justify-center rounded-[4px] bg-primary px-1.5 font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white shadow-sm",
-        !disabled && "cursor-text",
+        "inline-flex h-[22px] min-w-[28px] items-center justify-center rounded-[4px] bg-primary px-1.5 font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white shadow-sm transition-all",
+        !disabled &&
+          "cursor-text hover:ring-2 hover:ring-primary/40 hover:ring-offset-1 hover:ring-offset-surface",
         className,
       )}
       onDoubleClick={(e) => {
@@ -124,6 +128,15 @@ export function EditablePlayNumberBadge({
         committedRef.current = false;
         setInput(String(value));
         setEditing(true);
+      }}
+      onKeyDown={(e) => {
+        if (disabled) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          committedRef.current = false;
+          setInput(String(value));
+          setEditing(true);
+        }
       }}
     >
       {formatBadge(String(value))}

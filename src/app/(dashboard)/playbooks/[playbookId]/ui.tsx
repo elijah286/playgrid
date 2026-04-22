@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
+import { useFlipReorder } from "@/lib/hooks/useFlipReorder";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -230,6 +231,13 @@ export function PlaybookDetailClient({
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Transient UX for typed-number renumber: lock interaction while tiles
+  // glide to their new positions, then flash a ring on the moved play so
+  // the user can see what changed. Drag reorders skip this — the drag
+  // itself is the feedback.
+  const [isReordering, setIsReordering] = useState(false);
+  const [highlightPlayId, setHighlightPlayId] = useState<string | null>(null);
+  const registerFlipNode = useFlipReorder(localPlays.map((p) => p.id));
 
   // Debounced server save. Skips the very first effect run so we don't
   // save on mount (state already equals server state). Also skips the
@@ -550,6 +558,8 @@ export function PlaybookDetailClient({
     if (!source || !target || source.id === target.id) return;
     const aOrder = source.sort_order;
     const bOrder = target.sort_order;
+    setIsReordering(true);
+    setHighlightPlayId(sourceId);
     setLocalPlays((prev) =>
       prev.map((p) => {
         if (p.id === source.id) return { ...p, sort_order: bOrder };
@@ -559,6 +569,14 @@ export function PlaybookDetailClient({
     );
     startTransition(async () => {
       const res = await swapPlaySortOrderAction(playbookId, source.id, target.id);
+      // Hold the lock until the FLIP transition has a moment to play,
+      // even if the server returned faster. 400ms matches useFlipReorder's
+      // default duration with a small tail so the ring flash lands.
+      await new Promise((r) => setTimeout(r, 400));
+      setIsReordering(false);
+      window.setTimeout(() => {
+        setHighlightPlayId((id) => (id === sourceId ? null : id));
+      }, 800);
       if (!res.ok) {
         toast(res.error ?? "Could not save play order.", "error");
         router.refresh();
@@ -971,7 +989,15 @@ export function PlaybookDetailClient({
           }
         />
       ) : (
-        <div className="space-y-6">
+        <div className="relative space-y-6">
+          {isReordering && (
+            <div className="pointer-events-auto absolute inset-0 z-30 flex items-start justify-center bg-surface/40 pt-6 backdrop-blur-[1px]">
+              <div className="flex items-center gap-2 rounded-full border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-foreground shadow-elevated">
+                <Loader2 className="size-3.5 animate-spin text-primary" />
+                Reordering plays…
+              </div>
+            </div>
+          )}
           {sections.map((section) => {
             const buildItems = (p: PlaybookDetailPlayRow): ActionMenuItem[] => [
               {
@@ -1082,11 +1108,13 @@ export function PlaybookDetailClient({
                       const canReorder = !selectionMode;
                       const position = positionByPlayId.get(p.id);
                       const isDragging = draggingPlayId === p.id;
+                      const isHighlighted = highlightPlayId === p.id;
                       return (
                       <Card
                         key={`${section.key}:${p.id}`}
+                        ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
                         hover
-                        className={`relative flex flex-col p-0 ${selectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""}`}
+                        className={`relative flex flex-col p-0 ${selectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         draggable={canReorder}
                         onDragStart={
                           canReorder
@@ -1195,10 +1223,12 @@ export function PlaybookDetailClient({
                       const canReorder = !selectionMode;
                       const position = positionByPlayId.get(p.id);
                       const isDragging = draggingPlayId === p.id;
+                      const isHighlighted = highlightPlayId === p.id;
                       return (
                       <li
                         key={`${section.key}:${p.id}`}
-                        className={`flex items-center gap-2 pl-2 pr-2 ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""}`}
+                        ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
+                        className={`flex items-center gap-2 pl-2 pr-2 ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "rounded-md ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         draggable={canReorder}
                         onDragStart={
                           canReorder

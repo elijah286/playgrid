@@ -521,7 +521,7 @@ export function PrintPlaybookClient({
 
   function exportPdf() {
     if (wristbandLocked) {
-      toast("Wristbands are a Coach feature. Upgrade on your Account page.", "error");
+      toast("Wristbands are a Coach feature. See /pricing to upgrade.", "error");
       return;
     }
     startTransition(async () => {
@@ -536,7 +536,7 @@ export function PrintPlaybookClient({
 
   function printNow() {
     if (wristbandLocked) {
-      toast("Wristbands are a Coach feature. Upgrade on your Account page.", "error");
+      toast("Wristbands are a Coach feature. See /pricing to upgrade.", "error");
       return;
     }
     startPrint(async () => {
@@ -949,7 +949,7 @@ export function PrintPlaybookClient({
                     free.
                   </p>
                   <Link
-                    href="/account"
+                    href="/pricing"
                     className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
                   >
                     Upgrade

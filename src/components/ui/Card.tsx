@@ -2,11 +2,13 @@ import { cn } from "@/lib/utils";
 
 type CardProps = React.HTMLAttributes<HTMLDivElement> & {
   hover?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 };
 
-export function Card({ hover, className, children, ...props }: CardProps) {
+export function Card({ hover, className, children, ref, ...props }: CardProps) {
   return (
     <div
+      ref={ref}
       className={cn(
         "rounded-xl border border-border bg-surface-raised shadow-card",
         hover && "transition-shadow hover:shadow-elevated",
