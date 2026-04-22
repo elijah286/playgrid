@@ -23,6 +23,8 @@ export type PlaybookInvite = {
   expires_at: string;
   revoked_at: string | null;
   created_at: string;
+  auto_approve: boolean;
+  auto_approve_limit: number | null;
 };
 
 export type InvitePreview = {
@@ -56,6 +58,8 @@ export async function createInviteAction(input: {
   maxUses: number | null;
   email?: string | null;
   note?: string | null;
+  autoApprove?: boolean;
+  autoApproveLimit?: number | null;
 }): Promise<{ ok: true; invite: PlaybookInvite } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
@@ -89,6 +93,8 @@ export async function createInviteAction(input: {
       expires_at: expiresAt,
       created_by: user.id,
       filters_snapshot: myPrefs?.preferences ?? null,
+      auto_approve: input.autoApprove ?? true,
+      auto_approve_limit: input.autoApproveLimit ?? null,
     })
     .select("*")
     .single();
@@ -361,6 +367,8 @@ export async function sharePlaybookWithEmailsAction(input: {
           maxUses: 1,
           email,
           note: null,
+          autoApprove: true,
+          autoApproveLimit: null,
         });
         if (!inv.ok) {
           results.push({ email, kind: "failed", error: inv.error });

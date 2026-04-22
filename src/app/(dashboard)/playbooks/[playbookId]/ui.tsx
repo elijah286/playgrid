@@ -1829,6 +1829,11 @@ function InviteRow({ invite, onRevoke }: { invite: PlaybookInvite; onRevoke: () 
   const usesLabel = invite.max_uses
     ? `${invite.uses_count}/${invite.max_uses} used`
     : `${invite.uses_count} used`;
+  const approvalLabel = invite.auto_approve
+    ? invite.auto_approve_limit
+      ? `auto-join (${Math.max(0, invite.auto_approve_limit - invite.uses_count)} left, then approval)`
+      : "auto-join"
+    : "approval required";
 
   async function copy() {
     try {
@@ -1851,7 +1856,7 @@ function InviteRow({ invite, onRevoke }: { invite: PlaybookInvite; onRevoke: () 
           {invite.note && <span className="truncate text-xs text-muted">· {invite.note}</span>}
         </div>
         <p className="mt-0.5 text-[11px] text-muted">
-          {usesLabel} · expires {expiresLabel}
+          {approvalLabel} · {usesLabel} · expires {expiresLabel}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
@@ -1870,7 +1875,8 @@ function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () 
   const { toast } = useToast();
   const [role, setRole] = useState<"viewer" | "editor">("viewer");
   const [expiresInDays, setExpiresInDays] = useState(14);
-  const [maxUses, setMaxUses] = useState<string>("25");
+  const [autoApprove, setAutoApprove] = useState(true);
+  const [autoApproveLimit, setAutoApproveLimit] = useState<string>("25");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [creating, setCreating] = useState(false);
@@ -1879,14 +1885,19 @@ function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () 
 
   async function create() {
     setCreating(true);
-    const parsedMax = maxUses.trim() === "" ? null : Math.max(1, Math.floor(Number(maxUses)));
+    const parsedLimit =
+      autoApprove && autoApproveLimit.trim() !== ""
+        ? Math.max(1, Math.floor(Number(autoApproveLimit)))
+        : null;
     const res = await createInviteAction({
       playbookId,
       role,
       expiresInDays,
-      maxUses: parsedMax,
+      maxUses: null,
       email: email || null,
       note: note || null,
+      autoApprove,
+      autoApproveLimit: parsedLimit,
     });
     setCreating(false);
     if (!res.ok) {
@@ -1920,7 +1931,7 @@ function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () 
           <div>
             <h2 className="text-base font-bold text-foreground">Create invite link</h2>
             <p className="mt-0.5 text-xs text-muted">
-              You&apos;ll still need to approve them after they sign up.
+              Share this link by text, chat, or email.
             </p>
           </div>
           <button
@@ -1962,28 +1973,50 @@ function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () 
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-muted">Expires in</label>
-                  <select
-                    value={expiresInDays}
-                    onChange={(e) => setExpiresInDays(Number(e.target.value))}
-                    className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                  >
-                    <option value={1}>1 day</option>
-                    <option value={7}>7 days</option>
-                    <option value={14}>14 days</option>
-                    <option value={30}>30 days (max)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-muted">Max uses</label>
-                  <Input
-                    value={maxUses}
-                    onChange={(e) => setMaxUses(e.target.value)}
-                    placeholder="Leave blank = unlimited"
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">Expires in</label>
+                <select
+                  value={expiresInDays}
+                  onChange={(e) => setExpiresInDays(Number(e.target.value))}
+                  className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
+                >
+                  <option value={1}>1 day</option>
+                  <option value={7}>7 days</option>
+                  <option value={14}>14 days</option>
+                  <option value={30}>30 days (max)</option>
+                </select>
+              </div>
+
+              <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={autoApprove}
+                    onChange={(e) => setAutoApprove(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 rounded border-border"
                   />
-                </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-foreground">
+                      Anyone with this link can join immediately
+                    </div>
+                    {autoApprove ? (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                        <span>Up to</span>
+                        <Input
+                          value={autoApproveLimit}
+                          onChange={(e) => setAutoApproveLimit(e.target.value)}
+                          placeholder="unlimited"
+                          className="h-7 w-20 text-xs"
+                        />
+                        <span>user{autoApproveLimit.trim() === "1" ? "" : "s"} — after that, you&apos;ll approve each new person.</span>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted">
+                        You&apos;ll approve every joiner from the Roster tab.
+                      </p>
+                    )}
+                  </div>
+                </label>
               </div>
 
               <div>
