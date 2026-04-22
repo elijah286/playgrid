@@ -94,6 +94,7 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
+import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
@@ -194,6 +195,15 @@ export function PlaybookDetailClient({
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+
+  function showPlayCapUpgrade() {
+    setUpgradeNotice({
+      title: "Free tier is capped at 12 plays per playbook",
+      message:
+        "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
+    });
+  }
   // Per-playbook persisted view prefs. Server preloads the row in page.tsx
   // and passes it in as initialPrefs, so state initializes directly from
   // server state — no pre-hydration flash and no per-device drift. Search
@@ -467,7 +477,11 @@ export function PlaybookDetailClient({
     } else {
       setCreating(false);
       setShowFormationPicker(false);
-      toast(res.error, "error");
+      if (/Free tier|capped at/i.test(res.error)) {
+        showPlayCapUpgrade();
+      } else {
+        toast(res.error, "error");
+      }
     }
   }
 
@@ -516,7 +530,11 @@ export function PlaybookDetailClient({
     } else {
       setCreating(false);
       setShowFormationPicker(false);
-      toast(res.error, "error");
+      if (/Free tier|capped at/i.test(res.error)) {
+        showPlayCapUpgrade();
+      } else {
+        toast(res.error, "error");
+      }
     }
   }
 
@@ -634,6 +652,12 @@ export function PlaybookDetailClient({
 
   return (
     <div className="space-y-4">
+      <UpgradeModal
+        open={!!upgradeNotice}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
       {duplicatingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 shadow-xl">
@@ -1051,7 +1075,11 @@ export function PlaybookDetailClient({
                     const res = await duplicatePlayAction(p.id, { clearNotes });
                     if (!res.ok) {
                       setDuplicatingId(null);
-                      toast(res.error ?? "Could not duplicate play.", "error");
+                      if (/Free tier|capped at/i.test(res.error ?? "")) {
+                        showPlayCapUpgrade();
+                      } else {
+                        toast(res.error ?? "Could not duplicate play.", "error");
+                      }
                       return;
                     }
                     router.push(`/plays/${res.playId}/edit`);
