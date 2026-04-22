@@ -7,7 +7,8 @@ import { loadPlaybookPrintPackAction } from "@/app/actions/plays";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { canUseWristbands } from "@/lib/billing/features";
+import { getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
+import { canRemovePlaysheetWatermark, canUseWristbands } from "@/lib/billing/features";
 import { PrintPlaybookClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -83,6 +84,9 @@ export default async function PlaybookPrintPage({ params }: Props) {
         team={team}
         logoUrl={(book.logo_url as string | null) ?? null}
         canUseWristbands={canUseWristbands(await getCurrentEntitlement())}
+        canRemovePlaysheetWatermark={canRemovePlaysheetWatermark(
+          await getPlaybookOwnerEntitlement(playbookId),
+        )}
       />
     </div>
   );
