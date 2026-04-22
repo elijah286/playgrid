@@ -16,6 +16,7 @@ import {
 import { getPlaybookOwnerEntitlement, getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import { FREE_MAX_PLAYS_PER_PLAYBOOK, tierAtLeast } from "@/lib/billing/features";
 import { assertNotLocked, computeDowngradeLocks } from "@/lib/billing/downgrade-locks";
+import { resolveExampleMakerScope } from "@/lib/examples/mode";
 
 async function assertPlayCap(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -964,7 +965,22 @@ export async function getDashboardSummaryAction(): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  await ensureDefaultWorkspace(supabase, user.id);
+  // In example maker mode, the dashboard lists the examples user's
+  // playbooks instead of the admin's own. The caller still reads through
+  // their authenticated client — RLS grants admins select on examples
+  // content (see migration 0063).
+  const scope = await resolveExampleMakerScope();
+  const listUserId = scope.active ? scope.examplesUserId : user.id;
+
+  if (scope.active) {
+    // Bootstrap the examples user's workspace, not the admin's. Requires
+    // service role because the admin doesn't have RLS access to create
+    // orgs / teams for another user.
+    const svc = createServiceRoleClient();
+    await ensureDefaultWorkspace(svc, listUserId);
+  } else {
+    await ensureDefaultWorkspace(supabase, user.id);
+  }
 
   // Read through playbook_members so we get both owned and shared playbooks,
   // and know the caller's role on each.
@@ -973,7 +989,7 @@ export async function getDashboardSummaryAction(): Promise<
     .select(
       "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, sport_variant, settings, custom_offense_count, allow_coach_duplication, allow_player_duplication, plays(count))",
     )
-    .eq("user_id", user.id)
+    .eq("user_id", listUserId)
     .eq("playbooks.plays.is_archived", false);
 
   if (memErr) return { ok: false, error: memErr.message };
@@ -1068,11 +1084,15 @@ export async function getDashboardSummaryAction(): Promise<
   }
 
   // Apply downgrade locks: free owners see their extra playbooks as locked.
-  const locks = await computeDowngradeLocks(user.id);
-  if (locks.lockedPlaybookIds.size > 0) {
-    for (const book of playbooks) {
-      if (book.role === "owner" && locks.lockedPlaybookIds.has(book.id)) {
-        book.is_locked = true;
+  // Skipped in example maker mode — admins are editing on behalf of the
+  // examples account and shouldn't be blocked by that account's tier.
+  if (!scope.active) {
+    const locks = await computeDowngradeLocks(user.id);
+    if (locks.lockedPlaybookIds.size > 0) {
+      for (const book of playbooks) {
+        if (book.role === "owner" && locks.lockedPlaybookIds.has(book.id)) {
+          book.is_locked = true;
+        }
       }
     }
   }

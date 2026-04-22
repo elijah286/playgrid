@@ -18,6 +18,7 @@ import {
 } from "@/lib/billing/features";
 import { assertNotLocked } from "@/lib/billing/downgrade-locks";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
+import { resolveExampleMakerScope } from "@/lib/examples/mode";
 
 async function assertPlaybookNotLocked(
   playbookId: string,
@@ -146,22 +147,31 @@ export async function createPlaybookAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const entitlement = await getUserEntitlement(user.id);
-  if (!tierAtLeast(entitlement, "coach")) {
-    // Count all real playbooks the user owns — archived books still count so
-    // users can't sidestep the cap by archiving. Only the hidden default
-    // Inbox playbook is excluded.
-    const { count: ownedCount } = await supabase
-      .from("playbook_members")
-      .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("role", "owner")
-      .eq("playbooks.is_default", false);
-    if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
-      return {
-        ok: false as const,
-        error: `Free tier is limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Coach to create more.`,
-      };
+  // In example maker mode, the new playbook is owned by the configured
+  // examples user instead of the admin. We skip the admin's free-tier
+  // cap check; the examples account is assumed to be authoring-tier and
+  // its books are not billed against the admin.
+  const scope = await resolveExampleMakerScope();
+  const ownerId = scope.active ? scope.examplesUserId : user.id;
+
+  if (!scope.active) {
+    const entitlement = await getUserEntitlement(user.id);
+    if (!tierAtLeast(entitlement, "coach")) {
+      // Count all real playbooks the user owns — archived books still count
+      // so users can't sidestep the cap by archiving. Only the hidden
+      // default Inbox playbook is excluded.
+      const { count: ownedCount } = await supabase
+        .from("playbook_members")
+        .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("role", "owner")
+        .eq("playbooks.is_default", false);
+      if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
+        return {
+          ok: false as const,
+          error: `Free tier is limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Coach to create more.`,
+        };
+      }
     }
   }
 
@@ -185,9 +195,14 @@ export async function createPlaybookAction(
     offenseCount = n;
   }
 
+  // Writes that create workspace rows for another user require service role —
+  // admins don't have RLS grants on other accounts' orgs / teams / initial
+  // membership inserts.
+  const writer = scope.active ? createServiceRoleClient() : supabase;
+
   let teamId: string;
   try {
-    const ws = await ensureDefaultWorkspace(supabase, user.id);
+    const ws = await ensureDefaultWorkspace(writer, ownerId);
     teamId = ws.teamId;
   } catch (e) {
     return {
@@ -201,7 +216,7 @@ export async function createPlaybookAction(
   const resolvedSettings =
     settings ?? defaultSettingsForVariant(sportVariant, offenseCount);
 
-  const { data, error } = await supabase
+  const { data, error } = await writer
     .from("playbooks")
     .insert({
       team_id: teamId,
@@ -218,9 +233,9 @@ export async function createPlaybookAction(
 
   if (error) return { ok: false as const, error: error.message };
 
-  await supabase
+  await writer
     .from("playbook_members")
-    .insert({ playbook_id: data.id, user_id: user.id, role: "owner" });
+    .insert({ playbook_id: data.id, user_id: ownerId, role: "owner" });
 
   return { ok: true as const, id: data.id };
 }
