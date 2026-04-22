@@ -1003,35 +1003,6 @@ export function PlaybookDetailClient({
             Showing the 2000 most-recent plays. Archive or delete older plays to see more.
           </p>
         )}
-        {/* Section jump pills — only shown when grouping is active and there's
-            more than one section. Horizontal scroll on overflow so this stays
-            tidy on mobile and doesn't introduce a separate sidebar. */}
-        {sections.length > 1 && (
-          <nav
-            aria-label="Jump to section"
-            className="mb-4 -mx-6 flex gap-1.5 overflow-x-auto px-6 pb-1"
-          >
-            {sections.map((s) => {
-              const active = activeSection === s.key;
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => jumpToSection(s.key)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    active
-                      ? "bg-primary/10 text-primary ring-1 ring-primary/30"
-                      : "bg-surface-inset text-foreground hover:bg-surface-raised"
-                  }`}
-                >
-                  <span className="truncate max-w-[12rem]">{s.label || "Ungrouped"}</span>
-                  <span className="text-[10px] text-muted tabular-nums">{s.plays.length}</span>
-                </button>
-              );
-            })}
-          </nav>
-        )}
-
         {/* Main area */}
         <div className="min-w-0">
       {filtered.length === 0 ? (
