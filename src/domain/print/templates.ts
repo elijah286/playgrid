@@ -452,7 +452,7 @@ function renderPlaysheetPage(
     const row = Math.floor(i / opts.columns);
     const ox = margin + col * cellW;
     const oy = topOffset + row * cellH;
-    body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts, pad);
+    body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts, pad, freeTier);
   }
   const headerSvg = header ? renderPlaysheetHeaderBanner(w, header, margin) : "";
   const freeWm = freeTier ? freeTierWatermarkSvg(w, h) : "";
@@ -476,6 +476,7 @@ function renderPlaysheetCell(
   notesH: number,
   opts: PlaysheetOptions,
   padScale: number = 1,
+  freeTier: boolean = false,
 ): string {
   const padX = 2 * padScale;
   const padTop = 1.5 * padScale;
@@ -506,6 +507,9 @@ function renderPlaysheetCell(
     header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="Helvetica,Arial,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
   }
 
+  const fieldWm = freeTier
+    ? renderFieldFreeTierWatermark(fieldX, fieldY, fieldW, fieldH)
+    : "";
   const field = renderFieldContents(doc, fieldX, fieldY, fieldW, fieldH, opts);
 
   let notes = "";
@@ -540,6 +544,7 @@ function renderPlaysheetCell(
     ${outerBorder}
     ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
+    ${fieldWm}
     ${field}
     ${notes}
   </g>`;
@@ -729,6 +734,37 @@ function freeTierWatermarkSvg(w: number, h: number): string {
     }
   }
   return `<g transform="translate(${(w / 2).toFixed(2)} ${(h / 2).toFixed(2)}) rotate(-45)" style="pointer-events:none">${cells}</g>`;
+}
+
+/**
+ * Tiled PlayGrid watermark for a single play's field area on free-tier
+ * playsheets. Clipped to the field rect so letters don't bleed into the header
+ * or notes. Rendered behind the routes/players.
+ */
+function renderFieldFreeTierWatermark(
+  fx: number,
+  fy: number,
+  fw: number,
+  fh: number,
+): string {
+  const fontSize = Math.max(3, Math.min(7, Math.min(fw, fh) * 0.18));
+  const tileX = fontSize * 5;
+  const tileY = fontSize * 2.2;
+  const diag = Math.ceil(Math.hypot(fw, fh)) + tileY * 2;
+  const cols = Math.ceil(diag / tileX) + 2;
+  const rows = Math.ceil(diag / tileY) + 2;
+  const startX = -diag / 2;
+  const startY = -diag / 2;
+  const clipId = `fwm-${Math.random().toString(36).slice(2, 9)}`;
+  let cells = "";
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = startX + c * tileX + (r % 2 === 0 ? 0 : tileX / 2);
+      const y = startY + r * tileY;
+      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Helvetica,Arial,sans-serif" font-size="${fontSize.toFixed(2)}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.3">PlayGrid</text>`;
+    }
+  }
+  return `<defs><clipPath id="${clipId}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath></defs><g clip-path="url(#${clipId})" style="pointer-events:none"><g transform="translate(${(fx + fw / 2).toFixed(2)} ${(fy + fh / 2).toFixed(2)}) rotate(-45)">${cells}</g></g>`;
 }
 
 function watermarkSvg(w: number, h: number, wm: Watermark | null): string {
