@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, MessageCircle, Ticket, Users } from "lucide-react";
+import { CreditCard, KeyRound, MessageCircle, Ticket, Users } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
+import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
+import type { GiftCodeRow } from "@/app/actions/admin-billing";
 import { SegmentedControl } from "@/components/ui";
 
 type IntegrationProps =
@@ -26,7 +28,7 @@ type ResendProps =
     }
   | { ok: false; error: string };
 
-type Tab = "users" | "invites" | "integrations" | "feedback";
+type Tab = "users" | "invites" | "payments" | "integrations" | "feedback";
 
 export function SettingsClient({
   currentUserId,
@@ -39,6 +41,9 @@ export function SettingsClient({
   initialFeedbackWidgetEnabled,
   initialInvites,
   invitesError,
+  initialGiftCodes,
+  giftCodesError,
+  stripeStatus,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -50,6 +55,9 @@ export function SettingsClient({
   initialFeedbackWidgetEnabled: boolean;
   initialInvites: CoachInvitationRow[];
   invitesError: string | null;
+  initialGiftCodes: GiftCodeRow[];
+  giftCodesError: string | null;
+  stripeStatus: { hasSecretKey: boolean; hasWebhookSecret: boolean; mode: "test" | "live" | null };
 }) {
   const [tab, setTab] = useState<Tab>("users");
 
@@ -61,6 +69,7 @@ export function SettingsClient({
         options={[
           { value: "users", label: "Users", icon: Users },
           { value: "invites", label: "Coach invites", icon: Ticket },
+          { value: "payments", label: "Payments", icon: CreditCard },
           { value: "integrations", label: "Integrations", icon: KeyRound },
           { value: "feedback", label: "Feedback", icon: MessageCircle },
         ]}
@@ -82,6 +91,14 @@ export function SettingsClient({
         <CoachInvitationsAdminClient
           initialItems={initialInvites}
           initialError={invitesError}
+        />
+      )}
+
+      {tab === "payments" && (
+        <BillingAdminClient
+          initialCodes={initialGiftCodes}
+          initialError={giftCodesError}
+          stripeStatus={stripeStatus}
         />
       )}
 

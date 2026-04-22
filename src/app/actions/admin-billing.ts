@@ -194,6 +194,30 @@ export async function listGiftCodesAction(): Promise<
   return { ok: true, codes };
 }
 
+export async function getStripeConfigStatusAction(): Promise<{
+  ok: true;
+  hasSecretKey: boolean;
+  hasWebhookSecret: boolean;
+  mode: "test" | "live" | null;
+} | { ok: false; error: string }> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+
+  const secret = process.env.STRIPE_SECRET_KEY ?? "";
+  const hasSecretKey = secret.startsWith("sk_");
+  const mode: "test" | "live" | null = secret.startsWith("sk_test_")
+    ? "test"
+    : secret.startsWith("sk_live_")
+      ? "live"
+      : null;
+  return {
+    ok: true,
+    hasSecretKey,
+    hasWebhookSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
+    mode,
+  };
+}
+
 export async function revokeGiftCodeAction(codeId: string) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
