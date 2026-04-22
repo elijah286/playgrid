@@ -5,10 +5,19 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #F26522;
-  --color-primary-hover: #E05A1B;
-  --color-primary-light: #FFF3EC;
-  --color-primary-dark: #C44F13;
+  --color-primary: #1769FF;
+  --color-primary-hover: #0F50CC;
+  --color-primary-light: #E6F0FF;
+  --color-primary-dark: #0B3D99;
+
+  /* Preserved orange for upgrade CTAs and play-number badges. */
+  --color-brand-orange: #F26522;
+  --color-brand-orange-hover: #E05A1B;
+  --color-brand-orange-light: #FFF3EC;
+
+  /* Brand green accent (logo's O). */
+  --color-brand-green: #95CC1F;
+  --color-brand-green-hover: #7DAE17;
 
   --color-surface: #FAFAF8;
   --color-surface-raised: #FFFFFF;
@@ -64,7 +73,8 @@
   --color-border: #2A2F3A;
   --color-border-light: #1F2330;
 
-  --color-primary-light: rgba(242, 101, 34, 0.16);
+  --color-primary-light: rgba(23, 105, 255, 0.18);
+  --color-brand-orange-light: rgba(242, 101, 34, 0.16);
   --color-danger-light: rgba(220, 38, 38, 0.18);
   --color-warning-light: rgba(245, 158, 11, 0.16);
   --color-success-light: rgba(22, 163, 74, 0.18);
