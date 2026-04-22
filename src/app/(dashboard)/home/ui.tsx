@@ -240,6 +240,7 @@ function PlaybookTile({
           <h3 className="min-w-0 flex-1 truncate text-base font-bold text-foreground">
             {tile.name}
           </h3>
+          {tile.is_example && <Badge variant="primary">Example</Badge>}
           {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
         </div>
         <p className="text-xs text-muted">
@@ -530,11 +531,14 @@ function PlaybookBookTile({
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
                   Playbook
                 </span>
-                {tile.role !== "owner" && (
-                  <Badge variant={tile.role === "editor" ? "primary" : "default"}>
-                    {tile.role === "editor" ? "Editor" : "Viewer"}
-                  </Badge>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {tile.is_example && <Badge variant="primary">Example</Badge>}
+                  {tile.role !== "owner" && (
+                    <Badge variant={tile.role === "editor" ? "primary" : "default"}>
+                      {tile.role === "editor" ? "Editor" : "Viewer"}
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-1 items-center justify-center">
@@ -925,13 +929,24 @@ export function DashboardClient({
   const [storedView, setView] = useDashboardView();
   const view: DashboardView = hideAnimation ? "classic" : storedView;
   const [showArchived, setShowArchived] = useState(false);
+  const [showExamples, setShowExamples] = useState(false);
 
   const ownedAll = data.playbooks.filter((b) => b.role === "owner" && !b.is_default);
   const sharedAll = data.playbooks.filter((b) => b.role !== "owner");
-  const owned = ownedAll.filter((b) => !b.is_archived);
-  const shared = sharedAll.filter((b) => !b.is_archived);
+  // Example playbooks are pulled out of the main grid so the admin's
+  // real work isn't mixed with marketing copies. They only show when
+  // the admin toggles "Show marketing examples".
+  const examples = [...ownedAll, ...sharedAll].filter(
+    (b) => b.is_example && !b.is_archived,
+  );
+  const owned = ownedAll.filter((b) => !b.is_archived && !b.is_example);
+  const shared = sharedAll.filter((b) => !b.is_archived && !b.is_example);
   const archived = [...ownedAll, ...sharedAll].filter((b) => b.is_archived);
-  const isEmpty = owned.length === 0 && shared.length === 0 && archived.length === 0;
+  const isEmpty =
+    owned.length === 0 &&
+    shared.length === 0 &&
+    archived.length === 0 &&
+    examples.length === 0;
 
   function refresh() {
     router.refresh();
@@ -1205,6 +1220,17 @@ export function DashboardClient({
                 Show archived
               </label>
             )}
+            {isAdmin && examples.length > 0 && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-foreground">
+                <input
+                  type="checkbox"
+                  checked={showExamples}
+                  onChange={(e) => setShowExamples(e.target.checked)}
+                  className="size-3.5 accent-primary"
+                />
+                Show marketing examples
+              </label>
+            )}
             <Button
               variant="primary"
               size="sm"
@@ -1271,6 +1297,31 @@ export function DashboardClient({
               </div>
             </>
           )}
+          {isAdmin && showExamples && examples.length > 0 && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Marketing examples · {examples.length}
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="flex flex-wrap justify-start gap-3">
+                {examples.map((b) => (
+                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
+                    <PlaybookBookTile
+                      tile={b}
+                      actions={
+                        b.role === "owner"
+                          ? buildOwnerActions(b)
+                          : buildSharedActions(b)
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       ) : (
         <section className="space-y-6">
@@ -1298,6 +1349,30 @@ export function DashboardClient({
               </div>
               <div className="grid grid-cols-1 gap-4 opacity-70 sm:grid-cols-2 lg:grid-cols-4">
                 {archived.map((b) => (
+                  <PlaybookTile
+                    key={b.id}
+                    tile={b}
+                    actions={
+                      b.role === "owner"
+                        ? buildOwnerActions(b)
+                        : buildSharedActions(b)
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {isAdmin && showExamples && examples.length > 0 && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Marketing examples · {examples.length}
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {examples.map((b) => (
                   <PlaybookTile
                     key={b.id}
                     tile={b}
