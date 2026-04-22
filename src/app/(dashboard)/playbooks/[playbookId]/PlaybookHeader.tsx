@@ -13,6 +13,7 @@ import {
   SegmentedControl,
   useToast,
 } from "@/components/ui";
+import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import {
   archivePlaybookAction,
   deletePlaybookAction,
@@ -69,6 +70,7 @@ export function PlaybookHeader({
   accentColor,
   canManage,
   canShare,
+  viewerIsCoach,
   senderName,
   ownerDisplayName,
   allowCoachDuplication,
@@ -84,6 +86,7 @@ export function PlaybookHeader({
   accentColor: string;
   canManage: boolean;
   canShare: boolean;
+  viewerIsCoach: boolean;
   senderName?: string | null;
   ownerDisplayName?: string | null;
   allowCoachDuplication?: boolean;
@@ -93,6 +96,29 @@ export function PlaybookHeader({
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+
+  function openInvite() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Sharing a playbook is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
+      });
+      return;
+    }
+    setInviteOpen(true);
+  }
+
+  function openDuplicate() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Duplicating playbooks is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to duplicate playbooks.",
+      });
+      return;
+    }
+    setDuplicateOpen(true);
+  }
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -103,7 +129,14 @@ export function PlaybookHeader({
     const params = new URLSearchParams(searchParams.toString());
     if (canShare && searchParams.get("share") === "1") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydrate from URL query param
-      setInviteOpen(true);
+      if (viewerIsCoach) {
+        setInviteOpen(true);
+      } else {
+        setUpgradeNotice({
+          title: "Sharing a playbook is a Coach feature",
+          message: "Upgrade to Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
+        });
+      }
       params.delete("share");
       changed = true;
     }
@@ -116,7 +149,7 @@ export function PlaybookHeader({
       const qs = params.toString();
       router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
     }
-  }, [canManage, canShare, searchParams, router]);
+  }, [canManage, canShare, viewerIsCoach, searchParams, router]);
 
   function run(
     fn: () => Promise<{ ok: boolean; error?: string } | { ok: true; id?: string }>,
@@ -233,7 +266,7 @@ export function PlaybookHeader({
               <Button
                 size="sm"
                 leftIcon={UserPlus}
-                onClick={() => setInviteOpen(true)}
+                onClick={openInvite}
                 className={`hidden sm:inline-flex ${
                   isLightBg
                     ? "!bg-slate-900 !text-white hover:!bg-slate-800"
@@ -248,9 +281,9 @@ export function PlaybookHeader({
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
                 canManage={canManage}
-                onInvite={canShare ? () => setInviteOpen(true) : null}
+                onInvite={canShare ? openInvite : null}
                 onCustomize={canManage ? () => setCustomizeOpen(true) : null}
-                onDuplicate={canManage ? () => setDuplicateOpen(true) : null}
+                onDuplicate={canManage ? openDuplicate : null}
                 onToggleCoachDup={canManage ? handleToggleCoachDup : null}
                 onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
                 onArchive={canManage ? handleArchive : null}
@@ -294,6 +327,13 @@ export function PlaybookHeader({
           onDuplicate={handleDuplicate}
         />
       )}
+
+      <UpgradeModal
+        open={!!upgradeNotice}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
     </>
   );
 }

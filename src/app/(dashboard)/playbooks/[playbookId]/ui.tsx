@@ -156,6 +156,7 @@ export function PlaybookDetailClient({
     accentColor: string;
     canManage: boolean;
     canShare: boolean;
+    viewerIsCoach: boolean;
     senderName: string | null;
     ownerDisplayName: string | null;
     allowCoachDuplication: boolean;
@@ -707,6 +708,7 @@ export function PlaybookDetailClient({
           accentColor={headerProps.accentColor}
           canManage={headerProps.canManage}
           canShare={headerProps.canShare}
+          viewerIsCoach={headerProps.viewerIsCoach}
           senderName={headerProps.senderName}
           ownerDisplayName={headerProps.ownerDisplayName}
           allowCoachDuplication={headerProps.allowCoachDuplication}
@@ -1003,6 +1005,7 @@ export function PlaybookDetailClient({
           playbookId={playbookId}
           members={initialRoster}
           invites={initialInvites}
+          viewerIsCoach={headerProps.viewerIsCoach}
         />
       )}
 
@@ -1019,6 +1022,7 @@ export function PlaybookDetailClient({
           playbookId={playbookId}
           members={initialRoster}
           invites={initialInvites}
+          viewerIsCoach={headerProps.viewerIsCoach}
         />
       )}
 
@@ -1724,14 +1728,27 @@ function RosterPanel({
   playbookId,
   members,
   invites,
+  viewerIsCoach,
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
   invites: PlaybookInvite[];
+  viewerIsCoach: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  function openInvite() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Sharing a playbook is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to invite players and share playbooks.",
+      });
+      return;
+    }
+    setShowInviteModal(true);
+  }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   // Roster tab is player-only; coaches (owner/editor) live in the Staff tab.
@@ -1775,7 +1792,7 @@ function RosterPanel({
         <Button
           variant="primary"
           leftIcon={Plus}
-          onClick={() => setShowInviteModal(true)}
+          onClick={openInvite}
         >
           Invite
         </Button>
@@ -1898,6 +1915,13 @@ function RosterPanel({
           }}
         />
       )}
+
+      <UpgradeModal
+        open={!!upgradeNotice}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
     </div>
   );
 }
@@ -2450,14 +2474,27 @@ function StaffPanel({
   playbookId,
   members,
   invites,
+  viewerIsCoach,
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
   invites: PlaybookInvite[];
+  viewerIsCoach: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  function openInvite() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Sharing a playbook is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to invite coaches and share playbooks.",
+      });
+      return;
+    }
+    setShowInviteModal(true);
+  }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   // Coaches = owner/editor; players live in the Roster tab.
@@ -2523,7 +2560,7 @@ function StaffPanel({
         <Button
           variant="primary"
           leftIcon={Plus}
-          onClick={() => setShowInviteModal(true)}
+          onClick={openInvite}
         >
           Invite
         </Button>
@@ -2635,6 +2672,13 @@ function StaffPanel({
           }}
         />
       )}
+
+      <UpgradeModal
+        open={!!upgradeNotice}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
     </div>
   );
 }
