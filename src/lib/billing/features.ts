@@ -36,8 +36,16 @@ export function canRemovePlaysheetWatermark(entitlement: Entitlement | null): bo
 }
 
 /** Free tier caps. Owner tier-driven unless noted. */
-export const FREE_MAX_PLAYS_PER_PLAYBOOK = 12;
 export const FREE_MAX_PLAYBOOKS_OWNED = 1;
+
+/**
+ * Fallback default for the per-playbook free-tier play cap. The live value is
+ * admin-configurable via `site_settings.free_max_plays_per_playbook`; read it
+ * with `getFreeMaxPlaysPerPlaybook()` from `@/lib/site/free-tier-config`.
+ * This constant is only used when the site settings row is missing or the
+ * value can't be read (e.g. Supabase is not configured).
+ */
+export const FREE_MAX_PLAYS_PER_PLAYBOOK_DEFAULT = 15;
 
 export function canCreateAnotherPlaybook(
   entitlement: Entitlement | null,
@@ -45,14 +53,6 @@ export function canCreateAnotherPlaybook(
 ): boolean {
   if (tierAtLeast(entitlement, "coach")) return true;
   return ownedCount < FREE_MAX_PLAYBOOKS_OWNED;
-}
-
-export function canAddAnotherPlay(
-  ownerEntitlement: Entitlement | null,
-  currentPlayCount: number,
-): boolean {
-  if (tierAtLeast(ownerEntitlement, "coach")) return true;
-  return currentPlayCount < FREE_MAX_PLAYS_PER_PLAYBOOK;
 }
 
 export function canDuplicatePlaybook(entitlement: Entitlement | null): boolean {

@@ -16,6 +16,7 @@ import {
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-tier-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { SettingsClient } from "./ui";
 
@@ -35,6 +36,7 @@ export default async function SettingsPage() {
     stripeStatusRes,
     coachAiEnabled,
     hideLobbyAnimation,
+    freeMaxPlaysPerPlaybook,
     trafficRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
@@ -47,6 +49,7 @@ export default async function SettingsPage() {
     getStripeConfigStatusAction(),
     getCoachAiTierEnabled(),
     getHideLobbyAnimation(),
+    getFreeMaxPlaysPerPlaybook(),
     getTrafficSummaryAction(30),
   ]);
 
@@ -116,6 +119,7 @@ export default async function SettingsPage() {
         }
         initialCoachAiEnabled={coachAiEnabled}
         initialHideLobbyAnimation={hideLobbyAnimation}
+        initialFreeMaxPlaysPerPlaybook={freeMaxPlaysPerPlaybook}
         initialTrafficSummary={
           trafficRes.ok
             ? trafficRes.summary

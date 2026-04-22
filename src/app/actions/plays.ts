@@ -14,8 +14,9 @@ import {
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { getPlaybookOwnerEntitlement, getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
-import { FREE_MAX_PLAYS_PER_PLAYBOOK, tierAtLeast } from "@/lib/billing/features";
+import { tierAtLeast } from "@/lib/billing/features";
 import { assertNotLocked, computeDowngradeLocks } from "@/lib/billing/downgrade-locks";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-tier-config";
 
 async function assertPlayCap(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -23,15 +24,16 @@ async function assertPlayCap(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ownerEnt = await getPlaybookOwnerEntitlement(playbookId);
   if (tierAtLeast(ownerEnt, "coach")) return { ok: true };
+  const limit = await getFreeMaxPlaysPerPlaybook();
   const { count } = await supabase
     .from("plays")
     .select("id", { count: "exact", head: true })
     .eq("playbook_id", playbookId)
     .eq("is_archived", false);
-  if ((count ?? 0) >= FREE_MAX_PLAYS_PER_PLAYBOOK) {
+  if ((count ?? 0) >= limit) {
     return {
       ok: false,
-      error: `Free tier is capped at ${FREE_MAX_PLAYS_PER_PLAYBOOK} plays per playbook. Upgrade to Coach for unlimited plays.`,
+      error: `Free tier is capped at ${limit} plays per playbook. Upgrade to Coach for unlimited plays.`,
     };
   }
   return { ok: true };

@@ -65,6 +65,7 @@ export function SettingsClient({
   stripeStatus,
   initialCoachAiEnabled,
   initialHideLobbyAnimation,
+  initialFreeMaxPlaysPerPlaybook,
   initialTrafficSummary,
   trafficError,
 }: {
@@ -83,6 +84,7 @@ export function SettingsClient({
   stripeStatus: StripeConfigStatus;
   initialCoachAiEnabled: boolean;
   initialHideLobbyAnimation: boolean;
+  initialFreeMaxPlaysPerPlaybook: number;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
 }) {
@@ -186,6 +188,7 @@ export function SettingsClient({
       {tab === "site" && (
         <SiteSettingsAdminClient
           initialHideLobbyAnimation={initialHideLobbyAnimation}
+          initialFreeMaxPlaysPerPlaybook={initialFreeMaxPlaysPerPlaybook}
         />
       )}
     </div>

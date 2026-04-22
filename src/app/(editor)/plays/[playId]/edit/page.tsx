@@ -6,6 +6,7 @@ import { listFormationsAction, listFormationsForPlaybookAction } from "@/app/act
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-tier-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import type { SavedFormation } from "@/app/actions/formations";
 
@@ -28,7 +29,7 @@ export default async function PlayEditPage({ params }: Props) {
   const res = await getPlayForEditorAction(playId);
   if (!res.ok) notFound();
 
-  const [nav, formationsRes, allFormationsRes, settingsRes] = await Promise.all([
+  const [nav, formationsRes, allFormationsRes, settingsRes, freeMaxPlays] = await Promise.all([
     listPlaybookPlaysForNavigationAction(res.play.playbook_id),
     listFormationsForPlaybookAction(res.play.playbook_id),
     // Fallback list — used only to resolve the play's currently-linked or
@@ -36,6 +37,7 @@ export default async function PlayEditPage({ params }: Props) {
     // defense/special-teams formations, or one the coach removed later).
     listFormationsAction(),
     getPlaybookSettingsAction(res.play.playbook_id),
+    getFreeMaxPlaysPerPlaybook(),
   ]);
   const playbookSettings = settingsRes.ok
     ? settingsRes.settings
@@ -95,6 +97,7 @@ export default async function PlayEditPage({ params }: Props) {
       allFormations={allFormations}
       opponentFormations={allFormationsForLookup}
       playbookSettings={playbookSettings}
+      freeMaxPlays={freeMaxPlays}
       canEdit={canEdit}
     />
   );

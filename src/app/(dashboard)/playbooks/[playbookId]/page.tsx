@@ -11,6 +11,7 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-tier-config";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -35,12 +36,13 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   if (error || !book) notFound();
 
-  const [listed, rosterRes, invitesRes, formationsRes, prefsRes] = await Promise.all([
+  const [listed, rosterRes, invitesRes, formationsRes, prefsRes, freeMaxPlays] = await Promise.all([
     listPlaysAction(playbookId, { includeArchived: true }),
     listPlaybookRosterAction(playbookId),
     listInvitesAction(playbookId),
     listFormationsForPlaybookAction(playbookId),
     getPlaybookViewPrefsAction(playbookId),
+    getFreeMaxPlaysPerPlaybook(),
   ]);
 
   const {
@@ -116,6 +118,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       initialInvites={invitesRes.ok ? invitesRes.invites : []}
       initialFormations={formationsRes.ok ? formationsRes.formations : []}
       initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
+      freeMaxPlays={freeMaxPlays}
       headerProps={{
         name: book.name as string,
         season: (book.season as string | null) ?? null,

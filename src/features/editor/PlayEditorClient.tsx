@@ -45,6 +45,10 @@ type Props = {
   /** Full cross-variant, cross-playbook list. Used only by the opponent overlay. */
   opponentFormations?: SavedFormation[];
   playbookSettings?: PlaybookSettings;
+  /** Site-wide admin-configured cap on plays per playbook for free-tier
+   *  owners. Used in the "upgrade" modal shown when duplicate-play hits the
+   *  cap. */
+  freeMaxPlays: number;
   /** When false, the viewer only has read + playback + opponent-overlay
    *  access. Toolbars, inspectors, tag inputs, rename, copy, and auto-save
    *  are all suppressed. */
@@ -62,6 +66,7 @@ export function PlayEditorClient({
   allFormations = [],
   opponentFormations,
   playbookSettings,
+  freeMaxPlays,
   canEdit = true,
 }: Props) {
   const router = useRouter();
@@ -255,7 +260,7 @@ export function PlayEditorClient({
         if (!res.ok) {
           if (/Free tier|capped at/i.test(res.error)) {
             setUpgradeNotice({
-              title: "Free tier is capped at 12 plays per playbook",
+              title: `Free tier is capped at ${freeMaxPlays} plays per playbook`,
               message:
                 "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
             });
@@ -268,7 +273,7 @@ export function PlayEditorClient({
         }
       });
     },
-    [playId, router, toast],
+    [playId, router, toast, freeMaxPlays],
   );
 
   const duplicate = useCallback(() => {
