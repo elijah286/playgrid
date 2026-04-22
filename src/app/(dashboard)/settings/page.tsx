@@ -89,12 +89,21 @@ export default async function SettingsPage() {
         giftCodesError={giftCodesRes.ok ? null : giftCodesRes.error}
         stripeStatus={
           stripeStatusRes.ok
-            ? {
-                hasSecretKey: stripeStatusRes.hasSecretKey,
-                hasWebhookSecret: stripeStatusRes.hasWebhookSecret,
-                mode: stripeStatusRes.mode,
+            ? stripeStatusRes.status
+            : {
+                hasSecretKey: false,
+                hasWebhookSecret: false,
+                hasPublishableKey: false,
+                mode: null,
+                updatedAt: null,
+                publishableKey: null,
+                priceIds: {
+                  coach_month: null,
+                  coach_year: null,
+                  coach_ai_month: null,
+                  coach_ai_year: null,
+                },
               }
-            : { hasSecretKey: false, hasWebhookSecret: false, mode: null }
         }
       />
     </div>

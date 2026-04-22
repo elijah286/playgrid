@@ -11,6 +11,7 @@ import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type { GiftCodeRow } from "@/app/actions/admin-billing";
+import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import { SegmentedControl } from "@/components/ui";
 
 type IntegrationProps =
@@ -57,7 +58,7 @@ export function SettingsClient({
   invitesError: string | null;
   initialGiftCodes: GiftCodeRow[];
   giftCodesError: string | null;
-  stripeStatus: { hasSecretKey: boolean; hasWebhookSecret: boolean; mode: "test" | "live" | null };
+  stripeStatus: StripeConfigStatus;
 }) {
   const [tab, setTab] = useState<Tab>("users");
 

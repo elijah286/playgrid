@@ -11,6 +11,8 @@ import {
 import { Modal } from "@/components/ui";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { TIER_LABEL } from "@/lib/billing/features";
+import type { StripeConfigStatus } from "@/lib/site/stripe-config";
+import { StripeSettingsClient } from "./StripeSettingsClient";
 
 type Msg = { kind: "error" | "success"; text: string } | null;
 
@@ -57,7 +59,7 @@ export function BillingAdminClient({
 }: {
   initialCodes: GiftCodeRow[];
   initialError: string | null;
-  stripeStatus: { hasSecretKey: boolean; hasWebhookSecret: boolean; mode: "test" | "live" | null };
+  stripeStatus: StripeConfigStatus;
 }) {
   const [codes, setCodes] = useState(initialCodes);
   const [msg, setMsg] = useState<Msg>(initialError ? { kind: "error", text: initialError } : null);
@@ -98,39 +100,7 @@ export function BillingAdminClient({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl bg-card p-4 ring-1 ring-border">
-        <header className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Stripe configuration</h2>
-            <p className="text-xs text-muted">Configured via server environment variables.</p>
-          </div>
-        </header>
-        <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-          <div className="rounded-lg bg-surface px-3 py-2 ring-1 ring-border">
-            <dt className="text-xs uppercase tracking-wide text-muted">Secret key</dt>
-            <dd className="mt-1 text-foreground">
-              {stripeStatus.hasSecretKey ? "Set" : "Missing"}
-            </dd>
-          </div>
-          <div className="rounded-lg bg-surface px-3 py-2 ring-1 ring-border">
-            <dt className="text-xs uppercase tracking-wide text-muted">Webhook secret</dt>
-            <dd className="mt-1 text-foreground">
-              {stripeStatus.hasWebhookSecret ? "Set" : "Missing"}
-            </dd>
-          </div>
-          <div className="rounded-lg bg-surface px-3 py-2 ring-1 ring-border">
-            <dt className="text-xs uppercase tracking-wide text-muted">Mode</dt>
-            <dd className="mt-1 text-foreground">
-              {stripeStatus.mode ?? "Not set"}
-            </dd>
-          </div>
-        </dl>
-        <p className="mt-3 text-xs text-muted">
-          Set <code className="font-mono">STRIPE_SECRET_KEY</code>,{" "}
-          <code className="font-mono">STRIPE_WEBHOOK_SECRET</code>, and price IDs per tier in your
-          server env. Products/prices are managed in the Stripe dashboard.
-        </p>
-      </section>
+      <StripeSettingsClient initial={stripeStatus} />
 
       <section className="rounded-xl bg-card p-4 ring-1 ring-border">
         <header className="mb-3 flex items-center justify-between">

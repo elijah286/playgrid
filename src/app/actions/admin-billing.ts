@@ -5,6 +5,15 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
+import { getStripeConfigStatus, type StripeConfigStatus } from "@/lib/site/stripe-config";
+
+const SITE_ROW_ID = "default";
+
+type PriceKey =
+  | "stripe_price_coach_month"
+  | "stripe_price_coach_year"
+  | "stripe_price_coach_ai_month"
+  | "stripe_price_coach_ai_year";
 
 async function assertAdmin() {
   if (!hasSupabaseEnv()) {
@@ -194,27 +203,140 @@ export async function listGiftCodesAction(): Promise<
   return { ok: true, codes };
 }
 
-export async function getStripeConfigStatusAction(): Promise<{
-  ok: true;
-  hasSecretKey: boolean;
-  hasWebhookSecret: boolean;
-  mode: "test" | "live" | null;
-} | { ok: false; error: string }> {
+export async function getStripeConfigStatusAction(): Promise<
+  { ok: true; status: StripeConfigStatus } | { ok: false; error: string }
+> {
   const gate = await assertAdmin();
   if (!gate.ok) return { ok: false, error: gate.error };
+  try {
+    const status = await getStripeConfigStatus();
+    return { ok: true, status };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not load Stripe config." };
+  }
+}
 
-  const secret = process.env.STRIPE_SECRET_KEY ?? "";
-  const hasSecretKey = secret.startsWith("sk_");
-  const mode: "test" | "live" | null = secret.startsWith("sk_test_")
-    ? "test"
-    : secret.startsWith("sk_live_")
-      ? "live"
-      : null;
+export async function saveStripeConfigAction(input: {
+  secretKey?: string;
+  publishableKey?: string;
+  webhookSecret?: string;
+  priceCoachMonth?: string;
+  priceCoachYear?: string;
+  priceCoachAiMonth?: string;
+  priceCoachAiYear?: string;
+}) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const patch: Record<string, string | null> = { updated_at: new Date().toISOString() };
+
+  function normalize(v: string | undefined): string | null | undefined {
+    if (v === undefined) return undefined;
+    const t = v.trim();
+    return t.length === 0 ? null : t;
+  }
+
+  const secret = normalize(input.secretKey);
+  if (secret !== undefined) {
+    if (secret !== null && !secret.startsWith("sk_test_") && !secret.startsWith("sk_live_")) {
+      return { ok: false as const, error: "Secret key should start with sk_test_ or sk_live_." };
+    }
+    patch.stripe_secret_key = secret;
+  }
+
+  const pub = normalize(input.publishableKey);
+  if (pub !== undefined) {
+    if (pub !== null && !pub.startsWith("pk_test_") && !pub.startsWith("pk_live_")) {
+      return { ok: false as const, error: "Publishable key should start with pk_test_ or pk_live_." };
+    }
+    patch.stripe_publishable_key = pub;
+  }
+
+  const hook = normalize(input.webhookSecret);
+  if (hook !== undefined) {
+    if (hook !== null && !hook.startsWith("whsec_")) {
+      return { ok: false as const, error: "Webhook secret should start with whsec_." };
+    }
+    patch.stripe_webhook_secret = hook;
+  }
+
+  const priceFields: Array<[keyof typeof input, PriceKey]> = [
+    ["priceCoachMonth", "stripe_price_coach_month"],
+    ["priceCoachYear", "stripe_price_coach_year"],
+    ["priceCoachAiMonth", "stripe_price_coach_ai_month"],
+    ["priceCoachAiYear", "stripe_price_coach_ai_year"],
+  ];
+  for (const [inKey, dbKey] of priceFields) {
+    const v = normalize(input[inKey]);
+    if (v !== undefined) {
+      if (v !== null && !v.startsWith("price_")) {
+        return { ok: false as const, error: "Price IDs must start with price_." };
+      }
+      patch[dbKey] = v;
+    }
+  }
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin.from("site_settings").update(patch).eq("id", SITE_ROW_ID);
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+export async function clearStripeConfigAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+  const admin = createServiceRoleClient();
+  const { error } = await admin
+    .from("site_settings")
+    .update({
+      stripe_secret_key: null,
+      stripe_publishable_key: null,
+      stripe_webhook_secret: null,
+      stripe_price_coach_month: null,
+      stripe_price_coach_year: null,
+      stripe_price_coach_ai_month: null,
+      stripe_price_coach_ai_year: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", SITE_ROW_ID);
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+export async function testStripeSecretAction(proposed?: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+  const admin = createServiceRoleClient();
+  let key = (proposed ?? "").trim();
+  if (!key) {
+    const { data } = await admin
+      .from("site_settings")
+      .select("stripe_secret_key")
+      .eq("id", SITE_ROW_ID)
+      .maybeSingle();
+    key = data?.stripe_secret_key ?? "";
+  }
+  if (!key) return { ok: false as const, error: "No key to test — paste one above or save first." };
+
+  const res = await fetch("https://api.stripe.com/v1/balance", {
+    headers: { Authorization: `Bearer ${key}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `Request failed (${res.status}).`;
+    try {
+      const j = (await res.json()) as { error?: { message?: string } };
+      if (j.error?.message) msg = j.error.message;
+    } catch {
+      /* ignore */
+    }
+    return { ok: false as const, error: msg };
+  }
   return {
-    ok: true,
-    hasSecretKey,
-    hasWebhookSecret: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-    mode,
+    ok: true as const,
+    message: `Connection OK — mode: ${key.startsWith("sk_live_") ? "live" : "test"}.`,
   };
 }
 
