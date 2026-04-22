@@ -34,7 +34,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
         <Link
           href={user ? "/home" : "/"}
           aria-label="xogridmaker home"
-          className="flex items-center"
+          className="flex cursor-pointer items-center"
         >
           <Image
             src="/brand/xogridmaker_wordmark.svg"
