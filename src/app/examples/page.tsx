@@ -127,8 +127,21 @@ export default async function ExamplesPage() {
   if (!enabled) notFound();
   const playbooks = await loadExamplePlaybooks();
 
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+      { "@type": "ListItem", position: 2, name: "Examples", item: "/examples" },
+    ],
+  };
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       <header className="max-w-2xl">
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           Example playbooks

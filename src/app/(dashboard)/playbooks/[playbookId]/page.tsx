@@ -202,34 +202,51 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const canManageExample = isAdmin && (effectiveRole === "owner" || effectiveRole === "editor");
 
   const publicExampleJsonLd = isPublicExample
-    ? {
-        "@context": "https://schema.org",
-        "@type": "CreativeWork",
-        name: book.name as string,
-        description: `${
-          exampleAuthorLabel ? `Playbook by ${exampleAuthorLabel}. ` : ""
-        }Example football playbook built in xogridmaker.`,
-        inLanguage: "en",
-        genre: "Football playbook",
-        isAccessibleForFree: true,
-        url: `${
-          process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com"
-        }/playbooks/${playbookId}`,
-        ...(exampleAuthorLabel
-          ? { creator: { "@type": "Person", name: exampleAuthorLabel } }
-          : {}),
-        ...(book.season ? { dateCreated: book.season as string } : {}),
-      }
+    ? [
+        {
+          "@context": "https://schema.org",
+          "@type": "CreativeWork",
+          name: book.name as string,
+          description: `${
+            exampleAuthorLabel ? `Playbook by ${exampleAuthorLabel}. ` : ""
+          }Example football playbook built in xogridmaker.`,
+          inLanguage: "en",
+          genre: "Football playbook",
+          isAccessibleForFree: true,
+          url: `${
+            process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com"
+          }/playbooks/${playbookId}`,
+          ...(exampleAuthorLabel
+            ? { creator: { "@type": "Person", name: exampleAuthorLabel } }
+            : {}),
+          ...(book.season ? { dateCreated: book.season as string } : {}),
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+            { "@type": "ListItem", position: 2, name: "Examples", item: "/examples" },
+            {
+              "@type": "ListItem",
+              position: 3,
+              name: book.name as string,
+              item: `/playbooks/${playbookId}`,
+            },
+          ],
+        },
+      ]
     : null;
 
   return (
     <>
-      {publicExampleJsonLd && (
+      {publicExampleJsonLd?.map((ld, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(publicExampleJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
         />
-      )}
+      ))}
       {isExamplePreview && <ExamplePreviewBanner />}
       <PlaybookDetailClient
         isExamplePreview={isExamplePreview}
