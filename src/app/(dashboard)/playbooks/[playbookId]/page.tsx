@@ -11,9 +11,7 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { getExamplesUserId } from "@/lib/site/examples-config";
-import { PublishExampleControl } from "@/features/admin/PublishExampleControl";
-import { DuplicateToExamplesControl } from "@/features/admin/DuplicateToExamplesControl";
+import { ExampleBanner } from "@/features/admin/ExampleBanner";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -32,7 +30,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, is_public_example")
+    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, is_example, is_public_example, example_author_label")
     .eq("id", playbookId)
     .single();
 
@@ -107,84 +105,69 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const canShare = viewerRole === "owner" || viewerRole === "editor";
   const viewerIsCoach = tierAtLeast(await getCurrentEntitlement(), "coach");
 
-  // Admins see one of two controls when an examples author is configured:
-  //   * If the playbook is already owned by the examples user → a
-  //     Publish/Draft toggle so they can push it onto /examples.
-  //   * Otherwise → a Duplicate-into-examples button so they can fork
-  //     their own (or any accessible) playbook into the examples
-  //     author's workspace and tweak it there.
-  let showPublishExampleControl = false;
-  let showDuplicateToExamplesControl = false;
+  // Site admins get two extra action menu items: "Use as Example"
+  // (toggle is_example) and "Publish / Unpublish" (toggle
+  // is_public_example, only while is_example is true). Both live in
+  // the playbook action menu; the banner above just conveys state.
+  const isExample = Boolean(
+    (book as unknown as { is_example?: boolean | null }).is_example,
+  );
   const isPublicExample = Boolean(
     (book as unknown as { is_public_example?: boolean | null })
       .is_public_example,
   );
+  const exampleAuthorLabel =
+    ((book as unknown as { example_author_label?: string | null })
+      .example_author_label as string | null) ?? null;
+
+  let isAdmin = false;
   if (user) {
     const { data: selfRoleRow } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
-    if ((selfRoleRow?.role as string | null) === "admin") {
-      const examplesUserId = await getExamplesUserId();
-      if (examplesUserId) {
-        const { data: ownerRow } = await supabase
-          .from("playbook_members")
-          .select("user_id")
-          .eq("playbook_id", playbookId)
-          .eq("role", "owner")
-          .maybeSingle();
-        const ownerId = (ownerRow?.user_id as string | null) ?? null;
-        if (ownerId === examplesUserId) {
-          showPublishExampleControl = true;
-        } else {
-          showDuplicateToExamplesControl = true;
-        }
-      }
-    }
+    isAdmin = (selfRoleRow?.role as string | null) === "admin";
   }
+  const canManageExample = isAdmin && (viewerRole === "owner" || viewerRole === "editor");
 
   return (
     <>
-    {showPublishExampleControl && (
-      <PublishExampleControl
+      {isExample && <ExampleBanner isPublished={isPublicExample} />}
+      <PlaybookDetailClient
         playbookId={playbookId}
-        initialPublished={isPublicExample}
+        sportVariant={book.sport_variant as string}
+        playerCount={(book.player_count as number | null) ?? undefined}
+        initialPlays={listed.ok ? listed.plays : []}
+        initialGroups={listed.ok ? listed.groups : []}
+        truncated={listed.truncated}
+        initialRoster={rosterRes.ok ? rosterRes.members : []}
+        initialInvites={invitesRes.ok ? invitesRes.invites : []}
+        initialFormations={formationsRes.ok ? formationsRes.formations : []}
+        initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
+        headerProps={{
+          name: book.name as string,
+          season: (book.season as string | null) ?? null,
+          variantLabel,
+          settings: playbookSettings,
+          logoUrl,
+          accentColor,
+          canManage,
+          canShare,
+          viewerIsCoach,
+          senderName,
+          ownerDisplayName,
+          allowCoachDuplication: (book.allow_coach_duplication as boolean | null) ?? true,
+          allowPlayerDuplication: (book.allow_player_duplication as boolean | null) ?? true,
+          exampleAdmin: canManageExample
+            ? {
+                isExample,
+                isPublished: isPublicExample,
+                authorLabel: exampleAuthorLabel,
+              }
+            : null,
+        }}
       />
-    )}
-    {showDuplicateToExamplesControl && (
-      <DuplicateToExamplesControl
-        playbookId={playbookId}
-        playbookName={book.name as string}
-      />
-    )}
-    <PlaybookDetailClient
-      playbookId={playbookId}
-      sportVariant={book.sport_variant as string}
-      playerCount={(book.player_count as number | null) ?? undefined}
-      initialPlays={listed.ok ? listed.plays : []}
-      initialGroups={listed.ok ? listed.groups : []}
-      truncated={listed.truncated}
-      initialRoster={rosterRes.ok ? rosterRes.members : []}
-      initialInvites={invitesRes.ok ? invitesRes.invites : []}
-      initialFormations={formationsRes.ok ? formationsRes.formations : []}
-      initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
-      headerProps={{
-        name: book.name as string,
-        season: (book.season as string | null) ?? null,
-        variantLabel,
-        settings: playbookSettings,
-        logoUrl,
-        accentColor,
-        canManage,
-        canShare,
-        viewerIsCoach,
-        senderName,
-        ownerDisplayName,
-        allowCoachDuplication: (book.allow_coach_duplication as boolean | null) ?? true,
-        allowPlayerDuplication: (book.allow_player_duplication as boolean | null) ?? true,
-      }}
-    />
     </>
   );
 }

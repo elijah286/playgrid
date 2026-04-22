@@ -65,8 +65,7 @@ export function SettingsClient({
   stripeStatus,
   initialCoachAiEnabled,
   initialHideLobbyAnimation,
-  initialExamplesUserId,
-  initialExampleMakerActive,
+  initialExamplesPageEnabled,
   initialTrafficSummary,
   trafficError,
 }: {
@@ -85,8 +84,7 @@ export function SettingsClient({
   stripeStatus: StripeConfigStatus;
   initialCoachAiEnabled: boolean;
   initialHideLobbyAnimation: boolean;
-  initialExamplesUserId: string | null;
-  initialExampleMakerActive: boolean;
+  initialExamplesPageEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
 }) {
@@ -190,8 +188,7 @@ export function SettingsClient({
       {tab === "site" && (
         <SiteSettingsAdminClient
           initialHideLobbyAnimation={initialHideLobbyAnimation}
-          initialExamplesUserId={initialExamplesUserId}
-          initialExampleMakerActive={initialExampleMakerActive}
+          initialExamplesPageEnabled={initialExamplesPageEnabled}
         />
       )}
     </div>

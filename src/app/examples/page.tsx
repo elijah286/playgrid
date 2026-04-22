@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -6,6 +7,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
+import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 
 export const metadata: Metadata = {
   title: "Example playbooks",
@@ -46,6 +48,7 @@ type ExamplePlaybook = {
   play_count: number;
   plays: ExamplePlay[];
   updated_at: string | null;
+  author_label: string | null;
 };
 
 const MAX_PLAYS_PER_PLAYBOOK = 12;
@@ -56,7 +59,7 @@ async function loadExamplePlaybooks(): Promise<ExamplePlaybook[]> {
   const { data: books } = await svc
     .from("playbooks")
     .select(
-      "id, name, season, sport_variant, logo_url, color, updated_at, plays(count)",
+      "id, name, season, sport_variant, logo_url, color, updated_at, example_author_label, plays(count)",
     )
     .eq("is_public_example", true)
     .eq("is_archived", false)
@@ -72,6 +75,7 @@ async function loadExamplePlaybooks(): Promise<ExamplePlaybook[]> {
     logo_url: string | null;
     color: string | null;
     updated_at: string | null;
+    example_author_label: string | null;
     plays: { count: number }[] | { count: number } | null;
   };
 
@@ -121,11 +125,14 @@ async function loadExamplePlaybooks(): Promise<ExamplePlaybook[]> {
       play_count: agg?.count ?? 0,
       plays: playsByBook.get(b.id) ?? [],
       updated_at: b.updated_at,
+      author_label: b.example_author_label,
     } satisfies ExamplePlaybook;
   });
 }
 
 export default async function ExamplesPage() {
+  const enabled = await getExamplesPageEnabled();
+  if (!enabled) notFound();
   const playbooks = await loadExamplePlaybooks();
 
   return (
@@ -205,6 +212,11 @@ function ExamplePlaybookCard({ playbook }: { playbook: ExamplePlaybook }) {
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {playbook.author_label && (
+            <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wider text-muted">
+              By {playbook.author_label}
+            </p>
+          )}
         </div>
       </header>
       {playbook.plays.length > 0 && (

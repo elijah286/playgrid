@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArrowLeft, Check, CheckSquare, Copy, Home, Lock, LogOut, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, Home, Lock, LogOut, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -32,6 +32,11 @@ import {
   sharePlaybookWithEmailsAction,
   type ShareResultRow,
 } from "@/app/actions/invites";
+import {
+  setPlaybookExampleAuthorLabelAction,
+  setPlaybookIsExampleAction,
+  setPlaybookPublicExampleAction,
+} from "@/app/actions/admin-examples";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
 
@@ -60,6 +65,12 @@ export type PlaybookHeaderPlayActions = {
   newFormationHref: string;
 };
 
+export type ExampleAdminState = {
+  isExample: boolean;
+  isPublished: boolean;
+  authorLabel: string | null;
+};
+
 export function PlaybookHeader({
   playbookId,
   name,
@@ -76,6 +87,7 @@ export function PlaybookHeader({
   allowCoachDuplication,
   allowPlayerDuplication,
   playActions,
+  exampleAdmin,
 }: {
   playbookId: string;
   name: string;
@@ -92,6 +104,7 @@ export function PlaybookHeader({
   allowCoachDuplication?: boolean;
   allowPlayerDuplication?: boolean;
   playActions?: PlaybookHeaderPlayActions;
+  exampleAdmin?: ExampleAdminState | null;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -201,6 +214,16 @@ export function PlaybookHeader({
     run(() => leavePlaybookAction(playbookId), () => router.push("/home"));
   }
 
+  function handleToggleExample() {
+    const next = !(exampleAdmin?.isExample ?? false);
+    run(() => setPlaybookIsExampleAction(playbookId, next));
+  }
+
+  function handleTogglePublishExample() {
+    const next = !(exampleAdmin?.isPublished ?? false);
+    run(() => setPlaybookPublicExampleAction(playbookId, next));
+  }
+
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
   const onAccentMuted = isLightBg ? "text-slate-700" : "text-white/80";
@@ -276,7 +299,7 @@ export function PlaybookHeader({
                 Invite Team Member
               </Button>
             )}
-            {(canShare || canManage || playActions) && (
+            {(canShare || canManage || playActions || exampleAdmin) && (
               <HeaderMenu
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
@@ -292,6 +315,11 @@ export function PlaybookHeader({
                 allowCoachDuplication={allowCoachDuplication ?? true}
                 allowPlayerDuplication={allowPlayerDuplication ?? true}
                 playActions={playActions}
+                exampleAdmin={exampleAdmin ?? null}
+                onToggleExample={exampleAdmin ? handleToggleExample : null}
+                onTogglePublishExample={
+                  exampleAdmin?.isExample ? handleTogglePublishExample : null
+                }
               />
             )}
           </div>
@@ -307,6 +335,10 @@ export function PlaybookHeader({
           initialColor={accentColor}
           initialSettings={settings}
           variantLabel={variantLabel}
+          initialExampleAuthorLabel={
+            exampleAdmin?.isExample ? exampleAdmin.authorLabel : null
+          }
+          showExampleAuthorLabel={Boolean(exampleAdmin?.isExample)}
           onClose={() => setCustomizeOpen(false)}
         />
       )}
@@ -429,6 +461,9 @@ function HeaderMenu({
   allowCoachDuplication,
   allowPlayerDuplication,
   playActions,
+  exampleAdmin,
+  onToggleExample,
+  onTogglePublishExample,
 }: {
   onAccent: string;
   onAccentHover: string;
@@ -444,6 +479,9 @@ function HeaderMenu({
   allowCoachDuplication: boolean;
   allowPlayerDuplication: boolean;
   playActions?: PlaybookHeaderPlayActions;
+  exampleAdmin: ExampleAdminState | null;
+  onToggleExample: (() => void) | null;
+  onTogglePublishExample: (() => void) | null;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -669,6 +707,41 @@ function HeaderMenu({
               </button>
             </>
           )}
+          {exampleAdmin && onToggleExample && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onToggleExample();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+              >
+                <FlaskConical className="size-4" />
+                <span>
+                  {exampleAdmin.isExample ? "Remove as example" : "Use as example"}
+                </span>
+              </button>
+              {onTogglePublishExample && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onTogglePublishExample();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  <Globe className="size-4" />
+                  <span>
+                    {exampleAdmin.isPublished ? "Unpublish example" : "Publish example"}
+                  </span>
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -683,6 +756,8 @@ export function CustomizeTeamDialog({
   initialColor,
   initialSettings,
   variantLabel,
+  initialExampleAuthorLabel,
+  showExampleAuthorLabel,
   onClose,
 }: {
   playbookId: string;
@@ -692,6 +767,8 @@ export function CustomizeTeamDialog({
   initialColor: string;
   initialSettings: PlaybookSettings;
   variantLabel: string;
+  initialExampleAuthorLabel?: string | null;
+  showExampleAuthorLabel?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -701,6 +778,7 @@ export function CustomizeTeamDialog({
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
   const [color, setColor] = useState(initialColor);
   const [settings, setSettings] = useState<PlaybookSettings>(initialSettings);
+  const [authorLabel, setAuthorLabel] = useState(initialExampleAuthorLabel ?? "");
   const [saving, setSaving] = useState(false);
 
   const initials =
@@ -749,6 +827,20 @@ export function CustomizeTeamDialog({
         if (!r.ok) {
           toast(r.error, "error");
           return;
+        }
+      }
+      if (showExampleAuthorLabel) {
+        const before = (initialExampleAuthorLabel ?? "").trim();
+        const after = authorLabel.trim();
+        if (before !== after) {
+          const r = await setPlaybookExampleAuthorLabelAction(
+            playbookId,
+            after || null,
+          );
+          if (!r.ok) {
+            toast(r.error, "error");
+            return;
+          }
         }
       }
       onClose();
@@ -842,6 +934,23 @@ export function CustomizeTeamDialog({
           </div>
 
           <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={saving} />
+
+          {showExampleAuthorLabel && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Example author label{" "}
+                <span className="font-normal normal-case text-muted">
+                  (shown on the public /examples card)
+                </span>
+              </label>
+              <Input
+                value={authorLabel}
+                onChange={(e) => setAuthorLabel(e.target.value)}
+                placeholder='e.g. "Coach Jane" or "You!"'
+                maxLength={60}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

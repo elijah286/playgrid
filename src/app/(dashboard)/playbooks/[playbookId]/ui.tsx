@@ -161,6 +161,11 @@ export function PlaybookDetailClient({
     ownerDisplayName: string | null;
     allowCoachDuplication: boolean;
     allowPlayerDuplication: boolean;
+    exampleAdmin: {
+      isExample: boolean;
+      isPublished: boolean;
+      authorLabel: string | null;
+    } | null;
   };
 }) {
   const searchParams = useSearchParams();
@@ -713,6 +718,7 @@ export function PlaybookDetailClient({
           ownerDisplayName={headerProps.ownerDisplayName}
           allowCoachDuplication={headerProps.allowCoachDuplication}
           allowPlayerDuplication={headerProps.allowPlayerDuplication}
+          exampleAdmin={headerProps.exampleAdmin}
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight, FlaskConical, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 
 export default async function HomePage() {
   if (hasSupabaseEnv()) {
@@ -12,6 +13,8 @@ export default async function HomePage() {
     } = await supabase.auth.getUser();
     if (user) redirect("/home");
   }
+
+  const examplesEnabled = await getExamplesPageEnabled();
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-surface-dark">
@@ -60,6 +63,15 @@ export default async function HomePage() {
           >
             Open dashboard
           </Link>
+          {examplesEnabled && (
+            <Link
+              href="/examples"
+              className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-6 py-3 text-base font-medium text-white ring-1 ring-white/20 transition-colors hover:bg-white/20"
+            >
+              <FlaskConical className="size-5" />
+              Browse examples
+            </Link>
+          )}
         </div>
       </div>
     </div>
