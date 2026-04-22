@@ -1196,7 +1196,37 @@ export function DashboardClient({
   }
 
   return (
-    <div className="space-y-8">
+    <div className={`space-y-8 ${pending ? "cursor-wait" : ""}`}>
+      {pending && (
+        <div
+          className="pointer-events-none fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-elevated"
+          role="status"
+          aria-live="polite"
+        >
+          <svg
+            className="size-4 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeOpacity="0.25"
+            />
+            <path
+              d="M21 12a9 9 0 0 0-9-9"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          </svg>
+          Saving…
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

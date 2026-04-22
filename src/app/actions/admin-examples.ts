@@ -146,6 +146,7 @@ export async function setPlaybookIsExampleAction(
     .update(update)
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   revalidatePath("/examples");
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const, isExample };
@@ -182,6 +183,7 @@ export async function setPlaybookPublicExampleAction(
     .update({ is_public_example: isPublicExample })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   revalidatePath("/examples");
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const, isPublicExample };
@@ -204,6 +206,7 @@ export async function setPlaybookExampleAuthorLabelAction(
     .update({ example_author_label: clean })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   revalidatePath("/examples");
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const, label: clean };

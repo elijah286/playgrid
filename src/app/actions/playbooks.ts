@@ -383,6 +383,7 @@ export async function archivePlaybookAction(playbookId: string, archived: boolea
     .update({ is_archived: archived })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   return { ok: true as const };
 }
 
@@ -406,6 +407,7 @@ export async function deletePlaybookAction(playbookId: string) {
 
   const { error } = await supabase.from("playbooks").delete().eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   return { ok: true as const };
 }
 
@@ -532,6 +534,7 @@ export async function setPlaybookAllowDuplicationAction(
     .update({ [column]: allow })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   return { ok: true as const };
 }
 
@@ -565,5 +568,6 @@ export async function leavePlaybookAction(playbookId: string) {
     .eq("playbook_id", playbookId)
     .eq("user_id", user.id);
   if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/home");
   return { ok: true as const };
 }
