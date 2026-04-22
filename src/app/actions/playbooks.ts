@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
+import { copyPlaybookContents } from "@/lib/data/playbook-copy";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SportVariant } from "@/domain/play/types";
 import {
@@ -507,61 +508,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     .from("playbook_members")
     .insert({ playbook_id: newBook.id, user_id: user.id, role: "owner" });
 
-  // Copy plays + current versions. Archived plays are skipped.
-  const { data: plays, error: playsErr } = await supabase
-    .from("plays")
-    .select(
-      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id",
-    )
-    .eq("playbook_id", playbookId)
-    .eq("is_archived", false);
-  if (playsErr) return { ok: false as const, error: playsErr.message };
-
-  for (const p of plays ?? []) {
-    const { data: newPlay, error: insErr } = await supabase
-      .from("plays")
-      .insert({
-        playbook_id: newBook.id,
-        name: p.name,
-        shorthand: p.shorthand,
-        wristband_code: p.wristband_code,
-        mnemonic: p.mnemonic,
-        display_abbrev: p.display_abbrev,
-        formation_name: p.formation_name,
-        concept: p.concept,
-        tags: p.tags ?? (p.tag ? [p.tag] : []),
-        tag: p.tag,
-      })
-      .select("id")
-      .single();
-    if (insErr || !newPlay) continue;
-
-    if (!p.current_version_id) continue;
-    const { data: srcVer } = await supabase
-      .from("play_versions")
-      .select("document")
-      .eq("id", p.current_version_id)
-      .single();
-    if (!srcVer) continue;
-
-    const { data: newVer } = await supabase
-      .from("play_versions")
-      .insert({
-        play_id: newPlay.id,
-        schema_version: 1,
-        document: srcVer.document,
-        label: "copied",
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
-    if (newVer) {
-      await supabase
-        .from("plays")
-        .update({ current_version_id: newVer.id })
-        .eq("id", newPlay.id);
-    }
-  }
+  await copyPlaybookContents(supabase, playbookId, newBook.id, user.id);
 
   revalidatePath("/home");
   return { ok: true as const, id: newBook.id };
