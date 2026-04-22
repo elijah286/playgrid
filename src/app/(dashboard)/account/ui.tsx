@@ -202,6 +202,7 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
   const isComp = source === "comp";
+  const showUpgradeOptions = tier === "free";
 
   function checkout(t: "coach" | "coach_ai", interval: "month" | "year") {
     setErr(null);
@@ -256,7 +257,14 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
           ) : null}
         </div>
 
-        {!isPaid ? (
+        {isComp ? (
+          <p className="rounded-md bg-surface px-3 py-2 text-xs text-muted ring-1 ring-border">
+            You have a complimentary {TIER_LABEL[tier]} subscription — thank you for being an
+            early user. No action needed.
+          </p>
+        ) : null}
+
+        {showUpgradeOptions ? (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <PlanOption
               label="Coach · monthly"
