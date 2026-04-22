@@ -14,6 +14,7 @@ const PUBLIC_EXACT = new Set<string>([
   "/terms",
   "/about",
   "/contact",
+  "/pricing",
 ]);
 
 const PUBLIC_PREFIXES = [
