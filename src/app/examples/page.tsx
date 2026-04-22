@@ -145,7 +145,7 @@ export default async function ExamplesPage() {
           No example playbooks are published yet. Check back soon.
         </div>
       ) : (
-        <section className="mt-12 flex flex-wrap justify-start gap-6">
+        <section className="mt-12 flex flex-wrap justify-center gap-6">
           {playbooks.map((pb) => (
             <div key={pb.id} className="w-40 sm:w-48 lg:w-56">
               <ExampleBookTile tile={pb} />
