@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { CreditCard, IdCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
@@ -9,12 +10,9 @@ import {
   updateDisplayNameAction,
   uploadAvatarAction,
 } from "@/app/actions/account";
-import {
-  createBillingPortalSessionAction,
-  createCheckoutSessionAction,
-} from "@/app/actions/billing";
+import { createBillingPortalSessionAction } from "@/app/actions/billing";
 import type { Entitlement } from "@/lib/billing/entitlement";
-import { TIER_LABEL, TIER_PRICE } from "@/lib/billing/features";
+import { TIER_LABEL } from "@/lib/billing/features";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
@@ -202,19 +200,6 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
   const isComp = source === "comp";
-  const showUpgradeOptions = tier === "free";
-
-  function checkout(t: "coach" | "coach_ai", interval: "month" | "year") {
-    setErr(null);
-    startTransition(async () => {
-      const res = await createCheckoutSessionAction({ tier: t, interval });
-      if (!res.ok) {
-        setErr(res.error);
-        return;
-      }
-      window.location.href = res.url;
-    });
-  }
 
   function openPortal() {
     setErr(null);
@@ -254,7 +239,14 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
             >
               Manage billing
             </button>
-          ) : null}
+          ) : (
+            <Link
+              href="/pricing"
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+            >
+              {tier === "free" ? "See pricing" : "Change plan"}
+            </Link>
+          )}
         </div>
 
         {isComp ? (
@@ -264,68 +256,9 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
           </p>
         ) : null}
 
-        {showUpgradeOptions ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <PlanOption
-              label="Coach · monthly"
-              price={`$${TIER_PRICE.coach.month}/mo`}
-              onClick={() => checkout("coach", "month")}
-              disabled={pending}
-            />
-            <PlanOption
-              label="Coach · annual"
-              price={`$${TIER_PRICE.coach.year}/yr`}
-              onClick={() => checkout("coach", "year")}
-              disabled={pending}
-              hint="Save ~8%"
-            />
-            <PlanOption
-              label="Coach AI · monthly"
-              price={`$${TIER_PRICE.coach_ai.month}/mo`}
-              onClick={() => checkout("coach_ai", "month")}
-              disabled={pending}
-            />
-            <PlanOption
-              label="Coach AI · annual"
-              price={`$${TIER_PRICE.coach_ai.year}/yr`}
-              onClick={() => checkout("coach_ai", "year")}
-              disabled={pending}
-            />
-          </div>
-        ) : null}
-
         {err ? <p className="text-xs text-red-700">{err}</p> : null}
       </div>
     </Card>
-  );
-}
-
-function PlanOption({
-  label,
-  price,
-  onClick,
-  disabled,
-  hint,
-}: {
-  label: string;
-  price: string;
-  onClick: () => void;
-  disabled?: boolean;
-  hint?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-surface disabled:opacity-50"
-    >
-      <span>
-        <span className="block font-medium text-foreground">{label}</span>
-        {hint ? <span className="block text-[11px] text-muted">{hint}</span> : null}
-      </span>
-      <span className="text-sm font-semibold text-foreground">{price}</span>
-    </button>
   );
 }
 
