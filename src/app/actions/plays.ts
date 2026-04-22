@@ -12,8 +12,9 @@ import {
   type PlaybookGroupRow,
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
-import { getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
+import { getPlaybookOwnerEntitlement, getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import { FREE_MAX_PLAYS_PER_PLAYBOOK, tierAtLeast } from "@/lib/billing/features";
+import { assertNotLocked, computeDowngradeLocks } from "@/lib/billing/downgrade-locks";
 
 async function assertPlayCap(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -226,6 +227,12 @@ export async function createPlayAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const ownerId = await getPlaybookOwnerId(playbookId);
+  if (ownerId) {
+    const lock = await assertNotLocked({ ownerId, playbookId });
+    if (!lock.ok) return { ok: false as const, error: lock.error };
+  }
+
   const cap = await assertPlayCap(supabase, playbookId);
   if (!cap.ok) return { ok: false as const, error: cap.error };
 
@@ -396,6 +403,16 @@ export async function savePlayVersionAction(
     .eq("id", playId)
     .single();
   if (pErr || !play) return { ok: false as const, error: pErr?.message ?? "Not found" };
+
+  const ownerId = await getPlaybookOwnerId(play.playbook_id as string);
+  if (ownerId) {
+    const lock = await assertNotLocked({
+      ownerId,
+      playbookId: play.playbook_id as string,
+      playId: play.id as string,
+    });
+    if (!lock.ok) return { ok: false as const, error: lock.error };
+  }
 
   // Drop stale FKs: if the linked formation or opponent play was deleted,
   // writing the stored UUID back to plays fails the FK. Verify they exist
@@ -857,6 +874,10 @@ export type DashboardPlaybookTile = {
   shared_by_name: string | null;
   allow_coach_duplication: boolean;
   allow_player_duplication: boolean;
+  /** True when the owner is on Free tier and this playbook is beyond the
+   *  free cap (keeps content visible but read-only). Shared playbooks from
+   *  Coach+ owners are never locked. */
+  is_locked: boolean;
   previews: {
     players: Player[];
     routes: Route[];
@@ -988,6 +1009,7 @@ export async function getDashboardSummaryAction(): Promise<
         shared_by_name: null,
         allow_coach_duplication: b.allow_coach_duplication ?? true,
         allow_player_duplication: b.allow_player_duplication ?? true,
+        is_locked: false,
         previews: [],
       } as DashboardPlaybookTile;
     })
@@ -1029,6 +1051,16 @@ export async function getDashboardSummaryAction(): Promise<
     for (const book of playbooks) {
       if (book.role !== "owner") {
         book.shared_by_name = ownerByBook.get(book.id) ?? null;
+      }
+    }
+  }
+
+  // Apply downgrade locks: free owners see their extra playbooks as locked.
+  const locks = await computeDowngradeLocks(user.id);
+  if (locks.lockedPlaybookIds.size > 0) {
+    for (const book of playbooks) {
+      if (book.role === "owner" && locks.lockedPlaybookIds.has(book.id)) {
+        book.is_locked = true;
       }
     }
   }

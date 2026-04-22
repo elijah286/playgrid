@@ -4,6 +4,8 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
 import { userHasCreatedPlayAction } from "@/app/actions/plays";
+import { getExpirationNotice } from "@/lib/billing/expiration-notice";
+import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 
 export default async function DashboardLayout({
   children,
@@ -30,13 +32,15 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [feedbackEnabled, hasCreatedPlay] = await Promise.all([
+  const [feedbackEnabled, hasCreatedPlay, expirationNotice] = await Promise.all([
     getFeedbackWidgetEnabled(),
     userHasCreatedPlayAction(),
+    getExpirationNotice(),
   ]);
 
   return (
     <div className="min-h-full">
+      {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
       {feedbackEnabled && <FeedbackWidget hasCreatedPlay={hasCreatedPlay} />}
     </div>

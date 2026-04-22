@@ -4,6 +4,21 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
+
+export type AdminUserRowData = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  role: "user" | "admin" | "coach";
+  createdAt: string;
+  lastSignIn: string | null;
+  tier: SubscriptionTier;
+  entitlementSource: "comp" | "stripe" | "free";
+  entitlementExpiresAt: string | null;
+  compGrantId: string | null;
+  subscriptionId: string | null;
+};
 
 async function assertAdmin() {
   if (!hasSupabaseEnv()) {
@@ -36,12 +51,19 @@ export async function listUsersForAdminAction() {
   });
   if (authErr) return { ok: false as const, error: authErr.message, users: [] };
 
-  const { data: profiles } = await admin.from("profiles").select("id, display_name, role, created_at");
+  const [{ data: profiles }, { data: entitlements }] = await Promise.all([
+    admin.from("profiles").select("id, display_name, role, created_at"),
+    admin
+      .from("user_entitlements")
+      .select("user_id, tier, source, expires_at, comp_grant_id, subscription_id"),
+  ]);
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const entMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
 
-  const users = (authData.users ?? []).map((u) => {
+  const users: AdminUserRowData[] = (authData.users ?? []).map((u) => {
     const pr = profileMap.get(u.id);
+    const e = entMap.get(u.id);
     return {
       id: u.id,
       email: u.email ?? "",
@@ -49,6 +71,11 @@ export async function listUsersForAdminAction() {
       role: (pr?.role as "user" | "admin" | "coach") ?? "user",
       createdAt: u.created_at,
       lastSignIn: u.last_sign_in_at ?? null,
+      tier: (e?.tier as SubscriptionTier) ?? "free",
+      entitlementSource: (e?.source as "comp" | "stripe" | "free") ?? "free",
+      entitlementExpiresAt: (e?.expires_at as string | null) ?? null,
+      compGrantId: (e?.comp_grant_id as string | null) ?? null,
+      subscriptionId: (e?.subscription_id as string | null) ?? null,
     };
   });
 

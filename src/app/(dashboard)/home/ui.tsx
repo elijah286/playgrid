@@ -201,48 +201,74 @@ function PlaybookTile({
     .toUpperCase()
     .slice(0, 2) || "PB";
 
+  const locked = tile.is_locked;
+
+  const inner = (
+    <div className="flex h-full flex-col">
+      <div
+        className="flex h-32 items-center justify-center"
+        style={{ backgroundColor: color }}
+      >
+        {tile.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={tile.logo_url}
+            alt=""
+            className="h-20 w-20 object-contain"
+          />
+        ) : (
+          <span className="text-4xl font-black tracking-tight text-white drop-shadow">
+            {initials}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-1 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="min-w-0 flex-1 truncate text-base font-bold text-foreground">
+            {tile.name}
+          </h3>
+          {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
+        </div>
+        <p className="text-xs text-muted">
+          {tile.season ? `${tile.season} · ` : ""}
+          {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="group relative">
-      <Card hover className="overflow-hidden p-0">
-      <Link href={`/playbooks/${tile.id}`} className="flex h-full flex-col">
-        <div
-          className="flex h-32 items-center justify-center"
-          style={{ backgroundColor: color }}
-        >
-          {tile.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={tile.logo_url}
-              alt=""
-              className="h-20 w-20 object-contain"
-            />
-          ) : (
-            <span className="text-4xl font-black tracking-tight text-white drop-shadow">
-              {initials}
-            </span>
-          )}
-        </div>
-        <div className="flex flex-1 flex-col gap-1 p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="min-w-0 flex-1 truncate text-base font-bold text-foreground">
-              {tile.name}
-            </h3>
-            {tile.role !== "owner" && (
-              <Badge variant="default">Shared</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted">
-            {tile.season ? `${tile.season} · ` : ""}
-            {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
-          </p>
-        </div>
-      </Link>
+      <Card hover className="relative overflow-hidden p-0">
+        {locked ? (
+          <div className="flex h-full flex-col opacity-60">{inner}</div>
+        ) : (
+          <Link href={`/playbooks/${tile.id}`}>{inner}</Link>
+        )}
+        {locked && <LockedOverlay />}
       </Card>
-      {actions.length > 0 && (
+      {!locked && actions.length > 0 && (
         <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
           <ActionMenu items={actions} />
         </div>
       )}
+    </div>
+  );
+}
+
+function LockedOverlay() {
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/50 text-white backdrop-blur-[1px]">
+      <Lock className="size-7" />
+      <p className="px-3 text-center text-xs font-semibold">
+        Locked — plan downgraded
+      </p>
+      <Link
+        href="/pricing"
+        className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
+      >
+        Upgrade to unlock
+      </Link>
     </div>
   );
 }
@@ -262,6 +288,9 @@ function PlaybookBookTile({
   tile: DashboardPlaybookTile;
   actions: ActionMenuItem[];
 }) {
+  if (tile.is_locked) {
+    return <LockedBookTile tile={tile} />;
+  }
   const color = colorFor(tile);
   const initials = tile.name
     .split(/\s+/)
@@ -523,6 +552,68 @@ function PlaybookBookTile({
           <ActionMenu items={actions} open={menuOpen} onOpenChange={setMenuOpen} />
         </div>
       )}
+    </div>
+  );
+}
+
+function LockedBookTile({ tile }: { tile: DashboardPlaybookTile }) {
+  const color = colorFor(tile);
+  const initials =
+    tile.name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((s) => s[0])
+      .filter(Boolean)
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "PB";
+  return (
+    <div className="relative block aspect-[3/4] w-full">
+      <div
+        className="absolute inset-0 overflow-hidden rounded-xl shadow-elevated ring-1 ring-black/10 opacity-60"
+        style={{ backgroundColor: color }}
+      >
+        <div className="flex h-full flex-col justify-between p-5 text-white">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
+            Playbook
+          </span>
+          <div className="flex flex-1 items-center justify-center">
+            {tile.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={tile.logo_url}
+                alt=""
+                className="h-28 w-28 object-contain drop-shadow"
+              />
+            ) : (
+              <span className="text-7xl font-black tracking-tight drop-shadow">
+                {initials}
+              </span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-extrabold leading-tight drop-shadow-sm">
+              {tile.name}
+            </h3>
+            <p className="mt-0.5 truncate text-xs font-medium text-white/80">
+              {tile.season ? `${tile.season} · ` : ""}
+              {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-black/55 text-white">
+        <Lock className="size-8" />
+        <p className="px-3 text-center text-xs font-semibold">
+          Locked — plan downgraded
+        </p>
+        <Link
+          href="/pricing"
+          className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
+        >
+          Upgrade to unlock
+        </Link>
+      </div>
     </div>
   );
 }
@@ -854,6 +945,20 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   }
 
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
+    if (tile.is_locked) {
+      return [
+        {
+          label: "Delete",
+          icon: Trash2,
+          danger: true,
+          onSelect: () =>
+            confirmAnd(
+              `Delete "${tile.name}" and all its plays? This can't be undone.`,
+              () => handle(() => deletePlaybookAction(tile.id)),
+            ),
+        },
+      ];
+    }
     return [
       {
         label: "Invite",
