@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
@@ -493,6 +494,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     }
   }
 
+  revalidatePath("/home");
   return { ok: true as const, id: newBook.id };
 }
 

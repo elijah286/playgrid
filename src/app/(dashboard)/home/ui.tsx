@@ -987,68 +987,36 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           <MarketingPlaybookTile onCreate={() => setShowCreate(true)} />
         </div>
       ) : view === "preview" ? (
-        <>
-          {/* Owned — book mode */}
-          <section>
-            {owned.length === 1 ? (
-              <div className="mx-auto w-64 sm:w-72">
-                <PlaybookBookTile
-                  tile={owned[0]}
-                  actions={buildOwnerActions(owned[0])}
-                />
+        <section>
+          <div className="flex flex-wrap justify-center gap-3">
+            {owned.map((b) => (
+              <div key={b.id} className="w-40 sm:w-48 lg:w-56">
+                <PlaybookBookTile tile={b} actions={buildOwnerActions(b)} />
               </div>
-            ) : (
-              <div className="flex flex-wrap justify-center gap-3">
-                {owned.map((b) => (
-                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                    <PlaybookBookTile
-                      tile={b}
-                      actions={buildOwnerActions(b)}
-                    />
-                  </div>
-                ))}
+            ))}
+            {shared.map((b) => (
+              <div key={b.id} className="w-40 sm:w-48 lg:w-56">
+                <PlaybookBookTile tile={b} actions={buildSharedActions(b)} />
               </div>
-            )}
-          </section>
-
-          {shared.length > 0 && (
-            <section>
-              <div className="flex flex-wrap justify-center gap-3">
-                {shared.map((b) => (
-                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                    <PlaybookBookTile tile={b} actions={buildSharedActions(b)} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+            ))}
+          </div>
+        </section>
       ) : (
-        <>
-          {/* Classic grid */}
-          <section>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <NewPlaybookTile onClick={() => setShowCreate(true)} />
-              {owned.map((b) => (
-                <PlaybookTile
-                  key={b.id}
-                  tile={b}
-                  actions={buildOwnerActions(b)}
-                />
-              ))}
-            </div>
-          </section>
-
-          {shared.length > 0 && (
-            <section>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {shared.map((b) => (
-                  <PlaybookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+        <section>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <NewPlaybookTile onClick={() => setShowCreate(true)} />
+            {owned.map((b) => (
+              <PlaybookTile
+                key={b.id}
+                tile={b}
+                actions={buildOwnerActions(b)}
+              />
+            ))}
+            {shared.map((b) => (
+              <PlaybookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
+            ))}
+          </div>
+        </section>
       )}
 
       {duplicating && (
@@ -1061,7 +1029,10 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
             handle(
               () => duplicatePlaybookAction(tileId, name),
               (res) => {
-                if (res.ok) router.push(`/playbooks/${res.id}`);
+                if (res.ok) {
+                  router.refresh();
+                  router.push(`/playbooks/${res.id}`);
+                }
               },
             );
           }}
