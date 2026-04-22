@@ -1,19 +1,29 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { CreditCard, KeyRound, MessageCircle, Ticket, Users } from "lucide-react";
+import { useState } from "react";
+import {
+  BarChart3,
+  CreditCard,
+  KeyRound,
+  MessageCircle,
+  Settings as SettingsIcon,
+  Ticket,
+  Users,
+} from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
+import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
+import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type { GiftCodeRow } from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
-import { SegmentedControl, useToast } from "@/components/ui";
-import { setHideLobbyAnimationAction } from "@/app/actions/admin-lobby";
+import type { TrafficSummary } from "@/app/actions/admin-traffic";
+import { SegmentedControl } from "@/components/ui";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
@@ -30,7 +40,14 @@ type ResendProps =
     }
   | { ok: false; error: string };
 
-type Tab = "users" | "invites" | "payments" | "integrations" | "feedback";
+type Tab =
+  | "users"
+  | "traffic"
+  | "invites"
+  | "payments"
+  | "integrations"
+  | "feedback"
+  | "site";
 
 export function SettingsClient({
   currentUserId,
@@ -48,6 +65,8 @@ export function SettingsClient({
   stripeStatus,
   initialCoachAiEnabled,
   initialHideLobbyAnimation,
+  initialTrafficSummary,
+  trafficError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -64,28 +83,10 @@ export function SettingsClient({
   stripeStatus: StripeConfigStatus;
   initialCoachAiEnabled: boolean;
   initialHideLobbyAnimation: boolean;
+  initialTrafficSummary: TrafficSummary;
+  trafficError: string | null;
 }) {
-  const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("users");
-  const [hideLobbyAnimation, setHideLobbyAnimation] = useState(initialHideLobbyAnimation);
-  const [lobbyPending, startLobbyTransition] = useTransition();
-
-  function toggleLobbyAnimation(next: boolean) {
-    const prev = hideLobbyAnimation;
-    setHideLobbyAnimation(next);
-    startLobbyTransition(async () => {
-      const res = await setHideLobbyAnimationAction(next);
-      if (!res.ok) {
-        setHideLobbyAnimation(prev);
-        toast(res.error, "error");
-        return;
-      }
-      toast(
-        next ? "Lobby animation hidden." : "Lobby animation restored.",
-        "success",
-      );
-    });
-  }
 
   return (
     <div className="space-y-6">
@@ -94,10 +95,12 @@ export function SettingsClient({
         onChange={setTab}
         options={[
           { value: "users", label: "Users", icon: Users },
+          { value: "traffic", label: "Traffic", icon: BarChart3 },
           { value: "invites", label: "Coach invites", icon: Ticket },
           { value: "payments", label: "Payments", icon: CreditCard },
           { value: "integrations", label: "Integrations", icon: KeyRound },
           { value: "feedback", label: "Feedback", icon: MessageCircle },
+          { value: "site", label: "Site", icon: SettingsIcon },
         ]}
       />
 
@@ -111,6 +114,13 @@ export function SettingsClient({
             <UsersAdminClient initialUsers={initialUsers} currentUserId={currentUserId} />
           )}
         </div>
+      )}
+
+      {tab === "traffic" && (
+        <TrafficAdminClient
+          initialSummary={initialTrafficSummary}
+          initialError={trafficError}
+        />
       )}
 
       {tab === "invites" && (
@@ -130,34 +140,11 @@ export function SettingsClient({
       )}
 
       {tab === "feedback" && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                Hide playbook animation on lobby
-              </p>
-              <p className="mt-0.5 text-xs text-muted">
-                When on, the Preview/Simple toggle is hidden and the lobby
-                always renders the simple card view.
-              </p>
-            </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={hideLobbyAnimation}
-                disabled={lobbyPending}
-                onChange={(e) => toggleLobbyAnimation(e.target.checked)}
-              />
-              <span>{hideLobbyAnimation ? "On" : "Off"}</span>
-            </label>
-          </div>
-          <FeedbackAdminClient
-            initialItems={initialFeedback}
-            initialError={feedbackError}
-            initialWidgetEnabled={initialFeedbackWidgetEnabled}
-          />
-        </div>
+        <FeedbackAdminClient
+          initialItems={initialFeedback}
+          initialError={feedbackError}
+          initialWidgetEnabled={initialFeedbackWidgetEnabled}
+        />
       )}
 
       {tab === "integrations" && (
@@ -194,6 +181,12 @@ export function SettingsClient({
             <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
           )}
         </div>
+      )}
+
+      {tab === "site" && (
+        <SiteSettingsAdminClient
+          initialHideLobbyAnimation={initialHideLobbyAnimation}
+        />
       )}
     </div>
   );

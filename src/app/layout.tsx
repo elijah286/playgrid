@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import PageViewTracker from "@/components/PageViewTracker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -83,6 +84,7 @@ export default function RootLayout({
             <SiteHeader />
             <div className="flex flex-1 flex-col">{children}</div>
             <SiteFooter />
+            <PageViewTracker />
           </ToastProvider>
         </ThemeProvider>
       </body>

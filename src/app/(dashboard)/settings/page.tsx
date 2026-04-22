@@ -16,6 +16,7 @@ import {
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
+import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -34,6 +35,7 @@ export default async function SettingsPage() {
     stripeStatusRes,
     coachAiEnabled,
     hideLobbyAnimation,
+    trafficRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -45,6 +47,7 @@ export default async function SettingsPage() {
     getStripeConfigStatusAction(),
     getCoachAiTierEnabled(),
     getHideLobbyAnimation(),
+    getTrafficSummaryAction(30),
   ]);
 
   return (
@@ -113,6 +116,29 @@ export default async function SettingsPage() {
         }
         initialCoachAiEnabled={coachAiEnabled}
         initialHideLobbyAnimation={hideLobbyAnimation}
+        initialTrafficSummary={
+          trafficRes.ok
+            ? trafficRes.summary
+            : {
+                windowDays: 30,
+                totals: {
+                  views: 0,
+                  uniqueSessions: 0,
+                  signups: 0,
+                  totalUsers: 0,
+                  activeLast7: 0,
+                  activeLast30: 0,
+                },
+                conversion: { sessions: 0, sessionsWithSignup: 0, rate: 0 },
+                byDay: [],
+                topReferrers: [],
+                topPaths: [],
+                topCountries: [],
+                deviceMix: { mobile: 0, tablet: 0, desktop: 0, unknown: 0 },
+                utmSources: [],
+              }
+        }
+        trafficError={trafficRes.ok ? null : trafficRes.error}
       />
     </div>
   );
