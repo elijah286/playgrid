@@ -56,6 +56,7 @@ type Props = {
   team: PlaysheetHeader;
   logoUrl: string | null;
   canUseWristbands: boolean;
+  canRemovePlaysheetWatermark: boolean;
 };
 
 type TabKey = "plays" | "layout" | "visuals" | "presets";
@@ -74,6 +75,7 @@ export function PrintPlaybookClient({
   team,
   logoUrl,
   canUseWristbands,
+  canRemovePlaysheetWatermark,
 }: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -322,6 +324,7 @@ export function PrintPlaybookClient({
     logoUrl && alphaCache && alphaCache.src === logoUrl ? alphaCache.value : null;
 
   const watermark: Watermark | null = useMemo(() => {
+    if (!canRemovePlaysheetWatermark) return null;
     if (!config.watermarkEnabled) return null;
     const src = alphaKeyedLogoUrl ?? logoUrl;
     if (!src) return null;
@@ -332,6 +335,7 @@ export function PrintPlaybookClient({
     const scale = Math.max(0.1, Math.min(1, config.watermarkScale ?? 0.6));
     return { logoUrl: src, opacity: pct / 100, scale };
   }, [
+    canRemovePlaysheetWatermark,
     config.watermarkEnabled,
     config.watermarkOpacityPct,
     config.watermarkScale,
@@ -426,6 +430,7 @@ export function PrintPlaybookClient({
       groupKeys,
       config.playsheetIncludeHeader ? team : null,
       watermark,
+      !canRemovePlaysheetWatermark,
     );
   }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById]);
 
@@ -760,6 +765,21 @@ export function PrintPlaybookClient({
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
                 Watermark
               </p>
+              {!canRemovePlaysheetWatermark ? (
+                <div className="flex flex-col items-start gap-3">
+                  <p className="text-sm text-foreground">
+                    Free playsheets include a tiled PlayGrid watermark. Upgrade to
+                    Coach to remove it or use your own logo.
+                  </p>
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+                  >
+                    <Lock className="size-3.5" /> Upgrade to remove watermark
+                  </Link>
+                </div>
+              ) : (
+                <>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -810,6 +830,8 @@ export function PrintPlaybookClient({
                     className="mt-1 w-full accent-primary"
                   />
                 </div>
+              )}
+                </>
               )}
             </Card>
           </div>

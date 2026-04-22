@@ -10,6 +10,11 @@ import {
   normalizePlaybookSettings,
   type PlaybookSettings,
 } from "@/domain/playbook/settings";
+import { getUserEntitlement } from "@/lib/billing/entitlement";
+import {
+  FREE_MAX_PLAYBOOKS_OWNED,
+  tierAtLeast,
+} from "@/lib/billing/features";
 
 const LOGO_BUCKET = "playbook-logos";
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -129,6 +134,21 @@ export async function createPlaybookAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const entitlement = await getUserEntitlement(user.id);
+  if (!tierAtLeast(entitlement, "coach")) {
+    const { count: ownedCount } = await supabase
+      .from("playbook_members")
+      .select("playbook_id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("role", "owner");
+    if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
+      return {
+        ok: false as const,
+        error: `Free tier is limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Coach to create more.`,
+      };
+    }
+  }
 
   const color = appearance?.color?.trim() || null;
   const logo = appearance?.logo_url?.trim() || null;
@@ -375,6 +395,14 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const entitlement = await getUserEntitlement(user.id);
+  if (!tierAtLeast(entitlement, "coach")) {
+    return {
+      ok: false as const,
+      error: "Duplicating playbooks is a Coach feature. Upgrade to unlock.",
+    };
+  }
 
   const { data: src, error: srcErr } = await supabase
     .from("playbooks")

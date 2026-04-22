@@ -30,6 +30,35 @@ export function canUseWristbands(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");
 }
 
+/** Playsheet watermark (tiled PlayGrid logo) is shown for free owners. Coach+ removes it. */
+export function canRemovePlaysheetWatermark(entitlement: Entitlement | null): boolean {
+  return tierAtLeast(entitlement, "coach");
+}
+
+/** Free tier caps. Owner tier-driven unless noted. */
+export const FREE_MAX_PLAYS_PER_PLAYBOOK = 12;
+export const FREE_MAX_PLAYBOOKS_OWNED = 1;
+
+export function canCreateAnotherPlaybook(
+  entitlement: Entitlement | null,
+  ownedCount: number,
+): boolean {
+  if (tierAtLeast(entitlement, "coach")) return true;
+  return ownedCount < FREE_MAX_PLAYBOOKS_OWNED;
+}
+
+export function canAddAnotherPlay(
+  ownerEntitlement: Entitlement | null,
+  currentPlayCount: number,
+): boolean {
+  if (tierAtLeast(ownerEntitlement, "coach")) return true;
+  return currentPlayCount < FREE_MAX_PLAYS_PER_PLAYBOOK;
+}
+
+export function canDuplicatePlaybook(entitlement: Entitlement | null): boolean {
+  return tierAtLeast(entitlement, "coach");
+}
+
 /** Team features: invites, shared playbook membership, rosters. Coach+ only. */
 export function canUseTeamFeatures(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");

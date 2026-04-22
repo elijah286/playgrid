@@ -12,6 +12,28 @@ import {
   type PlaybookGroupRow,
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
+import { getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
+import { FREE_MAX_PLAYS_PER_PLAYBOOK, tierAtLeast } from "@/lib/billing/features";
+
+async function assertPlayCap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playbookId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ownerEnt = await getPlaybookOwnerEntitlement(playbookId);
+  if (tierAtLeast(ownerEnt, "coach")) return { ok: true };
+  const { count } = await supabase
+    .from("plays")
+    .select("id", { count: "exact", head: true })
+    .eq("playbook_id", playbookId)
+    .eq("is_archived", false);
+  if ((count ?? 0) >= FREE_MAX_PLAYS_PER_PLAYBOOK) {
+    return {
+      ok: false,
+      error: `Free tier is capped at ${FREE_MAX_PLAYS_PER_PLAYBOOK} plays per playbook. Upgrade to Coach for unlimited plays.`,
+    };
+  }
+  return { ok: true };
+}
 
 /**
  * Returns true if the signed-in user has created at least one play in a
@@ -203,6 +225,9 @@ export async function createPlayAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const cap = await assertPlayCap(supabase, playbookId);
+  if (!cap.ok) return { ok: false as const, error: cap.error };
 
   // Use the playbook's variant to drive both sport profile and default players.
   const effectiveVariant: SportVariant = opts?.variant ?? "flag_7v7";
@@ -656,6 +681,9 @@ export async function duplicatePlayAction(
     .eq("id", playId)
     .single();
   if (srcPlayErr || !srcPlay) return { ok: false as const, error: "Not found" };
+
+  const cap = await assertPlayCap(supabase, srcPlay.playbook_id as string);
+  if (!cap.ok) return { ok: false as const, error: cap.error };
 
   const doc = structuredClone(loaded.document);
   doc.metadata.coachName = `${doc.metadata.coachName} (copy)`;

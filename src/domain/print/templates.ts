@@ -374,6 +374,7 @@ export function compilePlaysheetPdfPages(
   groupKeys?: readonly (string | null)[],
   header?: PlaysheetHeader | null,
   watermark?: Watermark | null,
+  freeTier?: boolean,
 ): string[] {
   if (docs.length === 0) return [];
   const basePage = defaultFullSheetTemplate.page;
@@ -409,7 +410,20 @@ export function compilePlaysheetPdfPages(
   }
 
   return chunks.map((chunk) =>
-    renderPlaysheetPage(chunk, { w, h, margin, topOffset, cellW, cellH, notesH, rows, opts, header: header ?? null, watermark: watermark ?? null }),
+    renderPlaysheetPage(chunk, {
+      w,
+      h,
+      margin,
+      topOffset,
+      cellW,
+      cellH,
+      notesH,
+      rows,
+      opts,
+      header: header ?? null,
+      watermark: watermark ?? null,
+      freeTier: freeTier ?? false,
+    }),
   );
 }
 
@@ -427,9 +441,10 @@ function renderPlaysheetPage(
     opts: PlaysheetOptions;
     header: PlaysheetHeader | null;
     watermark: Watermark | null;
+    freeTier: boolean;
   },
 ): string {
-  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header, watermark } = layout;
+  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header, watermark, freeTier } = layout;
   const pad = opts.cellPadding ?? 1;
   let body = "";
   for (let i = 0; i < docs.length; i++) {
@@ -440,9 +455,11 @@ function renderPlaysheetPage(
     body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts, pad);
   }
   const headerSvg = header ? renderPlaysheetHeaderBanner(w, header, margin) : "";
+  const freeWm = freeTier ? freeTierWatermarkSvg(w, h) : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
   <rect width="100%" height="100%" fill="#ffffff"/>
+  ${freeWm}
   ${headerSvg}
   ${body}
   ${watermarkSvg(w, h, watermark)}
@@ -689,6 +706,30 @@ export type Watermark = {
   /** 0.1–1 fraction of min(width, height) used to size the logo. */
   scale?: number;
 };
+
+/**
+ * Tiled orange PlayGrid watermark for free-tier playsheets. Draws diagonally
+ * across the page behind the play cells. Not configurable — always same look.
+ */
+function freeTierWatermarkSvg(w: number, h: number): string {
+  const tileX = 60;
+  const tileY = 26;
+  const fontSize = 10;
+  const diag = Math.ceil(Math.hypot(w, h)) + tileY * 2;
+  const cols = Math.ceil(diag / tileX) + 1;
+  const rows = Math.ceil(diag / tileY) + 1;
+  const startX = -diag / 2;
+  const startY = -diag / 2;
+  let cells = "";
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = startX + c * tileX + (r % 2 === 0 ? 0 : tileX / 2);
+      const y = startY + r * tileY;
+      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.5">PlayGrid</text>`;
+    }
+  }
+  return `<g transform="translate(${(w / 2).toFixed(2)} ${(h / 2).toFixed(2)}) rotate(-45)" style="pointer-events:none">${cells}</g>`;
+}
 
 function watermarkSvg(w: number, h: number, wm: Watermark | null): string {
   if (!wm || !wm.logoUrl) return "";
