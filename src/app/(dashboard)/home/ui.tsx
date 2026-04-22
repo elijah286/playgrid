@@ -339,8 +339,20 @@ function PlaybookBookTile({
   }, []);
 
   const thickness = Math.min(6, Math.max(2, Math.round(tile.play_count / 4)));
-  const sheetPlays = tile.previews.slice(0, 12);
-  const hasPreviews = sheetPlays.length > 0;
+  // Always fill all 12 inside-page slots. When fewer unique plays exist,
+  // cycle through them and flip every other repeat so the playsheet
+  // reads as a full page instead of dashed placeholders.
+  const hasPreviews = tile.previews.length > 0;
+  const sheetPlays: {
+    play: DashboardPlaybookTile["previews"][number];
+    flipped: boolean;
+  }[] = hasPreviews
+    ? Array.from({ length: 12 }, (_, i) => {
+        const idx = i % tile.previews.length;
+        const cycle = Math.floor(i / tile.previews.length);
+        return { play: tile.previews[idx], flipped: cycle % 2 === 1 };
+      })
+    : [];
   const [hover, setHover] = useState(false);
   const [shiftX, setShiftX] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -492,9 +504,9 @@ function PlaybookBookTile({
 
           <div className="flex h-full w-full p-2">
             <PlaysheetColumn
-              plays={sheetPlays.slice(6, 12)}
-              blanks={Math.max(0, 6 - sheetPlays.slice(6, 12).length)}
-              mounted={mounted && hasPreviews}
+              slots={sheetPlays.slice(6, 12)}
+              blanks={hasPreviews ? 0 : 6}
+              mounted={mounted}
             />
           </div>
 
@@ -607,9 +619,9 @@ function PlaybookBookTile({
             />
             <div className="flex h-full w-full p-2">
               <PlaysheetColumn
-                plays={sheetPlays.slice(0, 6)}
-                blanks={Math.max(0, 6 - sheetPlays.slice(0, 6).length)}
-                mounted={mounted && hasPreviews}
+                slots={sheetPlays.slice(0, 6)}
+                blanks={hasPreviews ? 0 : 6}
+                mounted={mounted}
               />
             </div>
           </div>
@@ -691,23 +703,27 @@ function LockedBookTile({ tile }: { tile: DashboardPlaybookTile }) {
 }
 
 function PlaysheetColumn({
-  plays,
+  slots,
   blanks,
   mounted,
 }: {
-  plays: { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number }[];
+  slots: {
+    play: { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number };
+    flipped: boolean;
+  }[];
   blanks: number;
   mounted: boolean;
 }) {
   return (
     <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-1.5">
       {mounted &&
-        plays.map((p, i) => (
+        slots.map((s, i) => (
           <div
             key={i}
             className="overflow-hidden rounded-sm bg-white ring-1 ring-border/70"
+            style={s.flipped ? { transform: "scaleX(-1)" } : undefined}
           >
-            <PlayThumbnail preview={p} thin />
+            <PlayThumbnail preview={s.play} thin />
           </div>
         ))}
       {Array.from({ length: blanks }).map((_, i) => (
