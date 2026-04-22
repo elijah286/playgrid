@@ -34,19 +34,35 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
           PlayGrid
         </Link>
         {user ? (
-          <UserMenu
-            email={user.email ?? ""}
-            displayName={displayName}
-            avatarUrl={avatarUrl}
-            isAdmin={isAdmin}
-          />
+          <div className="flex items-center gap-4">
+            <Link
+              href="/pricing"
+              className="text-sm text-muted hover:text-foreground transition-colors"
+            >
+              Pricing
+            </Link>
+            <UserMenu
+              email={user.email ?? ""}
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+              isAdmin={isAdmin}
+            />
+          </div>
         ) : (
-          <Link
-            href="/login"
-            className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
-          >
-            Sign in
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/pricing"
+              className="text-sm text-muted hover:text-foreground transition-colors"
+            >
+              Pricing
+            </Link>
+            <Link
+              href="/login"
+              className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
+            >
+              Sign in
+            </Link>
+          </div>
         )}
       </div>
     </header>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
 import {
   createBillingPortalSessionAction,
   createCheckoutSessionAction,
@@ -21,7 +21,6 @@ type TierDef = {
   price: { month: number; year: number };
   features: string[];
   cta: string;
-  highlight?: boolean;
 };
 
 const TIERS: TierDef[] = [
@@ -31,11 +30,12 @@ const TIERS: TierDef[] = [
     tagline: "Build and print playsheets for free, forever.",
     price: { month: 0, year: 0 },
     features: [
-      "Unlimited plays and playbooks",
+      "1 playbook with up to 12 plays",
       "Full play editor",
       "Playsheets (print + PDF)",
       "Formations library",
       "View shared playbooks",
+      "View on mobile",
     ],
     cta: "Get started",
   },
@@ -46,13 +46,14 @@ const TIERS: TierDef[] = [
     price: { month: 9, year: 99 },
     features: [
       "Everything in Solo Coach",
+      "Unlimited plays",
       "Wristbands (print + PDF)",
       "Team invites and shared editing",
+      "Manage players",
+      "Share notes",
       "Collaborate with assistants",
-      "Priority support",
     ],
     cta: "Upgrade to Coach",
-    highlight: true,
   },
   {
     id: "coach_ai",
@@ -91,9 +92,11 @@ function annualSavings(tier: TierDef): number | null {
 export function PricingClient({
   entitlement,
   showCoachAi,
+  isAuthed = true,
 }: {
   entitlement: Entitlement | null;
   showCoachAi: boolean;
+  isAuthed?: boolean;
 }) {
   const tiers = showCoachAi ? TIERS : TIERS.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
@@ -105,6 +108,10 @@ export function PricingClient({
 
   function choose(t: TierDef) {
     setErr(null);
+    if (!isAuthed) {
+      window.location.href = "/login?mode=signup";
+      return;
+    }
     if (t.id === "free") {
       window.location.href = "/home";
       return;
@@ -159,18 +166,8 @@ export function PricingClient({
           return (
             <div
               key={t.id}
-              className={cn(
-                "relative flex flex-col rounded-2xl border bg-surface-raised p-6",
-                t.highlight
-                  ? "border-primary/60 ring-2 ring-primary/20"
-                  : "border-border",
-              )}
+              className="relative flex flex-col rounded-2xl border border-border bg-surface-raised p-6"
             >
-              {t.highlight ? (
-                <div className="absolute -top-3 right-6 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
-                  <Sparkles className="size-3" /> Most popular
-                </div>
-              ) : null}
 
               <div className="mb-4">
                 <h2 className="text-lg font-bold text-foreground">{t.name}</h2>
@@ -201,7 +198,7 @@ export function PricingClient({
               </ul>
 
               <div className="mt-auto">
-                {isCurrent ? (
+                {isAuthed && isCurrent ? (
                   <button
                     type="button"
                     onClick={() => choose(t)}
@@ -217,12 +214,12 @@ export function PricingClient({
                     disabled={pending}
                     className={cn(
                       "w-full rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50",
-                      t.highlight
+                      !isAuthed || t.id !== "free"
                         ? "bg-primary text-white hover:bg-primary-hover"
                         : "border border-border text-foreground hover:bg-surface",
                     )}
                   >
-                    {t.cta}
+                    {!isAuthed && t.id === "free" ? "Get started" : t.cta}
                   </button>
                 )}
               </div>
@@ -237,7 +234,7 @@ export function PricingClient({
         </p>
       ) : null}
 
-      <RedeemCodePanel />
+      {isAuthed && <RedeemCodePanel />}
 
       <p className="text-center text-xs text-muted">
         Prices in USD. Team invitees collaborate free — only the head coach pays. Cancel anytime
