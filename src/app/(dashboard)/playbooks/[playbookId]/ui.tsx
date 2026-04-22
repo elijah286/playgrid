@@ -11,6 +11,7 @@ import {
   ArchiveRestore,
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   Check,
   CheckSquare,
   Copy,
@@ -221,6 +222,7 @@ export function PlaybookDetailClient({
       : true,
   );
   const [selectionMode, setSelectionMode] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false);
   // Local optimistic order. Mirrors initialPlays but can be mutated during drag
   // so other rows slide into place in real time. Committed to the server on drop.
   const [localPlays, setLocalPlays] = useState<PlaybookDetailPlayRow[]>(initialPlays);
@@ -740,12 +742,12 @@ export function PlaybookDetailClient({
                     ]
               }
             />
-          </div>          <div className="min-w-[200px] flex-1">
+          </div>          <div className="min-w-0 flex-1 sm:max-w-[280px]">
             <Input
               leftIcon={Search}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name, code, formation, tag…"
+              placeholder="Search plays…"
             />
           </div>
 
@@ -879,9 +881,10 @@ export function PlaybookDetailClient({
             )}
           </div>
 
-          {/* Desktop: Select / Print / New play as dedicated buttons.
-              Mobile: all three live in the team-banner kebab menu so the
-              toolbar stays focused on viewing and filtering plays. */}
+          {/* Desktop: Select / Reorder / Print / New play as dedicated buttons.
+              Mobile: all of these live in the team-banner kebab menu so the
+              toolbar stays focused on viewing and filtering plays. Reorder
+              isn't exposed on mobile — drag-to-reorder is a desktop gesture. */}
           <Button
             variant={selectionMode ? "primary" : "secondary"}
             leftIcon={CheckSquare}
@@ -890,12 +893,33 @@ export function PlaybookDetailClient({
                 setSelectionMode(false);
                 setSelectedPlayIds(new Set());
               } else {
+                setReorderMode(false);
                 setSelectionMode(true);
               }
             }}
+            aria-label={selectionMode ? "Cancel selection" : "Select plays"}
+            title={selectionMode ? "Cancel selection" : "Select plays"}
+            className="hidden px-2.5 sm:inline-flex"
+          >
+            <span className="sr-only">{selectionMode ? "Cancel" : "Select"}</span>
+          </Button>
+          <Button
+            variant={reorderMode ? "primary" : "secondary"}
+            leftIcon={ArrowUpDown}
+            onClick={() => {
+              if (reorderMode) {
+                setReorderMode(false);
+              } else {
+                setSelectionMode(false);
+                setSelectedPlayIds(new Set());
+                setReorderMode(true);
+              }
+            }}
+            aria-label={reorderMode ? "Done reordering" : "Reorder plays"}
+            title={reorderMode ? "Done reordering" : "Reorder plays"}
             className="hidden sm:inline-flex"
           >
-            {selectionMode ? "Cancel" : "Select"}
+            {reorderMode ? "Done" : "Reorder"}
           </Button>
           <Link href={`/playbooks/${playbookId}/print`} className="hidden sm:inline-flex">
             <Button variant="secondary" leftIcon={Printer}>
@@ -1105,7 +1129,7 @@ export function PlaybookDetailClient({
 
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
-                      const canReorder = !selectionMode;
+                      const canReorder = reorderMode;
                       const position = positionByPlayId.get(p.id);
                       const isDragging = draggingPlayId === p.id;
                       const isHighlighted = highlightPlayId === p.id;
@@ -1114,7 +1138,7 @@ export function PlaybookDetailClient({
                         key={`${section.key}:${p.id}`}
                         ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
                         hover
-                        className={`relative flex flex-col p-0 ${selectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
+                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         draggable={canReorder}
                         onDragStart={
                           canReorder
@@ -1178,9 +1202,9 @@ export function PlaybookDetailClient({
                         )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode ? "pointer-events-none" : ""}`}
+                          className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode || reorderMode ? "pointer-events-none" : ""}`}
                           aria-label={`Open ${p.name}`}
-                          tabIndex={selectionMode ? -1 : 0}
+                          tabIndex={selectionMode || reorderMode ? -1 : 0}
                         >
                           <div>
                             <div className="mb-0.5 flex items-center gap-1.5 pr-7">
@@ -1203,9 +1227,11 @@ export function PlaybookDetailClient({
                             </div>
                           )}
                         </Link>
-                        <div className="absolute right-2 top-2 flex items-center gap-1">
-                          <ActionMenu items={buildItems(p)} />
-                        </div>
+                        {!reorderMode && (
+                          <div className="absolute right-2 top-2 flex items-center gap-1">
+                            <ActionMenu items={buildItems(p)} />
+                          </div>
+                        )}
                         {p.play_type !== "offense" && (
                           <div className="pointer-events-none absolute bottom-2 right-2">
                             <PlayTypeBadge type={p.play_type} />
@@ -1220,7 +1246,7 @@ export function PlaybookDetailClient({
                   <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
-                      const canReorder = !selectionMode;
+                      const canReorder = reorderMode;
                       const position = positionByPlayId.get(p.id);
                       const isDragging = draggingPlayId === p.id;
                       const isHighlighted = highlightPlayId === p.id;
@@ -1299,8 +1325,8 @@ export function PlaybookDetailClient({
                         )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className={`flex min-w-0 flex-1 items-center gap-2 py-2 hover:opacity-80 ${selectionMode ? "pointer-events-none" : ""}`}
-                          tabIndex={selectionMode ? -1 : 0}
+                          className={`flex min-w-0 flex-1 items-center gap-2 py-2 hover:opacity-80 ${selectionMode || reorderMode ? "pointer-events-none" : ""}`}
+                          tabIndex={selectionMode || reorderMode ? -1 : 0}
                         >
                           {(p.formation_name || p.shorthand) && (
                             <span className="max-w-[140px] shrink-0 truncate text-xs text-muted">
@@ -1322,7 +1348,7 @@ export function PlaybookDetailClient({
                             </div>
                           )}
                         </Link>
-                        <ActionMenu items={buildItems(p)} />
+                        {!reorderMode && <ActionMenu items={buildItems(p)} />}
                       </li>
                       );
                     })}
@@ -1336,6 +1362,24 @@ export function PlaybookDetailClient({
         </div>
       </div>
 
+      )}
+
+      {reorderMode && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface-raised px-4 py-2 shadow-elevated">
+            <ArrowUpDown className="size-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">
+              Drag plays to reorder
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setReorderMode(false)}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
       )}
 
       {selectionMode && (
