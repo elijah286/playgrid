@@ -11,6 +11,8 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { getExamplesUserId } from "@/lib/site/examples-config";
+import { PublishExampleControl } from "@/features/admin/PublishExampleControl";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -29,7 +31,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication")
+    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, is_public_example")
     .eq("id", playbookId)
     .single();
 
@@ -104,7 +106,45 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const canShare = viewerRole === "owner" || viewerRole === "editor";
   const viewerIsCoach = tierAtLeast(await getCurrentEntitlement(), "coach");
 
+  // Render the "publish to /examples" control only for admins looking at a
+  // playbook owned by the configured examples author. The fetch is cheap
+  // and the result is usually null; skip the owner lookup when there's no
+  // examples user configured.
+  let showPublishExampleControl = false;
+  const isPublicExample = Boolean(
+    (book as unknown as { is_public_example?: boolean | null })
+      .is_public_example,
+  );
+  if (user) {
+    const { data: selfRoleRow } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if ((selfRoleRow?.role as string | null) === "admin") {
+      const examplesUserId = await getExamplesUserId();
+      if (examplesUserId) {
+        const { data: ownerRow } = await supabase
+          .from("playbook_members")
+          .select("user_id")
+          .eq("playbook_id", playbookId)
+          .eq("role", "owner")
+          .maybeSingle();
+        if ((ownerRow?.user_id as string | null) === examplesUserId) {
+          showPublishExampleControl = true;
+        }
+      }
+    }
+  }
+
   return (
+    <>
+    {showPublishExampleControl && (
+      <PublishExampleControl
+        playbookId={playbookId}
+        initialPublished={isPublicExample}
+      />
+    )}
     <PlaybookDetailClient
       playbookId={playbookId}
       sportVariant={book.sport_variant as string}
@@ -132,5 +172,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
         allowPlayerDuplication: (book.allow_player_duplication as boolean | null) ?? true,
       }}
     />
+    </>
   );
 }

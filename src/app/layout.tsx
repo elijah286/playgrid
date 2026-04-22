@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
+import { ExampleMakerBanner } from "@/components/layout/ExampleMakerBanner";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -124,6 +125,7 @@ export default function RootLayout({
         <ThemeProvider>
           <ToastProvider>
             <ConfigBanner />
+            <ExampleMakerBanner />
             <SiteHeader />
             <div className="flex flex-1 flex-col">{children}</div>
             <SiteFooter />
