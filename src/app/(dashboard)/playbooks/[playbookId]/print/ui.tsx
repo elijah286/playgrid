@@ -96,7 +96,7 @@ export function PrintPlaybookClient({
   const [q, setQ] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("position");
   const [numberPlaysInOrder, setNumberPlaysInOrder] = useState<boolean>(false);
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("offense");
   const [previewPage, setPreviewPage] = useState(0);
   const [wristbandPreviewMode, setWristbandPreviewMode] = useState<
     "card" | "sheet"
