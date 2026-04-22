@@ -7,7 +7,6 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 const BRAND_BLUE = "#1769FF";
 const BRAND_GREEN = "#95CC1F";
-const BRAND_ORANGE = "#FF7A00";
 const BRAND_NAVY = "#0F1E3D";
 
 export default async function HomePage() {
@@ -24,21 +23,6 @@ export default async function HomePage() {
       <div className="relative mx-auto flex min-h-[calc(100dvh-8rem)] max-w-6xl flex-col items-center gap-10 px-6 py-16 md:flex-row md:items-center md:gap-12 lg:gap-16">
         {/* Left: headline + CTAs */}
         <div className="flex-1">
-          <div
-            className="mb-8 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-wider"
-            style={{
-              borderColor: `${BRAND_BLUE}33`,
-              background: `${BRAND_BLUE}0D`,
-              color: BRAND_BLUE,
-            }}
-          >
-            <span
-              className="inline-block size-1.5 rounded-full"
-              style={{ background: BRAND_GREEN }}
-            />
-            Football play designer for coaches
-          </div>
-
           <h1
             className="text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl"
             style={{ color: BRAND_NAVY }}
@@ -76,29 +60,6 @@ export default async function HomePage() {
             >
               See example playbooks
             </Link>
-          </div>
-
-          {/* Variant badges — each reinforces a brand color */}
-          <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm font-semibold">
-            <span style={{ color: "#64748B" }}>Built for</span>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1"
-              style={{ background: `${BRAND_BLUE}14`, color: BRAND_BLUE }}
-            >
-              <span className="font-black">✕</span> Flag football
-            </span>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1"
-              style={{ background: `${BRAND_GREEN}1F`, color: "#5B8A00" }}
-            >
-              <span className="font-black">○</span> 7v7
-            </span>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1"
-              style={{ background: `${BRAND_ORANGE}1A`, color: "#C85A00" }}
-            >
-              <span className="font-black">↗</span> Tackle
-            </span>
           </div>
         </div>
 
