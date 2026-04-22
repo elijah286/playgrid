@@ -327,6 +327,25 @@ function PlaybookBookTile({
     }
   }, [menuOpen]);
 
+  // A pointerdown anywhere outside the tile collapses it. Covers modal
+  // overlays (e.g. Duplicate dialog) that sit above the tile: mouseleave
+  // never fires because the overlay intercepts the pointer, and without
+  // this the tile stays stuck opened after the modal closes.
+  useEffect(() => {
+    if (!hover) return;
+    function onDown(e: PointerEvent) {
+      const el = wrapperRef.current;
+      if (!el) return;
+      if (el.contains(e.target as Node)) return;
+      mouseInsideRef.current = false;
+      setMenuOpen(false);
+      setHover(false);
+      setShiftX(0);
+    }
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [hover]);
+
   function handleEnter() {
     const el = wrapperRef.current;
     if (el) {
@@ -1153,8 +1172,10 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
               () => duplicatePlaybookAction(tileId, name),
               (res) => {
                 if (res.ok) {
-                  router.refresh();
-                  router.push(`/playbooks/${res.id}`);
+                  // Stay on home so the user sees the new tile appear
+                  // next to the original. `handle` calls refresh() after
+                  // this callback — no extra refresh needed here.
+                  toast("Playbook duplicated", "success");
                 }
               },
             );
