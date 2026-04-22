@@ -31,6 +31,7 @@ import {
   uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
 import {
+  duplicateAsExampleAction,
   setPlaybookIsExampleAction,
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
@@ -1021,27 +1022,42 @@ export function DashboardClient({
 
   function buildExampleAdminItems(tile: DashboardPlaybookTile): ActionMenuItem[] {
     if (!isAdmin) return [];
-    const items: ActionMenuItem[] = [
+    if (!tile.is_example) {
+      // On a normal playbook, "Use as example" forks into a separate copy
+      // the admin owns so further edits to the source don't leak into the
+      // published example. We navigate into the copy on success.
+      return [
+        {
+          label: "Use as example",
+          icon: FlaskConical,
+          onSelect: () =>
+            handle(
+              () => duplicateAsExampleAction(tile.id),
+              (res) => {
+                if (res && typeof res === "object" && "id" in res && res.id) {
+                  router.push(`/playbooks/${res.id}`);
+                }
+              },
+            ),
+        },
+      ];
+    }
+    return [
       {
-        label: tile.is_example ? "Remove as example" : "Use as example",
+        label: "Remove as example",
         icon: FlaskConical,
         onSelect: () =>
-          handle(() => setPlaybookIsExampleAction(tile.id, !tile.is_example)),
+          handle(() => setPlaybookIsExampleAction(tile.id, false)),
       },
-    ];
-    if (tile.is_example) {
-      items.push({
-        label: tile.is_public_example
-          ? "Unpublish example"
-          : "Publish example",
+      {
+        label: tile.is_public_example ? "Unpublish example" : "Publish example",
         icon: Globe,
         onSelect: () =>
           handle(() =>
             setPlaybookPublicExampleAction(tile.id, !tile.is_public_example),
           ),
-      });
-    }
-    return items;
+      },
+    ];
   }
 
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {

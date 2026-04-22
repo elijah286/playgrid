@@ -8,6 +8,8 @@ import {
   getExamplesPageEnabled,
   setExamplesPageEnabled,
 } from "@/lib/site/examples-config";
+import { copyPlaybookContents } from "@/lib/data/playbook-copy";
+import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 
 async function assertAdmin() {
   if (!hasSupabaseEnv()) {
@@ -53,10 +55,79 @@ async function assertAdminEditorOfPlaybook(playbookId: string) {
 }
 
 /**
- * Flip the "this playbook is a public example" mark. Setting it on
- * shows the inline banner and unlocks the Publish action. Setting it
- * off also un-publishes (so nothing leaks once you decide a playbook
- * isn't an example anymore).
+ * Deep-copy a source playbook into a new playbook owned by the admin
+ * and mark the copy as an example. The source is untouched, so admins
+ * can keep editing their real playbook without those changes bleeding
+ * into the published example. Returns the new playbook's id so the UI
+ * can navigate the admin into the copy to tweak it.
+ */
+export async function duplicateAsExampleAction(sourcePlaybookId: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const { data: src, error: srcErr } = await gate.supabase
+    .from("playbooks")
+    .select(
+      "id, name, sport_variant, custom_offense_count, color, logo_url, season",
+    )
+    .eq("id", sourcePlaybookId)
+    .maybeSingle();
+  if (srcErr || !src) {
+    return { ok: false as const, error: srcErr?.message ?? "Not found" };
+  }
+
+  let targetTeamId: string;
+  try {
+    const ws = await ensureDefaultWorkspace(gate.supabase, gate.userId);
+    targetTeamId = ws.teamId;
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Could not resolve workspace.",
+    };
+  }
+
+  const exampleName = `${src.name} (example)`.slice(0, 120);
+  const { data: newBook, error: pbErr } = await gate.supabase
+    .from("playbooks")
+    .insert({
+      team_id: targetTeamId,
+      name: exampleName,
+      sport_variant: src.sport_variant,
+      custom_offense_count: src.custom_offense_count,
+      color: src.color,
+      logo_url: src.logo_url,
+      season: src.season,
+      is_example: true,
+    })
+    .select("id")
+    .single();
+  if (pbErr || !newBook) {
+    return { ok: false as const, error: pbErr?.message ?? "Insert failed." };
+  }
+
+  const { error: memErr } = await gate.supabase
+    .from("playbook_members")
+    .insert({ playbook_id: newBook.id, user_id: gate.userId, role: "owner" });
+  if (memErr) return { ok: false as const, error: memErr.message };
+
+  await copyPlaybookContents(
+    gate.supabase,
+    sourcePlaybookId,
+    newBook.id,
+    gate.userId,
+  );
+
+  revalidatePath("/home");
+  revalidatePath("/examples");
+  return { ok: true as const, id: newBook.id as string };
+}
+
+/**
+ * Flip the "this playbook is a public example" mark. Used to clear the
+ * flag on an example playbook (e.g. "Remove as example" on a copy that
+ * was created via duplicateAsExampleAction). Setting it off also
+ * un-publishes so nothing leaks.
  */
 export async function setPlaybookIsExampleAction(
   playbookId: string,

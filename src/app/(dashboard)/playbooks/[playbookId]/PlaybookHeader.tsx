@@ -33,6 +33,7 @@ import {
   type ShareResultRow,
 } from "@/app/actions/invites";
 import {
+  duplicateAsExampleAction,
   setPlaybookExampleAuthorLabelAction,
   setPlaybookIsExampleAction,
   setPlaybookPublicExampleAction,
@@ -215,8 +216,19 @@ export function PlaybookHeader({
   }
 
   function handleToggleExample() {
-    const next = !(exampleAdmin?.isExample ?? false);
-    run(() => setPlaybookIsExampleAction(playbookId, next));
+    if (exampleAdmin?.isExample) {
+      run(() => setPlaybookIsExampleAction(playbookId, false));
+      return;
+    }
+    // "Use as example" forks this playbook into a new one the admin owns
+    // so future edits to the original don't bleed into the published
+    // example. Jump the admin into the copy so they can tweak it.
+    run(
+      () => duplicateAsExampleAction(playbookId),
+      (res) => {
+        if (res.id) router.push(`/playbooks/${res.id}`);
+      },
+    );
   }
 
   function handleTogglePublishExample() {
