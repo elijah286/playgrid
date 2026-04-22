@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { AccountClient } from "./ui";
 
 export default async function AccountPage() {
@@ -50,6 +51,7 @@ export default async function AccountPage() {
         email={user.email ?? ""}
         displayName={displayName}
         avatarUrl={avatarUrl}
+        entitlement={await getCurrentEntitlement()}
       />
     </div>
   );

@@ -1,0 +1,138 @@
+import { NextResponse } from "next/server";
+import type Stripe from "stripe";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { getStripeClient, tierForPriceId } from "@/lib/billing/stripe";
+import { getStripeConfig } from "@/lib/site/stripe-config";
+import type { SubscriptionTier } from "@/lib/billing/entitlement";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<void> {
+  const admin = createServiceRoleClient();
+  const config = await getStripeConfig();
+
+  const customerObj =
+    typeof sub.customer === "string" || !sub.customer || "deleted" in sub.customer
+      ? null
+      : sub.customer;
+  const userIdFromMeta =
+    (sub.metadata?.user_id as string | undefined) ??
+    (customerObj?.metadata?.user_id as string | undefined);
+
+  let userId = userIdFromMeta;
+  if (!userId) {
+    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+    if (customerId) {
+      const { data } = await admin
+        .from("subscriptions")
+        .select("user_id")
+        .eq("stripe_customer_id", customerId)
+        .limit(1)
+        .maybeSingle();
+      userId = data?.user_id ?? undefined;
+    }
+  }
+  if (!userId) {
+    // Last resort: try to resolve via customer email
+    const { stripe } = await getStripeClient();
+    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+    if (customerId) {
+      const cust = await stripe.customers.retrieve(customerId);
+      if (!("deleted" in cust) && cust.email) {
+        const { data } = await admin.auth.admin.listUsers({ perPage: 500, page: 1 });
+        const match = data.users.find((u) => u.email?.toLowerCase() === cust.email?.toLowerCase());
+        userId = match?.id;
+      }
+    }
+  }
+  if (!userId) {
+    throw new Error(`Cannot resolve user_id for subscription ${sub.id}`);
+  }
+
+  const item = sub.items.data[0];
+  const priceId = item?.price.id ?? null;
+  const mapped = priceId ? tierForPriceId(config, priceId) : null;
+  const tier: SubscriptionTier = mapped?.tier ?? "coach";
+  const interval = mapped?.interval ?? item?.price.recurring?.interval ?? null;
+  const periodEndUnix = item?.current_period_end ?? null;
+
+  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+
+  const row = {
+    user_id: userId,
+    tier,
+    status: sub.status,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: sub.id,
+    stripe_price_id: priceId,
+    current_period_end: periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null,
+    cancel_at_period_end: sub.cancel_at_period_end ?? false,
+    billing_interval: interval === "month" || interval === "year" ? interval : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await admin
+    .from("subscriptions")
+    .upsert(row, { onConflict: "stripe_subscription_id" });
+  if (error) throw new Error(`subscriptions upsert failed: ${error.message}`);
+}
+
+export async function POST(req: Request): Promise<NextResponse> {
+  const config = await getStripeConfig();
+  if (!config.webhookSecret) {
+    return NextResponse.json(
+      { error: "Webhook secret not configured." },
+      { status: 503 },
+    );
+  }
+  if (!config.secretKey) {
+    return NextResponse.json({ error: "Stripe not configured." }, { status: 503 });
+  }
+
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) return NextResponse.json({ error: "Missing signature." }, { status: 400 });
+
+  const bodyText = await req.text();
+  const { stripe } = await getStripeClient();
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(bodyText, sig, config.webhookSecret);
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Signature verification failed: ${e instanceof Error ? e.message : "unknown"}` },
+      { status: 400 },
+    );
+  }
+
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object;
+        if (session.mode === "subscription" && session.subscription) {
+          const subId =
+            typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+          const sub = await stripe.subscriptions.retrieve(subId);
+          await upsertSubscriptionFromStripe(sub);
+        }
+        break;
+      }
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        await upsertSubscriptionFromStripe(event.data.object);
+        break;
+      }
+      default:
+        break;
+    }
+    return NextResponse.json({ received: true });
+  } catch (e) {
+    console.error("[stripe webhook] handler error", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Webhook handler error." },
+      { status: 500 },
+    );
+  }
+}
