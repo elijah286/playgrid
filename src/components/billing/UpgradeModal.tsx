@@ -1,0 +1,54 @@
+"use client";
+
+import Link from "next/link";
+import { Lock, X } from "lucide-react";
+
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  message: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+};
+
+export function UpgradeModal({
+  open,
+  onClose,
+  title,
+  message,
+  ctaLabel = "Upgrade",
+  ctaHref = "/pricing",
+}: Props) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative flex w-full max-w-sm flex-col items-center gap-3 rounded-xl bg-surface-raised p-6 text-center shadow-lg ring-1 ring-border">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-2 top-2 rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          aria-label="Close"
+        >
+          <X className="size-4" />
+        </button>
+        <Lock className="size-6 text-muted" />
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted">{message}</p>
+        <Link
+          href={ctaHref}
+          className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+        >
+          {ctaLabel}
+        </Link>
+      </div>
+    </div>
+  );
+}

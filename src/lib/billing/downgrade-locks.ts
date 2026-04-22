@@ -39,7 +39,7 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
 
   const { data: ownedMembers } = await admin
     .from("playbook_members")
-    .select("playbook_id, playbooks!inner(id, is_archived, created_at)")
+    .select("playbook_id, playbooks!inner(id, is_archived, is_default, created_at)")
     .eq("user_id", userId)
     .eq("role", "owner")
     .eq("status", "active");
@@ -47,14 +47,14 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
   type Joined = {
     playbook_id: string;
     playbooks:
-      | { id: string; is_archived: boolean; created_at: string }
-      | { id: string; is_archived: boolean; created_at: string }[]
+      | { id: string; is_archived: boolean; is_default: boolean; created_at: string }
+      | { id: string; is_archived: boolean; is_default: boolean; created_at: string }[]
       | null;
   };
   const owned: Array<{ id: string; createdAt: string }> = [];
   for (const row of (ownedMembers ?? []) as unknown as Joined[]) {
     const b = Array.isArray(row.playbooks) ? row.playbooks[0] : row.playbooks;
-    if (!b || b.is_archived) continue;
+    if (!b || b.is_archived || b.is_default) continue;
     owned.push({ id: b.id, createdAt: b.created_at });
   }
   owned.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
