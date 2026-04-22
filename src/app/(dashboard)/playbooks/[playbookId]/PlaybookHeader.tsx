@@ -850,16 +850,24 @@ function InviteTeamMemberDialog({
   const [emailInput, setEmailInput] = useState("");
   const [sending, setSending] = useState(false);
   const [shareResults, setShareResults] = useState<ShareResultRow[] | null>(null);
+  const [autoApprove, setAutoApprove] = useState(true);
+  const [autoApproveLimit, setAutoApproveLimit] = useState<string>("25");
 
   async function generate() {
     setCreating(true);
+    const parsedLimit =
+      autoApprove && autoApproveLimit.trim() !== ""
+        ? Math.max(1, Math.floor(Number(autoApproveLimit)))
+        : null;
     const res = await createInviteAction({
       playbookId,
       role,
       expiresInDays: 14,
-      maxUses: 25,
+      maxUses: null,
       email: null,
       note: null,
+      autoApprove,
+      autoApproveLimit: parsedLimit,
     });
     setCreating(false);
     if (!res.ok) {
@@ -1091,10 +1099,38 @@ function InviteTeamMemberDialog({
                   ]}
                 />
               </div>
-              <p className="text-xs text-muted">
-                We&apos;ll create a link valid for 14 days (up to 25 uses). You&apos;ll still
-                approve each person after they sign up.
-              </p>
+              <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={autoApprove}
+                    onChange={(e) => setAutoApprove(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 rounded border-border"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-foreground">
+                      Anyone with this link can join immediately
+                    </div>
+                    {autoApprove ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <span>Up to</span>
+                        <Input
+                          value={autoApproveLimit}
+                          onChange={(e) => setAutoApproveLimit(e.target.value)}
+                          placeholder="unlimited"
+                          className="h-7 w-20 text-xs"
+                        />
+                        <span>user{autoApproveLimit.trim() === "1" ? "" : "s"} — after that, you&apos;ll approve each new person.</span>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted">
+                        You&apos;ll approve every joiner from the Roster tab.
+                      </p>
+                    )}
+                  </div>
+                </label>
+              </div>
+              <p className="text-xs text-muted">Link is valid for 14 days.</p>
               <Button variant="primary" onClick={generate} loading={creating} className="w-full">
                 Create invite link
               </Button>
