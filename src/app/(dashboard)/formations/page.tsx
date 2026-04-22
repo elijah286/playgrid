@@ -2,7 +2,7 @@ import { listFormationsAction } from "@/app/actions/formations";
 import { DashboardTabs } from "@/components/layout/DashboardTabs";
 import { FormationsClient } from "./ui";
 
-export const metadata = { title: "Formations — PlayGrid" };
+export const metadata = { title: "Formations — xogridmaker" };
 
 export default async function FormationsPage() {
   const result = await listFormationsAction();

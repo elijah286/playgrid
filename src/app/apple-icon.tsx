@@ -14,16 +14,47 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background:
-            "linear-gradient(135deg, #1d4ed8 0%, #2563eb 60%, #3b82f6 100%)",
-          color: "white",
-          fontSize: 120,
-          fontWeight: 800,
-          letterSpacing: "-0.04em",
-          fontFamily: "system-ui, sans-serif",
+          background: "#ffffff",
         }}
       >
-        P
+        <svg
+          width="140"
+          height="60"
+          viewBox="0 0 900 380"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g>
+            <line
+              stroke="#1769FF"
+              strokeLinecap="square"
+              strokeWidth="52"
+              x1="250"
+              x2="380"
+              y1="100"
+              y2="240"
+            />
+            <line
+              stroke="#1769FF"
+              strokeLinecap="square"
+              strokeWidth="52"
+              x1="380"
+              x2="250"
+              y1="100"
+              y2="240"
+            />
+            <rect
+              fill="none"
+              height="130"
+              rx="42"
+              ry="42"
+              stroke="#95CC1F"
+              strokeWidth="38"
+              width="170"
+              x="480"
+              y="105"
+            />
+          </g>
+        </svg>
       </div>
     ),
     { ...size },

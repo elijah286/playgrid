@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Terms of Service · PlayGrid",
-  description: "PlayGrid terms of service.",
+  title: "Terms of Service · xogridmaker",
+  description: "xogridmaker terms of service.",
 };
 
 export default function TermsPage() {
@@ -15,9 +15,9 @@ export default function TermsPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">1. Acceptance of terms</h2>
           <p className="mt-2">
-            By creating an account or using PlayGrid (the &quot;Service&quot;), you agree to
+            By creating an account or using xogridmaker (the &quot;Service&quot;), you agree to
             these Terms of Service. If you do not agree, do not use the Service.
-            The Service is operated by PlayGrid LLC (&quot;PlayGrid,&quot; &quot;we,&quot; &quot;us&quot;),
+            The Service is operated by xogridmaker LLC (&quot;xogridmaker,&quot; &quot;we,&quot; &quot;us&quot;),
             a Texas limited liability company.
           </p>
         </section>
@@ -36,7 +36,7 @@ export default function TermsPage() {
           <h2 className="text-base font-semibold text-foreground">3. Your content</h2>
           <p className="mt-2">
             Plays, formations, playbooks, and other content you create remain
-            yours. You grant PlayGrid a limited license to store, process, and
+            yours. You grant xogridmaker a limited license to store, process, and
             display that content solely as needed to operate the Service for you
             and any users you share with.
           </p>
@@ -63,8 +63,8 @@ export default function TermsPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">6. Disclaimer and limitation of liability</h2>
           <p className="mt-2">
-            To the maximum extent permitted by law, PlayGrid disclaims all
-            warranties, express or implied. PlayGrid&apos;s total liability for any
+            To the maximum extent permitted by law, xogridmaker disclaims all
+            warranties, express or implied. xogridmaker&apos;s total liability for any
             claim related to the Service will not exceed the amounts you paid
             us (if any) in the 12 months preceding the claim.
           </p>

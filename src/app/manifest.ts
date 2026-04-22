@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "PlayGrid — Football play designer for coaches",
-    short_name: "PlayGrid",
+    name: "xogridmaker — Football play designer for coaches",
+    short_name: "xogridmaker",
     description:
       "Design football plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
     start_url: "/",

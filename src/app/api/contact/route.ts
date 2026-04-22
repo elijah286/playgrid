@@ -3,7 +3,7 @@ import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-const DEFAULT_FROM_EMAIL = "PlayGrid <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
 
 export async function POST(req: Request) {
   const ip = await clientIp();

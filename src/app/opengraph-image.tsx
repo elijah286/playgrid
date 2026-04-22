@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "PlayGrid — Football play designer for coaches";
+export const alt = "xogridmaker — Football play designer for coaches";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -32,22 +32,12 @@ export default async function OpengraphImage() {
             letterSpacing: "-0.02em",
           }}
         >
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 10,
-              background: "#2563eb",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 26,
-              fontWeight: 800,
-            }}
-          >
-            P
-          </div>
-          PlayGrid
+          <svg width="72" height="30" viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg">
+            <line stroke="#1769FF" strokeLinecap="square" strokeWidth="52" x1="250" x2="380" y1="100" y2="240" />
+            <line stroke="#1769FF" strokeLinecap="square" strokeWidth="52" x1="380" x2="250" y1="100" y2="240" />
+            <rect fill="none" height="130" rx="42" ry="42" stroke="#95CC1F" strokeWidth="38" width="170" x="480" y="105" />
+          </svg>
+          xogridmaker
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div
@@ -60,7 +50,7 @@ export default async function OpengraphImage() {
           >
             Design plays.
             <br />
-            <span style={{ color: "#60a5fa" }}>Win games.</span>
+            <span style={{ color: "#95CC1F" }}>Win games.</span>
           </div>
           <div
             style={{
@@ -83,7 +73,7 @@ export default async function OpengraphImage() {
             color: "rgba(255,255,255,0.6)",
           }}
         >
-          <span>playgrid.us</span>
+          <span>xogridmaker.com</span>
           <span>Built for gameday</span>
         </div>
       </div>

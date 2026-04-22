@@ -101,7 +101,7 @@ import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.playgrid.us";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
 type GroupBy = "type" | "formation" | "group";
 

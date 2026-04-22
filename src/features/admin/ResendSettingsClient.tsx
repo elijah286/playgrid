@@ -87,7 +87,7 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
             autoComplete="off"
             value={fromEmail}
             onChange={(e) => setFromEmail(e.target.value)}
-            placeholder="PlayGrid <onboarding@resend.dev>"
+            placeholder="xogridmaker <onboarding@resend.dev>"
           />
         </Field>
 

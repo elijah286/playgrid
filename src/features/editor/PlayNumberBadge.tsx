@@ -16,7 +16,7 @@ export function PlayNumberBadge({ value, className }: Props) {
   return (
     <span
       className={cn(
-        "inline-flex h-[22px] min-w-[28px] items-center justify-center rounded-[4px] bg-primary px-1.5 font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white shadow-sm",
+        "inline-flex h-[22px] min-w-[28px] items-center justify-center rounded-[4px] bg-brand-orange px-1.5 font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white shadow-sm",
         className,
       )}
     >
@@ -99,7 +99,7 @@ export function EditablePlayNumberBadge({
           }
         }}
         className={cn(
-          "h-[22px] w-14 rounded-[4px] bg-primary px-1.5 text-center font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white outline-none ring-2 ring-primary/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+          "h-[22px] w-14 rounded-[4px] bg-brand-orange px-1.5 text-center font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white outline-none ring-2 ring-brand-orange/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
           className,
         )}
         aria-label="Renumber play"
@@ -116,9 +116,9 @@ export function EditablePlayNumberBadge({
         disabled ? `Play ${value}` : `Play ${value}, double-click to renumber`
       }
       className={cn(
-        "inline-flex h-[22px] min-w-[28px] items-center justify-center rounded-[4px] bg-primary px-1.5 font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white shadow-sm transition-all",
+        "inline-flex h-[22px] min-w-[28px] items-center justify-center rounded-[4px] bg-brand-orange px-1.5 font-mono text-[12px] font-bold leading-none tracking-wider tabular-nums text-white shadow-sm transition-all",
         !disabled &&
-          "cursor-text hover:ring-2 hover:ring-primary/40 hover:ring-offset-1 hover:ring-offset-surface",
+          "cursor-text hover:ring-2 hover:ring-brand-orange/40 hover:ring-offset-1 hover:ring-offset-surface",
         className,
       )}
       onDoubleClick={(e) => {

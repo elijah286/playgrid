@@ -282,7 +282,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
         data: { display_name: trimmedName },
       });
       if (error && !isSamePasswordErr(error)) throw error;
-      toast("Welcome to PlayGrid!", "success");
+      toast("Welcome to xogridmaker!", "success");
       hardNavigate(safeNext);
       return; // keep pending=true through navigation to block double-clicks
     } catch (e: unknown) {
