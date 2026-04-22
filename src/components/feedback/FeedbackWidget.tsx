@@ -15,11 +15,6 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "playgrid:feedback-widget-pos";
-const VIEW_COUNT_KEY = "playgrid:plays-viewed-count";
-const VIEW_COUNT_THRESHOLD = 2;
-const TIME_ON_SITE_KEY = "playgrid:time-on-site-seconds";
-const TIME_ON_SITE_THRESHOLD_SEC = 3 * 60;
-const TIME_TICK_SEC = 15;
 const MARGIN = 16;
 const FOOTER_CLEARANCE = 96;
 
@@ -43,7 +38,7 @@ function defaultPosition(size: { w: number; h: number }): Pos {
   };
 }
 
-export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) {
+export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
@@ -55,43 +50,6 @@ export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) 
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
   const didDragRef = useRef(false);
-
-  // Gate on engagement: show the pill once the user has created a play,
-  // viewed ≥ N plays, OR accumulated ≥ 3 minutes on the site (summed across
-  // sessions via localStorage). `hasCreatedPlay` comes from the server; the
-  // rest are client-only. Mount-gated so SSR doesn't leak a "hidden" state.
-  const [eligible, setEligible] = useState(false);
-  useEffect(() => {
-    function readNum(key: string): number {
-      try {
-        const raw = localStorage.getItem(key);
-        const n = raw ? parseInt(raw, 10) : 0;
-        return Number.isFinite(n) ? n : 0;
-      } catch {
-        return 0;
-      }
-    }
-    function check() {
-      if (hasCreatedPlay) return true;
-      if (readNum(VIEW_COUNT_KEY) >= VIEW_COUNT_THRESHOLD) return true;
-      if (readNum(TIME_ON_SITE_KEY) >= TIME_ON_SITE_THRESHOLD_SEC) return true;
-      return false;
-    }
-    if (check()) {
-      setEligible(true);
-      return;
-    }
-    // TimeOnSiteTracker (mounted once at the layout level) writes the
-    // running total to localStorage. The widget only READS here — no own
-    // increment, or we'd double-count.
-    const id = window.setInterval(() => {
-      if (readNum(TIME_ON_SITE_KEY) >= TIME_ON_SITE_THRESHOLD_SEC) {
-        setEligible(true);
-        window.clearInterval(id);
-      }
-    }, TIME_TICK_SEC * 1000);
-    return () => window.clearInterval(id);
-  }, [hasCreatedPlay]);
 
   useLayoutEffect(() => {
     if (!rootRef.current) return;
@@ -189,8 +147,6 @@ export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) 
   const style: React.CSSProperties = pos
     ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" }
     : { visibility: "hidden" };
-
-  if (!eligible) return null;
 
   return (
     <div
