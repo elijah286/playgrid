@@ -148,15 +148,15 @@ export async function createPlaybookAction(
 
   const entitlement = await getUserEntitlement(user.id);
   if (!tierAtLeast(entitlement, "coach")) {
-    // Count only real, non-archived playbooks the user owns. The hidden
-    // default Inbox playbook and archived books don't count against the cap.
+    // Count all real playbooks the user owns — archived books still count so
+    // users can't sidestep the cap by archiving. Only the hidden default
+    // Inbox playbook is excluded.
     const { count: ownedCount } = await supabase
       .from("playbook_members")
       .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("role", "owner")
-      .eq("playbooks.is_default", false)
-      .eq("playbooks.is_archived", false);
+      .eq("playbooks.is_default", false);
     if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
       return {
         ok: false as const,

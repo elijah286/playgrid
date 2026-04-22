@@ -54,7 +54,7 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
   const owned: Array<{ id: string; createdAt: string }> = [];
   for (const row of (ownedMembers ?? []) as unknown as Joined[]) {
     const b = Array.isArray(row.playbooks) ? row.playbooks[0] : row.playbooks;
-    if (!b || b.is_archived || b.is_default) continue;
+    if (!b || b.is_default) continue;
     owned.push({ id: b.id, createdAt: b.created_at });
   }
   owned.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
