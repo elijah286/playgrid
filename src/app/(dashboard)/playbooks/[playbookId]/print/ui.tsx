@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Lock,
   Maximize2,
   Printer,
   Save,
@@ -53,6 +55,7 @@ type Props = {
   loadError: string | null;
   team: PlaysheetHeader;
   logoUrl: string | null;
+  canUseWristbands: boolean;
 };
 
 type TabKey = "plays" | "layout" | "visuals" | "presets";
@@ -70,6 +73,7 @@ export function PrintPlaybookClient({
   loadError,
   team,
   logoUrl,
+  canUseWristbands,
 }: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -513,7 +517,13 @@ export function PrintPlaybookClient({
     return compileWristbandPdfPages(docs, wristbandGridOpts, watermark);
   }
 
+  const wristbandLocked = config.product === "wristband" && !canUseWristbands;
+
   function exportPdf() {
+    if (wristbandLocked) {
+      toast("Wristbands are a Coach feature. Upgrade on your Account page.", "error");
+      return;
+    }
     startTransition(async () => {
       const pages = await compileForExport();
       if (!pages) return;
@@ -525,6 +535,10 @@ export function PrintPlaybookClient({
   }
 
   function printNow() {
+    if (wristbandLocked) {
+      toast("Wristbands are a Coach feature. Upgrade on your Account page.", "error");
+      return;
+    }
     startPrint(async () => {
       const pages = await compileForExport();
       if (!pages) return;
@@ -567,17 +581,21 @@ export function PrintPlaybookClient({
         <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="secondary"
-            leftIcon={Printer}
+            leftIcon={wristbandLocked ? Lock : Printer}
             onClick={printNow}
             loading={printing}
+            disabled={wristbandLocked}
+            title={wristbandLocked ? "Wristbands require a Coach subscription" : undefined}
           >
             Print
           </Button>
           <Button
             variant="primary"
-            leftIcon={FileDown}
+            leftIcon={wristbandLocked ? Lock : FileDown}
             onClick={exportPdf}
             loading={pending}
+            disabled={wristbandLocked}
+            title={wristbandLocked ? "Wristbands require a Coach subscription" : undefined}
           >
             PDF
           </Button>
@@ -885,23 +903,33 @@ export function PrintPlaybookClient({
               )}
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted hover:bg-surface-raised"
-                onClick={() => setFullscreen(true)}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted hover:bg-surface-raised disabled:opacity-50"
+                onClick={() => {
+                  if (wristbandLocked) return;
+                  setFullscreen(true);
+                }}
+                disabled={wristbandLocked}
                 aria-label="Expand preview"
               >
-                <Maximize2 className="size-3.5" />
+                {wristbandLocked ? <Lock className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                 Expand
               </button>
             </div>
           )}
         </div>
         {pageCount > 0 ? (
-          <div className="flex min-h-0 flex-1 items-start justify-center">
+          <div className="relative flex min-h-0 flex-1 items-start justify-center">
             <button
               type="button"
-              className="block w-full max-h-full overflow-hidden bg-white text-left shadow-elevated ring-1 ring-black/10 [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
+              className={cn(
+                "block w-full max-h-full overflow-hidden bg-white text-left shadow-elevated ring-1 ring-black/10 [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
+                wristbandLocked && "pointer-events-none select-none blur-md",
+              )}
               style={{ aspectRatio: pageAspect }}
-              onClick={() => setFullscreen(true)}
+              onClick={() => {
+                if (wristbandLocked) return;
+                setFullscreen(true);
+              }}
               aria-label="Open preview fullscreen"
               dangerouslySetInnerHTML={{
                 __html: previewHtml(
@@ -909,6 +937,26 @@ export function PrintPlaybookClient({
                 ),
               }}
             />
+            {wristbandLocked ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex max-w-xs flex-col items-center gap-3 rounded-xl bg-surface-raised/95 p-6 text-center shadow-lg ring-1 ring-border backdrop-blur">
+                  <Lock className="size-6 text-muted" />
+                  <p className="text-sm font-semibold text-foreground">
+                    Wristbands are a Coach feature
+                  </p>
+                  <p className="text-xs text-muted">
+                    Upgrade to Coach ($9/mo or $99/yr) to print wrist coaches. Playsheets stay
+                    free.
+                  </p>
+                  <Link
+                    href="/account"
+                    className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+                  >
+                    Upgrade
+                  </Link>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border p-8">
