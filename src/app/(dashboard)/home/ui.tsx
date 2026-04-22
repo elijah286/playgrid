@@ -1333,16 +1333,12 @@ export function DashboardClient({
         </div>
       ) : view === "preview" ? (
         <section className="space-y-6">
-          <div className="flex flex-wrap justify-start gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
             {owned.map((b) => (
-              <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                <PlaybookBookTile tile={b} actions={buildOwnerActions(b)} />
-              </div>
+              <PlaybookBookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
             ))}
             {shared.map((b) => (
-              <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                <PlaybookBookTile tile={b} actions={buildSharedActions(b)} />
-              </div>
+              <PlaybookBookTile key={b.id} tile={b} actions={buildSharedActions(b)} />
             ))}
           </div>
           {showArchived && archived.length > 0 && (
@@ -1354,18 +1350,17 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="flex flex-wrap justify-start gap-3 opacity-70">
+              <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                 {archived.map((b) => (
-                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                    <PlaybookBookTile
-                      tile={b}
-                      actions={
-                        b.role === "owner"
-                          ? buildOwnerActions(b)
-                          : buildSharedActions(b)
-                      }
-                    />
-                  </div>
+                  <PlaybookBookTile
+                    key={b.id}
+                    tile={b}
+                    actions={
+                      b.role === "owner"
+                        ? buildOwnerActions(b)
+                        : buildSharedActions(b)
+                    }
+                  />
                 ))}
               </div>
             </>
@@ -1379,18 +1374,17 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="flex flex-wrap justify-start gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                 {examples.map((b) => (
-                  <div key={b.id} className="w-40 sm:w-48 lg:w-56">
-                    <PlaybookBookTile
-                      tile={b}
-                      actions={
-                        b.role === "owner"
-                          ? buildOwnerActions(b)
-                          : buildSharedActions(b)
-                      }
-                    />
-                  </div>
+                  <PlaybookBookTile
+                    key={b.id}
+                    tile={b}
+                    actions={
+                      b.role === "owner"
+                        ? buildOwnerActions(b)
+                        : buildSharedActions(b)
+                    }
+                  />
                 ))}
               </div>
             </>
@@ -1465,17 +1459,18 @@ export function DashboardClient({
       {duplicating && (
         <DuplicatePlaybookDialog
           tile={duplicating}
-          onClose={() => setDuplicating(null)}
+          pending={pending}
+          onClose={() => {
+            if (pending) return;
+            setDuplicating(null);
+          }}
           onDuplicate={(name) => {
             const tileId = duplicating.id;
-            setDuplicating(null);
             handle(
               () => duplicatePlaybookAction(tileId, name),
               (res) => {
                 if (res.ok) {
-                  // Stay on home so the user sees the new tile appear
-                  // next to the original. `handle` calls refresh() after
-                  // this callback — no extra refresh needed here.
+                  setDuplicating(null);
                   toast("Playbook duplicated", "success");
                 }
               },
@@ -1762,16 +1757,19 @@ const PALETTE = [
 
 function DuplicatePlaybookDialog({
   tile,
+  pending,
   onClose,
   onDuplicate,
 }: {
   tile: DashboardPlaybookTile;
+  pending: boolean;
   onClose: () => void;
   onDuplicate: (name: string) => void;
 }) {
   const [name, setName] = useState(`${tile.name} (copy)`);
 
   function submit() {
+    if (pending) return;
     const trimmed = name.trim();
     if (!trimmed) return;
     onDuplicate(trimmed);
@@ -1781,6 +1779,7 @@ function DuplicatePlaybookDialog({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={(e) => {
+        if (pending) return;
         if (e.target === e.currentTarget) onClose();
       }}
     >
@@ -1790,7 +1789,8 @@ function DuplicatePlaybookDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+            disabled={pending}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground disabled:opacity-50"
           >
             <X className="size-4" />
           </button>
@@ -1815,11 +1815,16 @@ function DuplicatePlaybookDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!name.trim()}>
-            Create copy
+          <Button
+            variant="primary"
+            onClick={submit}
+            disabled={!name.trim() || pending}
+            loading={pending}
+          >
+            {pending ? "Copying plays…" : "Create copy"}
           </Button>
         </div>
       </div>
