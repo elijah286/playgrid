@@ -18,7 +18,7 @@ const STORAGE_KEY = "playgrid:feedback-widget-pos";
 const VIEW_COUNT_KEY = "playgrid:plays-viewed-count";
 const VIEW_COUNT_THRESHOLD = 2;
 const TIME_ON_SITE_KEY = "playgrid:time-on-site-seconds";
-const TIME_ON_SITE_THRESHOLD_SEC = 10 * 60;
+const TIME_ON_SITE_THRESHOLD_SEC = 3 * 60;
 const TIME_TICK_SEC = 15;
 const MARGIN = 16;
 const FOOTER_CLEARANCE = 96;
@@ -57,7 +57,7 @@ export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) 
   const didDragRef = useRef(false);
 
   // Gate on engagement: show the pill once the user has created a play,
-  // viewed ≥ N plays, OR accumulated ≥ 5 minutes on the site (summed across
+  // viewed ≥ N plays, OR accumulated ≥ 3 minutes on the site (summed across
   // sessions via localStorage). `hasCreatedPlay` comes from the server; the
   // rest are client-only. Mount-gated so SSR doesn't leak a "hidden" state.
   const [eligible, setEligible] = useState(false);
