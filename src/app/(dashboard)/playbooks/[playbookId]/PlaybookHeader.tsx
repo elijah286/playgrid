@@ -675,7 +675,7 @@ function HeaderMenu({
   );
 }
 
-function CustomizeTeamDialog({
+export function CustomizeTeamDialog({
   playbookId,
   initialName,
   initialSeason,
@@ -867,7 +867,7 @@ function CustomizeTeamDialog({
   );
 }
 
-function InviteTeamMemberDialog({
+export function InviteTeamMemberDialog({
   playbookId,
   teamName,
   senderName,
