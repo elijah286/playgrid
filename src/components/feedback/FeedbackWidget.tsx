@@ -17,6 +17,9 @@ import { cn } from "@/lib/utils";
 const STORAGE_KEY = "playgrid:feedback-widget-pos";
 const VIEW_COUNT_KEY = "playgrid:plays-viewed-count";
 const VIEW_COUNT_THRESHOLD = 2;
+const TIME_ON_SITE_KEY = "playgrid:time-on-site-seconds";
+const TIME_ON_SITE_THRESHOLD_SEC = 5 * 60;
+const TIME_TICK_SEC = 15;
 const MARGIN = 16;
 const FOOTER_CLEARANCE = 96;
 
@@ -53,23 +56,47 @@ export function FeedbackWidget({ hasCreatedPlay }: { hasCreatedPlay: boolean }) 
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
   const didDragRef = useRef(false);
 
-  // Gate on engagement: user must have created a play OR viewed ≥ N plays.
-  // `hasCreatedPlay` comes from the server; view count is client-only
-  // (localStorage). Mount-gated so SSR doesn't leak a "hidden" state.
+  // Gate on engagement: show the pill once the user has created a play,
+  // viewed ≥ N plays, OR accumulated ≥ 5 minutes on the site (summed across
+  // sessions via localStorage). `hasCreatedPlay` comes from the server; the
+  // rest are client-only. Mount-gated so SSR doesn't leak a "hidden" state.
   const [eligible, setEligible] = useState(false);
   useEffect(() => {
-    if (hasCreatedPlay) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating engagement gate from localStorage
+    function readNum(key: string): number {
+      try {
+        const raw = localStorage.getItem(key);
+        const n = raw ? parseInt(raw, 10) : 0;
+        return Number.isFinite(n) ? n : 0;
+      } catch {
+        return 0;
+      }
+    }
+    function check() {
+      if (hasCreatedPlay) return true;
+      if (readNum(VIEW_COUNT_KEY) >= VIEW_COUNT_THRESHOLD) return true;
+      if (readNum(TIME_ON_SITE_KEY) >= TIME_ON_SITE_THRESHOLD_SEC) return true;
+      return false;
+    }
+    if (check()) {
       setEligible(true);
       return;
     }
-    try {
-      const raw = localStorage.getItem(VIEW_COUNT_KEY);
-      const n = raw ? parseInt(raw, 10) : 0;
-      if (Number.isFinite(n) && n >= VIEW_COUNT_THRESHOLD) setEligible(true);
-    } catch {
-      /* ignore */
-    }
+    // Tick while the tab is visible; accumulate total time across sessions.
+    // Cheap and lazy — no server write. Re-checks eligibility each tick.
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const next = readNum(TIME_ON_SITE_KEY) + TIME_TICK_SEC;
+      try {
+        localStorage.setItem(TIME_ON_SITE_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      if (next >= TIME_ON_SITE_THRESHOLD_SEC) {
+        setEligible(true);
+        window.clearInterval(id);
+      }
+    }, TIME_TICK_SEC * 1000);
+    return () => window.clearInterval(id);
   }, [hasCreatedPlay]);
 
   useLayoutEffect(() => {
