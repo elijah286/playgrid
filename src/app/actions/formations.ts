@@ -283,15 +283,24 @@ export async function listFormationsForPlaybookAction(
 
   const { data: pb, error: pbErr } = await supabase
     .from("playbooks")
-    .select("sport_variant")
+    .select("sport_variant, team_id")
     .eq("id", playbookId)
     .single();
   if (pbErr || !pb) return { ok: false, error: pbErr?.message ?? "Playbook not found." };
 
   const variant = ((pb.sport_variant as string | null) ?? "flag_7v7") as string;
+  const teamId = pb.team_id as string;
 
-  const all = await listFormationsAction();
-  if (!all.ok) return all;
+  // Query formations tied to the playbook's own team (not the caller's
+  // default team), plus system formations. This is what lets a coach who
+  // was invited into someone else's playbook still see that playbook's
+  // custom formations.
+  const { data: rows, error: fErr } = await supabase
+    .from("formations")
+    .select("id, team_id, is_system, params, kind")
+    .or(`team_id.eq.${teamId},is_system.eq.true`)
+    .order("is_system", { ascending: true });
+  if (fErr) return { ok: false, error: fErr.message };
 
   const { data: excl } = await supabase
     .from("playbook_formation_exclusions")
@@ -299,10 +308,28 @@ export async function listFormationsForPlaybookAction(
     .eq("playbook_id", playbookId);
   const excluded = new Set((excl ?? []).map((r) => r.formation_id as string));
 
-  const formations = all.formations.filter((f) => {
-    const v = (f.sportProfile?.variant as string | undefined) ?? "flag_7v7";
-    return v === variant && !excluded.has(f.id);
-  });
+  const formations: SavedFormation[] = (rows ?? [])
+    .map((row) => {
+      const params = (row.params as {
+        displayName?: string;
+        players?: Player[];
+        sportProfile?: Partial<SportProfile>;
+        losY?: number;
+      } | null) ?? {};
+      return {
+        id: row.id as string,
+        displayName: params.displayName ?? "Formation",
+        players: Array.isArray(params.players) ? params.players : [],
+        sportProfile: params.sportProfile ?? {},
+        isSystem: Boolean(row.is_system),
+        kind: (row.kind as FormationKind) ?? "offense",
+        losY: typeof params.losY === "number" ? params.losY : 0.4,
+      };
+    })
+    .filter((f) => {
+      const v = (f.sportProfile?.variant as string | undefined) ?? "flag_7v7";
+      return v === variant && !excluded.has(f.id);
+    });
 
   return { ok: true, formations };
 }

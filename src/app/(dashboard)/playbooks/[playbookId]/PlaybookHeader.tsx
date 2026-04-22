@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArrowLeft, Check, CheckSquare, Copy, Home, Lock, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { Archive, ArrowLeft, Check, CheckSquare, Copy, Home, Lock, LogOut, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -17,6 +17,7 @@ import {
   archivePlaybookAction,
   deletePlaybookAction,
   duplicatePlaybookAction,
+  leavePlaybookAction,
   renamePlaybookAction,
   setPlaybookAllowDuplicationAction,
   updatePlaybookAppearanceAction,
@@ -162,6 +163,11 @@ export function PlaybookHeader({
     run(() => deletePlaybookAction(playbookId), () => router.push("/home"));
   }
 
+  function handleLeave() {
+    if (!window.confirm(`Leave "${name}"? You'll lose access until a coach re-invites you.`)) return;
+    run(() => leavePlaybookAction(playbookId), () => router.push("/home"));
+  }
+
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
   const onAccentMuted = isLightBg ? "text-slate-700" : "text-white/80";
@@ -249,6 +255,7 @@ export function PlaybookHeader({
                 onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
                 onArchive={canManage ? handleArchive : null}
                 onDelete={canManage ? handleDelete : null}
+                onLeave={!canManage ? handleLeave : null}
                 allowCoachDuplication={allowCoachDuplication ?? true}
                 allowPlayerDuplication={allowPlayerDuplication ?? true}
                 playActions={playActions}
@@ -378,6 +385,7 @@ function HeaderMenu({
   onTogglePlayerDup,
   onArchive,
   onDelete,
+  onLeave,
   allowCoachDuplication,
   allowPlayerDuplication,
   playActions,
@@ -392,6 +400,7 @@ function HeaderMenu({
   onTogglePlayerDup: (() => void) | null;
   onArchive: (() => void) | null;
   onDelete: (() => void) | null;
+  onLeave: (() => void) | null;
   allowCoachDuplication: boolean;
   allowPlayerDuplication: boolean;
   playActions?: PlaybookHeaderPlayActions;
@@ -601,6 +610,23 @@ function HeaderMenu({
                   <span>Delete</span>
                 </button>
               )}
+            </>
+          )}
+          {onLeave && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onLeave();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger-light"
+              >
+                <LogOut className="size-4" />
+                <span>Leave playbook</span>
+              </button>
             </>
           )}
         </div>
