@@ -62,6 +62,45 @@ export const metadata: Metadata = {
   category: "sports",
 };
 
+const structuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "PlayGrid",
+    legalName: "PlayGrid LLC",
+    url: SITE_URL,
+    description:
+      "PlayGrid is a football play designer for coaches and athletes — build plays, organize playbooks, and preview wristbands.",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "PlayGrid",
+    url: SITE_URL,
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `${SITE_URL}/?q={search_term_string}`,
+      "query-input": "required name=search_term_string",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "PlayGrid",
+    applicationCategory: "SportsApplication",
+    operatingSystem: "Web",
+    url: SITE_URL,
+    description:
+      "Design football plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+    },
+  },
+];
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -75,6 +114,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var k='playgrid-color-scheme';var v=localStorage.getItem(k);if(v!=='light'&&v!=='dark'&&v!=='system')v='system';var d=v==='dark'||(v==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
           }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
       </head>
       <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans">

@@ -1,7 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import { LoginForm } from "./ui";
+
+export const metadata: Metadata = {
+  title: "Log in or sign up",
+  description:
+    "Log in to PlayGrid or create a free account to design football plays, organize playbooks, and share them with your team.",
+  alternates: { canonical: "/login" },
+};
 
 export default function LoginPage() {
   return (
