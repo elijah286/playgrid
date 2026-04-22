@@ -21,8 +21,23 @@ export function FieldBackdrop() {
           "radial-gradient(ellipse 110% 80% at 50% 30%, #000 55%, transparent 100%)",
       }}
     >
+      {/* Soft color blooms — the blue gradient the user liked from the early
+          preview. Kept very low opacity so they read as a tint, not a wash. */}
+      <div
+        className="absolute -left-40 top-20 h-[28rem] w-[28rem] rounded-full blur-3xl"
+        style={{ background: "rgba(23, 105, 255, 0.14)" }}
+      />
+      <div
+        className="absolute -right-32 top-40 h-[24rem] w-[24rem] rounded-full blur-3xl"
+        style={{ background: "rgba(149, 204, 31, 0.16)" }}
+      />
+      <div
+        className="absolute bottom-0 left-1/3 h-[20rem] w-[20rem] rounded-full blur-3xl"
+        style={{ background: "rgba(255, 122, 0, 0.10)" }}
+      />
+
       <svg
-        className="h-full w-full text-[#C7D0DB] dark:text-[#242A37]"
+        className="relative h-full w-full text-[#C7D0DB] dark:text-[#242A37]"
         xmlns="http://www.w3.org/2000/svg"
         preserveAspectRatio="xMidYMid slice"
       >
