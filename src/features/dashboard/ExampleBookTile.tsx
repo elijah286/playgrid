@@ -58,8 +58,18 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
   }, []);
 
   const thickness = Math.min(6, Math.max(2, Math.round(tile.play_count / 4)));
-  const sheetPlays = tile.previews.slice(0, 12);
-  const hasPreviews = sheetPlays.length > 0;
+  // Fill all 12 inside-page slots. If there are fewer unique plays than
+  // slots, cycle through them and flip every other repeat horizontally so
+  // the page still reads as a full playsheet.
+  const hasPreviews = tile.previews.length > 0;
+  const sheetPlays: { play: ExampleBookTileData["previews"][number]; flipped: boolean }[] =
+    hasPreviews
+      ? Array.from({ length: 12 }, (_, i) => {
+          const idx = i % tile.previews.length;
+          const cycle = Math.floor(i / tile.previews.length);
+          return { play: tile.previews[idx], flipped: cycle % 2 === 1 };
+        })
+      : [];
   const [hover, setHover] = useState(false);
   const [shiftX, setShiftX] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -140,9 +150,9 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
               />
               <div className="flex h-full w-full p-2">
                 <PlaysheetColumn
-                  plays={sheetPlays.slice(6, 12)}
-                  blanks={Math.max(0, 6 - sheetPlays.slice(6, 12).length)}
-                  mounted={mounted && hasPreviews}
+                  slots={sheetPlays.slice(6, 12)}
+                  blanks={hasPreviews ? 0 : 6}
+                  mounted={mounted}
                 />
               </div>
               {!hasPreviews && mounted && (
@@ -150,6 +160,17 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
                   <div className="flex flex-col items-center gap-1">
                     <Plus className="size-5 opacity-60" />
                     <span>No offensive plays yet</span>
+                  </div>
+                </div>
+              )}
+              {hasPreviews && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4 transition-opacity duration-300"
+                  style={{ opacity: hover ? 1 : 0 }}
+                >
+                  <div className="rounded-full bg-foreground/85 px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-white shadow-lg backdrop-blur-sm">
+                    Explore a sample playbook and the play editor
                   </div>
                 </div>
               )}
@@ -237,9 +258,9 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
                 />
                 <div className="flex h-full w-full p-2">
                   <PlaysheetColumn
-                    plays={sheetPlays.slice(0, 6)}
-                    blanks={Math.max(0, 6 - sheetPlays.slice(0, 6).length)}
-                    mounted={mounted && hasPreviews}
+                    slots={sheetPlays.slice(0, 6)}
+                    blanks={hasPreviews ? 0 : 6}
+                    mounted={mounted}
                   />
                 </div>
               </div>
@@ -252,23 +273,27 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
 }
 
 function PlaysheetColumn({
-  plays,
+  slots,
   blanks,
   mounted,
 }: {
-  plays: { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number }[];
+  slots: {
+    play: { players: Player[]; routes: Route[]; zones: Zone[]; lineOfScrimmageY: number };
+    flipped: boolean;
+  }[];
   blanks: number;
   mounted: boolean;
 }) {
   return (
     <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-1.5">
       {mounted &&
-        plays.map((p, i) => (
+        slots.map((s, i) => (
           <div
             key={i}
             className="overflow-hidden rounded-sm bg-white ring-1 ring-border/70"
+            style={s.flipped ? { transform: "scaleX(-1)" } : undefined}
           >
-            <PlayThumbnail preview={p} thin />
+            <PlayThumbnail preview={s.play} thin />
           </div>
         ))}
       {Array.from({ length: blanks }).map((_, i) => (

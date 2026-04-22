@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
@@ -153,6 +154,22 @@ export default async function ExamplesPage() {
           ))}
         </section>
       )}
+
+      <section className="mt-16 flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface-raised px-6 py-8 text-center shadow-sm sm:mt-20">
+        <h2 className="text-lg font-extrabold tracking-tight text-foreground sm:text-xl">
+          Rather get started with your own playbook?
+        </h2>
+        <p className="max-w-lg text-sm text-muted">
+          Create a free account and build your first playbook in under a
+          minute.
+        </p>
+        <Link
+          href="/login?mode=signup"
+          className="mt-1 inline-flex items-center rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
+        >
+          Start your own playbook
+        </Link>
+      </section>
     </main>
   );
 }
