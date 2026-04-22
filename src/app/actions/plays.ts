@@ -882,6 +882,12 @@ export type DashboardPlaybookTile = {
   is_archived: boolean;
   sport_variant: SportVariant;
   settings: PlaybookSettings;
+  /** Admin-marked example flag — drives the "Public example" banner and
+   *  unlocks the Publish action in the tile menu. */
+  is_example: boolean;
+  /** Marked example AND published — visible on /examples when the global
+   *  flag is on. */
+  is_public_example: boolean;
   previews: {
     players: Player[];
     routes: Route[];
@@ -971,7 +977,7 @@ export async function getDashboardSummaryAction(): Promise<
   const { data: memberRows, error: memErr } = await supabase
     .from("playbook_members")
     .select(
-      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, sport_variant, settings, custom_offense_count, allow_coach_duplication, allow_player_duplication, plays(count))",
+      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, sport_variant, settings, custom_offense_count, allow_coach_duplication, allow_player_duplication, is_example, is_public_example, plays(count))",
     )
     .eq("user_id", user.id)
     .eq("playbooks.plays.is_archived", false);
@@ -992,6 +998,8 @@ export async function getDashboardSummaryAction(): Promise<
     custom_offense_count: number | null;
     allow_coach_duplication: boolean | null;
     allow_player_duplication: boolean | null;
+    is_example: boolean | null;
+    is_public_example: boolean | null;
     plays: { count: number }[] | { count: number } | null;
   };
   type MemberJoin = {
@@ -1022,6 +1030,8 @@ export async function getDashboardSummaryAction(): Promise<
         is_archived: Boolean(b.is_archived),
         sport_variant: variant,
         settings: normalizePlaybookSettings(b.settings, variant, b.custom_offense_count ?? null),
+        is_example: Boolean(b.is_example),
+        is_public_example: Boolean(b.is_public_example),
         previews: [],
       } as DashboardPlaybookTile;
     })

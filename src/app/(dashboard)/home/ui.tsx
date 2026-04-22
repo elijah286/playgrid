@@ -8,6 +8,8 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  FlaskConical,
+  Globe,
   Link2,
   LogOut,
   Lock,
@@ -28,6 +30,10 @@ import {
   setPlaybookAllowDuplicationAction,
   uploadPlaybookLogoAction,
 } from "@/app/actions/playbooks";
+import {
+  setPlaybookIsExampleAction,
+  setPlaybookPublicExampleAction,
+} from "@/app/actions/admin-examples";
 import type { DashboardPlaybookTile, DashboardSummary } from "@/app/actions/plays";
 import type { Player, Route, SportVariant, Zone } from "@/domain/play/types";
 import {
@@ -900,9 +906,11 @@ function NewPlaybookTile({ onClick }: { onClick: () => void }) {
 export function DashboardClient({
   data,
   hideAnimation = false,
+  isAdmin = false,
 }: {
   data: DashboardSummary;
   hideAnimation?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1011,6 +1019,31 @@ export function DashboardClient({
     );
   }
 
+  function buildExampleAdminItems(tile: DashboardPlaybookTile): ActionMenuItem[] {
+    if (!isAdmin) return [];
+    const items: ActionMenuItem[] = [
+      {
+        label: tile.is_example ? "Remove as example" : "Use as example",
+        icon: FlaskConical,
+        onSelect: () =>
+          handle(() => setPlaybookIsExampleAction(tile.id, !tile.is_example)),
+      },
+    ];
+    if (tile.is_example) {
+      items.push({
+        label: tile.is_public_example
+          ? "Unpublish example"
+          : "Publish example",
+        icon: Globe,
+        onSelect: () =>
+          handle(() =>
+            setPlaybookPublicExampleAction(tile.id, !tile.is_public_example),
+          ),
+      });
+    }
+    return items;
+  }
+
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {
     if (tile.is_locked) {
       return [
@@ -1068,6 +1101,7 @@ export function DashboardClient({
             ),
           ),
       },
+      ...buildExampleAdminItems(tile),
       {
         label: "Archive",
         icon: Archive,
@@ -1105,6 +1139,9 @@ export function DashboardClient({
         icon: Copy,
         onSelect: () => setDuplicating(tile),
       });
+    }
+    if (tile.role === "editor") {
+      items.push(...buildExampleAdminItems(tile));
     }
     items.push({
       label: "Unsubscribe",
