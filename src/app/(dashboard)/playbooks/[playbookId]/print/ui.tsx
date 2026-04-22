@@ -938,8 +938,8 @@ export function PrintPlaybookClient({
               }}
             />
             {wristbandLocked ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex max-w-xs flex-col items-center gap-3 rounded-xl bg-surface-raised/95 p-6 text-center shadow-lg ring-1 ring-border backdrop-blur">
+              <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-8">
+                <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3 rounded-xl bg-surface-raised/95 p-5 text-center shadow-lg ring-1 ring-border backdrop-blur">
                   <Lock className="size-6 text-muted" />
                   <p className="text-sm font-semibold text-foreground">
                     Wristbands are a Coach feature
