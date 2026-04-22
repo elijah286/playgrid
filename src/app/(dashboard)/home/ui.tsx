@@ -363,7 +363,7 @@ function PlaybookBookTile({
       const cx = r.left + r.width / 2;
       const openLeft = cx - 1.5 * W;
       const openRight = cx + 0.5 * W;
-      const MARGIN = 12;
+      const MARGIN = 16;
       let shift = 0;
       if (openLeft < MARGIN) shift = MARGIN - openLeft;
       else if (openRight > window.innerWidth - MARGIN) {
@@ -387,15 +387,31 @@ function PlaybookBookTile({
       ref={wrapperRef}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
-      className="group relative z-0 transition-transform duration-500 ease-out"
-      style={{
-        perspective: "1600px",
-        zIndex: hover ? 20 : 0,
-        transform: hover
-          ? `translate3d(${shiftX}px, -8px, 0) scale(1.35)`
-          : "translate3d(0, 0, 0) scale(1)",
-      }}
+      className="group relative z-0"
+      style={{ zIndex: hover ? 20 : 0 }}
     >
+      {/* Outer transform: horizontal slide-to-fit. Snaps in quickly so the
+          book is already repositioned before the cover flips past the
+          viewport edge. */}
+      <div
+        className="transition-transform duration-150 ease-out"
+        style={{
+          transform: hover
+            ? `translate3d(${shiftX}px, 0, 0)`
+            : "translate3d(0, 0, 0)",
+        }}
+      >
+      {/* Inner transform: scale + subtle lift. Kept at 500ms so the visual
+          "pop" still feels smooth. */}
+      <div
+        className="transition-transform duration-500 ease-out"
+        style={{
+          perspective: "1600px",
+          transform: hover
+            ? "translate3d(0, -8px, 0) scale(1.35)"
+            : "translate3d(0, 0, 0) scale(1)",
+        }}
+      >
       <Link
         href={`/playbooks/${tile.id}`}
         className="relative block aspect-[3/4] w-full"
@@ -560,18 +576,15 @@ function PlaybookBookTile({
           </div>
         </div>
       </Link>
-
+      </div>
       {actions.length > 0 && (
         <div
-          className="absolute right-2 top-2 z-10 rounded-full bg-surface-raised shadow-sm ring-1 ring-border opacity-0 transition-[transform,opacity] group-hover:opacity-100"
-          style={{
-            transform: hover ? `scale(${1 / 1.35})` : "scale(1)",
-            transformOrigin: "top right",
-          }}
+          className="absolute right-2 top-2 z-10 rounded-full bg-surface-raised shadow-sm ring-1 ring-border opacity-0 transition-opacity group-hover:opacity-100"
         >
           <ActionMenu items={actions} open={menuOpen} onOpenChange={setMenuOpen} />
         </div>
       )}
+      </div>
     </div>
   );
 }
