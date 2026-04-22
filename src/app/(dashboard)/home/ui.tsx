@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
+  ArchiveRestore,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -1118,11 +1119,18 @@ export function DashboardClient({
           ),
       },
       ...buildExampleAdminItems(tile),
-      {
-        label: "Archive",
-        icon: Archive,
-        onSelect: () => handle(() => archivePlaybookAction(tile.id, true)),
-      },
+      tile.is_archived
+        ? {
+            label: "Unarchive",
+            icon: ArchiveRestore,
+            onSelect: () =>
+              handle(() => archivePlaybookAction(tile.id, false)),
+          }
+        : {
+            label: "Archive",
+            icon: Archive,
+            onSelect: () => handle(() => archivePlaybookAction(tile.id, true)),
+          },
       {
         label: "Delete",
         icon: Trash2,
