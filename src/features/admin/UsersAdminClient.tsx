@@ -806,7 +806,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
     },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
       {items.map((it) => (
         <div
           key={it.label}
