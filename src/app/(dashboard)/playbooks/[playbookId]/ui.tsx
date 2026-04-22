@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import {
+  ExamplePreviewProvider,
+  useExamplePreview,
+} from "@/features/admin/ExamplePreviewContext";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
 import { useFlipReorder } from "@/lib/hooks/useFlipReorder";
@@ -121,7 +125,19 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
   small: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
 };
 
-export function PlaybookDetailClient({
+export function PlaybookDetailClient(props: PlaybookDetailClientProps) {
+  return (
+    <ExamplePreviewProvider isPreview={props.isExamplePreview ?? false}>
+      <PlaybookDetailClientInner {...props} />
+    </ExamplePreviewProvider>
+  );
+}
+
+type PlaybookDetailClientProps = Parameters<typeof PlaybookDetailClientInner>[0] & {
+  isExamplePreview?: boolean;
+};
+
+function PlaybookDetailClientInner({
   playbookId,
   sportVariant,
   playerCount: playbookPlayerCount,

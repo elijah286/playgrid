@@ -12,6 +12,7 @@ import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 import { ExampleBanner } from "@/features/admin/ExampleBanner";
+import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -58,8 +59,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const accentColor = (book.color as string | null) || "#134e2a";
   const logoUrl = (book.logo_url as string | null) ?? null;
 
+  type ViewerRole = "owner" | "editor" | "viewer" | null;
   let senderName: string | null = null;
-  let viewerRole: "owner" | "editor" | "viewer" | null = null;
+  let viewerRole: ViewerRole = null;
+  let isMember = false;
   let ownerDisplayName: string | null = null;
   if (user) {
     const { data: profile } = await supabase
@@ -77,6 +80,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
       .eq("user_id", user.id)
       .maybeSingle();
     viewerRole = (membership?.role as typeof viewerRole) ?? null;
+    isMember = viewerRole != null;
 
     if (viewerRole && viewerRole !== "owner") {
       const { data: ownerRow } = await supabase
@@ -98,11 +102,22 @@ export default async function PlaybookDetailPage({ params }: Props) {
     }
   }
 
+  // Non-members viewing a published example get a synthesized viewer
+  // role so the read-only UI paths activate. All mutation attempts are
+  // intercepted client-side (see isExamplePreview) and surface a CTA
+  // instead of hitting the server.
+  if (!viewerRole && book.is_public_example) {
+    viewerRole = "viewer" as ViewerRole;
+  }
+  const effectiveRole: ViewerRole = viewerRole;
+  const isExamplePreview =
+    Boolean(book.is_example || book.is_public_example) && !isMember;
+
   // Owners can customize everything. Editors (coaches) can share the
   // playbook with teammates but can't rename/recolor/delete. Viewers get a
   // read-only header.
-  const canManage = viewerRole === "owner";
-  const canShare = viewerRole === "owner" || viewerRole === "editor";
+  const canManage = effectiveRole === "owner";
+  const canShare = effectiveRole === "owner" || effectiveRole === "editor";
   const viewerIsCoach = tierAtLeast(await getCurrentEntitlement(), "coach");
 
   // Site admins get two extra action menu items: "Use as Example"
@@ -129,12 +144,17 @@ export default async function PlaybookDetailPage({ params }: Props) {
       .maybeSingle();
     isAdmin = (selfRoleRow?.role as string | null) === "admin";
   }
-  const canManageExample = isAdmin && (viewerRole === "owner" || viewerRole === "editor");
+  const canManageExample = isAdmin && (effectiveRole === "owner" || effectiveRole === "editor");
 
   return (
     <>
-      {isExample && <ExampleBanner isPublished={isPublicExample} />}
+      {isExamplePreview ? (
+        <ExamplePreviewBanner />
+      ) : (
+        isExample && <ExampleBanner isPublished={isPublicExample} />
+      )}
       <PlaybookDetailClient
+        isExamplePreview={isExamplePreview}
         playbookId={playbookId}
         sportVariant={book.sport_variant as string}
         playerCount={(book.player_count as number | null) ?? undefined}

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
-import type { SportVariant } from "@/domain/play/types";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
+import type { PlayDocument, Player, Route, Zone } from "@/domain/play/types";
+import {
+  ExampleBookTile,
+  type ExampleBookTileData,
+} from "@/features/dashboard/ExampleBookTile";
 
 export const metadata: Metadata = {
   title: "Example playbooks",
@@ -29,37 +30,15 @@ export const metadata: Metadata = {
   },
 };
 
-type ExamplePlay = {
-  id: string;
-  name: string;
-  shorthand: string | null;
-  concept: string | null;
-  play_type: string | null;
-  formation_name: string | null;
-};
+const PREVIEWS_PER_BOOK = 12;
 
-type ExamplePlaybook = {
-  id: string;
-  name: string;
-  season: string | null;
-  sport_variant: SportVariant;
-  logo_url: string | null;
-  color: string | null;
-  play_count: number;
-  plays: ExamplePlay[];
-  updated_at: string | null;
-  author_label: string | null;
-};
-
-const MAX_PLAYS_PER_PLAYBOOK = 12;
-
-async function loadExamplePlaybooks(): Promise<ExamplePlaybook[]> {
+async function loadExamplePlaybooks(): Promise<ExampleBookTileData[]> {
   if (!hasSupabaseEnv()) return [];
   const svc = createServiceRoleClient();
   const { data: books } = await svc
     .from("playbooks")
     .select(
-      "id, name, season, sport_variant, logo_url, color, updated_at, example_author_label, plays(count)",
+      "id, name, season, logo_url, color, updated_at, example_author_label, plays(count)",
     )
     .eq("is_public_example", true)
     .eq("is_archived", false)
@@ -71,7 +50,6 @@ async function loadExamplePlaybooks(): Promise<ExamplePlaybook[]> {
     id: string;
     name: string;
     season: string | null;
-    sport_variant: string | null;
     logo_url: string | null;
     color: string | null;
     updated_at: string | null;
@@ -80,53 +58,66 @@ async function loadExamplePlaybooks(): Promise<ExamplePlaybook[]> {
   };
 
   const ids = (books as Row[]).map((b) => b.id);
+
+  // Pull a small set of recent offensive plays per book, then fetch the
+  // current_version document for each so we can thumbnail them on the
+  // book's back page.
   const { data: playRows } = await svc
     .from("plays")
-    .select(
-      "id, playbook_id, name, shorthand, concept, play_type, formation_name, sort_order, is_archived",
-    )
+    .select("id, playbook_id, current_version_id, updated_at")
     .in("playbook_id", ids)
     .eq("is_archived", false)
-    .order("sort_order", { ascending: true });
+    .eq("play_type", "offense")
+    .order("updated_at", { ascending: false });
 
-  const playsByBook = new Map<string, ExamplePlay[]>();
+  const versionIdsByBook = new Map<string, string[]>();
   for (const p of (playRows ?? []) as Array<{
-    id: string;
     playbook_id: string;
-    name: string;
-    shorthand: string | null;
-    concept: string | null;
-    play_type: string | null;
-    formation_name: string | null;
+    current_version_id: string | null;
   }>) {
-    const arr = playsByBook.get(p.playbook_id) ?? [];
-    if (arr.length < MAX_PLAYS_PER_PLAYBOOK) {
-      arr.push({
-        id: p.id,
-        name: p.name,
-        shorthand: p.shorthand,
-        concept: p.concept,
-        play_type: p.play_type,
-        formation_name: p.formation_name,
-      });
-      playsByBook.set(p.playbook_id, arr);
+    if (!p.current_version_id) continue;
+    const arr = versionIdsByBook.get(p.playbook_id) ?? [];
+    if (arr.length < PREVIEWS_PER_BOOK) {
+      arr.push(p.current_version_id);
+      versionIdsByBook.set(p.playbook_id, arr);
+    }
+  }
+
+  const allVersionIds = Array.from(versionIdsByBook.values()).flat();
+  const docsByVid = new Map<string, PlayDocument>();
+  if (allVersionIds.length > 0) {
+    const { data: versions } = await svc
+      .from("play_versions")
+      .select("id, document")
+      .in("id", allVersionIds);
+    for (const v of (versions ?? []) as Array<{ id: string; document: PlayDocument | null }>) {
+      if (v.document) docsByVid.set(v.id, v.document);
     }
   }
 
   return (books as Row[]).map((b) => {
     const agg = Array.isArray(b.plays) ? b.plays[0] : b.plays;
+    const vids = versionIdsByBook.get(b.id) ?? [];
+    const previews = vids
+      .map((vid) => docsByVid.get(vid))
+      .filter((d): d is PlayDocument => d != null)
+      .map((doc) => ({
+        players: (doc.layers?.players ?? []) as Player[],
+        routes: (doc.layers?.routes ?? []) as Route[],
+        zones: (doc.layers?.zones ?? []) as Zone[],
+        lineOfScrimmageY:
+          typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+      }));
     return {
       id: b.id,
       name: b.name,
       season: b.season,
-      sport_variant: (b.sport_variant as SportVariant) ?? "flag_7v7",
       logo_url: b.logo_url,
       color: b.color,
       play_count: agg?.count ?? 0,
-      plays: playsByBook.get(b.id) ?? [],
-      updated_at: b.updated_at,
       author_label: b.example_author_label,
-    } satisfies ExamplePlaybook;
+      previews,
+    } satisfies ExampleBookTileData;
   });
 }
 
@@ -136,25 +127,17 @@ export default async function ExamplesPage() {
   const playbooks = await loadExamplePlaybooks();
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-12 sm:py-16">
+    <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
       <header className="max-w-2xl">
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           Example playbooks
         </h1>
         <p className="mt-3 text-base leading-relaxed text-muted">
-          These are real PlayGrid playbooks — real formations, real routes,
-          real wristband cards. Browse the plays to see how coaches are
-          using PlayGrid for flag football, youth tackle, and 7v7, then
-          create your own free.
+          Real PlayGrid playbooks built by coaches — open one to explore the
+          plays, formations, and wristband cards. Nothing you do inside
+          will be saved; the &quot;Create your playbook&quot; button is
+          always one click away.
         </p>
-        <div className="mt-5">
-          <Link
-            href="/login"
-            className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            Create your playbook
-          </Link>
-        </div>
       </header>
 
       {playbooks.length === 0 ? (
@@ -162,79 +145,14 @@ export default async function ExamplesPage() {
           No example playbooks are published yet. Check back soon.
         </div>
       ) : (
-        <section className="mt-10 grid gap-6 sm:grid-cols-2">
+        <section className="mt-12 flex flex-wrap justify-start gap-6">
           {playbooks.map((pb) => (
-            <ExamplePlaybookCard key={pb.id} playbook={pb} />
+            <div key={pb.id} className="w-40 sm:w-48 lg:w-56">
+              <ExampleBookTile tile={pb} />
+            </div>
           ))}
         </section>
       )}
     </main>
-  );
-}
-
-function ExamplePlaybookCard({ playbook }: { playbook: ExamplePlaybook }) {
-  const accent = playbook.color || "#2563eb";
-  const variantLabel =
-    SPORT_VARIANT_LABELS[playbook.sport_variant] ?? playbook.sport_variant;
-  return (
-    <article
-      className="overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-sm"
-      style={{ borderTopWidth: 4, borderTopColor: accent }}
-    >
-      <header className="flex items-center gap-4 p-5">
-        <div
-          className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-black/10"
-        >
-          {playbook.logo_url ? (
-            <Image
-              src={playbook.logo_url}
-              alt=""
-              fill
-              sizes="56px"
-              className="object-contain p-1"
-              unoptimized
-            />
-          ) : (
-            <div
-              className="flex h-full w-full items-center justify-center text-xl font-extrabold text-white"
-              style={{ backgroundColor: accent }}
-            >
-              {playbook.name.slice(0, 1).toUpperCase()}
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-bold tracking-tight text-foreground">
-            {playbook.name}
-          </h2>
-          <p className="truncate text-xs text-muted">
-            {[variantLabel, playbook.season, `${playbook.play_count} plays`]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          {playbook.author_label && (
-            <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wider text-muted">
-              By {playbook.author_label}
-            </p>
-          )}
-        </div>
-      </header>
-      {playbook.plays.length > 0 && (
-        <ol className="divide-y divide-border border-t border-border text-sm">
-          {playbook.plays.map((p) => (
-            <li key={p.id} className="flex items-center gap-3 px-5 py-2.5">
-              <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                {p.name}
-              </span>
-              {p.formation_name && (
-                <span className="truncate text-xs text-muted">
-                  {p.formation_name}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-    </article>
   );
 }
