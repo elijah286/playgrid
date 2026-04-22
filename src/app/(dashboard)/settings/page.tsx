@@ -15,6 +15,7 @@ import {
   listGiftCodesAction,
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
+import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -32,6 +33,7 @@ export default async function SettingsPage() {
     giftCodesRes,
     stripeStatusRes,
     coachAiEnabled,
+    hideLobbyAnimation,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -42,6 +44,7 @@ export default async function SettingsPage() {
     listGiftCodesAction(),
     getStripeConfigStatusAction(),
     getCoachAiTierEnabled(),
+    getHideLobbyAnimation(),
   ]);
 
   return (
@@ -109,6 +112,7 @@ export default async function SettingsPage() {
               }
         }
         initialCoachAiEnabled={coachAiEnabled}
+        initialHideLobbyAnimation={hideLobbyAnimation}
       />
     </div>
   );

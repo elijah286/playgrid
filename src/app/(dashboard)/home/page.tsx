@@ -1,5 +1,6 @@
 import { getDashboardSummaryAction } from "@/app/actions/plays";
 import { listPendingApprovalsForOwnerAction } from "@/app/actions/playbook-roster";
+import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { DashboardTabs } from "@/components/layout/DashboardTabs";
 import { PendingApprovalsCard } from "@/features/dashboard/PendingApprovalsCard";
 import { DashboardClient } from "./ui";
@@ -8,9 +9,10 @@ type Props = { searchParams: Promise<{ error?: string }> };
 
 export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery } = await searchParams;
-  const [res, approvals] = await Promise.all([
+  const [res, approvals, hideAnimation] = await Promise.all([
     getDashboardSummaryAction(),
     listPendingApprovalsForOwnerAction(),
+    getHideLobbyAnimation(),
   ]);
 
   return (
@@ -27,7 +29,9 @@ export default async function HomePage({ searchParams }: Props) {
       {approvals.ok && approvals.tiles.length > 0 && (
         <PendingApprovalsCard initialTiles={approvals.tiles} />
       )}
-      {res.ok && <DashboardClient data={res.data} />}
+      {res.ok && (
+        <DashboardClient data={res.data} hideAnimation={hideAnimation} />
+      )}
     </div>
   );
 }
