@@ -48,6 +48,7 @@ import {
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
+import { UpgradeModal } from "@/components/billing/UpgradeModal";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -865,6 +866,7 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
+  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [view, setView] = useDashboardView();
 
@@ -918,7 +920,16 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
         config.settings,
       );
       if (!res.ok) {
-        toast(res.error, "error");
+        if (/Free tier is limited/i.test(res.error)) {
+          setShowCreate(false);
+          setUpgradeNotice({
+            title: "Free tier is limited to 1 playbook",
+            message:
+              "Upgrade to Coach ($9/mo or $99/yr) to create unlimited playbooks. Your existing content stays where it is.",
+          });
+        } else {
+          toast(res.error, "error");
+        }
         return;
       }
       setShowCreate(false);
@@ -1180,6 +1191,13 @@ export function DashboardClient({ data }: { data: DashboardSummary }) {
           onCreate={(config) => createBook(config)}
         />
       )}
+
+      <UpgradeModal
+        open={upgradeNotice !== null}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
     </div>
   );
 }
