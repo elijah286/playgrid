@@ -52,11 +52,8 @@ export default async function HomePage() {
             </Link>
             <Link
               href="/examples"
-              className="inline-flex items-center gap-2 rounded-lg border-2 px-6 py-3 text-base font-semibold transition-colors"
-              style={{
-                borderColor: `${BRAND_NAVY}1A`,
-                color: BRAND_NAVY,
-              }}
+              className="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+              style={{ background: BRAND_NAVY }}
             >
               See example playbooks
             </Link>
