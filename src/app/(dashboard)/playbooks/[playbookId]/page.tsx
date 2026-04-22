@@ -1,5 +1,7 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { listPlaysAction } from "@/app/actions/plays";
 import { listPlaybookRosterAction } from "@/app/actions/playbook-roster";
@@ -15,6 +17,60 @@ import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { playbookId } = await params;
+  const noIndex: Metadata = { robots: { index: false, follow: false } };
+
+  if (!hasSupabaseEnv()) return noIndex;
+  try {
+    const svc = createServiceRoleClient();
+    const { data: book } = await svc
+      .from("playbooks")
+      .select(
+        "name, season, sport_variant, is_public_example, example_author_label, plays(count)",
+      )
+      .eq("id", playbookId)
+      .eq("is_archived", false)
+      .maybeSingle();
+
+    if (!book || !book.is_public_example) return noIndex;
+
+    const name = (book.name as string) || "Example playbook";
+    const season = (book.season as string | null) || null;
+    const author = (book.example_author_label as string | null) || null;
+    const playsAgg = Array.isArray(book.plays) ? book.plays[0] : book.plays;
+    const playCount = (playsAgg as { count?: number } | null)?.count ?? 0;
+
+    const titleParts = [name, season].filter(Boolean).join(" · ");
+    const descParts = [
+      author ? `Playbook by ${author}` : null,
+      playCount > 0 ? `${playCount} plays` : null,
+      "built in xogridmaker",
+    ].filter(Boolean);
+    const description = `${descParts.join(" · ")}. Explore formations, plays, and wristband cards.`;
+    const canonical = `/playbooks/${playbookId}`;
+
+    return {
+      title: `${titleParts} — example playbook`,
+      description,
+      alternates: { canonical },
+      openGraph: {
+        title: `${titleParts} — example playbook`,
+        description,
+        url: canonical,
+        type: "article",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: `${titleParts} — example playbook`,
+        description,
+      },
+    };
+  } catch {
+    return noIndex;
+  }
+}
 
 export default async function PlaybookDetailPage({ params }: Props) {
   const { playbookId } = await params;
@@ -145,8 +201,35 @@ export default async function PlaybookDetailPage({ params }: Props) {
   }
   const canManageExample = isAdmin && (effectiveRole === "owner" || effectiveRole === "editor");
 
+  const publicExampleJsonLd = isPublicExample
+    ? {
+        "@context": "https://schema.org",
+        "@type": "CreativeWork",
+        name: book.name as string,
+        description: `${
+          exampleAuthorLabel ? `Playbook by ${exampleAuthorLabel}. ` : ""
+        }Example football playbook built in xogridmaker.`,
+        inLanguage: "en",
+        genre: "Football playbook",
+        isAccessibleForFree: true,
+        url: `${
+          process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com"
+        }/playbooks/${playbookId}`,
+        ...(exampleAuthorLabel
+          ? { creator: { "@type": "Person", name: exampleAuthorLabel } }
+          : {}),
+        ...(book.season ? { dateCreated: book.season as string } : {}),
+      }
+    : null;
+
   return (
     <>
+      {publicExampleJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(publicExampleJsonLd) }}
+        />
+      )}
       {isExamplePreview && <ExamplePreviewBanner />}
       <PlaybookDetailClient
         isExamplePreview={isExamplePreview}
