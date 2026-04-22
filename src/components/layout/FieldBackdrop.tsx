@@ -22,6 +22,10 @@ function isEditorPath(pathname: string | null): boolean {
   if (pathname === "/plays/new" || pathname === "/plays/new-preview") return true;
   if (pathname === "/formations/new") return true;
   if (/^\/formations\/[^/]+\/edit$/.test(pathname)) return true;
+  // Playbook detail pages (plays grid, formations, roster, staff tabs)
+  // render their own content-dense field + thumbnails, so the backdrop
+  // competes with them too.
+  if (/^\/playbooks\/[^/]+(\/.*)?$/.test(pathname)) return true;
   return false;
 }
 
