@@ -49,6 +49,10 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import {
+  CustomizeTeamDialog,
+  InviteTeamMemberDialog,
+} from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -853,7 +857,7 @@ function NewPlaybookTile({ onClick }: { onClick: () => void }) {
       </div>
       <div className="flex flex-1 flex-col gap-1 p-4">
         <h3 className="truncate text-base font-bold text-muted group-hover:text-primary">
-          New playbook
+          New Playbook
         </h3>
         <p className="text-xs text-muted">Click to create</p>
       </div>
@@ -874,6 +878,8 @@ export function DashboardClient({
   const [showCreate, setShowCreate] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
+  const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
+  const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
   const [storedView, setView] = useDashboardView();
   const view: DashboardView = hideAnimation ? "classic" : storedView;
 
@@ -988,12 +994,12 @@ export function DashboardClient({
       {
         label: "Invite",
         icon: UserPlus,
-        onSelect: () => router.push(`/playbooks/${tile.id}?share=1`),
+        onSelect: () => setInviting(tile),
       },
       {
         label: "Customize",
         icon: Settings2,
-        onSelect: () => router.push(`/playbooks/${tile.id}?customize=1`),
+        onSelect: () => setCustomizing(tile),
       },
       {
         label: "Duplicate",
@@ -1050,7 +1056,7 @@ export function DashboardClient({
       items.push({
         label: "Invite",
         icon: UserPlus,
-        onSelect: () => router.push(`/playbooks/${tile.id}?share=1`),
+        onSelect: () => setInviting(tile),
       });
     }
     const duplicationAllowed =
@@ -1097,7 +1103,7 @@ export function DashboardClient({
               leftIcon={Plus}
               onClick={() => setShowCreate(true)}
             >
-              New playbook
+              New Playbook
             </Button>
             {!hideAnimation && (
               <SegmentedControl
@@ -1176,6 +1182,28 @@ export function DashboardClient({
           pending={pending}
           onClose={() => setShowCreate(false)}
           onCreate={(config) => createBook(config)}
+        />
+      )}
+
+      {customizing && (
+        <CustomizeTeamDialog
+          playbookId={customizing.id}
+          initialName={customizing.name}
+          initialSeason={customizing.season ?? ""}
+          initialLogoUrl={customizing.logo_url ?? ""}
+          initialColor={customizing.color ?? "#134e2a"}
+          initialSettings={customizing.settings}
+          variantLabel={SPORT_VARIANT_LABELS[customizing.sport_variant] ?? ""}
+          onClose={() => setCustomizing(null)}
+        />
+      )}
+
+      {inviting && (
+        <InviteTeamMemberDialog
+          playbookId={inviting.id}
+          teamName={inviting.name}
+          senderName={data.senderName ?? null}
+          onClose={() => setInviting(null)}
         />
       )}
 
@@ -1263,7 +1291,7 @@ function CreatePlaybookDialog({
     >
       <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated sm:max-w-3xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-base font-bold text-foreground">New playbook</h2>
+          <h2 className="text-base font-bold text-foreground">New Playbook</h2>
           <button
             type="button"
             onClick={onClose}

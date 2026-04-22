@@ -7,6 +7,7 @@ import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/wor
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
 import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, VsPlaySnapshot, Zone } from "@/domain/play/types";
+import { normalizePlaybookSettings, type PlaybookSettings } from "@/domain/playbook/settings";
 import {
   compareNavPlays,
   type PlaybookGroupRow,
@@ -878,6 +879,8 @@ export type DashboardPlaybookTile = {
    *  free cap (keeps content visible but read-only). Shared playbooks from
    *  Coach+ owners are never locked. */
   is_locked: boolean;
+  sport_variant: SportVariant;
+  settings: PlaybookSettings;
   previews: {
     players: Player[];
     routes: Route[];
@@ -946,6 +949,7 @@ const getCachedPlaybookPreviews = unstable_cache(
 export type DashboardSummary = {
   playbooks: DashboardPlaybookTile[];
   totalPlays: number;
+  senderName: string | null;
 };
 
 /** One-shot dashboard fetch. Non-archived plays and non-archived playbooks only. */
@@ -966,7 +970,7 @@ export async function getDashboardSummaryAction(): Promise<
   const { data: memberRows, error: memErr } = await supabase
     .from("playbook_members")
     .select(
-      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, allow_coach_duplication, allow_player_duplication, plays(count))",
+      "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, sport_variant, settings, custom_offense_count, allow_coach_duplication, allow_player_duplication, plays(count))",
     )
     .eq("user_id", user.id)
     .eq("playbooks.is_archived", false)
@@ -982,6 +986,9 @@ export async function getDashboardSummaryAction(): Promise<
     logo_url: string | null;
     color: string | null;
     season: string | null;
+    sport_variant: string | null;
+    settings: unknown;
+    custom_offense_count: number | null;
     allow_coach_duplication: boolean | null;
     allow_player_duplication: boolean | null;
     plays: { count: number }[] | { count: number } | null;
@@ -996,6 +1003,7 @@ export async function getDashboardSummaryAction(): Promise<
       const b = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
       if (!b) return null;
       const agg = Array.isArray(b.plays) ? b.plays[0] : b.plays;
+      const variant = (b.sport_variant as SportVariant) ?? "flag_7v7";
       return {
         id: b.id,
         name: b.name,
@@ -1010,6 +1018,8 @@ export async function getDashboardSummaryAction(): Promise<
         allow_coach_duplication: b.allow_coach_duplication ?? true,
         allow_player_duplication: b.allow_player_duplication ?? true,
         is_locked: false,
+        sport_variant: variant,
+        settings: normalizePlaybookSettings(b.settings, variant, b.custom_offense_count ?? null),
         previews: [],
       } as DashboardPlaybookTile;
     })
@@ -1077,11 +1087,20 @@ export async function getDashboardSummaryAction(): Promise<
 
   const totalPlays = playbooks.reduce((n, b) => n + b.play_count, 0);
 
+  const { data: selfProfile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const senderName =
+    (selfProfile?.display_name as string | null) || user.email || null;
+
   return {
     ok: true,
     data: {
       playbooks,
       totalPlays,
+      senderName,
     },
   };
 }
