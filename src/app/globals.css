@@ -95,41 +95,25 @@ body {
   /* Subtle football-field backdrop: faint horizontal "yard lines" every
      ~88px with every 5th line slightly darker, over the tinted surface.
      Cards and editor canvases are opaque, so content stays legible. */
-  background-image:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 87px,
-      rgba(45, 139, 78, 0.08) 87px,
-      rgba(45, 139, 78, 0.08) 88px
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 439px,
-      rgba(45, 139, 78, 0.14) 439px,
-      rgba(45, 139, 78, 0.14) 441px
-    );
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 159px,
+    rgba(45, 139, 78, 0.05) 159px,
+    rgba(45, 139, 78, 0.05) 160px
+  );
   background-attachment: fixed;
   font-family: var(--font-sans);
 }
 
 .dark body {
-  background-image:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 87px,
-      rgba(149, 204, 31, 0.06) 87px,
-      rgba(149, 204, 31, 0.06) 88px
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 439px,
-      rgba(149, 204, 31, 0.1) 439px,
-      rgba(149, 204, 31, 0.1) 441px
-    );
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 159px,
+    rgba(149, 204, 31, 0.04) 159px,
+    rgba(149, 204, 31, 0.04) 160px
+  );
 }
 
 /* Smooth focus ring for interactive elements */

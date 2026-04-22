@@ -11,7 +11,6 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { ExampleBanner } from "@/features/admin/ExampleBanner";
 import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
 import { PlaybookDetailClient } from "./ui";
 
@@ -148,11 +147,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   return (
     <>
-      {isExamplePreview ? (
-        <ExamplePreviewBanner />
-      ) : (
-        isExample && <ExampleBanner isPublished={isPublicExample} />
-      )}
+      {isExamplePreview && <ExamplePreviewBanner />}
       <PlaybookDetailClient
         isExamplePreview={isExamplePreview}
         playbookId={playbookId}
@@ -186,6 +181,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
                 authorLabel: exampleAuthorLabel,
               }
             : null,
+          exampleStatus:
+            !isExamplePreview && isExample
+              ? { isPublished: isPublicExample }
+              : null,
         }}
       />
     </>

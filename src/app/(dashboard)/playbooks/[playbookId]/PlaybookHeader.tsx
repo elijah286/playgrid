@@ -89,6 +89,7 @@ export function PlaybookHeader({
   allowPlayerDuplication,
   playActions,
   exampleAdmin,
+  exampleStatus,
 }: {
   playbookId: string;
   name: string;
@@ -106,6 +107,7 @@ export function PlaybookHeader({
   allowPlayerDuplication?: boolean;
   playActions?: PlaybookHeaderPlayActions;
   exampleAdmin?: ExampleAdminState | null;
+  exampleStatus?: { isPublished: boolean } | null;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -271,9 +273,28 @@ export function PlaybookHeader({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className={`truncate text-base font-extrabold tracking-tight sm:text-2xl ${onAccent}`}>
-              {name}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className={`truncate text-base font-extrabold tracking-tight sm:text-2xl ${onAccent}`}>
+                {name}
+              </h1>
+              {exampleStatus && (
+                <span
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    isLightBg
+                      ? "bg-black/10 text-slate-900"
+                      : "bg-white/20 text-white"
+                  }`}
+                  title={
+                    exampleStatus.isPublished
+                      ? "Published as a public example"
+                      : "Marked as example — not yet published"
+                  }
+                >
+                  <FlaskConical className="size-3" />
+                  {exampleStatus.isPublished ? "Example · Published" : "Example · Draft"}
+                </span>
+              )}
+            </div>
             <p className={`truncate text-[11px] font-medium sm:text-sm ${onAccentMuted}`}>
               {[
                 season,

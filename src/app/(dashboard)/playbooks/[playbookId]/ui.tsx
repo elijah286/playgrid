@@ -182,6 +182,7 @@ function PlaybookDetailClientInner({
       isPublished: boolean;
       authorLabel: string | null;
     } | null;
+    exampleStatus: { isPublished: boolean } | null;
   };
 }) {
   const searchParams = useSearchParams();
@@ -767,6 +768,7 @@ function PlaybookDetailClientInner({
           allowCoachDuplication={headerProps.allowCoachDuplication}
           allowPlayerDuplication={headerProps.allowPlayerDuplication}
           exampleAdmin={headerProps.exampleAdmin}
+          exampleStatus={headerProps.exampleStatus}
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {
