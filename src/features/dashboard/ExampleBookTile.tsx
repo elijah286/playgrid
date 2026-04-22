@@ -39,7 +39,13 @@ function colorFor(tile: ExampleBookTileData): string {
   return DEFAULT_COLORS[h % DEFAULT_COLORS.length];
 }
 
-export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
+export function ExampleBookTile({
+  tile,
+  centerOnOpen = false,
+}: {
+  tile: ExampleBookTileData;
+  centerOnOpen?: boolean;
+}) {
   const color = colorFor(tile);
   const initials =
     tile.name
@@ -81,13 +87,22 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
       const SCALE = 1.35;
       const W = r.width * SCALE;
       const cx = r.left + r.width / 2;
+      // Open book spans from (cx - 1.5W) to (cx + 0.5W); visual center
+      // sits at (cx - 0.5W) — i.e. one half-page to the left of the
+      // closed tile's center.
+      const openCenter = cx - 0.5 * W;
       const openLeft = cx - 1.5 * W;
       const openRight = cx + 0.5 * W;
       const MARGIN = 16;
-      let shift = 0;
-      if (openLeft < MARGIN) shift = MARGIN - openLeft;
-      else if (openRight > window.innerWidth - MARGIN) {
+      let shift: number;
+      if (centerOnOpen) {
+        shift = window.innerWidth / 2 - openCenter;
+      } else if (openLeft < MARGIN) {
+        shift = MARGIN - openLeft;
+      } else if (openRight > window.innerWidth - MARGIN) {
         shift = window.innerWidth - MARGIN - openRight;
+      } else {
+        shift = 0;
       }
       setShiftX(shift);
     }
@@ -160,17 +175,6 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
                   <div className="flex flex-col items-center gap-1">
                     <Plus className="size-5 opacity-60" />
                     <span>No offensive plays yet</span>
-                  </div>
-                </div>
-              )}
-              {hasPreviews && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4 transition-opacity duration-300"
-                  style={{ opacity: hover ? 1 : 0 }}
-                >
-                  <div className="rounded-full bg-foreground/85 px-3 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-white shadow-lg backdrop-blur-sm">
-                    Explore a sample playbook and the play editor
                   </div>
                 </div>
               )}
@@ -265,6 +269,17 @@ export function ExampleBookTile({ tile }: { tile: ExampleBookTileData }) {
                 </div>
               </div>
             </div>
+            {hasPreviews && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 -left-full right-0 z-30 flex items-center justify-center transition-opacity duration-300"
+                style={{ opacity: hover ? 1 : 0 }}
+              >
+                <div className="rounded-full bg-foreground/85 px-4 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-white shadow-lg backdrop-blur-sm">
+                  Explore a sample playbook
+                </div>
+              </div>
+            )}
           </Link>
         </div>
       </div>

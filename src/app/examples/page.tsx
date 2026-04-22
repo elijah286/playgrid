@@ -162,7 +162,10 @@ export default async function ExamplesPage() {
         <section className="mt-12 flex flex-wrap justify-center gap-6">
           {playbooks.map((pb) => (
             <div key={pb.id} className="w-40 sm:w-48 lg:w-56">
-              <ExampleBookTile tile={pb} />
+              <ExampleBookTile
+                tile={pb}
+                centerOnOpen={playbooks.length === 1}
+              />
             </div>
           ))}
         </section>
