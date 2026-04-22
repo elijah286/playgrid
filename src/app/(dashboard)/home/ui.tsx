@@ -761,18 +761,22 @@ function MarketingPlaybookTile({ onCreate }: { onCreate: () => void }) {
   }, []);
   const season = currentSeasonLabel();
 
-  // Repeat the sample fan so each page has 6 thumbs.
+  // Repeat the sample fan so each page has 6 thumbs, wrapped in the
+  // { play, flipped } slot shape PlaysheetColumn expects.
   const sheetPlays = [
     ...SAMPLE_FAN_PREVIEWS,
     ...SAMPLE_FAN_PREVIEWS,
     ...SAMPLE_FAN_PREVIEWS,
   ]
     .slice(0, 12)
-    .map((p) => ({
-      players: p.players,
-      routes: p.routes,
-      zones: p.zones ?? [],
-      lineOfScrimmageY: p.lineOfScrimmageY,
+    .map((p, i) => ({
+      play: {
+        players: p.players,
+        routes: p.routes,
+        zones: p.zones ?? [],
+        lineOfScrimmageY: p.lineOfScrimmageY,
+      },
+      flipped: i % 2 === 1,
     }));
 
   const grayWrap = "opacity-70 [&_svg]:grayscale";
@@ -803,7 +807,7 @@ function MarketingPlaybookTile({ onCreate }: { onCreate: () => void }) {
           />
           <div className="flex h-full w-full p-2">
             <PlaysheetColumn
-              plays={sheetPlays.slice(6, 12)}
+              slots={sheetPlays.slice(6, 12)}
               blanks={0}
               mounted={mounted}
             />
@@ -896,7 +900,7 @@ function MarketingPlaybookTile({ onCreate }: { onCreate: () => void }) {
             />
             <div className="flex h-full w-full p-2">
               <PlaysheetColumn
-                plays={sheetPlays.slice(0, 6)}
+                slots={sheetPlays.slice(0, 6)}
                 blanks={0}
                 mounted={mounted}
               />
