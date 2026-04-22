@@ -215,6 +215,7 @@ function PlaybookDetailClientInner({
   const variantLabel = SPORT_VARIANT_LABELS[variant] ?? variant;
   const router = useRouter();
   const { toast } = useToast();
+  const { blockIfPreview } = useExamplePreview();
   const [pending, startTransition] = useTransition();
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
@@ -480,6 +481,14 @@ function PlaybookDetailClientInner({
     formation?: SavedFormation,
     opts?: { playType?: PlayType; specialTeamsUnit?: SpecialTeamsUnit | null; initialPlayers?: Player[]; formationName?: string; playName?: string },
   ) {
+    if (
+      blockIfPreview(
+        "Creating new plays in an example playbook isn't saved. Start your own playbook to create and keep plays.",
+      )
+    ) {
+      setShowFormationPicker(false);
+      return;
+    }
     setCreating(true);
     const playType = opts?.playType ?? "offense";
     const initialPlayers =
@@ -543,6 +552,14 @@ function PlaybookDetailClientInner({
   }
 
   async function createAndGoToFormationEditor() {
+    if (
+      blockIfPreview(
+        "New formations in an example playbook aren't saved. Start your own playbook to create and keep formations.",
+      )
+    ) {
+      setShowFormationPicker(false);
+      return;
+    }
     setCreating(true);
     const res = await createPlayAction(playbookId, { initialPlayers: defaultPlayers, variant, playerCount: playbookPlayerCount });
     if (res.ok) {

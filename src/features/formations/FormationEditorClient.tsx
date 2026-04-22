@@ -14,6 +14,8 @@ import {
 import { EditorCanvas } from "@/features/editor/EditorCanvas";
 import { FormationInspector } from "@/features/editor/FormationInspector";
 import { usePlayEditor } from "@/features/editor/usePlayEditor";
+import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
+import { useExamplePreview } from "@/features/admin/ExamplePreviewContext";
 import {
   createEmptyPlayDocument,
   defaultPlayersForVariant,
@@ -51,6 +53,7 @@ export function FormationEditorClient(props: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const { isPreview, blockIfPreview } = useExamplePreview();
 
   const defaultVariant: SportVariant =
     props.mode === "edit"
@@ -108,6 +111,13 @@ export function FormationEditorClient(props: Props) {
       toast("Enter a formation name", "error");
       return;
     }
+    if (
+      blockIfPreview(
+        "This formation is just a demo — it won't be saved. Create your own playbook to keep your work.",
+      )
+    ) {
+      return;
+    }
     setSaving(true);
     let res: { ok: boolean; error?: string };
     const losY = typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4;
@@ -157,6 +167,7 @@ export function FormationEditorClient(props: Props) {
 
   return (
     <div className="flex flex-col gap-5">
+      {isPreview && <ExamplePreviewBanner />}
       {/* Header */}
       <header className="flex flex-wrap items-center gap-3 border-b border-border pb-4">
         <Link href={backHref}>

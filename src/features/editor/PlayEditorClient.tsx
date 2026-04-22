@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { FlaskConical } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -31,6 +33,10 @@ import { OpponentOverlayCard } from "./OpponentOverlayCard";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
+import {
+  ExamplePreviewProvider,
+  useExamplePreview,
+} from "@/features/admin/ExamplePreviewContext";
 
 type Props = {
   playId: string;
@@ -49,9 +55,21 @@ type Props = {
    *  access. Toolbars, inspectors, tag inputs, rename, copy, and auto-save
    *  are all suppressed. */
   canEdit?: boolean;
+  /** Example preview: the user can interact with the editor as if it's
+   *  theirs, but nothing persists — autosave is skipped, and explicit
+   *  save attempts surface a "create your own playbook" CTA. */
+  isExamplePreview?: boolean;
 };
 
-export function PlayEditorClient({
+export function PlayEditorClient(props: Props) {
+  return (
+    <ExamplePreviewProvider isPreview={props.isExamplePreview ?? false}>
+      <PlayEditorClientInner {...props} />
+    </ExamplePreviewProvider>
+  );
+}
+
+function PlayEditorClientInner({
   playId,
   playbookId,
   initialDocument,
@@ -63,9 +81,11 @@ export function PlayEditorClient({
   opponentFormations,
   playbookSettings,
   canEdit = true,
+  isExamplePreview = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
+  const { blockIfPreview } = useExamplePreview();
   const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
 
   // Bump a localStorage counter of distinct plays this user has opened. The
@@ -163,6 +183,7 @@ export function PlayEditorClient({
       isFirstDocRender.current = false;
       return;
     }
+    if (isExamplePreview) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       setIsSaving(true);
@@ -175,7 +196,7 @@ export function PlayEditorClient({
       setIsSaving(false);
     }, 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, canEdit]);
+  }, [doc, canEdit, isExamplePreview]);
 
   useEffect(() => {
     if (!isSaving) return;
@@ -189,6 +210,13 @@ export function PlayEditorClient({
 
   const saveAsNewFormation = useCallback(
     async (name: string) => {
+      if (
+        blockIfPreview(
+          "Saving a new formation from an example playbook isn't persisted. Start your own playbook to keep your formations.",
+        )
+      ) {
+        return;
+      }
       const res = await saveFormationAction(
         name,
         doc.layers.players,
@@ -211,7 +239,7 @@ export function PlayEditorClient({
       toast(`Saved "${name}" as a new formation`, "success");
       router.refresh();
     },
-    [doc, dispatch, router, toast],
+    [doc, dispatch, router, toast, blockIfPreview],
   );
 
   const navigateToPlay = useCallback(
@@ -250,6 +278,13 @@ export function PlayEditorClient({
   const runDuplicate = useCallback(
     (clearNotes: boolean) => {
       setDuplicatePrompt(false);
+      if (
+        blockIfPreview(
+          "Duplicating a play in an example playbook isn't persisted. Start your own playbook to save copies.",
+        )
+      ) {
+        return;
+      }
       startTransition(async () => {
         const res = await duplicatePlayAction(playId, { clearNotes });
         if (!res.ok) {
@@ -268,7 +303,7 @@ export function PlayEditorClient({
         }
       });
     },
-    [playId, router, toast],
+    [playId, router, toast, blockIfPreview],
   );
 
   const duplicate = useCallback(() => {
@@ -506,6 +541,7 @@ export function PlayEditorClient({
           </div>
         </div>
       )}
+      {isExamplePreview && <ExamplePreviewEditorBanner />}
       <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}
@@ -744,6 +780,13 @@ export function PlayEditorClient({
                 onInstallVsPlay={
                   isDefense
                     ? async (offId: string) => {
+                        if (
+                          blockIfPreview(
+                            "Installing a vs-play against an example play isn't saved. Start your own playbook to keep changes.",
+                          )
+                        ) {
+                          return;
+                        }
                         const res = await installDefenseVsPlayAction(
                           playId,
                           offId,
@@ -865,6 +908,26 @@ function PlayNotesCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ExamplePreviewEditorBanner() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+      <div className="inline-flex items-center gap-2 text-foreground">
+        <FlaskConical className="size-4 text-primary" />
+        <span>
+          <span className="font-semibold">Demo mode.</span> You can edit
+          this play freely — nothing here will be saved.
+        </span>
+      </div>
+      <Link
+        href="/home"
+        className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
+      >
+        Create your own playbook
+      </Link>
     </div>
   );
 }

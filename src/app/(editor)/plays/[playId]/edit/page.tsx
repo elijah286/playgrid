@@ -72,6 +72,7 @@ export default async function PlayEditPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
   let canEdit = false;
+  let isMember = false;
   if (user) {
     const { data: membership } = await supabase
       .from("playbook_members")
@@ -80,8 +81,21 @@ export default async function PlayEditPage({ params }: Props) {
       .eq("user_id", user.id)
       .maybeSingle();
     const role = membership?.role as "owner" | "editor" | "viewer" | undefined;
+    isMember = role != null;
     canEdit = role === "owner" || role === "editor";
   }
+
+  // Example preview: a signed-in visitor who isn't a member of this
+  // example playbook gets the full editor (can draw, drag, undo, etc.)
+  // but autosave is suppressed and any save attempt surfaces the CTA.
+  const { data: book } = await supabase
+    .from("playbooks")
+    .select("is_example, is_public_example")
+    .eq("id", res.play.playbook_id)
+    .maybeSingle();
+  const isExamplePreview =
+    !isMember && Boolean(book?.is_public_example || book?.is_example);
+  if (isExamplePreview) canEdit = true;
 
   return (
     <PlayEditorClient
@@ -96,6 +110,7 @@ export default async function PlayEditPage({ params }: Props) {
       opponentFormations={allFormationsForLookup}
       playbookSettings={playbookSettings}
       canEdit={canEdit}
+      isExamplePreview={isExamplePreview}
     />
   );
 }

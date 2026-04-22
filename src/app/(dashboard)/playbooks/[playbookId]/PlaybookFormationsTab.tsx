@@ -21,6 +21,7 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 import type { SportVariant } from "@/domain/play/types";
+import { useExamplePreview } from "@/features/admin/ExamplePreviewContext";
 
 /**
  * Per-playbook formations tab. Mirrors the global formations page's card
@@ -40,9 +41,20 @@ export function PlaybookFormationsTab({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { blockIfPreview } = useExamplePreview();
   const [formations, setFormations] = useState(initial);
   const [q, setQ] = useState("");
   const [, startTransition] = useTransition();
+
+  function guardNewFormationHref(e: React.MouseEvent) {
+    if (
+      blockIfPreview(
+        "New formations in an example playbook aren't saved. Start your own playbook to create and keep formations.",
+      )
+    ) {
+      e.preventDefault();
+    }
+  }
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -110,6 +122,7 @@ export function PlaybookFormationsTab({
         <Link
           href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}
           className="hidden sm:inline-flex"
+          onClick={guardNewFormationHref}
         >
           <Button variant="primary" leftIcon={Plus}>
             New formation
@@ -128,7 +141,10 @@ export function PlaybookFormationsTab({
           }
           action={
             !q ? (
-              <Link href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}>
+              <Link
+                href={`/formations/new?variant=${variant}&returnToPlaybook=${playbookId}`}
+                onClick={guardNewFormationHref}
+              >
                 <Button variant="primary" leftIcon={Plus}>
                   New formation
                 </Button>

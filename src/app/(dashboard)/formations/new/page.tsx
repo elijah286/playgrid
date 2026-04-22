@@ -1,4 +1,5 @@
 import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
+import { ExamplePreviewProvider } from "@/features/admin/ExamplePreviewContext";
 import type { SportVariant } from "@/domain/play/types";
 
 export const metadata = { title: "New Formation — PlayGrid" };
@@ -10,6 +11,7 @@ type Props = {
     variant?: string;
     returnToPlay?: string;
     returnToPlaybook?: string;
+    preview?: string;
   }>;
 };
 
@@ -19,13 +21,16 @@ export default async function NewFormationPage({ searchParams }: Props) {
     VALID_VARIANTS.find((v) => v === params.variant) ?? "flag_7v7";
   const returnToPlay = params.returnToPlay ?? null;
   const returnToPlaybook = params.returnToPlaybook ?? null;
+  const isPreview = params.preview === "1";
 
   return (
-    <FormationEditorClient
-      mode="new"
-      initialVariant={variant}
-      returnToPlay={returnToPlay}
-      returnToPlaybook={returnToPlaybook}
-    />
+    <ExamplePreviewProvider isPreview={isPreview}>
+      <FormationEditorClient
+        mode="new"
+        initialVariant={variant}
+        returnToPlay={returnToPlay}
+        returnToPlaybook={returnToPlaybook}
+      />
+    </ExamplePreviewProvider>
   );
 }
