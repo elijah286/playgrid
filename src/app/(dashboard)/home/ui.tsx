@@ -361,8 +361,14 @@ function PlaybookBookTile({
   // overlays (e.g. Duplicate dialog) that sit above the tile: mouseleave
   // never fires because the overlay intercepts the pointer, and without
   // this the tile stays stuck opened after the modal closes.
+  //
+  // Skip while the action menu is open — its items render in a portal
+  // outside `wrapperRef`, so this capture-phase handler would fire first
+  // and close the menu before the menu-item click ever dispatches.
+  // ActionMenu manages its own outside-click dismissal.
   useEffect(() => {
     if (!hover) return;
+    if (menuOpen) return;
     function onDown(e: PointerEvent) {
       const el = wrapperRef.current;
       if (!el) return;
@@ -374,7 +380,7 @@ function PlaybookBookTile({
     }
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
-  }, [hover]);
+  }, [hover, menuOpen]);
 
   function handleEnter() {
     const el = wrapperRef.current;
