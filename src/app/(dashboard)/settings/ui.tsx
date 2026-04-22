@@ -45,6 +45,7 @@ export function SettingsClient({
   initialGiftCodes,
   giftCodesError,
   stripeStatus,
+  initialCoachAiEnabled,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -59,6 +60,7 @@ export function SettingsClient({
   initialGiftCodes: GiftCodeRow[];
   giftCodesError: string | null;
   stripeStatus: StripeConfigStatus;
+  initialCoachAiEnabled: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("users");
 
@@ -100,6 +102,7 @@ export function SettingsClient({
           initialCodes={initialGiftCodes}
           initialError={giftCodesError}
           stripeStatus={stripeStatus}
+          initialCoachAiEnabled={initialCoachAiEnabled}
         />
       )}
 

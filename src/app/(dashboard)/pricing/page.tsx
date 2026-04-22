@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { PricingClient } from "./ui";
 
 export default async function PricingPage() {
@@ -14,7 +15,10 @@ export default async function PricingPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const entitlement = await getCurrentEntitlement();
+  const [entitlement, coachAiEnabled] = await Promise.all([
+    getCurrentEntitlement(),
+    getCoachAiTierEnabled(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -33,7 +37,7 @@ export default async function PricingPage() {
           Simple plans that scale with how you use PlayGrid. Cancel anytime.
         </p>
       </div>
-      <PricingClient entitlement={entitlement} />
+      <PricingClient entitlement={entitlement} showCoachAi={coachAiEnabled} />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   createGiftCodeAction,
   listGiftCodesAction,
   revokeGiftCodeAction,
+  setCoachAiTierEnabledAction,
   type GiftCodeRow,
 } from "@/app/actions/admin-billing";
 import { Modal } from "@/components/ui";
@@ -56,16 +57,37 @@ export function BillingAdminClient({
   initialCodes,
   initialError,
   stripeStatus,
+  initialCoachAiEnabled,
 }: {
   initialCodes: GiftCodeRow[];
   initialError: string | null;
   stripeStatus: StripeConfigStatus;
+  initialCoachAiEnabled: boolean;
 }) {
   const [codes, setCodes] = useState(initialCodes);
   const [msg, setMsg] = useState<Msg>(initialError ? { kind: "error", text: initialError } : null);
   const [addOpen, setAddOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [coachAiEnabled, setCoachAiEnabled] = useState(initialCoachAiEnabled);
+  const [coachAiPending, startCoachAiTransition] = useTransition();
+
+  function toggleCoachAi(next: boolean) {
+    const prev = coachAiEnabled;
+    setCoachAiEnabled(next);
+    startCoachAiTransition(async () => {
+      const res = await setCoachAiTierEnabledAction(next);
+      if (!res.ok) {
+        setCoachAiEnabled(prev);
+        setMsg({ kind: "error", text: res.error });
+        return;
+      }
+      setMsg({
+        kind: "success",
+        text: next ? "Coach AI tier shown on /pricing." : "Coach AI tier hidden on /pricing.",
+      });
+    });
+  }
 
   function refresh() {
     startTransition(async () => {
@@ -101,6 +123,25 @@ export function BillingAdminClient({
   return (
     <div className="space-y-6">
       <StripeSettingsClient initial={stripeStatus} />
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card p-4 ring-1 ring-border">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Coach AI tier</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            When off, the Coach AI tier is hidden from the public /pricing page.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={coachAiEnabled}
+            disabled={coachAiPending}
+            onChange={(e) => toggleCoachAi(e.target.checked)}
+          />
+          <span>{coachAiEnabled ? "On" : "Off"}</span>
+        </label>
+      </section>
 
       <section className="rounded-xl bg-card p-4 ring-1 ring-border">
         <header className="mb-3 flex items-center justify-between">

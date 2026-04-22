@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeConfigStatus, type StripeConfigStatus } from "@/lib/site/stripe-config";
+import { setCoachAiTierEnabled } from "@/lib/site/pricing-config";
 
 const SITE_ROW_ID = "default";
 
@@ -338,6 +339,19 @@ export async function testStripeSecretAction(proposed?: string) {
     ok: true as const,
     message: `Connection OK — mode: ${key.startsWith("sk_live_") ? "live" : "test"}.`,
   };
+}
+
+export async function setCoachAiTierEnabledAction(next: boolean) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+  try {
+    await setCoachAiTierEnabled(next);
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Could not save." };
+  }
+  revalidatePath("/settings");
+  revalidatePath("/pricing");
+  return { ok: true as const };
 }
 
 export async function revokeGiftCodeAction(codeId: string) {
