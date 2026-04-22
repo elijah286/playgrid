@@ -53,7 +53,14 @@ export function Inspector({
 
       {/* Quick routes: hidden on defensive plays — those just draw direction arrows. */}
       {player && !route && doc.metadata.playType !== "defense" && (
-        <QuickRoutes player={player} dispatch={dispatch} activeStyle={activeStyle} />
+        <QuickRoutes
+          player={player}
+          dispatch={dispatch}
+          activeStyle={activeStyle}
+          existingRouteIds={doc.layers.routes
+            .filter((r) => r.carrierPlayerId === player.id)
+            .map((r) => r.id)}
+        />
       )}
 
       {route && (

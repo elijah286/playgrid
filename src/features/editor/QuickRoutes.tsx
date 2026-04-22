@@ -13,6 +13,7 @@ type Props = {
   player: Player;
   dispatch: (c: PlayCommand) => void;
   activeStyle?: Partial<RouteStyle>;
+  existingRouteIds?: readonly string[];
 };
 
 function TemplateThumbnail({ template }: { template: RouteTemplate }) {
@@ -86,7 +87,7 @@ function TemplateThumbnail({ template }: { template: RouteTemplate }) {
   );
 }
 
-export function QuickRoutes({ player, dispatch, activeStyle }: Props) {
+export function QuickRoutes({ player, dispatch, activeStyle, existingRouteIds }: Props) {
   const [query, setQuery] = useState("");
 
   const filtered = query.trim()
@@ -122,6 +123,12 @@ export function QuickRoutes({ player, dispatch, activeStyle }: Props) {
             type="button"
             className="flex items-center gap-2 rounded-lg border border-border bg-surface-inset px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-surface-raised"
             onClick={() => {
+              // Replace any existing routes carried by this player so picking
+              // a new quick route swaps the player's assignment instead of
+              // piling a second route on top.
+              for (const rid of existingRouteIds ?? []) {
+                dispatch({ type: "route.remove", routeId: rid });
+              }
               const route = instantiateTemplate(
                 template,
                 player.position,
