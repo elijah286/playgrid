@@ -9,6 +9,12 @@ import {
   updateDisplayNameAction,
   uploadAvatarAction,
 } from "@/app/actions/account";
+import {
+  createBillingPortalSessionAction,
+  createCheckoutSessionAction,
+} from "@/app/actions/billing";
+import type { Entitlement } from "@/lib/billing/entitlement";
+import { TIER_LABEL, TIER_PRICE } from "@/lib/billing/features";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
@@ -30,17 +36,19 @@ export function AccountClient({
   email,
   displayName,
   avatarUrl,
+  entitlement,
 }: {
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
+  entitlement: Entitlement | null;
 }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <NameCard initialDisplayName={displayName} />
       <PasswordCard />
       <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
-      <PlanCard />
+      <PlanCard entitlement={entitlement} />
       <AppearanceCard />
     </div>
   );
@@ -187,26 +195,137 @@ function PasswordCard() {
   );
 }
 
-function PlanCard() {
+function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const tier = entitlement?.tier ?? "free";
+  const source = entitlement?.source ?? "free";
+  const isPaid = source === "stripe";
+  const isComp = source === "comp";
+  const showUpgradeOptions = tier === "free";
+
+  function checkout(t: "coach" | "coach_ai", interval: "month" | "year") {
+    setErr(null);
+    startTransition(async () => {
+      const res = await createCheckoutSessionAction({ tier: t, interval });
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      window.location.href = res.url;
+    });
+  }
+
+  function openPortal() {
+    setErr(null);
+    startTransition(async () => {
+      const res = await createBillingPortalSessionAction();
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      window.location.href = res.url;
+    });
+  }
+
   return (
-    <Card icon={CreditCard} title="Plan" description="Billing lives here.">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-foreground">Free · Early access</p>
-          <p className="mt-1 text-xs text-muted">
-            Nothing to configure yet — PlayGrid is free while we&rsquo;re in early access.
-          </p>
+    <Card icon={CreditCard} title="Plan" description="Your subscription and billing.">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {TIER_LABEL[tier]}
+              {isComp ? " · complimentary" : null}
+              {isPaid ? " · paid" : null}
+            </p>
+            {entitlement?.expiresAt ? (
+              <p className="mt-1 text-xs text-muted">
+                {isComp ? "Expires" : "Renews / ends"}:{" "}
+                {new Date(entitlement.expiresAt).toLocaleDateString()}
+              </p>
+            ) : null}
+          </div>
+          {isPaid ? (
+            <button
+              type="button"
+              onClick={openPortal}
+              disabled={pending}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-50"
+            >
+              Manage billing
+            </button>
+          ) : null}
         </div>
-        <button
-          type="button"
-          disabled
-          className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted disabled:cursor-not-allowed"
-          title="Coming soon"
-        >
-          Change plan
-        </button>
+
+        {isComp ? (
+          <p className="rounded-md bg-surface px-3 py-2 text-xs text-muted ring-1 ring-border">
+            You have a complimentary {TIER_LABEL[tier]} subscription — thank you for being an
+            early user. No action needed.
+          </p>
+        ) : null}
+
+        {showUpgradeOptions ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <PlanOption
+              label="Coach · monthly"
+              price={`$${TIER_PRICE.coach.month}/mo`}
+              onClick={() => checkout("coach", "month")}
+              disabled={pending}
+            />
+            <PlanOption
+              label="Coach · annual"
+              price={`$${TIER_PRICE.coach.year}/yr`}
+              onClick={() => checkout("coach", "year")}
+              disabled={pending}
+              hint="Save ~8%"
+            />
+            <PlanOption
+              label="Coach AI · monthly"
+              price={`$${TIER_PRICE.coach_ai.month}/mo`}
+              onClick={() => checkout("coach_ai", "month")}
+              disabled={pending}
+            />
+            <PlanOption
+              label="Coach AI · annual"
+              price={`$${TIER_PRICE.coach_ai.year}/yr`}
+              onClick={() => checkout("coach_ai", "year")}
+              disabled={pending}
+            />
+          </div>
+        ) : null}
+
+        {err ? <p className="text-xs text-red-700">{err}</p> : null}
       </div>
     </Card>
+  );
+}
+
+function PlanOption({
+  label,
+  price,
+  onClick,
+  disabled,
+  hint,
+}: {
+  label: string;
+  price: string;
+  onClick: () => void;
+  disabled?: boolean;
+  hint?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-surface disabled:opacity-50"
+    >
+      <span>
+        <span className="block font-medium text-foreground">{label}</span>
+        {hint ? <span className="block text-[11px] text-muted">{hint}</span> : null}
+      </span>
+      <span className="text-sm font-semibold text-foreground">{price}</span>
+    </button>
   );
 }
 

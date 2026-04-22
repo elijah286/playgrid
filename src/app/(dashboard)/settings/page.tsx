@@ -10,6 +10,10 @@ import {
   listFeedbackForAdminAction,
 } from "@/app/actions/feedback";
 import { listCoachInvitationsAction } from "@/app/actions/coach-invitations";
+import {
+  getStripeConfigStatusAction,
+  listGiftCodesAction,
+} from "@/app/actions/admin-billing";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -17,15 +21,25 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
   if (profile?.role !== "admin") redirect("/home");
 
-  const [usersRes, integrationRes, resendRes, feedbackRes, invitesRes, feedbackWidgetRes] =
-    await Promise.all([
-      listUsersForAdminAction(),
-      getOpenAIIntegrationStatusAction(),
-      getResendStatusAction(),
-      listFeedbackForAdminAction(),
-      listCoachInvitationsAction(),
-      getFeedbackWidgetEnabledAction(),
-    ]);
+  const [
+    usersRes,
+    integrationRes,
+    resendRes,
+    feedbackRes,
+    invitesRes,
+    feedbackWidgetRes,
+    giftCodesRes,
+    stripeStatusRes,
+  ] = await Promise.all([
+    listUsersForAdminAction(),
+    getOpenAIIntegrationStatusAction(),
+    getResendStatusAction(),
+    listFeedbackForAdminAction(),
+    listCoachInvitationsAction(),
+    getFeedbackWidgetEnabledAction(),
+    listGiftCodesAction(),
+    getStripeConfigStatusAction(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -71,6 +85,26 @@ export default async function SettingsPage() {
         initialFeedbackWidgetEnabled={feedbackWidgetRes.enabled}
         initialInvites={invitesRes.ok ? invitesRes.items : []}
         invitesError={invitesRes.ok ? null : invitesRes.error}
+        initialGiftCodes={giftCodesRes.ok ? giftCodesRes.codes : []}
+        giftCodesError={giftCodesRes.ok ? null : giftCodesRes.error}
+        stripeStatus={
+          stripeStatusRes.ok
+            ? stripeStatusRes.status
+            : {
+                hasSecretKey: false,
+                hasWebhookSecret: false,
+                hasPublishableKey: false,
+                mode: null,
+                updatedAt: null,
+                publishableKey: null,
+                priceIds: {
+                  coach_month: null,
+                  coach_year: null,
+                  coach_ai_month: null,
+                  coach_ai_year: null,
+                },
+              }
+        }
       />
     </div>
   );
