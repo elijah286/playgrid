@@ -15,6 +15,16 @@ import {
   FREE_MAX_PLAYBOOKS_OWNED,
   tierAtLeast,
 } from "@/lib/billing/features";
+import { assertNotLocked } from "@/lib/billing/downgrade-locks";
+import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
+
+async function assertPlaybookNotLocked(
+  playbookId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ownerId = await getPlaybookOwnerId(playbookId);
+  if (!ownerId) return { ok: true };
+  return assertNotLocked({ ownerId, playbookId });
+}
 
 const LOGO_BUCKET = "playbook-logos";
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -221,6 +231,9 @@ export async function updatePlaybookAppearanceAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const lock = await assertPlaybookNotLocked(playbookId);
+  if (!lock.ok) return { ok: false as const, error: lock.error };
+
   const logo = appearance.logo_url?.trim() || null;
   const color = appearance.color?.trim() || null;
   if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
@@ -249,6 +262,9 @@ export async function updatePlaybookSeasonAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const lock = await assertPlaybookNotLocked(playbookId);
+  if (!lock.ok) return { ok: false as const, error: lock.error };
+
   const clean = season?.trim().slice(0, 60) || null;
   const { error } = await supabase
     .from("playbooks")
@@ -268,6 +284,9 @@ export async function updatePlaybookSettingsAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const lock = await assertPlaybookNotLocked(playbookId);
+  if (!lock.ok) return { ok: false as const, error: lock.error };
 
   if (!Number.isFinite(settings.maxPlayers) || settings.maxPlayers < 1 || settings.maxPlayers > 15) {
     return { ok: false as const, error: "Max players must be between 1 and 15." };
@@ -322,6 +341,9 @@ export async function renamePlaybookAction(playbookId: string, name: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const lock = await assertPlaybookNotLocked(playbookId);
+  if (!lock.ok) return { ok: false as const, error: lock.error };
 
   const { error } = await supabase
     .from("playbooks")
