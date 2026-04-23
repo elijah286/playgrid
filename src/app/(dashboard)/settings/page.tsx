@@ -18,6 +18,7 @@ import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
+import { listSeedFormationsAction } from "@/app/actions/formations";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
     hideLobbyAnimation,
     examplesPageEnabled,
     trafficRes,
+    seedsRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -51,6 +53,7 @@ export default async function SettingsPage() {
     getHideLobbyAnimation(),
     getExamplesPageEnabled(),
     getTrafficSummaryAction(30),
+    listSeedFormationsAction(),
   ]);
 
   return (
@@ -143,6 +146,7 @@ export default async function SettingsPage() {
               }
         }
         trafficError={trafficRes.ok ? null : trafficRes.error}
+        initialSeeds={seedsRes.ok ? seedsRes.formations : []}
       />
     </div>
   );

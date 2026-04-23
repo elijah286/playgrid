@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Copy, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import {
+  addFormationToSeedsAction,
   deleteFormationAction,
   type SavedFormation,
 } from "@/app/actions/formations";
@@ -33,11 +34,13 @@ export function PlaybookFormationsTab({
   playbookName,
   variant,
   initial,
+  isAdmin = false,
 }: {
   playbookId: string;
   playbookName: string;
   variant: SportVariant;
   initial: SavedFormation[];
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -89,6 +92,17 @@ export function PlaybookFormationsTab({
     });
   }
 
+  function handleAddAsSeed(formation: SavedFormation) {
+    startTransition(async () => {
+      const res = await addFormationToSeedsAction(formation.id);
+      if (res.ok) {
+        toast(`"${formation.displayName}" added to seeds.`, "success");
+      } else {
+        toast(res.error, "error");
+      }
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -132,6 +146,7 @@ export function PlaybookFormationsTab({
             <FormationCard
               key={f.id}
               formation={f}
+              isAdmin={isAdmin}
               onEdit={() =>
                 router.push(
                   `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
@@ -139,6 +154,7 @@ export function PlaybookFormationsTab({
               }
               onCopy={handleCopy}
               onDelete={handleDelete}
+              onAddAsSeed={handleAddAsSeed}
             />
           ))}
         </div>
@@ -167,25 +183,36 @@ export function PlaybookFormationsTab({
 
 function FormationCard({
   formation,
+  isAdmin,
   onEdit,
   onCopy,
   onDelete,
+  onAddAsSeed,
 }: {
   formation: SavedFormation;
+  isAdmin: boolean;
   onEdit: () => void;
   onCopy: (formation: SavedFormation) => void;
   onDelete: (id: string, name: string) => void;
+  onAddAsSeed: (formation: SavedFormation) => void;
 }) {
   const items: ActionMenuItem[] = [
     { label: "Edit", icon: Pencil, onSelect: onEdit },
     { label: "Copy", icon: Copy, onSelect: () => onCopy(formation) },
-    {
-      label: "Delete",
-      icon: Trash2,
-      danger: true,
-      onSelect: () => onDelete(formation.id, formation.displayName),
-    },
   ];
+  if (isAdmin) {
+    items.push({
+      label: "Add as seed",
+      icon: Sparkles,
+      onSelect: () => onAddAsSeed(formation),
+    });
+  }
+  items.push({
+    label: "Delete",
+    icon: Trash2,
+    danger: true,
+    onSelect: () => onDelete(formation.id, formation.displayName),
+  });
 
   return (
     <Card hover className="relative flex flex-col p-0">

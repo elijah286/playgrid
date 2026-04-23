@@ -260,6 +260,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         initialInvites={invitesRes.ok ? invitesRes.invites : []}
         initialFormations={formationsRes.ok ? formationsRes.formations : []}
         initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
+        isAdmin={isAdmin}
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,

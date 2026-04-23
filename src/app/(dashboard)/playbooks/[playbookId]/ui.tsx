@@ -238,6 +238,7 @@ function PlaybookDetailClientInner({
   initialFormations,
   initialPrefs,
   headerProps,
+  isAdmin = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -249,6 +250,7 @@ function PlaybookDetailClientInner({
   initialInvites: PlaybookInvite[];
   initialFormations: SavedFormation[];
   initialPrefs: PlaybookViewPrefs | null;
+  isAdmin?: boolean;
   // Data for the playbook banner. Rendered inside the sticky header region
   // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
   // the client can wire play-action callbacks into the banner's menu.
@@ -1265,6 +1267,7 @@ function PlaybookDetailClientInner({
           playbookName={headerProps.name}
           variant={variant}
           initial={initialFormations}
+          isAdmin={isAdmin}
         />
       )}
 

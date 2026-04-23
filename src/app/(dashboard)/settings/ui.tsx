@@ -7,6 +7,7 @@ import {
   KeyRound,
   MessageCircle,
   Settings as SettingsIcon,
+  Sparkles,
   Ticket,
   Users,
 } from "lucide-react";
@@ -18,6 +19,8 @@ import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAd
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
+import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
+import type { SavedFormation } from "@/app/actions/formations";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type { GiftCodeRow } from "@/app/actions/admin-billing";
@@ -47,6 +50,7 @@ type Tab =
   | "payments"
   | "integrations"
   | "feedback"
+  | "seeds"
   | "site";
 
 export function SettingsClient({
@@ -68,6 +72,7 @@ export function SettingsClient({
   initialExamplesPageEnabled,
   initialTrafficSummary,
   trafficError,
+  initialSeeds,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -87,6 +92,7 @@ export function SettingsClient({
   initialExamplesPageEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
+  initialSeeds: SavedFormation[];
 }) {
   const [tab, setTab] = useState<Tab>("users");
 
@@ -102,6 +108,7 @@ export function SettingsClient({
           { value: "payments", label: "Payments", icon: CreditCard },
           { value: "integrations", label: "Integrations", icon: KeyRound },
           { value: "feedback", label: "Feedback", icon: MessageCircle },
+          { value: "seeds", label: "Playbook seeds", icon: Sparkles },
           { value: "site", label: "Site", icon: SettingsIcon },
         ]}
       />
@@ -183,6 +190,10 @@ export function SettingsClient({
             <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
           )}
         </div>
+      )}
+
+      {tab === "seeds" && (
+        <PlaybookSeedsAdminClient initial={initialSeeds} />
       )}
 
       {tab === "site" && (

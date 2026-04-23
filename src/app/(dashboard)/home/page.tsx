@@ -2,7 +2,6 @@ import { getDashboardSummaryAction } from "@/app/actions/plays";
 import { listPendingApprovalsForOwnerAction } from "@/app/actions/playbook-roster";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
-import { DashboardTabs } from "@/components/layout/DashboardTabs";
 import { PendingApprovalsCard } from "@/features/dashboard/PendingApprovalsCard";
 import { DashboardClient } from "./ui";
 
@@ -20,7 +19,6 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <div className="space-y-8">
-      <DashboardTabs active="playbooks" />
       {errFromQuery && (
         <p className="rounded-lg bg-danger-light px-3 py-2 text-sm text-danger">
           {errFromQuery}
