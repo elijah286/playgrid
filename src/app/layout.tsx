@@ -20,11 +20,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.co
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "xogridmaker — Football play designer for coaches",
+    default: "xogridmaker — Football play designer & playbook builder",
     template: "%s · xogridmaker",
   },
   description:
-    "xogridmaker is a football play designer for coaches and athletes. Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+    "xogridmaker is a football play designer for coaches. Draw plays on a real grid, organize them into playbooks, preview wristbands, and carry your playbook to the field. Built for flag football, 7v7, and tackle.",
   applicationName: "xogridmaker",
   authors: [{ name: "xogridmaker" }],
   creator: "xogridmaker",
@@ -44,16 +44,16 @@ export const metadata: Metadata = {
     type: "website",
     url: SITE_URL,
     siteName: "xogridmaker",
-    title: "xogridmaker — Football play designer for coaches",
+    title: "xogridmaker — Football play designer & playbook builder",
     description:
-      "Design plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+      "Draw football plays on a real grid, organize them into playbooks, preview wristbands, and carry your playbook to the field. Flag, 7v7, and tackle.",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "xogridmaker — Football play designer for coaches",
+    title: "xogridmaker — Football play designer & playbook builder",
     description:
-      "Design plays, organize them into playbooks, and carry your playbook to the field.",
+      "Draw football plays on a real grid, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
   },
   robots: {
     index: true,
