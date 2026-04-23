@@ -1278,7 +1278,7 @@ function PlaybookDetailClientInner({
                         key={`${section.key}:${p.id}`}
                         ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
                         hover
-                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
+                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab select-none active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         draggable={canReorder}
                         onDragStart={
                           canReorder
@@ -1402,7 +1402,7 @@ function PlaybookDetailClientInner({
                       <li
                         key={`${section.key}:${p.id}`}
                         ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
-                        className={`flex items-center gap-2 pl-2 pr-2 ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "rounded-md ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
+                        className={`flex items-center gap-2 pl-2 pr-2 ${reorderMode ? "cursor-grab select-none active:cursor-grabbing" : ""} ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "rounded-md ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         draggable={canReorder}
                         onDragStart={
                           canReorder
