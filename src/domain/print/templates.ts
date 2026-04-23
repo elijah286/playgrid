@@ -22,6 +22,23 @@ function scaleDashForPrint(dash: string | undefined, strokeWidth: number): strin
   return `${dashLen.toFixed(2)} ${gapLen.toFixed(2)}`;
 }
 import { resolveRouteStroke } from "../play/factory";
+
+/** Merge the frozen opposing-side snapshot (defense plays installed against a
+ *  specific offense) into the doc's players/routes so print tiles show both
+ *  sides, matching the editor canvas. Returns the original doc when no
+ *  snapshot exists. */
+function mergeVsSnapshot(doc: PlayDocument): PlayDocument {
+  const snap = doc.metadata.vsPlaySnapshot;
+  if (!snap) return doc;
+  return {
+    ...doc,
+    layers: {
+      ...doc.layers,
+      players: [...doc.layers.players, ...snap.players],
+      routes: [...doc.layers.routes, ...snap.routes],
+    },
+  };
+}
 import {
   IN_TO_MM,
   type ArrowSize,
@@ -614,6 +631,7 @@ function renderFieldContents(
   fieldH: number,
   look: PlayTileLookOptions,
 ): string {
+  doc = mergeVsSnapshot(doc);
   const vis = doc.printProfile.visibility;
   const fieldMin = Math.min(fieldW, fieldH);
   const pr = iconRadiusProportional(look.iconSize, fieldMin);
@@ -1199,6 +1217,7 @@ function renderWristbandTile(
   opts: WristbandGridOptions,
   watermark?: Watermark | null,
 ): string {
+  doc = mergeVsSnapshot(doc);
   const vis = doc.printProfile.visibility;
   const zoom = opts.zoom / 100;
   const toggles: PrintLabelToggles = {
