@@ -9,7 +9,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/app/actions/playbook-view-prefs";
+import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 
 const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
