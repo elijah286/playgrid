@@ -105,7 +105,9 @@ import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
 import {
+  approveCoachUpgradeAction,
   approveMemberAction,
+  denyCoachUpgradeAction,
   denyMemberAction,
   removeStaffMemberAction,
   setCoachTitleAction,
@@ -2099,6 +2101,9 @@ function RosterPanel({
   // Roster tab is player-only; coaches (owner/editor) live in the Staff tab.
   const players = members.filter((m) => m.role === "viewer");
   const pending = players.filter((m) => m.status === "pending");
+  const coachUpgradeRequests = players.filter(
+    (m) => m.status === "active" && m.coach_upgrade_requested_at,
+  );
   const active = players.filter((m) => m.status === "active");
   const activeInvites = invites.filter(
     (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
@@ -2117,6 +2122,20 @@ function RosterPanel({
   async function deny(userId: string) {
     setPendingId(userId);
     const res = await denyMemberAction(playbookId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function approveCoachUpgrade(userId: string) {
+    setPendingId(userId);
+    const res = await approveCoachUpgradeAction(playbookId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Grant failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function denyCoachUpgrade(userId: string) {
+    setPendingId(userId);
+    const res = await denyCoachUpgradeAction(playbookId, userId);
     setPendingId(null);
     if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
     else router.refresh();
@@ -2176,6 +2195,54 @@ function RosterPanel({
                     leftIcon={X}
                     disabled={pendingId === m.user_id}
                     onClick={() => deny(m.user_id)}
+                  >
+                    Deny
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {coachUpgradeRequests.length > 0 && (
+        <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Coach access requests
+            <span className="ml-2 rounded-full bg-primary/20 px-2 py-0.5 text-[11px] text-primary">
+              {coachUpgradeRequests.length}
+            </span>
+          </h3>
+          <p className="mb-2 text-xs text-muted">
+            These players asked to be upgraded to coach (edit privileges).
+          </p>
+          <ul className="divide-y divide-border">
+            {coachUpgradeRequests.map((m) => (
+              <li key={m.user_id} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {m.label || m.display_name || m.user_id.slice(0, 8)}
+                  </p>
+                  <p className="text-xs text-muted">
+                    Currently a player — requesting coach access
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    leftIcon={Check}
+                    loading={pendingId === m.user_id}
+                    onClick={() => approveCoachUpgrade(m.user_id)}
+                  >
+                    Grant
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leftIcon={X}
+                    disabled={pendingId === m.user_id}
+                    onClick={() => denyCoachUpgrade(m.user_id)}
                   >
                     Deny
                   </Button>
@@ -3067,9 +3134,16 @@ function PendingApprovalsBanner({
 }) {
   if (!canManage) return null;
   const pending = roster.filter((m) => m.status === "pending");
-  if (pending.length === 0) return null;
-  const viewerPending = pending.filter((m) => m.role === "viewer").length;
-  const staffPending = pending.length - viewerPending;
+  const upgradeRequests = roster.filter(
+    (m) =>
+      m.status === "active" &&
+      m.role === "viewer" &&
+      m.coach_upgrade_requested_at,
+  );
+  if (pending.length + upgradeRequests.length === 0) return null;
+  const viewerPending =
+    pending.filter((m) => m.role === "viewer").length + upgradeRequests.length;
+  const staffPending = pending.length - pending.filter((m) => m.role === "viewer").length;
   const primaryTab: "roster" | "staff" =
     viewerPending >= staffPending ? "roster" : "staff";
   const secondaryTab: "roster" | "staff" =
@@ -3081,8 +3155,11 @@ function PendingApprovalsBanner({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
       <p className="text-sm text-foreground">
-        <span className="font-semibold">{pending.length}</span> pending request
-        {pending.length === 1 ? "" : "s"} to review.
+        <span className="font-semibold">
+          {pending.length + upgradeRequests.length}
+        </span>{" "}
+        pending request
+        {pending.length + upgradeRequests.length === 1 ? "" : "s"} to review.
       </p>
       <div className="flex items-center gap-2">
         <button

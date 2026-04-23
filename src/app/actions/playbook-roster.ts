@@ -17,6 +17,7 @@ export type PlaybookRosterMember = {
   coach_title: string | null;
   display_name: string | null;
   created_at: string;
+  coach_upgrade_requested_at: string | null;
 };
 
 export async function listPlaybookRosterAction(
@@ -35,7 +36,7 @@ export async function listPlaybookRosterAction(
   const { data, error } = await supabase
     .from("playbook_members")
     .select(
-      "user_id, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, profiles:user_id(display_name)",
+      "user_id, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
     )
     .eq("playbook_id", playbookId)
     .order("created_at", { ascending: true });
@@ -61,23 +62,33 @@ export async function listPlaybookRosterAction(
       coach_title: (row.coach_title as string | null) ?? null,
       display_name: profile?.display_name ?? null,
       created_at: row.created_at,
+      coach_upgrade_requested_at:
+        (row.coach_upgrade_requested_at as string | null) ?? null,
     };
   });
 
   return { ok: true, members };
 }
 
+export type PendingApprovalItem = {
+  userId: string;
+  displayName: string | null;
+  role: "editor" | "viewer";
+  createdAt: string;
+  /**
+   * `membership` = user hasn't been approved to join yet.
+   * `coach_upgrade` = user is already an active player who asked to be
+   * upgraded to coach (editor).
+   */
+  kind: "membership" | "coach_upgrade";
+};
+
 export type PendingApprovalTile = {
   playbookId: string;
   playbookName: string;
   playbookLogoUrl: string | null;
   playbookColor: string | null;
-  items: Array<{
-    userId: string;
-    displayName: string | null;
-    role: "editor" | "viewer";
-    createdAt: string;
-  }>;
+  items: PendingApprovalItem[];
 };
 
 /**
@@ -126,18 +137,20 @@ export async function listPendingApprovalsForOwnerAction(): Promise<
   const { data: pending, error: pendErr } = await supabase
     .from("playbook_members")
     .select(
-      "playbook_id, user_id, role, created_at, profiles:user_id(display_name)",
+      "playbook_id, user_id, role, status, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
     )
     .in("playbook_id", ownedIds)
-    .eq("status", "pending")
+    .or("status.eq.pending,coach_upgrade_requested_at.not.is.null")
     .order("created_at", { ascending: true });
   if (pendErr) return { ok: false, error: pendErr.message };
 
   type PendRow = {
     playbook_id: string;
     user_id: string;
-    role: "editor" | "viewer";
+    role: "owner" | "editor" | "viewer";
+    status: "pending" | "active";
     created_at: string;
+    coach_upgrade_requested_at: string | null;
     profiles:
       | { display_name: string | null }
       | { display_name: string | null }[]
@@ -157,16 +170,67 @@ export async function listPendingApprovalsForOwnerAction(): Promise<
         playbookColor: book.color,
         items: [],
       } as PendingApprovalTile);
-    tile.items.push({
-      userId: p.user_id,
-      displayName: prof?.display_name ?? null,
-      role: p.role,
-      createdAt: p.created_at,
-    });
-    grouped.set(p.playbook_id, tile);
+    if (p.status === "pending" && (p.role === "editor" || p.role === "viewer")) {
+      tile.items.push({
+        userId: p.user_id,
+        displayName: prof?.display_name ?? null,
+        role: p.role,
+        createdAt: p.created_at,
+        kind: "membership",
+      });
+    }
+    // A player who's already active and asked to be upgraded to coach.
+    // (If status is still pending we only surface the membership request;
+    // the upgrade gets its own item once the player approval lands.)
+    if (
+      p.coach_upgrade_requested_at &&
+      p.status === "active" &&
+      p.role === "viewer"
+    ) {
+      tile.items.push({
+        userId: p.user_id,
+        displayName: prof?.display_name ?? null,
+        role: "editor",
+        createdAt: p.coach_upgrade_requested_at,
+        kind: "coach_upgrade",
+      });
+    }
+    if (tile.items.length > 0) grouped.set(p.playbook_id, tile);
   }
 
   return { ok: true, tiles: Array.from(grouped.values()) };
+}
+
+export async function approveCoachUpgradeAction(
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("playbook_members")
+    .update({ role: "editor", coach_upgrade_requested_at: null })
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+export async function denyCoachUpgradeAction(
+  playbookId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("playbook_members")
+    .update({ coach_upgrade_requested_at: null })
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
 }
 
 export async function approveMemberAction(

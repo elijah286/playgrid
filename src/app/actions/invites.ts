@@ -480,6 +480,25 @@ async function sendSharedExistingUserEmail(input: {
   }
 }
 
+export async function requestCoachAccessAction(
+  token: string,
+): Promise<
+  | { ok: true; playbookId: string; status: "active" | "pending" }
+  | { ok: false; error: string }
+> {
+  const accepted = await acceptInviteAction(token);
+  if (!accepted.ok) return accepted;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("request_coach_upgrade", {
+    p_playbook_id: accepted.playbookId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/playbooks/${accepted.playbookId}`);
+  return { ok: true, playbookId: accepted.playbookId, status: accepted.status };
+}
+
 export async function acceptInviteAction(
   token: string,
 ): Promise<

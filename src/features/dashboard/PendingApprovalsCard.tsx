@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Check, X } from "lucide-react";
 import {
+  approveCoachUpgradeAction,
   approveMemberAction,
+  denyCoachUpgradeAction,
   denyMemberAction,
   type PendingApprovalTile,
 } from "@/app/actions/playbook-roster";
@@ -22,12 +24,21 @@ export function PendingApprovalsCard({ initialTiles }: Props) {
 
   if (tiles.length === 0) return null;
 
-  function removeItem(playbookId: string, userId: string) {
+  function removeItem(
+    playbookId: string,
+    userId: string,
+    kind: "membership" | "coach_upgrade",
+  ) {
     setTiles((prev) =>
       prev
         .map((t) =>
           t.playbookId === playbookId
-            ? { ...t, items: t.items.filter((i) => i.userId !== userId) }
+            ? {
+                ...t,
+                items: t.items.filter(
+                  (i) => !(i.userId === userId && i.kind === kind),
+                ),
+              }
             : t,
         )
         .filter((t) => t.items.length > 0),
@@ -39,6 +50,7 @@ export function PendingApprovalsCard({ initialTiles }: Props) {
     key: string,
     playbookId: string,
     userId: string,
+    kind: "membership" | "coach_upgrade",
     okMsg: string,
   ) {
     setBusy(key);
@@ -49,7 +61,7 @@ export function PendingApprovalsCard({ initialTiles }: Props) {
           toast(res.error, "error");
           return;
         }
-        removeItem(playbookId, userId);
+        removeItem(playbookId, userId, kind);
         toast(okMsg, "success");
         router.refresh();
       } catch (e) {
@@ -105,27 +117,50 @@ export function PendingApprovalsCard({ initialTiles }: Props) {
             </div>
             <ul className="divide-y divide-border">
               {tile.items.map((item) => {
-                const approveKey = `a:${tile.playbookId}:${item.userId}`;
-                const denyKey = `d:${tile.playbookId}:${item.userId}`;
+                const approveKey = `a:${tile.playbookId}:${item.userId}:${item.kind}`;
+                const denyKey = `d:${tile.playbookId}:${item.userId}:${item.kind}`;
                 const name = item.displayName?.trim() || "Unnamed member";
+                const isUpgrade = item.kind === "coach_upgrade";
+                const badgeLabel = isUpgrade ? "coach request" : item.role;
+                const approveFn = isUpgrade
+                  ? () => approveCoachUpgradeAction(tile.playbookId, item.userId)
+                  : () => approveMemberAction(tile.playbookId, item.userId);
+                const denyFn = isUpgrade
+                  ? () => denyCoachUpgradeAction(tile.playbookId, item.userId)
+                  : () => denyMemberAction(tile.playbookId, item.userId);
+                const approveMsg = isUpgrade
+                  ? `Granted coach access to ${name}`
+                  : `Approved ${name}`;
+                const denyMsg = isUpgrade
+                  ? `Denied coach request from ${name}`
+                  : `Rejected ${name}`;
                 return (
                   <li
-                    key={item.userId}
+                    key={`${item.userId}:${item.kind}`}
                     className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-sm text-foreground">
-                        {name}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                          item.role === "editor"
-                            ? "bg-secondary/10 text-secondary"
-                            : "bg-surface-inset text-muted"
-                        }`}
-                      >
-                        {item.role}
-                      </span>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm text-foreground">
+                          {name}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                            isUpgrade
+                              ? "bg-primary/10 text-primary"
+                              : item.role === "editor"
+                                ? "bg-secondary/10 text-secondary"
+                                : "bg-surface-inset text-muted"
+                          }`}
+                        >
+                          {badgeLabel}
+                        </span>
+                      </div>
+                      {isUpgrade && (
+                        <p className="text-[11px] text-muted">
+                          Already a player — requesting edit privileges.
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Button
@@ -135,16 +170,16 @@ export function PendingApprovalsCard({ initialTiles }: Props) {
                         disabled={busy !== null}
                         onClick={() =>
                           act(
-                            () =>
-                              approveMemberAction(tile.playbookId, item.userId),
+                            approveFn,
                             approveKey,
                             tile.playbookId,
                             item.userId,
-                            `Approved ${name}`,
+                            item.kind,
+                            approveMsg,
                           )
                         }
                       >
-                        {busy === approveKey ? "…" : "Approve"}
+                        {busy === approveKey ? "…" : isUpgrade ? "Grant" : "Approve"}
                       </Button>
                       <Button
                         size="sm"
@@ -153,16 +188,16 @@ export function PendingApprovalsCard({ initialTiles }: Props) {
                         disabled={busy !== null}
                         onClick={() =>
                           act(
-                            () =>
-                              denyMemberAction(tile.playbookId, item.userId),
+                            denyFn,
                             denyKey,
                             tile.playbookId,
                             item.userId,
-                            `Rejected ${name}`,
+                            item.kind,
+                            denyMsg,
                           )
                         }
                       >
-                        {busy === denyKey ? "…" : "Reject"}
+                        {busy === denyKey ? "…" : isUpgrade ? "Deny" : "Reject"}
                       </Button>
                     </div>
                   </li>
