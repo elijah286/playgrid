@@ -243,13 +243,40 @@ function FormationTitlePicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const activeFormationRef = useRef<HTMLButtonElement>(null);
   const offenseFormations = allFormations.filter((f) => (f.kind ?? "offense") === "offense");
 
   useEffect(() => {
     if (open) {
       setQuery("");
-      queueMicrotask(() => searchRef.current?.focus());
+      if (typeof window !== "undefined" && window.innerWidth >= 640) {
+        queueMicrotask(() => searchRef.current?.focus());
+      }
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    function run() {
+      const t = activeFormationRef.current;
+      if (!t || cancelled) return;
+      const scroller = t.closest("[data-formation-scroll]") as HTMLElement | null;
+      if (!scroller) return;
+      const sr = scroller.getBoundingClientRect();
+      const tr = t.getBoundingClientRect();
+      const offset = tr.top - sr.top - (sr.height - tr.height) / 2;
+      scroller.scrollTop += offset;
+    }
+    const r1 = requestAnimationFrame(run);
+    const t1 = window.setTimeout(run, 150);
+    const t2 = window.setTimeout(run, 400);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(r1);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [open]);
 
   const q = query.trim().toLowerCase();
@@ -330,7 +357,10 @@ function FormationTitlePicker({
                 Unlink formation
               </button>
             )}
-            <div className="max-h-[420px] overflow-y-auto p-2">
+            <div
+              data-formation-scroll
+              className="max-h-[min(75vh,720px)] overflow-y-auto p-2"
+            >
               {filtered.length === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted">
                   {q ? "No matches." : "No saved formations"}
@@ -342,6 +372,7 @@ function FormationTitlePicker({
                     return (
                       <button
                         key={f.id}
+                        ref={selected ? activeFormationRef : undefined}
                         type="button"
                         onClick={() => pick(f)}
                         className={`flex flex-col gap-1.5 rounded-md border p-1.5 text-left transition-colors ${

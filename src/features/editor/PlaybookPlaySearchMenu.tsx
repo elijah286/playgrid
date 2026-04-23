@@ -103,17 +103,26 @@ export function PlaybookPlaySearchMenu({
 
   useEffect(() => {
     if (!open) return;
-    const t = activeTileRef.current;
-    if (!t) return;
-    const id = requestAnimationFrame(() => {
+    let cancelled = false;
+    function run() {
+      const t = activeTileRef.current;
+      if (!t || cancelled) return;
       const scroller = t.closest("[data-play-scroll]") as HTMLElement | null;
       if (!scroller) return;
       const sr = scroller.getBoundingClientRect();
       const tr = t.getBoundingClientRect();
       const offset = tr.top - sr.top - (sr.height - tr.height) / 2;
       scroller.scrollTop += offset;
-    });
-    return () => cancelAnimationFrame(id);
+    }
+    const r1 = requestAnimationFrame(run);
+    const t1 = window.setTimeout(run, 150);
+    const t2 = window.setTimeout(run, 400);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(r1);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [open]);
 
   const filteredPlays = useMemo(() => {
@@ -169,7 +178,6 @@ export function PlaybookPlaySearchMenu({
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search name, code, formation, tag…"
                 className="pl-9"
-                autoFocus
               />
             </div>
             {printMode && onPrintToggle && onToggleGroup && (
@@ -210,7 +218,7 @@ export function PlaybookPlaySearchMenu({
           </div>
           <div
             data-play-scroll
-            className="max-h-[min(70vh,520px)] overflow-y-auto py-1 text-sm"
+            className="max-h-[min(80vh,820px)] overflow-y-auto py-1 text-sm"
           >
             {sections.map((sec) => (
               <div key={sec.groupId ?? "ungrouped"} className="border-b border-border last:border-0">
