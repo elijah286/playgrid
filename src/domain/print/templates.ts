@@ -660,7 +660,8 @@ function renderFieldContents(
     }
   }
 
-  return guides + zones + routes + players;
+  const clipId = `fc-${Math.random().toString(36).slice(2, 9)}`;
+  return `<defs><clipPath id="${clipId}"><rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}"/></clipPath></defs><g clip-path="url(#${clipId})">${guides}${zones}${routes}${players}</g>`;
 }
 
 /** Defensive coverage zones — rectangles or ellipses rendered beneath routes
@@ -1342,15 +1343,19 @@ function renderWristbandTile(
   const outerStroke = bt === 0 ? "none" : "#cbd5e1";
   const innerStroke = bt === 0 ? "none" : "#e2e8f0";
   const zones = renderZones(doc, fieldX, fieldY, fieldW, fieldH, fit, Math.min(fieldW, fieldH));
+  const clipId = `wb-${Math.random().toString(36).slice(2, 9)}`;
   return `
   <g>
     <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${0.25 * bt}"/>
     ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
-    ${guides}
-    ${zones}
-    ${routes}
-    ${players}
+    <defs><clipPath id="${clipId}"><rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}"/></clipPath></defs>
+    <g clip-path="url(#${clipId})">
+      ${guides}
+      ${zones}
+      ${routes}
+      ${players}
+    </g>
     ${overlay}
   </g>`;
 }
