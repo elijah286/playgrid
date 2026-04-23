@@ -486,15 +486,16 @@ function PlaybookDetailClientInner({
     return arr;
   }, [filtered, groupBy, groupById, initialGroups]);
 
-  // Flat, 1-based position map across all (non-archived + current filters) plays
-  // sorted by sort_order. Used to render the orange play-number glyph so every
-  // play shows its stable number regardless of which section it's under.
+  // Per-section, 1-based position map. Each section (Offense, Defense,
+  // Special Teams, or user-defined group) starts its own count at 1 so the
+  // orange play-number glyph reads naturally inside its grouping.
   const positionByPlayId = useMemo(() => {
-    const ordered = [...viewed].sort((a, b) => a.sort_order - b.sort_order);
     const m = new Map<string, number>();
-    ordered.forEach((p, i) => m.set(p.id, i + 1));
+    for (const section of sections) {
+      section.plays.forEach((p, i) => m.set(p.id, i + 1));
+    }
     return m;
-  }, [viewed]);
+  }, [sections]);
 
   // Close the filters popover on outside click or Escape.
   useEffect(() => {
@@ -779,23 +780,34 @@ function PlaybookDetailClientInner({
     if (!overContainer) return;
 
     setLocalPlays((prev) => {
-      const current = prev
-        .filter((p) => sectionKeyOfPlay.get(p.id) === overContainer)
-        .map((p) => p.id);
-      const src = current.indexOf(activeId);
-      const reordered = [...current];
-      if (src >= 0) reordered.splice(src, 1);
-      const dstRaw =
-        overId === overContainer ? reordered.length : reordered.indexOf(overId);
-      const insertAt = Math.max(
-        0,
-        Math.min(reordered.length, dstRaw < 0 ? reordered.length : dstRaw),
-      );
-      reordered.splice(insertAt, 0, activeId);
-      const orderMap = new Map(reordered.map((id, i) => [id, i]));
-      return prev.map((p) =>
-        orderMap.has(p.id) ? { ...p, sort_order: orderMap.get(p.id)! } : p,
-      );
+      // Rebuild sort_order over the full, visually-ordered list so the flat
+      // sort_order stays monotonic across sections. Starting from the
+      // sort_order-sorted `prev`, splice the active play out and re-insert
+      // it at the position of `over` (which may be a play or a section).
+      const ordered = [...prev].sort((a, b) => a.sort_order - b.sort_order);
+      const srcIdx = ordered.findIndex((p) => p.id === activeId);
+      if (srcIdx < 0) return prev;
+      const [moved] = ordered.splice(srcIdx, 1);
+
+      let dstIdx: number;
+      if (overId === overContainer) {
+        // Dropped on the section itself — append to the end of that section.
+        const lastInSection = [...ordered]
+          .reverse()
+          .find((p) => sectionKeyOfPlay.get(p.id) === overContainer);
+        dstIdx = lastInSection
+          ? ordered.findIndex((p) => p.id === lastInSection.id) + 1
+          : ordered.length;
+      } else {
+        const overIdx = ordered.findIndex((p) => p.id === overId);
+        dstIdx = overIdx < 0 ? ordered.length : overIdx;
+      }
+      ordered.splice(dstIdx, 0, moved);
+      const orderMap = new Map(ordered.map((p, i) => [p.id, i]));
+      return prev.map((p) => ({
+        ...p,
+        sort_order: orderMap.get(p.id) ?? p.sort_order,
+      }));
     });
 
     // Persist sort order.
