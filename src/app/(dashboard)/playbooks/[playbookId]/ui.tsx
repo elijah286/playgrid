@@ -779,41 +779,47 @@ function PlaybookDetailClientInner({
     const overContainer = findContainerFromId(overId);
     if (!overContainer) return;
 
-    setLocalPlays((prev) => {
-      // Work over the full, visually-ordered list so sort_order stays
-      // monotonic across sections. Use arrayMove with original indices —
-      // it handles drag-up and drag-down uniformly, unlike splice-then-
-      // reinsert which mis-positions by one when moving down.
-      const ordered = [...prev].sort((a, b) => a.sort_order - b.sort_order);
-      const oldIndex = ordered.findIndex((p) => p.id === activeId);
-      if (oldIndex < 0) return prev;
+    // Work over the full, visually-ordered list so sort_order stays
+    // monotonic across sections. Use arrayMove with original indices —
+    // it handles drag-up and drag-down uniformly, unlike splice-then-
+    // reinsert which mis-positions by one when moving down.
+    const ordered = [...localPlays].sort((a, b) => a.sort_order - b.sort_order);
+    const oldIndex = ordered.findIndex((p) => p.id === activeId);
+    if (oldIndex < 0) return;
 
-      let newIndex: number;
-      if (overId === overContainer) {
-        // Dropped on the section itself — place at the end of that section.
-        const lastInSection = [...ordered]
-          .reverse()
-          .find(
-            (p) => p.id !== activeId && sectionKeyOfPlay.get(p.id) === overContainer,
-          );
-        newIndex = lastInSection
-          ? ordered.findIndex((p) => p.id === lastInSection.id)
-          : ordered.length - 1;
-      } else {
-        const overIdx = ordered.findIndex((p) => p.id === overId);
-        newIndex = overIdx < 0 ? ordered.length - 1 : overIdx;
-      }
-      if (oldIndex === newIndex) return prev;
-      const moved = arrayMove(ordered, oldIndex, newIndex);
-      const orderMap = new Map(moved.map((p, i) => [p.id, i]));
-      return prev.map((p) => ({
+    let newIndex: number;
+    if (overId === overContainer) {
+      // Dropped on the section itself — place at the end of that section.
+      const lastInSection = [...ordered]
+        .reverse()
+        .find(
+          (p) => p.id !== activeId && sectionKeyOfPlay.get(p.id) === overContainer,
+        );
+      newIndex = lastInSection
+        ? ordered.findIndex((p) => p.id === lastInSection.id)
+        : ordered.length - 1;
+    } else {
+      const overIdx = ordered.findIndex((p) => p.id === overId);
+      newIndex = overIdx < 0 ? ordered.length - 1 : overIdx;
+    }
+    const crossGroup =
+      groupBy === "group" &&
+      startedGroup !== undefined &&
+      startedGroup !== (overContainer === UNASSIGNED ? null : overContainer);
+    if (oldIndex === newIndex && !crossGroup) return;
+
+    const moved = arrayMove(ordered, oldIndex, newIndex);
+    const orderMap = new Map(moved.map((p, i) => [p.id, i]));
+    setLocalPlays((prev) =>
+      prev.map((p) => ({
         ...p,
         sort_order: orderMap.get(p.id) ?? p.sort_order,
-      }));
-    });
+      })),
+    );
 
-    // Persist sort order.
-    commitPlayOrder();
+    // Persist sort order — pass the resolved ID list so we don't depend
+    // on the React state we just queued.
+    commitPlayOrder(moved.map((p) => p.id));
 
     // If groupBy === "group" and the active play moved to a different group
     // (detected during drag-over or at drop), persist the group change.
@@ -867,10 +873,12 @@ function PlaybookDetailClientInner({
     });
   }
 
-  function commitPlayOrder() {
-    const ordered = [...localPlays]
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((p) => p.id);
+  function commitPlayOrder(orderedIds?: string[]) {
+    const ordered =
+      orderedIds ??
+      [...localPlays]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((p) => p.id);
     startTransition(async () => {
       const res = await reorderPlaysAction(playbookId, ordered);
       if (!res.ok) {
