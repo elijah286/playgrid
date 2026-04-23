@@ -3,16 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Copy, Link2Off, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   deleteFormationAction,
-  setFormationPlaybookInclusionAction,
   type SavedFormation,
 } from "@/app/actions/formations";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import {
   ActionMenu,
-  Badge,
   Button,
   Card,
   EmptyState,
@@ -67,27 +65,9 @@ export function PlaybookFormationsTab({
     return formations.filter((f) => f.displayName.toLowerCase().includes(needle));
   }, [formations, q]);
 
-  function handleRemoveFromPlaybook(id: string, name: string) {
-    if (
-      !window.confirm(
-        `Remove "${name}" from this playbook? The formation stays in your global library.`,
-      )
-    )
-      return;
-    startTransition(async () => {
-      const res = await setFormationPlaybookInclusionAction(id, playbookId, false);
-      if (res.ok) {
-        setFormations((prev) => prev.filter((f) => f.id !== id));
-        toast(`Removed "${name}" from this playbook.`, "success");
-      } else {
-        toast(res.error, "error");
-      }
-    });
-  }
-
   function handleDelete(id: string, name: string) {
     if (
-      !window.confirm(`Delete "${name}" globally? This can't be undone.`)
+      !window.confirm(`Delete "${name}"? This can't be undone.`)
     )
       return;
     startTransition(async () => {
@@ -158,7 +138,6 @@ export function PlaybookFormationsTab({
                 )
               }
               onCopy={handleCopy}
-              onRemoveFromPlaybook={handleRemoveFromPlaybook}
               onDelete={handleDelete}
             />
           ))}
@@ -190,32 +169,23 @@ function FormationCard({
   formation,
   onEdit,
   onCopy,
-  onRemoveFromPlaybook,
   onDelete,
 }: {
   formation: SavedFormation;
   onEdit: () => void;
   onCopy: (formation: SavedFormation) => void;
-  onRemoveFromPlaybook: (id: string, name: string) => void;
   onDelete: (id: string, name: string) => void;
 }) {
   const items: ActionMenuItem[] = [
-    { label: "Edit", icon: Pencil, onSelect: onEdit, disabled: formation.isSystem },
+    { label: "Edit", icon: Pencil, onSelect: onEdit },
     { label: "Copy", icon: Copy, onSelect: () => onCopy(formation) },
     {
-      label: "Remove from playbook",
-      icon: Link2Off,
-      onSelect: () => onRemoveFromPlaybook(formation.id, formation.displayName),
-    },
-  ];
-  if (!formation.isSystem) {
-    items.push({
-      label: "Delete globally",
+      label: "Delete",
       icon: Trash2,
       danger: true,
       onSelect: () => onDelete(formation.id, formation.displayName),
-    });
-  }
+    },
+  ];
 
   return (
     <Card hover className="relative flex flex-col p-0">
@@ -223,15 +193,11 @@ function FormationCard({
         type="button"
         onClick={onEdit}
         className="flex flex-1 flex-col p-4 text-left"
-        disabled={formation.isSystem}
       >
         <div className="flex items-start gap-1.5 pr-8">
           <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
             {formation.displayName}
           </h3>
-          {formation.isSystem && (
-            <Badge variant="default" className="shrink-0">System</Badge>
-          )}
         </div>
 
         <div className="mt-2">

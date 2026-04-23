@@ -222,6 +222,7 @@ function PlayEditorClientInner({
         doc.sportProfile,
         typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
         "offense",
+        playbookId,
       );
       if (!res.ok) {
         toast(res.error, "error");
@@ -238,7 +239,7 @@ function PlayEditorClientInner({
       toast(`Saved "${name}" as a new formation`, "success");
       router.refresh();
     },
-    [doc, dispatch, router, toast, blockIfPreview],
+    [doc, dispatch, router, toast, blockIfPreview, playbookId],
   );
 
   const navigateToPlay = useCallback(

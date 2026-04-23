@@ -63,14 +63,17 @@ export async function copyPlaybookContents(
   const { data: plays } = await client
     .from("plays")
     .select(
-      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id, group_id, sort_order, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot",
+      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id, group_id, sort_order, play_type, special_teams_unit, formation_id, opponent_formation_id, vs_play_id, vs_play_snapshot",
     )
     .eq("playbook_id", sourcePlaybookId)
     .eq("is_archived", false)
     .order("sort_order", { ascending: true });
 
-  const formationIdMap = await copyReferencedFormations(
-    plays ?? [],
+  // Clone every formation owned by the source playbook into the target.
+  // After the move to playbook-scoped formations, formations don't travel
+  // implicitly with the team — we must copy them alongside the plays.
+  const formationIdMap = await copySourcePlaybookFormations(
+    sourcePlaybookId,
     targetPlaybookId,
   );
 
@@ -84,9 +87,13 @@ export async function copyPlaybookContents(
     const newGroupId = oldGroupId
       ? groupIdMap.get(oldGroupId) ?? null
       : null;
-    const oldFormationId = (p.opponent_formation_id as string | null) ?? null;
-    const newOpponentFormationId = oldFormationId
-      ? formationIdMap.get(oldFormationId) ?? oldFormationId
+    const oldOppFormationId = (p.opponent_formation_id as string | null) ?? null;
+    const newOpponentFormationId = oldOppFormationId
+      ? formationIdMap.get(oldOppFormationId) ?? null
+      : null;
+    const oldFormationId = (p.formation_id as string | null) ?? null;
+    const newFormationId = oldFormationId
+      ? formationIdMap.get(oldFormationId) ?? null
       : null;
 
     const { data: newPlay } = await client
@@ -106,6 +113,7 @@ export async function copyPlaybookContents(
         sort_order: p.sort_order ?? 0,
         play_type: p.play_type ?? "offense",
         special_teams_unit: p.special_teams_unit,
+        formation_id: newFormationId,
         opponent_formation_id: newOpponentFormationId,
         vs_play_snapshot: p.vs_play_snapshot,
         // vs_play_id resolved in pass 2 below.
@@ -176,72 +184,39 @@ export async function copyPlaybookContents(
       .eq("id", link.newPlayId);
   }
 
-  await copyFormationExclusions(
-    sourcePlaybookId,
-    targetPlaybookId,
-    formationIdMap,
-  );
 }
 
-type PlayWithRefs = {
-  opponent_formation_id?: string | null;
-};
-
 /**
- * For each non-system formation referenced by a source play, insert a
- * copy under the target playbook's team and return the old→new id map.
- * System formations are shared globally; their ids pass through.
+ * Clone every formation owned by the source playbook into the target
+ * playbook and return the old→new id map. Formations are now
+ * playbook-scoped, so duplicating a playbook must duplicate its
+ * formations alongside its plays; nothing is shared implicitly.
  *
  * Uses the service role so a coach duplicating another team's playbook
- * (allowed via allow_coach_duplication) still gets the opponent
- * formations copied into their own team — the anon client can't SELECT
- * rows from a team they don't own.
+ * (allowed via allow_coach_duplication) can still read and clone the
+ * source's formations — the anon client can't SELECT rows from a
+ * playbook they don't own.
  */
-async function copyReferencedFormations(
-  plays: PlayWithRefs[],
+async function copySourcePlaybookFormations(
+  sourcePlaybookId: string,
   targetPlaybookId: string,
 ): Promise<Map<string, string>> {
-  const referenced = new Set<string>();
-  for (const p of plays) {
-    const fid = (p.opponent_formation_id as string | null) ?? null;
-    if (fid) referenced.add(fid);
-  }
   const map = new Map<string, string>();
-  if (referenced.size === 0) return map;
-
   const svc = createServiceRoleClient();
-
-  const { data: targetBook } = await svc
-    .from("playbooks")
-    .select("team_id")
-    .eq("id", targetPlaybookId)
-    .maybeSingle();
-  const targetTeamId = (targetBook?.team_id as string | null) ?? null;
-  if (!targetTeamId) return map;
 
   const { data: rows } = await svc
     .from("formations")
-    .select("id, team_id, is_system, semantic_key, params, kind")
-    .in("id", Array.from(referenced));
+    .select("id, semantic_key, params, kind")
+    .eq("playbook_id", sourcePlaybookId);
 
   for (const f of rows ?? []) {
     const fid = f.id as string;
-    if (f.is_system === true) {
-      // System formations are visible to everyone; reuse the id as-is.
-      map.set(fid, fid);
-      continue;
-    }
-    if (f.team_id === targetTeamId) {
-      // Already in the target team's library.
-      map.set(fid, fid);
-      continue;
-    }
     const { data: newF } = await svc
       .from("formations")
       .insert({
-        team_id: targetTeamId,
-        is_system: false,
-        semantic_key: f.semantic_key,
+        playbook_id: targetPlaybookId,
+        is_seed: false,
+        semantic_key: `copied_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         params: f.params,
         kind: f.kind,
       })
@@ -250,39 +225,4 @@ async function copyReferencedFormations(
     if (newF?.id) map.set(fid, newF.id as string);
   }
   return map;
-}
-
-/**
- * Carry the source playbook's formation exclusions into the duplicate so
- * its available-formations pool matches the source's. Exclusions that
- * point at formations we copied get their formation_id translated;
- * exclusions on system formations keep the same formation_id.
- */
-async function copyFormationExclusions(
-  sourcePlaybookId: string,
-  targetPlaybookId: string,
-  formationIdMap: Map<string, string>,
-): Promise<void> {
-  const svc = createServiceRoleClient();
-  const { data: excl } = await svc
-    .from("playbook_formation_exclusions")
-    .select("formation_id")
-    .eq("playbook_id", sourcePlaybookId);
-  if (!excl || excl.length === 0) return;
-
-  const rows = excl
-    .map((r) => {
-      const oldId = r.formation_id as string;
-      const newId = formationIdMap.get(oldId) ?? oldId;
-      return { playbook_id: targetPlaybookId, formation_id: newId };
-    })
-    // De-dupe in case two source formations collapsed to the same target id.
-    .filter(
-      (row, i, arr) =>
-        arr.findIndex((r) => r.formation_id === row.formation_id) === i,
-    );
-
-  await svc
-    .from("playbook_formation_exclusions")
-    .upsert(rows, { onConflict: "playbook_id,formation_id" });
 }

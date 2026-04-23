@@ -411,7 +411,6 @@ export function CopyToPlaybookDialog({
                         {destFormations.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.displayName}
-                            {f.isSystem ? " (system)" : ""}
                           </option>
                         ))}
                       </select>

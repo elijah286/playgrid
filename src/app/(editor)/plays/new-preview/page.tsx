@@ -63,7 +63,7 @@ export default async function PreviewNewPlayPage({ searchParams }: Props) {
   if (formationId) {
     const { data: f } = await supabase
       .from("formations")
-      .select("id, params, kind, is_system")
+      .select("id, params, kind, is_seed, playbook_id")
       .eq("id", formationId)
       .maybeSingle();
     const params = f?.params as
@@ -81,7 +81,8 @@ export default async function PreviewNewPlayPage({ searchParams }: Props) {
         displayName: params.displayName ?? "Formation",
         players: params.players,
         sportProfile: params.sportProfile ?? {},
-        isSystem: Boolean(f?.is_system),
+        isSeed: Boolean(f?.is_seed),
+        playbookId: (f?.playbook_id as string | null) ?? null,
         kind: (f?.kind as SavedFormation["kind"] | null) ?? "offense",
         losY:
           typeof params.lineOfScrimmageY === "number"

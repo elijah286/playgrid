@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, MousePointer } from "lucide-react";
 import Link from "next/link";
-import { saveFormationAction, updateFormationAction } from "@/app/actions/formations";
+import {
+  saveFormationAction,
+  saveFormationInPlaybooksAction,
+  updateFormationAction,
+} from "@/app/actions/formations";
 import {
   Button,
   Input,
@@ -130,7 +134,42 @@ export function FormationEditorClient(props: Props) {
         losY,
       );
     } else {
-      res = await saveFormationAction(trimmed, doc.layers.players, doc.sportProfile, losY);
+      // New formation: returnToPlaybook can be a single id or a comma-joined
+      // list (from the multi-select picker). In either case we save into
+      // every listed playbook.
+      const raw = props.returnToPlaybook ?? "";
+      const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      if (ids.length === 0) {
+        setSaving(false);
+        toast("Pick a playbook first.", "error");
+        return;
+      }
+      if (ids.length === 1) {
+        res = await saveFormationAction(
+          trimmed,
+          doc.layers.players,
+          doc.sportProfile,
+          losY,
+          "offense",
+          ids[0],
+        );
+      } else {
+        const multi = await saveFormationInPlaybooksAction(
+          trimmed,
+          doc.layers.players,
+          doc.sportProfile,
+          losY,
+          "offense",
+          ids,
+        );
+        if (multi.ok && multi.errors.length === 0) {
+          res = { ok: true };
+        } else if (multi.ok) {
+          res = { ok: false, error: `Saved to ${multi.created.length} of ${ids.length} playbooks.` };
+        } else {
+          res = { ok: false, error: multi.error };
+        }
+      }
     }
     if (!res.ok) {
       setSaving(false);
@@ -144,12 +183,13 @@ export function FormationEditorClient(props: Props) {
     // Return precedence: specific play editor > playbook Formations tab >
     // global formations list. Keeps users in the context they started from.
     const returnToPlay = props.mode === "new" ? props.returnToPlay : null;
-    const returnToPlaybook =
-      (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook : null;
+    const raw =
+      (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook ?? "" : "";
+    const firstPlaybook = raw.split(",").map((s) => s.trim()).filter(Boolean)[0] ?? null;
     const returnTo = returnToPlay
       ? `/plays/${returnToPlay}/edit`
-      : returnToPlaybook
-        ? `/playbooks/${returnToPlaybook}?tab=formations`
+      : firstPlaybook
+        ? `/playbooks/${firstPlaybook}?tab=formations`
         : "/formations";
     router.push(returnTo);
   }
@@ -158,12 +198,14 @@ export function FormationEditorClient(props: Props) {
   const fieldAspect =
     doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
 
-  const returnToPlaybookId =
-    (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook : null;
-  const backHref = returnToPlaybookId
-    ? `/playbooks/${returnToPlaybookId}?tab=formations`
+  const returnRaw =
+    (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook ?? "" : "";
+  const returnFirstPb =
+    returnRaw.split(",").map((s) => s.trim()).filter(Boolean)[0] ?? null;
+  const backHref = returnFirstPb
+    ? `/playbooks/${returnFirstPb}?tab=formations`
     : "/formations";
-  const backLabel = returnToPlaybookId ? "Playbook" : "Formations";
+  const backLabel = returnFirstPb ? "Playbook" : "Formations";
 
   return (
     <div className="flex flex-col gap-5">

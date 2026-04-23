@@ -264,6 +264,33 @@ export async function createPlaybookAction(
     .from("playbook_members")
     .insert({ playbook_id: data.id, user_id: user.id, role: "owner" });
 
+  // Clone every seed formation into the new playbook. Seeds are templates
+  // frozen at creation time — edits to the seed later only affect future
+  // playbooks. Filter seeds by sport_variant (stored in params) so a
+  // flag-football playbook doesn't inherit tackle formations.
+  const { data: seeds } = await supabase
+    .from("formations")
+    .select("params, kind")
+    .eq("is_seed", true);
+  if (seeds && seeds.length > 0) {
+    const rows = seeds
+      .filter((s) => {
+        const p = s.params as { sportProfile?: { variant?: string } } | null;
+        const v = p?.sportProfile?.variant ?? "flag_7v7";
+        return v === sportVariant;
+      })
+      .map((s) => ({
+        playbook_id: data.id,
+        is_seed: false,
+        semantic_key: `seeded_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        params: s.params,
+        kind: (s.kind as string | null) ?? "offense",
+      }));
+    if (rows.length > 0) {
+      await supabase.from("formations").insert(rows);
+    }
+  }
+
   return { ok: true as const, id: data.id };
 }
 

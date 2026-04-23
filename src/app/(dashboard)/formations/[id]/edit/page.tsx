@@ -19,10 +19,6 @@ export default async function EditFormationPage({
 
   const formation = result.formations.find((f) => f.id === id);
   if (!formation) notFound();
-  if (formation.isSystem) {
-    // System formations are read-only — redirect to list
-    notFound();
-  }
 
   const variant = (formation.sportProfile?.variant ?? "flag_7v7") as SportVariant;
 
