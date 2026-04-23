@@ -976,11 +976,11 @@ export function PrintPlaybookClient({
           )}
         </div>
         {pageCount > 0 ? (
-          <div className="relative flex min-h-0 flex-1 items-start justify-center">
+          <div className="relative flex min-h-0 flex-1 justify-center overflow-auto">
             <button
               type="button"
               className={cn(
-                "block w-full max-h-full overflow-hidden bg-white text-left shadow-elevated ring-1 ring-black/10 [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
+                "block h-fit w-full shrink-0 overflow-hidden bg-white text-left shadow-elevated ring-1 ring-black/10 [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
                 wristbandLocked && "pointer-events-none select-none blur-md",
               )}
               style={{ aspectRatio: pageAspect }}
