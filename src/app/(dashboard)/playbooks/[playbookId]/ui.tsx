@@ -66,6 +66,7 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  StickyNote,
   Trash2,
   X,
 } from "lucide-react";
@@ -1460,6 +1461,15 @@ function PlaybookDetailClientInner({
                               {p.tags.length > 0 && (
                                 <PlayTagChips tags={p.tags} />
                               )}
+                              {p.hasNotes && (
+                                <span
+                                  title="This play has notes"
+                                  aria-label="This play has notes"
+                                  className="inline-flex shrink-0 items-center text-muted"
+                                >
+                                  <StickyNote className="size-3.5" />
+                                </span>
+                              )}
                             </div>
                             <EditablePlayTitle
                               name={p.name}
@@ -1562,6 +1572,15 @@ function PlaybookDetailClientInner({
                             onRename={(next) => onRenamePlayInline(p.id, next)}
                             className="shrink-0 text-sm font-medium"
                           />
+                          {p.hasNotes && (
+                            <span
+                              title="This play has notes"
+                              aria-label="This play has notes"
+                              className="inline-flex shrink-0 items-center text-muted"
+                            >
+                              <StickyNote className="size-3.5" />
+                            </span>
+                          )}
                           {p.tags.length > 0 && (
                             <div className="hidden flex-wrap gap-1 md:flex">
                               {p.tags.slice(0, 3).map((t) => (
