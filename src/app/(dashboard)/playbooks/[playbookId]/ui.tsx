@@ -188,19 +188,11 @@ function PlaybookDetailClientInner({
 }) {
   const searchParams = useSearchParams();
   const initialTab = (() => {
-    // Explicit ?tab= in the URL wins over saved prefs — this is how deep
-    // links (e.g. "Invite" routing to ?tab=roster) keep working. Otherwise
-    // fall back to the user's last-viewed tab, else "plays".
+    // Explicit ?tab= in the URL wins — this is how deep links (e.g.
+    // "Invite" routing to ?tab=roster) keep working. Otherwise always
+    // land on Plays, since that's the primary surface of a playbook.
     const t = searchParams?.get("tab");
-    if (t === "formations" || t === "roster" || t === "staff") return t;
-    if (
-      initialPrefs?.tab === "formations" ||
-      initialPrefs?.tab === "roster" ||
-      initialPrefs?.tab === "staff" ||
-      initialPrefs?.tab === "plays"
-    ) {
-      return initialPrefs.tab;
-    }
+    if (t === "plays" || t === "formations" || t === "roster" || t === "staff") return t;
     return "plays";
   })();
   const [tab, setTab] = useState<"plays" | "formations" | "roster" | "staff">(
