@@ -11,10 +11,11 @@ import {
 
 export type FeedbackRow = {
   id: string;
-  userId: string;
+  userId: string | null;
   email: string | null;
   displayName: string | null;
   message: string;
+  source: "widget" | "contact";
   createdAt: string;
 };
 
@@ -64,27 +65,42 @@ export async function listFeedbackForAdminAction() {
   const admin = createServiceRoleClient();
   const { data: rows, error } = await admin
     .from("feedback")
-    .select("id, user_id, message, created_at")
+    .select("id, user_id, message, created_at, name, email, source")
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) return { ok: false as const, error: error.message, items: [] };
 
-  const userIds = Array.from(new Set((rows ?? []).map((r) => r.user_id as string)));
-  const [{ data: profiles }, authRes] = await Promise.all([
-    admin.from("profiles").select("id, display_name").in("id", userIds),
-    admin.auth.admin.listUsers({ perPage: 200, page: 1 }),
-  ]);
+  const userIds = Array.from(
+    new Set(
+      (rows ?? [])
+        .map((r) => r.user_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const [{ data: profiles }, authRes] = userIds.length
+    ? await Promise.all([
+        admin.from("profiles").select("id, display_name").in("id", userIds),
+        admin.auth.admin.listUsers({ perPage: 200, page: 1 }),
+      ])
+    : ([{ data: [] }, { data: { users: [] } }] as const);
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name as string | null]));
   const emailMap = new Map((authRes.data.users ?? []).map((u) => [u.id, u.email ?? null]));
 
-  const items: FeedbackRow[] = (rows ?? []).map((r) => ({
-    id: r.id as string,
-    userId: r.user_id as string,
-    email: emailMap.get(r.user_id as string) ?? null,
-    displayName: profileMap.get(r.user_id as string) ?? null,
-    message: r.message as string,
-    createdAt: r.created_at as string,
-  }));
+  const items: FeedbackRow[] = (rows ?? []).map((r) => {
+    const uid = (r.user_id as string | null) ?? null;
+    const source = (r.source as string) === "contact" ? "contact" : "widget";
+    return {
+      id: r.id as string,
+      userId: uid,
+      email: uid ? emailMap.get(uid) ?? null : (r.email as string | null) ?? null,
+      displayName: uid
+        ? profileMap.get(uid) ?? null
+        : (r.name as string | null) ?? null,
+      message: r.message as string,
+      source,
+      createdAt: r.created_at as string,
+    };
+  });
 
   return { ok: true as const, items };
 }

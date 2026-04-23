@@ -131,8 +131,15 @@ export function FeedbackAdminClient({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {item.displayName || item.email || item.userId}
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <span className="truncate">
+                      {item.displayName || item.email || item.userId || "Anonymous"}
+                    </span>
+                    {item.source === "contact" && (
+                      <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                        Contact form
+                      </span>
+                    )}
                   </p>
                   {item.email && item.displayName && (
                     <p className="truncate text-xs text-muted">{item.email}</p>

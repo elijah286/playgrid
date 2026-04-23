@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
 
@@ -56,7 +58,29 @@ export async function POST(req: Request) {
   }
   if (!toEmail) toEmail = process.env.CONTACT_TO_EMAIL ?? null;
 
+  // Always mirror the submission into the admin Feedback tab so nothing
+  // is lost when email delivery is misconfigured or bounces.
+  let savedToFeedback = false;
+  if (hasSupabaseEnv()) {
+    try {
+      const admin = createServiceRoleClient();
+      const { error } = await admin.from("feedback").insert({
+        user_id: null,
+        name,
+        email,
+        message,
+        source: "contact",
+      });
+      savedToFeedback = !error;
+    } catch {
+      /* non-fatal — email path below is still attempted */
+    }
+  }
+
   if (!apiKey || !toEmail) {
+    // If we at least persisted it for the admin, still call it a win —
+    // the sender's note reached us, just not via email.
+    if (savedToFeedback) return NextResponse.json({ ok: true });
     return NextResponse.json(
       { error: "Contact form is not configured. Please try again later." },
       { status: 503 },
@@ -76,10 +100,12 @@ export async function POST(req: Request) {
       html: `<p><strong>From:</strong> ${name} &lt;${email}&gt;</p><p style="white-space:pre-wrap">${safeMessage}</p>`,
     });
     if (error) {
+      if (savedToFeedback) return NextResponse.json({ ok: true });
       return NextResponse.json({ error: error.message ?? "Failed to send" }, { status: 502 });
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (savedToFeedback) return NextResponse.json({ ok: true });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to send" },
       { status: 502 },
