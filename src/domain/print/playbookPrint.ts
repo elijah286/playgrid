@@ -27,6 +27,7 @@ export type PrintNumberPosition =
   | "bottom-left"
   | "bottom-center"
   | "below-name";
+export type PrintTextPosition = "top-left" | "top-center" | "bottom-center";
 export type WristbandPlayerShape = "circle" | "x" | "diamond";
 
 export const WRISTBAND_WIDTHS_IN: readonly number[] = [
@@ -66,6 +67,14 @@ export type PlaybookPrintRunConfig = {
   playsheetNumberSize: number;
   /** Where to render the play-number chip. */
   playsheetNumberPosition: PrintNumberPosition;
+  /** Formation label size multiplier (1 = default). */
+  playsheetFormationSize: number;
+  /** Where to render the formation label. */
+  playsheetFormationPosition: PrintTextPosition;
+  /** Play name label size multiplier (1 = default). */
+  playsheetNameSize: number;
+  /** Where to render the play name label. */
+  playsheetNamePosition: PrintTextPosition;
   /** Wrap long formation/name labels onto a second line instead of truncating. */
   playsheetLabelWrap: boolean;
   playsheetColorCoding: boolean;
@@ -101,6 +110,14 @@ export type PlaybookPrintRunConfig = {
   wristbandNumberSize: number;
   /** Where to render the play-number chip. */
   wristbandNumberPosition: PrintNumberPosition;
+  /** Formation label size multiplier (1 = default). */
+  wristbandFormationSize: number;
+  /** Where to render the formation label. */
+  wristbandFormationPosition: PrintTextPosition;
+  /** Play name label size multiplier (1 = default). */
+  wristbandNameSize: number;
+  /** Where to render the play name label. */
+  wristbandNamePosition: PrintTextPosition;
   /** Wrap long formation/name labels onto a second line instead of truncating. */
   wristbandLabelWrap: boolean;
   /** Wristband: draw dark outline around player markers */
@@ -155,6 +172,10 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetHeaderFontSize: 1,
   playsheetNumberSize: 1,
   playsheetNumberPosition: "top-left",
+  playsheetFormationSize: 1,
+  playsheetFormationPosition: "top-center",
+  playsheetNameSize: 1,
+  playsheetNamePosition: "top-center",
   playsheetLabelWrap: false,
   playsheetColorCoding: false,
   playsheetLosIntensity: 0.5,
@@ -175,6 +196,10 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandHeaderFontSize: 1,
   wristbandNumberSize: 1,
   wristbandNumberPosition: "top-left",
+  wristbandFormationSize: 1,
+  wristbandFormationPosition: "top-center",
+  wristbandNameSize: 1,
+  wristbandNamePosition: "top-center",
   wristbandLabelWrap: false,
   wristbandPlayerOutline: false,
   wristbandColorCoding: true,

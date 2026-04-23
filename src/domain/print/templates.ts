@@ -32,6 +32,7 @@ import {
   type WristbandIconSize,
   type PrintLabelToggles,
   type PrintNumberPosition,
+  type PrintTextPosition,
   type WristbandRouteWeight,
   type WristbandZoom,
   wristbandGridDims,
@@ -264,6 +265,14 @@ export type PlayTileLookOptions = {
   numberSize: number;
   /** Where to render the play-number chip. */
   numberPosition: PrintNumberPosition;
+  /** Formation label size multiplier (1 = default). */
+  formationSize: number;
+  /** Where to render the formation label. */
+  formationPosition: PrintTextPosition;
+  /** Play name label size multiplier (1 = default). */
+  nameSize: number;
+  /** Where to render the play name label. */
+  namePosition: PrintTextPosition;
   /** Wrap long formation/name labels onto a second line. */
   labelWrap: boolean;
   colorCoding: boolean;
@@ -498,15 +507,20 @@ function renderPlaysheetCell(
   const labelColor = opts.colorCoding ? groupLabelColor(doc) : "#111827";
 
   const baseTitle = 2.6;
-  const title = baseTitle * opts.headerFontSize;
-  const lineH = title * 1.15;
-  const labelLineCount =
-    toggles.showFormation || toggles.showName
-      ? opts.labelWrap
-        ? 2
-        : 1
-      : 0;
-  const headerH = labelLineCount > 0 ? title * 0.3 + lineH * labelLineCount : 0;
+  const innerW = cw - padX * 2;
+  const topMetrics = computeTopHeaderMetrics({
+    doc,
+    toggles,
+    formationPosition: opts.formationPosition,
+    formationSize: opts.formationSize,
+    namePosition: opts.namePosition,
+    nameSize: opts.nameSize,
+    baseTitle,
+    fontScale: opts.headerFontSize,
+    innerW,
+    labelWrap: opts.labelWrap,
+  });
+  const headerH = topHeaderHeight(topMetrics);
   const fieldX = ox + padX;
   const fieldY = oy + padTop + headerH;
   const fieldW = cw - padX * 2;
@@ -521,6 +535,10 @@ function renderPlaysheetCell(
     labelColor,
     numberSize: opts.numberSize,
     numberPosition: opts.numberPosition,
+    formationSize: opts.formationSize,
+    formationPosition: opts.formationPosition,
+    nameSize: opts.nameSize,
+    namePosition: opts.namePosition,
     ox,
     oy,
     cw,
@@ -533,7 +551,7 @@ function renderPlaysheetCell(
     baseTitle,
   });
   const header = hdr.headerSvg;
-  const numberBox = hdr.numberBoxSvg;
+  const overlay = hdr.overlaySvg;
 
   const fieldWm = freeTier
     ? renderFieldFreeTierWatermark(fieldX, fieldY, fieldW, fieldH)
@@ -574,7 +592,7 @@ function renderPlaysheetCell(
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
     ${fieldWm}
     ${field}
-    ${numberBox}
+    ${overlay}
     ${notes}
   </g>`;
 }
@@ -724,6 +742,14 @@ export type WristbandGridOptions = {
   numberSize: number;
   /** Where to render the play-number chip. */
   numberPosition: PrintNumberPosition;
+  /** Formation label size multiplier (1 = default). */
+  formationSize: number;
+  /** Where to render the formation label. */
+  formationPosition: PrintTextPosition;
+  /** Play name label size multiplier (1 = default). */
+  nameSize: number;
+  /** Where to render the play name label. */
+  namePosition: PrintTextPosition;
   /** Wrap long formation/name labels onto a second line. */
   labelWrap: boolean;
   colorCoding: boolean;
@@ -840,6 +866,98 @@ function routeStrokeMm(weight: WristbandRouteWeight): number {
  * baseFont: starting font size in mm. Multiplied by `scale` from the user's
  * header-font-size slider.
  */
+type TopHeaderMetrics = {
+  /** Number of lines consumed at the top of the tile by formation/name labels. */
+  lines: number;
+  /** Effective font size used to size the reserved header band. */
+  lineFont: number;
+  /** True when formation and name share a top slot and fit on one line together. */
+  combined: boolean;
+  formationFont: number;
+  nameFont: number;
+  formation: string;
+  name: string;
+  hasTopFormation: boolean;
+  hasTopName: boolean;
+  formationLines: string[];
+  nameLines: string[];
+};
+
+function isTopPos(p: PrintTextPosition): boolean {
+  return p === "top-left" || p === "top-center";
+}
+
+function computeTopHeaderMetrics(args: {
+  doc: PlayDocument;
+  toggles: PrintLabelToggles;
+  formationPosition: PrintTextPosition;
+  formationSize: number;
+  namePosition: PrintTextPosition;
+  nameSize: number;
+  baseTitle: number;
+  fontScale: number;
+  innerW: number;
+  labelWrap: boolean;
+}): TopHeaderMetrics {
+  const formationFont = args.baseTitle * args.fontScale * Math.max(0.3, args.formationSize);
+  const nameFont = args.baseTitle * args.fontScale * Math.max(0.3, args.nameSize);
+  const lineFont = Math.max(formationFont, nameFont);
+  const formation = args.toggles.showFormation ? (args.doc.metadata.formation || "").trim() : "";
+  const name = args.toggles.showName ? (args.doc.metadata.coachName || "").trim() : "";
+  const hasTopFormation = formation.length > 0 && isTopPos(args.formationPosition);
+  const hasTopName = name.length > 0 && isTopPos(args.namePosition);
+  const charsPerLineFor = (font: number) =>
+    Math.max(6, Math.floor(args.innerW / (font * 0.52)));
+  const wrapSingle = (text: string, font: number): string[] => {
+    const chars = charsPerLineFor(font);
+    if (!args.labelWrap || text.length <= chars) return [text];
+    return wrapText(text, chars).slice(0, 2);
+  };
+  const base = {
+    lineFont,
+    formationFont,
+    nameFont,
+    formation,
+    name,
+    hasTopFormation,
+    hasTopName,
+    formationLines: [] as string[],
+    nameLines: [] as string[],
+  };
+  if (!hasTopFormation && !hasTopName) {
+    return { ...base, lines: 0, combined: false };
+  }
+  if (hasTopFormation && hasTopName && args.formationPosition === args.namePosition) {
+    const combinedText = `${formation}  ·  ${name}`;
+    if (combinedText.length <= charsPerLineFor(lineFont)) {
+      return { ...base, lines: 1, combined: true };
+    }
+    // Same top slot, can't fit — stack formation line 1, name line 2.
+    return {
+      ...base,
+      lines: 2,
+      combined: false,
+      formationLines: [formation],
+      nameLines: [name],
+    };
+  }
+  const fLines = hasTopFormation ? wrapSingle(formation, formationFont) : [];
+  const nLines = hasTopName ? wrapSingle(name, nameFont) : [];
+  const lines = Math.max(fLines.length, nLines.length);
+  return {
+    ...base,
+    lines,
+    combined: false,
+    formationLines: fLines,
+    nameLines: nLines,
+  };
+}
+
+function topHeaderHeight(m: TopHeaderMetrics): number {
+  if (m.lines === 0) return 0;
+  return m.lineFont * 0.3 + m.lineFont * 1.15 * m.lines;
+}
+
 function renderTileTextHeader(params: {
   doc: PlayDocument;
   toggles: PrintLabelToggles;
@@ -849,6 +967,10 @@ function renderTileTextHeader(params: {
   labelColor: string;
   numberSize: number;
   numberPosition: PrintNumberPosition;
+  formationSize: number;
+  formationPosition: PrintTextPosition;
+  nameSize: number;
+  namePosition: PrintTextPosition;
   // Tile bounds
   ox: number;
   oy: number;
@@ -862,7 +984,7 @@ function renderTileTextHeader(params: {
   fieldH: number;
   // Base title font in mm (before scale)
   baseTitle: number;
-}): { headerSvg: string; numberBoxSvg: string; headerH: number } {
+}): { headerSvg: string; overlaySvg: string; headerH: number } {
   const {
     doc,
     toggles,
@@ -872,6 +994,10 @@ function renderTileTextHeader(params: {
     labelColor,
     numberSize,
     numberPosition,
+    formationSize,
+    formationPosition,
+    nameSize,
+    namePosition,
     ox,
     oy,
     cw,
@@ -884,38 +1010,78 @@ function renderTileTextHeader(params: {
     baseTitle,
   } = params;
 
-  const title = baseTitle * fontScale;
-  const formation = toggles.showFormation ? (doc.metadata.formation || "").trim() : "";
-  const name = toggles.showName ? (doc.metadata.coachName || "").trim() : "";
-  const parts = [formation, name].filter((s) => s.length > 0);
-  const combined = parts.join("  ·  ");
+  const innerW = cw - padX * 2;
+  const metrics = computeTopHeaderMetrics({
+    doc,
+    toggles,
+    formationPosition,
+    formationSize,
+    namePosition,
+    nameSize,
+    baseTitle,
+    fontScale,
+    innerW,
+    labelWrap,
+  });
+  const { formation, name, hasTopFormation, hasTopName, combined, formationFont, nameFont, lineFont, formationLines, nameLines } = metrics;
+  const headerH = topHeaderHeight(metrics);
+  const lineH = lineFont * 1.15;
+  const topBaselineY = oy + padTop + lineFont * 0.95;
+  const fontWeight = colorCoding ? "600" : "500";
+
+  function textAttrs(pos: PrintTextPosition): { x: number; anchor: string } {
+    if (pos === "top-left") return { x: ox + padX, anchor: "start" };
+    return { x: ox + cw / 2, anchor: "middle" };
+  }
 
   let headerSvg = "";
-  let headerH = 0;
-  let headerLines = 0;
-  const lineH = title * 1.15;
-
   if (combined) {
-    const innerW = cw - padX * 2;
-    const approxCharW = title * 0.52;
-    const charsPerLine = Math.max(6, Math.floor(innerW / approxCharW));
-    const lines =
-      labelWrap && combined.length > charsPerLine
-        ? wrapText(combined, charsPerLine).slice(0, 2)
-        : [combined];
-    const topY = oy + padTop + title * 0.95;
-    lines.forEach((line, i) => {
-      headerSvg += `<text x="${ox + cw / 2}" y="${topY + i * lineH}" text-anchor="middle" font-size="${title}" font-weight="${colorCoding ? "600" : "500"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
-    });
-    headerH = title * 0.3 + lineH * lines.length;
-    headerLines = lines.length;
+    const { x, anchor } = textAttrs(formationPosition);
+    headerSvg += `<text x="${x}" y="${topBaselineY}" text-anchor="${anchor}" font-size="${lineFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(`${formation}  ·  ${name}`)}</text>`;
+  } else {
+    if (hasTopFormation) {
+      const { x, anchor } = textAttrs(formationPosition);
+      formationLines.forEach((line, i) => {
+        headerSvg += `<text x="${x}" y="${topBaselineY + i * lineH}" text-anchor="${anchor}" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+      });
+    }
+    if (hasTopName) {
+      const { x, anchor } = textAttrs(namePosition);
+      const sameSlot =
+        hasTopFormation && formationPosition === namePosition;
+      // When both labels share the same top slot, stack formation on line 1 and
+      // name on line 2. Otherwise the name label uses its own top row.
+      const nameRowOffset = sameSlot ? formationLines.length : 0;
+      nameLines.forEach((line, i) => {
+        headerSvg += `<text x="${x}" y="${topBaselineY + (nameRowOffset + i) * lineH}" text-anchor="${anchor}" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+      });
+    }
+  }
+
+  // Bottom-center labels are painted over the bottom of the field rect.
+  let bottomSvg = "";
+  const bottomInset = 0.6;
+  const hasBottomFormation =
+    formation.length > 0 && formationPosition === "bottom-center";
+  const hasBottomName = name.length > 0 && namePosition === "bottom-center";
+  if (hasBottomFormation && hasBottomName) {
+    // Stack formation above name, flush to the bottom of the field.
+    const nameBaselineY = fieldY + fieldH - bottomInset;
+    const formationBaselineY = nameBaselineY - nameFont * 1.15;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${formationBaselineY}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${nameBaselineY}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
+  } else if (hasBottomFormation) {
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
+  } else if (hasBottomName) {
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
   }
 
   let numberBoxSvg = "";
   if (toggles.showNumber) {
     const code = (doc.metadata.wristbandCode || "").trim();
     if (code) {
-      const chipFont = title * 1.05 * Math.max(0.3, numberSize);
+      const baseChipFont = baseTitle * fontScale;
+      const chipFont = baseChipFont * 1.05 * Math.max(0.3, numberSize);
       const boxH = Math.max(3.2 * numberSize, chipFont * 1.3);
       const boxPad = 0.8;
       const approxCharW = chipFont * 0.66;
@@ -932,13 +1098,11 @@ function renderTileTextHeader(params: {
         bx = fieldX + (fieldW - boxW) / 2;
         by = fieldY + fieldH - boxH;
       } else if (numberPosition === "below-name") {
-        // Centered across the tile, directly below the name text. If no name
-        // is shown, fall back to the top of the field.
+        // Centered across the tile, directly below the last top-label line.
         bx = ox + (cw - boxW) / 2;
-        const topY = oy + padTop + title * 0.95;
         by =
-          headerLines > 0
-            ? topY + lineH * (headerLines - 1) + title * 0.4
+          metrics.lines > 0
+            ? topBaselineY + lineH * (metrics.lines - 1) + lineFont * 0.4
             : fieldY;
       }
       numberBoxSvg = `
@@ -949,7 +1113,7 @@ function renderTileTextHeader(params: {
     }
   }
 
-  return { headerSvg, numberBoxSvg, headerH };
+  return { headerSvg, overlaySvg: bottomSvg + numberBoxSvg, headerH };
 }
 
 function groupLabelColor(doc: PlayDocument): string {
@@ -1038,12 +1202,21 @@ function renderWristbandTile(
 
   const padScale = opts.cellPadding ?? 1;
   const baseTitle = 2.6;
-  const title = baseTitle * opts.headerFontSize;
-  const lineH = title * 1.15;
-  const hasText = toggles.showFormation || toggles.showName;
-  const labelLineCount = hasText ? (opts.labelWrap ? 2 : 1) : 0;
-  const headerH = labelLineCount > 0 ? title * 0.3 + lineH * labelLineCount : 0;
   const fieldPadX = cw * 0.04 * padScale;
+  const innerW = cw - fieldPadX * 2;
+  const topMetrics = computeTopHeaderMetrics({
+    doc,
+    toggles,
+    formationPosition: opts.formationPosition,
+    formationSize: opts.formationSize,
+    namePosition: opts.namePosition,
+    nameSize: opts.nameSize,
+    baseTitle,
+    fontScale: opts.headerFontSize,
+    innerW,
+    labelWrap: opts.labelWrap,
+  });
+  const headerH = topHeaderHeight(topMetrics);
   const fieldPadTop = headerH;
   const fieldPadBottom = cw * 0.03 * padScale;
   const fieldOuterW = cw - fieldPadX * 2;
@@ -1065,6 +1238,10 @@ function renderWristbandTile(
     labelColor,
     numberSize: opts.numberSize,
     numberPosition: opts.numberPosition,
+    formationSize: opts.formationSize,
+    formationPosition: opts.formationPosition,
+    nameSize: opts.nameSize,
+    namePosition: opts.namePosition,
     ox,
     oy,
     cw,
@@ -1077,7 +1254,7 @@ function renderWristbandTile(
     baseTitle,
   });
   const header = hdr.headerSvg;
-  const numberBox = hdr.numberBoxSvg;
+  const overlay = hdr.overlaySvg;
 
   const fit = computeFitScale(doc);
 
@@ -1113,7 +1290,7 @@ function renderWristbandTile(
     ${guides}
     ${routes}
     ${players}
-    ${numberBox}
+    ${overlay}
   </g>`;
 }
 
