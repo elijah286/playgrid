@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { PlayType, Player, SportProfile } from "@/domain/play/types";
@@ -25,6 +26,10 @@ export type SavedFormation = {
   playbookName?: string;
   /** Seeds are admin-managed templates cloned into new playbooks. */
   isSeed: boolean;
+  /** Per-playbook ordering (0-based). Seeds share 0. */
+  sortOrder: number;
+  /** Archived formations are hidden from the default view. */
+  isArchived: boolean;
 };
 
 type FormationParams = {
@@ -41,6 +46,8 @@ function rowToFormation(row: {
   params: FormationParams | Record<string, unknown> | null;
   kind: string | null;
   playbooks?: { name: string } | null;
+  sort_order?: number | null;
+  is_archived?: boolean | null;
 }): SavedFormation {
   const params = (row.params ?? {}) as FormationParams;
   return {
@@ -53,6 +60,8 @@ function rowToFormation(row: {
     playbookId: row.playbook_id,
     playbookName: row.playbooks?.name,
     isSeed: Boolean(row.is_seed),
+    sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
+    isArchived: Boolean(row.is_archived),
   };
 }
 
@@ -75,7 +84,7 @@ export async function listFormationsAction(): Promise<
 
   const { data, error } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind, playbooks!inner(name)")
+    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived, playbooks!inner(name)")
     .eq("is_seed", false);
   if (error) return { ok: false, error: error.message };
 
@@ -108,7 +117,7 @@ export async function listSeedFormationsAction(): Promise<
 
   const { data, error } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind")
+    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived")
     .eq("is_seed", true);
   if (error) return { ok: false, error: error.message };
 
@@ -142,6 +151,8 @@ export async function saveFormationAction(
     lineOfScrimmageY: losY,
   };
 
+  const nextSortOrder = await getNextFormationSortOrder(supabase, playbookId);
+
   const { data, error } = await supabase
     .from("formations")
     .insert({
@@ -150,6 +161,7 @@ export async function saveFormationAction(
       semantic_key: `custom_${Date.now()}`,
       params: params as unknown as Record<string, unknown>,
       kind,
+      sort_order: nextSortOrder,
     })
     .select("id")
     .single();
@@ -157,6 +169,21 @@ export async function saveFormationAction(
   if (error) return { ok: false, error: error.message };
 
   return { ok: true, formationId: data.id as string };
+}
+
+async function getNextFormationSortOrder(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playbookId: string,
+): Promise<number> {
+  const { data } = await supabase
+    .from("formations")
+    .select("sort_order")
+    .eq("playbook_id", playbookId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const max = (data?.sort_order as number | null | undefined) ?? -1;
+  return max + 1;
 }
 
 /**
@@ -286,6 +313,8 @@ export async function duplicateFormationAction(
     displayName: `${srcParams.displayName} (copy)`,
   };
 
+  const nextSortOrder = await getNextFormationSortOrder(supabase, src.playbook_id);
+
   const { data, error } = await supabase
     .from("formations")
     .insert({
@@ -294,6 +323,7 @@ export async function duplicateFormationAction(
       semantic_key: `custom_${Date.now()}`,
       params: nextParams as unknown as Record<string, unknown>,
       kind: (src.kind as string | null) ?? "offense",
+      sort_order: nextSortOrder,
     })
     .select("id")
     .single();
@@ -369,6 +399,8 @@ export async function copyFormationAction(params: {
 
   const nextParams: FormationParams = { ...srcParams, displayName: newName };
 
+  const nextSortOrder = await getNextFormationSortOrder(supabase, destinationPlaybookId);
+
   const { data: inserted, error: insErr } = await supabase
     .from("formations")
     .insert({
@@ -377,6 +409,7 @@ export async function copyFormationAction(params: {
       semantic_key: `custom_${Date.now()}`,
       params: nextParams as unknown as Record<string, unknown>,
       kind: (src.kind as string | null) ?? "offense",
+      sort_order: nextSortOrder,
     })
     .select("id")
     .single();
@@ -429,8 +462,9 @@ export async function listFormationsForPlaybookAction(
 
   const { data: rows, error: fErr } = await supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind")
-    .eq("playbook_id", playbookId);
+    .select("id, playbook_id, is_seed, params, kind, sort_order, is_archived")
+    .eq("playbook_id", playbookId)
+    .order("sort_order", { ascending: true });
   if (fErr) return { ok: false, error: fErr.message };
 
   const formations = (rows ?? [])
@@ -604,6 +638,78 @@ export async function removeSeedFormationAction(
   if (!user) return { ok: false, error: "Not signed in." };
 
   const { error } = await supabase.from("formations").delete().eq("id", seedId).eq("is_seed", true);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function reorderFormationsAction(
+  playbookId: string,
+  orderedFormationIds: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  for (let i = 0; i < orderedFormationIds.length; i++) {
+    const { error } = await supabase
+      .from("formations")
+      .update({ sort_order: i })
+      .eq("id", orderedFormationIds[i])
+      .eq("playbook_id", playbookId);
+    if (error) return { ok: false, error: error.message };
+  }
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+export async function swapFormationSortOrderAction(
+  playbookId: string,
+  aId: string,
+  bId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { data: rows, error: readErr } = await supabase
+    .from("formations")
+    .select("id, sort_order")
+    .eq("playbook_id", playbookId)
+    .in("id", [aId, bId]);
+  if (readErr) return { ok: false, error: readErr.message };
+  const a = rows?.find((r) => r.id === aId);
+  const b = rows?.find((r) => r.id === bId);
+  if (!a || !b) return { ok: false, error: "Formations not found." };
+  const aOrder = (a.sort_order as number | null) ?? 0;
+  const bOrder = (b.sort_order as number | null) ?? 0;
+  const { error: e1 } = await supabase
+    .from("formations")
+    .update({ sort_order: bOrder })
+    .eq("id", aId)
+    .eq("playbook_id", playbookId);
+  if (e1) return { ok: false, error: e1.message };
+  const { error: e2 } = await supabase
+    .from("formations")
+    .update({ sort_order: aOrder })
+    .eq("id", bId)
+    .eq("playbook_id", playbookId);
+  if (e2) return { ok: false, error: e2.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+export async function archiveFormationAction(
+  formationId: string,
+  archived: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { error } = await supabase
+    .from("formations")
+    .update({ is_archived: archived })
+    .eq("id", formationId);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

@@ -88,6 +88,8 @@ export default async function PreviewNewPlayPage({ searchParams }: Props) {
           typeof params.lineOfScrimmageY === "number"
             ? params.lineOfScrimmageY
             : 0.4,
+        sortOrder: 0,
+        isArchived: false,
       };
     }
   }
