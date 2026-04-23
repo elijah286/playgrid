@@ -31,6 +31,7 @@ import {
   type WristbandGridLayout,
   type WristbandIconSize,
   type PrintLabelToggles,
+  type PrintNumberPosition,
   type WristbandRouteWeight,
   type WristbandZoom,
   wristbandGridDims,
@@ -259,6 +260,10 @@ export type PlayTileLookOptions = {
   labels: PrintLabelToggles;
   /** Multiplier applied to base header font sizes (1 = default). */
   headerFontSize: number;
+  /** Number chip size multiplier (1 = default). */
+  numberSize: number;
+  /** Where to render the play-number chip. */
+  numberPosition: PrintNumberPosition;
   /** Wrap long formation/name labels onto a second line. */
   labelWrap: boolean;
   colorCoding: boolean;
@@ -514,6 +519,8 @@ function renderPlaysheetCell(
     labelWrap: opts.labelWrap,
     colorCoding: opts.colorCoding,
     labelColor,
+    numberSize: opts.numberSize,
+    numberPosition: opts.numberPosition,
     ox,
     oy,
     cw,
@@ -521,6 +528,8 @@ function renderPlaysheetCell(
     padTop,
     fieldX,
     fieldY,
+    fieldW,
+    fieldH,
     baseTitle,
   });
   const header = hdr.headerSvg;
@@ -711,6 +720,10 @@ export type WristbandGridOptions = {
   labels: PrintLabelToggles;
   /** Multiplier applied to base header font sizes (1 = default). */
   headerFontSize: number;
+  /** Number chip size multiplier (1 = default). */
+  numberSize: number;
+  /** Where to render the play-number chip. */
+  numberPosition: PrintNumberPosition;
   /** Wrap long formation/name labels onto a second line. */
   labelWrap: boolean;
   colorCoding: boolean;
@@ -834,15 +847,19 @@ function renderTileTextHeader(params: {
   labelWrap: boolean;
   colorCoding: boolean;
   labelColor: string;
+  numberSize: number;
+  numberPosition: PrintNumberPosition;
   // Tile bounds
   ox: number;
   oy: number;
   cw: number;
   padX: number;
   padTop: number;
-  // Field position (used to place the corner number box)
+  // Field rect (for corner chip placement)
   fieldX: number;
   fieldY: number;
+  fieldW: number;
+  fieldH: number;
   // Base title font in mm (before scale)
   baseTitle: number;
 }): { headerSvg: string; numberBoxSvg: string; headerH: number } {
@@ -853,6 +870,8 @@ function renderTileTextHeader(params: {
     labelWrap,
     colorCoding,
     labelColor,
+    numberSize,
+    numberPosition,
     ox,
     oy,
     cw,
@@ -860,6 +879,8 @@ function renderTileTextHeader(params: {
     padTop,
     fieldX,
     fieldY,
+    fieldW,
+    fieldH,
     baseTitle,
   } = params;
 
@@ -871,6 +892,8 @@ function renderTileTextHeader(params: {
 
   let headerSvg = "";
   let headerH = 0;
+  let headerLines = 0;
+  const lineH = title * 1.15;
 
   if (combined) {
     const innerW = cw - padX * 2;
@@ -880,28 +903,48 @@ function renderTileTextHeader(params: {
       labelWrap && combined.length > charsPerLine
         ? wrapText(combined, charsPerLine).slice(0, 2)
         : [combined];
-    const lineH = title * 1.15;
     const topY = oy + padTop + title * 0.95;
     lines.forEach((line, i) => {
       headerSvg += `<text x="${ox + cw / 2}" y="${topY + i * lineH}" text-anchor="middle" font-size="${title}" font-weight="${colorCoding ? "600" : "500"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
     });
     headerH = title * 0.3 + lineH * lines.length;
+    headerLines = lines.length;
   }
 
   let numberBoxSvg = "";
   if (toggles.showNumber) {
     const code = (doc.metadata.wristbandCode || "").trim();
     if (code) {
-      const boxH = Math.max(3.2, title * 1.35);
+      const chipFont = title * 1.05 * Math.max(0.3, numberSize);
+      const boxH = Math.max(3.2 * numberSize, chipFont * 1.3);
       const boxPad = 0.8;
-      const approxCharW = title * 0.7;
+      const approxCharW = chipFont * 0.66;
       const boxW = Math.max(boxH * 0.9, code.length * approxCharW + boxPad * 2);
-      const bx = fieldX;
-      const by = fieldY;
+      let bx = fieldX;
+      let by = fieldY;
+      if (numberPosition === "top-left") {
+        bx = fieldX;
+        by = fieldY;
+      } else if (numberPosition === "bottom-left") {
+        bx = fieldX;
+        by = fieldY + fieldH - boxH;
+      } else if (numberPosition === "bottom-center") {
+        bx = fieldX + (fieldW - boxW) / 2;
+        by = fieldY + fieldH - boxH;
+      } else if (numberPosition === "below-name") {
+        // Centered across the tile, directly below the name text. If no name
+        // is shown, fall back to the top of the field.
+        bx = ox + (cw - boxW) / 2;
+        const topY = oy + padTop + title * 0.95;
+        by =
+          headerLines > 0
+            ? topY + lineH * (headerLines - 1) + title * 0.4
+            : fieldY;
+      }
       numberBoxSvg = `
   <g>
     <rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#0f172a" rx="0.6"/>
-    <text x="${bx + boxW / 2}" y="${by + boxH * 0.72}" text-anchor="middle" font-size="${title * 1.05}" font-weight="700" font-family="Helvetica,Arial,sans-serif" fill="#ffffff">${escSvgText(code)}</text>
+    <text x="${bx + boxW / 2}" y="${by + boxH * 0.72}" text-anchor="middle" font-size="${chipFont}" font-weight="700" font-family="Helvetica,Arial,sans-serif" fill="#ffffff">${escSvgText(code)}</text>
   </g>`;
     }
   }
@@ -1020,6 +1063,8 @@ function renderWristbandTile(
     labelWrap: opts.labelWrap,
     colorCoding: opts.colorCoding,
     labelColor,
+    numberSize: opts.numberSize,
+    numberPosition: opts.numberPosition,
     ox,
     oy,
     cw,
@@ -1027,6 +1072,8 @@ function renderWristbandTile(
     padTop: 0,
     fieldX,
     fieldY,
+    fieldW,
+    fieldH,
     baseTitle,
   });
   const header = hdr.headerSvg;

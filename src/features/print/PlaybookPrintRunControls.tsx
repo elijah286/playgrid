@@ -377,6 +377,33 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                   className="accent-primary"
                 />
               </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">
+                  Number size · {Math.round(config.playsheetNumberSize * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={50}
+                  max={250}
+                  step={5}
+                  value={Math.round(config.playsheetNumberSize * 100)}
+                  onChange={(e) =>
+                    patch({ playsheetNumberSize: Number(e.target.value) / 100 })
+                  }
+                  className="accent-primary"
+                />
+              </label>
+              <PillGroup
+                label="Number position"
+                value={config.playsheetNumberPosition}
+                options={[
+                  { value: "top-left", label: "Top left" },
+                  { value: "bottom-left", label: "Bottom left" },
+                  { value: "bottom-center", label: "Bottom middle" },
+                  { value: "below-name", label: "Below name" },
+                ]}
+                onChange={(v) => patch({ playsheetNumberPosition: v })}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -615,6 +642,33 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                   className="accent-primary"
                 />
               </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">
+                  Number size · {Math.round(config.wristbandNumberSize * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={50}
+                  max={250}
+                  step={5}
+                  value={Math.round(config.wristbandNumberSize * 100)}
+                  onChange={(e) =>
+                    patch({ wristbandNumberSize: Number(e.target.value) / 100 })
+                  }
+                  className="accent-primary"
+                />
+              </label>
+              <PillGroup
+                label="Number position"
+                value={config.wristbandNumberPosition}
+                options={[
+                  { value: "top-left", label: "Top left" },
+                  { value: "bottom-left", label: "Bottom left" },
+                  { value: "bottom-center", label: "Bottom middle" },
+                  { value: "below-name", label: "Below name" },
+                ]}
+                onChange={(v) => patch({ wristbandNumberPosition: v })}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

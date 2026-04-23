@@ -22,6 +22,11 @@ export type PrintLabelToggles = {
   showFormation: boolean;
   showName: boolean;
 };
+export type PrintNumberPosition =
+  | "top-left"
+  | "bottom-left"
+  | "bottom-center"
+  | "below-name";
 export type WristbandPlayerShape = "circle" | "x" | "diamond";
 
 export const WRISTBAND_WIDTHS_IN: readonly number[] = [
@@ -57,6 +62,10 @@ export type PlaybookPrintRunConfig = {
   playsheetLabels: PrintLabelToggles;
   /** Header text size multiplier (e.g. 0.5 = 50%, 1 = default, 2 = 200%). */
   playsheetHeaderFontSize: number;
+  /** Number chip size multiplier (1 = default). */
+  playsheetNumberSize: number;
+  /** Where to render the play-number chip. */
+  playsheetNumberPosition: PrintNumberPosition;
   /** Wrap long formation/name labels onto a second line instead of truncating. */
   playsheetLabelWrap: boolean;
   playsheetColorCoding: boolean;
@@ -88,6 +97,10 @@ export type PlaybookPrintRunConfig = {
   wristbandLabels: PrintLabelToggles;
   /** Header text size multiplier (e.g. 0.5 = 50%, 1 = default, 2 = 200%). */
   wristbandHeaderFontSize: number;
+  /** Number chip size multiplier (1 = default). */
+  wristbandNumberSize: number;
+  /** Where to render the play-number chip. */
+  wristbandNumberPosition: PrintNumberPosition;
   /** Wrap long formation/name labels onto a second line instead of truncating. */
   wristbandLabelWrap: boolean;
   /** Wristband: draw dark outline around player markers */
@@ -140,6 +153,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetArrowSize: "medium",
   playsheetLabels: { showNumber: true, showFormation: false, showName: true },
   playsheetHeaderFontSize: 1,
+  playsheetNumberSize: 1,
+  playsheetNumberPosition: "top-left",
   playsheetLabelWrap: false,
   playsheetColorCoding: false,
   playsheetLosIntensity: 0.5,
@@ -158,6 +173,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandArrowSize: "medium",
   wristbandLabels: { showNumber: true, showFormation: false, showName: false },
   wristbandHeaderFontSize: 1,
+  wristbandNumberSize: 1,
+  wristbandNumberPosition: "top-left",
   wristbandLabelWrap: false,
   wristbandPlayerOutline: false,
   wristbandColorCoding: true,
