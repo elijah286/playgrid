@@ -193,7 +193,9 @@ export function CopyToPlaybookDialog({
       }
 
       // Play
-      const mode: CopyPlayFormationMode = destinationIsCurrent ? "copy" : formationMode;
+      // Same playbook: link to the existing formation (no deep-clone).
+      // Cross-playbook: user picks copy/unlink/pick in the dialog.
+      const mode: CopyPlayFormationMode = destinationIsCurrent ? "link" : formationMode;
       const res = await copyPlayAction({
         playId: target.playId,
         destinationPlaybookId: destinationId,

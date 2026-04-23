@@ -779,12 +779,16 @@ export async function duplicatePlayAction(
   return { ok: true as const, playId: play.id };
 }
 
-export type CopyPlayFormationMode = "copy" | "unlink" | "pick";
+export type CopyPlayFormationMode = "link" | "copy" | "unlink" | "pick";
 
 /**
  * Copy a play into another playbook (or the current one). Deep-clones the
  * play's current version — no shared references, no version history carried
  * over. Formation is handled per `formationMode`:
+ *  - "link":   keep the source formation link as-is. Only valid when the
+ *              destination is the same playbook (formations are playbook-
+ *              scoped). This is the right default for same-playbook copies
+ *              — the formation already exists there, so no need to clone.
  *  - "copy":   deep-clone the source formation into the destination's team
  *              (with " 2" suffix on name collision).
  *  - "unlink": strip the formation link; players/routes travel as-is.
@@ -887,7 +891,29 @@ export async function copyPlayAction(params: {
   let formationRenamed = false;
   let formationNewName: string | null = null;
 
-  if (formationMode === "unlink") {
+  if (formationMode === "link") {
+    // No-op: keep the source formation link intact. Only makes sense when
+    // the destination is the same playbook, since formations are playbook-
+    // scoped. Guard against misuse cross-playbook.
+    if (doc.metadata.formationId) {
+      const { data: linkedFormation } = await supabase
+        .from("formations")
+        .select("playbook_id")
+        .eq("id", doc.metadata.formationId)
+        .maybeSingle();
+      if (
+        linkedFormation &&
+        linkedFormation.playbook_id &&
+        linkedFormation.playbook_id !== destinationPlaybookId
+      ) {
+        return {
+          ok: false as const,
+          error:
+            "Can't link to a formation from a different playbook. Copy or pick a destination formation instead.",
+        };
+      }
+    }
+  } else if (formationMode === "unlink") {
     doc.metadata.formationId = null;
     doc.metadata.formation = "";
     doc.metadata.formationTag = "";
