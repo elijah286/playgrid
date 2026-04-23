@@ -647,6 +647,7 @@ function renderFieldContents(
     guides += `<line x1="${fieldX}" y1="${ly}" x2="${fieldX + fieldW}" y2="${ly}" stroke="#475569" stroke-width="${Math.max(0.2, fieldMin * 0.008 * losI)}" opacity="${losI}"/>`;
   }
 
+  const zones = renderZones(doc, fieldX, fieldY, fieldW, fieldH, fit, fieldMin);
   const routes = renderRoutesAndArrows(doc, fieldX, fieldY, fieldW, fieldH, strokeW, fieldMin, look.arrowSize, fit);
 
   let players = "";
@@ -659,7 +660,38 @@ function renderFieldContents(
     }
   }
 
-  return guides + routes + players;
+  return guides + zones + routes + players;
+}
+
+/** Defensive coverage zones — rectangles or ellipses rendered beneath routes
+ *  and players so the markers stay legible over them. Mirrors the editor
+ *  canvas styling (dashed stroke, semi-transparent fill). */
+function renderZones(
+  doc: PlayDocument,
+  fieldX: number,
+  fieldY: number,
+  fieldW: number,
+  fieldH: number,
+  fit: number,
+  fieldMin: number,
+): string {
+  const list = doc.layers.zones ?? [];
+  if (list.length === 0) return "";
+  const sw = Math.max(0.15, fieldMin * 0.006);
+  const dash = `${(sw * 4).toFixed(2)} ${(sw * 2.5).toFixed(2)}`;
+  let out = "";
+  for (const z of list) {
+    const cx = fieldX + fitX(z.center.x, fit) * fieldW;
+    const cy = fieldY + (1 - fitY(z.center.y, fit)) * fieldH;
+    const rx = z.size.w * fieldW * fit;
+    const ry = z.size.h * fieldH * fit;
+    if (z.kind === "rectangle") {
+      out += `<rect x="${cx - rx}" y="${cy - ry}" width="${rx * 2}" height="${ry * 2}" fill="${z.style.fill}" stroke="${z.style.stroke}" stroke-width="${sw}" stroke-dasharray="${dash}"/>`;
+    } else {
+      out += `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${z.style.fill}" stroke="${z.style.stroke}" stroke-width="${sw}" stroke-dasharray="${dash}"/>`;
+    }
+  }
+  return out;
 }
 
 /** Arrow rendered at each terminal segment's tip (matches editor logic). */
@@ -1309,12 +1341,14 @@ function renderWristbandTile(
   const bt = Math.max(0, Math.min(2, opts.borderThickness ?? 1));
   const outerStroke = bt === 0 ? "none" : "#cbd5e1";
   const innerStroke = bt === 0 ? "none" : "#e2e8f0";
+  const zones = renderZones(doc, fieldX, fieldY, fieldW, fieldH, fit, Math.min(fieldW, fieldH));
   return `
   <g>
     <rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${0.25 * bt}"/>
     ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
     ${guides}
+    ${zones}
     ${routes}
     ${players}
     ${overlay}
