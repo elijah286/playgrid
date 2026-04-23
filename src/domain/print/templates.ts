@@ -470,7 +470,7 @@ function renderPlaysheetPage(
   ${headerSvg}
   ${body}
   ${watermarkSvg(w, h, watermark)}
-  ${playsheetFooterSvg(w, h)}
+  ${freeTier ? playsheetFooterSvg(w, h) : ""}
 </svg>`;
 }
 
