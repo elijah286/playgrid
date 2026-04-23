@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,11 +55,18 @@ export function PlaybookPlaySearchMenu({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const activeTileRef = useRef<HTMLElement>(null);
+  const [mobileTop, setMobileTop] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onEsc(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -70,6 +77,43 @@ export function PlaybookPlaySearchMenu({
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onEsc);
     };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMobileTop(null);
+      return;
+    }
+    function update() {
+      if (window.innerWidth >= 640) {
+        setMobileTop(null);
+        return;
+      }
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setMobileTop(r.bottom + 4);
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = activeTileRef.current;
+    if (!t) return;
+    const id = requestAnimationFrame(() => {
+      const scroller = t.closest("[data-play-scroll]") as HTMLElement | null;
+      if (!scroller) return;
+      const sr = scroller.getBoundingClientRect();
+      const tr = t.getBoundingClientRect();
+      const offset = tr.top - sr.top - (sr.height - tr.height) / 2;
+      scroller.scrollTop += offset;
+    });
+    return () => cancelAnimationFrame(id);
   }, [open]);
 
   const filteredPlays = useMemo(() => {
@@ -101,6 +145,7 @@ export function PlaybookPlaySearchMenu({
   return (
     <div ref={rootRef} className="relative">
       <Button
+        ref={triggerRef}
         type="button"
         variant="secondary"
         size="sm"
@@ -111,7 +156,11 @@ export function PlaybookPlaySearchMenu({
         {printMode ? "Plays in print" : "All plays"}
       </Button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-[min(100vw-2rem,640px)] overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated">
+        <div
+          ref={panelRef}
+          style={mobileTop != null ? { top: mobileTop } : undefined}
+          className="fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-1 sm:w-[min(100vw-2rem,640px)]"
+        >
           <div className="border-b border-border p-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -159,7 +208,10 @@ export function PlaybookPlaySearchMenu({
               </div>
             )}
           </div>
-          <div className="max-h-[min(70vh,520px)] overflow-y-auto py-1 text-sm">
+          <div
+            data-play-scroll
+            className="max-h-[min(70vh,520px)] overflow-y-auto py-1 text-sm"
+          >
             {sections.map((sec) => (
               <div key={sec.groupId ?? "ungrouped"} className="border-b border-border last:border-0">
                 <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -192,6 +244,7 @@ export function PlaybookPlaySearchMenu({
                       onPrintToggle={onPrintToggle}
                       onNavigate={() => setOpen(false)}
                       onNavigatePlay={onNavigatePlay}
+                      activeRef={p.id === currentPlayId ? activeTileRef : undefined}
                     />
                   ))}
                 </div>
@@ -215,6 +268,7 @@ function PlayTile({
   onPrintToggle,
   onNavigate,
   onNavigatePlay,
+  activeRef,
 }: {
   p: PlaybookPlayNavItem;
   currentPlayId: string;
@@ -223,6 +277,7 @@ function PlayTile({
   onPrintToggle?: (playId: string, next: boolean) => void;
   onNavigate: () => void;
   onNavigatePlay?: (playId: string) => void;
+  activeRef?: React.RefObject<HTMLElement | null>;
 }) {
   const active = p.id === currentPlayId;
   const checked = printMode && printSelectedIds ? printSelectedIds.has(p.id) : true;
@@ -267,7 +322,12 @@ function PlayTile({
 
   if (printMode && onPrintToggle) {
     return (
-      <button type="button" onClick={() => onPrintToggle(p.id, !checked)} className={tileCls}>
+      <button
+        ref={activeRef as React.RefObject<HTMLButtonElement> | undefined}
+        type="button"
+        onClick={() => onPrintToggle(p.id, !checked)}
+        className={tileCls}
+      >
         {tileInner}
       </button>
     );
@@ -276,6 +336,7 @@ function PlayTile({
   if (onNavigatePlay) {
     return (
       <button
+        ref={activeRef as React.RefObject<HTMLButtonElement> | undefined}
         type="button"
         onClick={() => {
           onNavigate();
@@ -289,7 +350,12 @@ function PlayTile({
   }
 
   return (
-    <Link href={`/plays/${p.id}/edit`} onClick={onNavigate} className={tileCls}>
+    <Link
+      ref={activeRef as React.RefObject<HTMLAnchorElement> | undefined}
+      href={`/plays/${p.id}/edit`}
+      onClick={onNavigate}
+      className={tileCls}
+    >
       {tileInner}
     </Link>
   );
