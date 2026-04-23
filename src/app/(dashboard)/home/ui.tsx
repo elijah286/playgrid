@@ -723,7 +723,7 @@ function PlaysheetColumn({
             className="overflow-hidden rounded-sm bg-white ring-1 ring-border/70"
             style={s.flipped ? { transform: "scaleX(-1)" } : undefined}
           >
-            <PlayThumbnail preview={s.play} thin />
+            <PlayThumbnail preview={s.play} thin light />
           </div>
         ))}
       {Array.from({ length: blanks }).map((_, i) => (

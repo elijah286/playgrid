@@ -12,9 +12,16 @@ export type PlayThumbnailInput = {
 export function PlayThumbnail({
   preview,
   thin,
+  light,
 }: {
   preview: PlayThumbnailInput;
   thin?: boolean;
+  /**
+   * Force a light background regardless of the user's theme. Used by
+   * marketing surfaces (e.g. example-book tiles) where plays should
+   * always read as printed playsheets.
+   */
+  light?: boolean;
 }) {
   const routeSW = thin ? 0.9 : 1.8;
   const arrowSW = thin ? 0.5 : 0.8;
@@ -91,7 +98,9 @@ export function PlayThumbnail({
   const tenY = 1 - (preview.lineOfScrimmageY + 0.4);
 
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-border bg-surface-inset">
+    <div
+      className={`aspect-[16/10] w-full overflow-hidden rounded-lg border ${light ? "border-slate-200 bg-white" : "border-border bg-surface-inset"}`}
+    >
       <svg
         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
         width="100%"
