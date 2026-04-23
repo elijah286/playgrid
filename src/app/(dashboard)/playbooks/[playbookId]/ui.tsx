@@ -183,6 +183,7 @@ function PlaybookDetailClientInner({
       authorLabel: string | null;
     } | null;
     exampleStatus: { isPublished: boolean } | null;
+    isExamplePreview?: boolean;
   };
 }) {
   const searchParams = useSearchParams();
@@ -769,6 +770,7 @@ function PlaybookDetailClientInner({
           allowPlayerDuplication={headerProps.allowPlayerDuplication}
           exampleAdmin={headerProps.exampleAdmin}
           exampleStatus={headerProps.exampleStatus}
+          isExamplePreview={headerProps.isExamplePreview}
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {

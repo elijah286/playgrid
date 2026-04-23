@@ -13,7 +13,6 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -247,7 +246,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
         />
       ))}
-      {isExamplePreview && <ExamplePreviewBanner />}
       <PlaybookDetailClient
         isExamplePreview={isExamplePreview}
         playbookId={playbookId}
@@ -285,6 +283,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
             !isExamplePreview && isExample
               ? { isPublished: isPublicExample }
               : null,
+          isExamplePreview,
         }}
       />
     </>

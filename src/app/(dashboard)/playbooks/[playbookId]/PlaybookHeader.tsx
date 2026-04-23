@@ -90,6 +90,7 @@ export function PlaybookHeader({
   playActions,
   exampleAdmin,
   exampleStatus,
+  isExamplePreview,
 }: {
   playbookId: string;
   name: string;
@@ -108,6 +109,7 @@ export function PlaybookHeader({
   playActions?: PlaybookHeaderPlayActions;
   exampleAdmin?: ExampleAdminState | null;
   exampleStatus?: { isPublished: boolean } | null;
+  isExamplePreview?: boolean;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -294,6 +296,19 @@ export function PlaybookHeader({
                   {exampleStatus.isPublished ? "Example · Published" : "Example · Draft"}
                 </span>
               )}
+              {isExamplePreview && (
+                <span
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    isLightBg
+                      ? "bg-black/10 text-slate-900"
+                      : "bg-white/20 text-white"
+                  }`}
+                  title="You're viewing an example playbook. Changes won't be saved."
+                >
+                  <FlaskConical className="size-3" />
+                  Example
+                </span>
+              )}
             </div>
             <p className={`truncate text-[11px] font-medium sm:text-sm ${onAccentMuted}`}>
               {[
@@ -331,6 +346,18 @@ export function PlaybookHeader({
               >
                 Invite Team Member
               </Button>
+            )}
+            {isExamplePreview && (
+              <Link
+                href="/home"
+                className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
+                  isLightBg
+                    ? "bg-slate-900 text-white hover:bg-slate-800"
+                    : "bg-white text-slate-900 hover:bg-white/90"
+                }`}
+              >
+                Create your own
+              </Link>
             )}
             {(canShare || canManage || playActions || exampleAdmin) && (
               <HeaderMenu
