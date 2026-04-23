@@ -1136,7 +1136,13 @@ export function InviteTeamMemberDialog({
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
-            <h2 className="text-base font-bold text-foreground">Invite team member</h2>
+            <h2 className="text-base font-bold text-foreground">
+              {mode === "choose"
+                ? "Invite team member"
+                : role === "editor"
+                  ? "Invite coach"
+                  : "Invite player"}
+            </h2>
             <p className="mt-0.5 text-xs text-muted">Share a link, QR code, or email.</p>
           </div>
           <button
@@ -1150,7 +1156,21 @@ export function InviteTeamMemberDialog({
 
         <div className="space-y-4 p-5">
           {mode === "choose" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
+                <SegmentedControl
+                  value={role}
+                  onChange={(v) => setRole(v as "viewer" | "editor")}
+                  options={[
+                    { value: "viewer", label: "Player" },
+                    { value: "editor", label: "Coach" },
+                  ]}
+                />
+                <p className="mt-1.5 text-xs text-muted">
+                  Players can view plays and notes. Coaches can edit and create new ones.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setMode("email")}
@@ -1195,17 +1215,6 @@ export function InviteTeamMemberDialog({
               >
                 <ArrowLeft className="size-3" /> Back
               </button>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
-                <SegmentedControl
-                  value={role}
-                  onChange={(v) => setRole(v as "viewer" | "editor")}
-                  options={[
-                    { value: "viewer", label: "Player (view)" },
-                    { value: "editor", label: "Coach (edit)" },
-                  ]}
-                />
-              </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-muted">
                   Emails
@@ -1274,17 +1283,6 @@ export function InviteTeamMemberDialog({
               >
                 <ArrowLeft className="size-3" /> Back
               </button>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
-                <SegmentedControl
-                  value={role}
-                  onChange={(v) => setRole(v as "viewer" | "editor")}
-                  options={[
-                    { value: "viewer", label: "Player (view)" },
-                    { value: "editor", label: "Coach (edit)" },
-                  ]}
-                />
-              </div>
               <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
                 <label className="flex cursor-pointer items-start gap-2">
                   <input

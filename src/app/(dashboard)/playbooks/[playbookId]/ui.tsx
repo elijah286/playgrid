@@ -111,7 +111,6 @@ import {
   setHeadCoachAction,
 } from "@/app/actions/playbook-roster";
 import {
-  createInviteAction,
   revokeInviteAction,
   type PlaybookInvite,
 } from "@/app/actions/invites";
@@ -131,7 +130,7 @@ import {
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
-import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
+import { PlaybookHeader, InviteTeamMemberDialog, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
@@ -1247,6 +1246,8 @@ function PlaybookDetailClientInner({
           members={initialRoster}
           invites={initialInvites}
           viewerIsCoach={headerProps.viewerIsCoach}
+          teamName={headerProps.name}
+          senderName={headerProps.senderName}
         />
       )}
 
@@ -1265,6 +1266,8 @@ function PlaybookDetailClientInner({
           members={initialRoster}
           invites={initialInvites}
           viewerIsCoach={headerProps.viewerIsCoach}
+          teamName={headerProps.name}
+          senderName={headerProps.senderName}
         />
       )}
 
@@ -1959,11 +1962,15 @@ function RosterPanel({
   members,
   invites,
   viewerIsCoach,
+  teamName,
+  senderName,
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
   invites: PlaybookInvite[];
   viewerIsCoach: boolean;
+  teamName: string;
+  senderName: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -2137,8 +2144,10 @@ function RosterPanel({
       )}
 
       {showInviteModal && (
-        <InviteModal
+        <InviteTeamMemberDialog
           playbookId={playbookId}
+          teamName={teamName}
+          senderName={senderName}
           onClose={() => {
             setShowInviteModal(false);
             router.refresh();
@@ -2208,193 +2217,6 @@ function InviteRow({ invite, onRevoke }: { invite: PlaybookInvite; onRevoke: () 
         </Button>
       </div>
     </li>
-  );
-}
-
-function InviteModal({ playbookId, onClose }: { playbookId: string; onClose: () => void }) {
-  const { toast } = useToast();
-  const [role, setRole] = useState<"viewer" | "editor">("viewer");
-  const [expiresInDays, setExpiresInDays] = useState(14);
-  const [autoApprove, setAutoApprove] = useState(true);
-  const [autoApproveLimit, setAutoApproveLimit] = useState<string>("25");
-  const [email, setEmail] = useState("");
-  const [note, setNote] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  async function create() {
-    setCreating(true);
-    const parsedLimit =
-      autoApprove && autoApproveLimit.trim() !== ""
-        ? Math.max(1, Math.floor(Number(autoApproveLimit)))
-        : null;
-    const res = await createInviteAction({
-      playbookId,
-      role,
-      expiresInDays,
-      maxUses: null,
-      email: email || null,
-      note: note || null,
-      autoApprove,
-      autoApproveLimit: parsedLimit,
-    });
-    setCreating(false);
-    if (!res.ok) {
-      toast(`Could not create invite: ${res.error}`, "error");
-      return;
-    }
-    const url = `${SITE_URL}/invite/${res.invite.token}`;
-    setCreatedUrl(url);
-  }
-
-  async function copy() {
-    if (!createdUrl) return;
-    try {
-      await navigator.clipboard.writeText(createdUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast("Copy failed — copy the link manually.", "error");
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div>
-            <h2 className="text-base font-bold text-foreground">Create invite link</h2>
-            <p className="mt-0.5 text-xs text-muted">
-              Share this link by text, chat, or email.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
-            onClick={onClose}
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div className="space-y-4 px-6 py-4">
-          {createdUrl ? (
-            <>
-              <p className="text-sm text-foreground">
-                Link is ready — share it however you like (text, group chat, email).
-              </p>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-inset px-3 py-2">
-                <code className="flex-1 truncate text-xs text-foreground">{createdUrl}</code>
-                <Button size="sm" variant="primary" leftIcon={copied ? Check : Copy} onClick={copy}>
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-              </div>
-              <Button variant="secondary" onClick={onClose} className="w-full">
-                Done
-              </Button>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
-                <SegmentedControl
-                  value={role}
-                  onChange={(v) => setRole(v as "viewer" | "editor")}
-                  options={[
-                    { value: "viewer", label: "Player (view)" },
-                    { value: "editor", label: "Coach (edit)" },
-                  ]}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Expires in</label>
-                <select
-                  value={expiresInDays}
-                  onChange={(e) => setExpiresInDays(Number(e.target.value))}
-                  className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-                >
-                  <option value={1}>1 day</option>
-                  <option value={7}>7 days</option>
-                  <option value={14}>14 days</option>
-                  <option value={30}>30 days (max)</option>
-                </select>
-              </div>
-
-              <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
-                <label className="flex cursor-pointer items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={autoApprove}
-                    onChange={(e) => setAutoApprove(e.target.checked)}
-                    className="mt-0.5 size-4 shrink-0 rounded border-border"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-foreground">
-                      Anyone with this link can join immediately
-                    </div>
-                    {autoApprove ? (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                        <span>Up to</span>
-                        <Input
-                          value={autoApproveLimit}
-                          onChange={(e) => setAutoApproveLimit(e.target.value)}
-                          placeholder="unlimited"
-                          className="h-7 w-20 text-xs"
-                        />
-                        <span>user{autoApproveLimit.trim() === "1" ? "" : "s"} — after that, you&apos;ll approve each new person.</span>
-                      </div>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted">
-                        You&apos;ll approve every joiner from the Roster tab.
-                      </p>
-                    )}
-                  </div>
-                </label>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">
-                  Email (optional, for your records)
-                </label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="player@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">
-                  Note (optional)
-                </label>
-                <Input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="e.g. Jamal, parents text chain, etc."
-                />
-              </div>
-
-              <Button
-                variant="primary"
-                loading={creating}
-                onClick={create}
-                className="w-full"
-              >
-                Create link
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -2705,11 +2527,15 @@ function StaffPanel({
   members,
   invites,
   viewerIsCoach,
+  teamName,
+  senderName,
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
   invites: PlaybookInvite[];
   viewerIsCoach: boolean;
+  teamName: string;
+  senderName: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -2894,8 +2720,10 @@ function StaffPanel({
       )}
 
       {showInviteModal && (
-        <InviteModal
+        <InviteTeamMemberDialog
           playbookId={playbookId}
+          teamName={teamName}
+          senderName={senderName}
           onClose={() => {
             setShowInviteModal(false);
             router.refresh();
