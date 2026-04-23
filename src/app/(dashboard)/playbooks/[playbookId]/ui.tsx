@@ -1676,7 +1676,7 @@ function PlaybookDetailClientInner({
 
       {selectionMode && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface-raised px-4 py-2 shadow-elevated">
+          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-border bg-surface-raised px-4 py-2 shadow-elevated sm:gap-3 sm:rounded-full">
             <span className="text-sm font-medium text-foreground">
               {selectedPlayIds.size} selected
             </span>
@@ -1711,6 +1711,73 @@ function PlaybookDetailClientInner({
             >
               Cancel
             </button>
+            {!isViewer && (
+              <Button
+                variant="ghost"
+                leftIcon={view === "archived" ? ArchiveRestore : Archive}
+                disabled={selectedPlayIds.size === 0}
+                onClick={() => {
+                  const ids = Array.from(selectedPlayIds);
+                  const archiving = view !== "archived";
+                  handle(
+                    async () => {
+                      for (const id of ids) {
+                        const res = await archivePlayAction(id, archiving);
+                        if (!res.ok) return res;
+                      }
+                      return { ok: true as const };
+                    },
+                    () => {
+                      toast(
+                        `${ids.length} ${ids.length === 1 ? "play" : "plays"} ${archiving ? "archived" : "restored"}.`,
+                        "success",
+                      );
+                      setSelectionMode(false);
+                      setSelectedPlayIds(new Set());
+                    },
+                  );
+                }}
+              >
+                {view === "archived" ? "Restore" : "Archive"}
+              </Button>
+            )}
+            {!isViewer && (
+              <Button
+                variant="ghost"
+                leftIcon={Trash2}
+                disabled={selectedPlayIds.size === 0}
+                onClick={() => {
+                  const ids = Array.from(selectedPlayIds);
+                  const n = ids.length;
+                  if (
+                    !window.confirm(
+                      `Delete ${n} ${n === 1 ? "play" : "plays"}? This can't be undone.`,
+                    )
+                  )
+                    return;
+                  handle(
+                    async () => {
+                      for (const id of ids) {
+                        const res = await deletePlayAction(id);
+                        if (!res.ok) return res;
+                      }
+                      return { ok: true as const };
+                    },
+                    () => {
+                      toast(
+                        `${n} ${n === 1 ? "play" : "plays"} deleted.`,
+                        "success",
+                      );
+                      setSelectionMode(false);
+                      setSelectedPlayIds(new Set());
+                    },
+                  );
+                }}
+                className="text-danger hover:text-danger"
+              >
+                Delete
+              </Button>
+            )}
             <Button
               variant="primary"
               leftIcon={Printer}
