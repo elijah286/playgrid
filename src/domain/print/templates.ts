@@ -38,6 +38,12 @@ import {
   wristbandGridDims,
 } from "./playbookPrint";
 
+/** Forces all <text> in a generated print SVG to render with the app's font
+ *  stack. Inline as a <style> child of each <svg> root so CSS wins over the
+ *  presentation `font-family` attribute across all SVG renderers. */
+const SVG_FONT_STYLE =
+  `<style>text{font-family:Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif;}</style>`;
+
 export type PrintTemplateKind = "wristband" | "full_sheet";
 
 export type PageSpec = {
@@ -153,7 +159,7 @@ export function compilePlayToSvg(
     const pr = Math.max(1.8, 2.2 * doc.printProfile.fontScale);
     playerCircles += `<circle cx="${px}" cy="${py}" r="${pr}" fill="${p.style.fill}" stroke="${p.style.stroke}" stroke-width="0.35"/>`;
     if (vis.showPlayerLabels) {
-      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif">${escSvgText(p.label)}</text>`;
+      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -187,14 +193,15 @@ export function compilePlayToSvg(
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
+  ${SVG_FONT_STYLE}
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="Helvetica,Arial,sans-serif" fill="#111827">${title}</text>
-  ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="Helvetica,Arial,sans-serif" fill="#64748b">${code}</text>` : ""}
+  <text x="${w / 2}" y="${h * 0.08}" text-anchor="middle" font-size="${fontTitle}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#111827">${title}</text>
+  ${code ? `<text x="${w / 2}" y="${h * 0.12}" text-anchor="middle" font-size="${fontMeta}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#64748b">${code}</text>` : ""}
   <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="#d1d5db" stroke-width="0.3"/>
   ${yardMarkersSvg(fieldX, fieldY, fieldW, fieldH)}
   ${playerCircles}
   ${routePaths}
-  ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="Helvetica,Arial,sans-serif" fill="#334155">${notes}</text>` : ""}
+  ${notes ? `<text x="${fieldX}" y="${fieldY + fieldH + 4}" font-size="${fontMeta}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#334155">${notes}</text>` : ""}
 </svg>`;
 
   return { templateKind: kind, svgMarkup: svg, width: w, height: h };
@@ -371,14 +378,14 @@ function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin:
   const initial = (header.teamName || "").trim().charAt(0).toUpperCase() || "?";
   const logoMarkup = header.logoUrl
     ? `<image href="${escSvgText(header.logoUrl)}" x="${logoX + 1}" y="${logoY + 1}" width="${logoSize - 2}" height="${logoSize - 2}" preserveAspectRatio="xMidYMid meet"/>`
-    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="bold" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
+    : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="bold" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
   return `
   <g>
     <rect x="0" y="0" width="${w}" height="${hH}" fill="${accent}"/>
     <rect x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" rx="1.8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="0.2"/>
     ${logoMarkup}
-    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="bold" font-family="Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
-    ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="Helvetica,Arial,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
+    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="bold" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
+    ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
   </g>`;
 }
 
@@ -474,6 +481,7 @@ function renderPlaysheetPage(
   const freeWm = freeTier ? freeTierWatermarkSvg(w, h) : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
+  ${SVG_FONT_STYLE}
   <rect width="100%" height="100%" fill="#ffffff"/>
   ${freeWm}
   ${headerSvg}
@@ -571,7 +579,7 @@ function renderPlaysheetCell(
     notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
     notes += `<g clip-path="url(#${clipId})">`;
     wrapped.forEach((line, i) => {
-      notes += `<text x="${ox + padX}" y="${ny + lineH * (i + 1)}" font-size="${fontNote}" font-family="Helvetica,Arial,sans-serif" fill="#334155">${escSvgText(line)}</text>`;
+      notes += `<text x="${ox + padX}" y="${ny + lineH * (i + 1)}" font-size="${fontNote}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#334155">${escSvgText(line)}</text>`;
     });
     notes += `</g>`;
     notes += `<line x1="${ox + padX}" y1="${ny + notesH - 0.5}" x2="${ox + cw - padX}" y2="${ny + notesH - 0.5}" stroke="#e5e7eb" stroke-width="0.2"/>`;
@@ -629,7 +637,7 @@ function renderFieldContents(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
     if (look.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -792,7 +800,7 @@ function freeTierWatermarkSvg(w: number, h: number): string {
     for (let c = 0; c < cols; c++) {
       const x = startX + c * tileX + (r % 2 === 0 ? 0 : tileX / 2);
       const y = startY + r * tileY;
-      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.5">xogridmaker</text>`;
+      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.5">xogridmaker</text>`;
     }
   }
   return `<g transform="translate(${(w / 2).toFixed(2)} ${(h / 2).toFixed(2)}) rotate(-45)" style="pointer-events:none">${cells}</g>`;
@@ -823,7 +831,7 @@ function renderFieldFreeTierWatermark(
     for (let c = 0; c < cols; c++) {
       const x = startX + c * tileX + (r % 2 === 0 ? 0 : tileX / 2);
       const y = startY + r * tileY;
-      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Helvetica,Arial,sans-serif" font-size="${fontSize.toFixed(2)}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.3">xogridmaker</text>`;
+      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="${fontSize.toFixed(2)}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.3">xogridmaker</text>`;
     }
   }
   return `<defs><clipPath id="${clipId}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath></defs><g clip-path="url(#${clipId})" style="pointer-events:none"><g transform="translate(${(fx + fw / 2).toFixed(2)} ${(fy + fh / 2).toFixed(2)}) rotate(-45)">${cells}</g></g>`;
@@ -843,7 +851,7 @@ function playsheetFooterSvg(w: number, h: number): string {
   const y = h - bandH;
   return `<g>
     <rect x="0" y="${y}" width="${w}" height="${bandH}" fill="#f97316" opacity="0.95"/>
-    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="bold" letter-spacing="0.2">Powered by xogridmaker · xogridmaker.com · © 2026</text>
+    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="bold" letter-spacing="0.2">Powered by xogridmaker · xogridmaker.com · © 2026</text>
   </g>`;
 }
 
@@ -1037,12 +1045,12 @@ function renderTileTextHeader(params: {
   let headerSvg = "";
   if (combined) {
     const { x, anchor } = textAttrs(formationPosition);
-    headerSvg += `<text x="${x}" y="${topBaselineY}" text-anchor="${anchor}" font-size="${lineFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(`${formation}  ·  ${name}`)}</text>`;
+    headerSvg += `<text x="${x}" y="${topBaselineY}" text-anchor="${anchor}" font-size="${lineFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(`${formation}  ·  ${name}`)}</text>`;
   } else {
     if (hasTopFormation) {
       const { x, anchor } = textAttrs(formationPosition);
       formationLines.forEach((line, i) => {
-        headerSvg += `<text x="${x}" y="${topBaselineY + i * lineH}" text-anchor="${anchor}" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+        headerSvg += `<text x="${x}" y="${topBaselineY + i * lineH}" text-anchor="${anchor}" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
       });
     }
     if (hasTopName) {
@@ -1053,7 +1061,7 @@ function renderTileTextHeader(params: {
       // name on line 2. Otherwise the name label uses its own top row.
       const nameRowOffset = sameSlot ? formationLines.length : 0;
       nameLines.forEach((line, i) => {
-        headerSvg += `<text x="${x}" y="${topBaselineY + (nameRowOffset + i) * lineH}" text-anchor="${anchor}" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+        headerSvg += `<text x="${x}" y="${topBaselineY + (nameRowOffset + i) * lineH}" text-anchor="${anchor}" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
       });
     }
   }
@@ -1068,12 +1076,12 @@ function renderTileTextHeader(params: {
     // Stack formation above name, flush to the bottom of the field.
     const nameBaselineY = fieldY + fieldH - bottomInset;
     const formationBaselineY = nameBaselineY - nameFont * 1.15;
-    bottomSvg += `<text x="${ox + cw / 2}" y="${formationBaselineY}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
-    bottomSvg += `<text x="${ox + cw / 2}" y="${nameBaselineY}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${formationBaselineY}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${nameBaselineY}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
   } else if (hasBottomFormation) {
-    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
   } else if (hasBottomName) {
-    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
   }
 
   let numberBoxSvg = "";
@@ -1108,7 +1116,7 @@ function renderTileTextHeader(params: {
       numberBoxSvg = `
   <g>
     <rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#0f172a" rx="0.6"/>
-    <text x="${bx + boxW / 2}" y="${by + boxH * 0.72}" text-anchor="middle" font-size="${chipFont}" font-weight="700" font-family="Helvetica,Arial,sans-serif" fill="#ffffff">${escSvgText(code)}</text>
+    <text x="${bx + boxW / 2}" y="${by + boxH * 0.72}" text-anchor="middle" font-size="${chipFont}" font-weight="700" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#ffffff">${escSvgText(code)}</text>
   </g>`;
     }
   }
@@ -1264,7 +1272,7 @@ function renderWristbandTile(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -1323,6 +1331,7 @@ export function compileWristbandGridSvg(
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
+  ${SVG_FONT_STYLE}
   <rect width="100%" height="100%" fill="#f1f5f9"/>
   ${body}
   ${watermarkSvg(w, h, watermark ?? null)}
@@ -1400,6 +1409,7 @@ export function compileWristbandSheetPdfPages(
     });
     pages.push(`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${pageW}mm" height="${pageH}mm" viewBox="0 0 ${pageW} ${pageH}">
+  ${SVG_FONT_STYLE}
   <rect width="100%" height="100%" fill="#ffffff"/>
   ${body}
 </svg>`);
