@@ -366,7 +366,21 @@ export function PrintPlaybookClient({
     );
     const pool = chosen.length > 0 ? chosen : initialPack.slice(0, 1);
     if (config.product === "wristband") {
-      const docs = pool.map((r, i) => {
+      const wbGrouping: PlaysheetGrouping =
+        sortBy === "alpha" ? "name" : sortBy === "group" ? "group" : "name";
+      const wbOrdered =
+        sortBy === "position"
+          ? [...pool].sort(compareByWristbandNumber)
+          : (() => {
+              const navOrder = sortNavPlaysForPrint(
+                pool.map((r) => r.nav),
+                wbGrouping,
+              );
+              return navOrder
+                .map((n) => pool.find((r) => r.id === n.id))
+                .filter((x): x is PlaybookPrintPackRow => x != null);
+            })();
+      const docs = wbOrdered.map((r, i) => {
         const d = applyExportPresentation(r.document, config);
         const pos = playbookPositionById.get(r.id);
         const label = numberPlaysInOrder
