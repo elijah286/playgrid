@@ -30,8 +30,7 @@ import {
   type PlaysheetPageBreak,
   type WristbandGridLayout,
   type WristbandIconSize,
-  type WristbandLabelMode,
-  type WristbandLabelStyle,
+  type PrintLabelToggles,
   type WristbandRouteWeight,
   type WristbandZoom,
   wristbandGridDims,
@@ -257,8 +256,11 @@ export type PlayTileLookOptions = {
   iconSize: WristbandIconSize;
   routeWeight: WristbandRouteWeight;
   arrowSize: ArrowSize;
-  labelStyle: WristbandLabelStyle;
-  labels: WristbandLabelMode;
+  labels: PrintLabelToggles;
+  /** Multiplier applied to base header font sizes (1 = default). */
+  headerFontSize: number;
+  /** Wrap long formation/name labels onto a second line. */
+  labelWrap: boolean;
   colorCoding: boolean;
   /** 0 = hide LOS, 1 = full stroke/opacity. */
   losIntensity: number;
@@ -482,30 +484,47 @@ function renderPlaysheetCell(
   const padTop = 1.5 * padScale;
   const padBelowField = 1.5 * padScale;
   const tileH = ch - notesH;
-  const fonts = labelFontMm(opts.labelStyle);
   const vis = doc.printProfile.visibility;
-  const showName = opts.labels !== "number";
-  const showCode = opts.labels !== "name" && vis.showWristbandCode;
+  const toggles: PrintLabelToggles = {
+    showNumber: opts.labels.showNumber && vis.showWristbandCode,
+    showFormation: opts.labels.showFormation,
+    showName: opts.labels.showName,
+  };
   const labelColor = opts.colorCoding ? groupLabelColor(doc) : "#111827";
 
-  const headerH = showName || showCode ? (opts.labelStyle === "prominent" ? 6 : 4.5) : 0;
+  const baseTitle = 2.6;
+  const title = baseTitle * opts.headerFontSize;
+  const lineH = title * 1.15;
+  const labelLineCount =
+    toggles.showFormation || toggles.showName
+      ? opts.labelWrap
+        ? 2
+        : 1
+      : 0;
+  const headerH = labelLineCount > 0 ? title * 0.3 + lineH * labelLineCount : 0;
   const fieldX = ox + padX;
   const fieldY = oy + padTop + headerH;
   const fieldW = cw - padX * 2;
   const fieldH = Math.max(4, tileH - padTop - headerH - padBelowField);
 
-  let header = "";
-  if (showName) {
-    const name = escSvgText(doc.metadata.coachName || "");
-    header += `<text x="${ox + cw / 2}" y="${oy + padTop + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? "bold" : "normal"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
-  }
-  if (showCode) {
-    const code = escSvgText(doc.metadata.wristbandCode || "");
-    const cy = showName
-      ? oy + padTop + fonts.title * 0.95 + fonts.meta * 1.15
-      : oy + padTop + fonts.meta * 1.1;
-    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="Helvetica,Arial,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
-  }
+  const hdr = renderTileTextHeader({
+    doc,
+    toggles,
+    fontScale: opts.headerFontSize,
+    labelWrap: opts.labelWrap,
+    colorCoding: opts.colorCoding,
+    labelColor,
+    ox,
+    oy,
+    cw,
+    padX,
+    padTop,
+    fieldX,
+    fieldY,
+    baseTitle,
+  });
+  const header = hdr.headerSvg;
+  const numberBox = hdr.numberBoxSvg;
 
   const fieldWm = freeTier
     ? renderFieldFreeTierWatermark(fieldX, fieldY, fieldW, fieldH)
@@ -546,6 +565,7 @@ function renderPlaysheetCell(
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
     ${fieldWm}
     ${field}
+    ${numberBox}
     ${notes}
   </g>`;
 }
@@ -688,8 +708,11 @@ export type WristbandGridOptions = {
   iconSize: WristbandIconSize;
   routeWeight: WristbandRouteWeight;
   arrowSize: ArrowSize;
-  labelStyle: WristbandLabelStyle;
-  labels: WristbandLabelMode;
+  labels: PrintLabelToggles;
+  /** Multiplier applied to base header font sizes (1 = default). */
+  headerFontSize: number;
+  /** Wrap long formation/name labels onto a second line. */
+  labelWrap: boolean;
   colorCoding: boolean;
   /** 0 = hide LOS, 1 = full stroke/opacity. */
   losIntensity: number;
@@ -797,9 +820,93 @@ function routeStrokeMm(weight: WristbandRouteWeight): number {
   return 0.35;
 }
 
-function labelFontMm(style: WristbandLabelStyle): { title: number; meta: number } {
-  if (style === "prominent") return { title: 3.4, meta: 2.4 };
-  return { title: 2.4, meta: 1.8 };
+/**
+ * Build the top-header block (formation + name text, and a number chip that
+ * overlaps the top-left of the field). Shared across playsheet and wristband.
+ *
+ * baseFont: starting font size in mm. Multiplied by `scale` from the user's
+ * header-font-size slider.
+ */
+function renderTileTextHeader(params: {
+  doc: PlayDocument;
+  toggles: PrintLabelToggles;
+  fontScale: number;
+  labelWrap: boolean;
+  colorCoding: boolean;
+  labelColor: string;
+  // Tile bounds
+  ox: number;
+  oy: number;
+  cw: number;
+  padX: number;
+  padTop: number;
+  // Field position (used to place the corner number box)
+  fieldX: number;
+  fieldY: number;
+  // Base title font in mm (before scale)
+  baseTitle: number;
+}): { headerSvg: string; numberBoxSvg: string; headerH: number } {
+  const {
+    doc,
+    toggles,
+    fontScale,
+    labelWrap,
+    colorCoding,
+    labelColor,
+    ox,
+    oy,
+    cw,
+    padX,
+    padTop,
+    fieldX,
+    fieldY,
+    baseTitle,
+  } = params;
+
+  const title = baseTitle * fontScale;
+  const formation = toggles.showFormation ? (doc.metadata.formation || "").trim() : "";
+  const name = toggles.showName ? (doc.metadata.coachName || "").trim() : "";
+  const parts = [formation, name].filter((s) => s.length > 0);
+  const combined = parts.join("  ·  ");
+
+  let headerSvg = "";
+  let headerH = 0;
+
+  if (combined) {
+    const innerW = cw - padX * 2;
+    const approxCharW = title * 0.52;
+    const charsPerLine = Math.max(6, Math.floor(innerW / approxCharW));
+    const lines =
+      labelWrap && combined.length > charsPerLine
+        ? wrapText(combined, charsPerLine).slice(0, 2)
+        : [combined];
+    const lineH = title * 1.15;
+    const topY = oy + padTop + title * 0.95;
+    lines.forEach((line, i) => {
+      headerSvg += `<text x="${ox + cw / 2}" y="${topY + i * lineH}" text-anchor="middle" font-size="${title}" font-weight="${colorCoding ? "600" : "500"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+    });
+    headerH = title * 0.3 + lineH * lines.length;
+  }
+
+  let numberBoxSvg = "";
+  if (toggles.showNumber) {
+    const code = (doc.metadata.wristbandCode || "").trim();
+    if (code) {
+      const boxH = Math.max(3.2, title * 1.35);
+      const boxPad = 0.8;
+      const approxCharW = title * 0.7;
+      const boxW = Math.max(boxH * 0.9, code.length * approxCharW + boxPad * 2);
+      const bx = fieldX;
+      const by = fieldY;
+      numberBoxSvg = `
+  <g>
+    <rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#0f172a" rx="0.6"/>
+    <text x="${bx + boxW / 2}" y="${by + boxH * 0.72}" text-anchor="middle" font-size="${title * 1.05}" font-weight="700" font-family="Helvetica,Arial,sans-serif" fill="#ffffff">${escSvgText(code)}</text>
+  </g>`;
+    }
+  }
+
+  return { headerSvg, numberBoxSvg, headerH };
 }
 
 function groupLabelColor(doc: PlayDocument): string {
@@ -879,13 +986,20 @@ function renderWristbandTile(
 ): string {
   const vis = doc.printProfile.visibility;
   const zoom = opts.zoom / 100;
-  const fonts = labelFontMm(opts.labelStyle);
-  const showName = opts.labels !== "number";
-  const showCode = opts.labels !== "name" && vis.showWristbandCode;
+  const toggles: PrintLabelToggles = {
+    showNumber: opts.labels.showNumber && vis.showWristbandCode,
+    showFormation: opts.labels.showFormation,
+    showName: opts.labels.showName,
+  };
   const labelColor = opts.colorCoding ? groupLabelColor(doc) : "#111827";
 
   const padScale = opts.cellPadding ?? 1;
-  const headerH = showName || showCode ? (opts.labelStyle === "prominent" ? 5 : 3.6) : 0;
+  const baseTitle = 2.6;
+  const title = baseTitle * opts.headerFontSize;
+  const lineH = title * 1.15;
+  const hasText = toggles.showFormation || toggles.showName;
+  const labelLineCount = hasText ? (opts.labelWrap ? 2 : 1) : 0;
+  const headerH = labelLineCount > 0 ? title * 0.3 + lineH * labelLineCount : 0;
   const fieldPadX = cw * 0.04 * padScale;
   const fieldPadTop = headerH;
   const fieldPadBottom = cw * 0.03 * padScale;
@@ -899,16 +1013,24 @@ function renderWristbandTile(
   const pr = iconRadius(opts.iconSize);
   const strokeW = routeStrokeMm(opts.routeWeight);
 
-  let header = "";
-  if (showName) {
-    const name = escSvgText(doc.metadata.coachName || "");
-    header += `<text x="${ox + cw / 2}" y="${oy + fonts.title * 0.95}" text-anchor="middle" font-size="${fonts.title}" font-weight="${opts.labelStyle === "prominent" ? "bold" : "normal"}" font-family="Helvetica,Arial,sans-serif" fill="${labelColor}">${name}</text>`;
-  }
-  if (showCode) {
-    const code = escSvgText(doc.metadata.wristbandCode || "");
-    const cy = showName ? oy + fonts.title * 0.95 + fonts.meta * 1.1 : oy + fonts.meta * 1.1;
-    header += `<text x="${ox + cw / 2}" y="${cy}" text-anchor="middle" font-size="${fonts.meta}" font-family="Helvetica,Arial,sans-serif" fill="${opts.colorCoding ? labelColor : "#64748b"}">${code}</text>`;
-  }
+  const hdr = renderTileTextHeader({
+    doc,
+    toggles,
+    fontScale: opts.headerFontSize,
+    labelWrap: opts.labelWrap,
+    colorCoding: opts.colorCoding,
+    labelColor,
+    ox,
+    oy,
+    cw,
+    padX: fieldPadX,
+    padTop: 0,
+    fieldX,
+    fieldY,
+    baseTitle,
+  });
+  const header = hdr.headerSvg;
+  const numberBox = hdr.numberBoxSvg;
 
   const fit = computeFitScale(doc);
 
@@ -944,6 +1066,7 @@ function renderWristbandTile(
     ${guides}
     ${routes}
     ${players}
+    ${numberBox}
   </g>`;
 }
 

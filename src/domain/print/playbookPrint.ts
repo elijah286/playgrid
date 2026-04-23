@@ -17,8 +17,11 @@ export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
 export type WristbandIconSize = "small" | "medium" | "large";
 export type WristbandRouteWeight = "thin" | "medium" | "thick";
 export type ArrowSize = "small" | "medium" | "large";
-export type WristbandLabelStyle = "prominent" | "compact";
-export type WristbandLabelMode = "both" | "name" | "number";
+export type PrintLabelToggles = {
+  showNumber: boolean;
+  showFormation: boolean;
+  showName: boolean;
+};
 export type WristbandPlayerShape = "circle" | "x" | "diamond";
 
 export const WRISTBAND_WIDTHS_IN: readonly number[] = [
@@ -51,8 +54,11 @@ export type PlaybookPrintRunConfig = {
   playsheetIconSize: WristbandIconSize;
   playsheetRouteWeight: WristbandRouteWeight;
   playsheetArrowSize: ArrowSize;
-  playsheetLabelStyle: WristbandLabelStyle;
-  playsheetLabels: WristbandLabelMode;
+  playsheetLabels: PrintLabelToggles;
+  /** Header text size multiplier (e.g. 0.5 = 50%, 1 = default, 2 = 200%). */
+  playsheetHeaderFontSize: number;
+  /** Wrap long formation/name labels onto a second line instead of truncating. */
+  playsheetLabelWrap: boolean;
   playsheetColorCoding: boolean;
   /** LOS line intensity 0–1 (0 hides it, 1 = full stroke + opacity). */
   playsheetLosIntensity: number;
@@ -78,10 +84,12 @@ export type PlaybookPrintRunConfig = {
   wristbandRouteWeight: WristbandRouteWeight;
   /** Wristband: arrow-head size bucket */
   wristbandArrowSize: ArrowSize;
-  /** Wristband: play-label emphasis */
-  wristbandLabelStyle: WristbandLabelStyle;
   /** Wristband: which play label(s) to show per tile */
-  wristbandLabels: WristbandLabelMode;
+  wristbandLabels: PrintLabelToggles;
+  /** Header text size multiplier (e.g. 0.5 = 50%, 1 = default, 2 = 200%). */
+  wristbandHeaderFontSize: number;
+  /** Wrap long formation/name labels onto a second line instead of truncating. */
+  wristbandLabelWrap: boolean;
   /** Wristband: draw dark outline around player markers */
   wristbandPlayerOutline: boolean;
   /** Wristband: color-code labels by group/formation */
@@ -130,8 +138,9 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetIconSize: "medium",
   playsheetRouteWeight: "medium",
   playsheetArrowSize: "medium",
-  playsheetLabelStyle: "compact",
-  playsheetLabels: "both",
+  playsheetLabels: { showNumber: true, showFormation: false, showName: true },
+  playsheetHeaderFontSize: 1,
+  playsheetLabelWrap: false,
   playsheetColorCoding: false,
   playsheetLosIntensity: 0.5,
   playsheetYardMarkersIntensity: 0.3,
@@ -147,8 +156,9 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandIconSize: "medium",
   wristbandRouteWeight: "medium",
   wristbandArrowSize: "medium",
-  wristbandLabelStyle: "compact",
-  wristbandLabels: "number",
+  wristbandLabels: { showNumber: true, showFormation: false, showName: false },
+  wristbandHeaderFontSize: 1,
+  wristbandLabelWrap: false,
   wristbandPlayerOutline: false,
   wristbandColorCoding: true,
   wristbandShowLos: true,
@@ -160,6 +170,46 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   watermarkOpacityPct: 10,
   watermarkScale: 0.6,
 };
+
+/** Map a legacy string label mode onto the new toggles struct. */
+function legacyLabelsToToggles(mode: unknown): PrintLabelToggles | null {
+  if (mode === "both") return { showNumber: true, showFormation: false, showName: true };
+  if (mode === "name") return { showNumber: false, showFormation: false, showName: true };
+  if (mode === "number") return { showNumber: true, showFormation: false, showName: false };
+  return null;
+}
+
+function coerceLabels(value: unknown, fallback: PrintLabelToggles): PrintLabelToggles {
+  const legacy = legacyLabelsToToggles(value);
+  if (legacy) return legacy;
+  if (value && typeof value === "object") {
+    const v = value as Partial<PrintLabelToggles>;
+    return {
+      showNumber: typeof v.showNumber === "boolean" ? v.showNumber : fallback.showNumber,
+      showFormation:
+        typeof v.showFormation === "boolean" ? v.showFormation : fallback.showFormation,
+      showName: typeof v.showName === "boolean" ? v.showName : fallback.showName,
+    };
+  }
+  return { ...fallback };
+}
+
+/**
+ * Read a persisted print config (preset JSON, localStorage) and coerce it into
+ * the current shape. Drops legacy `playsheetLabelStyle`/`wristbandLabelStyle`
+ * keys and converts legacy string label modes to the toggles struct.
+ */
+export function normalizePrintRunConfig(raw: unknown): PlaybookPrintRunConfig {
+  const base = { ...defaultPlaybookPrintRunConfig };
+  if (!raw || typeof raw !== "object") return base;
+  const r = raw as Record<string, unknown>;
+  const merged = { ...base, ...r } as PlaybookPrintRunConfig & Record<string, unknown>;
+  merged.playsheetLabels = coerceLabels(r.playsheetLabels, base.playsheetLabels);
+  merged.wristbandLabels = coerceLabels(r.wristbandLabels, base.wristbandLabels);
+  delete (merged as Record<string, unknown>).playsheetLabelStyle;
+  delete (merged as Record<string, unknown>).wristbandLabelStyle;
+  return merged;
+}
 
 export function wristbandGridDims(layout: WristbandGridLayout): { rows: number; cols: number } {
   switch (layout) {
@@ -289,14 +339,14 @@ export function applyExportPresentation(doc: PlayDocument, run: PlaybookPrintRun
   const out: PlayDocument = structuredClone(doc);
   if (run.product === "wristband") {
     out.printProfile.visibility.showNotes = false;
-    const showCode = run.wristbandLabels !== "name";
-    const showName = run.wristbandLabels !== "number";
+    const showCode = run.wristbandLabels.showNumber;
+    const showName = run.wristbandLabels.showName;
     if (!showCode) out.printProfile.visibility.showWristbandCode = false;
     if (!showName) out.metadata.coachName = "\u200b";
   } else {
     out.printProfile.visibility.showNotes = run.playsheetShowNotes;
-    const showCode = run.playsheetLabels !== "name";
-    const showName = run.playsheetLabels !== "number";
+    const showCode = run.playsheetLabels.showNumber;
+    const showName = run.playsheetLabels.showName;
     if (!showCode) out.printProfile.visibility.showWristbandCode = false;
     if (!showName) out.metadata.coachName = "\u200b";
   }

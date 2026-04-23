@@ -19,6 +19,7 @@ import type { PlaybookPrintPackRow } from "@/app/actions/plays";
 import {
   applyExportPresentation,
   defaultPlaybookPrintRunConfig,
+  normalizePrintRunConfig,
   sortNavPlaysForPrint,
   wristbandTilesPerBand,
   WATERMARK_MAX_PCT,
@@ -59,7 +60,7 @@ type Props = {
   canRemovePlaysheetWatermark: boolean;
 };
 
-type TabKey = "plays" | "layout" | "visuals" | "presets";
+type TabKey = "plays" | "layout" | "visuals" | "text" | "presets";
 type SortKey = "position" | "alpha" | "group" | "tag";
 type TypeFilter = "all" | "offense" | "defense" | "special_teams";
 
@@ -242,8 +243,9 @@ export function PrintPlaybookClient({
       iconSize: config.wristbandIconSize,
       routeWeight: config.wristbandRouteWeight,
       arrowSize: config.wristbandArrowSize,
-      labelStyle: config.wristbandLabelStyle,
       labels: config.wristbandLabels,
+      headerFontSize: config.wristbandHeaderFontSize,
+      labelWrap: config.wristbandLabelWrap,
       colorCoding: config.wristbandColorCoding,
       losIntensity: config.wristbandShowLos ? 0.5 : 0,
       yardMarkersIntensity: config.wristbandShowYardMarkers ? 0.3 : 0,
@@ -266,8 +268,9 @@ export function PrintPlaybookClient({
       iconSize: config.playsheetIconSize,
       routeWeight: config.playsheetRouteWeight,
       arrowSize: config.playsheetArrowSize,
-      labelStyle: config.playsheetLabelStyle,
       labels: config.playsheetLabels,
+      headerFontSize: config.playsheetHeaderFontSize,
+      labelWrap: config.playsheetLabelWrap,
       colorCoding: config.playsheetColorCoding,
       losIntensity: config.playsheetLosIntensity,
       yardMarkersIntensity: config.playsheetYardMarkersIntensity,
@@ -577,6 +580,7 @@ export function PrintPlaybookClient({
               { value: "plays" as const, label: `Plays (${selected.size})` },
               { value: "layout" as const, label: "Layout" },
               { value: "visuals" as const, label: "Visuals" },
+              { value: "text" as const, label: "Text" },
               { value: "presets" as const, label: "Presets" },
             ]}
             value={tab}
@@ -860,11 +864,17 @@ export function PrintPlaybookClient({
           </div>
         )}
 
+        {tab === "text" && (
+          <div className="space-y-4">
+            <PlaybookPrintRunControls config={config} onChange={setConfig} section="text" />
+          </div>
+        )}
+
         {tab === "presets" && (
           <PresetsPanel
             config={config}
             onLoad={(c) => {
-              setConfig({ ...defaultPlaybookPrintRunConfig, ...c });
+              setConfig(normalizePrintRunConfig({ ...defaultPlaybookPrintRunConfig, ...c }));
               toast("Preset loaded", "success");
             }}
           />

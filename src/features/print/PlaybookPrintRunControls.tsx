@@ -12,10 +12,9 @@ import {
   type PlaysheetColumns,
   type PlaysheetNoteLines,
   type PlaysheetPageBreak,
+  type PrintLabelToggles,
   type WristbandGridLayout,
   type WristbandIconSize,
-  type WristbandLabelMode,
-  type WristbandLabelStyle,
   type WristbandRouteWeight,
   type WristbandZoom,
 } from "@/domain/print/playbookPrint";
@@ -34,8 +33,42 @@ type Props = {
    * columns, orientation, grouping, sizes). "visuals" = look (icons, route
    * weight, labels, colors, LOS/yard markers). "all" (default) = everything.
    */
-  section?: "layout" | "visuals" | "all";
+  section?: "layout" | "visuals" | "text" | "all";
 };
+
+function LabelToggles({
+  value,
+  onChange,
+}: {
+  value: PrintLabelToggles;
+  onChange: (next: PrintLabelToggles) => void;
+}) {
+  const items: { key: keyof PrintLabelToggles; label: string }[] = [
+    { key: "showNumber", label: "Number" },
+    { key: "showFormation", label: "Formation" },
+    { key: "showName", label: "Name" },
+  ];
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+        Play labels
+      </p>
+      <div className="space-y-1.5">
+        {items.map((it) => (
+          <label key={it.key} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={value[it.key]}
+              onChange={(e) => onChange({ ...value, [it.key]: e.target.checked })}
+            />
+            {it.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type PillOption<T extends string | number> = { value: T; label: string };
 
@@ -86,6 +119,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
 
   const showLayout = section === "all" || section === "layout";
   const showVisuals = section === "all" || section === "visuals";
+  const showText = section === "all" || section === "text";
 
   return (
     <div className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
@@ -218,27 +252,6 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 options={arrowSizeOptions}
               />
 
-              <PillGroup
-                label="Play label style"
-                value={config.playsheetLabelStyle}
-                onChange={(v) => patch({ playsheetLabelStyle: v as WristbandLabelStyle })}
-                options={[
-                  { value: "prominent" as WristbandLabelStyle, label: "Prominent" },
-                  { value: "compact" as WristbandLabelStyle, label: "Compact" },
-                ]}
-              />
-
-              <PillGroup
-                label="Play labels"
-                value={config.playsheetLabels}
-                onChange={(v) => patch({ playsheetLabels: v as WristbandLabelMode })}
-                options={[
-                  { value: "both" as WristbandLabelMode, label: "Both" },
-                  { value: "name" as WristbandLabelMode, label: "Name" },
-                  { value: "number" as WristbandLabelMode, label: "Number" },
-                ]}
-              />
-
               <div className="space-y-2">
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="text-muted">
@@ -292,15 +305,6 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                   <input
                     type="checkbox"
                     className="size-4 accent-primary"
-                    checked={config.playsheetShowPlayerLabels}
-                    onChange={(e) => patch({ playsheetShowPlayerLabels: e.target.checked })}
-                  />
-                  Show player letters
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
                     checked={config.playsheetPlayerOutline}
                     onChange={(e) => patch({ playsheetPlayerOutline: e.target.checked })}
                   />
@@ -349,6 +353,49 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 </label>
               </div>
             </>
+          )}
+
+          {showText && (
+            <div className="space-y-3">
+              <LabelToggles
+                value={config.playsheetLabels}
+                onChange={(v) => patch({ playsheetLabels: v })}
+              />
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">
+                  Header font size · {Math.round(config.playsheetHeaderFontSize * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={50}
+                  max={200}
+                  step={5}
+                  value={Math.round(config.playsheetHeaderFontSize * 100)}
+                  onChange={(e) =>
+                    patch({ playsheetHeaderFontSize: Number(e.target.value) / 100 })
+                  }
+                  className="accent-primary"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.playsheetLabelWrap}
+                  onChange={(e) => patch({ playsheetLabelWrap: e.target.checked })}
+                />
+                Wrap long labels
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.playsheetShowPlayerLabels}
+                  onChange={(e) => patch({ playsheetShowPlayerLabels: e.target.checked })}
+                />
+                Show player letters
+              </label>
+            </div>
           )}
         </div>
       )}
@@ -477,27 +524,6 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
             options={arrowSizeOptions}
           />
 
-          <PillGroup
-            label="Play label style"
-            value={config.wristbandLabelStyle}
-            onChange={(v) => patch({ wristbandLabelStyle: v })}
-            options={[
-              { value: "prominent" as WristbandLabelStyle, label: "Prominent" },
-              { value: "compact" as WristbandLabelStyle, label: "Compact" },
-            ]}
-          />
-
-          <PillGroup
-            label="Play labels"
-            value={config.wristbandLabels}
-            onChange={(v) => patch({ wristbandLabels: v })}
-            options={[
-              { value: "both" as WristbandLabelMode, label: "Both" },
-              { value: "name" as WristbandLabelMode, label: "Name" },
-              { value: "number" as WristbandLabelMode, label: "Number" },
-            ]}
-          />
-
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -516,15 +542,6 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 onChange={(e) => patch({ wristbandShowYardMarkers: e.target.checked })}
               />
               Show yard markers
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={config.wristbandShowPlayerLabels}
-                onChange={(e) => patch({ wristbandShowPlayerLabels: e.target.checked })}
-              />
-              Show player letters
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -574,6 +591,49 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
             </label>
           </div>
             </>
+          )}
+
+          {showText && (
+            <div className="space-y-3">
+              <LabelToggles
+                value={config.wristbandLabels}
+                onChange={(v) => patch({ wristbandLabels: v })}
+              />
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-muted">
+                  Header font size · {Math.round(config.wristbandHeaderFontSize * 100)}%
+                </span>
+                <input
+                  type="range"
+                  min={50}
+                  max={200}
+                  step={5}
+                  value={Math.round(config.wristbandHeaderFontSize * 100)}
+                  onChange={(e) =>
+                    patch({ wristbandHeaderFontSize: Number(e.target.value) / 100 })
+                  }
+                  className="accent-primary"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.wristbandLabelWrap}
+                  onChange={(e) => patch({ wristbandLabelWrap: e.target.checked })}
+                />
+                Wrap long labels
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.wristbandShowPlayerLabels}
+                  onChange={(e) => patch({ wristbandShowPlayerLabels: e.target.checked })}
+                />
+                Show player letters
+              </label>
+            </div>
           )}
         </div>
       )}
