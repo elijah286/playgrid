@@ -34,6 +34,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  arrayMove,
   rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
@@ -780,30 +781,32 @@ function PlaybookDetailClientInner({
     if (!overContainer) return;
 
     setLocalPlays((prev) => {
-      // Rebuild sort_order over the full, visually-ordered list so the flat
-      // sort_order stays monotonic across sections. Starting from the
-      // sort_order-sorted `prev`, splice the active play out and re-insert
-      // it at the position of `over` (which may be a play or a section).
+      // Work over the full, visually-ordered list so sort_order stays
+      // monotonic across sections. Use arrayMove with original indices —
+      // it handles drag-up and drag-down uniformly, unlike splice-then-
+      // reinsert which mis-positions by one when moving down.
       const ordered = [...prev].sort((a, b) => a.sort_order - b.sort_order);
-      const srcIdx = ordered.findIndex((p) => p.id === activeId);
-      if (srcIdx < 0) return prev;
-      const [moved] = ordered.splice(srcIdx, 1);
+      const oldIndex = ordered.findIndex((p) => p.id === activeId);
+      if (oldIndex < 0) return prev;
 
-      let dstIdx: number;
+      let newIndex: number;
       if (overId === overContainer) {
-        // Dropped on the section itself — append to the end of that section.
+        // Dropped on the section itself — place at the end of that section.
         const lastInSection = [...ordered]
           .reverse()
-          .find((p) => sectionKeyOfPlay.get(p.id) === overContainer);
-        dstIdx = lastInSection
-          ? ordered.findIndex((p) => p.id === lastInSection.id) + 1
-          : ordered.length;
+          .find(
+            (p) => p.id !== activeId && sectionKeyOfPlay.get(p.id) === overContainer,
+          );
+        newIndex = lastInSection
+          ? ordered.findIndex((p) => p.id === lastInSection.id)
+          : ordered.length - 1;
       } else {
         const overIdx = ordered.findIndex((p) => p.id === overId);
-        dstIdx = overIdx < 0 ? ordered.length : overIdx;
+        newIndex = overIdx < 0 ? ordered.length - 1 : overIdx;
       }
-      ordered.splice(dstIdx, 0, moved);
-      const orderMap = new Map(ordered.map((p, i) => [p.id, i]));
+      if (oldIndex === newIndex) return prev;
+      const moved = arrayMove(ordered, oldIndex, newIndex);
+      const orderMap = new Map(moved.map((p, i) => [p.id, i]));
       return prev.map((p) => ({
         ...p,
         sort_order: orderMap.get(p.id) ?? p.sort_order,
