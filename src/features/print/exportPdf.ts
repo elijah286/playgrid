@@ -3,9 +3,24 @@
 import { jsPDF } from "jspdf";
 import { svg2pdf } from "svg2pdf.js";
 
+/** svg2pdf resolves font-family against jsPDF's built-in PDF fonts, which are
+ *  only Helvetica/Times/Courier. Any other family (Inter, system-ui) falls
+ *  back to Times, producing serif text in the exported PDF. Rewrite the font
+ *  stacks to lead with helvetica and drop the embedded <style> block so the
+ *  PDF exporter picks the sans-serif built-in. Browser previews are
+ *  unaffected — this runs only on the export path. */
+function sanitizeSvgForPdf(svgMarkup: string): string {
+  return svgMarkup
+    .replace(/<style>[\s\S]*?<\/style>/g, "")
+    .replace(
+      /font-family="[^"]*"/g,
+      'font-family="helvetica"',
+    );
+}
+
 export async function exportSvgToPdf(svgMarkup: string, filename: string) {
   const parser = new DOMParser();
-  const parsed = parser.parseFromString(svgMarkup, "image/svg+xml");
+  const parsed = parser.parseFromString(sanitizeSvgForPdf(svgMarkup), "image/svg+xml");
   const svg = parsed.documentElement;
   const width = Number(svg.getAttribute("width")?.replace("mm", "") ?? 216);
   const height = Number(svg.getAttribute("height")?.replace("mm", "") ?? 279);
@@ -27,7 +42,7 @@ export async function exportSvgsToMultiPagePdf(svgPages: string[], filename: str
   let pdf: jsPDF | null = null;
 
   for (const svgMarkup of svgPages) {
-    const parsed = parser.parseFromString(svgMarkup, "image/svg+xml");
+    const parsed = parser.parseFromString(sanitizeSvgForPdf(svgMarkup), "image/svg+xml");
     const svg = parsed.documentElement;
     const width = Number(svg.getAttribute("width")?.replace("mm", "") ?? 216);
     const height = Number(svg.getAttribute("height")?.replace("mm", "") ?? 279);
@@ -52,7 +67,7 @@ export async function openSvgsInPrintTab(svgPages: string[]) {
   const parser = new DOMParser();
   let pdf: jsPDF | null = null;
   for (const svgMarkup of svgPages) {
-    const parsed = parser.parseFromString(svgMarkup, "image/svg+xml");
+    const parsed = parser.parseFromString(sanitizeSvgForPdf(svgMarkup), "image/svg+xml");
     const svg = parsed.documentElement;
     const width = Number(svg.getAttribute("width")?.replace("mm", "") ?? 216);
     const height = Number(svg.getAttribute("height")?.replace("mm", "") ?? 279);
