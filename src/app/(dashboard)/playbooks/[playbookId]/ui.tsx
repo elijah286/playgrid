@@ -217,7 +217,12 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
 
 export function PlaybookDetailClient(props: PlaybookDetailClientProps) {
   return (
-    <ExamplePreviewProvider isPreview={props.isExamplePreview ?? false}>
+    <ExamplePreviewProvider
+      isPreview={props.isExamplePreview ?? false}
+      isArchived={props.isArchived ?? false}
+      playbookId={props.playbookId}
+      canUnarchive={props.headerProps.canManage}
+    >
       <PlaybookDetailClientInner {...props} />
     </ExamplePreviewProvider>
   );
@@ -225,6 +230,7 @@ export function PlaybookDetailClient(props: PlaybookDetailClientProps) {
 
 type PlaybookDetailClientProps = Parameters<typeof PlaybookDetailClientInner>[0] & {
   isExamplePreview?: boolean;
+  isArchived?: boolean;
 };
 
 function PlaybookDetailClientInner({
@@ -303,7 +309,7 @@ function PlaybookDetailClientInner({
   const variantLabel = SPORT_VARIANT_LABELS[variant] ?? variant;
   const router = useRouter();
   const { toast } = useToast();
-  const { isPreview, blockIfPreview } = useExamplePreview();
+  const { isPreview, isArchived, blockIfPreview } = useExamplePreview();
   const [pending, startTransition] = useTransition();
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
@@ -552,7 +558,7 @@ function PlaybookDetailClientInner({
     }
   }
 
-  const isViewer = !headerProps.viewerIsCoach && !isPreview;
+  const isViewer = (!headerProps.viewerIsCoach && !isPreview) || isArchived;
 
   function openFormationPicker() {
     if (isViewer) {
@@ -960,6 +966,7 @@ function PlaybookDetailClientInner({
           exampleAdmin={headerProps.exampleAdmin}
           exampleStatus={headerProps.exampleStatus}
           isExamplePreview={headerProps.isExamplePreview}
+          isArchived={isArchived}
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {

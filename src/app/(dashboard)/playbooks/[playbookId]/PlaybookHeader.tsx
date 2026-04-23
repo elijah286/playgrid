@@ -92,6 +92,7 @@ export function PlaybookHeader({
   exampleAdmin,
   exampleStatus,
   isExamplePreview,
+  isArchived,
 }: {
   playbookId: string;
   name: string;
@@ -111,6 +112,7 @@ export function PlaybookHeader({
   exampleAdmin?: ExampleAdminState | null;
   exampleStatus?: { isPublished: boolean } | null;
   isExamplePreview?: boolean;
+  isArchived?: boolean;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -208,6 +210,10 @@ export function PlaybookHeader({
 
   function handleArchive() {
     run(() => archivePlaybookAction(playbookId, true), () => router.push("/home"));
+  }
+
+  function handleUnarchive() {
+    run(() => archivePlaybookAction(playbookId, false));
   }
 
   function handleDelete() {
@@ -311,6 +317,19 @@ export function PlaybookHeader({
                   Example
                 </span>
               )}
+              {isArchived && (
+                <span
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    isLightBg
+                      ? "bg-black/10 text-slate-900"
+                      : "bg-white/20 text-white"
+                  }`}
+                  title="This playbook is archived and can't be edited."
+                >
+                  <Archive className="size-3" />
+                  Archived
+                </span>
+              )}
             </div>
             <p className={`truncate text-[11px] font-medium sm:text-sm ${onAccentMuted}`}>
               {[
@@ -372,7 +391,8 @@ export function PlaybookHeader({
                 onDuplicate={canManage ? openDuplicate : null}
                 onToggleCoachDup={canManage ? handleToggleCoachDup : null}
                 onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
-                onArchive={canManage ? handleArchive : null}
+                onArchive={canManage && !isArchived ? handleArchive : null}
+                onUnarchive={canManage && isArchived ? handleUnarchive : null}
                 onDelete={canManage ? handleDelete : null}
                 onLeave={!canManage ? handleLeave : null}
                 allowCoachDuplication={allowCoachDuplication ?? true}
@@ -520,6 +540,7 @@ function HeaderMenu({
   onToggleCoachDup,
   onTogglePlayerDup,
   onArchive,
+  onUnarchive,
   onDelete,
   onLeave,
   allowCoachDuplication,
@@ -539,6 +560,7 @@ function HeaderMenu({
   onToggleCoachDup: (() => void) | null;
   onTogglePlayerDup: (() => void) | null;
   onArchive: (() => void) | null;
+  onUnarchive: (() => void) | null;
   onDelete: (() => void) | null;
   onLeave: (() => void) | null;
   allowCoachDuplication: boolean;
@@ -659,7 +681,7 @@ function HeaderMenu({
               <div className="my-1 h-px bg-border sm:hidden" />
             </>
           )}
-          {canManage && (onCustomize || onDuplicate || onArchive || onDelete) && (
+          {canManage && (onCustomize || onDuplicate || onArchive || onUnarchive || onDelete) && (
             <>
               <div className="my-1 h-px bg-border" />
               {onCustomize && (
@@ -740,6 +762,20 @@ function HeaderMenu({
                 >
                   <Archive className="size-4" />
                   <span>Archive</span>
+                </button>
+              )}
+              {onUnarchive && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onUnarchive();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  <Archive className="size-4" />
+                  <span>Restore playbook</span>
                 </button>
               )}
               {onDelete && (

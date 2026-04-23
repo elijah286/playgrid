@@ -59,11 +59,19 @@ type Props = {
    *  theirs, but nothing persists — autosave is skipped, and explicit
    *  save attempts surface a "create your own playbook" CTA. */
   isExamplePreview?: boolean;
+  /** Archived playbook: same treatment as example preview for edits, with a
+   *  distinct CTA that offers to restore the playbook. */
+  isArchived?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
   return (
-    <ExamplePreviewProvider isPreview={props.isExamplePreview ?? false}>
+    <ExamplePreviewProvider
+      isPreview={props.isExamplePreview ?? false}
+      isArchived={props.isArchived ?? false}
+      playbookId={props.playbookId}
+      canUnarchive={Boolean(props.canEdit) && !props.isExamplePreview}
+    >
       <PlayEditorClientInner {...props} />
     </ExamplePreviewProvider>
   );
@@ -82,6 +90,7 @@ function PlayEditorClientInner({
   playbookSettings,
   canEdit = true,
   isExamplePreview = false,
+  isArchived = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -183,6 +192,7 @@ function PlayEditorClientInner({
       return;
     }
     if (isExamplePreview) return;
+    if (isArchived) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       setIsSaving(true);
@@ -195,7 +205,7 @@ function PlayEditorClientInner({
       setIsSaving(false);
     }, 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, canEdit, isExamplePreview]);
+  }, [doc, canEdit, isExamplePreview, isArchived]);
 
   useEffect(() => {
     if (!isSaving) return;

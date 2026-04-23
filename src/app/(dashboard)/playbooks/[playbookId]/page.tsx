@@ -86,7 +86,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("playbooks")
-    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, is_example, is_public_example, example_author_label")
+    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, is_example, is_public_example, example_author_label, is_archived")
     .eq("id", playbookId)
     .single();
 
@@ -250,6 +250,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         />
       ))}
       <PlaybookDetailClient
+        isArchived={Boolean((book as unknown as { is_archived?: boolean | null }).is_archived)}
         isExamplePreview={isExamplePreview}
         playbookId={playbookId}
         sportVariant={book.sport_variant as string}
