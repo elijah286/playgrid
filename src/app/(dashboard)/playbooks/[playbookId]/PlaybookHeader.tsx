@@ -247,6 +247,7 @@ export function PlaybookHeader({
   const onAccentHover = isLightBg ? "hover:bg-black/10" : "hover:bg-white/15";
   const gradient = `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 55%, ${accentColor}a8 100%)`;
   const initial = name.trim().charAt(0).toUpperCase();
+  const homeHref = isExamplePreview ? "/examples" : "/home";
 
   return (
     <>
@@ -256,7 +257,7 @@ export function PlaybookHeader({
       >
         <div className="relative mx-auto flex max-w-7xl items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
           <Link
-            href="/home"
+            href={homeHref}
             className={`hidden sm:inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors ${onAccentMuted} ${onAccentHover}`}
             aria-label="Back to home"
           >
@@ -328,7 +329,7 @@ export function PlaybookHeader({
                 vertical space, so this chip keeps the brand present and
                 doubles as a nav link back to /home. */}
             <Link
-              href="/home"
+              href={homeHref}
               aria-label="xogridmaker home"
               className="sm:hidden inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white ring-2 ring-white/90"
             >
@@ -362,6 +363,7 @@ export function PlaybookHeader({
             )}
             {(canShare || canManage || playActions || exampleAdmin) && (
               <HeaderMenu
+                homeHref={homeHref}
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
                 canManage={canManage}
@@ -508,6 +510,7 @@ function DupStatePill({ allowed }: { allowed: boolean }) {
 }
 
 function HeaderMenu({
+  homeHref,
   onAccent,
   onAccentHover,
   canManage,
@@ -526,6 +529,7 @@ function HeaderMenu({
   onToggleExample,
   onTogglePublishExample,
 }: {
+  homeHref: string;
   onAccent: string;
   onAccentHover: string;
   canManage: boolean;
@@ -581,7 +585,7 @@ function HeaderMenu({
           className="absolute right-0 top-full z-30 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
         >
           <Link
-            href="/home"
+            href={homeHref}
             role="menuitem"
             onClick={() => setOpen(false)}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
