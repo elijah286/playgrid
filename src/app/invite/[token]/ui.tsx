@@ -55,6 +55,10 @@ export function AcceptInviteButton({
         toast(`Saved, but couldn't save positions: ${r.error}`, "error");
       }
     }
+    if (res.status === "active") {
+      router.push(`/playbooks/${res.playbookId}`);
+      return;
+    }
     setPending(false);
     setAccepted(true);
   }

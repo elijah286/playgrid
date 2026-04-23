@@ -481,7 +481,10 @@ async function sendSharedExistingUserEmail(input: {
 
 export async function acceptInviteAction(
   token: string,
-): Promise<{ ok: true; playbookId: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; playbookId: string; status: "active" | "pending" }
+  | { ok: false; error: string }
+> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
   const {
@@ -524,5 +527,13 @@ export async function acceptInviteAction(
       .then(() => undefined, () => undefined);
   }
 
-  return { ok: true, playbookId };
+  const { data: member } = await supabase
+    .from("playbook_members")
+    .select("status")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const status: "active" | "pending" = member?.status === "active" ? "active" : "pending";
+
+  return { ok: true, playbookId, status };
 }
