@@ -35,8 +35,10 @@ export function canRemovePlaysheetWatermark(entitlement: Entitlement | null): bo
   return tierAtLeast(entitlement, "coach");
 }
 
-/** Free tier caps. Owner tier-driven unless noted. */
-export const FREE_MAX_PLAYS_PER_PLAYBOOK = 12;
+/** Free tier caps. Owner tier-driven unless noted. The per-playbook play
+ *  cap is admin-configurable at runtime (see lib/site/free-plays-config);
+ *  this constant is the hardcoded fallback when site_settings is unreadable. */
+export const FREE_MAX_PLAYS_PER_PLAYBOOK = 16;
 export const FREE_MAX_PLAYBOOKS_OWNED = 1;
 
 export function canCreateAnotherPlaybook(
@@ -50,9 +52,10 @@ export function canCreateAnotherPlaybook(
 export function canAddAnotherPlay(
   ownerEntitlement: Entitlement | null,
   currentPlayCount: number,
+  limit: number = FREE_MAX_PLAYS_PER_PLAYBOOK,
 ): boolean {
   if (tierAtLeast(ownerEntitlement, "coach")) return true;
-  return currentPlayCount < FREE_MAX_PLAYS_PER_PLAYBOOK;
+  return currentPlayCount < limit;
 }
 
 export function canDuplicatePlaybook(entitlement: Entitlement | null): boolean {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -23,7 +24,8 @@ export const metadata: Metadata = {
 
 type Faq = { q: string; a: string };
 
-const faqs: Faq[] = [
+function buildFaqs(freeMaxPlays: number): Faq[] {
+  return [
   {
     q: "What is xogridmaker?",
     a: "xogridmaker is a football play designer for coaches. You draw plays on a field, organize them into playbooks, and share them with your team — on phones, tablets, or printed wristband cards.",
@@ -34,7 +36,7 @@ const faqs: Faq[] = [
   },
   {
     q: "Is xogridmaker free?",
-    a: "Yes, there's a free tier so you can design plays and small playbooks without paying. Paid plans scale with how much you use it — more plays, more playbooks, more athletes. See the pricing page for current plan details.",
+    a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to design a small playbook without paying. Paid plans scale with how much you use it: unlimited plays, more playbooks, team invites, and wristbands. See the pricing page for current plan details.`,
   },
   {
     q: "What formations and play types does it support?",
@@ -64,9 +66,12 @@ const faqs: Faq[] = [
     q: "How do I get started?",
     a: "Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes.",
   },
-];
+  ];
+}
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
+  const faqs = buildFaqs(freeMaxPlays);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",

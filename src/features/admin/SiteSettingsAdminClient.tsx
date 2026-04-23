@@ -1,16 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useToast } from "@/components/ui";
+import { Button, useToast } from "@/components/ui";
 import { setHideLobbyAnimationAction } from "@/app/actions/admin-lobby";
 import { setExamplesPageEnabledAction } from "@/app/actions/admin-examples";
+import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays";
 
 export function SiteSettingsAdminClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
+  initialFreeMaxPlays,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
+  initialFreeMaxPlays: number;
 }) {
   const { toast } = useToast();
 
@@ -19,6 +22,32 @@ export function SiteSettingsAdminClient({
 
   const [examplesEnabled, setExamplesEnabled] = useState(initialExamplesPageEnabled);
   const [examplesPending, startExamplesTransition] = useTransition();
+
+  const [savedFreeMaxPlays, setSavedFreeMaxPlays] = useState(initialFreeMaxPlays);
+  const [freeMaxPlaysInput, setFreeMaxPlaysInput] = useState(String(initialFreeMaxPlays));
+  const [freeMaxPlaysPending, startFreeMaxPlaysTransition] = useTransition();
+
+  function saveFreeMaxPlays() {
+    const next = Number(freeMaxPlaysInput);
+    if (!Number.isFinite(next) || next < 1 || next > 1000) {
+      toast("Enter a number between 1 and 1000.", "error");
+      setFreeMaxPlaysInput(String(savedFreeMaxPlays));
+      return;
+    }
+    const rounded = Math.floor(next);
+    if (rounded === savedFreeMaxPlays) return;
+    startFreeMaxPlaysTransition(async () => {
+      const res = await setFreeMaxPlaysPerPlaybookAction(rounded);
+      if (!res.ok) {
+        toast(res.error, "error");
+        setFreeMaxPlaysInput(String(savedFreeMaxPlays));
+        return;
+      }
+      setSavedFreeMaxPlays(res.value);
+      setFreeMaxPlaysInput(String(res.value));
+      toast(`Free-tier play cap set to ${res.value}.`, "success");
+    });
+  }
 
   function toggleLobbyAnimation(next: boolean) {
     const prev = hideLobbyAnimation;
@@ -56,6 +85,47 @@ export function SiteSettingsAdminClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            Free-tier plays per playbook
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            The max number of plays a free account can create in a single
+            playbook. Drives enforcement, the playbook upgrade notice, the
+            pricing table, and the FAQ copy. Default is 16.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            step={1}
+            className="w-20 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border"
+            value={freeMaxPlaysInput}
+            disabled={freeMaxPlaysPending}
+            onChange={(e) => setFreeMaxPlaysInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveFreeMaxPlays();
+            }}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={freeMaxPlaysPending}
+            disabled={
+              freeMaxPlaysPending ||
+              freeMaxPlaysInput.trim() === "" ||
+              Number(freeMaxPlaysInput) === savedFreeMaxPlays
+            }
+            onClick={saveFreeMaxPlays}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
         <div>
           <p className="text-sm font-semibold text-foreground">

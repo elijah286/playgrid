@@ -70,6 +70,7 @@ export function SettingsClient({
   initialCoachAiEnabled,
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
+  initialFreeMaxPlays,
   initialTrafficSummary,
   trafficError,
   initialSeeds,
@@ -90,6 +91,7 @@ export function SettingsClient({
   initialCoachAiEnabled: boolean;
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
+  initialFreeMaxPlays: number;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
   initialSeeds: SavedFormation[];
@@ -200,6 +202,7 @@ export function SettingsClient({
         <SiteSettingsAdminClient
           initialHideLobbyAnimation={initialHideLobbyAnimation}
           initialExamplesPageEnabled={initialExamplesPageEnabled}
+          initialFreeMaxPlays={initialFreeMaxPlays}
         />
       )}
     </div>

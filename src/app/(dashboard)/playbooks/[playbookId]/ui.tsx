@@ -240,6 +240,7 @@ function PlaybookDetailClientInner({
   initialPrefs,
   headerProps,
   isAdmin = false,
+  freeMaxPlays,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -252,6 +253,7 @@ function PlaybookDetailClientInner({
   initialFormations: SavedFormation[];
   initialPrefs: PlaybookViewPrefs | null;
   isAdmin?: boolean;
+  freeMaxPlays: number;
   // Data for the playbook banner. Rendered inside the sticky header region
   // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
   // the client can wire play-action callbacks into the banner's menu.
@@ -307,7 +309,7 @@ function PlaybookDetailClientInner({
 
   function showPlayCapUpgrade() {
     setUpgradeNotice({
-      title: "Free tier is capped at 12 plays per playbook",
+      title: `Free tier is capped at ${freeMaxPlays} plays per playbook`,
       message:
         "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
     });

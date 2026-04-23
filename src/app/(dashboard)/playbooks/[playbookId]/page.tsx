@@ -13,6 +13,7 @@ import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { ExamplePreviewBanner } from "@/features/admin/ExamplePreviewBanner";
 import { PlaybookDetailClient } from "./ui";
 
@@ -201,6 +202,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
   }
   const canManageExample = isAdmin && (effectiveRole === "owner" || effectiveRole === "editor");
 
+  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
+
   const publicExampleJsonLd = isPublicExample
     ? [
         {
@@ -261,6 +264,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         initialFormations={formationsRes.ok ? formationsRes.formations : []}
         initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
         isAdmin={isAdmin}
+        freeMaxPlays={freeMaxPlays}
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,

@@ -2,17 +2,18 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import {
   FREE_MAX_PLAYBOOKS_OWNED,
-  FREE_MAX_PLAYS_PER_PLAYBOOK,
   tierAtLeast,
 } from "@/lib/billing/features";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 
 /**
  * When a Coach+ user downgrades to Free, they may own more than
  * FREE_MAX_PLAYBOOKS_OWNED playbooks and individual playbooks may contain more
- * than FREE_MAX_PLAYS_PER_PLAYBOOK plays. We never delete their content — we
+ * than the current free-tier play cap. We never delete their content — we
  * keep it read-only ("locked") until they upgrade again. The rule is
  * oldest-first wins: the first playbook they created stays editable, and the
- * first 12 plays inside each playbook stay editable.
+ * first N plays inside each playbook stay editable, where N is the
+ * admin-configured free-tier cap.
  */
 
 export type DowngradeLocks = {
@@ -35,6 +36,7 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
   const entitlement = await getUserEntitlement(userId);
   if (tierAtLeast(entitlement, "coach")) return EMPTY_LOCKS;
 
+  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
   const admin = createServiceRoleClient();
 
   const { data: ownedMembers } = await admin
@@ -85,7 +87,7 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
     }
     for (const [bookId, list] of byBook) {
       list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      const locked = list.slice(FREE_MAX_PLAYS_PER_PLAYBOOK).map((p) => p.id);
+      const locked = list.slice(freeMaxPlays).map((p) => p.id);
       if (locked.length > 0) {
         lockedPlayIdsByBook.set(bookId, new Set(locked));
       }
