@@ -84,6 +84,22 @@ function usePersistedFlag(key: string): [boolean, (v: boolean) => void] {
   return [value, update];
 }
 
+// Treat anything below the `lg` Tailwind breakpoint as tablet/phone.
+// The book-preview grid needs ~4 columns of horizontal room to read
+// sensibly, and the hover-open interaction is fiddly on touch.
+function useIsCompactViewport(): boolean {
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from matchMedia
+    setCompact(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setCompact(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return compact;
+}
+
 function useDashboardView(): [DashboardView, (v: DashboardView) => void] {
   const [view, setView] = useState<DashboardView>("preview");
   useEffect(() => {
@@ -970,7 +986,12 @@ export function DashboardClient({
   const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
   const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
   const [storedView, setView] = useDashboardView();
-  const view: DashboardView = hideAnimation ? "classic" : storedView;
+  // Tablets and phones don't have the horizontal room for the open-book
+  // preview animation, and it feels fiddly on touch. Force Simple mode
+  // and hide the toggle below the desktop breakpoint.
+  const isCompact = useIsCompactViewport();
+  const effectiveHideAnimation = hideAnimation || isCompact;
+  const view: DashboardView = effectiveHideAnimation ? "classic" : storedView;
   const [showArchived, setShowArchived] = usePersistedFlag(
     "dashboard.showArchived",
   );
@@ -1316,7 +1337,7 @@ export function DashboardClient({
             >
               New Playbook
             </Button>
-            {!hideAnimation && (
+            {!effectiveHideAnimation && (
               <SegmentedControl
                 size="sm"
                 value={view}
