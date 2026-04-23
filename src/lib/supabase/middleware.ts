@@ -28,6 +28,7 @@ const PUBLIC_PREFIXES = [
   "/invite/", // invite landing page (pre-login preview)
   "/api/contact",
   "/api/health",
+  "/api/stripe/webhook", // Stripe → server. Must accept POSTs without a session.
   "/monitoring", // Sentry tunnel
   // Example playbook viewing — pages enforce their own anon/member check
   // against the `is_public_example` flag, so anon visitors don't bounce.
