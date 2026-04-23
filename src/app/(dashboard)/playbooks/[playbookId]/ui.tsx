@@ -7,9 +7,41 @@ import {
 } from "@/features/admin/ExamplePreviewContext";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
-import { useFlipReorder } from "@/lib/hooks/useFlipReorder";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+type SortableListeners = Record<string, (event: unknown) => void> | undefined;
 import {
   Archive,
   ArchiveRestore,
@@ -103,6 +135,62 @@ import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
+
+// Render-prop wrapper that exposes dnd-kit's useSortable outputs inline.
+// Lets us keep the existing Card/li JSX in-place while a single wrapper adds
+// transform, transition, and activator listeners.
+function SortableItem({
+  id,
+  disabled,
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  children: (args: {
+    setNodeRef: (el: HTMLElement | null) => void;
+    style: CSSProperties;
+    attributes: HTMLAttributes<HTMLElement>;
+    listeners: SortableListeners;
+    isDragging: boolean;
+  }) => ReactNode;
+}) {
+  const { setNodeRef, transform, transition, attributes, listeners, isDragging } =
+    useSortable({ id, disabled });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <>
+      {children({
+        setNodeRef,
+        style,
+        attributes,
+        listeners: listeners as SortableListeners,
+        isDragging,
+      })}
+    </>
+  );
+}
+
+// Render-prop wrapper for a section's drop zone (enables dropping onto an
+// empty group, and ensures the section is a valid over-target).
+function DroppableContainer({
+  id,
+  disabled,
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  children: (args: {
+    setNodeRef: (el: HTMLElement | null) => void;
+    isOver: boolean;
+  }) => ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled });
+  return <>{children({ setNodeRef, isOver })}</>;
+}
+
 
 type GroupBy = "type" | "formation" | "group";
 
@@ -259,7 +347,7 @@ function PlaybookDetailClientInner({
   useEffect(() => {
     setLocalPlays(initialPlays);
   }, [initialPlays]);
-  const [draggingPlayId, setDraggingPlayId] = useState<string | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -269,9 +357,6 @@ function PlaybookDetailClientInner({
   // itself is the feedback.
   const [isReordering, setIsReordering] = useState(false);
   const [highlightPlayId, setHighlightPlayId] = useState<string | null>(null);
-  const { register: registerFlipNode, snap: snapFlip } = useFlipReorder(
-    localPlays.map((p) => p.id),
-  );
 
   // Debounced server save. Skips the very first effect run so we don't
   // save on mount (state already equals server state). Also skips the
@@ -299,7 +384,6 @@ function PlaybookDetailClientInner({
   }, [playbookId, tab, view, typeFilter, groupBy, viewMode, thumbSize, showPlayNumbers]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showManageGroups, setShowManageGroups] = useState(false);
-  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const sectionRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   // Formation picker state
@@ -618,38 +702,119 @@ function PlaybookDetailClientInner({
     handle(() => renamePlayAction(id, next));
   }
 
-  function onDropToGroup(groupKey: string, playId: string) {
-    const target = groupKey === UNASSIGNED ? null : groupKey;
-    handle(() => setPlayGroupAction(playId, target));
+  // dnd-kit sensors: pointer for mouse, touch for iPad (short press-delay so
+  // vertical scrolling still works), keyboard for a11y. Activation distance
+  // on pointer lets ordinary clicks through without starting a drag.
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Map a play id (or a section id, when groupBy === "group") to the section
+  // it belongs to. Used by the drag-over handler to detect cross-container
+  // moves and update the in-memory list so siblings slide to make room.
+  const sectionKeyOfPlay = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of localPlays) {
+      if (groupBy === "group") {
+        m.set(p.id, p.group_id ?? UNASSIGNED);
+      } else if (groupBy === "type") {
+        m.set(p.id, p.play_type);
+      } else if (groupBy === "formation") {
+        m.set(p.id, (p.formation_name?.trim() || "Unassigned formation").toLowerCase());
+      } else {
+        m.set(p.id, "__all__");
+      }
+    }
+    return m;
+  }, [localPlays, groupBy]);
+
+  function findContainerFromId(id: string): string | undefined {
+    if (sectionKeyOfPlay.has(id)) return sectionKeyOfPlay.get(id);
+    // Id is a section key (e.g. empty group droppable).
+    return id;
   }
 
-  // Live-reorder the in-memory list so other rows slide into place while the
-  // user is still dragging. Commits to the server on drop via commitPlayOrder.
-  //
-  // Throttled: after a swap, the moved tile sits under the cursor, and any
-  // cross-border jitter would immediately trigger the reverse swap — classic
-  // flip-flop. We gate subsequent swaps behind a short cooldown and suppress
-  // the exact inverse until the cursor moves to a different target.
-  const lastSwapAtRef = useRef(0);
-  const lastSwapPairRef = useRef<{ source: string; target: string } | null>(null);
-  const SWAP_COOLDOWN_MS = 90;
-  function reorderLocal(sourceId: string, targetId: string) {
-    if (sourceId === targetId) return;
-    const now = Date.now();
-    if (now - lastSwapAtRef.current < SWAP_COOLDOWN_MS) return;
-    const last = lastSwapPairRef.current;
-    if (last && last.source === targetId && last.target === sourceId) return;
-    lastSwapAtRef.current = now;
-    lastSwapPairRef.current = { source: sourceId, target: targetId };
+  // Track the active play's group at drag-start so we can detect a
+  // cross-group move on drop and persist it with setPlayGroupAction.
+  const dragStartGroupRef = useRef<string | null | undefined>(undefined);
+
+  function handleDragStart(event: DragStartEvent) {
+    const id = String(event.active.id);
+    setActiveDragId(id);
+    const play = localPlays.find((p) => p.id === id);
+    dragStartGroupRef.current = play?.group_id ?? null;
+  }
+
+  // While dragging over a different container (groupBy === "group" only),
+  // reassign the active play's group_id in local state. The section memo
+  // re-derives and the SortableContexts update in place — siblings slide
+  // into the new gap naturally, no flip-flop.
+  function handleDragOver(event: DragOverEvent) {
+    if (groupBy !== "group") return;
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const activeContainer = findContainerFromId(activeId);
+    const overContainer = findContainerFromId(overId);
+    if (!activeContainer || !overContainer) return;
+    if (activeContainer === overContainer) return;
+    const nextGroupId = overContainer === UNASSIGNED ? null : overContainer;
+    setLocalPlays((prev) =>
+      prev.map((p) => (p.id === activeId ? { ...p, group_id: nextGroupId } : p)),
+    );
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    const startedGroup = dragStartGroupRef.current;
+    dragStartGroupRef.current = undefined;
+    setActiveDragId(null);
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const overContainer = findContainerFromId(overId);
+    if (!overContainer) return;
+
     setLocalPlays((prev) => {
-      const src = prev.findIndex((p) => p.id === sourceId);
-      const tgt = prev.findIndex((p) => p.id === targetId);
-      if (src < 0 || tgt < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(src, 1);
-      next.splice(tgt, 0, moved);
-      return next.map((p, i) => ({ ...p, sort_order: i }));
+      const current = prev
+        .filter((p) => sectionKeyOfPlay.get(p.id) === overContainer)
+        .map((p) => p.id);
+      const src = current.indexOf(activeId);
+      const reordered = [...current];
+      if (src >= 0) reordered.splice(src, 1);
+      const dstRaw =
+        overId === overContainer ? reordered.length : reordered.indexOf(overId);
+      const insertAt = Math.max(
+        0,
+        Math.min(reordered.length, dstRaw < 0 ? reordered.length : dstRaw),
+      );
+      reordered.splice(insertAt, 0, activeId);
+      const orderMap = new Map(reordered.map((id, i) => [id, i]));
+      return prev.map((p) =>
+        orderMap.has(p.id) ? { ...p, sort_order: orderMap.get(p.id)! } : p,
+      );
     });
+
+    // Persist sort order.
+    commitPlayOrder();
+
+    // If groupBy === "group" and the active play moved to a different group
+    // (detected during drag-over or at drop), persist the group change.
+    if (groupBy === "group") {
+      const newGroup = overContainer === UNASSIGNED ? null : overContainer;
+      if (startedGroup !== undefined && startedGroup !== newGroup) {
+        startTransition(async () => {
+          const res = await setPlayGroupAction(activeId, newGroup);
+          if (!res.ok) {
+            toast(res.error ?? "Could not move play.", "error");
+            router.refresh();
+          }
+        });
+      }
+    }
   }
 
   // Swap a play's position with whichever play currently holds target1Based.
@@ -1124,6 +1289,17 @@ function PlaybookDetailClientInner({
               </div>
             </div>
           )}
+          <DndContext
+            sensors={dragSensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => {
+              dragStartGroupRef.current = undefined;
+              setActiveDragId(null);
+            }}
+          >
           {sections.map((section) => {
             const buildItems = (p: PlaybookDetailPlayRow): ActionMenuItem[] => [
               {
@@ -1168,108 +1344,51 @@ function PlaybookDetailClientInner({
             ];
             const isGroupSection = groupBy === "group";
             const isDropTarget = isGroupSection;
-            const isNamedGroup = isGroupSection && section.key !== UNASSIGNED;
-            const isDragOver = dragOverKey === section.key;
+            const playIds = section.plays.map((p) => p.id);
             return (
-              <section
+              <DroppableContainer
                 key={section.key}
+                id={section.key}
+                disabled={!reorderMode || !isDropTarget}
+              >
+                {({ setNodeRef: setDroppableRef, isOver }) => (
+              <section
                 data-section-key={section.key}
                 ref={(el) => {
+                  setDroppableRef(el);
                   if (el) sectionRefs.current.set(section.key, el);
                   else sectionRefs.current.delete(section.key);
                 }}
                 className={`scroll-mt-20 space-y-3 rounded-lg transition-colors ${
                   isDropTarget ? "p-2 -m-2" : ""
-                } ${isDragOver ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
-                onDragOver={
-                  isDropTarget
-                    ? (e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        if (dragOverKey !== section.key) setDragOverKey(section.key);
-                      }
-                    : undefined
-                }
-                onDragLeave={
-                  isDropTarget
-                    ? (e) => {
-                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                          setDragOverKey((k) => (k === section.key ? null : k));
-                        }
-                      }
-                    : undefined
-                }
-                onDrop={
-                  isDropTarget
-                    ? (e) => {
-                        e.preventDefault();
-                        const playId = e.dataTransfer.getData("text/play-id");
-                        setDragOverKey(null);
-                        if (playId) onDropToGroup(section.key, playId);
-                      }
-                    : undefined
-                }
+                } ${reorderMode && isOver && isDropTarget ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
               >
                 <div className="flex items-center gap-2 border-b border-border pb-1.5">
                   <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
                   <Badge variant="default">{section.plays.length}</Badge>
                 </div>
                 {viewMode === "cards" && (
+                  <SortableContext items={playIds} strategy={rectSortingStrategy}>
                   <div className={`grid gap-3 ${SIZE_COL_CLASS[thumbSize]}`}>
 
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
-                      const canReorder = reorderMode;
                       const position = positionByPlayId.get(p.id);
-                      const isDragging = draggingPlayId === p.id;
                       const isHighlighted = highlightPlayId === p.id;
                       return (
-                      <Card
+                      <SortableItem
                         key={`${section.key}:${p.id}`}
-                        ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
+                        id={p.id}
+                        disabled={!reorderMode}
+                      >
+                        {({ setNodeRef, style, attributes, listeners, isDragging }) => (
+                      <Card
+                        ref={setNodeRef}
+                        style={style}
+                        {...(reorderMode ? attributes : {})}
+                        {...(reorderMode && listeners ? listeners : {})}
                         hover
-                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab select-none active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
-                        draggable={canReorder}
-                        onDragStart={
-                          canReorder
-                            ? (e) => {
-                                e.dataTransfer.setData("text/play-id", p.id);
-                                e.dataTransfer.effectAllowed = "move";
-                                setDraggingPlayId(p.id);
-                              }
-                            : undefined
-                        }
-                        onDragOver={
-                          canReorder
-                            ? (e) => {
-                                if (!draggingPlayId || draggingPlayId === p.id) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                e.dataTransfer.dropEffect = "move";
-                                reorderLocal(draggingPlayId, p.id);
-                              }
-                            : undefined
-                        }
-                        onDrop={
-                          canReorder
-                            ? (e) => {
-                                if (!draggingPlayId) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                snapFlip();
-                                setDraggingPlayId(null);
-                                commitPlayOrder();
-                              }
-                            : undefined
-                        }
-                        onDragEnd={
-                          canReorder
-                            ? () => {
-                                snapFlip();
-                                setDraggingPlayId(null);
-                              }
-                            : undefined
-                        }
+                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab touch-none select-none active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         onClick={
                           selectionMode
                             ? (e) => {
@@ -1336,68 +1455,38 @@ function PlaybookDetailClientInner({
                           </div>
                         )}
                       </Card>
+                        )}
+                      </SortableItem>
                       );
                     })}
                   </div>
+                  </SortableContext>
                 )}
                 {viewMode === "list" && (
+                  <SortableContext items={playIds} strategy={verticalListSortingStrategy}>
                   <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
                     {section.plays.map((p) => {
                       const isSelected = selectedPlayIds.has(p.id);
                       const canReorder = reorderMode;
                       const position = positionByPlayId.get(p.id);
-                      const isDragging = draggingPlayId === p.id;
                       const isHighlighted = highlightPlayId === p.id;
                       return (
-                      <li
+                      <SortableItem
                         key={`${section.key}:${p.id}`}
-                        ref={(el) => registerFlipNode(p.id, el as HTMLElement | null)}
-                        className={`flex items-center gap-2 pl-2 pr-2 ${reorderMode ? "cursor-grab select-none active:cursor-grabbing" : ""} ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "rounded-md ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
-                        draggable={canReorder}
-                        onDragStart={
-                          canReorder
-                            ? (e) => {
-                                e.dataTransfer.setData("text/play-id", p.id);
-                                e.dataTransfer.effectAllowed = "move";
-                                setDraggingPlayId(p.id);
-                              }
-                            : undefined
-                        }
-                        onDragOver={
-                          canReorder
-                            ? (e) => {
-                                if (!draggingPlayId || draggingPlayId === p.id) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                e.dataTransfer.dropEffect = "move";
-                                reorderLocal(draggingPlayId, p.id);
-                              }
-                            : undefined
-                        }
-                        onDrop={
-                          canReorder
-                            ? (e) => {
-                                if (!draggingPlayId) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                snapFlip();
-                                setDraggingPlayId(null);
-                                commitPlayOrder();
-                              }
-                            : undefined
-                        }
-                        onDragEnd={
-                          canReorder
-                            ? () => {
-                                snapFlip();
-                                setDraggingPlayId(null);
-                              }
-                            : undefined
-                        }
+                        id={p.id}
+                        disabled={!reorderMode}
+                      >
+                        {({ setNodeRef, style, attributes, listeners, isDragging }) => (
+                      <li
+                        ref={setNodeRef as unknown as React.Ref<HTMLLIElement>}
+                        style={style}
+                        className={`flex items-center gap-2 pl-2 pr-2 ${isSelected ? "bg-primary/5" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "rounded-md ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                       >
                         {canReorder && (
                           <span
-                            className="flex size-5 shrink-0 cursor-grab items-center justify-center text-muted hover:text-foreground active:cursor-grabbing"
+                            {...(attributes as HTMLAttributes<HTMLSpanElement>)}
+                            {...(listeners ?? {})}
+                            className="flex size-5 shrink-0 cursor-grab touch-none items-center justify-center text-muted hover:text-foreground active:cursor-grabbing"
                             aria-label="Drag to reorder"
                             title="Drag to reorder"
                           >
@@ -1456,13 +1545,62 @@ function PlaybookDetailClientInner({
                         </Link>
                         {!reorderMode && <ActionMenu items={buildItems(p)} />}
                       </li>
+                        )}
+                      </SortableItem>
                       );
                     })}
                   </ul>
+                  </SortableContext>
                 )}
               </section>
+                )}
+              </DroppableContainer>
             );
           })}
+          <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
+            {activeDragId
+              ? (() => {
+                  const p = localPlays.find((pl) => pl.id === activeDragId);
+                  if (!p) return null;
+                  if (viewMode === "cards") {
+                    return (
+                      <Card className="relative flex cursor-grabbing flex-col p-0 shadow-elevated ring-2 ring-primary">
+                        <div className="flex flex-1 flex-col px-4 pt-2 pb-4">
+                          <div className="mb-0.5 flex items-center gap-1.5 pr-7">
+                            <p className="min-w-0 max-w-[60%] truncate text-[11px] text-muted">
+                              {p.formation_name || p.shorthand || "\u00A0"}
+                            </p>
+                            {p.tags.length > 0 && <PlayTagChips tags={p.tags} />}
+                          </div>
+                          <span className="font-semibold">{p.name}</span>
+                          {p.preview && (
+                            <div className="mt-1">
+                              <PlayThumbnail preview={p.preview} />
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center gap-2 rounded-md bg-surface-raised pl-2 pr-2 shadow-elevated ring-2 ring-primary">
+                      <span className="flex size-5 shrink-0 items-center justify-center text-muted">
+                        <GripVertical className="size-4" />
+                      </span>
+                      <div className="flex min-w-0 flex-1 items-center gap-2 py-2">
+                        {(p.formation_name || p.shorthand) && (
+                          <span className="max-w-[140px] shrink-0 truncate text-xs text-muted">
+                            {p.formation_name || p.shorthand}
+                          </span>
+                        )}
+                        <span className="shrink-0 text-sm font-medium">{p.name}</span>
+                      </div>
+                    </div>
+                  );
+                })()
+              : null}
+          </DragOverlay>
+          </DndContext>
         </div>
       )}
         </div>
