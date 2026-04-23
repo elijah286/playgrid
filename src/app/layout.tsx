@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: "%s · xogridmaker",
   },
   description:
-    "xogridmaker is a football play designer for coaches. Draw plays on a real grid, organize them into playbooks, preview wristbands, and carry your playbook to the field. Built for flag football, 7v7, and tackle.",
+    "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets. Designed for flag, 7v7, and tackle football coaches.",
   applicationName: "xogridmaker",
   authors: [{ name: "xogridmaker" }],
   creator: "xogridmaker",
@@ -46,14 +46,14 @@ export const metadata: Metadata = {
     siteName: "xogridmaker",
     title: "xogridmaker — Football play designer & playbook builder",
     description:
-      "Draw football plays on a real grid, organize them into playbooks, preview wristbands, and carry your playbook to the field. Flag, 7v7, and tackle.",
+      "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets. Designed for flag, 7v7, and tackle football coaches.",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
     title: "xogridmaker — Football play designer & playbook builder",
     description:
-      "Draw football plays on a real grid, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
+      "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets.",
   },
   robots: {
     index: true,

@@ -36,9 +36,9 @@ export default async function HomePage() {
             className="mt-8 max-w-xl text-lg leading-relaxed"
             style={{ color: "#475569" }}
           >
-            Draw plays on a real grid, organize them into playbooks, preview
-            wristbands, and carry your playbook to the field. Built for flag
-            football, 7v7, and tackle coaches who take their game seriously.
+            Create custom playbooks and share them with your team. Quickly
+            generate game-ready wristbands and play sheets. Designed for flag,
+            7v7, and tackle football coaches.
           </p>
 
           <div className="mt-10 flex flex-wrap gap-3">
