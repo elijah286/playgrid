@@ -359,9 +359,16 @@ export async function getPlayForEditorAction(playId: string) {
       ...normalizedDoc.metadata,
       formationId: normalizedDoc.metadata.formationId ?? ((play.formation_id as string | null) ?? null),
       formationTag: normalizedDoc.metadata.formationTag ?? ((play.formation_tag as string | null) ?? null),
-      playType: normalizedDoc.metadata.playType ?? ((play.play_type as PlayType | null) ?? "offense"),
+      // plays.play_type / plays.special_teams_unit are the source of truth
+      // (NOT NULL columns, set at create and by dedicated actions). The
+      // document metadata is a denormalized mirror and is known to drift
+      // in older data. Trust the DB on load so the editor never surfaces
+      // a stale type — and never writes a stale type back on save.
+      playType: (play.play_type as PlayType | null) ?? normalizedDoc.metadata.playType ?? "offense",
       specialTeamsUnit:
-        normalizedDoc.metadata.specialTeamsUnit ?? ((play.special_teams_unit as SpecialTeamsUnit | null) ?? null),
+        (play.special_teams_unit as SpecialTeamsUnit | null) ??
+        normalizedDoc.metadata.specialTeamsUnit ??
+        null,
       opponentFormationId:
         normalizedDoc.metadata.opponentFormationId ?? ((play.opponent_formation_id as string | null) ?? null),
       vsPlayId:
@@ -396,7 +403,7 @@ export async function savePlayVersionAction(
 
   const { data: play, error: pErr } = await supabase
     .from("plays")
-    .select("id, playbook_id, current_version_id")
+    .select("id, playbook_id, current_version_id, play_type, special_teams_unit")
     .eq("id", playId)
     .single();
   if (pErr || !play) return { ok: false as const, error: pErr?.message ?? "Not found" };
@@ -483,8 +490,16 @@ export async function savePlayVersionAction(
       display_abbrev: document.metadata.sheetAbbrev,
       formation_id: formationId,
       formation_tag: formationId ? document.metadata.formationTag ?? null : null,
-      play_type: document.metadata.playType ?? "offense",
-      special_teams_unit: document.metadata.specialTeamsUnit ?? null,
+      // Preserve existing DB play_type / special_teams_unit when the
+      // document doesn't carry them. Falling back to "offense" here meant
+      // a stale document (e.g. one inherited from a duplicate where the
+      // metadata drifted from the row) could silently flip a defense play
+      // to offense on the next save.
+      play_type:
+        document.metadata.playType ?? ((play.play_type as PlayType | null) ?? "offense"),
+      special_teams_unit:
+        document.metadata.specialTeamsUnit ??
+        ((play.special_teams_unit as SpecialTeamsUnit | null) ?? null),
       opponent_formation_id: opponentFormationId,
       vs_play_id: vsPlayId,
       vs_play_snapshot: (document.metadata.vsPlaySnapshot ?? null) as unknown as Record<string, unknown> | null,
@@ -702,6 +717,12 @@ export async function duplicatePlayAction(
   const doc = structuredClone(loaded.document);
   doc.metadata.coachName = `${doc.metadata.coachName} (copy)`;
   if (opts?.clearNotes) doc.metadata.notes = "";
+  // Pin the copied document's type metadata to the source row's DB columns
+  // so any drift on the source doesn't ride into the copy's document and
+  // then flip the new row's play_type on its next save.
+  doc.metadata.playType = (srcPlay.play_type as PlayType | null) ?? "offense";
+  doc.metadata.specialTeamsUnit =
+    (srcPlay.special_teams_unit as SpecialTeamsUnit | null) ?? null;
 
   const { data: sortDup } = await supabase
     .from("plays")

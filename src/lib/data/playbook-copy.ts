@@ -127,12 +127,28 @@ export async function copyPlaybookContents(
         .eq("id", p.current_version_id)
         .maybeSingle();
       if (srcVer) {
+        // Force the copied document's metadata.playType and
+        // metadata.specialTeamsUnit to match the source play's DB columns.
+        // Source data in the wild has drift — a defense play whose document
+        // metadata still says "offense" from an older authoring pass. If we
+        // copied the document verbatim, the next save on the copy would
+        // write metadata.playType back to plays.play_type and flip the row.
+        const srcDoc = (srcVer.document ?? {}) as Record<string, unknown>;
+        const srcMeta = (srcDoc.metadata ?? {}) as Record<string, unknown>;
+        const copiedDoc: Record<string, unknown> = {
+          ...srcDoc,
+          metadata: {
+            ...srcMeta,
+            playType: (p.play_type as string | null) ?? "offense",
+            specialTeamsUnit: (p.special_teams_unit as string | null) ?? null,
+          },
+        };
         const { data: newVer } = await client
           .from("play_versions")
           .insert({
             play_id: newPlayId,
             schema_version: (srcVer.schema_version as number | null) ?? 1,
-            document: srcVer.document,
+            document: copiedDoc,
             label: "copied",
             created_by: createdByUserId,
           })
