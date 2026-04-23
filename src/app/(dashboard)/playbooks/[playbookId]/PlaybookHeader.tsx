@@ -343,16 +343,23 @@ export function PlaybookHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {/* Mobile-only xogridmaker brand chip. Desktop already shows the
+            {/* Mobile-only xogridmaker brand mark. Desktop already shows the
                 real SiteHeader; on mobile that header is hidden to save
-                vertical space, so this chip keeps the brand present and
-                doubles as a nav link back to /home. */}
+                vertical space, so this keeps the brand present and
+                doubles as a nav link back to /home. White pill keeps the
+                multi-color wordmark legible over any accent gradient. */}
             <Link
               href={homeHref}
               aria-label="xogridmaker home"
-              className="sm:hidden inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white ring-2 ring-white/90"
+              className="sm:hidden inline-flex items-center rounded-full bg-white px-2.5 py-1 ring-1 ring-black/10"
             >
-              xogridmaker
+              <Image
+                src="/brand/xogridmaker_wordmark.svg"
+                alt="xogridmaker"
+                width={200}
+                height={36}
+                className="h-3.5 w-auto"
+              />
             </Link>
             {canShare && (
               <Button
