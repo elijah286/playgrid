@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, MousePointer } from "lucide-react";
+import { ArrowLeft, FilePlus, Save, MousePointer } from "lucide-react";
 import Link from "next/link";
 import {
   saveFormationAction,
@@ -222,6 +222,20 @@ export function FormationEditorClient(props: Props) {
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {props.mode === "edit" && returnFirstPb && (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={FilePlus}
+              onClick={() =>
+                router.push(
+                  `/plays/new?playbookId=${returnFirstPb}&formationId=${props.formationId}`,
+                )
+              }
+            >
+              Create play using formation
+            </Button>
+          )}
           <Button
             variant="primary"
             size="sm"

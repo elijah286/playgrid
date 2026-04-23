@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Copy, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { Copy, FilePlus, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import {
   addFormationToSeedsAction,
   deleteFormationAction,
@@ -155,6 +155,11 @@ export function PlaybookFormationsTab({
               onCopy={handleCopy}
               onDelete={handleDelete}
               onAddAsSeed={handleAddAsSeed}
+              onCreatePlay={() =>
+                router.push(
+                  `/plays/new?playbookId=${playbookId}&formationId=${f.id}`,
+                )
+              }
             />
           ))}
         </div>
@@ -188,6 +193,7 @@ function FormationCard({
   onCopy,
   onDelete,
   onAddAsSeed,
+  onCreatePlay,
 }: {
   formation: SavedFormation;
   isAdmin: boolean;
@@ -195,8 +201,10 @@ function FormationCard({
   onCopy: (formation: SavedFormation) => void;
   onDelete: (id: string, name: string) => void;
   onAddAsSeed: (formation: SavedFormation) => void;
+  onCreatePlay: () => void;
 }) {
   const items: ActionMenuItem[] = [
+    { label: "Create play using formation", icon: FilePlus, onSelect: onCreatePlay },
     { label: "Edit", icon: Pencil, onSelect: onEdit },
     { label: "Copy", icon: Copy, onSelect: () => onCopy(formation) },
   ];
