@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -381,9 +380,15 @@ function FormationTitlePicker({
                             : "border-border hover:bg-surface-inset"
                         }`}
                       >
-                        <FormationThumbnail formation={f} />
+                        <div className="relative">
+                          <FormationThumbnail formation={f} />
+                          {selected && (
+                            <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                              Current
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1">
-                          {selected && <Check className="size-3 shrink-0 text-primary" />}
                           <span className="truncate text-xs font-medium text-foreground">
                             {f.displayName}
                           </span>
