@@ -48,6 +48,7 @@ export async function exportSvgToPdf(svgMarkup: string, filename: string) {
     unit: "mm",
     format: [Math.max(width, 10), Math.max(height, 10)],
   });
+  pdf.setFont("helvetica", "normal");
 
   await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
   pdf.save(filename);
@@ -70,9 +71,11 @@ export async function exportSvgsToMultiPagePdf(svgPages: string[], filename: str
 
     if (!pdf) {
       pdf = new jsPDF({ orientation, unit: "mm", format: fmt });
+      pdf.setFont("helvetica", "normal");
       await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
     } else {
       pdf.addPage(fmt, orientation);
+      pdf.setFont("helvetica", "normal");
       await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
     }
   }
@@ -95,9 +98,11 @@ export async function openSvgsInPrintTab(svgPages: string[]) {
     const fmt: [number, number] = [Math.max(width, 10), Math.max(height, 10)];
     if (!pdf) {
       pdf = new jsPDF({ orientation, unit: "mm", format: fmt });
+      pdf.setFont("helvetica", "normal");
       await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
     } else {
       pdf.addPage(fmt, orientation);
+      pdf.setFont("helvetica", "normal");
       await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
     }
   }
