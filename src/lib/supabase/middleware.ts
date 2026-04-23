@@ -16,6 +16,12 @@ const PUBLIC_EXACT = new Set<string>([
   "/contact",
   "/pricing",
   "/examples",
+  // SEO + PWA metadata routes: must be fetchable by crawlers (Googlebot,
+  // Bingbot) and the browser's PWA install flow without a session.
+  "/robots.txt",
+  "/sitemap.xml",
+  "/manifest.webmanifest",
+  "/opengraph-image",
 ]);
 
 const PUBLIC_PREFIXES = [
