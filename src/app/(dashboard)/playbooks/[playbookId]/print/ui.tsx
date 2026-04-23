@@ -361,12 +361,22 @@ export function PrintPlaybookClient({
     logoUrl,
   ]);
 
-  // Playbook-position (1..N) for each play, matching the orange glyph on the
-  // playbook detail page. Used as the "Number" label on tiles.
+  // Playbook-position for each play, matching the orange glyph on the playbook
+  // detail page. The grid resets numbering within each section (Offense,
+  // Defense, Special Teams), so mirror that per-play-type numbering here.
   const playbookPositionById = useMemo(() => {
-    const sorted = [...initialPack].sort((a, b) => a.nav.sort_order - b.nav.sort_order);
+    const byType = new Map<string, typeof initialPack>();
+    for (const r of initialPack) {
+      const k = r.nav.play_type;
+      const arr = byType.get(k);
+      if (arr) arr.push(r);
+      else byType.set(k, [r]);
+    }
     const m = new Map<string, number>();
-    sorted.forEach((r, i) => m.set(r.id, i + 1));
+    for (const [, arr] of byType) {
+      arr.sort((a, b) => a.nav.sort_order - b.nav.sort_order);
+      arr.forEach((r, i) => m.set(r.id, i + 1));
+    }
     return m;
   }, [initialPack]);
 
