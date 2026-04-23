@@ -64,6 +64,7 @@ export type PlaybookHeaderPlayActions = {
   creating: boolean;
   printHref: string;
   newFormationHref: string;
+  isViewer: boolean;
 };
 
 export type ExampleAdminState = {
@@ -586,20 +587,23 @@ function HeaderMenu({
                   setOpen(false);
                   playActions.onNewPlay();
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset disabled:opacity-50 sm:hidden"
+                title={playActions.isViewer ? "Viewers can't create plays" : undefined}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset disabled:opacity-50 sm:hidden${playActions.isViewer ? " opacity-60" : ""}`}
               >
                 <Plus className="size-4" />
                 <span>New play</span>
               </button>
-              <Link
-                href={playActions.newFormationHref}
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
-              >
-                <Plus className="size-4" />
-                <span>New formation</span>
-              </Link>
+              {!playActions.isViewer && (
+                <Link
+                  href={playActions.newFormationHref}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+                >
+                  <Plus className="size-4" />
+                  <span>New formation</span>
+                </Link>
+              )}
               <button
                 type="button"
                 role="menuitem"

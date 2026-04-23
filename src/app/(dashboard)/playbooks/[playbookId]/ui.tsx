@@ -93,6 +93,7 @@ import {
   Card,
   EmptyState,
   Input,
+  Modal,
   SegmentedControl,
   useToast,
   type ActionMenuItem,
@@ -314,6 +315,7 @@ function PlaybookDetailClientInner({
   const [availableFormations, setAvailableFormations] = useState<SavedFormation[]>([]);
   const [loadingFormations, setLoadingFormations] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showViewerCreateHint, setShowViewerCreateHint] = useState(false);
   const [openSection, setOpenSection] = useState<PlayType>("offense");
   const defenseTemplates = useMemo(
     () => defenseTemplatesForVariant(variant),
@@ -467,7 +469,13 @@ function PlaybookDetailClientInner({
     }
   }
 
+  const isViewer = !headerProps.viewerIsCoach;
+
   function openFormationPicker() {
+    if (isViewer) {
+      setShowViewerCreateHint(true);
+      return;
+    }
     setShowFormationPicker(true);
     setLoadingFormations(true);
     listFormationsAction().then((res) => {
@@ -713,6 +721,32 @@ function PlaybookDetailClientInner({
         title={upgradeNotice?.title ?? ""}
         message={upgradeNotice?.message ?? ""}
       />
+      <Modal
+        open={showViewerCreateHint}
+        onClose={() => setShowViewerCreateHint(false)}
+        title="Only coaches can add plays"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowViewerCreateHint(false)}>
+              Close
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowViewerCreateHint(false);
+                router.push("/home");
+              }}
+            >
+              Create your own playbook
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground">
+          You have view-only access to this playbook. To add plays, ask the coach
+          to grant you edit access, or create your own playbook.
+        </p>
+      </Modal>
       {duplicatingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 shadow-xl">
@@ -783,6 +817,7 @@ function PlaybookDetailClientInner({
             creating,
             printHref: `/playbooks/${playbookId}/print`,
             newFormationHref: `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}${isPreview ? "&preview=1" : ""}`,
+            isViewer,
           }}
         />
 
@@ -1054,7 +1089,8 @@ function PlaybookDetailClientInner({
             leftIcon={Plus}
             loading={creating}
             onClick={openFormationPicker}
-            className="hidden sm:inline-flex"
+            title={isViewer ? "Viewers can't create plays" : undefined}
+            className={`hidden sm:inline-flex${isViewer ? " opacity-60" : ""}`}
           >
             New play
           </Button>
@@ -1101,11 +1137,17 @@ function PlaybookDetailClientInner({
         <EmptyState
           icon={FileText}
           heading="No plays yet"
-          description="Create your first play to start designing routes and formations."
+          description={
+            isViewer
+              ? "This playbook doesn't have any plays yet. Your coach will add them here."
+              : "Create your first play to start designing routes and formations."
+          }
           action={
-            <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
-              New play
-            </Button>
+            isViewer ? undefined : (
+              <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
+                New play
+              </Button>
+            )
           }
         />
       ) : (
