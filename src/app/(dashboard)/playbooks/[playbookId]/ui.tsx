@@ -42,7 +42,6 @@ import {
   createPlaybookGroupAction,
   deletePlayAction,
   deletePlaybookGroupAction,
-  duplicatePlayAction,
   renamePlayAction,
   renamePlaybookGroupAction,
   reorderPlaybookGroupsAction,
@@ -54,6 +53,7 @@ import {
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
+import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -211,7 +211,7 @@ function PlaybookDetailClientInner({
   const { toast } = useToast();
   const { isPreview, blockIfPreview } = useExamplePreview();
   const [pending, startTransition] = useTransition();
-  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
   function showPlayCapUpgrade() {
@@ -739,35 +739,6 @@ function PlaybookDetailClientInner({
           to grant you edit access, or create your own playbook.
         </p>
       </Modal>
-      {duplicatingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 shadow-xl">
-            <svg
-              className="size-5 animate-spin text-primary"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="3"
-                opacity="0.25"
-              />
-              <path
-                d="M22 12a10 10 0 0 1-10 10"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="text-sm font-medium text-foreground">
-              Duplicating play…
-            </span>
-          </div>
-        </div>
-      )}
       {/* Sticky header region: back link + playbook identity + slim top bar.
           Desktop: pinned below the global dashboard header (h ≈ 56px = top-14).
           Mobile: the global header is hidden, so pin to the very top (top-0).
@@ -1102,6 +1073,7 @@ function PlaybookDetailClientInner({
       {tab === "formations" && (
         <PlaybookFormationsTab
           playbookId={playbookId}
+          playbookName={headerProps.name}
           variant={variant}
           initial={initialFormations}
         />
@@ -1160,29 +1132,15 @@ function PlaybookDetailClientInner({
                 onSelect: () => onRenamePlay(p.id, p.name),
               },
               {
-                label: "Duplicate",
+                label: "Copy",
                 icon: Copy,
                 onSelect: () => {
-                  let clearNotes = false;
-                  if (p.hasNotes) {
-                    const keep = window.confirm(
-                      `"${p.name}" has notes.\n\nOK = keep notes on the duplicate.\nCancel = clear notes on the duplicate.\n\nThe original play's notes will not be modified either way.`,
-                    );
-                    clearNotes = !keep;
-                  }
-                  setDuplicatingId(p.id);
-                  startTransition(async () => {
-                    const res = await duplicatePlayAction(p.id, { clearNotes });
-                    if (!res.ok) {
-                      setDuplicatingId(null);
-                      if (/Free tier|capped at/i.test(res.error ?? "")) {
-                        showPlayCapUpgrade();
-                      } else {
-                        toast(res.error ?? "Could not duplicate play.", "error");
-                      }
-                      return;
-                    }
-                    router.push(`/plays/${res.playId}/edit`);
+                  setCopyTarget({
+                    kind: "play",
+                    playId: p.id,
+                    playName: p.name,
+                    hasFormation: !!p.formation_name,
+                    sourceFormationName: p.formation_name,
                   });
                 },
               },
@@ -1815,6 +1773,29 @@ function PlaybookDetailClientInner({
             )}
           </div>
         </div>
+      )}
+      {copyTarget && (
+        <CopyToPlaybookDialog
+          open={!!copyTarget}
+          onClose={() => setCopyTarget(null)}
+          currentPlaybookId={playbookId}
+          currentPlaybookName={headerProps.name}
+          currentSportVariant={sportVariant}
+          target={copyTarget}
+          toast={toast}
+          onCopied={(result) => {
+            if (result.playbookId === playbookId && result.playId) {
+              // Local copy — jump to edit, matching old duplicate behavior.
+              router.push(`/plays/${result.playId}/edit`);
+            } else if (result.playbookId !== playbookId) {
+              // Cross-playbook — send the coach to the destination playbook.
+              router.push(`/playbooks/${result.playbookId}`);
+            } else {
+              // Formation copy within current playbook — refresh the tab.
+              router.refresh();
+            }
+          }}
+        />
       )}
     </div>
   );

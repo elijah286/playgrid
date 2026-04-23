@@ -9,7 +9,6 @@ import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import {
-  duplicatePlayAction,
   installDefenseVsPlayAction,
   savePlayVersionAction,
 } from "@/app/actions/plays";
@@ -23,8 +22,9 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorHeaderBar } from "./EditorHeaderBar";
+import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import { TagsCard } from "./TagsCard";
-import { useToast, Modal, Button } from "@/components/ui";
+import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
@@ -158,7 +158,6 @@ function PlayEditorClientInner({
   const [activeWidth, setActiveWidth] = useState(2.5);
 
   const [isNavPending, startNavTransition] = useTransition();
-  const [isDuplicating, startTransition] = useTransition();
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
   // Mobile defaults to view-only so a coach can just watch the play on a
@@ -273,46 +272,24 @@ function PlayEditorClientInner({
   const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
   const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
 
-  const [duplicatePrompt, setDuplicatePrompt] = useState(false);
-
-  const runDuplicate = useCallback(
-    (clearNotes: boolean) => {
-      setDuplicatePrompt(false);
-      if (
-        blockIfPreview(
-          "Duplicating a play in an example playbook isn't persisted. Start your own playbook to save copies.",
-        )
-      ) {
-        return;
-      }
-      startTransition(async () => {
-        const res = await duplicatePlayAction(playId, { clearNotes });
-        if (!res.ok) {
-          if (/Free tier|capped at/i.test(res.error)) {
-            setUpgradeNotice({
-              title: "Free tier is capped at 12 plays per playbook",
-              message:
-                "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
-            });
-          } else {
-            toast(res.error, "error");
-          }
-        } else {
-          toast("Play duplicated", "success");
-          router.push(`/plays/${res.playId}/edit`);
-        }
-      });
-    },
-    [playId, router, toast, blockIfPreview],
-  );
+  const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
 
   const duplicate = useCallback(() => {
-    if ((doc.metadata.notes ?? "").trim()) {
-      setDuplicatePrompt(true);
-    } else {
-      runDuplicate(false);
+    if (
+      blockIfPreview(
+        "Copying a play in an example playbook isn't persisted. Start your own playbook to save copies.",
+      )
+    ) {
+      return;
     }
-  }, [doc.metadata.notes, runDuplicate]);
+    setCopyTarget({
+      kind: "play",
+      playId,
+      playName: doc.metadata.coachName || "Untitled play",
+      hasFormation: !!doc.metadata.formationId,
+      sourceFormationName: doc.metadata.formation || null,
+    });
+  }, [playId, doc.metadata.coachName, doc.metadata.formationId, doc.metadata.formation, blockIfPreview]);
 
   /* ---------- Toolbar handlers ---------- */
 
@@ -814,29 +791,18 @@ function PlayEditorClientInner({
           </aside>
       </div>
 
-      <Modal
-        open={duplicatePrompt}
-        onClose={() => setDuplicatePrompt(false)}
-        title="Duplicate play"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setDuplicatePrompt(false)}>
-              Cancel
-            </Button>
-            <Button variant="ghost" onClick={() => runDuplicate(true)}>
-              Clear notes
-            </Button>
-            <Button onClick={() => runDuplicate(false)}>Keep notes</Button>
-          </>
-        }
-      >
-        <p className="text-sm text-foreground">
-          This play has notes. Do you want to keep them on the duplicate, or start fresh?
-        </p>
-        <p className="mt-2 text-xs text-muted">
-          The notes on the original play will not be modified either way.
-        </p>
-      </Modal>
+      {copyTarget && (
+        <CopyToPlaybookDialog
+          open={!!copyTarget}
+          onClose={() => setCopyTarget(null)}
+          currentPlaybookId={playbookId}
+          target={copyTarget}
+          toast={toast}
+          onCopied={(result) => {
+            if (result.playId) router.push(`/plays/${result.playId}/edit`);
+          }}
+        />
+      )}
 
       <UpgradeModal
         open={!!upgradeNotice}
@@ -845,18 +811,6 @@ function PlayEditorClientInner({
         message={upgradeNotice?.message ?? ""}
       />
 
-      {isDuplicating && (
-        <div
-          className="fixed inset-0 z-[55] flex items-center justify-center bg-black/40"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="flex items-center gap-3 rounded-xl bg-surface-raised px-4 py-3 text-sm text-foreground shadow-lg ring-1 ring-border">
-            <span className="inline-block size-4 animate-spin rounded-full border-2 border-muted border-t-transparent" />
-            Duplicating play…
-          </div>
-        </div>
-      )}
     </div>
   );
 }

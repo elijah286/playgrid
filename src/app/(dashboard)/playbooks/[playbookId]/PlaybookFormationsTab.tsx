@@ -6,10 +6,10 @@ import { useMemo, useState, useTransition } from "react";
 import { Copy, Link2Off, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   deleteFormationAction,
-  duplicateFormationAction,
   setFormationPlaybookInclusionAction,
   type SavedFormation,
 } from "@/app/actions/formations";
+import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import {
   ActionMenu,
   Badge,
@@ -32,10 +32,12 @@ import { useExamplePreview } from "@/features/admin/ExamplePreviewContext";
  */
 export function PlaybookFormationsTab({
   playbookId,
+  playbookName,
   variant,
   initial,
 }: {
   playbookId: string;
+  playbookName: string;
   variant: SportVariant;
   initial: SavedFormation[];
 }) {
@@ -44,6 +46,7 @@ export function PlaybookFormationsTab({
   const { isPreview } = useExamplePreview();
   const [formations, setFormations] = useState(initial);
   const [q, setQ] = useState("");
+  const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [, startTransition] = useTransition();
 
   // In preview mode the link goes to the preview formation editor,
@@ -98,15 +101,11 @@ export function PlaybookFormationsTab({
     });
   }
 
-  function handleDuplicate(id: string) {
-    startTransition(async () => {
-      const res = await duplicateFormationAction(id);
-      if (res.ok) {
-        toast("Formation duplicated", "success");
-        router.push(`/formations/${res.formationId}/edit`);
-      } else {
-        toast(res.error, "error");
-      }
+  function handleCopy(formation: SavedFormation) {
+    setCopyTarget({
+      kind: "formation",
+      formationId: formation.id,
+      formationName: formation.displayName,
     });
   }
 
@@ -158,12 +157,30 @@ export function PlaybookFormationsTab({
                   `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
                 )
               }
-              onDuplicate={handleDuplicate}
+              onCopy={handleCopy}
               onRemoveFromPlaybook={handleRemoveFromPlaybook}
               onDelete={handleDelete}
             />
           ))}
         </div>
+      )}
+      {copyTarget && (
+        <CopyToPlaybookDialog
+          open={!!copyTarget}
+          onClose={() => setCopyTarget(null)}
+          currentPlaybookId={playbookId}
+          currentPlaybookName={playbookName}
+          currentSportVariant={variant}
+          target={copyTarget}
+          toast={toast}
+          onCopied={(result) => {
+            if (result.playbookId === playbookId && result.formationId) {
+              router.push(`/formations/${result.formationId}/edit?returnToPlaybook=${playbookId}`);
+            } else {
+              router.push(`/playbooks/${result.playbookId}?tab=formations`);
+            }
+          }}
+        />
       )}
     </div>
   );
@@ -172,19 +189,19 @@ export function PlaybookFormationsTab({
 function FormationCard({
   formation,
   onEdit,
-  onDuplicate,
+  onCopy,
   onRemoveFromPlaybook,
   onDelete,
 }: {
   formation: SavedFormation;
   onEdit: () => void;
-  onDuplicate: (id: string) => void;
+  onCopy: (formation: SavedFormation) => void;
   onRemoveFromPlaybook: (id: string, name: string) => void;
   onDelete: (id: string, name: string) => void;
 }) {
   const items: ActionMenuItem[] = [
     { label: "Edit", icon: Pencil, onSelect: onEdit, disabled: formation.isSystem },
-    { label: "Duplicate", icon: Copy, onSelect: () => onDuplicate(formation.id) },
+    { label: "Copy", icon: Copy, onSelect: () => onCopy(formation) },
     {
       label: "Remove from playbook",
       icon: Link2Off,

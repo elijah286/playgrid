@@ -247,6 +247,101 @@ export async function duplicateFormationAction(
   return { ok: true, formationId: data.id as string };
 }
 
+/**
+ * Deep-clone a formation into the destination playbook's team.
+ * If a formation with the same display name is already visible to the
+ * destination playbook, appends " 2" (then " 3", etc.) to avoid collision.
+ * Used by the "Copy to playbook" dialog.
+ */
+export async function copyFormationAction(params: {
+  formationId: string;
+  destinationPlaybookId: string;
+}): Promise<
+  | { ok: true; formationId: string; renamed: boolean; newName: string }
+  | { ok: false; error: string }
+> {
+  const { formationId, destinationPlaybookId } = params;
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  // Destination gate + team/variant
+  const { data: destPb, error: destPbErr } = await supabase
+    .from("playbooks")
+    .select("team_id, sport_variant")
+    .eq("id", destinationPlaybookId)
+    .single();
+  if (destPbErr || !destPb) {
+    return { ok: false, error: destPbErr?.message ?? "Destination playbook not found." };
+  }
+  const { data: destMembership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", destinationPlaybookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!destMembership || (destMembership.role !== "owner" && destMembership.role !== "editor")) {
+    return { ok: false, error: "You don't have permission to add formations to that playbook." };
+  }
+
+  // Source
+  const { data: src, error: srcErr } = await supabase
+    .from("formations")
+    .select("params, kind")
+    .eq("id", formationId)
+    .single();
+  if (srcErr || !src) return { ok: false, error: srcErr?.message ?? "Formation not found." };
+
+  const srcParams = src.params as {
+    displayName: string;
+    players: Player[];
+    sportProfile?: Partial<SportProfile>;
+  };
+
+  // Existing names visible to destination (dest team's custom formations + system).
+  const { data: existing } = await supabase
+    .from("formations")
+    .select("params")
+    .or(`team_id.eq.${destPb.team_id},is_system.eq.true`);
+  const existingNames = new Set(
+    ((existing ?? []) as Array<{ params: Record<string, unknown> }>)
+      .map((r) => (r.params?.displayName as string | undefined)?.trim())
+      .filter((n): n is string => !!n),
+  );
+
+  const baseName = srcParams.displayName.trim() || "Untitled formation";
+  let newName = baseName;
+  let renamed = false;
+  if (existingNames.has(newName)) {
+    renamed = true;
+    let i = 2;
+    while (existingNames.has(`${baseName} ${i}`)) i += 1;
+    newName = `${baseName} ${i}`;
+  }
+
+  const nextParams = { ...srcParams, displayName: newName };
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("formations")
+    .insert({
+      team_id: destPb.team_id,
+      is_system: false,
+      semantic_key: `custom_${Date.now()}`,
+      params: nextParams as unknown as Record<string, unknown>,
+      kind: (src.kind as string | null) ?? "offense",
+    })
+    .select("id")
+    .single();
+
+  if (insErr) return { ok: false, error: insErr.message };
+  return { ok: true, formationId: inserted.id as string, renamed, newName };
+}
+
 export async function deleteFormationAction(
   formationId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {

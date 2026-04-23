@@ -777,6 +777,243 @@ export async function duplicatePlayAction(
   return { ok: true as const, playId: play.id };
 }
 
+export type CopyPlayFormationMode = "copy" | "unlink" | "pick";
+
+/**
+ * Copy a play into another playbook (or the current one). Deep-clones the
+ * play's current version — no shared references, no version history carried
+ * over. Formation is handled per `formationMode`:
+ *  - "copy":   deep-clone the source formation into the destination's team
+ *              (with " 2" suffix on name collision).
+ *  - "unlink": strip the formation link; players/routes travel as-is.
+ *  - "pick":   use the destination formation specified by
+ *              `destinationFormationId`. Routes are remapped by source-player
+ *              *label* → destination-player label. Source routes whose label
+ *              has no match are dropped; destination players with no match
+ *              have no route.
+ *
+ * Group assignment, sort order, opponent link, and roster assignments do not
+ * travel. Play-name collision in the destination gets " (copy)" / " (copy 2)".
+ */
+export async function copyPlayAction(params: {
+  playId: string;
+  destinationPlaybookId: string;
+  formationMode: CopyPlayFormationMode;
+  destinationFormationId?: string;
+}): Promise<
+  | {
+      ok: true;
+      playId: string;
+      playbookId: string;
+      droppedRouteCount: number;
+      formationRenamed: boolean;
+      formationNewName: string | null;
+    }
+  | { ok: false; error: string }
+> {
+  const { playId, destinationPlaybookId, formationMode, destinationFormationId } = params;
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  if (formationMode === "pick" && !destinationFormationId) {
+    return { ok: false as const, error: "Pick a destination formation." };
+  }
+
+  const loaded = await getPlayForEditorAction(playId);
+  if (!loaded.ok) return { ok: false as const, error: loaded.error };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  // Destination gate + basics
+  const { data: destPb, error: destPbErr } = await supabase
+    .from("playbooks")
+    .select("id, team_id, sport_variant")
+    .eq("id", destinationPlaybookId)
+    .single();
+  if (destPbErr || !destPb) {
+    return { ok: false as const, error: destPbErr?.message ?? "Destination playbook not found." };
+  }
+  const { data: destMembership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", destinationPlaybookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!destMembership || (destMembership.role !== "owner" && destMembership.role !== "editor")) {
+    return { ok: false as const, error: "You don't have permission to add plays to that playbook." };
+  }
+
+  const cap = await assertPlayCap(supabase, destinationPlaybookId);
+  if (!cap.ok) return { ok: false as const, error: cap.error };
+
+  // Source play row (for play_type + special_teams_unit)
+  const { data: srcPlay, error: srcPlayErr } = await supabase
+    .from("plays")
+    .select("play_type, special_teams_unit")
+    .eq("id", playId)
+    .single();
+  if (srcPlayErr || !srcPlay) return { ok: false as const, error: "Not found" };
+
+  const doc = structuredClone(loaded.document) as PlayDocument;
+
+  // --- Play name: " (copy)" with numeric suffix on destination collision ---
+  const baseName = (doc.metadata.coachName || "Untitled play").trim();
+  const { data: destPlayNames } = await supabase
+    .from("plays")
+    .select("name")
+    .eq("playbook_id", destinationPlaybookId)
+    .eq("is_archived", false);
+  const takenNames = new Set(
+    ((destPlayNames ?? []) as Array<{ name: string | null }>)
+      .map((r) => (r.name ?? "").trim())
+      .filter(Boolean),
+  );
+  let newName = `${baseName} (copy)`;
+  if (takenNames.has(newName)) {
+    let i = 2;
+    while (takenNames.has(`${baseName} (copy ${i})`)) i += 1;
+    newName = `${baseName} (copy ${i})`;
+  }
+  doc.metadata.coachName = newName;
+
+  // --- Formation handling ---
+  let droppedRouteCount = 0;
+  let formationRenamed = false;
+  let formationNewName: string | null = null;
+
+  if (formationMode === "unlink") {
+    doc.metadata.formationId = null;
+    doc.metadata.formation = "";
+    doc.metadata.formationTag = "";
+  } else if (formationMode === "copy") {
+    const srcFormationId = doc.metadata.formationId;
+    if (srcFormationId) {
+      // Inlined copy to keep the RPC single-statement: re-use the helper.
+      const { copyFormationAction } = await import("@/app/actions/formations");
+      const res = await copyFormationAction({
+        formationId: srcFormationId,
+        destinationPlaybookId,
+      });
+      if (!res.ok) return { ok: false as const, error: res.error };
+      doc.metadata.formationId = res.formationId;
+      doc.metadata.formation = res.newName;
+      formationRenamed = res.renamed;
+      formationNewName = res.newName;
+    } // else: no formation linked — nothing to copy.
+  } else if (formationMode === "pick" && destinationFormationId) {
+    const { data: destFormation, error: destFormErr } = await supabase
+      .from("formations")
+      .select("params")
+      .eq("id", destinationFormationId)
+      .single();
+    if (destFormErr || !destFormation) {
+      return { ok: false as const, error: "Destination formation not found." };
+    }
+    const destParams = destFormation.params as {
+      displayName: string;
+      players: Player[];
+    };
+
+    // Label-based remap: source player id -> label -> destination player id.
+    const srcPlayers = doc.layers.players;
+    const srcIdToLabel = new Map<string, string>(
+      srcPlayers.map((p) => [p.id, p.label.trim()]),
+    );
+    const destLabelToId = new Map<string, string>();
+    for (const dp of destParams.players) {
+      const lbl = dp.label.trim();
+      if (lbl && !destLabelToId.has(lbl)) destLabelToId.set(lbl, dp.id);
+    }
+
+    const remappedRoutes: Route[] = [];
+    for (const route of doc.layers.routes) {
+      const lbl = srcIdToLabel.get(route.carrierPlayerId);
+      const newCarrierId = lbl ? destLabelToId.get(lbl) : undefined;
+      if (newCarrierId) {
+        remappedRoutes.push({ ...structuredClone(route), carrierPlayerId: newCarrierId });
+      } else {
+        droppedRouteCount += 1;
+      }
+    }
+
+    doc.layers.players = structuredClone(destParams.players);
+    doc.layers.routes = remappedRoutes;
+    doc.metadata.formationId = destinationFormationId;
+    doc.metadata.formation = destParams.displayName ?? "";
+    doc.metadata.formationTag = "";
+  }
+
+  // Opponent link + grouping do not travel cross-playbook.
+  doc.metadata.opponentFormationId = null;
+  doc.metadata.vsPlayId = null;
+  doc.metadata.vsPlaySnapshot = null;
+
+  // --- Sort order: append to end of destination ---
+  const { data: sortDup } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", destinationPlaybookId)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const dupSort = (sortDup?.sort_order ?? -1) + 1;
+
+  // --- Insert play row + first version ---
+  const { data: play, error: playErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: destinationPlaybookId,
+      name: doc.metadata.coachName,
+      shorthand: doc.metadata.shorthand,
+      wristband_code: doc.metadata.wristbandCode,
+      formation_name: doc.metadata.formation,
+      formation_id: doc.metadata.formationId ?? null,
+      formation_tag: doc.metadata.formationTag ?? null,
+      concept: "",
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
+      display_abbrev: doc.metadata.sheetAbbrev,
+      group_id: null,
+      sort_order: dupSort,
+      play_type: (srcPlay.play_type as PlayType | null) ?? "offense",
+      special_teams_unit: (srcPlay.special_teams_unit as SpecialTeamsUnit | null) ?? null,
+      opponent_formation_id: null,
+    })
+    .select("id")
+    .single();
+  if (playErr) return { ok: false as const, error: playErr.message };
+
+  const { data: ver, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: play.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "copied",
+      parent_version_id: null,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (verErr) return { ok: false as const, error: verErr.message };
+
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
+
+  return {
+    ok: true as const,
+    playId: play.id,
+    playbookId: destinationPlaybookId,
+    droppedRouteCount,
+    formationRenamed,
+    formationNewName,
+  };
+}
+
 export async function renamePlayAction(playId: string, name: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const trimmed = name.trim();

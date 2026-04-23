@@ -101,6 +101,47 @@ export type PlaybookRow = {
   play_count?: number;
 };
 
+/**
+ * List playbooks the signed-in user can copy *into* — i.e. books where
+ * they're the owner or an editor. Excludes archived and default (inbox)
+ * books. Used by the "Copy to playbook" dialog.
+ */
+export async function listCopyTargetPlaybooksAction(): Promise<
+  | { ok: true; playbooks: PlaybookRow[] }
+  | { ok: false; error: string; playbooks: [] }
+> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured.", playbooks: [] };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in.", playbooks: [] };
+
+  await ensureDefaultWorkspace(supabase, user.id);
+
+  const { data, error } = await supabase
+    .from("playbook_members")
+    .select(
+      "role, playbooks!inner(id, name, sport_variant, season, created_at, updated_at, team_id, is_default, is_archived)",
+    )
+    .eq("user_id", user.id)
+    .in("role", ["owner", "editor"])
+    .eq("playbooks.is_archived", false)
+    .eq("playbooks.is_default", false);
+
+  if (error) return { ok: false, error: error.message, playbooks: [] };
+
+  type Row = { playbooks: PlaybookRow };
+  const rows = ((data ?? []) as unknown as Row[])
+    .map((r) => r.playbooks)
+    .filter((p): p is PlaybookRow => !!p)
+    .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+
+  return { ok: true, playbooks: rows };
+}
+
 /** List playbooks. Excludes the per-team "Inbox" (is_default) by default. */
 export async function listPlaybooksAction(opts?: {
   includeDefault?: boolean;
