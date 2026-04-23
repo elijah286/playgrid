@@ -8,6 +8,8 @@ import { FieldBackdrop } from "@/components/layout/FieldBackdrop";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import PageViewTracker from "@/components/PageViewTracker";
+import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -102,27 +104,47 @@ const structuredData = [
   },
 ];
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let isAuthed = false;
+  if (hasSupabaseEnv()) {
+    try {
+      const supabase = await createClient();
+      const { data } = await supabase.auth.getUser();
+      isAuthed = !!data.user;
+    } catch {
+      isAuthed = false;
+    }
+  }
+
   return (
     <html lang="en" className={`h-full antialiased ${inter.variable}`} suppressHydrationWarning>
       <head>
-        {/* Apply color scheme before hydration to avoid flash. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var k='playgrid-color-scheme';var v=localStorage.getItem(k);if(v!=='light'&&v!=='dark'&&v!=='system')v='system';var d=v==='dark'||(v==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
-          }}
-        />
+        {/* Apply color scheme before hydration to avoid flash. Only honor a
+            dark preference for logged-in users; visitors always see light. */}
+        {isAuthed ? (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function(){try{var k='playgrid-color-scheme';var v=localStorage.getItem(k);if(v!=='light'&&v!=='dark'&&v!=='system')v='system';var d=v==='dark'||(v==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
+            }}
+          />
+        ) : (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `document.documentElement.classList.remove('dark');`,
+            }}
+          />
+        )}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
       </head>
       <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans">
-        <ThemeProvider>
+        <ThemeProvider forceLight={!isAuthed}>
           <FieldBackdrop />
           <ToastProvider>
             <ConfigBanner />

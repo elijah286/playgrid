@@ -25,20 +25,31 @@ type Ctx = {
 
 const ThemeContext = createContext<Ctx | null>(null);
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const colorScheme = useSyncExternalStore(
+export function ThemeProvider({
+  children,
+  forceLight = false,
+}: {
+  children: ReactNode;
+  forceLight?: boolean;
+}) {
+  const storedScheme = useSyncExternalStore(
     subscribeColorScheme,
     getColorSchemeSnapshot,
     getColorSchemeServerSnapshot,
   );
+  const colorScheme: ColorSchemePreference = forceLight ? "light" : storedScheme;
 
   useEffect(() => {
     applyColorSchemeToDocument(colorScheme);
   }, [colorScheme]);
 
-  const setColorScheme = useCallback((v: ColorSchemePreference) => {
-    persistColorScheme(v);
-  }, []);
+  const setColorScheme = useCallback(
+    (v: ColorSchemePreference) => {
+      if (forceLight) return;
+      persistColorScheme(v);
+    },
+    [forceLight],
+  );
 
   const value = useMemo(() => ({ colorScheme, setColorScheme }), [colorScheme, setColorScheme]);
 
