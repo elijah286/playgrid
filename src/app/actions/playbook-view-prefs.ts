@@ -17,6 +17,22 @@ export type PlaybookViewPrefs = {
   showPlayNumbers?: boolean;
 };
 
+/**
+ * Strip content-hiding filters from prefs before seeding them to a new
+ * member. `typeFilter` and `view` aren't preferences — they're transient
+ * filters that hide plays. If a coach was filtered to Offense when they
+ * created an invite, we don't want the invitee to land on a playbook
+ * where defense and special-teams plays appear to be missing. Layout
+ * prefs (groupBy, viewMode, thumbSize, showPlayNumbers, tab) carry over.
+ */
+export function sanitizeSharedPrefs(prefs: PlaybookViewPrefs | null | undefined): PlaybookViewPrefs {
+  if (!prefs) return {};
+  const { typeFilter: _typeFilter, view: _view, ...rest } = prefs;
+  void _typeFilter;
+  void _view;
+  return rest;
+}
+
 export async function getPlaybookViewPrefsAction(
   playbookId: string,
 ): Promise<{ ok: true; prefs: PlaybookViewPrefs | null } | { ok: false; error: string }> {
@@ -90,7 +106,7 @@ export async function seedPlaybookViewPrefsAction(
     .eq("playbook_id", playbookId)
     .maybeSingle();
 
-  const prefs = (mine?.preferences as PlaybookViewPrefs) ?? {};
+  const prefs = sanitizeSharedPrefs(mine?.preferences as PlaybookViewPrefs | null);
   const { error } = await supabase.rpc("seed_playbook_view_prefs", {
     p_user_id: recipientUserId,
     p_playbook_id: playbookId,

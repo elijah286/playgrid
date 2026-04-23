@@ -9,6 +9,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/app/actions/playbook-view-prefs";
 
 const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -102,7 +103,7 @@ export async function createInviteAction(input: {
       max_uses: input.maxUses,
       expires_at: expiresAt,
       created_by: user.id,
-      filters_snapshot: myPrefs?.preferences ?? null,
+      filters_snapshot: sanitizeSharedPrefs(myPrefs?.preferences as PlaybookViewPrefs | null),
       auto_approve: input.autoApprove ?? true,
       auto_approve_limit: input.autoApproveLimit ?? null,
     })
@@ -522,7 +523,9 @@ export async function acceptInviteAction(
       .insert({
         user_id: user.id,
         playbook_id: playbookId,
-        preferences: inviteRow.filters_snapshot ?? {},
+        preferences: sanitizeSharedPrefs(
+          inviteRow.filters_snapshot as PlaybookViewPrefs | null,
+        ),
       })
       .then(() => undefined, () => undefined);
   }
