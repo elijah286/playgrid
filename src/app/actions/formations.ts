@@ -73,10 +73,24 @@ export async function listFormationsAction(): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { ok: true, formations: [] };
 
-  const { data, error } = await supabase
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isAdmin = profile?.role === "admin";
+
+  // Admins see seeds inline alongside playbook formations so they can manage
+  // the seed pool from the same view. Non-admins only ever see playbook-scoped
+  // rows. The left-join on playbooks keeps seeds (playbook_id = null) visible.
+  const query = supabase
     .from("formations")
-    .select("id, playbook_id, is_seed, params, kind, playbooks!inner(name)")
-    .eq("is_seed", false);
+    .select(
+      isAdmin
+        ? "id, playbook_id, is_seed, params, kind, playbooks(name)"
+        : "id, playbook_id, is_seed, params, kind, playbooks!inner(name)",
+    );
+  const { data, error } = await (isAdmin ? query : query.eq("is_seed", false));
   if (error) return { ok: false, error: error.message };
 
   const formations = (data ?? [])

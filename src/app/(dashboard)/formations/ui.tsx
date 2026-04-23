@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Copy, Pencil, Plus, Sparkles, Trash2, Users } from "lucide-react";
+import { Check, Copy, Pencil, Plus, Sparkles, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   addFormationToSeedsAction,
   deleteFormationAction,
   duplicateFormationAction,
+  removeSeedFormationAction,
   type SavedFormation,
 } from "@/app/actions/formations";
 import {
@@ -159,14 +160,14 @@ function FormationCard({
   onDelete,
   onDuplicate,
   onCopy,
-  onUseAsSeed,
+  onToggleSeed,
 }: {
   formation: SavedFormation;
   isAdmin: boolean;
   onDelete: (id: string, name: string) => void;
   onDuplicate: (id: string) => void;
   onCopy: (formation: SavedFormation) => void;
-  onUseAsSeed: (id: string) => void;
+  onToggleSeed: (formation: SavedFormation) => void;
 }) {
   const router = useRouter();
 
@@ -176,14 +177,19 @@ function FormationCard({
       icon: Pencil,
       onSelect: () => router.push(`/formations/${formation.id}/edit`),
     },
-    { label: "Copy to playbook…", icon: Copy, onSelect: () => onCopy(formation) },
-    { label: "Duplicate in this playbook", icon: Copy, onSelect: () => onDuplicate(formation.id) },
   ];
+  if (!formation.isSeed) {
+    items.push(
+      { label: "Copy to playbook…", icon: Copy, onSelect: () => onCopy(formation) },
+      { label: "Duplicate in this playbook", icon: Copy, onSelect: () => onDuplicate(formation.id) },
+    );
+  }
   if (isAdmin) {
     items.push({
       label: "Use as seed",
       icon: Sparkles,
-      onSelect: () => onUseAsSeed(formation.id),
+      trailing: formation.isSeed ? <Check className="size-4 text-primary" /> : null,
+      onSelect: () => onToggleSeed(formation),
     });
   }
   items.push({
@@ -210,6 +216,11 @@ function FormationCard({
           <h3 className="min-w-0 flex-1 truncate font-semibold text-foreground">
             {formation.displayName}
           </h3>
+          {formation.isSeed && (
+            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Seed
+            </span>
+          )}
         </div>
 
         <div className="mt-2">
@@ -225,11 +236,15 @@ function FormationCard({
             .filter(Boolean)
             .join(" · ")}
         </p>
-        {formation.playbookName && (
+        {formation.playbookName ? (
           <p className="mt-0.5 truncate text-[11px] text-muted/80">
             in {formation.playbookName}
           </p>
-        )}
+        ) : formation.isSeed ? (
+          <p className="mt-0.5 truncate text-[11px] text-muted/80">
+            Seeded into every new playbook
+          </p>
+        ) : null}
       </button>
 
       <div className="absolute right-2 top-2">
@@ -295,13 +310,24 @@ export function FormationsClient({
     });
   }
 
-  function handleUseAsSeed(id: string) {
+  function handleToggleSeed(formation: SavedFormation) {
     startTransition(async () => {
-      const res = await addFormationToSeedsAction(id);
-      if (res.ok) {
-        toast("Added to seed formations", "success");
+      if (formation.isSeed) {
+        const res = await removeSeedFormationAction(formation.id);
+        if (res.ok) {
+          setFormations((prev) => prev.filter((f) => f.id !== formation.id));
+          toast("Removed from seeds", "success");
+        } else {
+          toast(res.error, "error");
+        }
       } else {
-        toast(res.error, "error");
+        const res = await addFormationToSeedsAction(formation.id);
+        if (res.ok) {
+          router.refresh();
+          toast("Added to seeds", "success");
+        } else {
+          toast(res.error, "error");
+        }
       }
     });
   }
@@ -376,7 +402,7 @@ export function FormationsClient({
                   onDelete={handleDelete}
                   onDuplicate={handleDuplicate}
                   onCopy={handleCopy}
-                  onUseAsSeed={handleUseAsSeed}
+                  onToggleSeed={handleToggleSeed}
                 />
               ))}
             </div>
@@ -398,7 +424,7 @@ export function FormationsClient({
                 onDelete={handleDelete}
                 onDuplicate={handleDuplicate}
                 onCopy={handleCopy}
-                onUseAsSeed={handleUseAsSeed}
+                onToggleSeed={handleToggleSeed}
               />
             ))}
           </div>
