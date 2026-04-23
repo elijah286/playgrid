@@ -18,6 +18,7 @@ import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { SettingsClient } from "./ui";
@@ -42,6 +43,7 @@ export default async function SettingsPage() {
     freeMaxPlays,
     trafficRes,
     seedsRes,
+    mobileEditingEnabled,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -57,6 +59,7 @@ export default async function SettingsPage() {
     getFreeMaxPlaysPerPlaybook(),
     getTrafficSummaryAction(30),
     listSeedFormationsAction(),
+    getMobileEditingEnabled(),
   ]);
 
   return (
@@ -127,6 +130,7 @@ export default async function SettingsPage() {
         initialHideLobbyAnimation={hideLobbyAnimation}
         initialExamplesPageEnabled={examplesPageEnabled}
         initialFreeMaxPlays={freeMaxPlays}
+        initialMobileEditingEnabled={mobileEditingEnabled}
         initialTrafficSummary={
           trafficRes.ok
             ? trafficRes.summary

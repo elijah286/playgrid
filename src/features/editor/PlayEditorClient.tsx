@@ -62,6 +62,10 @@ type Props = {
   /** Archived playbook: same treatment as example preview for edits, with a
    *  distinct CTA that offers to restore the playbook. */
   isArchived?: boolean;
+  /** Site-admin kill switch. When false, mobile surfaces that enter edit
+   *  mode (the "Edit play" button, the formation picker dropdown) are
+   *  suppressed on small screens. Desktop is unaffected. */
+  mobileEditingEnabled?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
@@ -91,6 +95,7 @@ function PlayEditorClientInner({
   canEdit = true,
   isExamplePreview = false,
   isArchived = false,
+  mobileEditingEnabled = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -542,6 +547,7 @@ function PlayEditorClientInner({
         onSaveAsNewFormation={saveAsNewFormation}
         allFormations={allFormations}
         canEdit={canEdit}
+        mobileEditingEnabled={mobileEditingEnabled}
       />
 
       {playbookSettings &&
@@ -688,7 +694,7 @@ function PlayEditorClientInner({
                 <div className="rounded-xl border border-border bg-surface-raised p-4">
                   <PlayControlsPanel anim={anim} />
                 </div>
-                {canEdit && (
+                {canEdit && mobileEditingEnabled && (
                   <button
                     type="button"
                     onClick={() => setMode("edit")}

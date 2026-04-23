@@ -6,6 +6,7 @@ import { listFormationsAction, listFormationsForPlaybookAction } from "@/app/act
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import type { SavedFormation } from "@/app/actions/formations";
 
@@ -98,6 +99,8 @@ export default async function PlayEditPage({ params }: Props) {
   if (isExamplePreview) canEdit = true;
   const isArchived = Boolean(book?.is_archived);
 
+  const mobileEditingEnabled = await getMobileEditingEnabled();
+
   return (
     <PlayEditorClient
       playId={res.play.id}
@@ -113,6 +116,7 @@ export default async function PlayEditPage({ params }: Props) {
       canEdit={canEdit}
       isExamplePreview={isExamplePreview}
       isArchived={isArchived}
+      mobileEditingEnabled={mobileEditingEnabled}
     />
   );
 }

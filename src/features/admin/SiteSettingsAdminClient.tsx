@@ -5,15 +5,18 @@ import { Button, useToast } from "@/components/ui";
 import { setHideLobbyAnimationAction } from "@/app/actions/admin-lobby";
 import { setExamplesPageEnabledAction } from "@/app/actions/admin-examples";
 import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays";
+import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editing";
 
 export function SiteSettingsAdminClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
   initialFreeMaxPlays,
+  initialMobileEditingEnabled,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
+  initialMobileEditingEnabled: boolean;
 }) {
   const { toast } = useToast();
 
@@ -22,6 +25,9 @@ export function SiteSettingsAdminClient({
 
   const [examplesEnabled, setExamplesEnabled] = useState(initialExamplesPageEnabled);
   const [examplesPending, startExamplesTransition] = useTransition();
+
+  const [mobileEditingEnabled, setMobileEditingEnabled] = useState(initialMobileEditingEnabled);
+  const [mobileEditingPending, startMobileEditingTransition] = useTransition();
 
   const [savedFreeMaxPlays, setSavedFreeMaxPlays] = useState(initialFreeMaxPlays);
   const [freeMaxPlaysInput, setFreeMaxPlaysInput] = useState(String(initialFreeMaxPlays));
@@ -61,6 +67,23 @@ export function SiteSettingsAdminClient({
       }
       toast(
         next ? "Lobby animation hidden." : "Lobby animation restored.",
+        "success",
+      );
+    });
+  }
+
+  function toggleMobileEditing(next: boolean) {
+    const prev = mobileEditingEnabled;
+    setMobileEditingEnabled(next);
+    startMobileEditingTransition(async () => {
+      const res = await setMobileEditingEnabledAction(next);
+      if (!res.ok) {
+        setMobileEditingEnabled(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next ? "Mobile play editing enabled." : "Mobile play editing disabled.",
         "success",
       );
     });
@@ -169,6 +192,29 @@ export function SiteSettingsAdminClient({
             onChange={(e) => toggleExamplesEnabled(e.target.checked)}
           />
           <span>{examplesEnabled ? "Live" : "Off"}</span>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Mobile play editing
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            When off, the mobile &ldquo;Edit play&rdquo; button is hidden and
+            the formation picker is read-only on small screens. Turn on once
+            mobile editing is fixed.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={mobileEditingEnabled}
+            disabled={mobileEditingPending}
+            onChange={(e) => toggleMobileEditing(e.target.checked)}
+          />
+          <span>{mobileEditingEnabled ? "On" : "Off"}</span>
         </label>
       </div>
     </div>

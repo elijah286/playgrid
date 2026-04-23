@@ -71,6 +71,7 @@ export function SettingsClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
   initialFreeMaxPlays,
+  initialMobileEditingEnabled,
   initialTrafficSummary,
   trafficError,
   initialSeeds,
@@ -92,6 +93,7 @@ export function SettingsClient({
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
+  initialMobileEditingEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
   initialSeeds: SavedFormation[];
@@ -203,6 +205,7 @@ export function SettingsClient({
           initialHideLobbyAnimation={initialHideLobbyAnimation}
           initialExamplesPageEnabled={initialExamplesPageEnabled}
           initialFreeMaxPlays={initialFreeMaxPlays}
+          initialMobileEditingEnabled={initialMobileEditingEnabled}
         />
       )}
     </div>
