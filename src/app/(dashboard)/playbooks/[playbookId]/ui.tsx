@@ -552,7 +552,7 @@ function PlaybookDetailClientInner({
     }
   }
 
-  const isViewer = !headerProps.viewerIsCoach;
+  const isViewer = !headerProps.viewerIsCoach && !isPreview;
 
   function openFormationPicker() {
     if (isViewer) {
