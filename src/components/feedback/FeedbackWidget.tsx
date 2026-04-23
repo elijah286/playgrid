@@ -154,7 +154,7 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
       style={style}
       className={cn(
         "fixed z-40 print:hidden select-none",
-        "hidden sm:block",
+        "hidden lg:block",
         dragging && "cursor-grabbing",
       )}
     >
