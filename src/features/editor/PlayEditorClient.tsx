@@ -668,10 +668,19 @@ function PlayEditorClientInner({
             )}
 
             <div
-              className={`relative w-full overflow-hidden ${
-                !canEdit ? "pointer-events-none select-none" : ""
+              className={`field-viewport relative mx-auto w-full overflow-hidden ${
+                !canEdit || mode === "view"
+                  ? "pointer-events-none select-none"
+                  : ""
               }`}
-              style={{ aspectRatio: `${fieldAspect} / 1` }}
+              style={
+                {
+                  aspectRatio: `${fieldAspect} / 1`,
+                  // Used by the mobile cap in globals.css — see
+                  // `.field-viewport` @media rule. Desktop ignores it.
+                  ["--field-aspect" as string]: String(fieldAspect),
+                } as React.CSSProperties
+              }
             >
               <EditorCanvas
                 doc={doc}

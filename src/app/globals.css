@@ -151,3 +151,14 @@ body {
     color: #111;
   }
 }
+
+/* Field viewport cap on small screens. Without this, when the editor
+ * column grows in edit mode the aspect-ratio field can end up taller than
+ * the phone viewport. The cap binds both dimensions so the aspect ratio
+ * stays intact. Desktop keeps the full column width. */
+@media (max-width: 639px) {
+  .field-viewport {
+    max-height: min(42dvh, 320px);
+    max-width: calc(min(42dvh, 320px) * var(--field-aspect, 2));
+  }
+}
