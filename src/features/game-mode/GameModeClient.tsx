@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui";
 import { saveGameSessionAction } from "@/app/actions/game-sessions";
 import { PlayPickerDialog } from "./PlayPickerDialog";
 import { ExitGameDialog } from "./ExitGameDialog";
+import { GameFieldView } from "./GameFieldView";
 import {
   THUMBS_DOWN_TAGS,
   THUMBS_UP_TAGS,
@@ -189,9 +190,16 @@ export function GameModeClient({
           fill all remaining vertical space without spilling past the bottom
           control bar. */}
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-        {currentPlay?.preview ? (
-          <div className="absolute inset-0 flex items-center justify-center p-2">
-            <PlayThumbnail preview={currentPlay.preview} />
+        {currentPlay ? (
+          <div className="absolute inset-0 p-2">
+            {/* Keyed on play id so React remounts the field (and the
+                animation hook) when the coach runs the next play —
+                otherwise phase state would leak from the previous call. */}
+            <GameFieldView
+              key={currentPlay.id}
+              document={currentPlay.document}
+              fallbackPreview={currentPlay.preview}
+            />
           </div>
         ) : (
           <p className="px-6 text-center text-sm text-muted">

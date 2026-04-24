@@ -1,6 +1,11 @@
 import type { PlaybookDetailPlayRow } from "@/app/actions/plays";
+import type { PlayDocument } from "@/domain/play/types";
 
-export type GameModePlay = PlaybookDetailPlayRow;
+export type GameModePlay = PlaybookDetailPlayRow & {
+  /** Full canonical PlayDocument so the on-field view can run playback.
+   *  Null when the play has no current version (rare — defensive only). */
+  document: PlayDocument | null;
+};
 
 export type ThumbDirection = "up" | "down";
 
