@@ -10,6 +10,11 @@ import { canUseGameMode } from "@/lib/billing/features";
 import { listPlaysAction } from "@/app/actions/plays";
 import type { PlayDocument } from "@/domain/play/types";
 import { GameModeClient } from "@/features/game-mode/GameModeClient";
+import type {
+  LiveGameCall,
+  LiveGameSession,
+  LiveParticipant,
+} from "@/features/game-mode/live-session-types";
 
 type Props = {
   params: Promise<{ playbookId: string }>;
@@ -104,11 +109,86 @@ export default async function GameModePage({ params, searchParams }: Props) {
       ? initialPlayParam
       : null;
 
+  // Load any already-active session for this playbook so the client can
+  // render the shared state immediately (no "starting…" flash) and skip
+  // the intro for coaches who are joining mid-game.
+  const { data: sessionRow } = await supabase
+    .from("game_sessions")
+    .select(
+      "id, playbook_id, status, caller_user_id, current_play_id, next_play_id, started_at",
+    )
+    .eq("playbook_id", playbookId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  let initialSession: LiveGameSession | null = null;
+  let initialCalls: LiveGameCall[] = [];
+  let initialParticipants: LiveParticipant[] = [];
+  if (sessionRow) {
+    initialSession = {
+      id: sessionRow.id as string,
+      playbookId: sessionRow.playbook_id as string,
+      status: sessionRow.status as "active" | "ended",
+      callerUserId: (sessionRow.caller_user_id as string | null) ?? null,
+      currentPlayId: (sessionRow.current_play_id as string | null) ?? null,
+      nextPlayId: (sessionRow.next_play_id as string | null) ?? null,
+      startedAt: sessionRow.started_at as string,
+    };
+    const [{ data: callRows }, { data: partRows }] = await Promise.all([
+      supabase
+        .from("game_plays")
+        .select("id, play_id, position, called_at, thumb, tag")
+        .eq("session_id", initialSession.id)
+        .order("position", { ascending: true }),
+      supabase
+        .from("game_session_participants")
+        .select("user_id, last_seen_at")
+        .eq("session_id", initialSession.id),
+    ]);
+    initialCalls = (callRows ?? []).map((r) => ({
+      id: r.id as string,
+      playId: r.play_id as string,
+      position: r.position as number,
+      calledAt: r.called_at as string,
+      thumb: (r.thumb as "up" | "down" | null) ?? null,
+      tag: (r.tag as string | null) ?? null,
+    }));
+    const partIds = Array.from(
+      new Set((partRows ?? []).map((p) => p.user_id as string)),
+    );
+    const nameByUser = new Map<string, string | null>();
+    if (partIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", partIds);
+      for (const p of profs ?? []) {
+        nameByUser.set(p.id as string, (p.display_name as string | null) ?? null);
+      }
+    }
+    initialParticipants = (partRows ?? []).map((p) => ({
+      userId: p.user_id as string,
+      displayName: nameByUser.get(p.user_id as string) ?? null,
+      lastSeenAt: p.last_seen_at as string,
+    }));
+  }
+
+  const { data: myProfile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
   return (
     <GameModeClient
       playbookId={playbookId}
       plays={playRows.map((e) => ({ ...e.row, document: e.doc }))}
       initialPlayId={initialPlayId}
+      currentUserId={user.id}
+      currentUserName={(myProfile?.display_name as string | null) ?? null}
+      initialSession={initialSession}
+      initialCalls={initialCalls}
+      initialParticipants={initialParticipants}
     />
   );
 }

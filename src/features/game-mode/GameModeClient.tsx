@@ -2,10 +2,33 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ThumbsUp, ThumbsDown, Play, Repeat, X, Maximize, Minimize, StickyNote, ChevronDown } from "lucide-react";
+import {
+  ThumbsUp,
+  ThumbsDown,
+  Play,
+  Repeat,
+  X,
+  Maximize,
+  Minimize,
+  StickyNote,
+  ChevronDown,
+  Radio,
+} from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
-import { saveGameSessionAction } from "@/app/actions/game-sessions";
+import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
+import {
+  startOrJoinGameSessionAction,
+  heartbeatGameSessionAction,
+  takeoverCallerAction,
+  setInitialPlayAction,
+  setNextPlayAction,
+  advanceToNextPlayAction,
+  scoreCurrentCallAction,
+  endGameSessionAction,
+  discardGameSessionAction,
+  leaveGameSessionAction,
+} from "@/app/actions/game-sessions";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { PlayPickerDialog } from "./PlayPickerDialog";
 import { ExitGameDialog } from "./ExitGameDialog";
@@ -15,50 +38,73 @@ import type { PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import {
   THUMBS_DOWN_TAGS,
   THUMBS_UP_TAGS,
-  type CalledPlayLogEntry,
   type GameModePlay,
   type PlayOutcome,
   type ThumbDirection,
   type ThumbsDownTag,
   type ThumbsUpTag,
 } from "./types";
+import {
+  callToOutcome,
+  type LiveGameCall,
+  type LiveGameSession,
+  type LiveParticipant,
+} from "./live-session-types";
+
+const HEARTBEAT_MS = 20_000;
+
+type Props = {
+  playbookId: string;
+  plays: GameModePlay[];
+  initialPlayId?: string | null;
+  currentUserId: string;
+  currentUserName: string | null;
+  initialSession: LiveGameSession | null;
+  initialCalls: LiveGameCall[];
+  initialParticipants: LiveParticipant[];
+};
 
 export function GameModeClient({
   playbookId,
   plays,
   initialPlayId = null,
-}: {
-  playbookId: string;
-  plays: GameModePlay[];
-  initialPlayId?: string | null;
-}) {
+  currentUserId,
+  currentUserName,
+  initialSession,
+  initialCalls,
+  initialParticipants,
+}: Props) {
   const router = useRouter();
   const { toast } = useToast();
-  const [showIntro, setShowIntro] = useState(true);
-  const [currentPlayId, setCurrentPlayId] = useState<string | null>(
-    initialPlayId,
-  );
-  const [nextPlayId, setNextPlayId] = useState<string | null>(null);
+
+  // If we arrived to an already-active session, skip intro and go straight
+  // to shared state. Otherwise show the intro; dismissing it starts/joins
+  // the session on the server.
+  const [showIntro, setShowIntro] = useState(() => initialSession == null);
+  const [session, setSession] = useState<LiveGameSession | null>(initialSession);
+  const [calls, setCalls] = useState<LiveGameCall[]>(initialCalls);
+  const [participants, setParticipants] =
+    useState<LiveParticipant[]>(initialParticipants);
+
   const [pickerMode, setPickerMode] = useState<"closed" | "current" | "next">(
     "closed",
   );
   const [exitOpen, setExitOpen] = useState(false);
-  const [outcome, setOutcome] = useState<PlayOutcome>(null);
-  const [log, setLog] = useState<CalledPlayLogEntry[]>([]);
-  // Session start is fixed at mount and read during render (passed to the
-  // exit dialog) so it lives in state, not a ref.
-  const [startedAt] = useState<string>(() => new Date().toISOString());
-  const playCalledAtRef = useRef<string | null>(
-    initialPlayId ? new Date().toISOString() : null,
-  );
   const [saving, startSaving] = useTransition();
+  const [, startMutating] = useTransition();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const isCaller =
+    session != null && session.callerUserId === currentUserId;
+  const callerParticipant = session?.callerUserId
+    ? participants.find((p) => p.userId === session.callerUserId)
+    : undefined;
+  const callerName = callerParticipant?.displayName ?? "Another coach";
+
+  // --- Fullscreen (unchanged from pre-refactor) -----------------------------
   useEffect(() => {
-    type FsDoc = Document & {
-      webkitFullscreenElement?: Element | null;
-    };
+    type FsDoc = Document & { webkitFullscreenElement?: Element | null };
     const doc = document as FsDoc;
     function onChange() {
       const el = doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
@@ -90,7 +136,7 @@ export function GameModeClient({
         await (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
       }
     } catch {
-      // User-gesture requirements or platform restrictions — silent.
+      /* silent */
     }
   }
 
@@ -100,108 +146,299 @@ export function GameModeClient({
     return m;
   }, [plays]);
 
+  const currentPlayId = session?.currentPlayId ?? null;
+  const nextPlayId = session?.nextPlayId ?? null;
   const currentPlay = currentPlayId ? playMap.get(currentPlayId) ?? null : null;
   const nextPlay = nextPlayId ? playMap.get(nextPlayId) ?? null : null;
 
-  /** Append the just-finished play to the call log with whatever outcome was
-   *  selected (or null if the coach didn't tap thumbs). */
-  const finalizeCurrent = useCallback(() => {
-    if (!currentPlay || !playCalledAtRef.current) return;
-    setLog((prev) => [
-      ...prev,
-      {
-        playId: currentPlay.id,
-        playName: currentPlay.name,
-        outcome,
-        calledAt: playCalledAtRef.current!,
-      },
-    ]);
-  }, [currentPlay, outcome]);
+  const currentCall = calls.length > 0 ? calls[calls.length - 1] : null;
+  const currentOutcome: PlayOutcome =
+    currentCall && currentPlayId === currentCall.playId
+      ? callToOutcome(currentCall)
+      : null;
 
+  // --- Session bootstrap ---------------------------------------------------
+  // If we arrived with no session (first coach in), start/join on mount so
+  // the edit lock engages and other coaches see us. We don't wait for intro
+  // dismissal — a coach who opens the URL but immediately closes the tab
+  // leaves only a stale session, which the 45-min sweep will clean up.
+  const bootstrappedRef = useRef(false);
+  useEffect(() => {
+    if (session) return;
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    void (async () => {
+      const res = await startOrJoinGameSessionAction(playbookId);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      // Fall through — realtime will deliver the session row. For snappier
+      // UI we also optimistically build a minimal session from what we know.
+      setSession({
+        id: res.sessionId,
+        playbookId,
+        status: "active",
+        callerUserId: currentUserId,
+        currentPlayId: null,
+        nextPlayId: null,
+        startedAt: new Date().toISOString(),
+      });
+      setParticipants((prev) =>
+        prev.some((p) => p.userId === currentUserId)
+          ? prev
+          : [
+              ...prev,
+              {
+                userId: currentUserId,
+                displayName: currentUserName,
+                lastSeenAt: new Date().toISOString(),
+              },
+            ],
+      );
+      // If a starting play came in via ?play=…, apply it now. Only the
+      // bootstrapper (first coach in) will end up as caller, which is when
+      // this action succeeds.
+      if (initialPlayId) {
+        void setInitialPlayAction(res.sessionId, initialPlayId);
+      }
+    })();
+  }, [
+    session,
+    playbookId,
+    initialPlayId,
+    currentUserId,
+    currentUserName,
+    toast,
+  ]);
+
+  // --- Realtime subscription -----------------------------------------------
+  useEffect(() => {
+    if (!session) return;
+    const supabase = createBrowserSupabase();
+    const sessionId = session.id;
+
+    const channel = supabase
+      .channel(`game-session-${sessionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_sessions",
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            setSession(null);
+            return;
+          }
+          const row = payload.new as Record<string, unknown>;
+          setSession({
+            id: row.id as string,
+            playbookId: row.playbook_id as string,
+            status: row.status as "active" | "ended",
+            callerUserId: (row.caller_user_id as string | null) ?? null,
+            currentPlayId: (row.current_play_id as string | null) ?? null,
+            nextPlayId: (row.next_play_id as string | null) ?? null,
+            startedAt: row.started_at as string,
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_plays",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        (payload) => {
+          setCalls((prev) => {
+            if (payload.eventType === "DELETE") {
+              const oldId = (payload.old as { id?: string }).id;
+              return prev.filter((c) => c.id !== oldId);
+            }
+            const row = payload.new as Record<string, unknown>;
+            const next: LiveGameCall = {
+              id: row.id as string,
+              playId: row.play_id as string,
+              position: row.position as number,
+              calledAt: row.called_at as string,
+              thumb: (row.thumb as "up" | "down" | null) ?? null,
+              tag: (row.tag as string | null) ?? null,
+            };
+            const idx = prev.findIndex((c) => c.id === next.id);
+            if (idx >= 0) {
+              const copy = prev.slice();
+              copy[idx] = next;
+              return copy;
+            }
+            return [...prev, next].sort((a, b) => a.position - b.position);
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_session_participants",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        async (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldUserId = (payload.old as { user_id?: string }).user_id;
+            setParticipants((prev) => prev.filter((p) => p.userId !== oldUserId));
+            return;
+          }
+          const row = payload.new as Record<string, unknown>;
+          const userId = row.user_id as string;
+          const lastSeenAt = row.last_seen_at as string;
+          // Ensure we have a display name (one-shot profile fetch on new joiner).
+          setParticipants((prev) => {
+            const existing = prev.find((p) => p.userId === userId);
+            if (existing) {
+              return prev.map((p) =>
+                p.userId === userId ? { ...p, lastSeenAt } : p,
+              );
+            }
+            return [...prev, { userId, displayName: null, lastSeenAt }];
+          });
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", userId)
+            .maybeSingle();
+          const name = (profile?.display_name as string | null) ?? null;
+          setParticipants((prev) =>
+            prev.map((p) => (p.userId === userId ? { ...p, displayName: name } : p)),
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  // --- Heartbeat -----------------------------------------------------------
+  useEffect(() => {
+    if (!session) return;
+    const id = session.id;
+    void heartbeatGameSessionAction(id);
+    const interval = setInterval(() => {
+      void heartbeatGameSessionAction(id);
+    }, HEARTBEAT_MS);
+    return () => clearInterval(interval);
+  }, [session]);
+
+  // --- Caller-ended-while-I-watch detection --------------------------------
+  // If the session flips to 'ended' while I'm still here, I'm a spectator and
+  // the caller just closed the game. Kick back to the playbook.
+  useEffect(() => {
+    if (!session) return;
+    if (session.status === "ended") {
+      toast("Game ended.", "success");
+      router.push(`/playbooks/${playbookId}`);
+    }
+  }, [session, router, playbookId, toast]);
+
+  // --- Actions -------------------------------------------------------------
   function dismissIntro() {
     setShowIntro(false);
-    // First-time entry: open the picker to choose the opening play. Without
-    // this, the screen would render an empty state and the coach would have
-    // to hunt for the right button.
-    if (!currentPlayId) setPickerMode("current");
+    // No-op beyond UI; bootstrap effect has already started the session.
+    if (!currentPlayId && session && isCaller) {
+      setPickerMode("current");
+    }
   }
 
   function pickPlay(playId: string) {
-    if (pickerMode === "current") {
-      setCurrentPlayId(playId);
-      playCalledAtRef.current = new Date().toISOString();
-      setOutcome(null);
-    } else if (pickerMode === "next") {
-      setNextPlayId(playId);
-    }
+    if (!session) return;
+    const mode = pickerMode;
     setPickerMode("closed");
+    startMutating(async () => {
+      const res =
+        mode === "current"
+          ? await setInitialPlayAction(session.id, playId)
+          : mode === "next"
+            ? await setNextPlayAction(session.id, playId)
+            : { ok: true as const };
+      if (!res.ok) toast(res.error, "error");
+    });
   }
 
   function runNextPlay() {
-    if (!nextPlay) return;
-    finalizeCurrent();
-    setCurrentPlayId(nextPlay.id);
-    setNextPlayId(null);
-    playCalledAtRef.current = new Date().toISOString();
-    setOutcome(null);
+    if (!session) return;
+    startMutating(async () => {
+      const res = await advanceToNextPlayAction(session.id);
+      if (!res.ok) toast(res.error, "error");
+    });
   }
 
   function tapThumb(direction: ThumbDirection) {
-    setOutcome((prev) => {
-      // Tapping the active thumb again clears the outcome — coaches can
-      // change their mind without an extra "clear" button.
-      if (prev?.thumb === direction) return null;
-      return { thumb: direction, tag: null };
+    if (!session) return;
+    // Local last-write-wins: if currentOutcome already shows this thumb,
+    // tapping it clears. Otherwise set thumb, drop tag.
+    const next: { thumb: "up" | "down" | null; tag: string | null } =
+      currentOutcome?.thumb === direction
+        ? { thumb: null, tag: null }
+        : { thumb: direction, tag: null };
+    startMutating(async () => {
+      const res = await scoreCurrentCallAction(session.id, next);
+      if (!res.ok) toast(res.error, "error");
     });
   }
 
   function tapTag(direction: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) {
-    setOutcome((prev) => {
-      if (prev?.thumb !== direction) {
-        return { thumb: direction, tag } as PlayOutcome;
-      }
-      // Tapping the active tag again clears it (thumb stays selected).
-      const sameTag = prev.tag === tag;
-      return {
-        thumb: direction,
-        tag: sameTag ? null : (tag as ThumbsUpTag & ThumbsDownTag),
-      } as PlayOutcome;
+    if (!session) return;
+    // If the current outcome has a different thumb than this tag, switch
+    // thumb and set tag. If same thumb and same tag, clear tag. Else set.
+    const next: { thumb: "up" | "down" | null; tag: string | null } = (() => {
+      if (currentOutcome?.thumb !== direction) return { thumb: direction, tag };
+      if (currentOutcome.tag === tag) return { thumb: direction, tag: null };
+      return { thumb: direction, tag };
+    })();
+    startMutating(async () => {
+      const res = await scoreCurrentCallAction(session.id, next);
+      if (!res.ok) toast(res.error, "error");
     });
   }
 
-  function exitGame(data: {
+  function takeover() {
+    if (!session) return;
+    startMutating(async () => {
+      const res = await takeoverCallerAction(session.id);
+      if (!res.ok) toast(res.error, "error");
+    });
+  }
+
+  function handleTopLeftClose() {
+    if (!session) {
+      router.push(`/playbooks/${playbookId}`);
+      return;
+    }
+    if (isCaller) {
+      setExitOpen(true);
+      return;
+    }
+    // Spectator: leave silently.
+    startMutating(async () => {
+      await leaveGameSessionAction(session.id);
+      router.push(`/playbooks/${playbookId}`);
+    });
+  }
+
+  function endGame(data: {
     opponent: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
     notes: string | null;
   }) {
-    // Capture the current play's outcome before leaving so the final play
-    // call lands in the saved session.
-    const finalLog: CalledPlayLogEntry[] = [...log];
-    if (currentPlay && playCalledAtRef.current) {
-      finalLog.push({
-        playId: currentPlay.id,
-        playName: currentPlay.name,
-        outcome,
-        calledAt: playCalledAtRef.current,
-      });
-    }
+    if (!session) return;
     startSaving(async () => {
-      const res = await saveGameSessionAction({
-        playbookId,
-        startedAt,
-        endedAt: new Date().toISOString(),
-        opponent: data.opponent,
-        scoreUs: data.scoreUs,
-        scoreThem: data.scoreThem,
-        notes: data.notes,
-        calls: finalLog.map((c) => ({
-          playId: c.playId,
-          calledAt: c.calledAt,
-          thumb: c.outcome?.thumb ?? null,
-          tag: c.outcome?.tag ?? null,
-        })),
-      });
+      const res = await endGameSessionAction(session.id, data);
       if (!res.ok) {
         toast(res.error, "error");
         return;
@@ -211,24 +448,51 @@ export function GameModeClient({
     });
   }
 
+  function discardGame() {
+    if (!session) return;
+    if (!isCaller) return;
+    // Two-step confirm: the caller is about to throw away every scored call
+    // — we need them to actively acknowledge it.
+    const ok1 = window.confirm(
+      "Leave without saving? Every call you've tagged this game will be lost.",
+    );
+    if (!ok1) return;
+    const ok2 = window.confirm(
+      "Really discard? This can't be undone — the game will not be recorded.",
+    );
+    if (!ok2) return;
+    startSaving(async () => {
+      const res = await discardGameSessionAction(session.id);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      router.push(`/playbooks/${playbookId}`);
+    });
+  }
+
+  const callCount =
+    calls.length > 0 ? calls.filter((c) => c.thumb != null).length : 0;
+
   return (
     <div
       ref={rootRef}
       className="fixed inset-0 z-50 flex flex-col bg-surface-inset text-foreground"
     >
-      {/* Top bar — minimal: just an exit affordance and the play name. */}
+      {/* Top bar — exit affordance and the play name. The X opens the end-
+          game dialog for the caller, or quietly leaves for spectators. */}
       <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
         <button
           type="button"
-          onClick={() => setExitOpen(true)}
+          onClick={handleTopLeftClose}
           className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
-          aria-label="Exit game mode"
+          aria-label={isCaller ? "End game" : "Leave game mode"}
         >
           <X className="size-5" />
         </button>
         <div className="min-w-0 flex-1 text-center landscape:hidden">
           <div className="truncate text-sm font-semibold">
-            {currentPlay?.name ?? "Pick a play"}
+            {currentPlay?.name ?? (isCaller ? "Pick a play" : "Waiting for caller…")}
           </div>
           {currentPlay?.formation_name && (
             <div className="truncate text-[11px] text-muted">
@@ -248,42 +512,49 @@ export function GameModeClient({
         </button>
       </div>
 
-      {/* Scrollable column: field on top (natural aspect, never stretched),
-          next-play row beneath. The next-play row is always rendered so the
-          field's position doesn't shift when a next play is enqueued. */}
+      {/* Spectator banner: caller's name + takeover affordance. Hidden in
+          landscape so viewing coaches get the full field. */}
+      {session && !isCaller && (
+        <button
+          type="button"
+          onClick={takeover}
+          className="mx-auto mt-3 flex w-full max-w-[640px] items-center gap-2 rounded-lg border border-primary bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface-hover landscape:hidden"
+        >
+          <Radio className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="flex-1 text-left">
+            {callerName} is calling plays — tap to take over
+          </span>
+        </button>
+      )}
+
+      {/* Scrollable column: field on top, notes + next-play row beneath. */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 landscape:items-center landscape:justify-center landscape:overflow-hidden landscape:p-0">
         {currentPlay ? (
-          /* Keyed on play id so React remounts the section (and the
-             animation hook inside) when the coach runs the next play —
-             otherwise phase state would leak from the previous call. */
           <CurrentPlaySection
             key={currentPlay.id}
             document={currentPlay.document}
             preview={currentPlay.preview}
-            outcome={outcome}
+            outcome={currentOutcome}
             onTapThumb={tapThumb}
             onTapTag={tapTag}
           />
         ) : (
           <p className="px-6 py-12 text-center text-sm text-muted">
-            Pick a play to start the game.
+            {isCaller
+              ? "Pick a play to start the game."
+              : `${callerName} hasn't picked a play yet.`}
           </p>
         )}
 
-        {/* Coach notes for the current play. Expanded on tap; grayed out
-            with placeholder text when the play has no notes. Hidden in
-            landscape so the field uses the full screen. */}
         {currentPlay && (
           <div className="mx-auto w-full max-w-[640px] landscape:hidden">
             <NotesCard notes={currentPlay.document?.metadata?.notes ?? ""} />
           </div>
         )}
 
-        {/* Next-play area below the field. When the coach opens the picker
-            from here, it replaces this area (keeping the field visible
-            above) instead of covering the screen. Hidden in landscape —
-            coaches use landscape for viewing only. */}
-        {pickerMode === "next" ? (
+        {/* Next-play area. Inline picker replaces it for the caller when
+            picking; spectators always see a disabled stub with caller name. */}
+        {pickerMode === "next" && isCaller ? (
           <div className="mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col landscape:hidden">
             <PlayPickerDialog
               inline
@@ -313,14 +584,16 @@ export function GameModeClient({
                   <button
                     type="button"
                     onClick={runNextPlay}
-                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
+                    disabled={!isCaller}
+                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
                   >
                     <Play className="size-5" /> Run
                   </button>
                   <button
                     type="button"
                     onClick={() => setPickerMode("next")}
-                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
+                    disabled={!isCaller}
+                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-muted"
                   >
                     <Repeat className="size-5" /> Change
                   </button>
@@ -330,25 +603,24 @@ export function GameModeClient({
               <button
                 type="button"
                 onClick={() => setPickerMode("next")}
-                disabled={!currentPlay}
+                disabled={!currentPlay || !isCaller}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
               >
-                Choose next play
+                {isCaller
+                  ? "Choose next play"
+                  : `Only ${callerName} can choose the next play`}
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Intro: shown the first time per session. Coaches landing on the
-          screen mid-game shouldn't have to dismiss this every time, but
-          per-session is fine. */}
       {showIntro && <IntroOverlay onDismiss={dismissIntro} />}
 
-      {/* Fullscreen picker only for the initial "pick your first play" state.
-          The "next" mode renders inline above, replacing the next-play row. */}
+      {/* Fullscreen picker only for the initial "pick your first play" state,
+          and only for the caller. Spectators see the waiting message. */}
       <PlayPickerDialog
-        open={pickerMode === "current"}
+        open={pickerMode === "current" && isCaller}
         plays={plays}
         currentPlayId={null}
         onPick={pickPlay}
@@ -359,10 +631,10 @@ export function GameModeClient({
       <ExitGameDialog
         open={exitOpen}
         onCancel={() => setExitOpen(false)}
-        onConfirm={exitGame}
-        onDiscard={() => router.push(`/playbooks/${playbookId}`)}
-        startedAt={startedAt}
-        callCount={log.length + (currentPlay ? 1 : 0)}
+        onConfirm={endGame}
+        onDiscard={discardGame}
+        startedAt={session?.startedAt ?? new Date().toISOString()}
+        callCount={callCount}
         saving={saving}
       />
     </div>
@@ -573,11 +845,7 @@ function TagRail<T extends string>({
           ? "left-3 ml-0 sm:left-6"
           : "right-3 sm:right-6")
       }
-      style={{
-        // Stack tag pills directly below the thumb button: thumb is centered
-        // vertically; bump rail down so its first pill sits below the thumb.
-        marginTop: "3.75rem",
-      }}
+      style={{ marginTop: "3.75rem" }}
     >
       {tags.map((t) => {
         const isActive = active === t.value;
@@ -615,14 +883,15 @@ function IntroOverlay({ onDismiss }: { onDismiss: () => void }) {
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated">
         <h2 className="text-lg font-semibold text-foreground">Game mode</h2>
         <p className="mt-2 text-sm text-muted">
-          A simple in-game flow for coaches. Pick a play, give it a thumbs
-          up or down after the snap, then choose the next call. Exit when
-          the game ends to record the score and notes.
+          A sideline tool for live play calling. Pick a play, score it with a
+          thumb after the snap, then queue the next call. Other coaches on your
+          playbook can join from the playbook page to help score — everyone
+          sees the same thing, and only the caller can advance plays.
         </p>
         <ul className="mt-3 space-y-1 text-sm text-foreground">
           <li>· Big buttons. No menus.</li>
           <li>· Rotate to landscape for a bigger field.</li>
-          <li>· Outcomes save when you exit.</li>
+          <li>· Outcomes save when you end the game.</li>
         </ul>
         <button
           type="button"
