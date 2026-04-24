@@ -6,6 +6,24 @@ import type { LiveScoreEvent } from "./live-session-types";
 
 type Side = "us" | "them";
 
+function hexLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return 0.5;
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 0xff) / 255;
+  const g = ((n >> 8) & 0xff) / 255;
+  const b = (n & 0xff) / 255;
+  const toLin = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
+}
+
+/** Pick a legible on-accent text color (white or near-black) for a given
+ *  background hex. Matches the rule used by the playbook header. */
+function onAccentText(hex: string): string {
+  return hexLuminance(hex) > 0.55 ? "#0f172a" : "#ffffff";
+}
+
 export function ScoreCard({
   events,
   usLabel,
@@ -13,6 +31,7 @@ export function ScoreCard({
   isTackle,
   onAdd,
   onOverwrite,
+  accentColor,
 }: {
   events: LiveScoreEvent[];
   usLabel: string;
@@ -24,6 +43,9 @@ export function ScoreCard({
   /** Overwrite the side to an absolute score; implemented by the parent
    *  as a single compensating delta so history stays intact. */
   onOverwrite: (side: Side, target: number) => void;
+  /** Playbook brand color — used for the "us" tile. The opponent tile
+   *  takes a contrasting neutral so the two sides read distinctly. */
+  accentColor: string;
 }) {
   const [openSide, setOpenSide] = useState<Side | null>(null);
 
@@ -31,11 +53,19 @@ export function ScoreCard({
     let us = 0;
     let them = 0;
     for (const e of events) {
-      if (e.side === "us") us += e.delta;
-      else them += e.delta;
+      const d = Number.isFinite(e.delta) ? e.delta : 0;
+      if (e.side === "us") us += d;
+      else them += d;
     }
     return { us, them };
   }, [events]);
+
+  const usFg = onAccentText(accentColor);
+  // Opponent tile: dark slate if the accent is light, else a bright
+  // off-white — always the opposite luminance family from "us" so they
+  // read as two separate teams at a glance.
+  const themBg = hexLuminance(accentColor) > 0.55 ? "#1f2937" : "#e5e7eb";
+  const themFg = onAccentText(themBg);
 
   return (
     <>
@@ -44,11 +74,15 @@ export function ScoreCard({
           label={usLabel}
           value={totals.us}
           onClick={() => setOpenSide("us")}
+          bg={accentColor}
+          fg={usFg}
         />
         <ScoreTile
           label={themLabel}
           value={totals.them}
           onClick={() => setOpenSide("them")}
+          bg={themBg}
+          fg={themFg}
         />
       </div>
 
@@ -77,25 +111,34 @@ function ScoreTile({
   label,
   value,
   onClick,
+  bg,
+  fg,
 }: {
   label: string;
   value: number;
   onClick: () => void;
+  bg: string;
+  fg: string;
 }) {
+  const safeValue = Number.isFinite(value) ? value : 0;
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-foreground transition-colors hover:border-primary active:scale-[0.98]"
+      style={{ backgroundColor: bg, color: fg, borderColor: bg }}
+      className="flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 transition-transform active:scale-[0.98]"
     >
-      <span className="line-clamp-1 min-w-0 text-[10px] font-semibold uppercase tracking-wide text-muted">
+      <span
+        className="line-clamp-1 min-w-0 text-[10px] font-semibold uppercase tracking-wide opacity-80"
+        style={{ color: fg }}
+      >
         {label}
       </span>
       <span
-        className="font-mono text-3xl font-bold leading-none tabular-nums text-primary"
-        style={{ fontVariantNumeric: "tabular-nums" }}
+        className="font-mono text-3xl font-bold leading-none tabular-nums"
+        style={{ fontVariantNumeric: "tabular-nums", color: fg }}
       >
-        {value}
+        {safeValue}
       </span>
     </button>
   );
@@ -234,7 +277,8 @@ function ExactScoreDialog({
   }
 
   const parsed = Number(entry);
-  const invalid = !Number.isFinite(parsed) || parsed < 0;
+  const invalid =
+    !Number.isFinite(parsed) || parsed < 0 || !/^\d+$/.test(entry);
 
   return (
     <div
@@ -289,7 +333,10 @@ function ExactScoreDialog({
           <button
             type="button"
             disabled={invalid}
-            onClick={() => onConfirm(Math.trunc(parsed))}
+            onClick={() => {
+              if (invalid) return;
+              onConfirm(Math.trunc(parsed));
+            }}
             className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
             Set

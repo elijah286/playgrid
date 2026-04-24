@@ -71,7 +71,17 @@ type Props = {
   initialScoreEvents: LiveScoreEvent[];
   playbookName: string;
   sportVariant: string;
+  accentColor: string;
 };
+
+/** Coerce an unknown wire value into a finite signed integer, or null if it
+ *  can't be. Guards against NaN / non-finite deltas that would otherwise
+ *  poison the running total once reduced. */
+function toFiniteInt(v: unknown): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
 
 export function GameModeClient({
   playbookId,
@@ -85,6 +95,7 @@ export function GameModeClient({
   initialScoreEvents,
   playbookName,
   sportVariant,
+  accentColor,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -109,6 +120,19 @@ export function GameModeClient({
   const [, startMutating] = useTransition();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Score events whose server INSERT failed (offline, auth blip, etc.).
+  // Retained optimistically in state and flushed when the browser reports
+  // it's back online, so a bad cell connection on the sideline doesn't lose
+  // the tap the user already saw on their scoreboard.
+  const queuePendingScoreRef = useRef<
+    Array<{
+      optimisticId: string;
+      side: "us" | "them";
+      delta: number;
+      playId: string | null;
+    }>
+  >([]);
 
   const isCaller =
     session != null && session.callerUserId === currentUserId;
@@ -311,23 +335,47 @@ export function GameModeClient({
               thumb: (row.thumb as "up" | "down" | null) ?? null,
               tag: (row.tag as string | null) ?? null,
             };
-            // Replace any optimistic stand-in for the same play/position
-            // so we don't end up with a duplicate row. Then upsert by id.
+            // Find any optimistic stand-in for the same play/position so we
+            // can merge rather than overwrite. The user may have tapped a
+            // thumb locally between the optimistic insert and this echo;
+            // the server's null thumb/tag must not clobber that input.
+            // Most-recent-user-input wins.
+            const optimistic = prev.find(
+              (c) =>
+                c.id.startsWith("optimistic:") &&
+                c.playId === next.playId &&
+                c.position === next.position,
+            );
+            const merged: LiveGameCall =
+              optimistic && (optimistic.thumb != null || optimistic.tag != null)
+                ? { ...next, thumb: optimistic.thumb, tag: optimistic.tag }
+                : next;
             const pruned = prev.filter(
               (c) =>
                 !(
                   c.id.startsWith("optimistic:") &&
-                  c.playId === next.playId &&
-                  c.position === next.position
+                  c.playId === merged.playId &&
+                  c.position === merged.position
                 ),
             );
-            const idx = pruned.findIndex((c) => c.id === next.id);
+            const idx = pruned.findIndex((c) => c.id === merged.id);
             if (idx >= 0) {
               const copy = pruned.slice();
-              copy[idx] = next;
+              // Same rule for UPDATE echoes: if the existing row carries a
+              // newer thumb/tag we set locally and the incoming payload
+              // doesn't include that column (Supabase ships changed-only
+              // without REPLICA IDENTITY FULL), keep ours.
+              const existing = pruned[idx];
+              const hasThumbCol = "thumb" in row;
+              const hasTagCol = "tag" in row;
+              copy[idx] = {
+                ...merged,
+                thumb: hasThumbCol ? merged.thumb : existing.thumb,
+                tag: hasTagCol ? merged.tag : existing.tag,
+              };
               return copy;
             }
-            return [...pruned, next].sort((a, b) => a.position - b.position);
+            return [...pruned, merged].sort((a, b) => a.position - b.position);
           });
         },
       )
@@ -384,10 +432,15 @@ export function GameModeClient({
               return prev.filter((e) => e.id !== oldId);
             }
             const row = payload.new as Record<string, unknown>;
+            const deltaInt = toFiniteInt(row.delta);
+            // Drop non-finite deltas rather than letting them poison the
+            // totals reducer. A malformed row on the wire should never be
+            // able to NaN the scoreboard.
+            if (deltaInt == null) return prev;
             const next: LiveScoreEvent = {
               id: row.id as string,
               side: (row.side as "us" | "them") ?? "us",
-              delta: row.delta as number,
+              delta: deltaInt,
               playId: (row.play_id as string | null) ?? null,
               createdAt: row.created_at as string,
             };
@@ -417,6 +470,145 @@ export function GameModeClient({
 
     return () => {
       void supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  // --- Online-retry + reconcile -------------------------------------------
+  // Sideline connectivity drops are expected. When the browser reports
+  // 'online' we (a) flush any score taps that failed to reach the server
+  // and (b) refetch session + calls + score events so we don't show a
+  // stale view after a missed realtime window. The realtime subscription
+  // re-subscribes on its own; this covers the gap before it does.
+  useEffect(() => {
+    if (!session) return;
+    const sessionId = session.id;
+
+    async function reconcile() {
+      const supabase = createBrowserSupabase();
+      const [sessRes, callsRes, scoreRes, partRes] = await Promise.all([
+        supabase
+          .from("game_sessions")
+          .select(
+            "id, playbook_id, status, caller_user_id, current_play_id, next_play_id, started_at, kind, opponent",
+          )
+          .eq("id", sessionId)
+          .maybeSingle(),
+        supabase
+          .from("game_plays")
+          .select("id, play_id, position, called_at, thumb, tag")
+          .eq("session_id", sessionId)
+          .order("position", { ascending: true }),
+        supabase
+          .from("game_score_events")
+          .select("id, side, delta, play_id, created_at")
+          .eq("session_id", sessionId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("game_session_participants")
+          .select("user_id, last_seen_at")
+          .eq("session_id", sessionId),
+      ]);
+      if (sessRes.data) {
+        const r = sessRes.data as Record<string, unknown>;
+        setSession({
+          id: r.id as string,
+          playbookId: r.playbook_id as string,
+          status: r.status as "active" | "ended",
+          callerUserId: (r.caller_user_id as string | null) ?? null,
+          currentPlayId: (r.current_play_id as string | null) ?? null,
+          nextPlayId: (r.next_play_id as string | null) ?? null,
+          startedAt: r.started_at as string,
+          kind:
+            (r.kind as string | null) === "scrimmage" ? "scrimmage" : "game",
+          opponent: (r.opponent as string | null) ?? null,
+        });
+      }
+      if (callsRes.data) {
+        const serverCalls: LiveGameCall[] = callsRes.data.map((r) => ({
+          id: r.id as string,
+          playId: r.play_id as string,
+          position: r.position as number,
+          calledAt: r.called_at as string,
+          thumb: (r.thumb as "up" | "down" | null) ?? null,
+          tag: (r.tag as string | null) ?? null,
+        }));
+        // Preserve any still-unsynced optimistic calls (position > max server).
+        setCalls((prev) => {
+          const optimistics = prev.filter((c) => c.id.startsWith("optimistic:"));
+          const merged = [...serverCalls];
+          for (const o of optimistics) {
+            if (
+              !serverCalls.some(
+                (s) => s.playId === o.playId && s.position === o.position,
+              )
+            ) {
+              merged.push(o);
+            }
+          }
+          return merged.sort((a, b) => a.position - b.position);
+        });
+      }
+      if (scoreRes.data) {
+        const serverEvents: LiveScoreEvent[] = scoreRes.data
+          .map((r) => {
+            const d = toFiniteInt(r.delta);
+            if (d == null) return null;
+            return {
+              id: r.id as string,
+              side: (r.side as "us" | "them") ?? "us",
+              delta: d,
+              playId: (r.play_id as string | null) ?? null,
+              createdAt: r.created_at as string,
+            };
+          })
+          .filter((e): e is LiveScoreEvent => e !== null);
+        setScoreEvents((prev) => {
+          const optimistics = prev.filter((e) => e.id.startsWith("optimistic:"));
+          return [...serverEvents, ...optimistics];
+        });
+      }
+      if (partRes.data) {
+        setParticipants((prev) => {
+          const byId = new Map(prev.map((p) => [p.userId, p]));
+          const next: LiveParticipant[] = [];
+          for (const r of partRes.data) {
+            const uid = r.user_id as string;
+            const lastSeen = r.last_seen_at as string;
+            const existing = byId.get(uid);
+            next.push({
+              userId: uid,
+              displayName: existing?.displayName ?? null,
+              lastSeenAt: lastSeen,
+            });
+          }
+          return next;
+        });
+      }
+    }
+
+    async function flushPendingScores() {
+      const pending = queuePendingScoreRef.current.splice(0);
+      for (const p of pending) {
+        const res = await logScoreEventAction(sessionId, {
+          side: p.side,
+          delta: p.delta,
+          playId: p.playId,
+        });
+        if (!res.ok) {
+          queuePendingScoreRef.current.push(p);
+          return;
+        }
+      }
+    }
+
+    function onOnline() {
+      void reconcile();
+      void flushPendingScores();
+    }
+
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("online", onOnline);
     };
   }, [session]);
 
@@ -643,41 +835,53 @@ export function GameModeClient({
 
   function addScore(side: "us" | "them", delta: number) {
     if (!session) return;
-    if (delta === 0) return;
+    const safeDelta = toFiniteInt(delta);
+    if (safeDelta == null || safeDelta === 0) return;
     const currentCallId =
       currentCall && currentCall.playId === session.currentPlayId
         ? currentCall.id
         : null;
     // Optimistic event so the scoreboard ticks instantly on the tapping
-    // device. Realtime INSERT dedupes by matching side+delta.
+    // device. Realtime INSERT dedupes by matching side+delta. We keep the
+    // optimistic entry on action failure — most-recent user input wins,
+    // and the online-retry effect will resubmit when connectivity returns.
     const optimistic: LiveScoreEvent = {
-      id: `optimistic:${Date.now()}`,
+      id: `optimistic:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       side,
-      delta,
+      delta: safeDelta,
       playId: currentCallId,
       createdAt: new Date().toISOString(),
     };
-    const snapshot = scoreEvents;
-    setScoreEvents([...scoreEvents, optimistic]);
+    setScoreEvents((prev) => [...prev, optimistic]);
     startMutating(async () => {
       const res = await logScoreEventAction(session.id, {
         side,
-        delta,
+        delta: safeDelta,
         playId: currentCallId,
       });
       if (!res.ok) {
         toast(res.error, "error");
-        setScoreEvents(snapshot);
+        queuePendingScoreRef.current.push({
+          optimisticId: optimistic.id,
+          side,
+          delta: safeDelta,
+          playId: currentCallId,
+        });
       }
     });
   }
 
   function overwriteScore(side: "us" | "them", target: number) {
     if (!session) return;
+    const safeTarget = toFiniteInt(target);
+    if (safeTarget == null || safeTarget < 0) return;
     const current = scoreEvents
       .filter((e) => e.side === side)
-      .reduce((sum, e) => sum + e.delta, 0);
-    const delta = target - current;
+      .reduce((sum, e) => {
+        const d = toFiniteInt(e.delta);
+        return sum + (d ?? 0);
+      }, 0);
+    const delta = safeTarget - current;
     if (delta === 0) return;
     addScore(side, delta);
   }
@@ -884,6 +1088,7 @@ export function GameModeClient({
               isTackle={isTackle}
               onAdd={addScore}
               onOverwrite={overwriteScore}
+              accentColor={accentColor}
             />
           )}
       </div>
@@ -1089,7 +1294,15 @@ function ThumbButton({
   return (
     <button
       type="button"
-      onClick={onTap}
+      onPointerDown={(e) => {
+        // Commit on pointerdown, not click, so the tap is visually
+        // authoritative immediately — prevents the mobile "bounce back"
+        // where a sticky :hover state flashes on iOS before the click
+        // handler runs. Preventing default also stops the synthesized
+        // click/double-tap zoom.
+        e.preventDefault();
+        onTap();
+      }}
       aria-label={direction === "up" ? "Thumbs up" : "Thumbs down"}
       aria-pressed={active}
       className={
@@ -1100,7 +1313,7 @@ function ThumbButton({
           ? direction === "up"
             ? "border-emerald-400 bg-emerald-500/80 text-white shadow-[0_0_24px_rgba(16,185,129,0.6)]"
             : "border-rose-400 bg-rose-500/80 text-white shadow-[0_0_24px_rgba(244,63,94,0.6)]"
-          : "border-border bg-surface-raised/70 text-foreground hover:bg-surface-raised")
+          : "border-border bg-surface-raised/70 text-foreground")
       }
     >
       <Icon className="size-7" />
@@ -1135,7 +1348,10 @@ function TagRail<T extends string>({
           <button
             key={t.value}
             type="button"
-            onClick={() => onTap(t.value)}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onTap(t.value);
+            }}
             aria-pressed={isActive}
             className={
               "rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-sm " +
@@ -1143,7 +1359,7 @@ function TagRail<T extends string>({
                 ? position === "right"
                   ? "border-emerald-400 bg-emerald-500/80 text-white"
                   : "border-rose-400 bg-rose-500/80 text-white"
-                : "border-border bg-surface-raised/70 text-foreground hover:bg-surface-raised")
+                : "border-border bg-surface-raised/70 text-foreground")
             }
           >
             {t.label}

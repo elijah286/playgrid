@@ -194,7 +194,7 @@ export default async function GameModePage({ params, searchParams }: Props) {
 
   const { data: playbookRow } = await supabase
     .from("playbooks")
-    .select("name, sport_variant")
+    .select("name, sport_variant, color")
     .eq("id", playbookId)
     .maybeSingle();
 
@@ -217,6 +217,7 @@ export default async function GameModePage({ params, searchParams }: Props) {
       initialScoreEvents={initialScoreEvents}
       playbookName={(playbookRow?.name as string | null) ?? "Home"}
       sportVariant={(playbookRow?.sport_variant as string | null) ?? "flag_7v7"}
+      accentColor={(playbookRow?.color as string | null) || "#134e2a"}
     />
   );
 }
