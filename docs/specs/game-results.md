@@ -21,6 +21,16 @@ Give coaches a per-playbook view of what happened in past games run via Game Mod
 - Visible only to **owner + editors** (coaches). Players (viewers) never see it.
 - Gated behind beta flag `game_results` — gate the same way `game_mode` is gated in `src/app/(dashboard)/playbooks/[playbookId]/page.tsx`.
 
+## Architecture context (game-mode rewrite)
+
+Since this spec was first drafted, game-mode was rewritten as a multi-coach realtime live session:
+
+- `game_sessions.status` ∈ `'active' | 'ended'` — Game Results only shows `'ended'`. Active sessions belong to Game Mode.
+- `game_sessions.kind` ∈ `'game' | 'scrimmage'` — both shown in Results, with a kind toggle (All / Games / Scrimmages).
+- `game_sessions.opponent`, `score_us`, `score_them` are written at session end by `endGameSessionAction`.
+- `game_score_events` (added 0078) — per-event signed score deltas with optional `play_id` attribution. Used to render the live scoreboard and the Timeline (interleave score events between plays).
+- `game_plays` is still the canonical called-plays log. `play_version_id` is still populated; we additionally write a frozen `snapshot` (see below) because version rows can be mutated.
+
 ## Data model
 
 ### Snapshot column on `game_plays`
@@ -39,12 +49,13 @@ Shape:
 ```json
 {
   "snapshotVersion": 1,
-  "play": { /* full PlayDocument as it existed at called_at */ },
-  "formation": { /* full formation doc as it existed at called_at */ },
+  "play": { /* full PlayDocument as it existed at called_at; self-contained */ },
   "playName": "Power Right",
   "groupName": "Run Game"
 }
 ```
+
+`PlayDocument` already embeds the field, players, routes, and animation — no separate formation snapshot needed.
 
 Keep existing `play_id` and `play_version_id` columns as **soft references** for "jump to this play in the playbook." Handle gracefully if the play was later deleted or renamed — the snapshot is the source of truth for rendering.
 
@@ -60,8 +71,9 @@ When a play is logged in Game Mode (`saveGameSessionAction` in `src/app/actions/
 
 ### Tab landing — game list
 
-- One row per `game_sessions` row for this playbook, most recent first.
-- Columns: date, opponent, our score – their score, # plays called, overall success %.
+- One row per `game_sessions` row for this playbook **where `status = 'ended'`**, most recent first.
+- Kind toggle at the top: **All** (default) / **Games** / **Scrimmages**.
+- Columns: date, kind badge, opponent, our score – their score, # plays called, overall success %.
 - "Success %" = `count(thumb='up') / count(*)` across that game's `game_plays`.
 - Click a row → game detail.
 
@@ -81,13 +93,20 @@ Toggle between two views:
 
 #### 1. Timeline (default)
 
-Chronological list of every call in the game. Each row:
+Chronological feed interleaving **plays called** and **score events**, ordered by `called_at` / `created_at`. Two row kinds:
 
+**Play call row:**
 - Time (or quarter, if Game Mode adds it later)
-- Mini play diagram rendered from `snapshot.play` + `snapshot.formation`
+- Mini play diagram rendered from `snapshot.play`
 - Play name (from `snapshot.playName`)
 - Thumb up / thumb down indicator
 - Tag if present (yards, first_down, score, loss, flag, incomplete, fumble)
+
+**Score event row:**
+- Time
+- Side + signed delta (e.g. "+6 us", "−2 them")
+- Attribution (which coach tapped, via `created_by`)
+- Linked play (if `play_id` present, link to the call row above)
 
 #### 2. By Play
 

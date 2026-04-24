@@ -88,6 +88,7 @@ import {
 import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
+import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
@@ -204,7 +205,7 @@ const UNASSIGNED = "__unassigned__";
 type ThumbSize = "small" | "medium" | "large";
 
 type PlaybookPrefs = {
-  tab?: "plays" | "formations" | "roster" | "staff";
+  tab?: "plays" | "formations" | "roster" | "staff" | "games";
   view: "active" | "archived";
   typeFilter: PlayType | "all";
   groupBy: GroupBy;
@@ -253,6 +254,7 @@ function PlaybookDetailClientInner({
   freeMaxPlays,
   gameModeAvailable = false,
   canUseGameMode = false,
+  gameResultsAvailable = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -268,6 +270,8 @@ function PlaybookDetailClientInner({
   freeMaxPlays: number;
   /** When true, render the mobile "Game" button next to the search bar. */
   gameModeAvailable?: boolean;
+  /** When true, show the "Games" tab for reviewing past game results. */
+  gameResultsAvailable?: boolean;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
@@ -303,12 +307,19 @@ function PlaybookDetailClientInner({
     // "Invite" routing to ?tab=roster) keep working. Otherwise always
     // land on Plays, since that's the primary surface of a playbook.
     const t = searchParams?.get("tab");
-    if (t === "plays" || t === "formations" || t === "roster" || t === "staff") return t;
+    if (
+      t === "plays" ||
+      t === "formations" ||
+      t === "roster" ||
+      t === "staff" ||
+      t === "games"
+    )
+      return t;
     return "plays";
   })();
-  const [tab, setTab] = useState<"plays" | "formations" | "roster" | "staff">(
-    initialTab,
-  );
+  const [tab, setTab] = useState<
+    "plays" | "formations" | "roster" | "staff" | "games"
+  >(initialTab);
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
   const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
@@ -1015,7 +1026,10 @@ function PlaybookDetailClientInner({
                 { key: "formations" as const, label: "Formations", count: initialFormations.length },
                 { key: "roster" as const, label: "Roster", count: initialRoster.filter((m) => m.role === "viewer").length },
                 { key: "staff" as const, label: "Staff", count: initialRoster.filter((m) => m.role !== "viewer").length },
-              ]
+                ...(gameResultsAvailable
+                  ? [{ key: "games" as const, label: "Games", count: null as number | null }]
+                  : []),
+              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "staff" | "games"; label: string; count: number | null }>
             ).map((t) => {
               const active = tab === t.key;
               return (
@@ -1031,6 +1045,7 @@ function PlaybookDetailClientInner({
                   }`}
                 >
                   {t.label}
+                  {t.count != null && (
                   <span
                     className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
                       active ? "bg-primary/10 text-primary" : "bg-surface-inset text-muted"
@@ -1038,6 +1053,7 @@ function PlaybookDetailClientInner({
                   >
                     {t.count}
                   </span>
+                  )}
                 </button>
               );
             })}
@@ -1341,6 +1357,10 @@ function PlaybookDetailClientInner({
           teamName={headerProps.name}
           senderName={headerProps.senderName}
         />
+      )}
+
+      {tab === "games" && gameResultsAvailable && (
+        <GameResultsPanel playbookId={playbookId} />
       )}
 
       {tab === "plays" && (

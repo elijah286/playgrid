@@ -218,6 +218,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
+  const gameResultsAvailable =
+    !isExamplePreview &&
+    isBetaFeatureAvailable(betaFeatures.game_results, {
+      isAdmin,
+      isEntitled: isCoachInPlaybook,
+    });
 
   const publicExampleJsonLd = isPublicExample
     ? [
@@ -281,6 +287,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         isAdmin={isAdmin}
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
+        gameResultsAvailable={gameResultsAvailable}
         canUseGameMode={viewerCanUseGameMode || isAdmin}
         headerProps={{
           name: book.name as string,
