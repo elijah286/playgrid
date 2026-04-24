@@ -165,9 +165,4 @@ body {
   body.editor-hide-site-header [data-site-footer] {
     display: none;
   }
-  body.editor-hide-site-header {
-    overflow: hidden;
-    height: 100dvh;
-    min-height: 0;
-  }
 }
