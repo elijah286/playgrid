@@ -581,6 +581,11 @@ function EditorCanvasImpl({
       }
       if (simplified.length < 2) return;
 
+      // A freehand (drag) path with 3+ points renders more faithfully as
+      // curves; with exactly 2 points (effectively a straight drag), honor
+      // the current shape tool.
+      const freehandShape = simplified.length > 2 ? "curve" : activeShape;
+
       if (extendingRouteId && extendFromNodeId) {
         // Append new nodes onto existing route (skip index 0 = anchor position).
         // Motion only applies to the first segment of a brand-new route — when
@@ -595,7 +600,7 @@ function EditorCanvasImpl({
             routeId: extendingRouteId,
             node: newNode,
             afterNodeId: prevNodeId,
-            shape: activeShape,
+            shape: freehandShape,
             strokePattern: extendStroke,
           });
           prevNodeId = newNode.id;
@@ -622,7 +627,7 @@ function EditorCanvasImpl({
           id: uid("seg"),
           fromNodeId: nodes[i].id,
           toNodeId: nodes[i + 1].id,
-          shape: activeShape,
+          shape: freehandShape,
           strokePattern: segStroke,
           controlOffset: null,
         });
@@ -829,9 +834,12 @@ function EditorCanvasImpl({
       if (state.type === "pending") {
         const dx = e.clientX - state.screenX;
         const dy = e.clientY - state.screenY;
+        // Any pointer movement at all cancels a pending long-press — even
+        // sub-threshold finger wobble. Otherwise a user who rests a finger
+        // on a player for 500ms while beginning to drag gets a context
+        // menu and loses their drag.
+        if (Math.hypot(dx, dy) > 1) cancelLongPress();
         if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-        // Any real movement cancels a pending long-press.
-        cancelLongPress();
 
         if (state.target.kind === "player") {
           const next: Interaction = {
