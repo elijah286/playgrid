@@ -161,7 +161,13 @@ body {
     max-height: min(42dvh, 320px);
     max-width: calc(min(42dvh, 320px) * var(--field-aspect, 2));
   }
-  body.editor-hide-site-header [data-site-header] {
+  body.editor-hide-site-header [data-site-header],
+  body.editor-hide-site-header [data-site-footer] {
     display: none;
+  }
+  body.editor-hide-site-header {
+    overflow: hidden;
+    height: 100dvh;
+    min-height: 0;
   }
 }
