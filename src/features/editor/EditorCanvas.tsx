@@ -1898,7 +1898,7 @@ function EditorCanvasImpl({
                         stroke={isSelectedNode ? "#F26522" : "rgba(0,0,0,0.35)"}
                         strokeWidth={0.0015}
                         vectorEffect="non-scaling-stroke"
-                        style={{ cursor: "grab" }}
+                        style={{ cursor: "grab", touchAction: "none" }}
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           startInteraction(e, {
@@ -2081,7 +2081,7 @@ function EditorCanvasImpl({
         const shape = pl.shape ?? "circle";
 
         const pointerHandlers = {
-          style: { cursor: isDragging ? "grabbing" : "grab" } as React.CSSProperties,
+          style: { cursor: isDragging ? "grabbing" : "grab", touchAction: "none" } as React.CSSProperties,
           onPointerDown: (e: React.PointerEvent) => {
             e.stopPropagation();
             // Right-clicks are handled by the native contextmenu listener above.
