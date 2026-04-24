@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import {
@@ -205,6 +205,55 @@ function readableLabelColor(fill: string, preferred?: string): string {
   // If preferred label is too close in luminance to the fill, override.
   if (Math.abs(pLum - lum) < 0.35) return auto;
   return preferred;
+}
+
+/**
+ * Positions a floating context menu at (x, y) relative to `wrapperRef`, then
+ * after mount measures its real size and clamps it so it stays fully inside
+ * the wrapper's bounds — flipping to the left/above when it would overflow.
+ * Prevents the mid-field right-click menu from being cut off near edges.
+ */
+function ClampedMenu({
+  x,
+  y,
+  wrapperRef,
+  className,
+  children,
+  onPointerDown,
+  ...rest
+}: {
+  x: number;
+  y: number;
+  wrapperRef: React.RefObject<HTMLDivElement | null>;
+  className?: string;
+  children: React.ReactNode;
+  onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
+} & React.HTMLAttributes<HTMLDivElement>) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const wrap = wrapperRef.current;
+    if (!el || !wrap) return;
+    const wr = wrap.getBoundingClientRect();
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const pad = 6;
+    const left = Math.max(pad, Math.min(x, wr.width - w - pad));
+    const top = Math.max(pad, Math.min(y, wr.height - h - pad));
+    setPos({ left, top });
+  }, [x, y, wrapperRef]);
+  return (
+    <div
+      ref={ref}
+      {...rest}
+      className={className}
+      style={{ left: pos.left, top: pos.top }}
+      onPointerDown={onPointerDown}
+    >
+      {children}
+    </div>
+  );
 }
 
 function EditorCanvasImpl({
@@ -2252,13 +2301,12 @@ function EditorCanvasImpl({
 
       {/* Segment context menu */}
       {segmentMenu && (
-        <div
+        <ClampedMenu
           data-segment-menu
+          wrapperRef={wrapperRef}
+          x={segmentMenu.screenX}
+          y={segmentMenu.screenY}
           className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
-          style={{
-            left: segmentMenu.screenX,
-            top: segmentMenu.screenY,
-          }}
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -2304,13 +2352,15 @@ function EditorCanvasImpl({
           >
             Delete route
           </button>
-        </div>
+        </ClampedMenu>
       )}
       {anchorMenu && (
-        <div
+        <ClampedMenu
           data-segment-menu
+          wrapperRef={wrapperRef}
+          x={anchorMenu.screenX}
+          y={anchorMenu.screenY}
           className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
-          style={{ left: anchorMenu.screenX, top: anchorMenu.screenY }}
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -2320,7 +2370,7 @@ function EditorCanvasImpl({
           >
             Delete anchor
           </button>
-        </div>
+        </ClampedMenu>
       )}
 
       {/* Player context menu */}
@@ -2329,10 +2379,12 @@ function EditorCanvasImpl({
           (r) => r.carrierPlayerId === playerMenu.playerId,
         );
         return (
-          <div
+          <ClampedMenu
             data-segment-menu
+            wrapperRef={wrapperRef}
+            x={playerMenu.screenX}
+            y={playerMenu.screenY}
             className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
-            style={{ left: playerMenu.screenX, top: playerMenu.screenY }}
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button
@@ -2357,7 +2409,7 @@ function EditorCanvasImpl({
             >
               Clear all routes
             </button>
-          </div>
+          </ClampedMenu>
         );
       })()}
 
@@ -2366,10 +2418,12 @@ function EditorCanvasImpl({
         const z = (doc.layers.zones ?? []).find((zn) => zn.id === zoneMenu.zoneId);
         if (!z) return null;
         return (
-          <div
+          <ClampedMenu
             data-segment-menu
+            wrapperRef={wrapperRef}
+            x={zoneMenu.screenX}
+            y={zoneMenu.screenY}
             className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
-            style={{ left: zoneMenu.screenX, top: zoneMenu.screenY }}
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button
@@ -2402,7 +2456,7 @@ function EditorCanvasImpl({
             >
               Delete
             </button>
-          </div>
+          </ClampedMenu>
         );
       })()}
     </div>
