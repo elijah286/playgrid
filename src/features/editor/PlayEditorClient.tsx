@@ -766,6 +766,7 @@ function PlayEditorClientInner({
             ) : !showToolbar ? (
               <OpponentOverlayCard
                 currentPlayId={playId}
+                currentPlaybookId={playbookId}
                 playType={doc.metadata.playType ?? "offense"}
                 nav={initialNav}
                 allFormations={opponentFormations ?? allFormations}

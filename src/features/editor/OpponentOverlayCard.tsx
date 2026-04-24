@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Search, Swords, Users, X } from "lucide-react";
+import { ChevronRight, Search, Swords, Users, X } from "lucide-react";
 import type { PlayDocument, Player } from "@/domain/play/types";
 import type { PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import type { SavedFormation } from "@/app/actions/formations";
@@ -10,6 +10,8 @@ import { useToast } from "@/components/ui";
 
 type Props = {
   currentPlayId: string;
+  /** Used to scope formations and plays to this playbook only. */
+  currentPlaybookId: string;
   playType: PlayDocument["metadata"]["playType"];
   nav: PlaybookPlayNavItem[];
   allFormations: SavedFormation[];
@@ -36,6 +38,7 @@ type Selection =
  */
 export function OpponentOverlayCard({
   currentPlayId,
+  currentPlaybookId,
   playType,
   nav,
   allFormations,
@@ -46,6 +49,8 @@ export function OpponentOverlayCard({
   const { toast } = useToast();
   const [selection, setSelection] = useState<Selection>({ kind: "none" });
   const [query, setQuery] = useState("");
+  const [formationsOpen, setFormationsOpen] = useState(false);
+  const [playsOpen, setPlaysOpen] = useState(true);
   const [pending, startTransition] = useTransition();
   const [installing, startInstall] = useTransition();
 
@@ -57,9 +62,14 @@ export function OpponentOverlayCard({
         : ["offense", "defense", "special_teams"];
 
   const eligibleFormations = useMemo(
-    () => allFormations.filter((f) => wantKinds.includes(f.kind ?? "offense")),
+    () =>
+      allFormations.filter(
+        (f) =>
+          f.playbookId === currentPlaybookId &&
+          wantKinds.includes(f.kind ?? "offense"),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allFormations, playType],
+    [allFormations, playType, currentPlaybookId],
   );
 
   const eligiblePlays = useMemo(
@@ -204,26 +214,13 @@ export function OpponentOverlayCard({
           </p>
         )}
 
-        {filteredFormations.length > 0 && (
-          <Group title="Formations" count={filteredFormations.length}>
-            {filteredFormations.map((f) => {
-              const active =
-                selection.kind === "formation" && selection.id === f.id;
-              return (
-                <RowButton
-                  key={f.id}
-                  active={active}
-                  onClick={() => pickFormation(f)}
-                  primary={f.displayName}
-                  secondary={labelForKind(f.kind ?? "offense")}
-                />
-              );
-            })}
-          </Group>
-        )}
-
         {filteredPlays.length > 0 && (
-          <Group title="Plays" count={filteredPlays.length}>
+          <Group
+            title="Plays"
+            count={filteredPlays.length}
+            open={playsOpen || q.length > 0}
+            onToggle={() => setPlaysOpen((v) => !v)}
+          >
             {filteredPlays.map((p) => {
               const active =
                 selection.kind === "play" && selection.id === p.id;
@@ -242,6 +239,29 @@ export function OpponentOverlayCard({
             })}
           </Group>
         )}
+
+        {filteredFormations.length > 0 && (
+          <Group
+            title="Formations"
+            count={filteredFormations.length}
+            open={formationsOpen || q.length > 0}
+            onToggle={() => setFormationsOpen((v) => !v)}
+          >
+            {filteredFormations.map((f) => {
+              const active =
+                selection.kind === "formation" && selection.id === f.id;
+              return (
+                <RowButton
+                  key={f.id}
+                  active={active}
+                  onClick={() => pickFormation(f)}
+                  primary={f.displayName}
+                  secondary={labelForKind(f.kind ?? "offense")}
+                />
+              );
+            })}
+          </Group>
+        )}
       </div>
 
       <p className="border-t border-border px-3 py-2 text-[11px] leading-snug text-muted">
@@ -254,19 +274,33 @@ export function OpponentOverlayCard({
 function Group({
   title,
   count,
+  open,
+  onToggle,
   children,
 }: {
   title: string;
   count: number;
+  open: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="px-2 pb-1">
-      <div className="sticky top-0 z-10 flex items-center justify-between bg-surface-inset/90 px-1 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted backdrop-blur">
-        <span>{title}</span>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="sticky top-0 z-10 flex w-full items-center justify-between gap-1 rounded bg-surface-inset/90 px-1 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted backdrop-blur hover:text-foreground"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-1">
+          <ChevronRight
+            className={`size-3 transition-transform ${open ? "rotate-90" : ""}`}
+          />
+          {title}
+        </span>
         <span>{count}</span>
-      </div>
-      <ul className="mt-1 space-y-0.5">{children}</ul>
+      </button>
+      {open && <ul className="mt-1 space-y-0.5">{children}</ul>}
     </div>
   );
 }
