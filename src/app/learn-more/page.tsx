@@ -753,62 +753,27 @@ function FeatureBullet({
 
 function MockWristSheet() {
   return (
-    <div className="grid grid-cols-4 gap-1">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <div
-          key={i}
-          className="rounded-sm bg-white p-1 ring-1 ring-neutral-300"
-        >
-          <div className="flex items-center gap-1">
-            <span
-              className="rounded px-1 text-[7px] font-bold text-white"
-              style={{ background: BRAND_ORANGE }}
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <span className="truncate text-[7px] font-semibold">
-              {["PA Go", "Mesh", "Slant", "Counter", "Y-Stick", "Bubble"][i % 6]}
-            </span>
-          </div>
-          <div className="mt-1 aspect-[4/3] rounded-sm bg-neutral-900">
-            <MiniPlayTile seed={i + 3} />
-          </div>
-        </div>
-      ))}
-    </div>
+    <Image
+      src="/marketing/screens/print-wristband.png"
+      alt="Wristband sheet generated from a real example playbook"
+      width={1400}
+      height={900}
+      className="h-auto w-full"
+      priority={false}
+    />
   );
 }
 
 function MockCallSheet() {
   return (
-    <div>
-      <div className="flex items-baseline justify-between border-b border-neutral-300 pb-2">
-        <p className="text-sm font-bold">Call Sheet · Wk 4</p>
-        <p className="text-[10px] text-neutral-500">vs. Valley</p>
-      </div>
-      {[
-        { title: "1st & 10", plays: ["02 PA Go", "14 Mesh", "21 Counter"] },
-        { title: "3rd & Short", plays: ["33 Y-Stick", "07 Slant/Flat"] },
-        { title: "Red Zone", plays: ["09 Fade", "02 PA Go", "41 Sneak"] },
-      ].map((group) => (
-        <div key={group.title} className="mt-3">
-          <p
-            className="text-[10px] font-bold uppercase tracking-wider"
-            style={{ color: BRAND_BLUE }}
-          >
-            {group.title}
-          </p>
-          <ul className="mt-1 space-y-0.5 text-[11px]">
-            {group.plays.map((p) => (
-              <li key={p} className="flex justify-between border-b border-dashed border-neutral-200 py-0.5">
-                <span className="font-medium">{p}</span>
-                <span className="text-neutral-500">✓</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
+    <Image
+      src="/marketing/screens/print-callsheet.png"
+      alt="Call sheet generated from a real example playbook"
+      width={1400}
+      height={1800}
+      className="h-auto w-full"
+      priority={false}
+    />
   );
 }
 
@@ -819,32 +784,6 @@ function MiniFormation({ dots }: { dots: Array<[number, number]> }) {
       <line x1="5" y1="42" x2="95" y2="42" stroke="rgba(255,255,255,0.5)" strokeDasharray="2 2" />
       {dots.map(([x, y], i) => (
         <circle key={i} cx={x} cy={y} r="3.5" fill="white" />
-      ))}
-    </svg>
-  );
-}
-
-function MiniPlayTile({ seed }: { seed: number }) {
-  const r = (n: number) => ((seed * 9301 + n * 49297) % 233280) / 233280;
-  const routes = Array.from({ length: 4 }).map((_, i) => {
-    const x = 20 + r(i) * 60;
-    const y2 = 20 + r(i + 10) * 30;
-    return { x, y1: 75, y2 };
-  });
-  return (
-    <svg viewBox="0 0 100 100" className="h-full w-full">
-      {routes.map((rt, i) => (
-        <g key={i}>
-          <line
-            x1={rt.x}
-            y1={rt.y1}
-            x2={rt.x + (i % 2 === 0 ? -10 : 10)}
-            y2={rt.y2}
-            stroke={i === 2 ? BRAND_ORANGE : BRAND_BLUE}
-            strokeWidth="1.5"
-          />
-          <circle cx={rt.x} cy={rt.y1} r="3" fill="white" />
-        </g>
       ))}
     </svg>
   );
