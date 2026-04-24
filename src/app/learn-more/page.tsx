@@ -17,7 +17,6 @@ import {
   TabletFrame,
   WristBand,
 } from "@/features/marketing/DeviceFrames";
-import { PlayAnimation } from "@/features/marketing/PlayAnimation";
 import { Reveal } from "@/features/marketing/Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
@@ -81,14 +80,16 @@ function Hero() {
             className="mt-5 text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl"
             style={{ color: BRAND_NAVY }}
           >
-            Everything a coach needs.
+            Everything a youth football coach
             <br />
-            <span style={{ color: BRAND_GREEN }}>Nothing they don&apos;t.</span>
+            <span style={{ color: BRAND_GREEN }}>
+              needs for a playbook.
+            </span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
             Design plays, build formations, run game mode from the sideline,
-            and print wristband-ready call sheets — all in one place. Built by
-            a coach, so it works the way coaches think.
+            and print call sheets and wristbands — all in one place. Built
+            by a coach, so it works the way coaches think.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -111,9 +112,18 @@ function Hero() {
         <div className="relative">
           <div className="absolute -inset-8 -z-10 rounded-[36px] bg-gradient-to-br from-white/40 to-white/0 blur-2xl" />
           <LaptopFrame>
-            <div className="flex h-full w-full items-center justify-center bg-neutral-900 p-2">
-              <PlayAnimation className="h-auto w-full" />
-            </div>
+            <video
+              className="block h-full w-full object-cover object-top"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster="/marketing/screens/hero-1-shelf.png"
+            >
+              <source src="/marketing/screens/hero-walkthrough.mp4" type="video/mp4" />
+              <source src="/marketing/screens/hero-walkthrough.webm" type="video/webm" />
+            </video>
           </LaptopFrame>
         </div>
       </div>
