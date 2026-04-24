@@ -29,6 +29,7 @@ import {
   discardGameSessionAction,
   leaveGameSessionAction,
   logScoreEventAction,
+  updateGameSessionMetaAction,
 } from "@/app/actions/game-sessions";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { PlayPickerDialog } from "./PlayPickerDialog";
@@ -88,10 +89,10 @@ export function GameModeClient({
   const router = useRouter();
   const { toast } = useToast();
 
-  // If we arrived to an already-active session, skip intro and go straight
-  // to shared state. Otherwise show the intro; dismissing it starts/joins
-  // the session on the server.
-  const [showIntro, setShowIntro] = useState(() => initialSession == null);
+  // Always show the intro on entry, whether starting a new session or
+  // joining one already in progress. Late joiners see the current kind +
+  // opponent (prefilled from initialSession) and can edit or skip.
+  const [showIntro, setShowIntro] = useState(true);
   const [session, setSession] = useState<LiveGameSession | null>(initialSession);
   const [calls, setCalls] = useState<LiveGameCall[]>(initialCalls);
   const [participants, setParticipants] =
@@ -446,11 +447,35 @@ export function GameModeClient({
     kind: GameKind;
     opponent: string | null;
   }) {
+    if (session) {
+      // Late joiner (or re-opening the dialog): update only if anything
+      // changed so we don't stomp a teammate's edit with our defaults.
+      const changed =
+        opts.kind !== session.kind ||
+        (opts.opponent ?? null) !== (session.opponent ?? null);
+      if (changed) {
+        const optimistic: LiveGameSession = {
+          ...session,
+          kind: opts.kind,
+          opponent: opts.opponent,
+        };
+        setSession(optimistic);
+        const res = await updateGameSessionMetaAction(session.id, opts);
+        if (!res.ok) {
+          toast(res.error, "error");
+          setSession(session);
+        }
+      }
+      setShowIntro(false);
+      // If we arrived with no play picked yet, open the picker now.
+      if (!session.currentPlayId && isCaller) {
+        setPickerMode("current");
+      }
+      return;
+    }
+    // First coach in — create the session.
     await startSession(opts);
     setShowIntro(false);
-    // After the session lands, show the "pick a starting play" picker.
-    // currentPlayId and session aren't read here because startSession has
-    // already set them synchronously.
     setPickerMode("current");
   }
 
@@ -863,7 +888,14 @@ export function GameModeClient({
           )}
       </div>
 
-      {showIntro && <IntroOverlay onDismiss={dismissIntro} />}
+      {showIntro && (
+        <IntroOverlay
+          onDismiss={dismissIntro}
+          isJoining={initialSession != null}
+          initialKind={session?.kind ?? "game"}
+          initialOpponent={session?.opponent ?? null}
+        />
+      )}
 
       {/* Fullscreen picker only for the initial "pick your first play" state,
           and only for the caller. Spectators see the waiting message. */}
@@ -1124,25 +1156,41 @@ function TagRail<T extends string>({
 
 function IntroOverlay({
   onDismiss,
+  isJoining,
+  initialKind,
+  initialOpponent,
 }: {
   onDismiss: (opts: { kind: GameKind; opponent: string | null }) => void;
+  /** True when the session was already active when we loaded the page —
+   *  changes the framing from "start a game" to "join in progress". */
+  isJoining: boolean;
+  initialKind: GameKind;
+  initialOpponent: string | null;
 }) {
-  const [kind, setKind] = useState<GameKind>("game");
-  const [opponent, setOpponent] = useState("");
-  const [starting, setStarting] = useState(false);
+  const [kind, setKind] = useState<GameKind>(initialKind);
+  const [opponent, setOpponent] = useState(initialOpponent ?? "");
+  const [submitting, setSubmitting] = useState(false);
+
+  const primaryLabel = isJoining
+    ? "Continue"
+    : `Start ${kind === "scrimmage" ? "scrimmage" : "game"}`;
+  const submittingLabel = isJoining ? "Joining…" : "Starting…";
+
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Welcome to game mode"
+      aria-label={isJoining ? "Join game mode" : "Welcome to game mode"}
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 p-3 sm:items-center"
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated">
-        <h2 className="text-lg font-semibold text-foreground">Game mode</h2>
+        <h2 className="text-lg font-semibold text-foreground">
+          {isJoining ? "Join game mode" : "Game mode"}
+        </h2>
         <p className="mt-2 text-sm text-muted">
-          A sideline tool for live play calling. Pick a play, score it with a
-          thumb after the snap, then queue the next call. Other coaches on your
-          playbook can join to help score — everyone sees the same thing.
+          {isJoining
+            ? "You're joining a session that's already in progress. Confirm or correct the details below — you can always edit them on exit."
+            : "A sideline tool for live play calling. Pick a play, score it with a thumb after the snap, then queue the next call. Other coaches can join to help score."}
         </p>
 
         <KindToggle value={kind} onChange={setKind} className="mt-4" />
@@ -1162,14 +1210,14 @@ function IntroOverlay({
 
         <button
           type="button"
-          disabled={starting}
+          disabled={submitting}
           onClick={() => {
-            setStarting(true);
+            setSubmitting(true);
             onDismiss({ kind, opponent: opponent.trim() || null });
           }}
           className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
         >
-          {starting ? "Starting…" : `Start ${kind === "scrimmage" ? "scrimmage" : "game"}`}
+          {submitting ? submittingLabel : primaryLabel}
         </button>
       </div>
     </div>

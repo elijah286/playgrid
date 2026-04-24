@@ -227,6 +227,32 @@ export async function takeoverCallerAction(sessionId: string) {
   return { ok: true as const };
 }
 
+/** Any coach in the playbook can update the session's metadata (kind and
+ *  opponent). Used by the start/join dialog so late joiners can correct
+ *  or fill in values the opener left blank. */
+export async function updateGameSessionMetaAction(
+  sessionId: string,
+  input: { kind: "game" | "scrimmage"; opponent: string | null },
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const kind = input.kind === "scrimmage" ? "scrimmage" : "game";
+  const opponent = input.opponent?.trim() || null;
+
+  const { error } = await supabase
+    .from("game_sessions")
+    .update({ kind, opponent })
+    .eq("id", sessionId)
+    .eq("status", "active");
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 /** Caller sets the next-up play. */
 export async function setNextPlayAction(sessionId: string, playId: string | null) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
