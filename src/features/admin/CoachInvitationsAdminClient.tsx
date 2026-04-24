@@ -312,9 +312,11 @@ function CreateInviteDialog({
 }) {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [note, setNote] = useState("");
-  const [expires, setExpires] = useState<"never" | "7" | "30" | "90">("never");
+  const [expires, setExpires] = useState<"never" | "7" | "30" | "90">("90");
   const [sendNow, setSendNow] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [created, setCreated] = useState<{ code: string; url: string } | null>(null);
+  const [copied, setCopied] = useState<"code" | "url" | null>(null);
 
   function expiresIso(): string | null {
     if (expires === "never") return null;
@@ -339,96 +341,172 @@ function CreateInviteDialog({
         onError(res.error);
         return;
       }
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const url = `${origin}/login?invite=${encodeURIComponent(res.code)}`;
       if (sendNow && recipientEmail.trim()) {
-        const origin = typeof window !== "undefined" ? window.location.origin : "";
         const emailRes = await emailCoachInvitationAction({ id: res.id, origin });
         if (!emailRes.ok) {
           onError(`Invite created (${res.code}) but email failed: ${emailRes.error}`);
+          setCreated({ code: res.code, url });
           return;
         }
-        onDone(`Invite ${res.code} created and emailed to ${recipientEmail.trim()}.`);
-        return;
+        onDone(`Invite ${res.code} emailed to ${recipientEmail.trim()}.`);
       }
-      onDone(`Invite ${res.code} created.`);
+      setCreated({ code: res.code, url });
     });
+  }
+
+  async function copy(value: string, key: "code" | "url") {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+    } catch {
+      onError("Could not copy to clipboard.");
+    }
+  }
+
+  function finish() {
+    if (created) onDone(`Invite ${created.code} created.`);
+    else onClose();
   }
 
   return (
     <Modal
       open
-      onClose={onClose}
-      title="Create coach invite"
+      onClose={finish}
+      title={created ? "Invite ready to share" : "Create coach invite"}
       footer={
-        <>
+        created ? (
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-medium text-foreground hover:bg-surface-inset"
+            onClick={finish}
+            className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-hover"
           >
-            Cancel
+            Done
           </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={submit}
-            className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-          >
-            {pending ? "Creating…" : sendNow ? "Create & email" : "Create invite"}
-          </button>
-        </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-medium text-foreground hover:bg-surface-inset"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={submit}
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              {pending ? "Creating…" : sendNow ? "Create & email" : "Create invite"}
+            </button>
+          </>
+        )
       }
     >
-      <div className="space-y-3">
-        <label className="block text-sm">
-          <span className="font-medium text-foreground">Recipient email (optional)</span>
-          <input
-            type="email"
-            value={recipientEmail}
-            onChange={(e) => setRecipientEmail(e.target.value)}
-            placeholder="coach@example.com"
-            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <span className="mt-1 block text-xs text-muted">
-            Used when you email the invite. You can leave blank and copy the code by hand.
-          </span>
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium text-foreground">Note (optional)</span>
-          <input
-            type="text"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. HS varsity coach, referred by Jane"
-            maxLength={500}
-            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium text-foreground">Expires</span>
-          <select
-            value={expires}
-            onChange={(e) => setExpires(e.target.value as typeof expires)}
-            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="never">Never</option>
-            <option value="7">In 7 days</option>
-            <option value="30">In 30 days</option>
-            <option value="90">In 90 days</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={sendNow}
-            onChange={(e) => setSendNow(e.target.checked)}
-            className="size-4 rounded border-border text-primary focus:ring-primary"
-          />
-          <span className="text-foreground">
-            Email this invite now{" "}
-            <span className="text-xs text-muted">(requires Resend configured)</span>
-          </span>
-        </label>
-      </div>
+      {created ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted">
+            Share this link so the coach lands on signup with the code
+            pre-filled. You can also copy just the code if they&apos;d rather
+            type it.
+          </p>
+          <div className="space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+              Shareable link
+            </span>
+            <div className="flex items-stretch gap-2">
+              <input
+                readOnly
+                value={created.url}
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-w-0 flex-1 rounded-lg border border-border bg-surface-inset px-3 py-2 font-mono text-xs text-foreground"
+              />
+              <button
+                type="button"
+                onClick={() => copy(created.url, "url")}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-surface-inset"
+              >
+                {copied === "url" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copied === "url" ? "Copied" : "Copy link"}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">Code</span>
+            <div className="flex items-stretch gap-2">
+              <input
+                readOnly
+                value={created.code}
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-w-0 flex-1 rounded-lg border border-border bg-surface-inset px-3 py-2 font-mono text-sm font-semibold text-foreground"
+              />
+              <button
+                type="button"
+                onClick={() => copy(created.code, "code")}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-foreground hover:bg-surface-inset"
+              >
+                {copied === "code" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copied === "code" ? "Copied" : "Copy code"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <label className="block text-sm">
+            <span className="font-medium text-foreground">Recipient email (optional)</span>
+            <input
+              type="email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              placeholder="coach@example.com"
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Used when you email the invite. You can leave blank and copy the code by hand.
+            </span>
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-foreground">Note (optional)</span>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. HS varsity coach, referred by Jane"
+              maxLength={500}
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-foreground">Expires</span>
+            <select
+              value={expires}
+              onChange={(e) => setExpires(e.target.value as typeof expires)}
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="90">In 90 days</option>
+              <option value="30">In 30 days</option>
+              <option value="7">In 7 days</option>
+              <option value="never">Never</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={sendNow}
+              onChange={(e) => setSendNow(e.target.checked)}
+              className="size-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <span className="text-foreground">
+              Email this invite now{" "}
+              <span className="text-xs text-muted">(requires Resend configured)</span>
+            </span>
+          </label>
+        </div>
+      )}
     </Modal>
   );
 }
