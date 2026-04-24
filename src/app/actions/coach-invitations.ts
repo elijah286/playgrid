@@ -40,16 +40,19 @@ export type CoachInvitationRow = {
   redeemedByEmail: string | null;
   revokedAt: string | null;
   lastEmailedAt: string | null;
+  maxUses: number;
+  usedCount: number;
   status: "active" | "redeemed" | "revoked" | "expired";
 };
 
 function computeStatus(row: {
-  redeemed_at: string | null;
   revoked_at: string | null;
   expires_at: string | null;
+  max_uses: number;
+  used_count: number;
 }): CoachInvitationRow["status"] {
-  if (row.redeemed_at) return "redeemed";
   if (row.revoked_at) return "revoked";
+  if (row.used_count >= row.max_uses) return "redeemed";
   if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return "expired";
   return "active";
 }
@@ -73,7 +76,7 @@ export async function listCoachInvitationsAction() {
   const { data, error } = await admin
     .from("coach_invitations")
     .select(
-      "id, code, note, recipient_email, expires_at, created_at, redeemed_at, redeemed_by, revoked_at, last_emailed_at",
+      "id, code, note, recipient_email, expires_at, created_at, redeemed_at, redeemed_by, revoked_at, last_emailed_at, max_uses, used_count",
     )
     .order("created_at", { ascending: false });
   if (error) return { ok: false as const, error: error.message, items: [] };
@@ -106,10 +109,13 @@ export async function listCoachInvitationsAction() {
     redeemedByEmail: r.redeemed_by ? emailsById.get(r.redeemed_by as string) ?? null : null,
     revokedAt: (r.revoked_at as string | null) ?? null,
     lastEmailedAt: (r.last_emailed_at as string | null) ?? null,
-    status: computeStatus(r as {
-      redeemed_at: string | null;
-      revoked_at: string | null;
-      expires_at: string | null;
+    maxUses: (r.max_uses as number | null) ?? 1,
+    usedCount: (r.used_count as number | null) ?? 0,
+    status: computeStatus({
+      revoked_at: (r.revoked_at as string | null) ?? null,
+      expires_at: (r.expires_at as string | null) ?? null,
+      max_uses: (r.max_uses as number | null) ?? 1,
+      used_count: (r.used_count as number | null) ?? 0,
     }),
   }));
 
@@ -120,6 +126,7 @@ export async function createCoachInvitationAction(input: {
   recipientEmail?: string;
   note?: string;
   expiresAt?: string | null;
+  maxUses?: number;
 }) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
@@ -127,12 +134,16 @@ export async function createCoachInvitationAction(input: {
   const recipientEmail = input.recipientEmail?.trim() || null;
   const note = input.note?.trim() || null;
   const expiresAt = input.expiresAt?.trim() ? input.expiresAt : null;
+  const maxUses = Math.max(1, Math.floor(input.maxUses ?? 1));
 
   if (recipientEmail && !EMAIL_RE.test(recipientEmail)) {
     return { ok: false as const, error: "Invalid recipient email." };
   }
   if (note && note.length > 500) {
     return { ok: false as const, error: "Note must be 500 characters or fewer." };
+  }
+  if (!Number.isFinite(maxUses) || maxUses > 1000) {
+    return { ok: false as const, error: "Number of uses must be between 1 and 1000." };
   }
   if (expiresAt) {
     const t = new Date(expiresAt).getTime();
@@ -154,6 +165,7 @@ export async function createCoachInvitationAction(input: {
         recipient_email: recipientEmail,
         expires_at: expiresAt,
         created_by: gate.userId,
+        max_uses: maxUses,
       })
       .select("id, code")
       .single();
@@ -179,7 +191,7 @@ export async function revokeCoachInvitationAction(id: string) {
     .from("coach_invitations")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
-    .is("redeemed_at", null);
+    .is("revoked_at", null);
   if (error) return { ok: false as const, error: error.message };
   revalidatePath("/settings");
   return { ok: true as const };
@@ -259,13 +271,13 @@ export async function emailCoachInvitationAction(input: {
   const admin = createServiceRoleClient();
   const { data: row, error: rowErr } = await admin
     .from("coach_invitations")
-    .select("id, code, note, recipient_email, expires_at, redeemed_at, revoked_at")
+    .select("id, code, note, recipient_email, expires_at, redeemed_at, revoked_at, max_uses, used_count")
     .eq("id", input.id)
     .single();
   if (rowErr || !row) return { ok: false as const, error: rowErr?.message ?? "Invite not found." };
 
-  if (row.redeemed_at) {
-    return { ok: false as const, error: "This invite has already been redeemed." };
+  if ((row.used_count as number) >= (row.max_uses as number)) {
+    return { ok: false as const, error: "This invite has already been fully redeemed." };
   }
   if (row.revoked_at) {
     return { ok: false as const, error: "This invite has been revoked." };

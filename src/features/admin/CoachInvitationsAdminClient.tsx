@@ -158,6 +158,11 @@ export function CoachInvitationsAdminClient({
                         <span className="font-mono text-sm font-semibold text-foreground">
                           {row.code}
                         </span>
+                        {row.maxUses > 1 && (
+                          <span className="rounded-full bg-surface-inset px-2 py-0.5 text-[11px] text-muted">
+                            {row.usedCount} / {row.maxUses} used
+                          </span>
+                        )}
                       </div>
                       {row.note && (
                         <p className="mt-1 text-xs text-muted line-clamp-2">{row.note}</p>
@@ -313,6 +318,7 @@ function CreateInviteDialog({
   const [recipientEmail, setRecipientEmail] = useState("");
   const [note, setNote] = useState("");
   const [expires, setExpires] = useState<"never" | "7" | "30" | "90">("90");
+  const [maxUses, setMaxUses] = useState<string>("1");
   const [sendNow, setSendNow] = useState(false);
   const [pending, startTransition] = useTransition();
   const [created, setCreated] = useState<{ code: string; url: string } | null>(null);
@@ -331,11 +337,13 @@ function CreateInviteDialog({
       onError("Add a recipient email to send the invite.");
       return;
     }
+    const parsedUses = Math.max(1, Math.floor(Number(maxUses) || 1));
     startTransition(async () => {
       const res = await createCoachInvitationAction({
         recipientEmail: recipientEmail || undefined,
         note: note || undefined,
         expiresAt: expiresIso(),
+        maxUses: parsedUses,
       });
       if (!res.ok) {
         onError(res.error);
@@ -480,19 +488,36 @@ function CreateInviteDialog({
               className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </label>
-          <label className="block text-sm">
-            <span className="font-medium text-foreground">Expires</span>
-            <select
-              value={expires}
-              onChange={(e) => setExpires(e.target.value as typeof expires)}
-              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="90">In 90 days</option>
-              <option value="30">In 30 days</option>
-              <option value="7">In 7 days</option>
-              <option value="never">Never</option>
-            </select>
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="font-medium text-foreground">Expires</span>
+              <select
+                value={expires}
+                onChange={(e) => setExpires(e.target.value as typeof expires)}
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="90">In 90 days</option>
+                <option value="30">In 30 days</option>
+                <option value="7">In 7 days</option>
+                <option value="never">Never</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="font-medium text-foreground">Number of uses</span>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                step={1}
+                value={maxUses}
+                onChange={(e) => setMaxUses(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="mt-1 block text-xs text-muted">
+                How many coaches can redeem this code.
+              </span>
+            </label>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
