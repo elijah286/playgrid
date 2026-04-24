@@ -568,6 +568,101 @@ export async function addRosterEntryAction(input: {
 }
 
 /**
+ * Coach: edit roster fields on any member row (name/label, jersey,
+ * positions, minor flag). RLS lets any editor of the playbook update;
+ * we clean inputs the same way the Add dialog does.
+ */
+export async function updateRosterEntryAction(input: {
+  playbookId: string;
+  memberId: string;
+  label?: string | null;
+  jerseyNumber?: string | null;
+  positions?: string[];
+  isMinor?: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+
+  const patch: Record<string, unknown> = {};
+  if (input.label !== undefined) {
+    const cleaned = (input.label ?? "").trim();
+    patch.label = cleaned.length > 0 ? cleaned : null;
+  }
+  if (input.jerseyNumber !== undefined) {
+    const cleaned = (input.jerseyNumber ?? "").trim();
+    patch.jersey_number = cleaned.length > 0 ? cleaned : null;
+  }
+  if (input.positions !== undefined) {
+    const cleaned = Array.from(
+      new Set(
+        input.positions
+          .map((p) => (typeof p === "string" ? p.trim() : ""))
+          .filter((p) => p.length > 0 && p.length <= 12),
+      ),
+    ).slice(0, 8);
+    patch.positions = cleaned;
+    patch.position = cleaned[0] ?? null;
+  }
+  if (input.isMinor !== undefined) {
+    patch.is_minor = input.isMinor;
+  }
+  if (Object.keys(patch).length === 0) return { ok: true };
+
+  const { error } = await supabase
+    .from("playbook_members")
+    .update(patch)
+    .eq("playbook_id", input.playbookId)
+    .eq("id", input.memberId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${input.playbookId}`);
+  return { ok: true };
+}
+
+/**
+ * Coach: switch a member between player and coach. Owners can't be
+ * demoted here — that requires a dedicated transfer-ownership flow.
+ * Unclaimed entries are locked to viewer by the DB check constraint.
+ */
+export async function setMemberRoleAction(input: {
+  playbookId: string;
+  memberId: string;
+  role: "viewer" | "editor";
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+
+  const { data: current, error: readErr } = await supabase
+    .from("playbook_members")
+    .select("role, user_id, is_head_coach")
+    .eq("id", input.memberId)
+    .single();
+  if (readErr) return { ok: false, error: readErr.message };
+  if (!current) return { ok: false, error: "Member not found." };
+  if (current.role === "owner") {
+    return { ok: false, error: "Owner role can't be changed here." };
+  }
+  if (current.user_id === null) {
+    return { ok: false, error: "Unclaimed roster spots stay as players." };
+  }
+
+  const patch: Record<string, unknown> = { role: input.role };
+  // Demoting a coach → clear coach-only fields so the player view is clean.
+  if (input.role === "viewer") {
+    patch.is_head_coach = false;
+    patch.coach_title = null;
+  }
+
+  const { error } = await supabase
+    .from("playbook_members")
+    .update(patch)
+    .eq("playbook_id", input.playbookId)
+    .eq("id", input.memberId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${input.playbookId}`);
+  return { ok: true };
+}
+
+/**
  * Coach: unlink a claimed roster entry from its user. The roster spot
  * returns to unclaimed status and the user keeps playbook access as a
  * fresh self-member row (so we don't silently yank access when the
