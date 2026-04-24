@@ -235,32 +235,32 @@ export function GameModeClient({
           next-play preview with Run / Change. Always followed by Exit. */}
       <div className="border-t border-border bg-surface-raised px-3 py-2">
         {nextPlay ? (
-          <div className="flex items-center gap-2">
-            <div className="h-16 w-24 shrink-0 overflow-hidden rounded-md border border-border bg-surface">
-              {nextPlay.preview && (
-                <PlayThumbnail preview={nextPlay.preview} thin />
-              )}
-            </div>
-            <div className="flex flex-1 flex-col gap-1.5">
+          <div className="flex items-stretch gap-2">
+            <div className="flex flex-1 flex-col gap-1">
               <div className="truncate text-xs font-semibold">
                 Next: {nextPlay.name}
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={runNextPlay}
-                  className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  <Play className="size-4" /> Run next
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPickerMode("next")}
-                  className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-sm font-semibold text-foreground hover:bg-surface-hover"
-                >
-                  <Repeat className="size-4" /> Change
-                </button>
+              <div className="h-28 w-full overflow-hidden rounded-md border border-border bg-surface sm:h-32">
+                {nextPlay.preview && (
+                  <PlayThumbnail preview={nextPlay.preview} thin />
+                )}
               </div>
+            </div>
+            <div className="flex w-28 shrink-0 flex-col gap-2 self-end">
+              <button
+                type="button"
+                onClick={runNextPlay}
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                <Play className="size-4" /> Run
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerMode("next")}
+                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-sm font-semibold text-foreground hover:bg-surface-hover"
+              >
+                <Repeat className="size-4" /> Change
+              </button>
             </div>
           </div>
         ) : (
