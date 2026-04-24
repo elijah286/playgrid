@@ -80,36 +80,34 @@ export function WristBand({
   children: ReactNode;
   className?: string;
 }) {
-  const bandStyle =
-    "bg-[linear-gradient(180deg,#1a1a1a_0%,#2a2a2a_50%,#151515_100%)]";
   return (
-    <div className={`relative mx-auto w-full max-w-md ${className}`}>
+    <div className={`relative mx-auto w-full max-w-lg ${className}`}>
       <div
         className="relative shadow-[0_30px_60px_-15px_rgba(0,0,0,0.45)]"
         style={{
-          transform: "perspective(900px) rotateX(14deg)",
+          transform: "perspective(1100px) rotateX(10deg)",
         }}
       >
         {/* Top strap */}
         <div
-          className={`h-10 rounded-t-2xl ${bandStyle} ring-1 ring-black/40`}
+          className="h-14 rounded-t-[18px] ring-1 ring-black/50"
           style={{
             backgroundImage:
-              "repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 2px, transparent 2px 6px), linear-gradient(180deg,#1a1a1a 0%,#2a2a2a 50%,#151515 100%)",
+              "repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 5px), linear-gradient(180deg,#0f0f0f 0%,#2b2b2b 55%,#1a1a1a 100%)",
           }}
         />
-        {/* Card window */}
-        <div className="relative -my-1 bg-neutral-900 p-2 ring-1 ring-black/40">
-          <div className="rounded-sm bg-white p-1.5 shadow-inner ring-1 ring-black/10">
+        {/* Card window — black bezel hugging the artwork */}
+        <div className="relative bg-neutral-900 px-3 py-2 ring-1 ring-black/60">
+          <div className="overflow-hidden rounded-[3px] bg-white ring-1 ring-black/20">
             {children}
           </div>
         </div>
         {/* Bottom strap */}
         <div
-          className={`h-10 rounded-b-2xl ${bandStyle} ring-1 ring-black/40`}
+          className="h-14 rounded-b-[18px] ring-1 ring-black/50"
           style={{
             backgroundImage:
-              "repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 2px, transparent 2px 6px), linear-gradient(180deg,#151515 0%,#2a2a2a 50%,#1a1a1a 100%)",
+              "repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 5px), linear-gradient(180deg,#1a1a1a 0%,#2b2b2b 45%,#0f0f0f 100%)",
           }}
         />
       </div>

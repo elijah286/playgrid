@@ -754,11 +754,11 @@ function FeatureBullet({
 function MockWristSheet() {
   return (
     <Image
-      src="/marketing/screens/print-wristband.png"
-      alt="Wristband sheet generated from a real example playbook"
-      width={1400}
-      height={900}
-      className="h-auto w-full"
+      src="/marketing/screens/print-wristband-v2.png"
+      alt="Single wristband card generated from a real example playbook"
+      width={1338}
+      height={754}
+      className="block h-auto w-full"
       priority={false}
     />
   );
@@ -767,11 +767,11 @@ function MockWristSheet() {
 function MockCallSheet() {
   return (
     <Image
-      src="/marketing/screens/print-callsheet.png"
+      src="/marketing/screens/print-callsheet-v2.png"
       alt="Call sheet generated from a real example playbook"
-      width={1400}
-      height={1800}
-      className="h-auto w-full"
+      width={1338}
+      height={1732}
+      className="block h-auto w-full"
       priority={false}
     />
   );

@@ -178,7 +178,7 @@ async function run() {
 
   // ---- 1) CALL SHEET (default product = "playsheet")
   await page.waitForTimeout(1200);
-  const callOut = path.join(OUT_DIR, "print-callsheet.png");
+  const callOut = path.join(OUT_DIR, "print-callsheet-v2.png");
   await preview.screenshot({ path: callOut });
   console.log("  ✓", callOut);
 
@@ -200,8 +200,13 @@ async function run() {
 
   await preview.waitFor({ timeout: 10000 });
   await page.waitForTimeout(1200);
-  const wristOut = path.join(OUT_DIR, "print-wristband.png");
-  await preview.screenshot({ path: wristOut });
+  const wristOut = path.join(OUT_DIR, "print-wristband-v2.png");
+  // Screenshot just the inner SVG, cropped tight to the wristband art —
+  // no surrounding "page" margin. The preview button has the SVG as a
+  // direct child via dangerouslySetInnerHTML.
+  const svg = preview.locator("svg").first();
+  await svg.waitFor({ timeout: 8000 });
+  await svg.screenshot({ path: wristOut, omitBackground: false });
   console.log("  ✓", wristOut);
 
   await page.close();
