@@ -243,31 +243,31 @@ export function GameModeClient({
           next-play preview with Run / Change. Always followed by Exit. */}
       <div className="border-t border-border bg-surface-raised px-3 py-2">
         {nextPlay ? (
-          <div className="flex items-stretch gap-2">
-            <div className="flex flex-1 flex-col gap-1">
+          <div className="flex items-stretch gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="truncate text-xs font-semibold">
                 Next: {nextPlay.name}
               </div>
-              <div className="h-28 w-full overflow-hidden rounded-md border border-border bg-surface sm:h-32">
+              <div className="w-full max-w-[180px] sm:max-w-[220px]">
                 {nextPlay.preview && (
                   <PlayThumbnail preview={nextPlay.preview} thin />
                 )}
               </div>
             </div>
-            <div className="flex w-28 shrink-0 flex-col gap-2 self-end">
+            <div className="flex w-36 shrink-0 flex-col gap-2 sm:w-40">
               <button
                 type="button"
                 onClick={runNextPlay}
-                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
               >
-                <Play className="size-4" /> Run
+                <Play className="size-5" /> Run
               </button>
               <button
                 type="button"
                 onClick={() => setPickerMode("next")}
-                className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-sm font-semibold text-foreground hover:bg-surface-hover"
+                className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
               >
-                <Repeat className="size-4" /> Change
+                <Repeat className="size-5" /> Change
               </button>
             </div>
           </div>
