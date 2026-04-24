@@ -166,3 +166,15 @@ body {
     display: none;
   }
 }
+
+/* Game-mode landscape: let the field fit the full available area while
+ * keeping its aspect ratio (letterbox as needed). Overrides the small-
+ * screen cap above. Scoped via .game-mode-field so only game mode uses it. */
+@media (orientation: landscape) {
+  .game-mode-field.field-viewport {
+    height: 100%;
+    width: auto;
+    max-height: 100%;
+    max-width: 100%;
+  }
+}

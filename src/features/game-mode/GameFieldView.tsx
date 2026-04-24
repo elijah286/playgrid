@@ -55,7 +55,7 @@ function GameFieldPlayback({
 
   return (
     <div
-      className="field-viewport relative mx-auto w-full cursor-pointer select-none overflow-hidden"
+      className="field-viewport game-mode-field relative mx-auto w-full cursor-pointer select-none overflow-hidden"
       onClick={anim.step}
       style={
         {

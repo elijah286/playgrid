@@ -226,7 +226,7 @@ export function GameModeClient({
         >
           <X className="size-5" />
         </button>
-        <div className="min-w-0 flex-1 text-center">
+        <div className="min-w-0 flex-1 text-center landscape:hidden">
           <div className="truncate text-sm font-semibold">
             {currentPlay?.name ?? "Pick a play"}
           </div>
@@ -236,6 +236,7 @@ export function GameModeClient({
             </div>
           )}
         </div>
+        <div className="hidden flex-1 landscape:block" aria-hidden />
         <button
           type="button"
           onClick={toggleFullscreen}
@@ -250,7 +251,7 @@ export function GameModeClient({
       {/* Scrollable column: field on top (natural aspect, never stretched),
           next-play row beneath. The next-play row is always rendered so the
           field's position doesn't shift when a next play is enqueued. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3 landscape:items-center landscape:justify-center landscape:overflow-hidden landscape:p-0">
         {currentPlay ? (
           /* Keyed on play id so React remounts the section (and the
              animation hook inside) when the coach runs the next play —
@@ -270,8 +271,9 @@ export function GameModeClient({
         )}
 
         {/* Next-play row below the field. Always present (CTA when empty)
-            so the field above never shifts. */}
-        <div className="mx-auto w-full max-w-[640px]">
+            so the field above never shifts. Hidden in landscape — coaches
+            use landscape for viewing only. */}
+        <div className="mx-auto w-full max-w-[640px] landscape:hidden">
           {nextPlay ? (
             <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -332,6 +334,7 @@ export function GameModeClient({
         open={exitOpen}
         onCancel={() => setExitOpen(false)}
         onConfirm={exitGame}
+        onDiscard={() => router.push(`/playbooks/${playbookId}`)}
         startedAt={startedAt}
         callCount={log.length + (currentPlay ? 1 : 0)}
         saving={saving}
@@ -412,7 +415,7 @@ function CurrentPlaySectionAnimated({
 }) {
   const anim = usePlayAnimation(document);
   return (
-    <div className="relative mx-auto w-full">
+    <div className="relative mx-auto flex w-full flex-col items-center justify-center landscape:h-full landscape:flex-1">
       <GameFieldView document={document} fallbackPreview={preview} anim={anim} />
       <ThumbButton
         direction="down"

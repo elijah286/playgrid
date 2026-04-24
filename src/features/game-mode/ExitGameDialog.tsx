@@ -6,6 +6,7 @@ export function ExitGameDialog({
   open,
   onCancel,
   onConfirm,
+  onDiscard,
   startedAt,
   callCount,
   saving,
@@ -18,6 +19,7 @@ export function ExitGameDialog({
     scoreThem: number | null;
     notes: string | null;
   }) => void;
+  onDiscard: () => void;
   startedAt: string;
   callCount: number;
   saving: boolean;
@@ -133,6 +135,22 @@ export function ExitGameDialog({
             {saving ? "Saving…" : "Save & exit"}
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (
+              confirm(
+                "Leave without saving? This game's plays and outcomes won't be recorded.",
+              )
+            ) {
+              onDiscard();
+            }
+          }}
+          disabled={saving}
+          className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+        >
+          Leave without saving
+        </button>
       </div>
     </div>
   );
