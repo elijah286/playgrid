@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ThumbsUp, ThumbsDown, Play, Repeat, X, Maximize, Minimize } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Play, Repeat, X, Maximize, Minimize, StickyNote, ChevronDown } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
 import { saveGameSessionAction } from "@/app/actions/game-sessions";
@@ -270,6 +270,15 @@ export function GameModeClient({
           </p>
         )}
 
+        {/* Coach notes for the current play. Expanded on tap; grayed out
+            with placeholder text when the play has no notes. Hidden in
+            landscape so the field uses the full screen. */}
+        {currentPlay && (
+          <div className="mx-auto w-full max-w-[640px] landscape:hidden">
+            <NotesCard notes={currentPlay.document?.metadata?.notes ?? ""} />
+          </div>
+        )}
+
         {/* Next-play area below the field. When the coach opens the picker
             from here, it replaces this area (keeping the field visible
             above) instead of covering the screen. Hidden in landscape —
@@ -357,6 +366,53 @@ export function GameModeClient({
         saving={saving}
       />
     </div>
+  );
+}
+
+function NotesCard({ notes }: { notes: string }) {
+  const trimmed = notes.trim();
+  const hasNotes = trimmed.length > 0;
+  const [expanded, setExpanded] = useState(false);
+
+  if (!hasNotes) {
+    return (
+      <div
+        aria-disabled="true"
+        className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-muted"
+      >
+        <StickyNote className="size-4 shrink-0" aria-hidden />
+        <span>No notes for this play</span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded((v) => !v)}
+      aria-expanded={expanded}
+      className="flex w-full flex-col gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-left hover:bg-surface-hover"
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <StickyNote className="size-4 shrink-0" aria-hidden />
+        <span className="flex-1">Coach notes</span>
+        <ChevronDown
+          className={
+            "size-4 shrink-0 transition-transform " +
+            (expanded ? "rotate-180" : "")
+          }
+          aria-hidden
+        />
+      </div>
+      <div
+        className={
+          "whitespace-pre-wrap text-sm text-foreground " +
+          (expanded ? "" : "line-clamp-1 text-muted")
+        }
+      >
+        {trimmed}
+      </div>
+    </button>
   );
 }
 
