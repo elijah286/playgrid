@@ -306,6 +306,28 @@ function EditorCanvasImpl({
       longPressRef.current = null;
     }
   }, []);
+
+  // Window-level pointer listeners installed on pointerdown so that drag works
+  // even when iOS Safari silently drops setPointerCapture. Tracks the active
+  // pointerId so a second finger doesn't interfere.
+  const windowListenersRef = useRef<{
+    pointerId: number;
+    move: (e: PointerEvent) => void;
+    end: (e: PointerEvent) => void;
+  } | null>(null);
+  // Holds the latest move/end callbacks so the window listeners installed in
+  // startInteraction can reach them without a circular useCallback dep.
+  const pointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const pointerEndRef = useRef<((e: PointerEvent) => void) | null>(null);
+  const detachWindowListeners = useCallback(() => {
+    const l = windowListenersRef.current;
+    if (!l) return;
+    window.removeEventListener("pointermove", l.move);
+    window.removeEventListener("pointerup", l.end);
+    window.removeEventListener("pointercancel", l.end);
+    windowListenersRef.current = null;
+  }, []);
+  useEffect(() => detachWindowListeners, [detachWindowListeners]);
   useEffect(() => {
     interactionRef.current = interaction;
   }, [interaction]);
@@ -734,7 +756,32 @@ function EditorCanvasImpl({
       setSegmentMenu(null);
       setHoveredRouteId(null);
       const svg = svgRef.current;
-      if (svg) svg.setPointerCapture(e.pointerId);
+      if (svg) {
+        try { svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      }
+
+      // iOS Safari drops SVG pointer capture unpredictably, so we also attach
+      // window-level pointer listeners keyed to this pointerId. These fire
+      // reliably even if capture is lost mid-drag.
+      detachWindowListeners();
+      const capturedPointerId = e.pointerId;
+      const moveHandler = (ev: PointerEvent) => {
+        if (ev.pointerId !== capturedPointerId) return;
+        if (interactionRef.current.type !== "idle") ev.preventDefault();
+        pointerMoveRef.current?.(ev);
+      };
+      const endHandler = (ev: PointerEvent) => {
+        if (ev.pointerId !== capturedPointerId) return;
+        pointerEndRef.current?.(ev);
+      };
+      window.addEventListener("pointermove", moveHandler, { passive: false });
+      window.addEventListener("pointerup", endHandler);
+      window.addEventListener("pointercancel", endHandler);
+      windowListenersRef.current = {
+        pointerId: capturedPointerId,
+        move: moveHandler,
+        end: endHandler,
+      };
       const origin = toNorm(e);
       const next: Interaction = {
         type: "pending",
@@ -815,7 +862,7 @@ function EditorCanvasImpl({
         longPressRef.current = { timer, pointerId: capturedId };
       }
     },
-    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress],
+    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress, detachWindowListeners],
   );
 
   const handlePointerDown = useCallback(
@@ -826,7 +873,7 @@ function EditorCanvasImpl({
   );
 
   const handlePointerMove = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
+    (e: { clientX: number; clientY: number; pointerId: number }) => {
       const state = interactionRef.current;
 
       if (state.type === "idle") return;
@@ -992,11 +1039,12 @@ function EditorCanvasImpl({
   );
 
   const finishInteraction = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
+    (e: { clientX: number; clientY: number; pointerId: number }) => {
       // Pointerup cancels any armed long-press. If the long-press already
       // fired, the state is "idle" and the normal completion branch below
       // no-ops cleanly.
       cancelLongPress();
+      detachWindowListeners();
       const state = interactionRef.current;
 
       if (state.type === "pending") {
@@ -1066,7 +1114,7 @@ function EditorCanvasImpl({
       }
 
       try {
-        (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId);
+        svgRef.current?.releasePointerCapture(e.pointerId);
       } catch {
         // may already be released
       }
@@ -1078,9 +1126,15 @@ function EditorCanvasImpl({
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
-      onActiveStrokePatternChange, onSelectZone, cancelLongPress,
+      onActiveStrokePatternChange, onSelectZone, cancelLongPress, detachWindowListeners,
     ],
   );
+
+  // Keep window-listener bridge pointing at the latest callbacks.
+  useEffect(() => {
+    pointerMoveRef.current = handlePointerMove;
+    pointerEndRef.current = finishInteraction;
+  }, [handlePointerMove, finishInteraction]);
 
   /* ---------- Double-click: select the whole route (marching ants) ---------- */
 
@@ -1403,9 +1457,6 @@ function EditorCanvasImpl({
       className="block h-full w-full touch-none rounded-xl shadow-card"
       style={{ cursor: svgCursor }}
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={finishInteraction}
-      onPointerLeave={finishInteraction}
       onContextMenu={(e) => {
         // Prevent the browser menu anywhere on the canvas; segment-specific
         // menu is wired on the hit-path onContextMenu above.
