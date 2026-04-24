@@ -8,6 +8,11 @@ type Props = {
   anim: PlayAnimation;
   /** When true, disable the controls entirely (e.g. editor in a mid-draw state). */
   disabled?: boolean;
+  /**
+   * When true, render as a plain inline toolbar (no floating pill, no drag
+   * handle) so the caller can place it in normal flow beneath the field.
+   */
+  inline?: boolean;
 };
 
 /**
@@ -19,7 +24,7 @@ type Props = {
  * pointer-events auto on a pointer-events-none parent so they don't block
  * canvas clicks when dismissed.
  */
-export function PlayControls({ anim, disabled = false }: Props) {
+export function PlayControls({ anim, disabled = false, inline = false }: Props) {
   useEffect(() => {
     if (disabled) return;
     function onKey(e: KeyboardEvent) {
@@ -78,6 +83,35 @@ export function PlayControls({ anim, disabled = false }: Props) {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
+  }
+
+  if (inline) {
+    const PrimaryIcon = primaryIcon;
+    return (
+      <div className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-elevated">
+        <button
+          type="button"
+          onClick={step}
+          disabled={disabled || isRunning}
+          className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={primaryLabel}
+        >
+          <PrimaryIcon className="size-4" />
+          {primaryLabel}
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          disabled={disabled || phase === "idle"}
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Reset"
+          title="Reset"
+        >
+          <RotateCcw className="size-4" />
+          Reset
+        </button>
+      </div>
+    );
   }
 
   return (

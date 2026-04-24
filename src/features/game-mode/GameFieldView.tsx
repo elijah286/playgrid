@@ -2,9 +2,8 @@
 
 import { useMemo } from "react";
 import type { PlayDocument } from "@/domain/play/types";
-import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import type { PlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
-import { PlayControls } from "@/features/animation/PlayControls";
 import { EditorCanvas } from "@/features/editor/EditorCanvas";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 
@@ -12,10 +11,10 @@ const VIEWPORT_LENGTH_YDS = 25;
 const noop = () => {};
 
 /**
- * Read-only field renderer for game mode. Reuses the editor's actual
- * EditorCanvas + AnimationOverlay + floating PlayControls so coaches see
- * the play exactly as they did before entering game mode — same yard
- * lines, hash marks, LOS, players, routes — and the same playback pill.
+ * Read-only field renderer for game mode. Reuses the editor's
+ * EditorCanvas + AnimationOverlay so coaches see the play exactly as they
+ * did before entering game mode. Playback controls live in a separate
+ * inline toolbar rendered by the parent, so the anim is passed in.
  *
  * The wrapper carries the editor's `.field-viewport` class so it inherits
  * the mobile size cap; pointer-events-none disables editing.
@@ -23,23 +22,29 @@ const noop = () => {};
 export function GameFieldView({
   document,
   fallbackPreview,
+  anim,
 }: {
   document: PlayDocument | null;
   fallbackPreview: PlayThumbnailInput | null;
+  anim: PlayAnimation | null;
 }) {
-  if (!document) {
+  if (!document || !anim) {
     return (
       <div className="mx-auto w-full max-w-[420px]">
         {fallbackPreview && <PlayThumbnail preview={fallbackPreview} />}
       </div>
     );
   }
-  return <GameFieldPlayback document={document} />;
+  return <GameFieldPlayback document={document} anim={anim} />;
 }
 
-function GameFieldPlayback({ document }: { document: PlayDocument }) {
-  const anim = usePlayAnimation(document);
-
+function GameFieldPlayback({
+  document,
+  anim,
+}: {
+  document: PlayDocument;
+  anim: PlayAnimation;
+}) {
   const fieldAspect =
     document.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
 
@@ -82,7 +87,6 @@ function GameFieldPlayback({ document }: { document: PlayDocument }) {
         />
       </div>
       <AnimationOverlay doc={document} anim={anim} fieldAspect={fieldAspect} />
-      <PlayControls anim={anim} />
     </div>
   );
 }

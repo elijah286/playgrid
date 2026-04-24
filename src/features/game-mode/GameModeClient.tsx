@@ -6,9 +6,13 @@ import { ThumbsUp, ThumbsDown, Play, Repeat, X } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
 import { saveGameSessionAction } from "@/app/actions/game-sessions";
+import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import { PlayControls } from "@/features/animation/PlayControls";
 import { PlayPickerDialog } from "./PlayPickerDialog";
 import { ExitGameDialog } from "./ExitGameDialog";
 import { GameFieldView } from "./GameFieldView";
+import type { PlayDocument } from "@/domain/play/types";
+import type { PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import {
   THUMBS_DOWN_TAGS,
   THUMBS_UP_TAGS,
@@ -197,42 +201,17 @@ export function GameModeClient({
           field's position doesn't shift when a next play is enqueued. */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
         {currentPlay ? (
-          <div className="relative mx-auto w-full">
-            {/* Keyed on play id so React remounts the field (and the
-                animation hook) when the coach runs the next play —
-                otherwise phase state would leak from the previous call. */}
-            <GameFieldView
-              key={currentPlay.id}
-              document={currentPlay.document}
-              fallbackPreview={currentPlay.preview}
-            />
-            <ThumbButton
-              direction="down"
-              active={outcome?.thumb === "down"}
-              onTap={() => tapThumb("down")}
-            />
-            <ThumbButton
-              direction="up"
-              active={outcome?.thumb === "up"}
-              onTap={() => tapThumb("up")}
-            />
-            {outcome?.thumb === "up" && (
-              <TagRail
-                position="right"
-                tags={THUMBS_UP_TAGS}
-                active={outcome.tag}
-                onTap={(t) => tapTag("up", t)}
-              />
-            )}
-            {outcome?.thumb === "down" && (
-              <TagRail
-                position="left"
-                tags={THUMBS_DOWN_TAGS}
-                active={outcome.tag}
-                onTap={(t) => tapTag("down", t)}
-              />
-            )}
-          </div>
+          /* Keyed on play id so React remounts the section (and the
+             animation hook inside) when the coach runs the next play —
+             otherwise phase state would leak from the previous call. */
+          <CurrentPlaySection
+            key={currentPlay.id}
+            document={currentPlay.document}
+            preview={currentPlay.preview}
+            outcome={outcome}
+            onTapThumb={tapThumb}
+            onTapTag={tapTag}
+          />
         ) : (
           <p className="px-6 py-12 text-center text-sm text-muted">
             Pick a play to start the game.
@@ -306,6 +285,115 @@ export function GameModeClient({
         callCount={log.length + (currentPlay ? 1 : 0)}
         saving={saving}
       />
+    </div>
+  );
+}
+
+function CurrentPlaySection({
+  document,
+  preview,
+  outcome,
+  onTapThumb,
+  onTapTag,
+}: {
+  document: PlayDocument | null;
+  preview: PlayThumbnailInput | null;
+  outcome: PlayOutcome;
+  onTapThumb: (dir: ThumbDirection) => void;
+  onTapTag: (dir: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) => void;
+}) {
+  if (!document) {
+    return (
+      <div className="relative mx-auto w-full">
+        <GameFieldView document={null} fallbackPreview={preview} anim={null} />
+        <ThumbButton
+          direction="down"
+          active={outcome?.thumb === "down"}
+          onTap={() => onTapThumb("down")}
+        />
+        <ThumbButton
+          direction="up"
+          active={outcome?.thumb === "up"}
+          onTap={() => onTapThumb("up")}
+        />
+        {outcome?.thumb === "up" && (
+          <TagRail
+            position="right"
+            tags={THUMBS_UP_TAGS}
+            active={outcome.tag}
+            onTap={(t) => onTapTag("up", t)}
+          />
+        )}
+        {outcome?.thumb === "down" && (
+          <TagRail
+            position="left"
+            tags={THUMBS_DOWN_TAGS}
+            active={outcome.tag}
+            onTap={(t) => onTapTag("down", t)}
+          />
+        )}
+      </div>
+    );
+  }
+  return (
+    <CurrentPlaySectionAnimated
+      document={document}
+      preview={preview}
+      outcome={outcome}
+      onTapThumb={onTapThumb}
+      onTapTag={onTapTag}
+    />
+  );
+}
+
+function CurrentPlaySectionAnimated({
+  document,
+  preview,
+  outcome,
+  onTapThumb,
+  onTapTag,
+}: {
+  document: PlayDocument;
+  preview: PlayThumbnailInput | null;
+  outcome: PlayOutcome;
+  onTapThumb: (dir: ThumbDirection) => void;
+  onTapTag: (dir: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) => void;
+}) {
+  const anim = usePlayAnimation(document);
+  return (
+    <div className="mx-auto w-full">
+      <div className="relative">
+        <GameFieldView document={document} fallbackPreview={preview} anim={anim} />
+        <ThumbButton
+          direction="down"
+          active={outcome?.thumb === "down"}
+          onTap={() => onTapThumb("down")}
+        />
+        <ThumbButton
+          direction="up"
+          active={outcome?.thumb === "up"}
+          onTap={() => onTapThumb("up")}
+        />
+        {outcome?.thumb === "up" && (
+          <TagRail
+            position="right"
+            tags={THUMBS_UP_TAGS}
+            active={outcome.tag}
+            onTap={(t) => onTapTag("up", t)}
+          />
+        )}
+        {outcome?.thumb === "down" && (
+          <TagRail
+            position="left"
+            tags={THUMBS_DOWN_TAGS}
+            active={outcome.tag}
+            onTap={(t) => onTapTag("down", t)}
+          />
+        )}
+      </div>
+      <div className="mx-auto mt-3 w-full max-w-[640px]">
+        <PlayControls anim={anim} inline />
+      </div>
     </div>
   );
 }
