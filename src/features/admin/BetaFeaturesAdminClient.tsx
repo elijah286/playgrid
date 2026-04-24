@@ -13,6 +13,8 @@ type FeatureMeta = {
   key: BetaFeatureKey;
   label: string;
   description: string;
+  disabledScopes?: BetaFeatureScope[];
+  previewHref?: string;
 };
 
 const FEATURES: FeatureMeta[] = [
@@ -33,6 +35,14 @@ const FEATURES: FeatureMeta[] = [
     label: "Game Results",
     description:
       "Playbook tab showing per-game and aggregate play outcomes from Game Mode.",
+  },
+  {
+    key: "marketing_content",
+    label: "Enhanced marketing content",
+    description:
+      "Pre-auth landing page addition. When on, shows a \"Learn More Here\" link under the main CTAs. \"Only me\" doesn't apply here — the link is either public or hidden.",
+    disabledScopes: ["me"],
+    previewHref: "/learn-more",
   },
 ];
 
@@ -89,6 +99,16 @@ export function BetaFeaturesAdminClient({
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{f.label}</p>
                 <p className="mt-0.5 text-xs text-muted">{f.description}</p>
+                {f.previewHref && (
+                  <a
+                    href={f.previewHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1.5 inline-block text-xs font-medium text-primary hover:underline"
+                  >
+                    Preview page →
+                  </a>
+                )}
               </div>
               <div
                 role="radiogroup"
@@ -97,20 +117,23 @@ export function BetaFeaturesAdminClient({
               >
                 {SCOPE_OPTIONS.map((opt) => {
                   const active = current === opt.value;
+                  const scopeDisabled = f.disabledScopes?.includes(opt.value) ?? false;
+                  const disabled = isPending || scopeDisabled;
                   return (
                     <button
                       key={opt.value}
                       type="button"
                       role="radio"
                       aria-checked={active}
-                      title={opt.hint}
-                      disabled={isPending}
+                      title={scopeDisabled ? "Not applicable for this feature" : opt.hint}
+                      disabled={disabled}
                       onClick={() => changeScope(f.key, opt.value)}
                       className={
                         "px-3 py-1.5 text-xs font-medium transition-colors " +
                         (active
                           ? "bg-primary text-primary-foreground"
-                          : "bg-surface text-foreground hover:bg-surface-hover")
+                          : "bg-surface text-foreground hover:bg-surface-hover") +
+                        (scopeDisabled ? " cursor-not-allowed opacity-40" : "")
                       }
                     >
                       {opt.label}

@@ -2,7 +2,11 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 const SITE_ROW_ID = "default";
 
-export type BetaFeatureKey = "coach_ai" | "game_mode" | "game_results";
+export type BetaFeatureKey =
+  | "coach_ai"
+  | "game_mode"
+  | "game_results"
+  | "marketing_content";
 export type BetaFeatureScope = "off" | "me" | "all";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -11,6 +15,7 @@ const DEFAULTS: BetaFeatures = {
   coach_ai: "off",
   game_mode: "off",
   game_results: "off",
+  marketing_content: "off",
 };
 
 function normalize(input: unknown): BetaFeatures {
