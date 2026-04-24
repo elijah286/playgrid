@@ -2013,8 +2013,8 @@ function EditorCanvasImpl({
               </text>
             )}
             {editingPlayerId === pl.id && (() => {
-              const w = r * 2.2;
-              const h = r * 1.5;
+              const w = r * 3;
+              const h = r * 2;
               return (
                 <foreignObject
                   x={px - w / 2}
@@ -2048,16 +2048,19 @@ function EditorCanvasImpl({
                     style={{
                       width: "100%",
                       height: "100%",
-                      border: "none",
+                      border: "2px solid #2563eb",
+                      borderRadius: "4px",
                       outline: "none",
-                      background: "transparent",
-                      color: labelColor,
+                      boxShadow: "0 0 0 3px rgba(37,99,235,0.25), 0 2px 8px rgba(0,0,0,0.15)",
+                      background: "#ffffff",
+                      color: "#111827",
                       textAlign: "center",
                       fontFamily: "Inter, system-ui, sans-serif",
                       fontWeight: 700,
-                      fontSize: "10px",
+                      fontSize: "12px",
                       padding: 0,
                       textTransform: "uppercase",
+                      caretColor: "#2563eb",
                     }}
                   />
                 </foreignObject>

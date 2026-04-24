@@ -249,8 +249,12 @@ function realYardLinesSvg(
     if (yNorm <= 0 || yNorm >= 1) return;
     const gy = fy + (1 - yNorm) * fh;
     const isTen = Math.abs(yardsFromLos) % 10 === 0;
-    const w = Math.max(0.08, fieldMin * baseWidth * intensity * (isTen ? 1.35 : 1));
-    const op = intensity * (isTen ? 1 : 0.7);
+    // Guarantee a visible line whenever the toggle is on. Without a real
+    // minimum, low-intensity settings collapse to hairline strokes that
+    // disappear on print — and yard lines are critical for reading routes.
+    const minStroke = isTen ? 0.32 : 0.24;
+    const w = Math.max(minStroke, fieldMin * baseWidth * intensity * (isTen ? 1.35 : 1));
+    const op = Math.max(isTen ? 0.75 : 0.55, intensity * (isTen ? 1 : 0.7));
     out += `<line x1="${fx}" y1="${gy}" x2="${fx + fw}" y2="${gy}" stroke="#94a3b8" stroke-width="${w}" opacity="${op}"/>`;
   };
   for (let y = step; y <= backYd + 0.01; y += step) draw(-y);
