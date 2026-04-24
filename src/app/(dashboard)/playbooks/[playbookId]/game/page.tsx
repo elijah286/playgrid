@@ -63,22 +63,17 @@ export default async function GameModePage({ params, searchParams }: Props) {
   const isExamplePreview = isExample && !isMember;
 
   if (isExamplePreview) {
-    // Service-role fetch so unauthenticated visitors can see the example's
-    // plays. Only published examples are exposed here; is_public_example
-    // on the book is the gate.
+    // Only published examples are exposed to non-members.
     if (!book.is_public_example) redirect(`/playbooks/${playbookId}`);
 
+    // listPlaysAction already handles anon visitors for public examples
+    // via RLS, so the same loader works here.
+    const listedPreview = await listPlaysAction(playbookId);
+    const previewOffense = (listedPreview.ok ? listedPreview.plays : []).filter(
+      (p) => p.play_type === "offense" && !p.is_archived,
+    );
     const svc = createServiceRoleClient();
-    const { data: playRows } = await svc
-      .from("plays")
-      .select("*")
-      .eq("playbook_id", playbookId)
-      .eq("play_type", "offense")
-      .eq("is_archived", false)
-      .order("order_index", { ascending: true });
-
-    const offensePlays = (playRows ?? []) as unknown as PlaybookDetailPlayRow[];
-    const playsWithDocs = await loadPlayDocuments(svc, offensePlays);
+    const playsWithDocs = await loadPlayDocuments(svc, previewOffense);
 
     return (
       <GameModePreviewClient

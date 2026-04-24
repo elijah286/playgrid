@@ -18,7 +18,6 @@ import {
   WristBand,
 } from "@/features/marketing/DeviceFrames";
 import { PlayAnimation } from "@/features/marketing/PlayAnimation";
-import { AnimatedGameMode } from "@/features/marketing/AnimatedGameMode";
 import { Reveal } from "@/features/marketing/Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
@@ -461,7 +460,17 @@ function GameModeSection() {
         <Reveal delay={100}>
           <div className="flex justify-center">
             <PhoneFrame>
-              <AnimatedGameMode />
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                poster="/marketing/screens/gm-1-picker.png"
+                className="h-full w-full object-cover"
+              >
+                <source src="/marketing/screens/gm-walkthrough.mp4" type="video/mp4" />
+                <source src="/marketing/screens/gm-walkthrough.webm" type="video/webm" />
+              </video>
             </PhoneFrame>
           </div>
         </Reveal>
