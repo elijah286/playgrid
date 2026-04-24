@@ -382,6 +382,36 @@ export async function reinstateGiftCodeAction(codeId: string) {
   return { ok: true as const };
 }
 
+export async function updateGiftCodeDurationAction(
+  codeId: string,
+  durationDays: number | null,
+) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  if (durationDays !== null) {
+    if (
+      !Number.isFinite(durationDays) ||
+      !Number.isInteger(durationDays) ||
+      durationDays < 1
+    ) {
+      return {
+        ok: false as const,
+        error: "Duration must be a positive whole number of days, or unlimited.",
+      };
+    }
+  }
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin
+    .from("gift_codes")
+    .update({ duration_days: durationDays })
+    .eq("id", codeId);
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
 export async function updateGiftCodeMaxUsesAction(codeId: string, maxUses: number) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;

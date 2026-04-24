@@ -8,6 +8,7 @@ import {
   reinstateGiftCodeAction,
   revokeGiftCodeAction,
   setCoachAiTierEnabledAction,
+  updateGiftCodeDurationAction,
   updateGiftCodeMaxUsesAction,
   type GiftCodeRow,
 } from "@/app/actions/admin-billing";
@@ -134,6 +135,24 @@ export function BillingAdminClient({
     });
   }
 
+  function onUpdateDuration(id: string, durationDays: number | null) {
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        const res = await updateGiftCodeDurationAction(id, durationDays);
+        if (!res.ok) {
+          setMsg({ kind: "error", text: res.error });
+          resolve(false);
+          return;
+        }
+        setMsg({ kind: "success", text: "Duration updated." });
+        setCodes((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, durationDays } : c)),
+        );
+        resolve(true);
+      });
+    });
+  }
+
   function onUpdateMaxUses(id: string, maxUses: number) {
     return new Promise<boolean>((resolve) => {
       startTransition(async () => {
@@ -241,7 +260,7 @@ export function BillingAdminClient({
                     </td>
                     <td className="px-2 py-2">{TIER_LABEL[c.tier]}</td>
                     <td className="px-2 py-2">
-                      {c.durationDays ? `${c.durationDays} days` : "Permanent"}
+                      <DurationCell row={c} disabled={pending} onSave={onUpdateDuration} />
                     </td>
                     <td className="px-2 py-2">
                       <UsesCell row={c} disabled={pending} onSave={onUpdateMaxUses} />
@@ -289,6 +308,106 @@ export function BillingAdminClient({
           refresh();
         }}
       />
+    </div>
+  );
+}
+
+function DurationCell({
+  row,
+  disabled,
+  onSave,
+}: {
+  row: GiftCodeRow;
+  disabled: boolean;
+  onSave: (id: string, durationDays: number | null) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [unlimited, setUnlimited] = useState(row.durationDays === null);
+  const [value, setValue] = useState(row.durationDays ? String(row.durationDays) : "");
+
+  if (!editing) {
+    return (
+      <div className="inline-flex items-center gap-1">
+        <span>{row.durationDays ? `${row.durationDays} days` : "Permanent"}</span>
+        <button
+          type="button"
+          onClick={() => {
+            setUnlimited(row.durationDays === null);
+            setValue(row.durationDays ? String(row.durationDays) : "");
+            setEditing(true);
+          }}
+          disabled={disabled}
+          className="rounded p-0.5 text-muted hover:bg-surface hover:text-foreground disabled:opacity-50"
+          title="Edit duration"
+        >
+          <Pencil className="size-3" />
+        </button>
+      </div>
+    );
+  }
+
+  async function commit() {
+    if (unlimited) {
+      if (row.durationDays === null) {
+        setEditing(false);
+        return;
+      }
+      const ok = await onSave(row.id, null);
+      if (ok) setEditing(false);
+      return;
+    }
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1) return;
+    if (n === row.durationDays) {
+      setEditing(false);
+      return;
+    }
+    const ok = await onSave(row.id, n);
+    if (ok) setEditing(false);
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <input
+        type="number"
+        min={1}
+        value={value}
+        autoFocus={!unlimited}
+        disabled={unlimited}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void commit();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        placeholder="days"
+        className="w-16 rounded-md bg-surface px-1.5 py-0.5 text-xs ring-1 ring-border disabled:opacity-50"
+      />
+      <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted">
+        <input
+          type="checkbox"
+          className="size-3 accent-primary"
+          checked={unlimited}
+          onChange={(e) => setUnlimited(e.target.checked)}
+        />
+        Unlimited
+      </label>
+      <button
+        type="button"
+        onClick={() => void commit()}
+        disabled={disabled}
+        className="rounded p-0.5 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+        title="Save"
+      >
+        <Check className="size-3" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="rounded p-0.5 text-muted hover:bg-surface"
+        title="Cancel"
+      >
+        <X className="size-3" />
+      </button>
     </div>
   );
 }
