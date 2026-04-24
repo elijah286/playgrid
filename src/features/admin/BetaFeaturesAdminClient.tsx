@@ -28,6 +28,12 @@ const FEATURES: FeatureMeta[] = [
     description:
       "Mobile-first in-game flow for coaches: pick plays fast and log outcomes.",
   },
+  {
+    key: "game_results",
+    label: "Game Results",
+    description:
+      "Playbook tab showing per-game and aggregate play outcomes from Game Mode.",
+  },
 ];
 
 const SCOPE_OPTIONS: { value: BetaFeatureScope; label: string; hint: string }[] = [
