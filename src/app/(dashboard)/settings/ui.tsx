@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  Check,
   CreditCard,
   FlaskConical,
   KeyRound,
+  Menu as MenuIcon,
   MessageCircle,
   Settings as SettingsIcon,
   Sparkles,
@@ -30,6 +32,7 @@ import type { GiftCodeRow } from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import type { TrafficSummary } from "@/app/actions/admin-traffic";
 import { SegmentedControl } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
@@ -105,23 +108,98 @@ export function SettingsClient({
   initialBetaFeatures: BetaFeatures;
 }) {
   const [tab, setTab] = useState<Tab>("users");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  const tabOptions = [
+    { value: "users" as const, label: "Users", icon: Users },
+    { value: "traffic" as const, label: "Traffic", icon: BarChart3 },
+    { value: "invites" as const, label: "Coach invites", icon: Ticket },
+    { value: "payments" as const, label: "Payments", icon: CreditCard },
+    { value: "integrations" as const, label: "Integrations", icon: KeyRound },
+    { value: "feedback" as const, label: "Feedback", icon: MessageCircle },
+    { value: "seeds" as const, label: "Playbook seeds", icon: Sparkles },
+    { value: "beta" as const, label: "Beta features", icon: FlaskConical },
+    { value: "site" as const, label: "Site", icon: SettingsIcon },
+  ];
+  const activeOption = tabOptions.find((o) => o.value === tab) ?? tabOptions[0];
+  const ActiveIcon = activeOption.icon;
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (!mobileMenuRef.current?.contains(e.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
 
   return (
     <div className="space-y-6">
+      <div className="sm:hidden" ref={mobileMenuRef}>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={mobileMenuOpen}
+            className="inline-flex w-full items-center justify-between gap-2 rounded-lg bg-surface-inset px-3 py-2 text-sm font-medium text-foreground ring-1 ring-inset ring-black/5"
+          >
+            <span className="inline-flex items-center gap-2">
+              <ActiveIcon className="size-4" />
+              {activeOption.label}
+            </span>
+            <MenuIcon className="size-4 text-muted" />
+          </button>
+          {mobileMenuOpen && (
+            <div
+              role="menu"
+              className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg bg-surface-raised py-1 shadow-lg ring-1 ring-black/10"
+            >
+              {tabOptions.map((opt) => {
+                const Icon = opt.icon;
+                const active = opt.value === tab;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setTab(opt.value);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm",
+                      active ? "bg-surface-inset text-foreground" : "text-foreground hover:bg-surface-inset",
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Icon className="size-4" />
+                      {opt.label}
+                    </span>
+                    {active && <Check className="size-4 text-muted" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       <SegmentedControl
+        className="hidden sm:inline-flex"
         value={tab}
         onChange={setTab}
-        options={[
-          { value: "users", label: "Users", icon: Users },
-          { value: "traffic", label: "Traffic", icon: BarChart3 },
-          { value: "invites", label: "Coach invites", icon: Ticket },
-          { value: "payments", label: "Payments", icon: CreditCard },
-          { value: "integrations", label: "Integrations", icon: KeyRound },
-          { value: "feedback", label: "Feedback", icon: MessageCircle },
-          { value: "seeds", label: "Playbook seeds", icon: Sparkles },
-          { value: "beta", label: "Beta features", icon: FlaskConical },
-          { value: "site", label: "Site", icon: SettingsIcon },
-        ]}
+        options={tabOptions}
       />
 
       {tab === "users" && (
