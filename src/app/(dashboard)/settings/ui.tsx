@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   BarChart3,
   CreditCard,
+  FlaskConical,
   KeyRound,
   MessageCircle,
   Settings as SettingsIcon,
@@ -20,6 +21,8 @@ import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
+import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
+import type { BetaFeatures } from "@/lib/site/beta-features-config";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
@@ -51,6 +54,7 @@ type Tab =
   | "integrations"
   | "feedback"
   | "seeds"
+  | "beta"
   | "site";
 
 export function SettingsClient({
@@ -75,6 +79,7 @@ export function SettingsClient({
   initialTrafficSummary,
   trafficError,
   initialSeeds,
+  initialBetaFeatures,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -97,6 +102,7 @@ export function SettingsClient({
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
   initialSeeds: SavedFormation[];
+  initialBetaFeatures: BetaFeatures;
 }) {
   const [tab, setTab] = useState<Tab>("users");
 
@@ -113,6 +119,7 @@ export function SettingsClient({
           { value: "integrations", label: "Integrations", icon: KeyRound },
           { value: "feedback", label: "Feedback", icon: MessageCircle },
           { value: "seeds", label: "Playbook seeds", icon: Sparkles },
+          { value: "beta", label: "Beta features", icon: FlaskConical },
           { value: "site", label: "Site", icon: SettingsIcon },
         ]}
       />
@@ -198,6 +205,10 @@ export function SettingsClient({
 
       {tab === "seeds" && (
         <PlaybookSeedsAdminClient initial={initialSeeds} />
+      )}
+
+      {tab === "beta" && (
+        <BetaFeaturesAdminClient initialFeatures={initialBetaFeatures} />
       )}
 
       {tab === "site" && (

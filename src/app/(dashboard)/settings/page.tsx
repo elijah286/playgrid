@@ -19,6 +19,7 @@ import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
+import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { SettingsClient } from "./ui";
@@ -44,6 +45,7 @@ export default async function SettingsPage() {
     trafficRes,
     seedsRes,
     mobileEditingEnabled,
+    betaFeatures,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -60,6 +62,7 @@ export default async function SettingsPage() {
     getTrafficSummaryAction(30),
     listSeedFormationsAction(),
     getMobileEditingEnabled(),
+    getBetaFeatures(),
   ]);
 
   return (
@@ -155,6 +158,7 @@ export default async function SettingsPage() {
         }
         trafficError={trafficRes.ok ? null : trafficRes.error}
         initialSeeds={seedsRes.ok ? seedsRes.formations : []}
+        initialBetaFeatures={betaFeatures}
       />
     </div>
   );
