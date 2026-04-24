@@ -30,7 +30,6 @@ import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
-import { DrawRoutePill } from "./DrawRoutePill";
 import { QuickRoutes } from "./QuickRoutes";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
@@ -177,8 +176,6 @@ function PlayEditorClientInner({
   // canvas never silently create routes — the user must opt in via the pill.
   // Resets whenever the player selection clears so the gate doesn't linger
   // across unrelated edits.
-  const [drawMode, setDrawMode] = useState(false);
-
   // Mobile edit mode: the bottom area toggles between the field-size
   // controls and the notes editor so the two compact surfaces never fight
   // for the same limited vertical space. Desktop shows both side-by-side.
@@ -441,14 +438,7 @@ function PlayEditorClientInner({
     setSelectedSegmentId(null);
     setSelectedRouteId(null);
     setSelectedPlayerId(null);
-    setDrawMode(false);
   }, []);
-
-  // Auto-exit draw mode when the selected player clears — the pill is only
-  // meaningful while a player is the anchor for the next stroke.
-  useEffect(() => {
-    if (!selectedPlayerId && drawMode) setDrawMode(false);
-  }, [selectedPlayerId, drawMode]);
 
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -743,17 +733,8 @@ function PlayEditorClientInner({
                 animatingPlayerIds={animatingPlayerIds}
                 opponentFormation={opponentFormation ?? null}
                 opponentPlayers={opponentPlayers ?? vsSnapshot?.players ?? null}
-                drawMode={drawMode}
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
-              {canEdit && selectedPlayerId != null && (
-                <DrawRoutePill
-                  active={drawMode}
-                  onToggle={() => setDrawMode((v) => !v)}
-                  onUndo={undo}
-                  canUndo={canUndo}
-                />
-              )}
             </div>
 
             {/* Route templates: surfaced directly under the field on small

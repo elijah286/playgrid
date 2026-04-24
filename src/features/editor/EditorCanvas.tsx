@@ -170,7 +170,6 @@ type Props = {
    *  suppressed so taps on empty canvas only deselect — avoids the footgun
    *  where a stray touch-drag silently created a route. Extending an existing
    *  anchor (clicking its node) still works in both modes. */
-  drawMode?: boolean;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -281,7 +280,6 @@ function EditorCanvasImpl({
   animatingPlayerIds = null,
   opponentFormation = null,
   opponentPlayers = null,
-  drawMode = true,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -868,9 +866,6 @@ function EditorCanvasImpl({
         }
 
         // Canvas drag: start freehand from anchor (node/last-node) or player.
-        // Deliberate drag gestures are always allowed — the drawMode gate
-        // only applies to taps (finishInteraction), which were the real
-        // footgun. Dragging with a finger is too intentional to be noise.
         if (state.target.kind === "canvas") {
           if (mode === "formation") return;
 
@@ -985,7 +980,7 @@ function EditorCanvasImpl({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, drawMode, cancelLongPress],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, cancelLongPress],
   );
 
   const finishInteraction = useCallback(
@@ -1041,10 +1036,7 @@ function EditorCanvasImpl({
               });
               if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
               onSelectNode(newNode.id);
-            } else if (selectedPlayerId && drawMode) {
-              // Start new route from player — only when draw mode is on so a
-              // casual tap on empty canvas with a selected player doesn't
-              // accidentally drop a stray route segment.
+            } else if (selectedPlayerId) {
               const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
               if (player) {
                 commitClickRoute(selectedPlayerId, player.position, state.origin);
@@ -1078,7 +1070,7 @@ function EditorCanvasImpl({
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
-      onActiveStrokePatternChange, drawMode, onSelectZone, cancelLongPress,
+      onActiveStrokePatternChange, onSelectZone, cancelLongPress,
     ],
   );
 
@@ -2338,6 +2330,35 @@ function EditorCanvasImpl({
             </button>
           ))}
           <div className="border-t border-border" />
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
+            onClick={() => {
+              if (!segmentMenu) return;
+              const route = doc.layers.routes.find((r) => r.id === segmentMenu.routeId);
+              const seg = route?.segments.find((s) => s.id === segmentMenu.segmentId);
+              if (route && seg) {
+                // Remove just this segment by dropping its end node and
+                // bridging neighbors. If it's the only segment, the route
+                // collapses to a single node and is removed outright.
+                if (route.segments.length <= 1) {
+                  dispatch({ type: "route.remove", routeId: route.id });
+                  onSelectRoute(null);
+                } else {
+                  dispatch({
+                    type: "route.removeNodeBridging",
+                    routeId: route.id,
+                    nodeId: seg.toNodeId,
+                  });
+                }
+              }
+              onSelectSegment(null);
+              onSelectNode(null);
+              setSegmentMenu(null);
+            }}
+          >
+            Delete segment
+          </button>
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
