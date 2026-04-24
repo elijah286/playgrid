@@ -1226,7 +1226,7 @@ function PlaybookDetailClientInner({
           {gameModeAvailable && (
             <Link
               href={`/playbooks/${playbookId}/game`}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 text-sm font-semibold text-foreground hover:bg-surface sm:hidden"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:hidden"
               aria-label="Game mode"
             >
               <Gamepad2 className="size-4" />
