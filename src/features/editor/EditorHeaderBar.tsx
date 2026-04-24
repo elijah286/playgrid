@@ -8,7 +8,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  LayoutGrid,
   Link2Off,
+  List,
   PencilLine,
   Plus,
   Search,
@@ -22,7 +24,7 @@ import {
 } from "@/app/actions/plays";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
-import { Button, Input } from "@/components/ui";
+import { Button, Input, SegmentedControl } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
 import { EditablePlayNumberBadge } from "./PlayNumberBadge";
 
@@ -272,6 +274,7 @@ function FormationTitlePicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const searchRef = useRef<HTMLInputElement>(null);
   const activeFormationRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -374,19 +377,30 @@ function FormationTitlePicker({
             style={mobileTop != null ? { top: mobileTop } : undefined}
             className="fixed inset-x-2 z-50 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-[480px]"
           >
-            <div className="relative border-b border-border p-2">
-              <Search className="pointer-events-none absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setOpen(false);
-                  if (e.key === "Enter" && filtered.length > 0) pick(filtered[0]);
-                }}
-                placeholder="Search formations…"
-                className="w-full rounded-md border border-border bg-surface-inset py-1.5 pl-7 pr-2 text-xs font-normal text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+            <div className="flex items-center gap-2 border-b border-border p-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setOpen(false);
+                    if (e.key === "Enter" && filtered.length > 0) pick(filtered[0]);
+                  }}
+                  placeholder="Search formations…"
+                  className="w-full rounded-md border border-border bg-surface-inset py-1.5 pl-7 pr-2 text-xs font-normal text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                />
+              </div>
+              <SegmentedControl
+                size="sm"
+                value={viewMode}
+                onChange={(v) => setViewMode(v as "grid" | "list")}
+                options={[
+                  { value: "grid", label: "Grid", icon: LayoutGrid },
+                  { value: "list", label: "List", icon: List },
+                ]}
               />
             </div>
             <button
@@ -420,7 +434,7 @@ function FormationTitlePicker({
                 <div className="px-3 py-6 text-center text-xs text-muted">
                   {q ? "No matches." : "No saved formations"}
                 </div>
-              ) : (
+              ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-2 gap-2">
                   {filtered.map((f) => {
                     const selected = f.id === currentId;
@@ -453,6 +467,36 @@ function FormationTitlePicker({
                     );
                   })}
                 </div>
+              ) : (
+                <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                  {filtered.map((f) => {
+                    const selected = f.id === currentId;
+                    return (
+                      <li key={f.id}>
+                        <button
+                          ref={selected ? activeFormationRef : undefined}
+                          type="button"
+                          onClick={() => pick(f)}
+                          className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-inset ${
+                            selected ? "bg-primary/5" : ""
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                            {f.displayName}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted">
+                            {f.players.length} players
+                          </span>
+                          {selected && (
+                            <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                              Current
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           </div>

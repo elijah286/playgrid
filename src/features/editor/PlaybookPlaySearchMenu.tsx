@@ -2,9 +2,9 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, LayoutGrid, List, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button, Input } from "@/components/ui";
+import { Button, Input, SegmentedControl } from "@/components/ui";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { compareNavPlays, formatPlayNavSubtitle } from "@/domain/print/playbookPrint";
 import { PlayThumbnail } from "./PlayThumbnail";
@@ -54,6 +54,8 @@ export function PlaybookPlaySearchMenu({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [typeFilter, setTypeFilter] = useState<"all" | "offense" | "defense" | "special_teams">("all");
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -137,10 +139,37 @@ export function PlaybookPlaySearchMenu({
     };
   }, [open]);
 
+  // Only show the type selector if the playbook actually contains more than
+  // one play type — otherwise it's dead UI.
+  const availableTypes = useMemo(() => {
+    const s = new Set<"offense" | "defense" | "special_teams">();
+    for (const p of plays) s.add(p.play_type);
+    return s;
+  }, [plays]);
+  const showTypeFilter = availableTypes.size > 1;
+  const typeOptions = useMemo(() => {
+    const opts: { value: "all" | "offense" | "defense" | "special_teams"; label: string }[] = [
+      { value: "all", label: "All" },
+    ];
+    if (availableTypes.has("offense")) opts.push({ value: "offense", label: "Offense" });
+    if (availableTypes.has("defense")) opts.push({ value: "defense", label: "Defense" });
+    if (availableTypes.has("special_teams")) opts.push({ value: "special_teams", label: "ST" });
+    return opts;
+  }, [availableTypes]);
+
+  // If the stored filter is no longer available (playbook changed), treat it
+  // as "all" for this render rather than eagerly writing state from an effect.
+  const effectiveTypeFilter: typeof typeFilter =
+    typeFilter !== "all" && !availableTypes.has(typeFilter) ? "all" : typeFilter;
+
   const filteredPlays = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return plays;
-    return plays.filter((p) => {
+    const byType =
+      effectiveTypeFilter === "all"
+        ? plays
+        : plays.filter((p) => p.play_type === effectiveTypeFilter);
+    if (!s) return byType;
+    return byType.filter((p) => {
       return (
         p.name.toLowerCase().includes(s) ||
         p.wristband_code.toLowerCase().includes(s) ||
@@ -150,7 +179,7 @@ export function PlaybookPlaySearchMenu({
         (p.group_name && p.group_name.toLowerCase().includes(s))
       );
     });
-  }, [plays, q]);
+  }, [plays, q, effectiveTypeFilter]);
 
   const sections = useMemo(
     () => buildSections(filteredPlays, groups),
@@ -189,15 +218,36 @@ export function PlaybookPlaySearchMenu({
           className="fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:inset-x-auto"
         >
           <div className="border-b border-border p-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search name, code, formation, tag…"
-                className="pl-9"
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search name, code, formation, tag…"
+                  className="pl-9"
+                />
+              </div>
+              <SegmentedControl
+                size="sm"
+                value={viewMode}
+                onChange={(v) => setViewMode(v as "grid" | "list")}
+                options={[
+                  { value: "grid", label: "Grid", icon: LayoutGrid },
+                  { value: "list", label: "List", icon: List },
+                ]}
               />
             </div>
+            {showTypeFilter && (
+              <div className="mt-2">
+                <SegmentedControl
+                  size="sm"
+                  value={effectiveTypeFilter}
+                  onChange={(v) => setTypeFilter(v as typeof typeFilter)}
+                  options={typeOptions}
+                />
+              </div>
+            )}
             {printMode && onPrintToggle && onToggleGroup && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button
@@ -259,21 +309,39 @@ export function PlaybookPlaySearchMenu({
                     </Button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-3">
-                  {sec.plays.map((p) => (
-                    <PlayTile
-                      key={p.id}
-                      p={p}
-                      currentPlayId={currentPlayId}
-                      printMode={printMode}
-                      printSelectedIds={printSelectedIds}
-                      onPrintToggle={onPrintToggle}
-                      onNavigate={() => setOpen(false)}
-                      onNavigatePlay={onNavigatePlay}
-                      activeRef={p.id === currentPlayId ? activeTileRef : undefined}
-                    />
-                  ))}
-                </div>
+                {viewMode === "grid" ? (
+                  <div className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-3">
+                    {sec.plays.map((p) => (
+                      <PlayTile
+                        key={p.id}
+                        p={p}
+                        currentPlayId={currentPlayId}
+                        printMode={printMode}
+                        printSelectedIds={printSelectedIds}
+                        onPrintToggle={onPrintToggle}
+                        onNavigate={() => setOpen(false)}
+                        onNavigatePlay={onNavigatePlay}
+                        activeRef={p.id === currentPlayId ? activeTileRef : undefined}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="mx-3 mb-3 divide-y divide-border overflow-hidden rounded-md border border-border">
+                    {sec.plays.map((p) => (
+                      <PlayRow
+                        key={p.id}
+                        p={p}
+                        currentPlayId={currentPlayId}
+                        printMode={printMode}
+                        printSelectedIds={printSelectedIds}
+                        onPrintToggle={onPrintToggle}
+                        onNavigate={() => setOpen(false)}
+                        onNavigatePlay={onNavigatePlay}
+                        activeRef={p.id === currentPlayId ? activeTileRef : undefined}
+                      />
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
             {sections.length === 0 && (
@@ -384,5 +452,105 @@ function PlayTile({
     >
       {tileInner}
     </Link>
+  );
+}
+
+function PlayRow({
+  p,
+  currentPlayId,
+  printMode,
+  printSelectedIds,
+  onPrintToggle,
+  onNavigate,
+  onNavigatePlay,
+  activeRef,
+}: {
+  p: PlaybookPlayNavItem;
+  currentPlayId: string;
+  printMode?: boolean;
+  printSelectedIds?: Set<string>;
+  onPrintToggle?: (playId: string, next: boolean) => void;
+  onNavigate: () => void;
+  onNavigatePlay?: (playId: string) => void;
+  activeRef?: React.RefObject<HTMLElement | null>;
+}) {
+  const active = p.id === currentPlayId;
+  const checked = printMode && printSelectedIds ? printSelectedIds.has(p.id) : true;
+
+  const rowInner = (
+    <>
+      {printMode && (
+        <span
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded border border-border bg-surface-raised",
+            checked && "border-primary bg-primary text-white",
+          )}
+        >
+          {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{p.name}</span>
+        <span className="block truncate text-[11px] text-muted">
+          {formatPlayNavSubtitle(p)}
+        </span>
+      </div>
+      {active && (
+        <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+          Current
+        </span>
+      )}
+    </>
+  );
+
+  const rowCls = cn(
+    "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-inset",
+    active && "bg-primary/5",
+  );
+
+  if (printMode && onPrintToggle) {
+    return (
+      <li>
+        <button
+          ref={activeRef as React.RefObject<HTMLButtonElement> | undefined}
+          type="button"
+          onClick={() => onPrintToggle(p.id, !checked)}
+          className={rowCls}
+        >
+          {rowInner}
+        </button>
+      </li>
+    );
+  }
+
+  if (onNavigatePlay) {
+    return (
+      <li>
+        <button
+          ref={activeRef as React.RefObject<HTMLButtonElement> | undefined}
+          type="button"
+          onClick={() => {
+            onNavigate();
+            onNavigatePlay(p.id);
+          }}
+          className={rowCls}
+        >
+          {rowInner}
+        </button>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <Link
+        ref={activeRef as React.RefObject<HTMLAnchorElement> | undefined}
+        href={`/plays/${p.id}/edit`}
+        onClick={onNavigate}
+        className={rowCls}
+      >
+        {rowInner}
+      </Link>
+    </li>
   );
 }
