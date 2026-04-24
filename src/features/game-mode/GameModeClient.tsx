@@ -538,7 +538,7 @@ export function GameModeClient({
           </p>
         )}
 
-        {currentPlay && (
+        {currentPlay && pickerMode !== "next" && (
           <div className="mx-auto w-full max-w-[640px] landscape:hidden">
             <NotesCard notes={currentPlay.document?.metadata?.notes ?? ""} />
           </div>
