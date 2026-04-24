@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ThumbsUp, ThumbsDown, Play, Repeat, X } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
 import { saveGameSessionAction } from "@/app/actions/game-sessions";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
-import { PlayControls } from "@/features/animation/PlayControls";
 import { PlayPickerDialog } from "./PlayPickerDialog";
 import { ExitGameDialog } from "./ExitGameDialog";
 import { GameFieldView } from "./GameFieldView";
@@ -53,6 +52,48 @@ export function GameModeClient({
     initialPlayId ? new Date().toISOString() : null,
   );
   const [saving, startSaving] = useTransition();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    type FsDoc = Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitFullscreenEnabled?: boolean;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+    type FsEl = HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
+    const doc = document as FsDoc;
+    const supported = Boolean(doc.fullscreenEnabled ?? doc.webkitFullscreenEnabled);
+    if (!supported) return;
+
+    const mql = window.matchMedia("(orientation: landscape)");
+
+    async function sync(landscape: boolean) {
+      const el = rootRef.current as FsEl | null;
+      const active =
+        doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+      try {
+        if (landscape && !active && el) {
+          await (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
+        } else if (!landscape && active) {
+          await (doc.exitFullscreen?.() ?? doc.webkitExitFullscreen?.());
+        }
+      } catch {
+        // Browsers may reject requests without a user gesture; ignore silently.
+      }
+    }
+
+    function onChange(e: MediaQueryListEvent) {
+      void sync(e.matches);
+    }
+
+    void sync(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => {
+      mql.removeEventListener("change", onChange);
+    };
+  }, []);
 
   const playMap = useMemo(() => {
     const m = new Map<string, GameModePlay>();
@@ -172,7 +213,10 @@ export function GameModeClient({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface-inset text-foreground">
+    <div
+      ref={rootRef}
+      className="fixed inset-0 z-50 flex flex-col bg-surface-inset text-foreground"
+    >
       {/* Top bar — minimal: just an exit affordance and the play name. */}
       <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
         <button
@@ -361,39 +405,34 @@ function CurrentPlaySectionAnimated({
 }) {
   const anim = usePlayAnimation(document);
   return (
-    <div className="mx-auto w-full">
-      <div className="relative">
-        <GameFieldView document={document} fallbackPreview={preview} anim={anim} />
-        <ThumbButton
-          direction="down"
-          active={outcome?.thumb === "down"}
-          onTap={() => onTapThumb("down")}
+    <div className="relative mx-auto w-full">
+      <GameFieldView document={document} fallbackPreview={preview} anim={anim} />
+      <ThumbButton
+        direction="down"
+        active={outcome?.thumb === "down"}
+        onTap={() => onTapThumb("down")}
+      />
+      <ThumbButton
+        direction="up"
+        active={outcome?.thumb === "up"}
+        onTap={() => onTapThumb("up")}
+      />
+      {outcome?.thumb === "up" && (
+        <TagRail
+          position="right"
+          tags={THUMBS_UP_TAGS}
+          active={outcome.tag}
+          onTap={(t) => onTapTag("up", t)}
         />
-        <ThumbButton
-          direction="up"
-          active={outcome?.thumb === "up"}
-          onTap={() => onTapThumb("up")}
+      )}
+      {outcome?.thumb === "down" && (
+        <TagRail
+          position="left"
+          tags={THUMBS_DOWN_TAGS}
+          active={outcome.tag}
+          onTap={(t) => onTapTag("down", t)}
         />
-        {outcome?.thumb === "up" && (
-          <TagRail
-            position="right"
-            tags={THUMBS_UP_TAGS}
-            active={outcome.tag}
-            onTap={(t) => onTapTag("up", t)}
-          />
-        )}
-        {outcome?.thumb === "down" && (
-          <TagRail
-            position="left"
-            tags={THUMBS_DOWN_TAGS}
-            active={outcome.tag}
-            onTap={(t) => onTapTag("down", t)}
-          />
-        )}
-      </div>
-      <div className="mx-auto mt-3 w-full max-w-[640px]">
-        <PlayControls anim={anim} inline />
-      </div>
+      )}
     </div>
   );
 }
