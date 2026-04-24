@@ -227,19 +227,51 @@ export function GameModeClient({
             return;
           }
           const row = payload.new as Record<string, unknown>;
-          setSession({
-            id: row.id as string,
-            playbookId: row.playbook_id as string,
-            status: row.status as "active" | "ended",
-            callerUserId: (row.caller_user_id as string | null) ?? null,
-            currentPlayId: (row.current_play_id as string | null) ?? null,
-            nextPlayId: (row.next_play_id as string | null) ?? null,
-            startedAt: row.started_at as string,
-            kind:
-              (row.kind as string | null) === "scrimmage"
-                ? "scrimmage"
-                : "game",
-            opponent: (row.opponent as string | null) ?? null,
+          // Merge: Supabase realtime may only ship the primary key + changed
+          // columns on an UPDATE (unless REPLICA IDENTITY FULL is set).
+          // Overwriting the whole session from a partial payload used to
+          // drop caller/current_play and bomb action calls with
+          // `uuid: "undefined"`. Prefer existing fields when the payload
+          // doesn't include them.
+          setSession((prev) => {
+            const merged: LiveGameSession = {
+              id: (row.id as string | undefined) ?? prev?.id ?? sessionId,
+              playbookId:
+                (row.playbook_id as string | undefined) ??
+                prev?.playbookId ??
+                playbookId,
+              status:
+                (row.status as "active" | "ended" | undefined) ??
+                prev?.status ??
+                "active",
+              callerUserId:
+                "caller_user_id" in row
+                  ? ((row.caller_user_id as string | null) ?? null)
+                  : (prev?.callerUserId ?? null),
+              currentPlayId:
+                "current_play_id" in row
+                  ? ((row.current_play_id as string | null) ?? null)
+                  : (prev?.currentPlayId ?? null),
+              nextPlayId:
+                "next_play_id" in row
+                  ? ((row.next_play_id as string | null) ?? null)
+                  : (prev?.nextPlayId ?? null),
+              startedAt:
+                (row.started_at as string | undefined) ??
+                prev?.startedAt ??
+                new Date().toISOString(),
+              kind:
+                "kind" in row
+                  ? (row.kind as string) === "scrimmage"
+                    ? "scrimmage"
+                    : "game"
+                  : (prev?.kind ?? "game"),
+              opponent:
+                "opponent" in row
+                  ? ((row.opponent as string | null) ?? null)
+                  : (prev?.opponent ?? null),
+            };
+            return merged;
           });
         },
       )
@@ -515,11 +547,12 @@ export function GameModeClient({
   }
 
   function takeover() {
-    if (!session) return;
+    if (!session || !session.id) return;
     const snapshot = session;
+    const id = session.id;
     setSession({ ...session, callerUserId: currentUserId });
     startMutating(async () => {
-      const res = await takeoverCallerAction(session.id);
+      const res = await takeoverCallerAction(id);
       if (!res.ok) {
         toast(res.error, "error");
         setSession(snapshot);
