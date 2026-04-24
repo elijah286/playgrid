@@ -192,12 +192,12 @@ export function GameModeClient({
         <div className="size-10" aria-hidden />
       </div>
 
-      {/* Main play area + thumb overlays. flex-1 + min-h-0 lets the SVG
-          fill all remaining vertical space without spilling past the bottom
-          control bar. */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+      {/* Scrollable column: field on top (natural aspect, never stretched),
+          next-play row beneath. The next-play row is always rendered so the
+          field's position doesn't shift when a next play is enqueued. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-3">
         {currentPlay ? (
-          <div className="absolute inset-0 p-2">
+          <div className="relative mx-auto w-full">
             {/* Keyed on play id so React remounts the field (and the
                 animation hook) when the coach runs the next play —
                 otherwise phase state would leak from the previous call. */}
@@ -206,15 +206,6 @@ export function GameModeClient({
               document={currentPlay.document}
               fallbackPreview={currentPlay.preview}
             />
-          </div>
-        ) : (
-          <p className="px-6 text-center text-sm text-muted">
-            Pick a play to start the game.
-          </p>
-        )}
-
-        {currentPlay && (
-          <>
             <ThumbButton
               direction="down"
               active={outcome?.thumb === "down"}
@@ -241,52 +232,56 @@ export function GameModeClient({
                 onTap={(t) => tapTag("down", t)}
               />
             )}
-          </>
-        )}
-      </div>
-
-      {/* Bottom controls. Either the big "Choose next play" CTA, or the
-          next-play preview with Run / Change. Always followed by Exit. */}
-      <div className="border-t border-border bg-surface-raised px-3 py-2">
-        {nextPlay ? (
-          <div className="flex items-stretch gap-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="truncate text-xs font-semibold">
-                Next: {nextPlay.name}
-              </div>
-              <div className="w-full max-w-[180px] sm:max-w-[220px]">
-                {nextPlay.preview && (
-                  <PlayThumbnail preview={nextPlay.preview} thin />
-                )}
-              </div>
-            </div>
-            <div className="flex w-36 shrink-0 flex-col gap-2 sm:w-40">
-              <button
-                type="button"
-                onClick={runNextPlay}
-                className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                <Play className="size-5" /> Run
-              </button>
-              <button
-                type="button"
-                onClick={() => setPickerMode("next")}
-                className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
-              >
-                <Repeat className="size-5" /> Change
-              </button>
-            </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setPickerMode("next")}
-            disabled={!currentPlay}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
-          >
-            Choose next play
-          </button>
+          <p className="px-6 py-12 text-center text-sm text-muted">
+            Pick a play to start the game.
+          </p>
         )}
+
+        {/* Next-play row below the field. Always present (CTA when empty)
+            so the field above never shifts. */}
+        <div className="mx-auto w-full max-w-[640px]">
+          {nextPlay ? (
+            <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <div className="truncate text-xs font-semibold">
+                  Next: {nextPlay.name}
+                </div>
+                <div className="w-full max-w-[220px]">
+                  {nextPlay.preview && (
+                    <PlayThumbnail preview={nextPlay.preview} thin />
+                  )}
+                </div>
+              </div>
+              <div className="flex w-36 shrink-0 flex-col gap-2 sm:w-40">
+                <button
+                  type="button"
+                  onClick={runNextPlay}
+                  className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  <Play className="size-5" /> Run
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPickerMode("next")}
+                  className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
+                >
+                  <Repeat className="size-5" /> Change
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPickerMode("next")}
+              disabled={!currentPlay}
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
+            >
+              Choose next play
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Intro: shown the first time per session. Coaches landing on the

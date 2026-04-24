@@ -1,17 +1,24 @@
 "use client";
 
+import { useMemo } from "react";
 import type { PlayDocument } from "@/domain/play/types";
-import { pathGeometryToSvgD, routeToPathGeometry } from "@/domain/play/geometry";
-import { resolveRouteStroke } from "@/domain/play/factory";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControls } from "@/features/animation/PlayControls";
+import { EditorCanvas } from "@/features/editor/EditorCanvas";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 
+const VIEWPORT_LENGTH_YDS = 25;
+const noop = () => {};
+
 /**
- * Read-only field renderer for game mode. Mirrors the mobile viewer's
- * carousel field exactly — same SVG, same AnimationOverlay, same floating
- * PlayControls — so coaches get the playback they're already used to.
+ * Read-only field renderer for game mode. Reuses the editor's actual
+ * EditorCanvas + AnimationOverlay + floating PlayControls so coaches see
+ * the play exactly as they did before entering game mode — same yard
+ * lines, hash marks, LOS, players, routes — and the same playback pill.
+ *
+ * The wrapper carries the editor's `.field-viewport` class so it inherits
+ * the mobile size cap; pointer-events-none disables editing.
  */
 export function GameFieldView({
   document,
@@ -22,7 +29,7 @@ export function GameFieldView({
 }) {
   if (!document) {
     return (
-      <div className="flex size-full items-center justify-center">
+      <div className="mx-auto w-full max-w-[420px]">
         {fallbackPreview && <PlayThumbnail preview={fallbackPreview} />}
       </div>
     );
@@ -33,57 +40,48 @@ export function GameFieldView({
 function GameFieldPlayback({ document }: { document: PlayDocument }) {
   const anim = usePlayAnimation(document);
 
+  const fieldAspect =
+    document.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+
+  const animatingPlayerIds = useMemo(() => {
+    if (anim.phase === "idle") return null;
+    return new Set(anim.flats.map((f) => f.carrierPlayerId));
+  }, [anim.phase, anim.flats]);
+
   return (
-    <div className="relative mx-auto aspect-[4/3] h-full max-h-full w-auto max-w-full overflow-hidden rounded-xl shadow-card">
-      <svg viewBox="0 0 1 1" className="h-full w-full" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="gameFieldGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2D8B4E" />
-            <stop offset="100%" stopColor="#247540" />
-          </linearGradient>
-        </defs>
-        <rect width={1} height={1} fill="url(#gameFieldGrad)" />
-        {document.layers.routes.map((r) => (
-          <path
-            key={r.id}
-            d={pathGeometryToSvgD(routeToPathGeometry(r))}
-            fill="none"
-            stroke={resolveRouteStroke(r, document.layers.players)}
-            strokeWidth={0.004}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
-        {document.layers.players
-          .filter((pl) => {
-            if (anim.phase === "idle") return true;
-            return !anim.flats.some((f) => f.carrierPlayerId === pl.id);
-          })
-          .map((pl) => (
-            <g key={pl.id}>
-              <circle
-                cx={pl.position.x}
-                cy={1 - pl.position.y}
-                r={0.03}
-                fill="#FFFFFF"
-                stroke="rgba(0,0,0,0.2)"
-                strokeWidth={0.003}
-              />
-              <text
-                x={pl.position.x}
-                y={1 - pl.position.y + 0.01}
-                textAnchor="middle"
-                fontSize={0.022}
-                fontWeight={700}
-                fill="#1C1C1E"
-                style={{ fontFamily: "Inter, system-ui, sans-serif" }}
-              >
-                {pl.label}
-              </text>
-            </g>
-          ))}
-      </svg>
-      <AnimationOverlay doc={document} anim={anim} fieldAspect={1} />
+    <div
+      className="field-viewport relative mx-auto w-full select-none overflow-hidden"
+      style={
+        {
+          aspectRatio: `${fieldAspect} / 1`,
+          ["--field-aspect" as string]: String(fieldAspect),
+        } as React.CSSProperties
+      }
+    >
+      <div className="pointer-events-none absolute inset-0">
+        <EditorCanvas
+          doc={document}
+          dispatch={noop}
+          selectedPlayerId={null}
+          selectedRouteId={null}
+          selectedNodeId={null}
+          selectedSegmentId={null}
+          selectedZoneId={null}
+          onSelectPlayer={noop}
+          onSelectRoute={noop}
+          onSelectNode={noop}
+          onSelectSegment={noop}
+          onSelectZone={noop}
+          activeShape="straight"
+          activeStrokePattern="solid"
+          activeColor="#1C1C1E"
+          activeWidth={2}
+          fieldAspect={fieldAspect}
+          fieldBackground={document.fieldBackground}
+          animatingPlayerIds={animatingPlayerIds}
+        />
+      </div>
+      <AnimationOverlay doc={document} anim={anim} fieldAspect={fieldAspect} />
       <PlayControls anim={anim} />
     </div>
   );
