@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ThumbsUp, ThumbsDown, Play, Repeat, X } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Play, Repeat, X, Maximize, Minimize } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
 import { saveGameSessionAction } from "@/app/actions/game-sessions";
@@ -53,47 +53,54 @@ export function GameModeClient({
   );
   const [saving, startSaving] = useTransition();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenSupported, setFullscreenSupported] = useState(false);
 
   useEffect(() => {
     type FsDoc = Document & {
       webkitFullscreenElement?: Element | null;
       webkitFullscreenEnabled?: boolean;
+    };
+    const doc = document as FsDoc;
+    // iOS Safari on iPhone exposes webkitEnterFullscreen only on <video>;
+    // the document-level flag is the most reliable signal for element-level
+    // fullscreen support (iPadOS 16.4+, desktop browsers).
+    setFullscreenSupported(
+      Boolean(doc.fullscreenEnabled ?? doc.webkitFullscreenEnabled),
+    );
+    function onChange() {
+      const el = doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+      setIsFullscreen(Boolean(el));
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
+
+  async function toggleFullscreen() {
+    type FsDoc = Document & {
+      webkitFullscreenElement?: Element | null;
       webkitExitFullscreen?: () => Promise<void> | void;
     };
     type FsEl = HTMLElement & {
       webkitRequestFullscreen?: () => Promise<void> | void;
     };
     const doc = document as FsDoc;
-    const supported = Boolean(doc.fullscreenEnabled ?? doc.webkitFullscreenEnabled);
-    if (!supported) return;
-
-    const mql = window.matchMedia("(orientation: landscape)");
-
-    async function sync(landscape: boolean) {
-      const el = rootRef.current as FsEl | null;
-      const active =
-        doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
-      try {
-        if (landscape && !active && el) {
-          await (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
-        } else if (!landscape && active) {
-          await (doc.exitFullscreen?.() ?? doc.webkitExitFullscreen?.());
-        }
-      } catch {
-        // Browsers may reject requests without a user gesture; ignore silently.
+    const el = rootRef.current as FsEl | null;
+    const active = doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+    try {
+      if (active) {
+        await (doc.exitFullscreen?.() ?? doc.webkitExitFullscreen?.());
+      } else if (el) {
+        await (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.());
       }
+    } catch {
+      // User-gesture requirements or platform restrictions — silent.
     }
-
-    function onChange(e: MediaQueryListEvent) {
-      void sync(e.matches);
-    }
-
-    void sync(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => {
-      mql.removeEventListener("change", onChange);
-    };
-  }, []);
+  }
 
   const playMap = useMemo(() => {
     const m = new Map<string, GameModePlay>();
@@ -237,7 +244,19 @@ export function GameModeClient({
             </div>
           )}
         </div>
-        <div className="size-10" aria-hidden />
+        {fullscreenSupported ? (
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
+          </button>
+        ) : (
+          <div className="size-10" aria-hidden />
+        )}
       </div>
 
       {/* Scrollable column: field on top (natural aspect, never stretched),
