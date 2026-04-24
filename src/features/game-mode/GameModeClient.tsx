@@ -270,50 +270,65 @@ export function GameModeClient({
           </p>
         )}
 
-        {/* Next-play row below the field. Always present (CTA when empty)
-            so the field above never shifts. Hidden in landscape — coaches
-            use landscape for viewing only. */}
-        <div className="mx-auto w-full max-w-[640px] landscape:hidden">
-          {nextPlay ? (
-            <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="truncate text-xs font-semibold">
-                  Next: {nextPlay.name}
+        {/* Next-play area below the field. When the coach opens the picker
+            from here, it replaces this area (keeping the field visible
+            above) instead of covering the screen. Hidden in landscape —
+            coaches use landscape for viewing only. */}
+        {pickerMode === "next" ? (
+          <div className="mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col landscape:hidden">
+            <PlayPickerDialog
+              inline
+              open
+              plays={plays}
+              currentPlayId={currentPlayId}
+              onPick={pickPlay}
+              onClose={() => setPickerMode("closed")}
+              canClose
+            />
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-[640px] landscape:hidden">
+            {nextPlay ? (
+              <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="truncate text-xs font-semibold">
+                    Next: {nextPlay.name}
+                  </div>
+                  <div className="w-full max-w-[220px]">
+                    {nextPlay.preview && (
+                      <PlayThumbnail preview={nextPlay.preview} thin />
+                    )}
+                  </div>
                 </div>
-                <div className="w-full max-w-[220px]">
-                  {nextPlay.preview && (
-                    <PlayThumbnail preview={nextPlay.preview} thin />
-                  )}
+                <div className="flex w-36 shrink-0 flex-col gap-2 sm:w-40">
+                  <button
+                    type="button"
+                    onClick={runNextPlay}
+                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Play className="size-5" /> Run
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickerMode("next")}
+                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
+                  >
+                    <Repeat className="size-5" /> Change
+                  </button>
                 </div>
               </div>
-              <div className="flex w-36 shrink-0 flex-col gap-2 sm:w-40">
-                <button
-                  type="button"
-                  onClick={runNextPlay}
-                  className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  <Play className="size-5" /> Run
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPickerMode("next")}
-                  className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
-                >
-                  <Repeat className="size-5" /> Change
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setPickerMode("next")}
-              disabled={!currentPlay}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
-            >
-              Choose next play
-            </button>
-          )}
-        </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPickerMode("next")}
+                disabled={!currentPlay}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
+              >
+                Choose next play
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Intro: shown the first time per session. Coaches landing on the
@@ -321,10 +336,12 @@ export function GameModeClient({
           per-session is fine. */}
       {showIntro && <IntroOverlay onDismiss={dismissIntro} />}
 
+      {/* Fullscreen picker only for the initial "pick your first play" state.
+          The "next" mode renders inline above, replacing the next-play row. */}
       <PlayPickerDialog
-        open={pickerMode !== "closed"}
+        open={pickerMode === "current"}
         plays={plays}
-        currentPlayId={pickerMode === "current" ? null : currentPlayId}
+        currentPlayId={null}
         onPick={pickPlay}
         onClose={() => setPickerMode("closed")}
         canClose={currentPlay != null}

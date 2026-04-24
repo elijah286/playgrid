@@ -12,6 +12,7 @@ export function PlayPickerDialog({
   onPick,
   onClose,
   canClose,
+  inline = false,
 }: {
   open: boolean;
   plays: GameModePlay[];
@@ -21,6 +22,9 @@ export function PlayPickerDialog({
   /** When false, the close (X) button is hidden — used for the initial
    *  "pick your first play" state where there is no play to fall back to. */
   canClose: boolean;
+  /** When true, render as an in-flow panel (no fixed overlay) so the picker
+   *  replaces only the next-play row beneath the visible current play. */
+  inline?: boolean;
 }) {
   const [q, setQ] = useState("");
 
@@ -46,9 +50,13 @@ export function PlayPickerDialog({
   return (
     <div
       role="dialog"
-      aria-modal="true"
+      aria-modal={inline ? undefined : "true"}
       aria-label="Pick a play"
-      className="fixed inset-0 z-[60] flex flex-col bg-surface-inset"
+      className={
+        inline
+          ? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-surface-inset"
+          : "fixed inset-0 z-[60] flex flex-col bg-surface-inset"
+      }
     >
       <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
         <div className="relative flex-1">
