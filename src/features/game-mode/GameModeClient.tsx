@@ -415,11 +415,41 @@ export function GameModeClient({
       setAdvancePending(true);
     }
     startMutating(async () => {
+      if (!isCaller) {
+        const t = await takeoverCallerAction(session.id);
+        if (!t.ok) {
+          toast(t.error, "error");
+          setAdvancePending(false);
+          return;
+        }
+      }
       const res = await advanceToNextPlayAction(session.id);
       if (!res.ok) {
         toast(res.error, "error");
         setAdvancePending(false);
       }
+    });
+  }
+
+  /** Open the "choose next play" picker. For a spectator, transparently
+   *  claim the caller role first so the tap does what the label says.
+   *  High-trust environment — we don't gate this behind a confirm. */
+  function openNextPicker() {
+    if (!session) {
+      setPickerMode("next");
+      return;
+    }
+    if (isCaller) {
+      setPickerMode("next");
+      return;
+    }
+    startMutating(async () => {
+      const t = await takeoverCallerAction(session.id);
+      if (!t.ok) {
+        toast(t.error, "error");
+        return;
+      }
+      setPickerMode("next");
     });
   }
 
@@ -631,16 +661,14 @@ export function GameModeClient({
                   <button
                     type="button"
                     onClick={runNextPlay}
-                    disabled={!isCaller}
-                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
+                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
                   >
                     <Play className="size-5" /> Run
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPickerMode("next")}
-                    disabled={!isCaller}
-                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-muted"
+                    onClick={openNextPicker}
+                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
                   >
                     <Repeat className="size-5" /> Change
                   </button>
@@ -649,13 +677,11 @@ export function GameModeClient({
             ) : (
               <button
                 type="button"
-                onClick={() => setPickerMode("next")}
-                disabled={!currentPlay || !isCaller}
+                onClick={openNextPicker}
+                disabled={!currentPlay}
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
               >
-                {isCaller
-                  ? "Choose next play"
-                  : `Only ${callerName} can choose the next play`}
+                Choose next play
               </button>
             )}
           </div>

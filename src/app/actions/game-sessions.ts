@@ -143,6 +143,41 @@ export async function startOrJoinGameSessionAction(playbookId: string) {
       { onConflict: "session_id,user_id" },
     );
 
+  // Ghost-session reclaim: if we just joined an existing active session
+  // whose caller is us, or whose caller hasn't heartbeated in >2 min (or
+  // never joined as a participant), silently claim the caller role. This
+  // handles the common solo-user case of returning to a session the server
+  // didn't get to clean up — without it, a single coach can get stuck as a
+  // spectator of their own ghost session.
+  if (existing) {
+    const callerId = (existing.caller_user_id as string | null) ?? null;
+    if (callerId === user.id) {
+      // Already the caller; nothing to do.
+    } else {
+      const TWO_MIN_MS = 2 * 60_000;
+      let callerStale = true;
+      if (callerId) {
+        const { data: callerPart } = await supabase
+          .from("game_session_participants")
+          .select("last_seen_at")
+          .eq("session_id", sessionId)
+          .eq("user_id", callerId)
+          .maybeSingle();
+        const seen = callerPart?.last_seen_at as string | null | undefined;
+        if (seen) {
+          callerStale = Date.now() - new Date(seen).getTime() > TWO_MIN_MS;
+        }
+      }
+      if (callerStale) {
+        await supabase
+          .from("game_sessions")
+          .update({ caller_user_id: user.id, caller_changed_at: nowIso })
+          .eq("id", sessionId)
+          .eq("status", "active");
+      }
+    }
+  }
+
   return { ok: true as const, sessionId };
 }
 
