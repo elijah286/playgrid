@@ -23,10 +23,10 @@ const OUT_DIR = path.resolve("public/marketing/screens");
 const VIDEO_TMP = path.resolve(".capture-video");
 
 // Pacing knobs — tuned for "can a coach follow this on a marketing page?"
-const BEAT_SHORT = 900;   // pause after a small UI change
-const BEAT_MED = 1600;    // pause to let the viewer read a new screen
-const BEAT_LONG = 2400;   // pause on a key moment (play picked, thumbs up)
-const MOVE_STEPS = 28;    // interpolated mouse-move frames → slow glide
+const BEAT_SHORT = 700;   // pause after a small UI change
+const BEAT_MED = 1400;    // pause to let the viewer read a new screen
+const BEAT_LONG = 2200;   // pause on a key moment (play picked, thumbs up)
+const GLIDE_MS = 900;     // matches the CSS transition on the cursor
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -56,79 +56,72 @@ function ffmpeg(args) {
 const CURSOR_INIT = () => {
   const id = "__capture_cursor__";
   if (document.getElementById(id)) return;
+  // Apple-style: a single soft, translucent dot that glides smoothly
+  // around the screen. No heavy halo, no ripple burst — the dot itself
+  // briefly scales down on tap to read as a press.
   const el = document.createElement("div");
   el.id = id;
   Object.assign(el.style, {
     position: "fixed",
     left: "0px",
     top: "0px",
-    width: "44px",
-    height: "44px",
-    marginLeft: "-22px",
-    marginTop: "-22px",
+    width: "30px",
+    height: "30px",
+    marginLeft: "-15px",
+    marginTop: "-15px",
     borderRadius: "9999px",
-    background: "rgba(242,101,34,0.28)",
-    border: "2px solid rgba(242,101,34,0.9)",
-    boxShadow: "0 0 0 6px rgba(242,101,34,0.15), 0 2px 10px rgba(0,0,0,0.25)",
+    background: "rgba(242,101,34,0.55)",
+    boxShadow:
+      "0 0 0 1px rgba(242,101,34,0.35), 0 6px 18px rgba(242,101,34,0.35), 0 2px 6px rgba(0,0,0,0.15)",
+    backdropFilter: "blur(2px)",
     pointerEvents: "none",
     zIndex: "2147483647",
-    transition: "transform 120ms ease-out",
+    transition:
+      "transform 850ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms ease-out, height 180ms ease-out, margin 180ms ease-out, opacity 240ms ease-out",
     transform: "translate(-200px,-200px)",
+    opacity: "0.95",
   });
-  const dot = document.createElement("div");
-  Object.assign(dot.style, {
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    width: "10px",
-    height: "10px",
-    marginLeft: "-5px",
-    marginTop: "-5px",
-    borderRadius: "9999px",
-    background: "#F26522",
-    boxShadow: "0 0 0 2px white",
-  });
-  el.appendChild(dot);
   document.body.appendChild(el);
 
+  let lastX = -200;
+  let lastY = -200;
   window.addEventListener(
     "mousemove",
     (ev) => {
+      lastX = ev.clientX;
+      lastY = ev.clientY;
       el.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px)`;
     },
     { passive: true, capture: true },
   );
 
-  // Tap ripple on click.
+  // Subtle press: shrink the dot briefly, then restore.
   window.addEventListener(
     "mousedown",
-    (ev) => {
-      const ripple = document.createElement("div");
-      Object.assign(ripple.style, {
-        position: "fixed",
-        left: ev.clientX + "px",
-        top: ev.clientY + "px",
-        width: "16px",
-        height: "16px",
-        marginLeft: "-8px",
-        marginTop: "-8px",
-        borderRadius: "9999px",
-        border: "2px solid rgba(242,101,34,0.9)",
-        background: "rgba(242,101,34,0.25)",
-        pointerEvents: "none",
-        zIndex: "2147483646",
-        animation: "__cap_ripple__ 600ms ease-out forwards",
-      });
-      document.body.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 650);
+    () => {
+      el.style.width = "20px";
+      el.style.height = "20px";
+      el.style.marginLeft = "-10px";
+      el.style.marginTop = "-10px";
+      el.style.opacity = "1";
     },
     { passive: true, capture: true },
   );
-
-  const style = document.createElement("style");
-  style.textContent =
-    "@keyframes __cap_ripple__ { to { transform: scale(4); opacity: 0; } }";
-  document.head.appendChild(style);
+  window.addEventListener(
+    "mouseup",
+    () => {
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.marginLeft = "-15px";
+      el.style.marginTop = "-15px";
+      el.style.opacity = "0.95";
+    },
+    { passive: true, capture: true },
+  );
+  // Silence unused-var lint on lastX/lastY — they're handy for future
+  // overlays (e.g. pinning cursor on scroll) without rewiring listeners.
+  void lastX;
+  void lastY;
 };
 
 async function installCursor(page) {
@@ -136,10 +129,12 @@ async function installCursor(page) {
   await page.evaluate(CURSOR_INIT);
 }
 
-/** Glide the mouse to a target with interpolated steps so the orange
- *  cursor is visibly in motion rather than teleporting. */
+/** Move the real mouse to the target and wait for the DOM cursor's CSS
+ *  transition to settle. The overlay cursor uses a long ease-out, so
+ *  the dot glides smoothly to where we're about to tap. */
 async function glideTo(page, x, y) {
-  await page.mouse.move(x, y, { steps: MOVE_STEPS });
+  await page.mouse.move(x, y);
+  await sleep(GLIDE_MS);
 }
 
 async function glideToLocator(page, locator) {
@@ -148,7 +143,6 @@ async function glideToLocator(page, locator) {
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   await glideTo(page, x, y);
-  await sleep(350);
   return { x, y };
 }
 
