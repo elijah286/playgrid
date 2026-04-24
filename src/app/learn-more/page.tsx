@@ -11,8 +11,12 @@ import {
   Share2,
   Users,
 } from "lucide-react";
-import { PhoneFrame, WristBand } from "@/features/marketing/DeviceFrames";
-import { PlayAnimation } from "@/features/marketing/PlayAnimation";
+import {
+  LaptopFrame,
+  PhoneFrame,
+  TabletFrame,
+  WristBand,
+} from "@/features/marketing/DeviceFrames";
 import { Reveal } from "@/features/marketing/Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
@@ -36,6 +40,7 @@ export default async function LearnMorePage() {
       <Hero />
       <FreeForSolo />
       <RealPlaybooks examples={examples} />
+      <EveryScreen />
       <FormationsAndTags />
       <PrintoutsAndWristbands />
       <GameModeSection />
@@ -100,12 +105,16 @@ function Hero() {
 
         <div className="relative">
           <div className="absolute -inset-8 -z-10 rounded-[36px] bg-gradient-to-br from-white/40 to-white/0 blur-2xl" />
-          <div className="rounded-2xl bg-neutral-900 p-3 shadow-[var(--shadow-elevated)]">
-            <PlayAnimation className="h-auto w-full rounded-xl" />
-          </div>
-          <p className="mt-3 text-center text-sm text-muted">
-            A real play, animated. Every route in the editor plays like this.
-          </p>
+          <LaptopFrame>
+            <Image
+              src="/marketing/screens/desktop-playbook.png"
+              alt="A real playbook open in xogridmaker"
+              width={1440}
+              height={900}
+              className="h-full w-full object-cover object-top"
+              priority
+            />
+          </LaptopFrame>
         </div>
       </div>
     </section>
@@ -226,6 +235,56 @@ function RealPlaybooks({
             </Link>
           </div>
         </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Every screen (real tablet + phone shots) ---------- */
+
+function EveryScreen() {
+  return (
+    <section className="relative py-24">
+      <div className="mx-auto max-w-6xl px-6">
+        <Reveal>
+          <div className="max-w-2xl">
+            <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
+            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
+              Desktop to draw.
+              <br />
+              Phone on the field.
+            </h2>
+            <p className="mt-5 text-lg text-muted">
+              Design at home on your laptop. Review on the tablet. Pull up a
+              play on your phone between series. Same playbook, every screen.
+            </p>
+          </div>
+        </Reveal>
+
+        <div className="mt-14 flex flex-wrap items-end justify-center gap-10">
+          <Reveal delay={0}>
+            <TabletFrame>
+              <Image
+                src="/marketing/screens/tablet-playbook.png"
+                alt="Playbook on a tablet"
+                width={1024}
+                height={768}
+                className="h-full w-full object-cover object-top"
+              />
+            </TabletFrame>
+          </Reveal>
+          <Reveal delay={150}>
+            <PhoneFrame>
+              <Image
+                src="/marketing/screens/phone-play.png"
+                alt="A play open on a phone"
+                width={390}
+                height={844}
+                className="h-full w-full object-cover object-top"
+              />
+            </PhoneFrame>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
