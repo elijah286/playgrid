@@ -17,6 +17,7 @@ import {
   TabletFrame,
   WristBand,
 } from "@/features/marketing/DeviceFrames";
+import { PlayAnimation } from "@/features/marketing/PlayAnimation";
 import { Reveal } from "@/features/marketing/Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
@@ -106,14 +107,9 @@ function Hero() {
         <div className="relative">
           <div className="absolute -inset-8 -z-10 rounded-[36px] bg-gradient-to-br from-white/40 to-white/0 blur-2xl" />
           <LaptopFrame>
-            <Image
-              src="/marketing/screens/desktop-playbook.png"
-              alt="A real playbook open in xogridmaker"
-              width={1440}
-              height={900}
-              className="h-full w-full object-cover object-top"
-              priority
-            />
+            <div className="flex h-full w-full items-center justify-center bg-neutral-900 p-2">
+              <PlayAnimation className="h-auto w-full" />
+            </div>
           </LaptopFrame>
         </div>
       </div>
