@@ -238,6 +238,16 @@ function EditorCanvasImpl({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
   const interactionRef = useRef(interaction);
+  // Cross-device double-tap tracker. React's onDoubleClick doesn't fire
+  // reliably on iOS Safari/Android Chrome when touch-action suppresses the
+  // synthetic click, so we recognise a double-tap ourselves from pointerdown
+  // timing + target equality. Keyed by a string so "player:abc" and
+  // "segment:r:s" stay distinct.
+  const lastTapRef = useRef<{ key: string; at: number; x: number; y: number } | null>(
+    null,
+  );
+  const DOUBLE_TAP_MS = 320;
+  const DOUBLE_TAP_PX = 22;
   useEffect(() => {
     interactionRef.current = interaction;
   }, [interaction]);
@@ -615,6 +625,48 @@ function EditorCanvasImpl({
       // Primary-button only. Right-clicks are handled by the context-menu
       // path (onContextMenu) and should not start a drag / selection.
       if (e.button !== 0) return;
+
+      // Cross-device double-tap: if the same target was tapped recently and
+      // close by, promote this pointerdown to a double-tap action and
+      // suppress the normal interaction start so the state machine doesn't
+      // also treat it as a fresh drag/select.
+      const tapKey =
+        target.kind === "player"
+          ? `player:${target.playerId}`
+          : target.kind === "route_segment"
+            ? `seg:${target.routeId}:${target.segmentId}`
+            : target.kind === "route_node"
+              ? `node:${target.routeId}:${target.nodeId}`
+              : "canvas";
+      const now = performance.now();
+      const last = lastTapRef.current;
+      const isDouble =
+        last &&
+        last.key === tapKey &&
+        now - last.at < DOUBLE_TAP_MS &&
+        Math.hypot(e.clientX - last.x, e.clientY - last.y) < DOUBLE_TAP_PX;
+      lastTapRef.current = { key: tapKey, at: now, x: e.clientX, y: e.clientY };
+
+      if (isDouble) {
+        if (target.kind === "player") {
+          onSelectPlayer(target.playerId);
+          onSelectRoute(null);
+          onSelectNode(null);
+          onSelectSegment(null);
+          onSelectZone?.(null);
+          setEditingPlayerId(target.playerId);
+          return;
+        }
+        if (target.kind === "route_segment") {
+          onSelectRoute(target.routeId);
+          onSelectSegment(null);
+          onSelectNode(null);
+          onSelectPlayer(null);
+          onSelectZone?.(null);
+          return;
+        }
+      }
+
       // Any interaction cancels the context menu and hover highlight.
       setSegmentMenu(null);
       setHoveredRouteId(null);

@@ -575,7 +575,7 @@ function PlayEditorClientInner({
 
       {/* Routes */}
       <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="flex min-h-[420px] flex-col gap-3">
+          <div className="flex min-h-[260px] flex-col gap-3 sm:min-h-[420px]">
             {/* The route toolbar is ALWAYS rendered — even with nothing
                 selected — so the canvas never shifts when a player or
                 route is selected. When no selection exists, the buttons
