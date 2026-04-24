@@ -54,20 +54,12 @@ export function GameModeClient({
   const [saving, startSaving] = useTransition();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenSupported, setFullscreenSupported] = useState(false);
 
   useEffect(() => {
     type FsDoc = Document & {
       webkitFullscreenElement?: Element | null;
-      webkitFullscreenEnabled?: boolean;
     };
     const doc = document as FsDoc;
-    // iOS Safari on iPhone exposes webkitEnterFullscreen only on <video>;
-    // the document-level flag is the most reliable signal for element-level
-    // fullscreen support (iPadOS 16.4+, desktop browsers).
-    setFullscreenSupported(
-      Boolean(doc.fullscreenEnabled ?? doc.webkitFullscreenEnabled),
-    );
     function onChange() {
       const el = doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
       setIsFullscreen(Boolean(el));
@@ -244,19 +236,15 @@ export function GameModeClient({
             </div>
           )}
         </div>
-        {fullscreenSupported ? (
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
-            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          >
-            {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
-          </button>
-        ) : (
-          <div className="size-10" aria-hidden />
-        )}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
+        </button>
       </div>
 
       {/* Scrollable column: field on top (natural aspect, never stretched),
