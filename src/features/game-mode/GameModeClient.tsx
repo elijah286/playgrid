@@ -720,21 +720,21 @@ export function GameModeClient({
     >
       {/* Top bar — exit affordance and the play name. The X opens the end-
           game dialog for the caller, or quietly leaves for spectators. */}
-      <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
         <button
           type="button"
           onClick={handleTopLeftClose}
-          className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
+          className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-surface text-foreground hover:bg-surface-hover"
           aria-label={isCaller ? "End game" : "Leave game mode"}
         >
-          <X className="size-5" />
+          <X className="size-4" />
         </button>
-        <div className="min-w-0 flex-1 text-center landscape:hidden">
-          <div className="truncate text-sm font-semibold">
+        <div className="min-w-0 flex-1 text-center leading-tight landscape:hidden">
+          <div className="truncate text-xs font-semibold">
             {currentPlay?.name ?? (isCaller ? "Pick a play" : "Waiting for caller…")}
           </div>
           {currentPlay?.formation_name && (
-            <div className="truncate text-[11px] text-muted">
+            <div className="truncate text-[10px] text-muted">
               {currentPlay.formation_name}
             </div>
           )}
@@ -743,11 +743,11 @@ export function GameModeClient({
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
+          className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-surface text-foreground hover:bg-surface-hover"
           aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
         >
-          {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
+          {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
         </button>
       </div>
 
@@ -808,32 +808,32 @@ export function GameModeClient({
         ) : (
           <div className="mx-auto w-full max-w-[640px] landscape:hidden">
             {nextPlay ? (
-              <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <div className="truncate text-xs font-semibold">
-                    Next: {nextPlay.name}
-                  </div>
-                  <div className="w-full max-w-[220px]">
+              <div className="rounded-lg border border-border bg-surface-raised px-3 py-2">
+                <div className="truncate text-[11px] font-semibold text-muted">
+                  Next: <span className="text-foreground">{nextPlay.name}</span>
+                </div>
+                <div className="mt-1 flex items-start gap-3">
+                  <div className="w-full max-w-[200px] flex-1">
                     {nextPlay.preview && (
                       <PlayThumbnail preview={nextPlay.preview} thin />
                     )}
                   </div>
-                </div>
-                <div className="flex w-36 shrink-0 flex-col gap-2 sm:w-40">
-                  <button
-                    type="button"
-                    onClick={runNextPlay}
-                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
-                  >
-                    <Play className="size-5" /> Run
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openNextPicker}
-                    className="inline-flex h-14 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-base font-semibold text-foreground hover:bg-surface-hover"
-                  >
-                    <Repeat className="size-5" /> Change
-                  </button>
+                  <div className="flex w-44 shrink-0 flex-col gap-1.5 sm:w-48">
+                    <button
+                      type="button"
+                      onClick={runNextPlay}
+                      className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                    >
+                      <Play className="size-4" /> Run
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openNextPicker}
+                      className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-sm font-semibold text-foreground hover:bg-surface-hover"
+                    >
+                      <Repeat className="size-4" /> Change
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -841,7 +841,7 @@ export function GameModeClient({
                 type="button"
                 onClick={openNextPicker}
                 disabled={!currentPlay}
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-surface disabled:text-muted"
               >
                 Choose next play
               </button>

@@ -39,22 +39,17 @@ export function ScoreCard({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-[640px] rounded-lg border border-border bg-surface-raised p-3 landscape:hidden">
-        <div className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Score
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <ScoreTile
-            label={usLabel}
-            value={totals.us}
-            onClick={() => setOpenSide("us")}
-          />
-          <ScoreTile
-            label={themLabel}
-            value={totals.them}
-            onClick={() => setOpenSide("them")}
-          />
-        </div>
+      <div className="mx-auto grid w-full max-w-[640px] grid-cols-2 gap-2 rounded-lg border border-border bg-surface-raised p-2 landscape:hidden">
+        <ScoreTile
+          label={usLabel}
+          value={totals.us}
+          onClick={() => setOpenSide("us")}
+        />
+        <ScoreTile
+          label={themLabel}
+          value={totals.them}
+          onClick={() => setOpenSide("them")}
+        />
       </div>
 
       {openSide && (
@@ -91,13 +86,13 @@ function ScoreTile({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface px-2 py-3 text-foreground transition-colors hover:border-primary active:scale-[0.98]"
+      className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-foreground transition-colors hover:border-primary active:scale-[0.98]"
     >
-      <span className="line-clamp-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+      <span className="line-clamp-1 min-w-0 text-[10px] font-semibold uppercase tracking-wide text-muted">
         {label}
       </span>
       <span
-        className="font-mono text-5xl font-bold leading-none tabular-nums text-primary"
+        className="font-mono text-3xl font-bold leading-none tabular-nums text-primary"
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {value}
