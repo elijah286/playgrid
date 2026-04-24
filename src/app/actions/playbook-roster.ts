@@ -568,6 +568,44 @@ export async function addRosterEntryAction(input: {
 }
 
 /**
+ * Coach: bulk-add multiple unclaimed roster entries in one round-trip.
+ * Names are trimmed; blanks are skipped. Cap at 30 per call so the
+ * quick-add dialog can't accidentally spam the DB.
+ */
+export async function bulkAddRosterEntriesAction(input: {
+  playbookId: string;
+  labels: string[];
+}): Promise<
+  { ok: true; added: number } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const cleaned = input.labels
+    .map((l) => (typeof l === "string" ? l.trim() : ""))
+    .filter((l) => l.length > 0)
+    .slice(0, 30);
+  if (cleaned.length === 0) return { ok: false, error: "No names provided." };
+
+  const supabase = await createClient();
+  let added = 0;
+  for (const label of cleaned) {
+    const { error } = await supabase.rpc("add_roster_entry", {
+      p_playbook_id: input.playbookId,
+      p_label: label,
+      p_jersey_number: null,
+      p_positions: [],
+      p_is_minor: false,
+    });
+    if (error) {
+      if (added > 0) revalidatePath(`/playbooks/${input.playbookId}`);
+      return { ok: false, error: error.message };
+    }
+    added += 1;
+  }
+  revalidatePath(`/playbooks/${input.playbookId}`);
+  return { ok: true, added };
+}
+
+/**
  * Coach: edit roster fields on any member row (name/label, jersey,
  * positions, minor flag). RLS lets any editor of the playbook update;
  * we clean inputs the same way the Add dialog does.

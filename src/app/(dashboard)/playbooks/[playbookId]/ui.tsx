@@ -112,6 +112,7 @@ import type {
 } from "@/app/actions/playbook-roster";
 import {
   addRosterEntryAction,
+  bulkAddRosterEntriesAction,
   approveCoachUpgradeAction,
   approveMemberAction,
   approveRosterClaimAction,
@@ -2868,6 +2869,7 @@ function AddPlayerDialog({
   const [positions, setPositions] = useState<Set<string>>(new Set());
   const [isMinor, setIsMinor] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
 
   // Reset form whenever the dialog is re-opened.
   useEffect(() => {
@@ -2911,12 +2913,21 @@ function AddPlayerDialog({
   }
 
   return (
+    <>
     <Modal
-      open={open}
+      open={open && !quickOpen}
       onClose={onClose}
       title="Add player"
       footer={
         <>
+          <button
+            type="button"
+            onClick={() => setQuickOpen(true)}
+            className="mr-auto text-xs text-primary underline-offset-2 hover:underline disabled:opacity-50"
+            disabled={saving}
+          >
+            Use quick add to add multiple players
+          </button>
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
@@ -2983,6 +2994,144 @@ function AddPlayerDialog({
           />
           Minor (under 18)
         </label>
+      </div>
+    </Modal>
+    <QuickAddDialog
+      open={quickOpen}
+      playbookId={playbookId}
+      onClose={() => setQuickOpen(false)}
+      onAdded={() => {
+        setQuickOpen(false);
+        onAdded();
+      }}
+    />
+    </>
+  );
+}
+
+function QuickAddDialog({
+  open,
+  playbookId,
+  onClose,
+  onAdded,
+}: {
+  open: boolean;
+  playbookId: string;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const { toast } = useToast();
+  const MAX = 30;
+  const [names, setNames] = useState<string[]>([""]);
+  const [saving, setSaving] = useState(false);
+  const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (open) {
+      setNames([""]);
+      setTimeout(() => inputsRef.current[0]?.focus(), 0);
+    }
+  }, [open]);
+
+  function setName(i: number, v: string) {
+    setNames((prev) => {
+      const next = [...prev];
+      next[i] = v;
+      return next;
+    });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, i: number) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      setNames((prev) => {
+        // If this is the last row and has content and we're under the cap,
+        // append a new blank row. Otherwise jump to the next row.
+        const isLast = i === prev.length - 1;
+        const hasContent = (prev[i] ?? "").trim().length > 0;
+        if (isLast && hasContent && prev.length < MAX) {
+          const next = [...prev, ""];
+          setTimeout(() => inputsRef.current[i + 1]?.focus(), 0);
+          return next;
+        }
+        if (i + 1 < prev.length) {
+          setTimeout(() => inputsRef.current[i + 1]?.focus(), 0);
+        }
+        return prev;
+      });
+    } else if (
+      e.key === "Backspace" &&
+      (names[i] ?? "").length === 0 &&
+      names.length > 1
+    ) {
+      e.preventDefault();
+      setNames((prev) => prev.filter((_, idx) => idx !== i));
+      setTimeout(() => inputsRef.current[Math.max(0, i - 1)]?.focus(), 0);
+    }
+  }
+
+  async function save() {
+    const cleaned = names.map((n) => n.trim()).filter((n) => n.length > 0);
+    if (cleaned.length === 0) {
+      toast("Add at least one name.", "error");
+      return;
+    }
+    setSaving(true);
+    const res = await bulkAddRosterEntriesAction({ playbookId, labels: cleaned });
+    setSaving(false);
+    if (!res.ok) {
+      toast(`Couldn't add players: ${res.error}`, "error");
+      return;
+    }
+    toast(`Added ${res.added} player${res.added === 1 ? "" : "s"} to the roster.`);
+    onAdded();
+  }
+
+  const filledCount = names.filter((n) => n.trim().length > 0).length;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Quick add players"
+      footer={
+        <>
+          <span className="mr-auto text-xs text-muted">
+            {filledCount}/{MAX}
+          </span>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} loading={saving} disabled={filledCount === 0}>
+            Done
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-muted">
+          Type a name and press Enter for the next one. Jersey, position, and
+          other details can be added later.
+        </p>
+        <div className="max-h-[50vh] space-y-1.5 overflow-y-auto pr-1">
+          {names.map((n, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-6 shrink-0 text-right text-xs text-muted">
+                {i + 1}.
+              </span>
+              <Input
+                ref={(el) => {
+                  inputsRef.current[i] = el;
+                }}
+                value={n}
+                onChange={(e) => setName(i, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, i)}
+                placeholder="Player name"
+                className="flex-1"
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </Modal>
   );
