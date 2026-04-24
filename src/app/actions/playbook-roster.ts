@@ -346,6 +346,68 @@ export async function setMyPositionsAction(
   return { ok: true };
 }
 
+export type UnclaimedRosterEntry = {
+  id: string;
+  label: string | null;
+  jersey_number: string | null;
+  positions: string[];
+  position: string | null;
+  is_minor: boolean;
+};
+
+/**
+ * Player: list unclaimed roster entries on a playbook the caller belongs
+ * to. Drives the "Claim your player" step of the invite flow.
+ */
+export async function listUnclaimedRosterAction(
+  playbookId: string,
+): Promise<
+  { ok: true; entries: UnclaimedRosterEntry[] } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data, error } = await supabase
+    .from("playbook_members")
+    .select("id, label, jersey_number, positions, position, is_minor")
+    .eq("playbook_id", playbookId)
+    .is("user_id", null)
+    .order("label", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+
+  const entries: UnclaimedRosterEntry[] = (data ?? []).map((row) => ({
+    id: row.id,
+    label: row.label,
+    jersey_number: row.jersey_number,
+    positions: Array.isArray(row.positions) ? (row.positions as string[]) : [],
+    position: row.position,
+    is_minor: Boolean(row.is_minor),
+  }));
+  return { ok: true, entries };
+}
+
+/**
+ * Player: request to claim an unclaimed roster entry. The coach must
+ * approve before user_id on the entry is set.
+ */
+export async function submitRosterClaimAction(input: {
+  memberId: string;
+  note?: string | null;
+}): Promise<{ ok: true; claimId: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("submit_roster_claim", {
+    p_member_id: input.memberId,
+    p_note: input.note ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, claimId: data as string };
+}
+
 /**
  * Coach: add an unclaimed roster entry (a "player slot" not yet linked
  * to any user account). A player claims the slot later via the invite
