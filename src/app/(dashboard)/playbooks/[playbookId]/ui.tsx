@@ -1246,14 +1246,15 @@ function PlaybookDetailClientInner({
             )}
           </div>
 
-          {/* Mobile-only Game mode button. Sits next to the filter icon so
-              coaches can flip into in-game flow without leaving the plays
-              tab. Hidden when the beta feature is off for this user. */}
+          {/* Game mode button. Visible on every viewport — some coaches
+              bring a laptop to the sideline, and on mobile it's the primary
+              way into the sideline flow. Hidden when the beta feature is
+              off for this user. */}
           {gameModeAvailable && (
             canUseGameMode ? (
               <Link
                 href={`/playbooks/${playbookId}/game`}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:hidden"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
                 aria-label="Game mode"
               >
                 <Gamepad2 className="size-4" />
@@ -1263,7 +1264,7 @@ function PlaybookDetailClientInner({
               <button
                 type="button"
                 onClick={() => setGameModeUpgradeOpen(true)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:hidden"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
                 aria-label="Game mode"
               >
                 <Gamepad2 className="size-4" />

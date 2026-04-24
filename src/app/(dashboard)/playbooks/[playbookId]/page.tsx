@@ -212,8 +212,11 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const betaFeatures = await getBetaFeatures();
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
+  // Examples always expose Game Mode so visitors can experience the full
+  // end-to-end flow. The /game route renders a preview client for example
+  // visitors that keeps everything in local state — nothing persists.
   const gameModeAvailable =
-    !isExamplePreview &&
+    isExamplePreview ||
     isBetaFeatureAvailable(betaFeatures.game_mode, {
       isAdmin,
       isEntitled: isCoachInPlaybook,
@@ -288,7 +291,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
         gameResultsAvailable={gameResultsAvailable}
-        canUseGameMode={viewerCanUseGameMode || isAdmin}
+        canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,
