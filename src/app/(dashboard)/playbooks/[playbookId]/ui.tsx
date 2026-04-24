@@ -122,6 +122,7 @@ import {
   removeStaffMemberAction,
   setCoachTitleAction,
   setHeadCoachAction,
+  linkRosterEntryAction,
   unlinkRosterEntryAction,
 } from "@/app/actions/playbook-roster";
 import {
@@ -2255,6 +2256,22 @@ function RosterPanel({
     if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
     else router.refresh();
   }
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(
+    new Set(),
+  );
+  async function linkUserToEntry(memberId: string, userId: string, name: string) {
+    if (
+      !window.confirm(
+        `Link ${name} to this roster spot? Their existing entry will merge into it.`,
+      )
+    )
+      return;
+    setPendingId(memberId);
+    const res = await linkRosterEntryAction(playbookId, memberId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Link failed: ${res.error}`, "error");
+    else router.refresh();
+  }
   async function unlinkUser(memberId: string, name: string) {
     if (
       !window.confirm(
@@ -2300,6 +2317,14 @@ function RosterPanel({
     claimsByMember.set(c.memberId, list);
   }
 
+  // Self-joined user / unclaimed-entry name collisions. When a player
+  // skipped the claim step and joined as themselves but the coach
+  // already pre-added someone with the same name, offer a one-click
+  // link so the roster doesn't end up with two rows for one person.
+  const suggestions = buildMergeSuggestions(players).filter(
+    (s) => !dismissedSuggestions.has(`${s.userMemberId}:${s.unclaimedMemberId}`),
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -2318,6 +2343,67 @@ function RosterPanel({
           </Button>
         </div>
       </div>
+
+      {suggestions.length > 0 && (
+        <section className="rounded-xl border border-border bg-surface-inset p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Possible matches
+            <span className="ml-2 rounded-full bg-surface-raised px-2 py-0.5 text-[11px] text-muted ring-1 ring-border">
+              {suggestions.length}
+            </span>
+          </h3>
+          <p className="mb-3 text-xs text-muted">
+            A player joined without claiming a spot, and their name matches an
+            unclaimed roster entry. Link to merge.
+          </p>
+          <ul className="divide-y divide-border">
+            {suggestions.map((s) => {
+              const key = `${s.userMemberId}:${s.unclaimedMemberId}`;
+              return (
+                <li
+                  key={key}
+                  className="flex items-center justify-between gap-3 py-2"
+                >
+                  <div className="min-w-0 text-sm">
+                    <p className="truncate font-semibold text-foreground">
+                      {s.userName}
+                    </p>
+                    <p className="truncate text-xs text-muted">
+                      looks like roster spot &ldquo;{s.unclaimedLabel}&rdquo;
+                      {s.unclaimedJersey ? ` · #${s.unclaimedJersey}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={pendingId === s.unclaimedMemberId}
+                      onClick={() =>
+                        linkUserToEntry(s.unclaimedMemberId, s.userId, s.userName)
+                      }
+                    >
+                      Link
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setDismissedSuggestions((prev) => {
+                          const next = new Set(prev);
+                          next.add(key);
+                          return next;
+                        })
+                      }
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {claimsByMember.size > 0 && (
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
@@ -2617,6 +2703,74 @@ function RosterPanel({
       />
     </div>
   );
+}
+
+type MergeSuggestion = {
+  userMemberId: string;
+  userId: string;
+  userName: string;
+  unclaimedMemberId: string;
+  unclaimedLabel: string;
+  unclaimedJersey: string | null;
+};
+
+/**
+ * Suggest merges between self-joined user rows (no coach-set label) and
+ * unclaimed roster entries with a matching name. Heuristic only —
+ * coaches confirm via the Link button. Normalization strips whitespace,
+ * case, and punctuation so "Jane Doe", "jane doe", and "Jane  Doe" all
+ * match.
+ */
+function buildMergeSuggestions(
+  players: PlaybookRosterMember[],
+): MergeSuggestion[] {
+  const normalize = (s: string | null) =>
+    (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+  const selfJoined = players.filter(
+    (
+      m,
+    ): m is PlaybookRosterMember & { user_id: string; display_name: string } =>
+      m.user_id !== null &&
+      m.status === "active" &&
+      !m.label &&
+      !!m.display_name,
+  );
+  const unclaimed = players.filter(
+    (m) => m.user_id === null && !!m.label,
+  );
+  if (selfJoined.length === 0 || unclaimed.length === 0) return [];
+
+  const byName = new Map<string, PlaybookRosterMember[]>();
+  for (const u of unclaimed) {
+    const key = normalize(u.label);
+    if (!key) continue;
+    const list = byName.get(key) ?? [];
+    list.push(u);
+    byName.set(key, list);
+  }
+
+  const out: MergeSuggestion[] = [];
+  for (const s of selfJoined) {
+    const key = normalize(s.display_name);
+    if (!key) continue;
+    const matches = byName.get(key);
+    if (!matches) continue;
+    // If exactly one unclaimed entry matches, it's a strong suggestion.
+    // Multiple matches (rare, e.g. two "John Smith"s) would need jersey
+    // info to disambiguate; surface them all and let the coach pick.
+    for (const u of matches) {
+      out.push({
+        userMemberId: s.id,
+        userId: s.user_id,
+        userName: s.display_name,
+        unclaimedMemberId: u.id,
+        unclaimedLabel: u.label ?? "",
+        unclaimedJersey: u.jersey_number,
+      });
+    }
+  }
+  return out;
 }
 
 const ADD_PLAYER_POSITIONS = [
