@@ -97,6 +97,15 @@ export async function getTrafficSummaryAction(
   const thirtyStart = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
   try {
+    // Admins are excluded from traffic stats so internal activity doesn't skew the numbers.
+    const { data: adminProfiles, error: adminsErr } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin")
+      .limit(1000);
+    if (adminsErr) throw new Error(adminsErr.message);
+    const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
+
     // Pull all non-bot views in window. Volume should be manageable for an admin tool.
     const { data: viewsRaw, error: viewsErr } = await admin
       .from("page_views")
@@ -108,24 +117,34 @@ export async function getTrafficSummaryAction(
       .order("created_at", { ascending: false })
       .limit(100000);
     if (viewsErr) throw new Error(viewsErr.message);
-    const views: ViewRow[] = (viewsRaw ?? []) as ViewRow[];
+    const allViews: ViewRow[] = (viewsRaw ?? []) as ViewRow[];
 
-    // Signups in window.
-    const { data: newProfiles, error: signupsErr } = await admin
+    // Exclude any session that was ever authenticated as an admin — catches
+    // pre-login anonymous views from that same browser session too.
+    const adminSessionIds = new Set<string>();
+    for (const v of allViews) {
+      if (v.user_id && adminIds.has(v.user_id)) adminSessionIds.add(v.session_id);
+    }
+    const views = allViews.filter((v) => !adminSessionIds.has(v.session_id));
+
+    // Signups in window (excluding admins).
+    const { data: newProfilesRaw, error: signupsErr } = await admin
       .from("profiles")
-      .select("id, created_at")
+      .select("id, role, created_at")
       .gte("created_at", windowStart.toISOString())
       .limit(100000);
     if (signupsErr) throw new Error(signupsErr.message);
+    const newProfiles = (newProfilesRaw ?? []).filter((p) => (p.role as string) !== "admin");
 
-    const signupUserIds = new Set<string>((newProfiles ?? []).map((p) => p.id as string));
+    const signupUserIds = new Set<string>(newProfiles.map((p) => p.id as string));
 
-    // Total users.
+    // Total users (excluding admins).
     const { count: totalUsersCount } = await admin
       .from("profiles")
-      .select("id", { count: "exact", head: true });
+      .select("id", { count: "exact", head: true })
+      .neq("role", "admin");
 
-    // Active cohorts via user_activity_days.
+    // Active cohorts via user_activity_days (excluding admins).
     const { data: active7 } = await admin
       .from("user_activity_days")
       .select("user_id")
@@ -137,8 +156,16 @@ export async function getTrafficSummaryAction(
       .gte("day", thirtyStart.toISOString().slice(0, 10))
       .limit(100000);
 
-    const activeLast7 = new Set((active7 ?? []).map((r) => r.user_id as string)).size;
-    const activeLast30 = new Set((active30 ?? []).map((r) => r.user_id as string)).size;
+    const activeLast7 = new Set(
+      (active7 ?? [])
+        .map((r) => r.user_id as string)
+        .filter((id) => !adminIds.has(id)),
+    ).size;
+    const activeLast30 = new Set(
+      (active30 ?? [])
+        .map((r) => r.user_id as string)
+        .filter((id) => !adminIds.has(id)),
+    ).size;
 
     // Aggregate.
     const uniqueSessions = new Set<string>();
@@ -196,7 +223,7 @@ export async function getTrafficSummaryAction(
     }
 
     // Signups by day.
-    for (const p of newProfiles ?? []) {
+    for (const p of newProfiles) {
       const dk = dayKey(new Date((p.created_at as string) ?? new Date().toISOString()));
       const bucket = byDayMap.get(dk);
       if (bucket) bucket.signups += 1;
@@ -235,7 +262,7 @@ export async function getTrafficSummaryAction(
       totals: {
         views: views.length,
         uniqueSessions: sessions,
-        signups: newProfiles?.length ?? 0,
+        signups: newProfiles.length,
         totalUsers: totalUsersCount ?? 0,
         activeLast7,
         activeLast30,
