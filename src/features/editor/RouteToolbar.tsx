@@ -37,6 +37,8 @@ type Props = {
   /** End-of-route decoration (arrow/T/none). Disabled when no route selected. */
   endDecoration: EndDecoration;
   onEndDecorationChange: (d: EndDecoration) => void;
+  /** Whether a route is currently selected — gates the end-decoration row. */
+  hasSelectedRoute?: boolean;
   /** Player-level controls — shown when a player is selected. */
   hasSelectedPlayer?: boolean;
   isHotRoute?: boolean;
@@ -128,6 +130,7 @@ export function RouteToolbar({
   canRedo,
   endDecoration,
   onEndDecorationChange,
+  hasSelectedRoute = false,
   hasSelectedPlayer = false,
   isHotRoute = false,
   onToggleHotRoute,
@@ -198,21 +201,29 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+        <div
+          className={`inline-flex items-center rounded-lg bg-surface-inset p-1 ${
+            hasSelectedRoute ? "" : "opacity-40"
+          }`}
+        >
           {END_OPTIONS.map((opt) => {
-            const active = opt.value === endDecoration;
+            const active = hasSelectedRoute && opt.value === endDecoration;
             const Icon = opt.icon;
             return (
-              <Tooltip key={opt.value} content={opt.label}>
+              <Tooltip
+                key={opt.value}
+                content={hasSelectedRoute ? opt.label : "Select a route first"}
+              >
                 <button
                   type="button"
                   onClick={() => onEndDecorationChange(opt.value)}
+                  disabled={!hasSelectedRoute}
                   aria-label={opt.label}
                   className={`inline-flex h-6 w-7 items-center justify-center rounded-md transition-all ${
                     active
                       ? "bg-surface-raised text-foreground shadow-sm"
                       : "text-muted hover:text-foreground"
-                  }`}
+                  } disabled:cursor-not-allowed disabled:hover:text-muted`}
                 >
                   <Icon className="size-3.5" />
                 </button>

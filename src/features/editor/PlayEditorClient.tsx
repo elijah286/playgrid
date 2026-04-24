@@ -667,6 +667,7 @@ function PlayEditorClientInner({
                 }
                 endDecoration={displayEndDecoration}
                 onEndDecorationChange={handleEndDecorationChange}
+                hasSelectedRoute={selectedRouteId != null}
                 hasSelectedPlayer={selectedPlayerId != null}
                 isHotRoute={
                   doc.layers.players.find((p) => p.id === selectedPlayerId)?.isHotRoute ?? false
