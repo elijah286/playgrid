@@ -594,7 +594,17 @@ function PlayEditorClientInner({
             {canEdit && mobileEditingEnabled && (
               <button
                 type="button"
-                onClick={() => setMode(mode === "edit" ? "view" : "edit")}
+                onClick={() => {
+                  const next = mode === "edit" ? "view" : "edit";
+                  if (next === "view") {
+                    setSelectedPlayerId(null);
+                    setSelectedRouteId(null);
+                    setSelectedNodeId(null);
+                    setSelectedSegmentId(null);
+                    setSelectedZoneId(null);
+                  }
+                  setMode(next);
+                }}
                 className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold sm:hidden ${
                   mode === "edit"
                     ? "border-border bg-surface-raised text-foreground hover:bg-surface"

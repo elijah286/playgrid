@@ -101,14 +101,15 @@ export function EditorHeaderBar({
 
   return (
     <header className="flex flex-col border-b border-border pb-1">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Link
           href={`/playbooks/${playbookId}`}
           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted ring-1 ring-border hover:bg-surface-inset hover:text-foreground"
           aria-label="Back to playbook"
+          title="Back to playbook"
         >
           <ArrowLeft className="size-3.5" />
-          Playbook
+          <span className="hidden sm:inline">Playbook</span>
         </Link>
 
         {playNumber != null && (
@@ -151,8 +152,8 @@ export function EditorHeaderBar({
             aria-label="Play name"
           />
         ) : (
-          <div className="inline-flex min-w-0 items-center gap-1">
-            <h1 className="flex min-w-0 items-center text-base font-bold text-foreground">
+          <div className="inline-flex min-w-0 flex-1 items-center gap-1">
+            <h1 className="flex min-w-0 flex-1 items-center text-base font-bold text-foreground">
               {(doc.metadata.playType ?? "offense") === "offense" ? (
                 canEdit ? (
                   <>
@@ -219,38 +220,38 @@ export function EditorHeaderBar({
             Copy
           </Button>
         )}
-        <div
-          className={`${
-            hideMobileNav ? "hidden sm:flex" : "flex"
-          } w-full flex-wrap items-center gap-1 sm:ml-0 sm:w-auto`}
+      </div>
+      <div
+        className={`${
+          hideMobileNav ? "hidden sm:flex" : "flex"
+        } mt-1 flex-wrap items-center gap-1`}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          leftIcon={ChevronLeft}
+          disabled={!prevPlay}
+          onClick={() => prevPlay && onNavigateToPlay(prevPlay.id)}
         >
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            leftIcon={ChevronLeft}
-            disabled={!prevPlay}
-            onClick={() => prevPlay && onNavigateToPlay(prevPlay.id)}
-          >
-            Previous play
-          </Button>
-          <PlaybookPlaySearchMenu
-            plays={nav}
-            groups={groups}
-            currentPlayId={playId}
-            onNavigatePlay={onNavigateToPlay}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            rightIcon={ChevronRight}
-            disabled={!nextPlay}
-            onClick={() => nextPlay && onNavigateToPlay(nextPlay.id)}
-          >
-            Next play
-          </Button>
-        </div>
+          Previous play
+        </Button>
+        <PlaybookPlaySearchMenu
+          plays={nav}
+          groups={groups}
+          currentPlayId={playId}
+          onNavigatePlay={onNavigateToPlay}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          rightIcon={ChevronRight}
+          disabled={!nextPlay}
+          onClick={() => nextPlay && onNavigateToPlay(nextPlay.id)}
+        >
+          Next play
+        </Button>
       </div>
     </header>
   );
