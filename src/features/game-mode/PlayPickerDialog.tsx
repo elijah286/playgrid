@@ -99,12 +99,17 @@ export function PlayPickerDialog({
                   type="button"
                   onClick={() => onPick(p.id)}
                   className={
-                    "flex flex-col gap-2 rounded-xl border bg-surface-raised p-2 text-left transition-colors active:scale-[0.99] " +
+                    "relative flex flex-col gap-2 rounded-xl border-2 p-2 text-left transition-colors active:scale-[0.99] " +
                     (isCurrent
-                      ? "border-primary ring-2 ring-primary"
-                      : "border-border hover:border-primary")
+                      ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2 ring-offset-surface"
+                      : "border-border bg-surface-raised hover:border-primary")
                   }
                 >
+                  {isCurrent && (
+                    <span className="absolute right-2 top-2 z-10 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground shadow">
+                      On field
+                    </span>
+                  )}
                   <div className="text-sm font-semibold text-foreground line-clamp-1">
                     {p.name}
                   </div>
