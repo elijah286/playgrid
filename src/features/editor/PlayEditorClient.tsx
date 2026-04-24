@@ -30,6 +30,8 @@ import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
+import { DrawRoutePill } from "./DrawRoutePill";
+import { QuickRoutes } from "./QuickRoutes";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
@@ -170,6 +172,12 @@ function PlayEditorClientInner({
   const [activeStrokePattern, setActiveStrokePattern] = useState<StrokePattern>("solid");
   const [activeColor, setActiveColor] = useState("#FFFFFF");
   const [activeWidth, setActiveWidth] = useState(2.5);
+
+  // Explicit "draw route" gesture gate. Off by default so taps/drags on the
+  // canvas never silently create routes — the user must opt in via the pill.
+  // Resets whenever the player selection clears so the gate doesn't linger
+  // across unrelated edits.
+  const [drawMode, setDrawMode] = useState(false);
 
   const [isNavPending, startNavTransition] = useTransition();
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
@@ -428,7 +436,14 @@ function PlayEditorClientInner({
     setSelectedSegmentId(null);
     setSelectedRouteId(null);
     setSelectedPlayerId(null);
+    setDrawMode(false);
   }, []);
+
+  // Auto-exit draw mode when the selected player clears — the pill is only
+  // meaningful while a player is the anchor for the next stroke.
+  useEffect(() => {
+    if (!selectedPlayerId && drawMode) setDrawMode(false);
+  }, [selectedPlayerId, drawMode]);
 
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -681,9 +696,37 @@ function PlayEditorClientInner({
                 animatingPlayerIds={animatingPlayerIds}
                 opponentFormation={opponentFormation ?? null}
                 opponentPlayers={opponentPlayers ?? vsSnapshot?.players ?? null}
+                drawMode={drawMode}
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
+              {canEdit && selectedPlayerId != null && (
+                <DrawRoutePill
+                  active={drawMode}
+                  onToggle={() => setDrawMode((v) => !v)}
+                  onUndo={undo}
+                  canUndo={canUndo}
+                />
+              )}
             </div>
+
+            {/* Route templates: surfaced directly under the field on small
+                screens when a player is selected. Desktop keeps the copy in
+                the sidebar Inspector where it already lives. Tapping a
+                template replaces any existing routes on the player so the
+                strip is a "pick my assignment" shortcut, not an additive
+                stack. */}
+            {canEdit && selectedPlayer && doc.metadata.playType !== "defense" && (
+              <div className="rounded-xl border border-border bg-surface-raised p-3 sm:hidden">
+                <QuickRoutes
+                  player={selectedPlayer}
+                  dispatch={dispatch}
+                  activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
+                  existingRouteIds={doc.layers.routes
+                    .filter((r) => r.carrierPlayerId === selectedPlayer.id)
+                    .map((r) => r.id)}
+                />
+              </div>
+            )}
 
             {/* Mobile view-mode controls: play/animate + Edit toggle. Shown
                 only on mobile when the user hasn't switched to edit mode.

@@ -166,6 +166,11 @@ type Props = {
   opponentFormation?: import("@/app/actions/formations").SavedFormation | null;
   /** Optional opposing players (from a play or formation) to render as ghosts. */
   opponentPlayers?: import("@/domain/play/types").Player[] | null;
+  /** When true, canvas drags/clicks draw routes. When false, route drawing is
+   *  suppressed so taps on empty canvas only deselect — avoids the footgun
+   *  where a stray touch-drag silently created a route. Extending an existing
+   *  anchor (clicking its node) still works in both modes. */
+  drawMode?: boolean;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -227,6 +232,7 @@ function EditorCanvasImpl({
   animatingPlayerIds = null,
   opponentFormation = null,
   opponentPlayers = null,
+  drawMode = true,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -690,6 +696,11 @@ function EditorCanvasImpl({
         if (state.target.kind === "canvas") {
           // In formation mode, canvas drag does nothing (no route drawing)
           if (mode === "formation") return;
+          // Draw mode gate: when off, a canvas drag should not silently create
+          // a route. Extending from an explicit anchor node is still allowed
+          // because the user had to click the node precisely.
+          const anchorForGate = getAnchor();
+          if (!drawMode && !anchorForGate) return;
 
           const anchor = getAnchor();
           let startPos: Point2;
@@ -802,7 +813,7 @@ function EditorCanvasImpl({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, drawMode],
   );
 
   const finishInteraction = useCallback(
@@ -854,8 +865,10 @@ function EditorCanvasImpl({
               });
               if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
               onSelectNode(newNode.id);
-            } else if (selectedPlayerId) {
-              // Start new route from player
+            } else if (selectedPlayerId && drawMode) {
+              // Start new route from player — only when draw mode is on so a
+              // casual tap on empty canvas with a selected player doesn't
+              // accidentally drop a stray route segment.
               const player = doc.layers.players.find((p) => p.id === selectedPlayerId);
               if (player) {
                 commitClickRoute(selectedPlayerId, player.position, state.origin);
@@ -889,7 +902,7 @@ function EditorCanvasImpl({
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
-      onActiveStrokePatternChange,
+      onActiveStrokePatternChange, drawMode, onSelectZone,
     ],
   );
 
