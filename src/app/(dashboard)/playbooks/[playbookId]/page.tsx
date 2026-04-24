@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { listPlaysAction } from "@/app/actions/plays";
-import { listPlaybookRosterAction } from "@/app/actions/playbook-roster";
+import {
+  listPendingRosterClaimsAction,
+  listPlaybookRosterAction,
+} from "@/app/actions/playbook-roster";
 import { listInvitesAction } from "@/app/actions/invites";
 import { listFormationsForPlaybookAction } from "@/app/actions/formations";
 import { getPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
@@ -96,13 +99,15 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   if (error || !book) notFound();
 
-  const [listed, rosterRes, invitesRes, formationsRes, prefsRes] = await Promise.all([
-    listPlaysAction(playbookId, { includeArchived: true }),
-    listPlaybookRosterAction(playbookId),
-    listInvitesAction(playbookId),
-    listFormationsForPlaybookAction(playbookId),
-    getPlaybookViewPrefsAction(playbookId),
-  ]);
+  const [listed, rosterRes, invitesRes, formationsRes, prefsRes, claimsRes] =
+    await Promise.all([
+      listPlaysAction(playbookId, { includeArchived: true }),
+      listPlaybookRosterAction(playbookId),
+      listInvitesAction(playbookId),
+      listFormationsForPlaybookAction(playbookId),
+      getPlaybookViewPrefsAction(playbookId),
+      listPendingRosterClaimsAction(playbookId),
+    ]);
 
   const {
     data: { user },
@@ -284,6 +289,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         initialGroups={listed.ok ? listed.groups : []}
         truncated={listed.truncated}
         initialRoster={rosterRes.ok ? rosterRes.members : []}
+        initialRosterClaims={claimsRes.ok ? claimsRes.claims : []}
         initialInvites={invitesRes.ok ? invitesRes.invites : []}
         initialFormations={formationsRes.ok ? formationsRes.formations : []}
         initialPrefs={prefsRes.ok ? prefsRes.prefs : null}

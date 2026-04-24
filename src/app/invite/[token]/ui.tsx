@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   acceptInviteAction,
   requestCoachAccessAction,
 } from "@/app/actions/invites";
-import { setMyPositionsAction } from "@/app/actions/playbook-roster";
+import {
+  listUnclaimedRosterAction,
+  setMyPositionsAction,
+  submitRosterClaimAction,
+  type UnclaimedRosterEntry,
+} from "@/app/actions/playbook-roster";
 import { Button, useToast } from "@/components/ui";
 
 const POSITION_OPTIONS = [
@@ -23,6 +28,20 @@ const POSITION_OPTIONS = [
 
 type Mode = "player" | "coach";
 
+/** Internal state machine for the accept flow.
+ *  form    → initial: pick positions, accept
+ *  claim   → player has accepted; list unclaimed roster entries to claim
+ *  done    → terminal: show success (pending) or redirect (active) */
+type Phase =
+  | { kind: "form" }
+  | {
+      kind: "claim";
+      playbookId: string;
+      status: "active" | "pending";
+      entries: UnclaimedRosterEntry[];
+    }
+  | { kind: "done"; mode: Mode; status: "active" | "pending" };
+
 export function AcceptInviteButton({
   token,
   askPositions = false,
@@ -33,10 +52,7 @@ export function AcceptInviteButton({
   const router = useRouter();
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
-  const [accepted, setAccepted] = useState<null | {
-    mode: Mode;
-    status: "active" | "pending";
-  }>(null);
+  const [phase, setPhase] = useState<Phase>({ kind: "form" });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<Mode>("player");
 
@@ -71,18 +87,63 @@ export function AcceptInviteButton({
         toast(`Saved, but couldn't save positions: ${r.error}`, "error");
       }
     }
-    if (mode === "player" && res.status === "active") {
-      router.push(`/playbooks/${res.playbookId}`);
+
+    // Coach path never hits the claim step — coaches aren't on the roster.
+    if (mode === "coach") {
+      setPending(false);
+      setPhase({ kind: "done", mode, status: res.status });
       return;
     }
+
+    // Player path: check for unclaimed roster entries to offer as a claim
+    // step. If the coach hasn't pre-added anyone, skip straight to done.
+    const rosterRes = await listUnclaimedRosterAction(res.playbookId);
+    const entries = rosterRes.ok ? rosterRes.entries : [];
     setPending(false);
-    setAccepted({ mode, status: res.status });
+    if (entries.length === 0) {
+      if (res.status === "active") {
+        router.push(`/playbooks/${res.playbookId}`);
+        return;
+      }
+      setPhase({ kind: "done", mode, status: res.status });
+      return;
+    }
+    setPhase({
+      kind: "claim",
+      playbookId: res.playbookId,
+      status: res.status,
+      entries,
+    });
   }
 
-  if (accepted) {
-    if (accepted.mode === "coach") {
+  if (phase.kind === "claim") {
+    return (
+      <ClaimPlayerStep
+        entries={phase.entries}
+        onSubmit={async (memberId) => {
+          const r = await submitRosterClaimAction({ memberId });
+          if (!r.ok) {
+            toast(`Couldn't submit claim: ${r.error}`, "error");
+            return false;
+          }
+          setPhase({ kind: "done", mode: "player", status: phase.status });
+          return true;
+        }}
+        onSkip={() => {
+          if (phase.status === "active") {
+            router.push(`/playbooks/${phase.playbookId}`);
+            return;
+          }
+          setPhase({ kind: "done", mode: "player", status: phase.status });
+        }}
+      />
+    );
+  }
+
+  if (phase.kind === "done") {
+    if (phase.mode === "coach") {
       const playerLine =
-        accepted.status === "active"
+        phase.status === "active"
           ? "You have player access to the playbook while you wait."
           : "The coach still needs to approve your player access too, so you won't see plays yet.";
       return (
@@ -105,12 +166,19 @@ export function AcceptInviteButton({
         </div>
       );
     }
+    // Player finished the flow. If they submitted a claim, it's always
+    // pending coach approval regardless of their access status.
     return (
       <div className="space-y-2">
-        <p className="text-sm font-semibold text-foreground">Request sent.</p>
+        <p className="text-sm font-semibold text-foreground">
+          {phase.status === "active"
+            ? "You&rsquo;re in."
+            : "Request sent."}
+        </p>
         <p className="text-xs text-muted">
-          The coach will review and approve your access. You&apos;ll see the
-          playbook once they do.
+          {phase.status === "active"
+            ? "You have access to the playbook. Any player claim you submitted is pending coach approval."
+            : "The coach will review and approve your access. You\u2019ll see the playbook once they do."}
         </p>
         <Button
           variant="secondary"
@@ -198,6 +266,94 @@ export function AcceptInviteButton({
         disabled={pending}
       >
         Click here if you are a coach
+      </button>
+    </div>
+  );
+}
+
+function ClaimPlayerStep({
+  entries,
+  onSubmit,
+  onSkip,
+}: {
+  entries: UnclaimedRosterEntry[];
+  onSubmit: (memberId: string) => Promise<boolean>;
+  onSkip: () => void;
+}) {
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // If only one unclaimed entry, preselect it — most common case.
+  useEffect(() => {
+    if (entries.length === 1 && !pickedId) setPickedId(entries[0]!.id);
+  }, [entries, pickedId]);
+
+  async function claim() {
+    if (!pickedId) return;
+    setSubmitting(true);
+    const ok = await onSubmit(pickedId);
+    if (!ok) setSubmitting(false);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+          Claim your player
+        </p>
+        <p className="mt-0.5 text-xs text-muted">
+          Your coach set up the roster already. Pick who you are so they can
+          link your account — this needs coach approval.
+        </p>
+      </div>
+      <ul className="max-h-64 space-y-1.5 overflow-y-auto">
+        {entries.map((e) => {
+          const on = pickedId === e.id;
+          const positions =
+            e.positions.length > 0 ? e.positions.join(", ") : e.position;
+          const meta = [e.jersey_number ? `#${e.jersey_number}` : null, positions]
+            .filter(Boolean)
+            .join(" · ");
+          return (
+            <li key={e.id}>
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() => setPickedId(e.id)}
+                className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                  on
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-surface hover:bg-surface-inset"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-foreground">
+                    {e.label || "Unnamed player"}
+                  </span>
+                  {meta && <span className="block truncate text-xs text-muted">{meta}</span>}
+                </span>
+                {on && <span className="text-xs font-semibold text-primary">Selected</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <Button
+        variant="primary"
+        disabled={!pickedId}
+        loading={submitting}
+        onClick={claim}
+        className="w-full"
+      >
+        Claim player
+      </Button>
+      <button
+        type="button"
+        className="block w-full text-center text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
+        onClick={onSkip}
+        disabled={submitting}
+      >
+        Skip for now
       </button>
     </div>
   );

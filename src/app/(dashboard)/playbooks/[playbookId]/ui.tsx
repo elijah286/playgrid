@@ -106,15 +106,24 @@ import {
 } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
-import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
+import type {
+  PendingRosterClaim,
+  PlaybookRosterMember,
+} from "@/app/actions/playbook-roster";
 import {
+  addRosterEntryAction,
   approveCoachUpgradeAction,
   approveMemberAction,
+  approveRosterClaimAction,
+  deleteRosterEntryAction,
   denyCoachUpgradeAction,
   denyMemberAction,
+  rejectRosterClaimAction,
   removeStaffMemberAction,
   setCoachTitleAction,
   setHeadCoachAction,
+  linkRosterEntryAction,
+  unlinkRosterEntryAction,
 } from "@/app/actions/playbook-roster";
 import {
   revokeInviteAction,
@@ -246,6 +255,7 @@ function PlaybookDetailClientInner({
   initialGroups,
   truncated,
   initialRoster,
+  initialRosterClaims,
   initialInvites,
   initialFormations,
   initialPrefs,
@@ -263,6 +273,7 @@ function PlaybookDetailClientInner({
   initialGroups: PlaybookGroupRow[];
   truncated?: boolean;
   initialRoster: PlaybookRosterMember[];
+  initialRosterClaims: PendingRosterClaim[];
   initialInvites: PlaybookInvite[];
   initialFormations: SavedFormation[];
   initialPrefs: PlaybookViewPrefs | null;
@@ -1336,6 +1347,7 @@ function PlaybookDetailClientInner({
         <RosterPanel
           playbookId={playbookId}
           members={initialRoster}
+          claims={initialRosterClaims}
           invites={initialInvites}
           viewerIsCoach={headerProps.viewerIsCoach}
           teamName={headerProps.name}
@@ -2146,6 +2158,7 @@ function PlaybookDetailClientInner({
 function RosterPanel({
   playbookId,
   members,
+  claims,
   invites,
   viewerIsCoach,
   teamName,
@@ -2153,6 +2166,7 @@ function RosterPanel({
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
+  claims: PendingRosterClaim[];
   invites: PlaybookInvite[];
   viewerIsCoach: boolean;
   teamName: string;
@@ -2161,6 +2175,7 @@ function RosterPanel({
   const router = useRouter();
   const { toast } = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   function openInvite() {
     if (!viewerIsCoach) {
@@ -2172,13 +2187,34 @@ function RosterPanel({
     }
     setShowInviteModal(true);
   }
+  function openAddPlayer() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Managing the roster is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to add players to the roster.",
+      });
+      return;
+    }
+    setShowAddPlayerModal(true);
+  }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   // Roster tab is player-only; coaches (owner/editor) live in the Staff tab.
   const players = members.filter((m) => m.role === "viewer");
-  const pending = players.filter((m) => m.status === "pending");
+  // Unclaimed roster entries (user_id = null) are pre-added by a coach
+  // and haven't been linked to a user yet. They can only ever be
+  // role=viewer, status=active (enforced in the DB), so anything that
+  // acts on a specific user — approvals, coach upgrades, staff actions
+  // — is guarded by a non-null user_id narrow below.
+  const pending = players.filter(
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.status === "pending" && m.user_id !== null,
+  );
   const coachUpgradeRequests = players.filter(
-    (m) => m.status === "active" && m.coach_upgrade_requested_at,
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.status === "active" &&
+      !!m.coach_upgrade_requested_at &&
+      m.user_id !== null,
   );
   const active = players.filter((m) => m.status === "active");
   const activeInvites = invites.filter(
@@ -2221,6 +2257,74 @@ function RosterPanel({
     if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
     else router.refresh();
   }
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(
+    new Set(),
+  );
+  async function linkUserToEntry(memberId: string, userId: string, name: string) {
+    if (
+      !window.confirm(
+        `Link ${name} to this roster spot? Their existing entry will merge into it.`,
+      )
+    )
+      return;
+    setPendingId(memberId);
+    const res = await linkRosterEntryAction(playbookId, memberId, userId);
+    setPendingId(null);
+    if (!res.ok) toast(`Link failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function unlinkUser(memberId: string, name: string) {
+    if (
+      !window.confirm(
+        `Unlink ${name} from this roster spot? They keep playbook access; the spot returns to unclaimed.`,
+      )
+    )
+      return;
+    setPendingId(memberId);
+    const res = await unlinkRosterEntryAction(playbookId, memberId);
+    setPendingId(null);
+    if (!res.ok) toast(`Unlink failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function deleteEntry(memberId: string, name: string) {
+    if (!window.confirm(`Remove ${name} from the roster?`)) return;
+    setPendingId(memberId);
+    const res = await deleteRosterEntryAction(playbookId, memberId);
+    setPendingId(null);
+    if (!res.ok) toast(`Remove failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function approveClaim(claimId: string) {
+    setPendingId(claimId);
+    const res = await approveRosterClaimAction(playbookId, claimId);
+    setPendingId(null);
+    if (!res.ok) toast(`Approve failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function rejectClaim(claimId: string) {
+    setPendingId(claimId);
+    const res = await rejectRosterClaimAction(playbookId, claimId);
+    setPendingId(null);
+    if (!res.ok) toast(`Reject failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+
+  // Group pending claims by the roster entry they target so collisions
+  // (two users claiming the same player) show up as a single decision.
+  const claimsByMember = new Map<string, PendingRosterClaim[]>();
+  for (const c of claims) {
+    const list = claimsByMember.get(c.memberId) ?? [];
+    list.push(c);
+    claimsByMember.set(c.memberId, list);
+  }
+
+  // Self-joined user / unclaimed-entry name collisions. When a player
+  // skipped the claim step and joined as themselves but the coach
+  // already pre-added someone with the same name, offer a one-click
+  // link so the roster doesn't end up with two rows for one person.
+  const suggestions = buildMergeSuggestions(players).filter(
+    (s) => !dismissedSuggestions.has(`${s.userMemberId}:${s.unclaimedMemberId}`),
+  );
 
   return (
     <div className="space-y-6">
@@ -2229,14 +2333,162 @@ function RosterPanel({
           <h2 className="text-base font-bold text-foreground">Roster</h2>
           <p className="text-xs text-muted">Players and coaches with access to this playbook.</p>
         </div>
-        <Button
-          variant="primary"
-          leftIcon={Plus}
-          onClick={openInvite}
-        >
-          Invite
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {viewerIsCoach && (
+            <Button variant="secondary" leftIcon={Plus} onClick={openAddPlayer}>
+              Add player
+            </Button>
+          )}
+          <Button variant="primary" leftIcon={Plus} onClick={openInvite}>
+            Invite
+          </Button>
+        </div>
       </div>
+
+      {suggestions.length > 0 && (
+        <section className="rounded-xl border border-border bg-surface-inset p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Possible matches
+            <span className="ml-2 rounded-full bg-surface-raised px-2 py-0.5 text-[11px] text-muted ring-1 ring-border">
+              {suggestions.length}
+            </span>
+          </h3>
+          <p className="mb-3 text-xs text-muted">
+            A player joined without claiming a spot, and their name matches an
+            unclaimed roster entry. Link to merge.
+          </p>
+          <ul className="divide-y divide-border">
+            {suggestions.map((s) => {
+              const key = `${s.userMemberId}:${s.unclaimedMemberId}`;
+              return (
+                <li
+                  key={key}
+                  className="flex items-center justify-between gap-3 py-2"
+                >
+                  <div className="min-w-0 text-sm">
+                    <p className="truncate font-semibold text-foreground">
+                      {s.userName}
+                    </p>
+                    <p className="truncate text-xs text-muted">
+                      looks like roster spot &ldquo;{s.unclaimedLabel}&rdquo;
+                      {s.unclaimedJersey ? ` · #${s.unclaimedJersey}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={pendingId === s.unclaimedMemberId}
+                      onClick={() =>
+                        linkUserToEntry(s.unclaimedMemberId, s.userId, s.userName)
+                      }
+                    >
+                      Link
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setDismissedSuggestions((prev) => {
+                          const next = new Set(prev);
+                          next.add(key);
+                          return next;
+                        })
+                      }
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {claimsByMember.size > 0 && (
+        <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Player claims
+            <span className="ml-2 rounded-full bg-primary/20 px-2 py-0.5 text-[11px] text-primary">
+              {claims.length}
+            </span>
+          </h3>
+          <p className="mb-3 text-xs text-muted">
+            A player joined and is asking to be linked to a roster spot.
+            Approve only if the right person is claiming.
+          </p>
+          <ul className="space-y-3">
+            {Array.from(claimsByMember.entries()).map(([memberId, group]) => {
+              const first = group[0]!;
+              const slot = [
+                first.memberLabel || "Unnamed player",
+                first.memberJerseyNumber ? `#${first.memberJerseyNumber}` : null,
+                first.memberPositions.length > 0
+                  ? first.memberPositions.join(", ")
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={memberId}
+                  className="rounded-lg border border-border bg-surface-raised p-3"
+                >
+                  <p className="mb-2 text-sm font-semibold text-foreground">
+                    {slot}
+                  </p>
+                  {group.length > 1 && (
+                    <p className="mb-2 text-[11px] font-semibold text-warning">
+                      {group.length} people are claiming this spot —
+                      approving one will reject the others.
+                    </p>
+                  )}
+                  <ul className="divide-y divide-border">
+                    {group.map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-foreground">
+                            {c.userDisplayName || c.userId.slice(0, 8)}
+                          </p>
+                          {c.note && (
+                            <p className="truncate text-xs text-muted">
+                              &ldquo;{c.note}&rdquo;
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            leftIcon={Check}
+                            loading={pendingId === c.id}
+                            onClick={() => approveClaim(c.id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            leftIcon={X}
+                            disabled={pendingId === c.id}
+                            onClick={() => rejectClaim(c.id)}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {pending.length > 0 && (
         <section className="rounded-xl border border-warning/30 bg-warning/5 p-4">
@@ -2344,16 +2596,39 @@ function RosterPanel({
                   <th className="px-4 py-2.5 font-semibold">Role</th>
                   <th className="px-4 py-2.5 font-semibold">Jersey</th>
                   <th className="px-4 py-2.5 font-semibold">Position</th>
+                  {viewerIsCoach && <th className="w-10 px-4 py-2.5" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {active.map((m) => {
                   const name = m.label || m.display_name || "—";
+                  const unclaimed = m.user_id === null;
+                  const items: ActionMenuItem[] = unclaimed
+                    ? [
+                        {
+                          label: "Remove from roster",
+                          icon: Trash2,
+                          danger: true,
+                          onSelect: () => deleteEntry(m.id, name),
+                        },
+                      ]
+                    : [
+                        {
+                          label: "Unlink user",
+                          icon: X,
+                          onSelect: () => unlinkUser(m.id, name),
+                        },
+                      ];
                   return (
-                    <tr key={m.user_id}>
+                    <tr key={m.id}>
                       <td className="px-4 py-2.5 font-medium text-foreground">
                         <span className="inline-flex items-center gap-2">
                           {name}
+                          {unclaimed && (
+                            <Badge variant="default" className="text-[10px]">
+                              Unclaimed
+                            </Badge>
+                          )}
                           {m.is_minor && (
                             <Badge variant="warning" className="text-[10px]">
                               Minor
@@ -2374,6 +2649,11 @@ function RosterPanel({
                           ? m.positions.join(", ")
                           : m.position || "—"}
                       </td>
+                      {viewerIsCoach && (
+                        <td className="px-4 py-2.5 text-right">
+                          <ActionMenu items={items} />
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -2406,6 +2686,16 @@ function RosterPanel({
         />
       )}
 
+      <AddPlayerDialog
+        open={showAddPlayerModal}
+        playbookId={playbookId}
+        onClose={() => setShowAddPlayerModal(false)}
+        onAdded={() => {
+          setShowAddPlayerModal(false);
+          router.refresh();
+        }}
+      />
+
       <UpgradeModal
         open={!!upgradeNotice}
         onClose={() => setUpgradeNotice(null)}
@@ -2413,6 +2703,223 @@ function RosterPanel({
         message={upgradeNotice?.message ?? ""}
       />
     </div>
+  );
+}
+
+type MergeSuggestion = {
+  userMemberId: string;
+  userId: string;
+  userName: string;
+  unclaimedMemberId: string;
+  unclaimedLabel: string;
+  unclaimedJersey: string | null;
+};
+
+/**
+ * Suggest merges between self-joined user rows (no coach-set label) and
+ * unclaimed roster entries with a matching name. Heuristic only —
+ * coaches confirm via the Link button. Normalization strips whitespace,
+ * case, and punctuation so "Jane Doe", "jane doe", and "Jane  Doe" all
+ * match.
+ */
+function buildMergeSuggestions(
+  players: PlaybookRosterMember[],
+): MergeSuggestion[] {
+  const normalize = (s: string | null) =>
+    (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+  const selfJoined = players.filter(
+    (
+      m,
+    ): m is PlaybookRosterMember & { user_id: string; display_name: string } =>
+      m.user_id !== null &&
+      m.status === "active" &&
+      !m.label &&
+      !!m.display_name,
+  );
+  const unclaimed = players.filter(
+    (m) => m.user_id === null && !!m.label,
+  );
+  if (selfJoined.length === 0 || unclaimed.length === 0) return [];
+
+  const byName = new Map<string, PlaybookRosterMember[]>();
+  for (const u of unclaimed) {
+    const key = normalize(u.label);
+    if (!key) continue;
+    const list = byName.get(key) ?? [];
+    list.push(u);
+    byName.set(key, list);
+  }
+
+  const out: MergeSuggestion[] = [];
+  for (const s of selfJoined) {
+    const key = normalize(s.display_name);
+    if (!key) continue;
+    const matches = byName.get(key);
+    if (!matches) continue;
+    // If exactly one unclaimed entry matches, it's a strong suggestion.
+    // Multiple matches (rare, e.g. two "John Smith"s) would need jersey
+    // info to disambiguate; surface them all and let the coach pick.
+    for (const u of matches) {
+      out.push({
+        userMemberId: s.id,
+        userId: s.user_id,
+        userName: s.display_name,
+        unclaimedMemberId: u.id,
+        unclaimedLabel: u.label ?? "",
+        unclaimedJersey: u.jersey_number,
+      });
+    }
+  }
+  return out;
+}
+
+const ADD_PLAYER_POSITIONS = [
+  "QB",
+  "RB",
+  "WR",
+  "TE",
+  "OL",
+  "DL",
+  "LB",
+  "DB",
+  "K",
+] as const;
+
+function AddPlayerDialog({
+  open,
+  playbookId,
+  onClose,
+  onAdded,
+}: {
+  open: boolean;
+  playbookId: string;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const { toast } = useToast();
+  const [label, setLabel] = useState("");
+  const [jersey, setJersey] = useState("");
+  const [positions, setPositions] = useState<Set<string>>(new Set());
+  const [isMinor, setIsMinor] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Reset form whenever the dialog is re-opened.
+  useEffect(() => {
+    if (open) {
+      setLabel("");
+      setJersey("");
+      setPositions(new Set());
+      setIsMinor(false);
+    }
+  }, [open]);
+
+  function togglePos(p: string) {
+    setPositions((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+  }
+
+  async function save() {
+    const name = label.trim();
+    if (!name) {
+      toast("Name is required.", "error");
+      return;
+    }
+    setSaving(true);
+    const res = await addRosterEntryAction({
+      playbookId,
+      label: name,
+      jerseyNumber: jersey.trim() || null,
+      positions: Array.from(positions),
+      isMinor,
+    });
+    setSaving(false);
+    if (!res.ok) {
+      toast(`Couldn't add player: ${res.error}`, "error");
+      return;
+    }
+    onAdded();
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add player"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} loading={saving}>
+            Add to roster
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-xs text-muted">
+          Creates an unclaimed roster spot. When the player joins via an invite
+          link, they&apos;ll see this name in the &ldquo;Claim your player&rdquo;
+          step and you&apos;ll approve the match.
+        </p>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">Name</label>
+          <Input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Jane Doe"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">
+            Jersey number
+          </label>
+          <Input
+            value={jersey}
+            onChange={(e) => setJersey(e.target.value)}
+            placeholder="12"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">
+            Positions
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {ADD_PLAYER_POSITIONS.map((p) => {
+              const on = positions.has(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => togglePos(p)}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${
+                    on
+                      ? "bg-primary/10 text-primary ring-primary/40"
+                      : "bg-surface-inset text-muted ring-border hover:text-foreground"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={isMinor}
+            onChange={(e) => setIsMinor(e.target.checked)}
+          />
+          Minor (under 18)
+        </label>
+      </div>
+    </Modal>
   );
 }
 
@@ -2804,8 +3311,13 @@ function StaffPanel({
   }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  // Coaches = owner/editor; players live in the Roster tab.
-  const coaches = members.filter((m) => m.role !== "viewer");
+  // Coaches = owner/editor; players live in the Roster tab. Unclaimed
+  // roster entries are always role=viewer so they can't land here, but
+  // the null-narrow keeps TS happy and guards the actions below.
+  const coaches = members.filter(
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.role !== "viewer" && m.user_id !== null,
+  );
   const pending = coaches.filter((m) => m.status === "pending");
   const active = coaches.filter((m) => m.status === "active");
   const activeInvites = invites.filter(
