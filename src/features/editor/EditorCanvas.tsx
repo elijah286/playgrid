@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
+import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import {
   routeToRenderedSegments,
   simplifyPolyline,
@@ -2238,100 +2238,18 @@ function EditorCanvasImpl({
               />
             )}
             {shapeEl}
-            {editingPlayerId !== pl.id && (
-              <text
-                x={px}
-                y={py + 0.01}
-                textAnchor="middle"
-                fontSize={0.022}
-                fontWeight={700}
-                fill={labelColor}
-                pointerEvents="none"
-                style={{ fontFamily: "Inter, system-ui, sans-serif" }}
-              >
-                {pl.label}
-              </text>
-            )}
-            {editingPlayerId === pl.id && (() => {
-              // Float the editor above the player so the marker stays visible
-              // and the text field reads as a dedicated tooltip-style input.
-              // Clamp to the field bounds so edge players don't push it off.
-              const w = r * 3.2;
-              const h = r * 1.9;
-              const gap = r * 0.45;
-              let ex = px - w / 2;
-              if (ex < 0.005) ex = 0.005;
-              if (ex + w > fieldAspect - 0.005) ex = fieldAspect - 0.005 - w;
-              let ey = py - r - gap - h;
-              let tailBelow = true;
-              if (ey < 0.005) {
-                ey = py + r + gap;
-                tailBelow = false;
-              }
-              const tailCx = Math.max(ex + 0.008, Math.min(ex + w - 0.008, px));
-              const tailCy = tailBelow ? ey + h : ey;
-              const tailDy = tailBelow ? gap : -gap;
-              return (
-                <g>
-                <path
-                  d={`M ${tailCx - 0.008} ${tailCy} L ${tailCx} ${tailCy + tailDy} L ${tailCx + 0.008} ${tailCy} Z`}
-                  fill="#ffffff"
-                  stroke="#2563eb"
-                  strokeWidth={1.5}
-                  vectorEffect="non-scaling-stroke"
-                  pointerEvents="none"
-                />
-                <foreignObject
-                  x={ex}
-                  y={ey}
-                  width={w}
-                  height={h}
-                  style={{ overflow: "visible" }}
-                >
-                  <input
-                    autoFocus
-                    defaultValue={pl.label}
-                    maxLength={2}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const next = e.currentTarget.value.slice(0, 2);
-                        dispatch({ type: "player.setLabel", playerId: pl.id, label: next });
-                        setEditingPlayerId(null);
-                      } else if (e.key === "Escape") {
-                        setEditingPlayerId(null);
-                      }
-                      e.stopPropagation();
-                    }}
-                    onBlur={(e) => {
-                      const next = e.currentTarget.value.slice(0, 2);
-                      dispatch({ type: "player.setLabel", playerId: pl.id, label: next });
-                      setEditingPlayerId(null);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      border: "2px solid #2563eb",
-                      borderRadius: "4px",
-                      outline: "none",
-                      boxShadow: "0 0 0 3px rgba(37,99,235,0.25), 0 2px 8px rgba(0,0,0,0.15)",
-                      background: "#ffffff",
-                      color: "#111827",
-                      textAlign: "center",
-                      fontFamily: "Inter, system-ui, sans-serif",
-                      fontWeight: 700,
-                      fontSize: "12px",
-                      padding: 0,
-                      textTransform: "uppercase",
-                      caretColor: "#2563eb",
-                    }}
-                  />
-                </foreignObject>
-                </g>
-              );
-            })()}
+            <text
+              x={px}
+              y={py + 0.01}
+              textAnchor="middle"
+              fontSize={0.022}
+              fontWeight={700}
+              fill={labelColor}
+              pointerEvents="none"
+              style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+            >
+              {pl.label}
+            </text>
           </g>
         );
       })}
@@ -2349,6 +2267,33 @@ function EditorCanvasImpl({
         pointerEvents="none"
       />
     </svg>
+
+      {/* Player label editor — small HTML popover positioned over the player.
+          Replaces the previous in-SVG foreignObject, which was cramped and
+          unreliable on mobile. */}
+      {editingPlayerId && (() => {
+        const pl = doc.layers.players.find((p) => p.id === editingPlayerId);
+        if (!pl) return null;
+        return (
+          <PlayerLabelEditor
+            key={pl.id}
+            player={pl}
+            svgRef={svgRef}
+            wrapperRef={wrapperRef}
+            fieldAspect={fieldAspect}
+            onSave={(label, labelColor) => {
+              dispatch({ type: "player.setLabel", playerId: pl.id, label });
+              dispatch({
+                type: "player.setStyle",
+                playerId: pl.id,
+                style: { ...pl.style, labelColor },
+              });
+              setEditingPlayerId(null);
+            }}
+            onCancel={() => setEditingPlayerId(null)}
+          />
+        );
+      })()}
 
       {/* Segment context menu */}
       {segmentMenu && (
@@ -2549,3 +2494,160 @@ function EditorCanvasImpl({
  * setState setters, useMemo'd sets) so shallow prop compare is sufficient.
  */
 export const EditorCanvas = memo(EditorCanvasImpl);
+
+/* ------------------------------------------------------------------ */
+/*  Player label editor popover                                       */
+/* ------------------------------------------------------------------ */
+
+function autoLabelColor(fill: string): string {
+  const rgb = parseColor(fill);
+  if (!rgb) return "#1C1C1E";
+  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+  return lum < 0.55 ? "#FFFFFF" : "#1C1C1E";
+}
+
+const LABEL_COLOR_OPTIONS: { label: string; value: string | null }[] = [
+  { label: "Default", value: null },
+  { label: "White", value: "#FFFFFF" },
+  { label: "Gray", value: "#9CA3AF" },
+  { label: "Black", value: "#1C1C1E" },
+];
+
+function PlayerLabelEditor({
+  player,
+  svgRef,
+  wrapperRef,
+  fieldAspect,
+  onSave,
+  onCancel,
+}: {
+  player: Player;
+  svgRef: React.RefObject<SVGSVGElement | null>;
+  wrapperRef: React.RefObject<HTMLDivElement | null>;
+  fieldAspect: number;
+  onSave: (label: string, labelColor: string) => void;
+  onCancel: () => void;
+}) {
+  const autoColor = autoLabelColor(player.style.fill);
+  // If the stored labelColor matches auto, treat as "default" selection so the
+  // swatch reflects the user's most-likely intent when they re-open the popover.
+  const initialChoice: string | null =
+    player.style.labelColor.toUpperCase() === autoColor.toUpperCase()
+      ? null
+      : player.style.labelColor;
+
+  const [label, setLabel] = useState(player.label);
+  const [choice, setChoice] = useState<string | null>(initialChoice);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const resolvedColor = choice ?? autoColor;
+
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const wrap = wrapperRef.current;
+    const el = rootRef.current;
+    if (!svg || !wrap || !el) return;
+    function place() {
+      const ctm = svg!.getScreenCTM();
+      if (!ctm) return;
+      const pt = svg!.createSVGPoint();
+      pt.x = player.position.x * fieldAspect;
+      pt.y = 1 - player.position.y;
+      const screen = pt.matrixTransform(ctm);
+      const wr = wrap!.getBoundingClientRect();
+      const cx = screen.x - wr.left;
+      const cy = screen.y - wr.top;
+      const w = el!.offsetWidth;
+      const h = el!.offsetHeight;
+      const gap = 28;
+      const pad = 6;
+      let top = cy - gap - h;
+      if (top < pad) top = cy + gap;
+      top = Math.max(pad, Math.min(top, wr.height - h - pad));
+      let left = cx - w / 2;
+      left = Math.max(pad, Math.min(left, wr.width - w - pad));
+      setPos({ left, top });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [player.position.x, player.position.y, fieldAspect, svgRef, wrapperRef]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  // Click outside commits (matches desktop tooltip-dismiss behaviour).
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      onSave(label.slice(0, 2).toUpperCase(), resolvedColor);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [label, resolvedColor, onSave]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="absolute z-30 flex flex-col gap-2 rounded-lg border border-border bg-surface-raised p-2 shadow-elevated"
+      style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: -9999 }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
+    >
+      <input
+        ref={inputRef}
+        value={label}
+        maxLength={2}
+        onChange={(e) => setLabel(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onSave(label.slice(0, 2).toUpperCase(), resolvedColor);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+          e.stopPropagation();
+        }}
+        className="w-24 rounded border-2 border-primary bg-surface-raised px-2 py-1 text-center text-sm font-bold uppercase text-foreground outline-none"
+        style={{ caretColor: "var(--color-primary)" }}
+      />
+      <div className="flex items-center gap-1">
+        {LABEL_COLOR_OPTIONS.map((opt) => {
+          const active =
+            (opt.value === null && choice === null) ||
+            (opt.value !== null && choice?.toUpperCase() === opt.value.toUpperCase());
+          const swatchColor = opt.value ?? autoColor;
+          return (
+            <button
+              key={opt.label}
+              type="button"
+              title={opt.label}
+              aria-label={opt.label}
+              onClick={() => setChoice(opt.value)}
+              className={`flex size-6 items-center justify-center rounded border-2 transition-colors ${
+                active ? "border-primary" : "border-border"
+              }`}
+              style={{ backgroundColor: swatchColor }}
+            >
+              {opt.value === null && (
+                <span className="text-[9px] font-bold" style={{ color: autoLabelColor(autoColor) }}>
+                  A
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
