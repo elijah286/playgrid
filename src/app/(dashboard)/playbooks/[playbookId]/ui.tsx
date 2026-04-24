@@ -106,14 +106,19 @@ import {
 } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
-import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
+import type {
+  PendingRosterClaim,
+  PlaybookRosterMember,
+} from "@/app/actions/playbook-roster";
 import {
   addRosterEntryAction,
   approveCoachUpgradeAction,
   approveMemberAction,
+  approveRosterClaimAction,
   deleteRosterEntryAction,
   denyCoachUpgradeAction,
   denyMemberAction,
+  rejectRosterClaimAction,
   removeStaffMemberAction,
   setCoachTitleAction,
   setHeadCoachAction,
@@ -248,6 +253,7 @@ function PlaybookDetailClientInner({
   initialGroups,
   truncated,
   initialRoster,
+  initialRosterClaims,
   initialInvites,
   initialFormations,
   initialPrefs,
@@ -265,6 +271,7 @@ function PlaybookDetailClientInner({
   initialGroups: PlaybookGroupRow[];
   truncated?: boolean;
   initialRoster: PlaybookRosterMember[];
+  initialRosterClaims: PendingRosterClaim[];
   initialInvites: PlaybookInvite[];
   initialFormations: SavedFormation[];
   initialPrefs: PlaybookViewPrefs | null;
@@ -1337,6 +1344,7 @@ function PlaybookDetailClientInner({
         <RosterPanel
           playbookId={playbookId}
           members={initialRoster}
+          claims={initialRosterClaims}
           invites={initialInvites}
           viewerIsCoach={headerProps.viewerIsCoach}
           teamName={headerProps.name}
@@ -2147,6 +2155,7 @@ function PlaybookDetailClientInner({
 function RosterPanel({
   playbookId,
   members,
+  claims,
   invites,
   viewerIsCoach,
   teamName,
@@ -2154,6 +2163,7 @@ function RosterPanel({
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
+  claims: PendingRosterClaim[];
   invites: PlaybookInvite[];
   viewerIsCoach: boolean;
   teamName: string;
@@ -2244,6 +2254,29 @@ function RosterPanel({
     if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
     else router.refresh();
   }
+  async function approveClaim(claimId: string) {
+    setPendingId(claimId);
+    const res = await approveRosterClaimAction(playbookId, claimId);
+    setPendingId(null);
+    if (!res.ok) toast(`Approve failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function rejectClaim(claimId: string) {
+    setPendingId(claimId);
+    const res = await rejectRosterClaimAction(playbookId, claimId);
+    setPendingId(null);
+    if (!res.ok) toast(`Reject failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+
+  // Group pending claims by the roster entry they target so collisions
+  // (two users claiming the same player) show up as a single decision.
+  const claimsByMember = new Map<string, PendingRosterClaim[]>();
+  for (const c of claims) {
+    const list = claimsByMember.get(c.memberId) ?? [];
+    list.push(c);
+    claimsByMember.set(c.memberId, list);
+  }
 
   return (
     <div className="space-y-6">
@@ -2263,6 +2296,90 @@ function RosterPanel({
           </Button>
         </div>
       </div>
+
+      {claimsByMember.size > 0 && (
+        <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Player claims
+            <span className="ml-2 rounded-full bg-primary/20 px-2 py-0.5 text-[11px] text-primary">
+              {claims.length}
+            </span>
+          </h3>
+          <p className="mb-3 text-xs text-muted">
+            A player joined and is asking to be linked to a roster spot.
+            Approve only if the right person is claiming.
+          </p>
+          <ul className="space-y-3">
+            {Array.from(claimsByMember.entries()).map(([memberId, group]) => {
+              const first = group[0]!;
+              const slot = [
+                first.memberLabel || "Unnamed player",
+                first.memberJerseyNumber ? `#${first.memberJerseyNumber}` : null,
+                first.memberPositions.length > 0
+                  ? first.memberPositions.join(", ")
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li
+                  key={memberId}
+                  className="rounded-lg border border-border bg-surface-raised p-3"
+                >
+                  <p className="mb-2 text-sm font-semibold text-foreground">
+                    {slot}
+                  </p>
+                  {group.length > 1 && (
+                    <p className="mb-2 text-[11px] font-semibold text-warning">
+                      {group.length} people are claiming this spot —
+                      approving one will reject the others.
+                    </p>
+                  )}
+                  <ul className="divide-y divide-border">
+                    {group.map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-center justify-between gap-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-foreground">
+                            {c.userDisplayName || c.userId.slice(0, 8)}
+                          </p>
+                          {c.note && (
+                            <p className="truncate text-xs text-muted">
+                              &ldquo;{c.note}&rdquo;
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            leftIcon={Check}
+                            loading={pendingId === c.id}
+                            onClick={() => approveClaim(c.id)}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            leftIcon={X}
+                            disabled={pendingId === c.id}
+                            onClick={() => rejectClaim(c.id)}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {pending.length > 0 && (
         <section className="rounded-xl border border-warning/30 bg-warning/5 p-4">

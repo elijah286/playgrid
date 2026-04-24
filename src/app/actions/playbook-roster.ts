@@ -346,6 +346,128 @@ export async function setMyPositionsAction(
   return { ok: true };
 }
 
+export type PendingRosterClaim = {
+  id: string;
+  memberId: string;
+  playbookId: string;
+  userId: string;
+  userDisplayName: string | null;
+  memberLabel: string | null;
+  memberJerseyNumber: string | null;
+  memberPositions: string[];
+  requestedAt: string;
+  note: string | null;
+};
+
+/**
+ * Coach: list pending roster claims across one playbook (or all
+ * playbooks the caller owns, if `playbookId` is omitted). Used by the
+ * roster panel's "Player claims" section and the dashboard banner.
+ */
+export async function listPendingRosterClaimsAction(
+  playbookId?: string,
+): Promise<
+  { ok: true; claims: PendingRosterClaim[] } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  let query = supabase
+    .from("roster_claims")
+    .select(
+      "id, member_id, user_id, requested_at, note, member:member_id(playbook_id, label, jersey_number, positions), profiles:user_id(display_name)",
+    )
+    .eq("status", "pending")
+    .order("requested_at", { ascending: true });
+
+  // RLS already restricts what the coach can see, but scoping explicitly
+  // avoids a join filter round-trip when we know the playbook.
+  if (playbookId) {
+    // Supabase PostgREST doesn't let us filter an inner-joined column via
+    // .eq directly; use the nested resource filter instead.
+    query = query.eq("member.playbook_id", playbookId);
+  }
+
+  const { data, error } = await query;
+  if (error) return { ok: false, error: error.message };
+
+  type Row = {
+    id: string;
+    member_id: string;
+    user_id: string;
+    requested_at: string;
+    note: string | null;
+    member:
+      | {
+          playbook_id: string;
+          label: string | null;
+          jersey_number: string | null;
+          positions: string[] | null;
+        }
+      | { playbook_id: string; label: string | null; jersey_number: string | null; positions: string[] | null }[]
+      | null;
+    profiles:
+      | { display_name: string | null }
+      | { display_name: string | null }[]
+      | null;
+  };
+
+  const claims: PendingRosterClaim[] = (data ?? [])
+    .map((raw) => {
+      const row = raw as unknown as Row;
+      const m = Array.isArray(row.member) ? row.member[0] ?? null : row.member;
+      if (!m) return null;
+      const prof = Array.isArray(row.profiles) ? row.profiles[0] ?? null : row.profiles;
+      return {
+        id: row.id,
+        memberId: row.member_id,
+        playbookId: m.playbook_id,
+        userId: row.user_id,
+        userDisplayName: prof?.display_name ?? null,
+        memberLabel: m.label,
+        memberJerseyNumber: m.jersey_number,
+        memberPositions: Array.isArray(m.positions) ? m.positions : [],
+        requestedAt: row.requested_at,
+        note: row.note,
+      } satisfies PendingRosterClaim;
+    })
+    .filter((c): c is PendingRosterClaim => c !== null);
+
+  return { ok: true, claims };
+}
+
+export async function approveRosterClaimAction(
+  playbookId: string,
+  claimId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("approve_roster_claim", {
+    p_claim_id: claimId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+export async function rejectRosterClaimAction(
+  playbookId: string,
+  claimId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reject_roster_claim", {
+    p_claim_id: claimId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
 export type UnclaimedRosterEntry = {
   id: string;
   label: string | null;
