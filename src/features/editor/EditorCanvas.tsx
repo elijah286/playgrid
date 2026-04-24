@@ -2078,12 +2078,37 @@ function EditorCanvasImpl({
               </text>
             )}
             {editingPlayerId === pl.id && (() => {
-              const w = r * 3;
-              const h = r * 2;
+              // Float the editor above the player so the marker stays visible
+              // and the text field reads as a dedicated tooltip-style input.
+              // Clamp to the field bounds so edge players don't push it off.
+              const w = r * 3.2;
+              const h = r * 1.9;
+              const gap = r * 0.45;
+              let ex = px - w / 2;
+              if (ex < 0.005) ex = 0.005;
+              if (ex + w > fieldAspect - 0.005) ex = fieldAspect - 0.005 - w;
+              let ey = py - r - gap - h;
+              let tailBelow = true;
+              if (ey < 0.005) {
+                ey = py + r + gap;
+                tailBelow = false;
+              }
+              const tailCx = Math.max(ex + 0.008, Math.min(ex + w - 0.008, px));
+              const tailCy = tailBelow ? ey + h : ey;
+              const tailDy = tailBelow ? gap : -gap;
               return (
+                <g>
+                <path
+                  d={`M ${tailCx - 0.008} ${tailCy} L ${tailCx} ${tailCy + tailDy} L ${tailCx + 0.008} ${tailCy} Z`}
+                  fill="#ffffff"
+                  stroke="#2563eb"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                />
                 <foreignObject
-                  x={px - w / 2}
-                  y={py - h / 2}
+                  x={ex}
+                  y={ey}
                   width={w}
                   height={h}
                   style={{ overflow: "visible" }}
@@ -2129,6 +2154,7 @@ function EditorCanvasImpl({
                     }}
                   />
                 </foreignObject>
+                </g>
               );
             })()}
           </g>

@@ -20,7 +20,14 @@ export function DrawRoutePill({ active, onToggle, onUndo, canUndo }: Props) {
       <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-black/75 p-1 shadow-lg ring-1 ring-white/15 backdrop-blur">
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => {
+            try {
+              navigator.vibrate?.(active ? 8 : 14);
+            } catch {
+              /* ignore */
+            }
+            onToggle();
+          }}
           className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors ${
             active
               ? "bg-white text-black"
