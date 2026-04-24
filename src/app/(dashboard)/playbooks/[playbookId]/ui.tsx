@@ -108,8 +108,10 @@ import { routeToRenderedSegments } from "@/domain/play/geometry";
 import type { PlaybookGroupRow } from "@/domain/print/playbookPrint";
 import type { PlaybookRosterMember } from "@/app/actions/playbook-roster";
 import {
+  addRosterEntryAction,
   approveCoachUpgradeAction,
   approveMemberAction,
+  deleteRosterEntryAction,
   denyCoachUpgradeAction,
   denyMemberAction,
   removeStaffMemberAction,
@@ -2160,6 +2162,7 @@ function RosterPanel({
   const router = useRouter();
   const { toast } = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   function openInvite() {
     if (!viewerIsCoach) {
@@ -2171,13 +2174,34 @@ function RosterPanel({
     }
     setShowInviteModal(true);
   }
+  function openAddPlayer() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Managing the roster is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to add players to the roster.",
+      });
+      return;
+    }
+    setShowAddPlayerModal(true);
+  }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   // Roster tab is player-only; coaches (owner/editor) live in the Staff tab.
   const players = members.filter((m) => m.role === "viewer");
-  const pending = players.filter((m) => m.status === "pending");
+  // Unclaimed roster entries (user_id = null) are pre-added by a coach
+  // and haven't been linked to a user yet. They can only ever be
+  // role=viewer, status=active (enforced in the DB), so anything that
+  // acts on a specific user — approvals, coach upgrades, staff actions
+  // — is guarded by a non-null user_id narrow below.
+  const pending = players.filter(
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.status === "pending" && m.user_id !== null,
+  );
   const coachUpgradeRequests = players.filter(
-    (m) => m.status === "active" && m.coach_upgrade_requested_at,
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.status === "active" &&
+      !!m.coach_upgrade_requested_at &&
+      m.user_id !== null,
   );
   const active = players.filter((m) => m.status === "active");
   const activeInvites = invites.filter(
@@ -2228,13 +2252,16 @@ function RosterPanel({
           <h2 className="text-base font-bold text-foreground">Roster</h2>
           <p className="text-xs text-muted">Players and coaches with access to this playbook.</p>
         </div>
-        <Button
-          variant="primary"
-          leftIcon={Plus}
-          onClick={openInvite}
-        >
-          Invite
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {viewerIsCoach && (
+            <Button variant="secondary" leftIcon={Plus} onClick={openAddPlayer}>
+              Add player
+            </Button>
+          )}
+          <Button variant="primary" leftIcon={Plus} onClick={openInvite}>
+            Invite
+          </Button>
+        </div>
       </div>
 
       {pending.length > 0 && (
@@ -2348,11 +2375,17 @@ function RosterPanel({
               <tbody className="divide-y divide-border">
                 {active.map((m) => {
                   const name = m.label || m.display_name || "—";
+                  const unclaimed = m.user_id === null;
                   return (
-                    <tr key={m.user_id}>
+                    <tr key={m.id}>
                       <td className="px-4 py-2.5 font-medium text-foreground">
                         <span className="inline-flex items-center gap-2">
                           {name}
+                          {unclaimed && (
+                            <Badge variant="default" className="text-[10px]">
+                              Unclaimed
+                            </Badge>
+                          )}
                           {m.is_minor && (
                             <Badge variant="warning" className="text-[10px]">
                               Minor
@@ -2405,6 +2438,16 @@ function RosterPanel({
         />
       )}
 
+      <AddPlayerDialog
+        open={showAddPlayerModal}
+        playbookId={playbookId}
+        onClose={() => setShowAddPlayerModal(false)}
+        onAdded={() => {
+          setShowAddPlayerModal(false);
+          router.refresh();
+        }}
+      />
+
       <UpgradeModal
         open={!!upgradeNotice}
         onClose={() => setUpgradeNotice(null)}
@@ -2412,6 +2455,155 @@ function RosterPanel({
         message={upgradeNotice?.message ?? ""}
       />
     </div>
+  );
+}
+
+const ADD_PLAYER_POSITIONS = [
+  "QB",
+  "RB",
+  "WR",
+  "TE",
+  "OL",
+  "DL",
+  "LB",
+  "DB",
+  "K",
+] as const;
+
+function AddPlayerDialog({
+  open,
+  playbookId,
+  onClose,
+  onAdded,
+}: {
+  open: boolean;
+  playbookId: string;
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const { toast } = useToast();
+  const [label, setLabel] = useState("");
+  const [jersey, setJersey] = useState("");
+  const [positions, setPositions] = useState<Set<string>>(new Set());
+  const [isMinor, setIsMinor] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Reset form whenever the dialog is re-opened.
+  useEffect(() => {
+    if (open) {
+      setLabel("");
+      setJersey("");
+      setPositions(new Set());
+      setIsMinor(false);
+    }
+  }, [open]);
+
+  function togglePos(p: string) {
+    setPositions((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+  }
+
+  async function save() {
+    const name = label.trim();
+    if (!name) {
+      toast("Name is required.", "error");
+      return;
+    }
+    setSaving(true);
+    const res = await addRosterEntryAction({
+      playbookId,
+      label: name,
+      jerseyNumber: jersey.trim() || null,
+      positions: Array.from(positions),
+      isMinor,
+    });
+    setSaving(false);
+    if (!res.ok) {
+      toast(`Couldn't add player: ${res.error}`, "error");
+      return;
+    }
+    onAdded();
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add player"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} loading={saving}>
+            Add to roster
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-xs text-muted">
+          Creates an unclaimed roster spot. When the player joins via an invite
+          link, they&apos;ll see this name in the &ldquo;Claim your player&rdquo;
+          step and you&apos;ll approve the match.
+        </p>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">Name</label>
+          <Input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Jane Doe"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">
+            Jersey number
+          </label>
+          <Input
+            value={jersey}
+            onChange={(e) => setJersey(e.target.value)}
+            placeholder="12"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">
+            Positions
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {ADD_PLAYER_POSITIONS.map((p) => {
+              const on = positions.has(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => togglePos(p)}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${
+                    on
+                      ? "bg-primary/10 text-primary ring-primary/40"
+                      : "bg-surface-inset text-muted ring-border hover:text-foreground"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={isMinor}
+            onChange={(e) => setIsMinor(e.target.checked)}
+          />
+          Minor (under 18)
+        </label>
+      </div>
+    </Modal>
   );
 }
 
@@ -2803,8 +2995,13 @@ function StaffPanel({
   }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  // Coaches = owner/editor; players live in the Roster tab.
-  const coaches = members.filter((m) => m.role !== "viewer");
+  // Coaches = owner/editor; players live in the Roster tab. Unclaimed
+  // roster entries are always role=viewer so they can't land here, but
+  // the null-narrow keeps TS happy and guards the actions below.
+  const coaches = members.filter(
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.role !== "viewer" && m.user_id !== null,
+  );
   const pending = coaches.filter((m) => m.status === "pending");
   const active = coaches.filter((m) => m.status === "active");
   const activeInvites = invites.filter(

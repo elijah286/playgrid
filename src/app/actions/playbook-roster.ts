@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 export type PlaybookRosterMember = {
-  user_id: string;
+  id: string;
+  user_id: string | null;
   role: "owner" | "editor" | "viewer";
   status: "pending" | "active";
   label: string | null;
@@ -36,7 +37,7 @@ export async function listPlaybookRosterAction(
   const { data, error } = await supabase
     .from("playbook_members")
     .select(
-      "user_id, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
+      "id, user_id, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
     )
     .eq("playbook_id", playbookId)
     .order("created_at", { ascending: true });
@@ -50,6 +51,7 @@ export async function listPlaybookRosterAction(
       | null;
     const profile = Array.isArray(prof) ? prof[0] ?? null : prof;
     return {
+      id: row.id,
       user_id: row.user_id,
       role: row.role,
       status: row.status,
@@ -339,6 +341,65 @@ export async function setMyPositionsAction(
     p_playbook_id: playbookId,
     p_positions: cleaned,
   });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+/**
+ * Coach: add an unclaimed roster entry (a "player slot" not yet linked
+ * to any user account). A player claims the slot later via the invite
+ * flow, at which point the coach approves and the user_id gets set.
+ */
+export async function addRosterEntryAction(input: {
+  playbookId: string;
+  label: string;
+  jerseyNumber?: string | null;
+  positions?: string[];
+  isMinor?: boolean;
+}): Promise<{ ok: true; memberId: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const label = (input.label ?? "").trim();
+  if (!label) return { ok: false, error: "Name is required." };
+
+  const supabase = await createClient();
+  const cleanedPositions = Array.from(
+    new Set(
+      (input.positions ?? [])
+        .map((p) => (typeof p === "string" ? p.trim() : ""))
+        .filter((p) => p.length > 0 && p.length <= 12),
+    ),
+  ).slice(0, 8);
+
+  const { data, error } = await supabase.rpc("add_roster_entry", {
+    p_playbook_id: input.playbookId,
+    p_label: label,
+    p_jersey_number: input.jerseyNumber ?? null,
+    p_positions: cleanedPositions,
+    p_is_minor: input.isMinor ?? false,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${input.playbookId}`);
+  return { ok: true, memberId: data as string };
+}
+
+/**
+ * Coach: remove a roster entry. If it's unclaimed, just deletes the
+ * row. If it's claimed, the corresponding user also loses playbook
+ * access — callers should prefer `unlinkRosterEntryAction` when they
+ * only want to detach the user, not kick them.
+ */
+export async function deleteRosterEntryAction(
+  playbookId: string,
+  memberId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("playbook_members")
+    .delete()
+    .eq("playbook_id", playbookId)
+    .eq("id", memberId);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
