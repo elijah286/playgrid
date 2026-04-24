@@ -451,16 +451,8 @@ export function GameModeClient({
   function discardGame() {
     if (!session) return;
     if (!isCaller) return;
-    // Two-step confirm: the caller is about to throw away every scored call
-    // — we need them to actively acknowledge it.
-    const ok1 = window.confirm(
-      "Leave without saving? Every call you've tagged this game will be lost.",
-    );
-    if (!ok1) return;
-    const ok2 = window.confirm(
-      "Really discard? This can't be undone — the game will not be recorded.",
-    );
-    if (!ok2) return;
+    // The ExitGameDialog itself asks for confirmation before invoking this,
+    // so no second confirm here — one warning is enough.
     startSaving(async () => {
       const res = await discardGameSessionAction(session.id);
       if (!res.ok) {
