@@ -21,6 +21,7 @@ import { PlayAnimation } from "@/features/marketing/PlayAnimation";
 import { Reveal } from "@/features/marketing/Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
+import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 
 export const metadata: Metadata = {
   title: "Learn more · xogridmaker",
@@ -34,12 +35,14 @@ const BRAND_NAVY = "#0F1E3D";
 const BRAND_ORANGE = "#F26522";
 
 export default async function LearnMorePage() {
-  const examples = (await loadExamplePlaybooks()).slice(0, 3);
+  const [examples, freeMaxPlays] = await Promise.all([
+    loadExamplePlaybooks().then((r) => r.slice(0, 3)),
+    getFreeMaxPlaysPerPlaybook(),
+  ]);
 
   return (
     <div className="bg-surface text-foreground">
       <Hero />
-      <FreeForSolo />
       <RealPlaybooks examples={examples} />
       <EveryScreen />
       <FormationsAndTags />
@@ -48,6 +51,7 @@ export default async function LearnMorePage() {
       <GameDataSection />
       <SharingSection />
       <BuiltByACoach />
+      <FreeForSolo freeMaxPlays={freeMaxPlays} />
       <FinalCta />
     </div>
   );
@@ -119,12 +123,12 @@ function Hero() {
 
 /* ---------- Free for solo coaches ---------- */
 
-function FreeForSolo() {
+function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
   const perks = [
-    "Unlimited plays for your own playbook",
+    `Up to ${freeMaxPlays} plays in your own playbook`,
     "Full editor — routes, formations, tags",
     "Mobile & tablet views included",
-    "Print to PDF for wristbands and sheets",
+    "Print call sheets to PDF (wristbands on Coach)",
   ];
   return (
     <section
@@ -149,9 +153,9 @@ function FreeForSolo() {
                   Solo coach? You pay <span style={{ color: BRAND_GREEN }}>$0</span>.
                 </h2>
                 <p className="mt-3 max-w-xl text-muted">
-                  Everything you need to run your own playbook is free. Paid
-                  tiers unlock collaboration and advanced tools when your
-                  program grows.
+                  One playbook with up to {freeMaxPlays} plays is free, forever.
+                  Call sheets print free. Upgrade to Coach when you want
+                  wristbands, bigger playbooks, and staff collaboration.
                 </p>
               </div>
               <Link
@@ -246,13 +250,14 @@ function EveryScreen() {
           <div className="max-w-2xl">
             <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Desktop to draw.
+              Make plays on your desktop
               <br />
-              Phone on the field.
+              <span className="text-muted">or on the field.</span>
             </h2>
             <p className="mt-5 text-lg text-muted">
-              Design at home on your laptop. Review on the tablet. Pull up a
-              play on your phone between series. Same playbook, every screen.
+              An easy, fun play editor designed for desktop, tablet, and
+              mobile. Draw it up at the kitchen table, review it on the
+              sideline, pull up the call on your phone between series.
             </p>
           </div>
         </Reveal>
@@ -547,14 +552,15 @@ function SharingSection() {
           <div>
             <SectionEyebrow icon={Share2}>Share & collaborate</SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Whole staff.
+              Share with players.
               <br />
-              <span className="text-muted">One source of truth.</span>
+              <span className="text-muted">Collaborate with coaches.</span>
             </h2>
             <p className="mt-5 max-w-lg text-lg text-muted">
-              Invite co-coaches and coordinators. Share read-only playbooks
-              with the team. Roles and approvals keep your starter playbook
-              clean while letting assistants iterate.
+              Players see the plays and review coaching notes on their own
+              phones. Co-coaches and coordinators edit alongside you, leave
+              comments, and review how each call played out after the game.
+              One playbook, everyone on the same page.
             </p>
           </div>
         </Reveal>
@@ -615,9 +621,9 @@ function BuiltByACoach() {
             Built by a coach
           </SectionEyebrow>
           <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-            Not a SaaS guy
+            Built by a youth football coach
             <br />
-            <span className="text-muted">who watched football once.</span>
+            <span className="text-muted">for youth football coaches.</span>
           </h2>
           <p className="mt-6 text-lg text-muted">
             xogridmaker is built by an active flag, youth tackle, and 7v7

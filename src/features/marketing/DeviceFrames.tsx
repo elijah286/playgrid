@@ -38,7 +38,7 @@ export function TabletFrame({
       className={`relative mx-auto w-[520px] max-w-full rounded-[28px] bg-neutral-900 p-3 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.4)] ring-1 ring-black/20 ${className}`}
       style={{ aspectRatio: "4 / 3" }}
     >
-      <div className="relative h-full w-full overflow-hidden rounded-[18px] bg-white">
+      <div className="absolute inset-3 overflow-hidden rounded-[18px] bg-white [&>*]:!h-full [&>*]:!w-full [&_img]:!h-full [&_img]:!w-full [&_img]:object-cover [&_img]:object-top">
         {children}
       </div>
     </div>
