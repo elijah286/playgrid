@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
-import { listFormationsAction } from "@/app/actions/formations";
+import {
+  listFormationsAction,
+  listFormationsForPlaybookAction,
+} from "@/app/actions/formations";
 import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
 import type { SportVariant } from "@/domain/play/types";
 
@@ -22,6 +25,16 @@ export default async function EditFormationPage({
 
   const variant = (formation.sportProfile?.variant ?? "flag_7v7") as SportVariant;
 
+  // Sibling formations (same playbook, same variant, not archived) power the
+  // prev/next/all dropdown in the editor header.
+  const siblings = formation.playbookId
+    ? await listFormationsForPlaybookAction(formation.playbookId)
+    : null;
+  const navFormations =
+    siblings && siblings.ok
+      ? siblings.formations.filter((f) => !f.isArchived)
+      : [];
+
   return (
     <FormationEditorClient
       mode="edit"
@@ -30,6 +43,7 @@ export default async function EditFormationPage({
       initialVariant={variant}
       initialPlayers={formation.players}
       returnToPlaybook={returnToPlaybook}
+      navFormations={navFormations}
     />
   );
 }

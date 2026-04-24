@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FilePlus, Save, MousePointer } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  FilePlus,
+  Save,
+  MousePointer,
+} from "lucide-react";
 import Link from "next/link";
 import {
   saveFormationAction,
   saveFormationInPlaybooksAction,
   updateFormationAction,
+  type SavedFormation,
 } from "@/app/actions/formations";
+import { PlaybookFormationSearchMenu } from "@/features/formations/PlaybookFormationSearchMenu";
 import {
   Button,
   Input,
@@ -51,6 +60,8 @@ type Props =
       initialPlayers: Player[];
       /** Playbook ID to return to after saving (from ?returnToPlaybook=). */
       returnToPlaybook?: string | null;
+      /** Sibling formations in the same playbook for prev/next/all nav. */
+      navFormations?: SavedFormation[];
     };
 
 export function FormationEditorClient(props: Props) {
@@ -207,6 +218,27 @@ export function FormationEditorClient(props: Props) {
     : "/formations";
   const backLabel = returnFirstPb ? "Playbook" : "Formations";
 
+  const navFormations =
+    props.mode === "edit" ? props.navFormations ?? [] : [];
+  const sortedNav = useMemo(
+    () => [...navFormations].sort((a, b) => a.sortOrder - b.sortOrder),
+    [navFormations],
+  );
+  const currentIx =
+    props.mode === "edit"
+      ? sortedNav.findIndex((f) => f.id === props.formationId)
+      : -1;
+  const prevFormation = currentIx > 0 ? sortedNav[currentIx - 1] : null;
+  const nextFormation =
+    currentIx >= 0 && currentIx < sortedNav.length - 1
+      ? sortedNav[currentIx + 1]
+      : null;
+
+  function navigateToFormation(id: string) {
+    const qs = returnFirstPb ? `?returnToPlaybook=${returnFirstPb}` : "";
+    router.push(`/formations/${id}/edit${qs}`);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {isPreview && <ExamplePreviewBanner />}
@@ -222,6 +254,39 @@ export function FormationEditorClient(props: Props) {
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {props.mode === "edit" && sortedNav.length > 1 && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                leftIcon={ChevronLeft}
+                disabled={!prevFormation}
+                onClick={() =>
+                  prevFormation && navigateToFormation(prevFormation.id)
+                }
+              >
+                Previous formation
+              </Button>
+              <PlaybookFormationSearchMenu
+                formations={sortedNav}
+                currentFormationId={props.formationId}
+                onNavigate={navigateToFormation}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                rightIcon={ChevronRight}
+                disabled={!nextFormation}
+                onClick={() =>
+                  nextFormation && navigateToFormation(nextFormation.id)
+                }
+              >
+                Next formation
+              </Button>
+            </div>
+          )}
           {props.mode === "edit" && returnFirstPb && (
             <Button
               variant="secondary"
