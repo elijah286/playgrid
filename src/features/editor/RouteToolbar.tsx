@@ -132,7 +132,7 @@ export function RouteToolbar({
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
       {/* Row 1: shape / stroke / width / color (top-right) */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SegmentedControl
           options={SHAPE_OPTIONS}
           value={shape}
@@ -204,7 +204,7 @@ export function RouteToolbar({
       </div>
 
       {/* Row 2: end decoration / history / player actions / done */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SegmentedControl
           options={END_OPTIONS}
           value={endDecoration}

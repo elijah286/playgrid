@@ -516,7 +516,7 @@ function PlayEditorClientInner({
   }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
   return (
-    <div ref={rootRef} className="relative flex min-h-0 flex-1 flex-col gap-2">
+    <div ref={rootRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       {isNavPending && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]"
@@ -575,8 +575,8 @@ function PlayEditorClientInner({
         )}
 
       {/* Routes */}
-      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="flex min-h-[260px] flex-col gap-3 sm:min-h-[420px]">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="flex min-h-[260px] min-w-0 flex-col gap-3 sm:min-h-[420px]">
             {/* Mobile-only Edit/Done toggle. Sits directly above the field
                 (and above the edit toolbar) so coaches can flip between
                 viewing and editing without hunting through the UI. Desktop
