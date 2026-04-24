@@ -172,7 +172,7 @@ export function AcceptInviteButton({
       <div className="space-y-2">
         <p className="text-sm font-semibold text-foreground">
           {phase.status === "active"
-            ? "You&rsquo;re in."
+            ? "You\u2019re in."
             : "Request sent."}
         </p>
         <p className="text-xs text-muted">
