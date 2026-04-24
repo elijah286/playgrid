@@ -787,9 +787,29 @@ function EditorCanvasImpl({
         cancelLongPress();
 
         if (state.target.kind === "player") {
+          const playerId = state.target.playerId;
+          // When Draw route mode is active, dragging from a player starts a
+          // freehand route at the player's position instead of moving them —
+          // on touch the player circle is the natural anchor, and users
+          // expect finger drag to draw.
+          if (drawMode && mode !== "formation") {
+            const player = doc.layers.players.find((p) => p.id === playerId);
+            if (player) {
+              const next: Interaction = {
+                type: "drawing_route",
+                playerId,
+                extendingRouteId: null,
+                extendFromNodeId: null,
+                points: [player.position, toNorm(e)],
+              };
+              setInteraction(next);
+              interactionRef.current = next;
+              return;
+            }
+          }
           const next: Interaction = {
             type: "dragging_player",
-            playerId: state.target.playerId,
+            playerId,
           };
           setInteraction(next);
           interactionRef.current = next;

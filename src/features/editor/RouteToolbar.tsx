@@ -5,7 +5,6 @@ import {
   Spline,
   Undo2,
   Redo2,
-  Check,
   Sparkles,
   Waves,
   ArrowRight,
@@ -18,7 +17,7 @@ import {
   Eraser,
 } from "lucide-react";
 import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
-import { SegmentedControl, IconButton, Button } from "@/components/ui";
+import { SegmentedControl, IconButton } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 type Props = {
@@ -36,8 +35,6 @@ type Props = {
   canUndo: boolean;
   onRedo: () => void;
   canRedo: boolean;
-  onDone: () => void;
-  doneLabel?: string;
   /** End-of-route decoration (arrow/T/none). Disabled when no route selected. */
   endDecoration: EndDecoration;
   onEndDecorationChange: (d: EndDecoration) => void;
@@ -62,17 +59,38 @@ const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[
   { value: "curve", label: "Curve", icon: Spline },
 ];
 
-const STROKE_OPTIONS_OFFENSE: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
+type StrokeOpt = { value: StrokePattern; label: string };
+const STROKE_OPTIONS_OFFENSE: StrokeOpt[] = [
   { value: "solid", label: "Solid" },
   { value: "dashed", label: "Dashed" },
   { value: "dotted", label: "Dotted" },
-  { value: "motion", label: "Motion", icon: Waves },
+  { value: "motion", label: "Motion" },
 ];
-const STROKE_OPTIONS_DEFENSE: { value: StrokePattern; label: string; icon?: typeof Waves }[] = [
+const STROKE_OPTIONS_DEFENSE: StrokeOpt[] = [
   { value: "solid", label: "Solid" },
   { value: "dashed", label: "Dashed" },
   { value: "dotted", label: "Dotted" },
 ];
+
+function StrokeGlyph({ kind }: { kind: StrokePattern }) {
+  if (kind === "motion") return <Waves className="size-4" />;
+  const dash =
+    kind === "solid" ? undefined : kind === "dashed" ? "5 3" : "1.5 3";
+  return (
+    <svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true">
+      <line
+        x1="2"
+        y1="5"
+        x2="18"
+        y2="5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={dash}
+      />
+    </svg>
+  );
+}
 
 const END_OPTIONS: { value: EndDecoration; label: string; icon: typeof ArrowRight }[] = [
   { value: "arrow", label: "Arrow", icon: ArrowRight },
@@ -112,8 +130,6 @@ export function RouteToolbar({
   canUndo,
   onRedo,
   canRedo,
-  onDone,
-  doneLabel = "Done",
   endDecoration,
   onEndDecorationChange,
   hasSelectedPlayer = false,
@@ -129,10 +145,12 @@ export function RouteToolbar({
   onClearAllRoutes,
 }: Props) {
   const showPlayerActions = !isDefense;
+  const strokeOptions = isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE;
+  const activeStroke = strokePattern === "motion" && isDefense ? "solid" : strokePattern;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 shadow-sm">
-      {/* Row 1: shape / stroke / width / color (top-right) */}
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1.5 shadow-sm">
+      {/* Row 1: shape / stroke / width / end decoration / color */}
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <SegmentedControl
           options={SHAPE_OPTIONS}
           value={shape}
@@ -140,30 +158,29 @@ export function RouteToolbar({
           size="sm"
         />
 
-        <div className="h-5 w-px bg-border" />
+        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+          {strokeOptions.map((opt) => {
+            const active = opt.value === activeStroke;
+            return (
+              <Tooltip key={opt.value} content={opt.label}>
+                <button
+                  type="button"
+                  onClick={() => onStrokePatternChange(opt.value)}
+                  aria-label={opt.label}
+                  className={`inline-flex h-6 w-8 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <StrokeGlyph kind={opt.value} />
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
 
-        <SegmentedControl
-          options={isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE}
-          value={strokePattern === "motion" && isDefense ? "solid" : strokePattern}
-          onChange={onStrokePatternChange}
-          size="sm"
-        />
-
-        {isDefense && onAddRectZone && onAddEllipseZone && (
-          <>
-            <div className="h-5 w-px bg-border" />
-            <Tooltip content="Add rectangular zone">
-              <IconButton icon={Square} variant="ghost" size="sm" onClick={onAddRectZone} />
-            </Tooltip>
-            <Tooltip content="Add elliptical zone">
-              <IconButton icon={Circle} variant="ghost" size="sm" onClick={onAddEllipseZone} />
-            </Tooltip>
-          </>
-        )}
-
-        <div className="h-5 w-px bg-border" />
-
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {WIDTH_OPTIONS.map((w) => {
             const active = w.value === width;
             return (
@@ -187,7 +204,30 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="flex items-center gap-0.5 sm:ml-auto">
+        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+          {END_OPTIONS.map((opt) => {
+            const active = opt.value === endDecoration;
+            const Icon = opt.icon;
+            return (
+              <Tooltip key={opt.value} content={opt.label}>
+                <button
+                  type="button"
+                  onClick={() => onEndDecorationChange(opt.value)}
+                  aria-label={opt.label}
+                  className={`inline-flex h-6 w-7 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-0.5">
           {COLOR_PRESETS.map((c) => (
             <button
               key={c}
@@ -203,51 +243,22 @@ export function RouteToolbar({
         </div>
       </div>
 
-      {/* Row 2: end decoration / history / player actions / done */}
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <SegmentedControl
-          options={END_OPTIONS}
-          value={endDecoration}
-          onChange={onEndDecorationChange}
-          size="sm"
-        />
-
-        <div className="h-5 w-px bg-border" />
+      {/* Row 2: history / player actions / zones */}
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <Tooltip content="Undo">
+          <IconButton icon={Undo2} variant="ghost" size="sm" disabled={!canUndo} onClick={onUndo} />
+        </Tooltip>
+        <Tooltip content="Redo">
+          <IconButton icon={Redo2} variant="ghost" size="sm" disabled={!canRedo} onClick={onRedo} />
+        </Tooltip>
 
         <Tooltip content="Smooth curve">
-          <IconButton
-            icon={Sparkles}
-            variant="ghost"
-            disabled={!canSmooth}
-            onClick={onSmooth}
-          />
-        </Tooltip>
-
-        <Tooltip content="Undo">
-          <IconButton
-            icon={Undo2}
-            variant="ghost"
-            disabled={!canUndo}
-            onClick={onUndo}
-          />
-        </Tooltip>
-
-        <Tooltip content="Redo">
-          <IconButton
-            icon={Redo2}
-            variant="ghost"
-            disabled={!canRedo}
-            onClick={onRedo}
-          />
+          <IconButton icon={Sparkles} variant="ghost" size="sm" disabled={!canSmooth} onClick={onSmooth} />
         </Tooltip>
 
         {onFlipHorizontal && (
           <Tooltip content="Flip horizontal">
-            <IconButton
-              icon={FlipHorizontal}
-              variant="ghost"
-              onClick={onFlipHorizontal}
-            />
+            <IconButton icon={FlipHorizontal} variant="ghost" size="sm" onClick={onFlipHorizontal} />
           </Tooltip>
         )}
 
@@ -262,6 +273,7 @@ export function RouteToolbar({
             <IconButton
               icon={Eraser}
               variant="ghost"
+              size="sm"
               disabled={totalRouteCount === 0}
               onClick={onClearAllRoutes}
               className="text-danger hover:bg-danger/10 hover:text-danger"
@@ -269,9 +281,19 @@ export function RouteToolbar({
           </Tooltip>
         )}
 
+        {isDefense && onAddRectZone && onAddEllipseZone && (
+          <>
+            <Tooltip content="Add rectangular zone">
+              <IconButton icon={Square} variant="ghost" size="sm" onClick={onAddRectZone} />
+            </Tooltip>
+            <Tooltip content="Add elliptical zone">
+              <IconButton icon={Circle} variant="ghost" size="sm" onClick={onAddEllipseZone} />
+            </Tooltip>
+          </>
+        )}
+
         {showPlayerActions && (
           <>
-            <div className="h-5 w-px bg-border" />
             <Tooltip content={hasSelectedPlayer ? (isHotRoute ? "Remove hot route" : "Mark as hot route") : "Select a player to toggle hot route"}>
               <IconButton
                 icon={Star}
@@ -303,12 +325,6 @@ export function RouteToolbar({
             </Tooltip>
           </>
         )}
-
-        <div className="hidden sm:ml-auto sm:block" />
-
-        <Button variant="primary" size="sm" leftIcon={Check} onClick={onDone}>
-          {doneLabel}
-        </Button>
       </div>
     </div>
   );

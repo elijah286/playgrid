@@ -649,7 +649,6 @@ function PlayEditorClientInner({
                 onFlipHorizontal={() =>
                   dispatch({ type: "document.flip", axis: "horizontal" })
                 }
-                onDone={handleDone}
                 endDecoration={displayEndDecoration}
                 onEndDecorationChange={handleEndDecorationChange}
                 hasSelectedPlayer={selectedPlayerId != null}
