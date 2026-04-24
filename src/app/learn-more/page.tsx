@@ -9,17 +9,13 @@ import {
   LayoutGrid,
   Printer,
   Share2,
-  Sparkles,
   Users,
 } from "lucide-react";
-import {
-  LaptopFrame,
-  PhoneFrame,
-  TabletFrame,
-  WristBand,
-} from "@/features/marketing/DeviceFrames";
+import { PhoneFrame, WristBand } from "@/features/marketing/DeviceFrames";
 import { PlayAnimation } from "@/features/marketing/PlayAnimation";
 import { Reveal } from "@/features/marketing/Reveal";
+import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
+import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 
 export const metadata: Metadata = {
   title: "Learn more · xogridmaker",
@@ -32,14 +28,15 @@ const BRAND_GREEN = "#95CC1F";
 const BRAND_NAVY = "#0F1E3D";
 const BRAND_ORANGE = "#F26522";
 
-export default function LearnMorePage() {
+export default async function LearnMorePage() {
+  const examples = (await loadExamplePlaybooks()).slice(0, 3);
+
   return (
     <div className="bg-surface text-foreground">
       <Hero />
       <FreeForSolo />
-      <EditorShowcase />
+      <RealPlaybooks examples={examples} />
       <FormationsAndTags />
-      <MobileAndTablet />
       <PrintoutsAndWristbands />
       <GameModeSection />
       <GameDataSection />
@@ -96,16 +93,19 @@ function Hero() {
               href="/examples"
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-5 py-3 text-base font-semibold text-foreground hover:bg-surface-inset"
             >
-              See example playbooks
+              See real playbooks
             </Link>
           </div>
         </div>
 
         <div className="relative">
           <div className="absolute -inset-8 -z-10 rounded-[36px] bg-gradient-to-br from-white/40 to-white/0 blur-2xl" />
-          <LaptopFrame>
-            <MockEditor />
-          </LaptopFrame>
+          <div className="rounded-2xl bg-neutral-900 p-3 shadow-[var(--shadow-elevated)]">
+            <PlayAnimation className="h-auto w-full rounded-xl" />
+          </div>
+          <p className="mt-3 text-center text-sm text-muted">
+            A real play, animated. Every route in the editor plays like this.
+          </p>
         </div>
       </div>
     </section>
@@ -175,36 +175,55 @@ function FreeForSolo() {
   );
 }
 
-/* ---------- Editor showcase with live animated play ---------- */
+/* ---------- Real playbooks — point to /examples ---------- */
 
-function EditorShowcase() {
+function RealPlaybooks({
+  examples,
+}: {
+  examples: Awaited<ReturnType<typeof loadExamplePlaybooks>>;
+}) {
   return (
     <section className="relative py-24">
-      <div className="mx-auto grid max-w-6xl gap-16 px-6 md:grid-cols-2 md:items-center">
+      <div className="mx-auto max-w-6xl px-6">
         <Reveal>
-          <div>
-            <SectionEyebrow icon={Sparkles}>World-class editor</SectionEyebrow>
+          <div className="max-w-2xl">
+            <SectionEyebrow icon={LayoutGrid}>See it live</SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Draw the play.
+              Real playbooks.
               <br />
-              <span className="text-muted">Watch it run.</span>
+              <span className="text-muted">Open one, poke around.</span>
             </h2>
-            <p className="mt-5 max-w-lg text-lg text-muted">
-              Drag players into formation, sketch routes with a single stroke,
-              and press play to see the whole thing in motion. Every route is
-              editable later — no more starting over when you tweak a read.
+            <p className="mt-5 text-lg text-muted">
+              These are actual xogridmaker playbooks built by coaches. Every
+              play opens in the real editor, every formation is live, every
+              wristband is printable. Click in and tinker — nothing you do
+              here is saved.
             </p>
-            <ul className="mt-6 space-y-2 text-sm">
-              <FeatureBullet>Route library with slants, flats, gos, drags, wheels, and more</FeatureBullet>
-              <FeatureBullet>Animate the full play — pre-snap motion through the route</FeatureBullet>
-              <FeatureBullet>Clone, flip, and mirror plays in one click</FeatureBullet>
-            </ul>
           </div>
         </Reveal>
 
-        <Reveal delay={100}>
-          <div className="rounded-2xl bg-neutral-900 p-3 shadow-[var(--shadow-elevated)]">
-            <PlayAnimation className="h-auto w-full rounded-xl" />
+        {examples.length > 0 && (
+          <Reveal delay={100}>
+            <div className="mt-12 flex flex-wrap justify-center gap-6">
+              {examples.map((pb) => (
+                <div key={pb.id} className="w-40 sm:w-48 lg:w-56">
+                  <ExampleBookTile tile={pb} />
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        )}
+
+        <Reveal delay={200}>
+          <div className="mt-10 flex justify-center">
+            <Link
+              href="/examples"
+              className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+              style={{ background: BRAND_BLUE }}
+            >
+              Browse all examples
+              <ArrowRight className="size-5" />
+            </Link>
           </div>
         </Reveal>
       </div>
@@ -297,45 +316,6 @@ function FormationsAndTags() {
   );
 }
 
-/* ---------- Mobile + tablet ---------- */
-
-function MobileAndTablet() {
-  return (
-    <section className="relative py-24">
-      <div className="mx-auto max-w-6xl px-6">
-        <Reveal>
-          <div className="max-w-2xl">
-            <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
-            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Desktop to draw.
-              <br />
-              Phone on the field.
-            </h2>
-            <p className="mt-5 text-lg text-muted">
-              Design at home on your laptop. Review on the tablet. Run the
-              game from your phone in the headset. Every view is built for
-              the device it runs on — not shoehorned.
-            </p>
-          </div>
-        </Reveal>
-
-        <div className="mt-14 flex flex-wrap items-end justify-center gap-10">
-          <Reveal delay={0}>
-            <TabletFrame>
-              <MockPlaybookGrid />
-            </TabletFrame>
-          </Reveal>
-          <Reveal delay={150}>
-            <PhoneFrame>
-              <MockPhonePlay />
-            </PhoneFrame>
-          </Reveal>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ---------- Printouts + wristbands ---------- */
 
 function PrintoutsAndWristbands() {
@@ -362,6 +342,9 @@ function PrintoutsAndWristbands() {
               One-click PDFs sized for wristbands, call sheets, and the
               bench-side binder. Numbering, formations, and tags all carry
               through so the printout reads just like the app.
+            </p>
+            <p className="mt-3 text-sm text-muted">
+              Every example playbook has a live print preview — try one.
             </p>
           </div>
         </Reveal>
@@ -698,130 +681,10 @@ function FeatureBullet({
 }
 
 /* ========================================================================
-   Mock "screenshots" — faithful to the real app visual language. Replace
-   with captured screenshots once a demo playbook is seeded.
+   Mocks — only for features not covered by /examples (wristband print,
+   game mode, game data). Everything editor/playbook/play-related points
+   to real example playbooks instead.
    ======================================================================== */
-
-function MockEditor() {
-  return (
-    <div className="flex h-full w-full">
-      {/* Sidebar */}
-      <div className="hidden w-40 shrink-0 border-r border-neutral-200 bg-neutral-50 p-3 md:block">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-          Playbook
-        </p>
-        <ul className="mt-2 space-y-1 text-[11px]">
-          {["01 · Slant/Flat", "02 · PA Go", "03 · Bubble", "04 · Mesh", "05 · Counter"].map(
-            (p, i) => (
-              <li
-                key={p}
-                className={`rounded px-2 py-1 ${
-                  i === 1 ? "bg-primary text-white" : "text-neutral-700"
-                }`}
-              >
-                {p}
-              </li>
-            ),
-          )}
-        </ul>
-      </div>
-      {/* Canvas */}
-      <div className="flex-1 bg-neutral-100 p-3">
-        <div className="flex items-center gap-2">
-          <span
-            className="rounded px-2 py-0.5 text-[10px] font-bold text-white"
-            style={{ background: BRAND_ORANGE }}
-          >
-            02
-          </span>
-          <span className="text-xs font-semibold">PA Go</span>
-          <span className="ml-auto flex gap-1">
-            {["Red Zone", "PA", "Shot"].map((t) => (
-              <span
-                key={t}
-                className="rounded-full bg-primary-light px-2 py-0.5 text-[9px] font-semibold text-primary"
-              >
-                #{t}
-              </span>
-            ))}
-          </span>
-        </div>
-        <div className="mt-2 overflow-hidden rounded-md">
-          <PlayAnimation className="h-auto w-full" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MockPlaybookGrid() {
-  return (
-    <div className="h-full w-full bg-neutral-50 p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-bold">Varsity · Offense</p>
-        <div className="flex gap-1">
-          {["All", "Red Zone", "3rd"].map((t, i) => (
-            <span
-              key={t}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                i === 0
-                  ? "bg-primary text-white"
-                  : "bg-white text-neutral-600 ring-1 ring-neutral-200"
-              }`}
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <div
-            key={i}
-            className="aspect-[4/3] overflow-hidden rounded bg-neutral-900 p-1 ring-1 ring-black/10"
-          >
-            <MiniPlayTile seed={i} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MockPhonePlay() {
-  return (
-    <div className="flex h-full flex-col bg-neutral-50">
-      <div className="flex items-center justify-between bg-white px-3 py-2 ring-1 ring-neutral-200">
-        <span className="text-[11px] font-semibold">Play 02</span>
-        <span
-          className="rounded px-1.5 py-0.5 text-[9px] font-bold text-white"
-          style={{ background: BRAND_ORANGE }}
-        >
-          Red Zone
-        </span>
-      </div>
-      <div className="flex-1 p-2">
-        <div className="h-full w-full overflow-hidden rounded bg-neutral-900 p-1">
-          <PlayAnimation className="h-full w-full" />
-        </div>
-      </div>
-      <div className="grid grid-cols-4 gap-1 bg-white p-2 ring-1 ring-neutral-200">
-        {["+5", "+10", "TD", "Loss"].map((l, i) => (
-          <button
-            key={l}
-            className="rounded py-1.5 text-[10px] font-bold text-white"
-            style={{
-              background:
-                i === 2 ? BRAND_GREEN : i === 3 ? "#DC2626" : BRAND_BLUE,
-            }}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function MockGameMode() {
   return (
@@ -896,7 +759,7 @@ function MockWristSheet() {
             </span>
           </div>
           <div className="mt-1 aspect-[4/3] rounded-sm bg-neutral-900">
-            <MiniPlayTile seed={i + 3} compact />
+            <MiniPlayTile seed={i + 3} />
           </div>
         </div>
       ))}
@@ -949,8 +812,7 @@ function MiniFormation({ dots }: { dots: Array<[number, number]> }) {
   );
 }
 
-function MiniPlayTile({ seed, compact = false }: { seed: number; compact?: boolean }) {
-  // Deterministic pseudo-random tiny route doodle.
+function MiniPlayTile({ seed }: { seed: number }) {
   const r = (n: number) => ((seed * 9301 + n * 49297) % 233280) / 233280;
   const routes = Array.from({ length: 4 }).map((_, i) => {
     const x = 20 + r(i) * 60;
@@ -959,9 +821,6 @@ function MiniPlayTile({ seed, compact = false }: { seed: number; compact?: boole
   });
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full">
-      {!compact && (
-        <line x1="5" y1="75" x2="95" y2="75" stroke="rgba(255,255,255,0.3)" strokeDasharray="2 2" />
-      )}
       {routes.map((rt, i) => (
         <g key={i}>
           <line
