@@ -248,6 +248,17 @@ function EditorCanvasImpl({
   );
   const DOUBLE_TAP_MS = 320;
   const DOUBLE_TAP_PX = 22;
+  // Long-press timer for touch context menus. Opens the same player/segment
+  // menus that Ctrl+click / right-click opens on desktop, so touch users
+  // don't lose access to Delete / Add anchor / etc.
+  const longPressRef = useRef<{ timer: ReturnType<typeof setTimeout>; pointerId: number } | null>(null);
+  const LONG_PRESS_MS = 500;
+  const cancelLongPress = useCallback(() => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current.timer);
+      longPressRef.current = null;
+    }
+  }, []);
   useEffect(() => {
     interactionRef.current = interaction;
   }, [interaction]);
@@ -690,8 +701,69 @@ function EditorCanvasImpl({
         onSelectSegment(null);
         onSelectZone?.(null);
       }
+
+      // Schedule a long-press → context menu. Only meaningful on touch
+      // (pointerType === "touch"); mouse users have right-click already.
+      // Any movement past the drag threshold or a pointerup will cancel.
+      if (e.pointerType === "touch" && target.kind !== "canvas") {
+        cancelLongPress();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const capturedId = e.pointerId;
+        const timer = setTimeout(() => {
+          const wrap = wrapperRef.current;
+          if (!wrap) return;
+          const rect = wrap.getBoundingClientRect();
+          const localX = Math.max(6, Math.min(startX - rect.left, rect.width - 186));
+          const localY = Math.max(6, Math.min(startY - rect.top, rect.height - 106));
+          try {
+            navigator.vibrate?.(18);
+          } catch {
+            /* ignore */
+          }
+          // Cancel the pending pointer interaction so pointerup doesn't
+          // also fire a selection on the same target.
+          const svg = svgRef.current;
+          try {
+            svg?.releasePointerCapture(capturedId);
+          } catch {
+            /* may already be released */
+          }
+          setInteraction({ type: "idle" });
+          interactionRef.current = { type: "idle" };
+
+          if (target.kind === "player") {
+            setPlayerMenu({ screenX: localX, screenY: localY, playerId: target.playerId });
+          } else if (target.kind === "route_segment") {
+            setSegmentMenu({
+              screenX: localX,
+              screenY: localY,
+              routeId: target.routeId,
+              segmentId: target.segmentId,
+              position: origin,
+            });
+            onSelectRoute(target.routeId);
+            onSelectSegment(target.segmentId);
+            onSelectNode(null);
+            onSelectPlayer(null);
+          } else if (target.kind === "route_node") {
+            setAnchorMenu({
+              screenX: localX,
+              screenY: localY,
+              routeId: target.routeId,
+              nodeId: target.nodeId,
+            });
+            onSelectRoute(target.routeId);
+            onSelectNode(target.nodeId);
+            onSelectSegment(null);
+            onSelectPlayer(null);
+          }
+          longPressRef.current = null;
+        }, LONG_PRESS_MS);
+        longPressRef.current = { timer, pointerId: capturedId };
+      }
     },
-    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone],
+    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress],
   );
 
   const handlePointerDown = useCallback(
@@ -711,6 +783,8 @@ function EditorCanvasImpl({
         const dx = e.clientX - state.screenX;
         const dy = e.clientY - state.screenY;
         if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+        // Any real movement cancels a pending long-press.
+        cancelLongPress();
 
         if (state.target.kind === "player") {
           const next: Interaction = {
@@ -865,11 +939,15 @@ function EditorCanvasImpl({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, drawMode],
+    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, drawMode, cancelLongPress],
   );
 
   const finishInteraction = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
+      // Pointerup cancels any armed long-press. If the long-press already
+      // fired, the state is "idle" and the normal completion branch below
+      // no-ops cleanly.
+      cancelLongPress();
       const state = interactionRef.current;
 
       if (state.type === "pending") {
@@ -954,7 +1032,7 @@ function EditorCanvasImpl({
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
       selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
-      onActiveStrokePatternChange, drawMode, onSelectZone,
+      onActiveStrokePatternChange, drawMode, onSelectZone, cancelLongPress,
     ],
   );
 
