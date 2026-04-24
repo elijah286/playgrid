@@ -27,6 +27,10 @@ import { TagsCard } from "./TagsCard";
 import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
+import {
+  GameModeLockedDialog,
+  isGameModeLocked,
+} from "@/features/game-mode/GameModeLockedDialog";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
@@ -208,6 +212,10 @@ function PlayEditorClientInner({
   const [isSaving, setIsSaving] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstDocRender = useRef(true);
+  const [gameLock, setGameLock] = useState<{
+    playbookId: string;
+    callerName: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -217,11 +225,17 @@ function PlayEditorClientInner({
     }
     if (isExamplePreview) return;
     if (isArchived) return;
+    if (gameLock) return; // paused while a live game is running
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       setIsSaving(true);
       const res = await savePlayVersionAction(playId, doc);
-      if (res.ok) {
+      if (isGameModeLocked(res)) {
+        setGameLock({
+          playbookId: res.gameLock.playbookId,
+          callerName: res.gameLock.callerName,
+        });
+      } else if (res.ok) {
         router.refresh();
       } else {
         toast(res.error, "error");
@@ -948,6 +962,13 @@ function PlayEditorClientInner({
       <GameModeUpgradeDialog
         open={gameModeUpgradeOpen}
         onClose={() => setGameModeUpgradeOpen(false)}
+      />
+
+      <GameModeLockedDialog
+        open={gameLock != null}
+        playbookId={gameLock?.playbookId ?? playbookId}
+        callerName={gameLock?.callerName ?? null}
+        onClose={() => setGameLock(null)}
       />
 
     </div>
