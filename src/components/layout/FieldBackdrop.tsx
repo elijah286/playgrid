@@ -64,24 +64,15 @@ export function FieldBackdrop() {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Yard lines: one horizontal line per 160px, with just two hash ticks
-              at ~1/3 and ~2/3 of the width. Real football fields only mark
-              hash ticks at two column positions — NOT a dense row of ticks. */}
+          {/* Hash ticks only — the horizontal yard lines clashed with
+              other horizontal rules on the page, so we keep just the
+              two short tick columns as faint texture. */}
           <pattern
             id="yard-lines"
             width="1600"
             height="160"
             patternUnits="userSpaceOnUse"
           >
-            <line
-              x1="0"
-              y1="80"
-              x2="1600"
-              y2="80"
-              stroke="currentColor"
-              strokeWidth="1"
-              opacity="0.35"
-            />
             <line
               x1="533"
               y1="73"
