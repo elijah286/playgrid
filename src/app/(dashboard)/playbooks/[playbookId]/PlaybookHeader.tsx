@@ -88,6 +88,8 @@ export function PlaybookHeader({
   ownerDisplayName,
   allowCoachDuplication,
   allowPlayerDuplication,
+  allowGameResultsDuplication,
+  gameResultsAvailable,
   playActions,
   exampleAdmin,
   exampleStatus,
@@ -108,6 +110,8 @@ export function PlaybookHeader({
   ownerDisplayName?: string | null;
   allowCoachDuplication?: boolean;
   allowPlayerDuplication?: boolean;
+  allowGameResultsDuplication?: boolean;
+  gameResultsAvailable?: boolean;
   playActions?: PlaybookHeaderPlayActions;
   exampleAdmin?: ExampleAdminState | null;
   exampleStatus?: { isPublished: boolean } | null;
@@ -186,10 +190,10 @@ export function PlaybookHeader({
     });
   }
 
-  function handleDuplicate(newName: string) {
+  function handleDuplicate(newName: string, copyGameResults: boolean) {
     setDuplicateOpen(false);
     run(
-      () => duplicatePlaybookAction(playbookId, newName),
+      () => duplicatePlaybookAction(playbookId, newName, { copyGameResults }),
       (res) => {
         if (res.id) router.push(`/playbooks/${res.id}`);
       },
@@ -205,6 +209,16 @@ export function PlaybookHeader({
   function handleTogglePlayerDup() {
     run(() =>
       setPlaybookAllowDuplicationAction(playbookId, "player", !allowPlayerDuplication),
+    );
+  }
+
+  function handleToggleGameResultsDup() {
+    run(() =>
+      setPlaybookAllowDuplicationAction(
+        playbookId,
+        "game_results",
+        !allowGameResultsDuplication,
+      ),
     );
   }
 
@@ -380,12 +394,18 @@ export function PlaybookHeader({
                 onDuplicate={canManage ? openDuplicate : null}
                 onToggleCoachDup={canManage ? handleToggleCoachDup : null}
                 onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
+                onToggleGameResultsDup={
+                  canManage && gameResultsAvailable
+                    ? handleToggleGameResultsDup
+                    : null
+                }
                 onArchive={canManage && !isArchived ? handleArchive : null}
                 onUnarchive={canManage && isArchived ? handleUnarchive : null}
                 onDelete={canManage ? handleDelete : null}
                 onLeave={!canManage ? handleLeave : null}
                 allowCoachDuplication={allowCoachDuplication ?? true}
                 allowPlayerDuplication={allowPlayerDuplication ?? true}
+                allowGameResultsDuplication={allowGameResultsDuplication ?? false}
                 playActions={playActions}
                 exampleAdmin={exampleAdmin ?? null}
                 onToggleExample={exampleAdmin ? handleToggleExample : null}
@@ -427,6 +447,9 @@ export function PlaybookHeader({
       {duplicateOpen && (
         <DuplicatePlaybookDialog
           playbookName={name}
+          allowGameResultsCopy={Boolean(
+            allowGameResultsDuplication && gameResultsAvailable,
+          )}
           onClose={() => setDuplicateOpen(false)}
           onDuplicate={handleDuplicate}
         />
@@ -444,18 +467,21 @@ export function PlaybookHeader({
 
 function DuplicatePlaybookDialog({
   playbookName,
+  allowGameResultsCopy,
   onClose,
   onDuplicate,
 }: {
   playbookName: string;
+  allowGameResultsCopy: boolean;
   onClose: () => void;
-  onDuplicate: (name: string) => void;
+  onDuplicate: (name: string, copyGameResults: boolean) => void;
 }) {
   const [name, setName] = useState(`${playbookName} (copy)`);
+  const [copyGameResults, setCopyGameResults] = useState(false);
   function submit() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onDuplicate(trimmed);
+    onDuplicate(trimmed, allowGameResultsCopy && copyGameResults);
   }
   return (
     <div
@@ -490,6 +516,24 @@ function DuplicatePlaybookDialog({
               }}
             />
           </div>
+          {allowGameResultsCopy && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-surface-inset/50 p-3">
+              <input
+                type="checkbox"
+                checked={copyGameResults}
+                onChange={(e) => setCopyGameResults(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 rounded border-border"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">
+                  Also copy game results
+                </div>
+                <p className="mt-0.5 text-xs text-muted">
+                  Include completed game sessions, play calls, and score events from the source playbook.
+                </p>
+              </div>
+            </label>
+          )}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
           <Button variant="ghost" onClick={onClose}>
@@ -528,12 +572,14 @@ function HeaderMenu({
   onDuplicate,
   onToggleCoachDup,
   onTogglePlayerDup,
+  onToggleGameResultsDup,
   onArchive,
   onUnarchive,
   onDelete,
   onLeave,
   allowCoachDuplication,
   allowPlayerDuplication,
+  allowGameResultsDuplication,
   playActions,
   exampleAdmin,
   onToggleExample,
@@ -548,12 +594,14 @@ function HeaderMenu({
   onDuplicate: (() => void) | null;
   onToggleCoachDup: (() => void) | null;
   onTogglePlayerDup: (() => void) | null;
+  onToggleGameResultsDup: (() => void) | null;
   onArchive: (() => void) | null;
   onUnarchive: (() => void) | null;
   onDelete: (() => void) | null;
   onLeave: (() => void) | null;
   allowCoachDuplication: boolean;
   allowPlayerDuplication: boolean;
+  allowGameResultsDuplication: boolean;
   playActions?: PlaybookHeaderPlayActions;
   exampleAdmin: ExampleAdminState | null;
   onToggleExample: (() => void) | null;
@@ -737,6 +785,25 @@ function HeaderMenu({
                   )}
                   <span className="flex-1">Player duplication</span>
                   <DupStatePill allowed={allowPlayerDuplication} />
+                </button>
+              )}
+              {onToggleGameResultsDup && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onToggleGameResultsDup();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                >
+                  {allowGameResultsDuplication ? (
+                    <Unlock className="size-4 shrink-0" />
+                  ) : (
+                    <Lock className="size-4 shrink-0" />
+                  )}
+                  <span className="flex-1">Copy game results on duplicate</span>
+                  <DupStatePill allowed={allowGameResultsDuplication} />
                 </button>
               )}
               {onArchive && (

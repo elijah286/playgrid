@@ -226,3 +226,150 @@ async function copySourcePlaybookFormations(
   }
   return map;
 }
+
+/**
+ * Copy game results (sessions + per-call rows + score events) from one
+ * playbook into another. Caller is responsible for verifying:
+ *   * the source playbook's allow_game_results_duplication is true
+ *   * the duplicating user explicitly opted in (UI prompt)
+ *
+ * Only ended sessions are copied — active sessions belong to a live
+ * game in progress and have no place in a static duplicate.
+ *
+ * play_id references on game_plays are translated through the play
+ * id map produced by copyPlaybookContents. We re-query plays for that
+ * map by joining old play ids to the new playbook by name (cheap and
+ * good enough for the v1 prompted flow). game_score_events.play_id
+ * points at game_plays.id and is translated through the call id map
+ * built inline below. Coach attribution (game_sessions.coach_id and
+ * game_score_events.created_by) is rewritten to the duplicating user
+ * so cross-team copies don't leak third-party identities.
+ */
+export async function copyPlaybookGameSessions(
+  client: SupabaseClient,
+  sourcePlaybookId: string,
+  targetPlaybookId: string,
+  duplicatingUserId: string,
+): Promise<void> {
+  const { data: sessions } = await client
+    .from("game_sessions")
+    .select(
+      "id, started_at, ended_at, kind, opponent, score_us, score_them, notes",
+    )
+    .eq("playbook_id", sourcePlaybookId)
+    .eq("status", "ended")
+    .order("started_at", { ascending: true });
+  if (!sessions || sessions.length === 0) return;
+
+  // Build old-play-id → new-play-id map by name. The duplicate copies
+  // every non-archived play and preserves names, so this resolves the
+  // vast majority of historical calls. Calls that don't resolve are
+  // dropped — game_plays.play_id is NOT NULL, so we can't preserve
+  // them without a target play row.
+  const playIdMap = await buildSourceToTargetPlayMap(
+    client,
+    sourcePlaybookId,
+    targetPlaybookId,
+  );
+
+  for (const s of sessions) {
+    const sourceSessionId = s.id as string;
+    const { data: newSession } = await client
+      .from("game_sessions")
+      .insert({
+        playbook_id: targetPlaybookId,
+        coach_id: duplicatingUserId,
+        status: "ended",
+        started_at: s.started_at,
+        ended_at: s.ended_at,
+        kind: s.kind,
+        opponent: s.opponent,
+        score_us: s.score_us,
+        score_them: s.score_them,
+        notes: s.notes,
+      })
+      .select("id")
+      .single();
+    if (!newSession?.id) continue;
+    const newSessionId = newSession.id as string;
+
+    const { data: calls } = await client
+      .from("game_plays")
+      .select(
+        "id, play_id, position, called_at, thumb, tag, snapshot, play_version_id",
+      )
+      .eq("session_id", sourceSessionId)
+      .order("position", { ascending: true });
+
+    const callIdMap = new Map<string, string>();
+    for (const c of calls ?? []) {
+      const newPlayId = playIdMap.get(c.play_id as string);
+      if (!newPlayId) continue;
+      const { data: newCall } = await client
+        .from("game_plays")
+        .insert({
+          session_id: newSessionId,
+          play_id: newPlayId,
+          // Don't carry version_id across — it points at a row in the
+          // source's play_versions tree which the duplicate doesn't
+          // own. The snapshot is the authoritative render source.
+          play_version_id: null,
+          position: c.position,
+          called_at: c.called_at,
+          thumb: c.thumb,
+          tag: c.tag,
+          snapshot: c.snapshot ?? {},
+        })
+        .select("id")
+        .single();
+      if (newCall?.id) callIdMap.set(c.id as string, newCall.id as string);
+    }
+
+    const { data: events } = await client
+      .from("game_score_events")
+      .select("side, delta, created_at, play_id")
+      .eq("session_id", sourceSessionId)
+      .order("created_at", { ascending: true });
+    if (events && events.length > 0) {
+      const rows = events.map((e) => ({
+        session_id: newSessionId,
+        created_by: duplicatingUserId,
+        side: e.side,
+        delta: e.delta,
+        created_at: e.created_at,
+        play_id: e.play_id ? callIdMap.get(e.play_id as string) ?? null : null,
+      }));
+      await client.from("game_score_events").insert(rows);
+    }
+  }
+}
+
+async function buildSourceToTargetPlayMap(
+  client: SupabaseClient,
+  sourcePlaybookId: string,
+  targetPlaybookId: string,
+): Promise<Map<string, string>> {
+  const [{ data: src }, { data: tgt }] = await Promise.all([
+    client
+      .from("plays")
+      .select("id, name")
+      .eq("playbook_id", sourcePlaybookId),
+    client
+      .from("plays")
+      .select("id, name")
+      .eq("playbook_id", targetPlaybookId),
+  ]);
+  const tgtByName = new Map<string, string>();
+  for (const t of tgt ?? []) {
+    const name = (t.name as string | null)?.trim();
+    if (name) tgtByName.set(name, t.id as string);
+  }
+  const map = new Map<string, string>();
+  for (const s of src ?? []) {
+    const name = (s.name as string | null)?.trim();
+    if (!name) continue;
+    const newId = tgtByName.get(name);
+    if (newId) map.set(s.id as string, newId);
+  }
+  return map;
+}

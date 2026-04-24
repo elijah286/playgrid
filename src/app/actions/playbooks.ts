@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { ensureDefaultWorkspace } from "@/lib/data/workspace";
-import { copyPlaybookContents } from "@/lib/data/playbook-copy";
+import {
+  copyPlaybookContents,
+  copyPlaybookGameSessions,
+} from "@/lib/data/playbook-copy";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SportVariant } from "@/domain/play/types";
 import {
@@ -494,7 +497,11 @@ export async function deletePlaybookAction(playbookId: string) {
  * Non-owners can only duplicate if the owner has left `allow_duplication`
  * on (default). Owners can always duplicate their own books.
  */
-export async function duplicatePlaybookAction(playbookId: string, newName?: string) {
+export async function duplicatePlaybookAction(
+  playbookId: string,
+  newName?: string,
+  opts?: { copyGameResults?: boolean },
+) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
   const {
@@ -512,7 +519,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
 
   const { data: src, error: srcErr } = await supabase
     .from("playbooks")
-    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season, allow_coach_duplication, allow_player_duplication")
+    .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication")
     .eq("id", playbookId)
     .single();
   if (srcErr || !src) return { ok: false as const, error: srcErr?.message ?? "Not found" };
@@ -573,6 +580,17 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
 
   await copyPlaybookContents(supabase, playbookId, newBook.id, user.id);
 
+  // Game results are only carried over when the source owner has opted
+  // in via the playbook setting AND the duplicating user explicitly
+  // requested it. Both gates are required so historical game data never
+  // leaks into a copy without two-sided consent.
+  if (
+    opts?.copyGameResults &&
+    src.allow_game_results_duplication === true
+  ) {
+    await copyPlaybookGameSessions(supabase, playbookId, newBook.id, user.id);
+  }
+
   revalidatePath("/home");
   return { ok: true as const, id: newBook.id };
 }
@@ -583,7 +601,7 @@ export async function duplicatePlaybookAction(playbookId: string, newName?: stri
  */
 export async function setPlaybookAllowDuplicationAction(
   playbookId: string,
-  target: "coach" | "player",
+  target: "coach" | "player" | "game_results",
   allow: boolean,
 ) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
@@ -604,7 +622,11 @@ export async function setPlaybookAllowDuplicationAction(
   }
 
   const column =
-    target === "coach" ? "allow_coach_duplication" : "allow_player_duplication";
+    target === "coach"
+      ? "allow_coach_duplication"
+      : target === "player"
+        ? "allow_player_duplication"
+        : "allow_game_results_duplication";
   const { error } = await supabase
     .from("playbooks")
     .update({ [column]: allow })

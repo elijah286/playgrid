@@ -292,6 +292,8 @@ function PlaybookDetailClientInner({
     ownerDisplayName: string | null;
     allowCoachDuplication: boolean;
     allowPlayerDuplication: boolean;
+    allowGameResultsDuplication: boolean;
+    gameResultsAvailable: boolean;
     exampleAdmin: {
       isExample: boolean;
       isPublished: boolean;
@@ -986,6 +988,8 @@ function PlaybookDetailClientInner({
           ownerDisplayName={headerProps.ownerDisplayName}
           allowCoachDuplication={headerProps.allowCoachDuplication}
           allowPlayerDuplication={headerProps.allowPlayerDuplication}
+          allowGameResultsDuplication={headerProps.allowGameResultsDuplication}
+          gameResultsAvailable={headerProps.gameResultsAvailable}
           exampleAdmin={headerProps.exampleAdmin}
           exampleStatus={headerProps.exampleStatus}
           isExamplePreview={headerProps.isExamplePreview}
