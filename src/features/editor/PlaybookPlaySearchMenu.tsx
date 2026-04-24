@@ -59,6 +59,7 @@ export function PlaybookPlaySearchMenu({
   const panelRef = useRef<HTMLDivElement>(null);
   const activeTileRef = useRef<HTMLElement>(null);
   const [mobileTop, setMobileTop] = useState<number | null>(null);
+  const [desktopPos, setDesktopPos] = useState<{ left: number; top: number; width: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -82,15 +83,26 @@ export function PlaybookPlaySearchMenu({
   useLayoutEffect(() => {
     if (!open) {
       setMobileTop(null);
+      setDesktopPos(null);
       return;
     }
     function update() {
-      if (window.innerWidth >= 640) {
-        setMobileTop(null);
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      if (window.innerWidth < 640) {
+        setMobileTop(r.bottom + 4);
+        setDesktopPos(null);
         return;
       }
-      const r = triggerRef.current?.getBoundingClientRect();
-      if (r) setMobileTop(r.bottom + 4);
+      // Desktop: left-align to trigger, clamp so the panel stays on screen.
+      const margin = 8;
+      const maxWidth = Math.min(640, window.innerWidth - margin * 2);
+      const left = Math.max(
+        margin,
+        Math.min(r.left, window.innerWidth - maxWidth - margin),
+      );
+      setMobileTop(null);
+      setDesktopPos({ left, top: r.bottom + 4, width: maxWidth });
     }
     update();
     window.addEventListener("resize", update);
@@ -167,8 +179,14 @@ export function PlaybookPlaySearchMenu({
       {open && (
         <div
           ref={panelRef}
-          style={mobileTop != null ? { top: mobileTop } : undefined}
-          className="fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-1 sm:w-[min(100vw-2rem,640px)]"
+          style={
+            mobileTop != null
+              ? { top: mobileTop }
+              : desktopPos
+                ? { left: desktopPos.left, top: desktopPos.top, width: desktopPos.width }
+                : undefined
+          }
+          className="fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:inset-x-auto"
         >
           <div className="border-b border-border p-2">
             <div className="relative">
