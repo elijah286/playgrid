@@ -2925,7 +2925,7 @@ function AddPlayerDialog({
             className="mr-auto text-xs text-primary underline-offset-2 hover:underline disabled:opacity-50"
             disabled={saving}
           >
-            Use quick add to add multiple players
+            Bulk add players
           </button>
           <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
