@@ -194,9 +194,8 @@ async function run() {
   await clickButton(/^select shown$/i);
   await page.waitForTimeout(500);
 
-  // Prefer "On paper" (sheet of wristbands) over "Individual band" — that's
-  // the layout the marketing section wants to show.
-  await clickButton(/^on paper$/i);
+  // Marketing shows a single wristband card, so pick "Individual band".
+  await clickButton(/^individual band$/i);
   await page.waitForTimeout(1200);
 
   await preview.waitFor({ timeout: 10000 });

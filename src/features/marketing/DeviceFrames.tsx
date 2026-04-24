@@ -80,19 +80,38 @@ export function WristBand({
   children: ReactNode;
   className?: string;
 }) {
+  const bandStyle =
+    "bg-[linear-gradient(180deg,#1a1a1a_0%,#2a2a2a_50%,#151515_100%)]";
   return (
     <div className={`relative mx-auto w-full max-w-md ${className}`}>
       <div
-        className="relative rounded-2xl bg-neutral-800 p-3 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)]"
+        className="relative shadow-[0_30px_60px_-15px_rgba(0,0,0,0.45)]"
         style={{
-          transform: "perspective(800px) rotateX(18deg) rotateY(-8deg)",
+          transform: "perspective(900px) rotateX(14deg)",
         }}
       >
-        <div className="rounded-lg bg-white p-2 ring-1 ring-black/10">
-          {children}
+        {/* Top strap */}
+        <div
+          className={`h-10 rounded-t-2xl ${bandStyle} ring-1 ring-black/40`}
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 2px, transparent 2px 6px), linear-gradient(180deg,#1a1a1a 0%,#2a2a2a 50%,#151515 100%)",
+          }}
+        />
+        {/* Card window */}
+        <div className="relative -my-1 bg-neutral-900 p-2 ring-1 ring-black/40">
+          <div className="rounded-sm bg-white p-1.5 shadow-inner ring-1 ring-black/10">
+            {children}
+          </div>
         </div>
-        <div className="absolute -left-2 top-1/2 h-16 w-4 -translate-y-1/2 rounded-l-md bg-neutral-900" />
-        <div className="absolute -right-2 top-1/2 h-16 w-4 -translate-y-1/2 rounded-r-md bg-neutral-900" />
+        {/* Bottom strap */}
+        <div
+          className={`h-10 rounded-b-2xl ${bandStyle} ring-1 ring-black/40`}
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 2px, transparent 2px 6px), linear-gradient(180deg,#151515 0%,#2a2a2a 50%,#1a1a1a 100%)",
+          }}
+        />
       </div>
     </div>
   );
