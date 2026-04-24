@@ -13,7 +13,6 @@ import {
   StickyNote,
   ChevronDown,
   Radio,
-  Loader2,
 } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
@@ -93,15 +92,6 @@ export function GameModeClient({
   const [exitOpen, setExitOpen] = useState(false);
   const [saving, startSaving] = useTransition();
   const [, startMutating] = useTransition();
-  // Separate pending flag for the two interactions that change which play
-  // is on deck (picking/changing the next play, and running it). Realtime
-  // round-trips on a slow connection can take a beat, so we overlay a
-  // spinner on the next-play row until the server confirms the new state.
-  const [advancePending, setAdvancePending] = useState(false);
-  const advanceTargetRef = useRef<{
-    kind: "next" | "run";
-    playId: string;
-  } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -278,13 +268,23 @@ export function GameModeClient({
               thumb: (row.thumb as "up" | "down" | null) ?? null,
               tag: (row.tag as string | null) ?? null,
             };
-            const idx = prev.findIndex((c) => c.id === next.id);
+            // Replace any optimistic stand-in for the same play/position
+            // so we don't end up with a duplicate row. Then upsert by id.
+            const pruned = prev.filter(
+              (c) =>
+                !(
+                  c.id.startsWith("optimistic:") &&
+                  c.playId === next.playId &&
+                  c.position === next.position
+                ),
+            );
+            const idx = pruned.findIndex((c) => c.id === next.id);
             if (idx >= 0) {
-              const copy = prev.slice();
+              const copy = pruned.slice();
               copy[idx] = next;
               return copy;
             }
-            return [...prev, next].sort((a, b) => a.position - b.position);
+            return [...pruned, next].sort((a, b) => a.position - b.position);
           });
         },
       )
@@ -333,27 +333,6 @@ export function GameModeClient({
     };
   }, [session]);
 
-  // Clear the advance spinner when realtime confirms the target state has
-  // landed, with a 6s failsafe in case the realtime packet is dropped.
-  useEffect(() => {
-    if (!advancePending) return;
-    const target = advanceTargetRef.current;
-    if (!target || !session) return;
-    const matched =
-      (target.kind === "next" && session.nextPlayId === target.playId) ||
-      (target.kind === "run" && session.currentPlayId === target.playId);
-    if (matched) {
-      advanceTargetRef.current = null;
-      setAdvancePending(false);
-      return;
-    }
-    const timeout = setTimeout(() => {
-      advanceTargetRef.current = null;
-      setAdvancePending(false);
-    }, 6000);
-    return () => clearTimeout(timeout);
-  }, [advancePending, session]);
-
   // --- Heartbeat -----------------------------------------------------------
   useEffect(() => {
     if (!session) return;
@@ -385,24 +364,33 @@ export function GameModeClient({
     }
   }
 
+  // Optimistic UI: the device that triggers a change updates local state
+  // immediately and fires the server action in the background. Realtime
+  // echoes the same truth back and our state stays consistent (idempotent
+  // reducers — we match by id). On failure we roll back to the snapshot.
+
   function pickPlay(playId: string) {
     if (!session) return;
     const mode = pickerMode;
     setPickerMode("closed");
-    if (mode === "next") {
-      advanceTargetRef.current = { kind: "next", playId };
-      setAdvancePending(true);
-    }
+    if (mode === "closed") return;
+
+    const snapshot = session;
+    setSession({
+      ...session,
+      ...(mode === "current"
+        ? { currentPlayId: playId }
+        : { nextPlayId: playId }),
+    });
+
     startMutating(async () => {
       const res =
         mode === "current"
           ? await setInitialPlayAction(session.id, playId)
-          : mode === "next"
-            ? await setNextPlayAction(session.id, playId)
-            : { ok: true as const };
+          : await setNextPlayAction(session.id, playId);
       if (!res.ok) {
         toast(res.error, "error");
-        if (mode === "next") setAdvancePending(false);
+        setSession(snapshot);
       }
     });
   }
@@ -410,23 +398,44 @@ export function GameModeClient({
   function runNextPlay() {
     if (!session) return;
     const target = session.nextPlayId;
-    if (target) {
-      advanceTargetRef.current = { kind: "run", playId: target };
-      setAdvancePending(true);
-    }
+    if (!target) return;
+
+    const sessionSnapshot = session;
+    const callsSnapshot = calls;
+    // Optimistic: promote next → current, clear next, insert a pending
+    // call row so scoring taps are responsive even before the server
+    // INSERT echoes back. We tag the id so the realtime handler can
+    // replace it when the real row arrives.
+    const optimisticCallId = `optimistic:${Date.now()}`;
+    const maxPos = calls.reduce((m, c) => Math.max(m, c.position), -1);
+    setSession({ ...session, currentPlayId: target, nextPlayId: null });
+    setCalls([
+      ...calls,
+      {
+        id: optimisticCallId,
+        playId: target,
+        position: maxPos + 1,
+        calledAt: new Date().toISOString(),
+        thumb: null,
+        tag: null,
+      },
+    ]);
+
     startMutating(async () => {
       if (!isCaller) {
         const t = await takeoverCallerAction(session.id);
         if (!t.ok) {
           toast(t.error, "error");
-          setAdvancePending(false);
+          setSession(sessionSnapshot);
+          setCalls(callsSnapshot);
           return;
         }
       }
       const res = await advanceToNextPlayAction(session.id);
       if (!res.ok) {
         toast(res.error, "error");
-        setAdvancePending(false);
+        setSession(sessionSnapshot);
+        setCalls(callsSnapshot);
       }
     });
   }
@@ -435,58 +444,84 @@ export function GameModeClient({
    *  claim the caller role first so the tap does what the label says.
    *  High-trust environment — we don't gate this behind a confirm. */
   function openNextPicker() {
-    if (!session) {
-      setPickerMode("next");
-      return;
-    }
-    if (isCaller) {
-      setPickerMode("next");
-      return;
-    }
+    setPickerMode("next");
+    if (!session || isCaller) return;
+    const snapshot = session;
+    setSession({ ...session, callerUserId: currentUserId });
     startMutating(async () => {
       const t = await takeoverCallerAction(session.id);
       if (!t.ok) {
         toast(t.error, "error");
-        return;
+        setSession(snapshot);
       }
-      setPickerMode("next");
+    });
+  }
+
+  function applyScore(next: { thumb: "up" | "down" | null; tag: string | null }) {
+    if (!session) return;
+    const currentPlayIdNow = session.currentPlayId;
+    if (!currentPlayIdNow) return;
+
+    const callsSnapshot = calls;
+    // Update (or synthesize) the latest call for the current play so the
+    // scoring UI reflects the tap instantly.
+    const lastIdx = calls.length - 1;
+    const last = lastIdx >= 0 ? calls[lastIdx] : null;
+    if (last && last.playId === currentPlayIdNow) {
+      const copy = calls.slice();
+      copy[lastIdx] = { ...last, thumb: next.thumb, tag: next.tag };
+      setCalls(copy);
+    } else {
+      const maxPos = calls.reduce((m, c) => Math.max(m, c.position), -1);
+      setCalls([
+        ...calls,
+        {
+          id: `optimistic:${Date.now()}`,
+          playId: currentPlayIdNow,
+          position: maxPos + 1,
+          calledAt: new Date().toISOString(),
+          thumb: next.thumb,
+          tag: next.tag,
+        },
+      ]);
+    }
+
+    startMutating(async () => {
+      const res = await scoreCurrentCallAction(session.id, next);
+      if (!res.ok) {
+        toast(res.error, "error");
+        setCalls(callsSnapshot);
+      }
     });
   }
 
   function tapThumb(direction: ThumbDirection) {
-    if (!session) return;
-    // Local last-write-wins: if currentOutcome already shows this thumb,
-    // tapping it clears. Otherwise set thumb, drop tag.
     const next: { thumb: "up" | "down" | null; tag: string | null } =
       currentOutcome?.thumb === direction
         ? { thumb: null, tag: null }
         : { thumb: direction, tag: null };
-    startMutating(async () => {
-      const res = await scoreCurrentCallAction(session.id, next);
-      if (!res.ok) toast(res.error, "error");
-    });
+    applyScore(next);
   }
 
   function tapTag(direction: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) {
-    if (!session) return;
-    // If the current outcome has a different thumb than this tag, switch
-    // thumb and set tag. If same thumb and same tag, clear tag. Else set.
     const next: { thumb: "up" | "down" | null; tag: string | null } = (() => {
       if (currentOutcome?.thumb !== direction) return { thumb: direction, tag };
       if (currentOutcome.tag === tag) return { thumb: direction, tag: null };
       return { thumb: direction, tag };
     })();
-    startMutating(async () => {
-      const res = await scoreCurrentCallAction(session.id, next);
-      if (!res.ok) toast(res.error, "error");
-    });
+    applyScore(next);
   }
 
   function takeover() {
     if (!session) return;
+    const snapshot = session;
+    setSession({ ...session, callerUserId: currentUserId });
     startMutating(async () => {
       const res = await takeoverCallerAction(session.id);
-      if (!res.ok) toast(res.error, "error");
+      if (!res.ok) {
+        toast(res.error, "error");
+        setSession(snapshot);
+      }
     });
   }
 
@@ -635,16 +670,7 @@ export function GameModeClient({
             />
           </div>
         ) : (
-          <div className="relative mx-auto w-full max-w-[640px] landscape:hidden">
-            {advancePending && (
-              <div
-                role="status"
-                aria-label="Updating"
-                className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface-inset/70 backdrop-blur-sm"
-              >
-                <Loader2 className="size-8 animate-spin text-primary" />
-              </div>
-            )}
+          <div className="mx-auto w-full max-w-[640px] landscape:hidden">
             {nextPlay ? (
               <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
