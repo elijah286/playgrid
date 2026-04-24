@@ -19,6 +19,9 @@ import {
   CheckSquare,
   Copy,
   FilePlus,
+  GripVertical,
+  LayoutGrid,
+  List,
   Pencil,
   Plus,
   Search,
@@ -43,6 +46,7 @@ import {
   rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -124,6 +128,7 @@ export function PlaybookFormationsTab({
   }, [initial]);
   const [q, setQ] = useState("");
   const [view, setView] = useState<"active" | "archived">("active");
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [reorderMode, setReorderMode] = useState(false);
@@ -306,6 +311,15 @@ export function PlaybookFormationsTab({
             { value: "archived", label: "Archived" },
           ]}
         />
+        <SegmentedControl
+          size="sm"
+          value={viewMode}
+          onChange={(v) => setViewMode(v as "cards" | "list")}
+          options={[
+            { value: "cards", label: "Grid", icon: LayoutGrid },
+            { value: "list", label: "List", icon: List },
+          ]}
+        />
         <Button
           variant={selectionMode ? "primary" : "secondary"}
           leftIcon={CheckSquare}
@@ -378,53 +392,103 @@ export function PlaybookFormationsTab({
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveDragId(null)}
         >
-          <SortableContext items={visibleIds} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {visible.map((f) => {
-                const isSelected = selectedIds.has(f.id);
-                return (
-                  <SortableItem key={f.id} id={f.id} disabled={!reorderMode}>
-                    {({ setNodeRef, style, attributes, listeners, isDragging }) => (
-                      <FormationCard
-                        ref={setNodeRef}
-                        style={style}
-                        dragAttributes={reorderMode ? attributes : undefined}
-                        dragListeners={reorderMode ? listeners : undefined}
-                        isDragging={isDragging}
-                        reorderMode={reorderMode}
-                        selectionMode={selectionMode}
-                        isSelected={isSelected}
-                        onToggleSelect={() => {
-                          setSelectedIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(f.id)) next.delete(f.id);
-                            else next.add(f.id);
-                            return next;
-                          });
-                        }}
-                        formation={f}
-                        isAdmin={isAdmin}
-                        onEdit={() =>
-                          router.push(
-                            `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
-                          )
-                        }
-                        onCreatePlay={() =>
-                          router.push(
-                            `/plays/new?playbookId=${playbookId}&formationId=${f.id}`,
-                          )
-                        }
-                        onCopy={handleCopy}
-                        onDelete={handleDelete}
-                        onArchive={handleArchive}
-                        onAddAsSeed={handleAddAsSeed}
-                      />
-                    )}
-                  </SortableItem>
-                );
-              })}
-            </div>
-          </SortableContext>
+          {viewMode === "cards" ? (
+            <SortableContext items={visibleIds} strategy={rectSortingStrategy}>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {visible.map((f) => {
+                  const isSelected = selectedIds.has(f.id);
+                  return (
+                    <SortableItem key={f.id} id={f.id} disabled={!reorderMode}>
+                      {({ setNodeRef, style, attributes, listeners, isDragging }) => (
+                        <FormationCard
+                          ref={setNodeRef}
+                          style={style}
+                          dragAttributes={reorderMode ? attributes : undefined}
+                          dragListeners={reorderMode ? listeners : undefined}
+                          isDragging={isDragging}
+                          reorderMode={reorderMode}
+                          selectionMode={selectionMode}
+                          isSelected={isSelected}
+                          onToggleSelect={() => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(f.id)) next.delete(f.id);
+                              else next.add(f.id);
+                              return next;
+                            });
+                          }}
+                          formation={f}
+                          isAdmin={isAdmin}
+                          onEdit={() =>
+                            router.push(
+                              `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
+                            )
+                          }
+                          onCreatePlay={() =>
+                            router.push(
+                              `/plays/new?playbookId=${playbookId}&formationId=${f.id}`,
+                            )
+                          }
+                          onCopy={handleCopy}
+                          onDelete={handleDelete}
+                          onArchive={handleArchive}
+                          onAddAsSeed={handleAddAsSeed}
+                        />
+                      )}
+                    </SortableItem>
+                  );
+                })}
+              </div>
+            </SortableContext>
+          ) : (
+            <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
+              <ul className="divide-y divide-border rounded-lg border border-border bg-surface-raised">
+                {visible.map((f) => {
+                  const isSelected = selectedIds.has(f.id);
+                  return (
+                    <SortableItem key={f.id} id={f.id} disabled={!reorderMode}>
+                      {({ setNodeRef, style, attributes, listeners, isDragging }) => (
+                        <FormationRow
+                          ref={setNodeRef as unknown as (el: HTMLLIElement | null) => void}
+                          style={style}
+                          dragAttributes={reorderMode ? attributes : undefined}
+                          dragListeners={reorderMode ? listeners : undefined}
+                          isDragging={isDragging}
+                          reorderMode={reorderMode}
+                          selectionMode={selectionMode}
+                          isSelected={isSelected}
+                          onToggleSelect={() => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(f.id)) next.delete(f.id);
+                              else next.add(f.id);
+                              return next;
+                            });
+                          }}
+                          formation={f}
+                          isAdmin={isAdmin}
+                          onEdit={() =>
+                            router.push(
+                              `/formations/${f.id}/edit?returnToPlaybook=${playbookId}`,
+                            )
+                          }
+                          onCreatePlay={() =>
+                            router.push(
+                              `/plays/new?playbookId=${playbookId}&formationId=${f.id}`,
+                            )
+                          }
+                          onCopy={handleCopy}
+                          onDelete={handleDelete}
+                          onArchive={handleArchive}
+                          onAddAsSeed={handleAddAsSeed}
+                        />
+                      )}
+                    </SortableItem>
+                  );
+                })}
+              </ul>
+            </SortableContext>
+          )}
           <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
             {activeDragId
               ? (() => {
@@ -667,6 +731,113 @@ const FormationCard = function FormationCard({
         </div>
       )}
     </Card>
+  );
+};
+
+type FormationRowProps = FormationCardProps;
+
+const FormationRow = function FormationRow({
+  ref,
+  formation,
+  isAdmin,
+  onEdit,
+  onCreatePlay,
+  onCopy,
+  onDelete,
+  onArchive,
+  onAddAsSeed,
+  reorderMode,
+  selectionMode,
+  isSelected,
+  isDragging,
+  onToggleSelect,
+  style,
+  dragAttributes,
+  dragListeners,
+}: FormationRowProps & { ref?: (el: HTMLLIElement | null) => void }) {
+  const items: ActionMenuItem[] = [
+    { label: "Create play using formation", icon: FilePlus, onSelect: onCreatePlay },
+    { label: "Edit", icon: Pencil, onSelect: onEdit },
+    { label: "Copy", icon: Copy, onSelect: () => onCopy(formation) },
+    formation.isArchived
+      ? { label: "Restore", icon: ArchiveRestore, onSelect: () => onArchive(formation) }
+      : { label: "Archive", icon: Archive, onSelect: () => onArchive(formation) },
+  ];
+  if (isAdmin) {
+    items.push({
+      label: "Add as seed",
+      icon: Sparkles,
+      onSelect: () => onAddAsSeed(formation),
+    });
+  }
+  items.push({
+    label: "Delete",
+    icon: Trash2,
+    danger: true,
+    onSelect: () => onDelete(formation.id, formation.displayName),
+  });
+
+  return (
+    <li
+      ref={ref}
+      style={style}
+      className={`flex items-center gap-3 px-3 py-2 transition-colors ${
+        isDragging ? "opacity-40" : ""
+      } ${isSelected ? "bg-primary/5" : "hover:bg-surface-inset"} ${
+        selectionMode ? "cursor-pointer" : ""
+      }`}
+      onClick={
+        selectionMode
+          ? (e) => {
+              e.preventDefault();
+              onToggleSelect();
+            }
+          : undefined
+      }
+    >
+      {reorderMode && (
+        <button
+          type="button"
+          aria-label="Drag to reorder"
+          className="flex size-8 shrink-0 cursor-grab items-center justify-center rounded text-muted hover:bg-surface-inset hover:text-foreground active:cursor-grabbing"
+          {...(dragAttributes ?? {})}
+          {...(dragListeners ?? {})}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      )}
+      {selectionMode && (
+        <div className="pointer-events-none flex size-5 shrink-0 items-center justify-center rounded border-2 border-primary bg-surface-raised">
+          {isSelected && <Check className="size-3.5 text-primary" />}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onEdit}
+        disabled={reorderMode || selectionMode}
+        className={`flex min-w-0 flex-1 items-center gap-3 text-left ${
+          reorderMode || selectionMode ? "pointer-events-none" : ""
+        }`}
+        tabIndex={reorderMode || selectionMode ? -1 : 0}
+      >
+        <div className="w-20 shrink-0 sm:w-28">
+          <FormationThumbnail formation={formation} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-foreground">
+            {formation.displayName}
+          </div>
+          <div className="truncate text-xs text-muted">
+            {formation.players.length} players
+          </div>
+        </div>
+      </button>
+      {!reorderMode && !selectionMode && (
+        <div className="shrink-0">
+          <ActionMenu items={items} />
+        </div>
+      )}
+    </li>
   );
 };
 
