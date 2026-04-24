@@ -122,6 +122,8 @@ import {
   removeStaffMemberAction,
   setCoachTitleAction,
   setHeadCoachAction,
+  setMemberRoleAction,
+  updateRosterEntryAction,
   linkRosterEntryAction,
   unlinkRosterEntryAction,
 } from "@/app/actions/playbook-roster";
@@ -2176,6 +2178,8 @@ function RosterPanel({
   const { toast } = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
+  const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   function openInvite() {
     if (!viewerIsCoach) {
@@ -2603,27 +2607,55 @@ function RosterPanel({
                 {active.map((m) => {
                   const name = m.label || m.display_name || "—";
                   const unclaimed = m.user_id === null;
-                  const items: ActionMenuItem[] = unclaimed
-                    ? [
-                        {
-                          label: "Remove from roster",
-                          icon: Trash2,
-                          danger: true,
-                          onSelect: () => deleteEntry(m.id, name),
-                        },
-                      ]
-                    : [
-                        {
-                          label: "Unlink user",
-                          icon: X,
-                          onSelect: () => unlinkUser(m.id, name),
-                        },
-                      ];
+                  const items: ActionMenuItem[] = [
+                    {
+                      label: "Rename",
+                      icon: Pencil,
+                      onSelect: () => setRenaming(m),
+                    },
+                    ...(unclaimed
+                      ? []
+                      : [
+                          {
+                            label: "Change role",
+                            icon: Crown,
+                            onSelect: () => setRoleEditing(m),
+                          },
+                        ]),
+                    ...(unclaimed
+                      ? [
+                          {
+                            label: "Remove from roster",
+                            icon: Trash2,
+                            danger: true,
+                            onSelect: () => deleteEntry(m.id, name),
+                          },
+                        ]
+                      : [
+                          {
+                            label: "Unlink user",
+                            icon: X,
+                            onSelect: () => unlinkUser(m.id, name),
+                          },
+                        ]),
+                  ];
+                  const canEditRole = viewerIsCoach && !unclaimed && m.role !== "owner";
                   return (
                     <tr key={m.id}>
                       <td className="px-4 py-2.5 font-medium text-foreground">
                         <span className="inline-flex items-center gap-2">
-                          {name}
+                          {viewerIsCoach ? (
+                            <button
+                              type="button"
+                              onClick={() => setRenaming(m)}
+                              className="rounded px-1 -mx-1 text-left hover:bg-surface-inset"
+                              title="Rename"
+                            >
+                              {name}
+                            </button>
+                          ) : (
+                            name
+                          )}
                           {unclaimed && (
                             <Badge variant="default" className="text-[10px]">
                               Unclaimed
@@ -2637,9 +2669,22 @@ function RosterPanel({
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <Badge variant={m.role === "owner" ? "primary" : "default"} className="text-[10px]">
-                          {roleLabel(m.role)}
-                        </Badge>
+                        {canEditRole ? (
+                          <button
+                            type="button"
+                            onClick={() => setRoleEditing(m)}
+                            className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            title="Change role"
+                          >
+                            <Badge variant={m.role === "owner" ? "primary" : "default"} className="text-[10px] cursor-pointer hover:opacity-80">
+                              {roleLabel(m.role)}
+                            </Badge>
+                          </button>
+                        ) : (
+                          <Badge variant={m.role === "owner" ? "primary" : "default"} className="text-[10px]">
+                            {roleLabel(m.role)}
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-muted">
                         {m.jersey_number ? `#${m.jersey_number}` : "—"}
@@ -2692,6 +2737,26 @@ function RosterPanel({
         onClose={() => setShowAddPlayerModal(false)}
         onAdded={() => {
           setShowAddPlayerModal(false);
+          router.refresh();
+        }}
+      />
+
+      <RenamePlayerDialog
+        member={renaming}
+        playbookId={playbookId}
+        onClose={() => setRenaming(null)}
+        onSaved={() => {
+          setRenaming(null);
+          router.refresh();
+        }}
+      />
+
+      <RolePickerDialog
+        member={roleEditing}
+        playbookId={playbookId}
+        onClose={() => setRoleEditing(null)}
+        onSaved={() => {
+          setRoleEditing(null);
           router.refresh();
         }}
       />
@@ -2918,6 +2983,237 @@ function AddPlayerDialog({
           />
           Minor (under 18)
         </label>
+      </div>
+    </Modal>
+  );
+}
+
+function RenamePlayerDialog({
+  member,
+  playbookId,
+  onClose,
+  onSaved,
+}: {
+  member: PlaybookRosterMember | null;
+  playbookId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [label, setLabel] = useState("");
+  const [jersey, setJersey] = useState("");
+  const [positions, setPositions] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (member) {
+      setLabel(member.label ?? member.display_name ?? "");
+      setJersey(member.jersey_number ?? "");
+      setPositions(new Set(member.positions ?? []));
+    }
+  }, [member]);
+
+  function togglePos(p: string) {
+    setPositions((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+  }
+
+  async function save() {
+    if (!member) return;
+    const name = label.trim();
+    if (!name) {
+      toast("Name is required.", "error");
+      return;
+    }
+    setSaving(true);
+    const res = await updateRosterEntryAction({
+      playbookId,
+      memberId: member.id,
+      label: name,
+      jerseyNumber: jersey.trim() || null,
+      positions: Array.from(positions),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      toast(`Couldn't save: ${res.error}`, "error");
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <Modal
+      open={!!member}
+      onClose={onClose}
+      title="Edit player"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} loading={saving}>
+            Done
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">Name</label>
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} autoFocus />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">Jersey number</label>
+          <Input value={jersey} onChange={(e) => setJersey(e.target.value)} placeholder="12" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted">Positions</label>
+          <div className="flex flex-wrap gap-1.5">
+            {ADD_PLAYER_POSITIONS.map((p) => {
+              const on = positions.has(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => togglePos(p)}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${
+                    on
+                      ? "bg-primary/10 text-primary ring-primary/40"
+                      : "bg-surface-inset text-muted ring-border hover:text-foreground"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const ROLE_OPTIONS: { value: "viewer" | "editor"; label: string; hint: string }[] = [
+  { value: "viewer", label: "Player", hint: "Can view the playbook" },
+  { value: "editor", label: "Coach", hint: "Can edit plays and invite" },
+];
+
+function RolePickerDialog({
+  member,
+  playbookId,
+  onClose,
+  onSaved,
+}: {
+  member: PlaybookRosterMember | null;
+  playbookId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [role, setRole] = useState<"viewer" | "editor">("viewer");
+  const [headCoach, setHeadCoach] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (member) {
+      setRole(member.role === "editor" ? "editor" : "viewer");
+      setHeadCoach(member.is_head_coach);
+    }
+  }, [member]);
+
+  async function save() {
+    if (!member || !member.user_id) return;
+    setSaving(true);
+    const prevRole = member.role === "editor" ? "editor" : "viewer";
+    if (role !== prevRole) {
+      const res = await setMemberRoleAction({
+        playbookId,
+        memberId: member.id,
+        role,
+      });
+      if (!res.ok) {
+        setSaving(false);
+        toast(`Couldn't change role: ${res.error}`, "error");
+        return;
+      }
+    }
+    if (role === "editor" && headCoach !== member.is_head_coach) {
+      const res = await setHeadCoachAction(
+        playbookId,
+        headCoach ? member.user_id : null,
+      );
+      if (!res.ok) {
+        setSaving(false);
+        toast(`Couldn't update head coach: ${res.error}`, "error");
+        return;
+      }
+    }
+    setSaving(false);
+    onSaved();
+  }
+
+  return (
+    <Modal
+      open={!!member}
+      onClose={onClose}
+      title="Change role"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} loading={saving}>
+            Done
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-xs text-muted">
+          Tap to pick a role for{" "}
+          <span className="font-semibold text-foreground">
+            {member?.label || member?.display_name || "this person"}
+          </span>
+          .
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {ROLE_OPTIONS.map((opt) => {
+            const on = role === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRole(opt.value)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                  on
+                    ? "bg-primary/10 text-primary ring-primary/40"
+                    : "bg-surface-inset text-muted ring-border hover:text-foreground"
+                }`}
+                title={opt.hint}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {role === "editor" && (
+          <button
+            type="button"
+            onClick={() => setHeadCoach((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+              headCoach
+                ? "bg-primary/10 text-primary ring-primary/40"
+                : "bg-surface-inset text-muted ring-border hover:text-foreground"
+            }`}
+          >
+            <Crown className="size-3.5" />
+            Head coach
+          </button>
+        )}
       </div>
     </Modal>
   );
@@ -3298,6 +3594,8 @@ function StaffPanel({
   const router = useRouter();
   const { toast } = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
+  const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   function openInvite() {
     if (!viewerIsCoach) {
@@ -3461,6 +3759,8 @@ function StaffPanel({
                       isOwner={isOwner}
                       onToggleHead={() => toggleHeadCoach(m.user_id, m.is_head_coach)}
                       onSaveTitle={(t) => saveTitle(m.user_id, t)}
+                      onRename={() => setRenaming(m)}
+                      onChangeRole={isOwner ? null : () => setRoleEditing(m)}
                       onRemove={isOwner ? null : () => removeStaff(m.user_id, name)}
                     />
                   );
@@ -3494,6 +3794,26 @@ function StaffPanel({
         />
       )}
 
+      <RenamePlayerDialog
+        member={renaming}
+        playbookId={playbookId}
+        onClose={() => setRenaming(null)}
+        onSaved={() => {
+          setRenaming(null);
+          router.refresh();
+        }}
+      />
+
+      <RolePickerDialog
+        member={roleEditing}
+        playbookId={playbookId}
+        onClose={() => setRoleEditing(null)}
+        onSaved={() => {
+          setRoleEditing(null);
+          router.refresh();
+        }}
+      />
+
       <UpgradeModal
         open={!!upgradeNotice}
         onClose={() => setUpgradeNotice(null)}
@@ -3510,6 +3830,8 @@ function StaffRow({
   isOwner,
   onToggleHead,
   onSaveTitle,
+  onRename,
+  onChangeRole,
   onRemove,
 }: {
   member: PlaybookRosterMember;
@@ -3517,6 +3839,8 @@ function StaffRow({
   isOwner: boolean;
   onToggleHead: () => void;
   onSaveTitle: (title: string) => void;
+  onRename: () => void;
+  onChangeRole: (() => void) | null;
   onRemove: (() => void) | null;
 }) {
   const [title, setTitle] = useState(member.coach_title ?? "");
@@ -3550,12 +3874,30 @@ function StaffRow({
       </td>
       <td className="px-4 py-2.5 font-medium text-foreground">
         <span className="inline-flex items-center gap-2">
-          {name}
-          {isOwner && (
+          <button
+            type="button"
+            onClick={onRename}
+            className="rounded px-1 -mx-1 text-left hover:bg-surface-inset"
+            title="Rename"
+          >
+            {name}
+          </button>
+          {isOwner ? (
             <Badge variant="primary" className="text-[10px]">
               Owner
             </Badge>
-          )}
+          ) : onChangeRole ? (
+            <button
+              type="button"
+              onClick={onChangeRole}
+              className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary/40"
+              title="Change role"
+            >
+              <Badge variant="default" className="text-[10px] cursor-pointer hover:opacity-80">
+                Coach
+              </Badge>
+            </button>
+          ) : null}
           {member.is_head_coach && (
             <Badge variant="primary" className="text-[10px]">
               Head coach
