@@ -183,7 +183,10 @@ async function run() {
   await installCursor(page);
   // Park the cursor off-screen-ish so its entry is visible.
   await page.mouse.move(40, 780);
-  await sleep(BEAT_MED);
+  // Short beat — we don't linger on the picker; the previous version of
+  // this animation went straight into gameplay and that's what reads best
+  // on the marketing page.
+  await sleep(BEAT_SHORT);
 
   // Helper: pick the Nth play in whichever picker is currently open.
   async function pickPlayAt(n) {
@@ -235,13 +238,9 @@ async function run() {
     return true;
   }
 
-  // Step 1 — picker open ("Pick a play"). Glide across so the viewer
-  // registers that there are several plays to choose from.
-  await shot(page, "gm-1-picker");
-  await glideTo(page, 320, 260);
-  await glideTo(page, 60, 260);
-
-  // ---- Drive 1: pick play → animation auto-runs → First down.
+  // ---- Drive 1: tap a play immediately → animation auto-runs → First
+  // down. We don't showcase the picker itself — "didn't show the
+  // playbooks" was the explicit marketing note.
   await pickPlayAt(0);
   await sleep(BEAT_LONG + 800); // let the play auto-animate
   await shot(page, "gm-2-play");
@@ -289,8 +288,13 @@ async function run() {
   await rename(webmSrc, webmOut);
   console.log("  ✓", webmOut);
 
+  // Skip the first 400ms of the capture — Playwright's recordVideo opens
+  // the file before the first frame is painted, so we always get a blank
+  // white opener otherwise.
   await ffmpeg([
     "-y",
+    "-ss",
+    "0.4",
     "-i",
     webmOut,
     "-c:v",

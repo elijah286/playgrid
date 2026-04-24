@@ -480,7 +480,7 @@ function GameModeSection() {
                 muted
                 loop
                 playsInline
-                poster="/marketing/screens/gm-1-picker.png"
+                poster="/marketing/screens/gm-2-play.png"
                 className="h-full w-full object-cover"
               >
                 <source src="/marketing/screens/gm-walkthrough.mp4" type="video/mp4" />
