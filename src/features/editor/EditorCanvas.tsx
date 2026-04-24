@@ -818,15 +818,12 @@ function EditorCanvasImpl({
           return;
         }
 
-        // Canvas drag: start freehand from anchor (node/last-node) or player
+        // Canvas drag: start freehand from anchor (node/last-node) or player.
+        // Deliberate drag gestures are always allowed — the drawMode gate
+        // only applies to taps (finishInteraction), which were the real
+        // footgun. Dragging with a finger is too intentional to be noise.
         if (state.target.kind === "canvas") {
-          // In formation mode, canvas drag does nothing (no route drawing)
           if (mode === "formation") return;
-          // Draw mode gate: when off, a canvas drag should not silently create
-          // a route. Extending from an explicit anchor node is still allowed
-          // because the user had to click the node precisely.
-          const anchorForGate = getAnchor();
-          if (!drawMode && !anchorForGate) return;
 
           const anchor = getAnchor();
           let startPos: Point2;
@@ -2292,6 +2289,21 @@ function EditorCanvasImpl({
               {p[0].toUpperCase() + p.slice(1)}
             </button>
           ))}
+          <div className="border-t border-border" />
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
+            onClick={() => {
+              if (!segmentMenu) return;
+              dispatch({ type: "route.remove", routeId: segmentMenu.routeId });
+              onSelectRoute(null);
+              onSelectSegment(null);
+              onSelectNode(null);
+              setSegmentMenu(null);
+            }}
+          >
+            Delete route
+          </button>
         </div>
       )}
       {anchorMenu && (

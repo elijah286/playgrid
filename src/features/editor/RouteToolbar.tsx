@@ -187,7 +187,7 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 sm:ml-auto">
           {COLOR_PRESETS.map((c) => (
             <button
               key={c}
@@ -304,7 +304,7 @@ export function RouteToolbar({
           </>
         )}
 
-        <div className="ml-auto" />
+        <div className="hidden sm:ml-auto sm:block" />
 
         <Button variant="primary" size="sm" leftIcon={Check} onClick={onDone}>
           {doneLabel}
