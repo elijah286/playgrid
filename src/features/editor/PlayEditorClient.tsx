@@ -179,6 +179,11 @@ function PlayEditorClientInner({
   // across unrelated edits.
   const [drawMode, setDrawMode] = useState(false);
 
+  // Mobile edit mode: the bottom area toggles between the field-size
+  // controls and the notes editor so the two compact surfaces never fight
+  // for the same limited vertical space. Desktop shows both side-by-side.
+  const [notesOpen, setNotesOpen] = useState(false);
+
   const [isNavPending, startNavTransition] = useTransition();
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
@@ -550,6 +555,10 @@ function PlayEditorClientInner({
         </div>
       )}
       {isExamplePreview && <ExamplePreviewEditorBanner />}
+      {/* Hide the full header bar on mobile while actively editing — the
+          Done editing button moves to the very top so the field has as much
+          vertical room as possible. Desktop always keeps the header. */}
+      <div className={mode === "edit" ? "hidden sm:block" : ""}>
       <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}
@@ -565,6 +574,7 @@ function PlayEditorClientInner({
         mobileEditingEnabled={mobileEditingEnabled}
         hideMobileNav={mode === "edit"}
       />
+      </div>
 
       {playbookSettings &&
         doc.layers.players.length > playbookSettings.maxPlayers && (
@@ -765,15 +775,54 @@ function PlayEditorClientInner({
               </div>
             )}
 
-            {/* Field size controls (below canvas) */}
-            {canEdit && (
-              <div className={mode === "edit" ? "" : "hidden sm:block"}>
+            {/* Mobile edit mode: swap field-size controls ⇄ notes editor.
+                Desktop renders both stacked. */}
+            {canEdit && mode === "edit" && !notesOpen && (
+              <div className="flex flex-col gap-2 sm:hidden">
                 <FieldSizeControls doc={doc} dispatch={dispatch} />
+                <button
+                  type="button"
+                  onClick={() => setNotesOpen(true)}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-medium text-foreground hover:bg-surface"
+                >
+                  {(doc.metadata.notes ?? "").trim() ? "Edit notes" : "Add notes"}
+                </button>
               </div>
             )}
 
-            {/* Play notes */}
-            <div className={mode === "edit" ? "" : "hidden sm:block"}>
+            {canEdit && mode === "edit" && notesOpen && (
+              <div className="flex flex-col gap-2 sm:hidden">
+                <div className="rounded-xl border border-border bg-surface-raised p-3">
+                  <PlayerMentionEditor
+                    value={doc.metadata.notes ?? ""}
+                    onChange={(notes) =>
+                      dispatch({
+                        type: "document.setMetadata",
+                        patch: { notes },
+                      })
+                    }
+                    players={doc.layers.players}
+                    placeholder={'Type notes here. Use "@F" or "@Q" to link to a player.'}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNotesOpen(false)}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Done with notes
+                </button>
+              </div>
+            )}
+
+            {/* Desktop keeps the classic stacked layout with both cards
+                always visible. Mobile uses the toggle above. */}
+            {canEdit && (
+              <div className="hidden sm:block">
+                <FieldSizeControls doc={doc} dispatch={dispatch} />
+              </div>
+            )}
+            <div className="hidden sm:block">
               <PlayNotesCard
                 value={doc.metadata.notes ?? ""}
                 players={doc.layers.players}
@@ -786,7 +835,7 @@ function PlayEditorClientInner({
           </div>
           <aside
             className={`${
-              mode === "edit" ? "flex" : "hidden sm:flex"
+              mode === "edit" ? "hidden sm:flex" : "hidden sm:flex"
             } min-h-0 flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4`}
           >
             {(!showToolbar || !canEdit) && <PlayControlsPanel anim={anim} />}
