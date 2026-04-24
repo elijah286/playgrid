@@ -115,7 +115,7 @@ export default async function GameModePage({ params, searchParams }: Props) {
   const { data: sessionRow } = await supabase
     .from("game_sessions")
     .select(
-      "id, playbook_id, status, caller_user_id, current_play_id, next_play_id, started_at",
+      "id, playbook_id, status, caller_user_id, current_play_id, next_play_id, started_at, kind, opponent",
     )
     .eq("playbook_id", playbookId)
     .eq("status", "active")
@@ -133,6 +133,10 @@ export default async function GameModePage({ params, searchParams }: Props) {
       currentPlayId: (sessionRow.current_play_id as string | null) ?? null,
       nextPlayId: (sessionRow.next_play_id as string | null) ?? null,
       startedAt: sessionRow.started_at as string,
+      kind: ((sessionRow.kind as string | null) === "scrimmage"
+        ? "scrimmage"
+        : "game") as "game" | "scrimmage",
+      opponent: (sessionRow.opponent as string | null) ?? null,
     };
     const [{ data: callRows }, { data: partRows }] = await Promise.all([
       supabase

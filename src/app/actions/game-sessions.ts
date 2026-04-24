@@ -80,12 +80,17 @@ async function assertCoachOfPlaybook(playbookId: string) {
  *  active one). First coach to start becomes the caller. Idempotent: if an
  *  active session already exists, returns it and inserts/refreshes a
  *  participant row for the current user. */
-export async function startOrJoinGameSessionAction(playbookId: string) {
+export async function startOrJoinGameSessionAction(
+  playbookId: string,
+  opts?: { kind?: "game" | "scrimmage"; opponent?: string | null },
+) {
   const guard = await assertCoachOfPlaybook(playbookId);
   if (!guard.ok) return guard;
   const { supabase, user } = guard;
 
   const nowIso = new Date().toISOString();
+  const kind = opts?.kind === "scrimmage" ? "scrimmage" : "game";
+  const opponent = opts?.opponent?.trim() || null;
 
   const { data: existing } = await supabase
     .from("game_sessions")
@@ -107,6 +112,8 @@ export async function startOrJoinGameSessionAction(playbookId: string) {
         caller_changed_at: nowIso,
         started_at: nowIso,
         status: "active",
+        kind,
+        opponent,
       })
       .select("id")
       .single();
@@ -380,6 +387,7 @@ export async function scoreCurrentCallAction(
 export async function endGameSessionAction(
   sessionId: string,
   finals: {
+    kind: "game" | "scrimmage";
     opponent: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
@@ -393,11 +401,14 @@ export async function endGameSessionAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const kind = finals.kind === "scrimmage" ? "scrimmage" : "game";
+
   const { error } = await supabase
     .from("game_sessions")
     .update({
       status: "ended",
       ended_at: new Date().toISOString(),
+      kind,
       opponent: finals.opponent,
       score_us: finals.scoreUs,
       score_them: finals.scoreThem,

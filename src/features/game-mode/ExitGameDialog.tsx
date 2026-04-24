@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { KindToggle } from "./KindToggle";
+import type { GameKind } from "./live-session-types";
 
 export function ExitGameDialog({
   open,
@@ -10,10 +12,13 @@ export function ExitGameDialog({
   startedAt,
   callCount,
   saving,
+  initialKind,
+  initialOpponent,
 }: {
   open: boolean;
   onCancel: () => void;
   onConfirm: (data: {
+    kind: GameKind;
     opponent: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
@@ -23,8 +28,11 @@ export function ExitGameDialog({
   startedAt: string;
   callCount: number;
   saving: boolean;
+  initialKind: GameKind;
+  initialOpponent: string | null;
 }) {
-  const [opponent, setOpponent] = useState("");
+  const [kind, setKind] = useState<GameKind>(initialKind);
+  const [opponent, setOpponent] = useState(initialOpponent ?? "");
   const [scoreUs, setScoreUs] = useState("");
   const [scoreThem, setScoreThem] = useState("");
   const [notes, setNotes] = useState("");
@@ -41,12 +49,15 @@ export function ExitGameDialog({
 
   function submit() {
     onConfirm({
+      kind,
       opponent: opponent.trim() || null,
       scoreUs: parseScore(scoreUs),
       scoreThem: parseScore(scoreThem),
       notes: notes.trim() || null,
     });
   }
+
+  const isScrimmage = kind === "scrimmage";
 
   return (
     <div
@@ -56,13 +67,17 @@ export function ExitGameDialog({
       className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-3 sm:items-center"
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised p-4 shadow-elevated">
-        <h2 className="text-lg font-semibold text-foreground">Game summary</h2>
+        <h2 className="text-lg font-semibold text-foreground">
+          {isScrimmage ? "Scrimmage summary" : "Game summary"}
+        </h2>
         <p className="mt-1 text-xs text-muted">
           Started {new Date(startedAt).toLocaleString()} · {callCount} play
           {callCount === 1 ? "" : "s"} called.
         </p>
 
-        <div className="mt-4 space-y-3">
+        <KindToggle value={kind} onChange={setKind} className="mt-3" />
+
+        <div className="mt-3 space-y-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-muted">
               Opponent
@@ -111,7 +126,11 @@ export function ExitGameDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              placeholder="Anything to remember from the game"
+              placeholder={
+                isScrimmage
+                  ? "Anything to remember from this scrimmage"
+                  : "Anything to remember from the game"
+              }
               className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
             />
           </div>
@@ -140,7 +159,7 @@ export function ExitGameDialog({
           onClick={() => {
             if (
               confirm(
-                "Leave without saving? This game's plays and outcomes won't be recorded.",
+                "Leave without saving? This session's plays and outcomes won't be recorded.",
               )
             ) {
               onDiscard();

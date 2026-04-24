@@ -1,5 +1,7 @@
 import type { PlayOutcome, ThumbsDownTag, ThumbsUpTag } from "./types";
 
+export type GameKind = "game" | "scrimmage";
+
 /** Wire shape for a live or just-loaded game session. */
 export type LiveGameSession = {
   id: string;
@@ -9,6 +11,8 @@ export type LiveGameSession = {
   currentPlayId: string | null;
   nextPlayId: string | null;
   startedAt: string;
+  kind: GameKind;
+  opponent: string | null;
 };
 
 /** One logged call inside a session. Position is 0-based and monotonic. */

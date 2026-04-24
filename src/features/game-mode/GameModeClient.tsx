@@ -32,6 +32,7 @@ import {
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { PlayPickerDialog } from "./PlayPickerDialog";
 import { ExitGameDialog } from "./ExitGameDialog";
+import { KindToggle } from "./KindToggle";
 import { GameFieldView } from "./GameFieldView";
 import type { PlayDocument } from "@/domain/play/types";
 import type { PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
@@ -46,6 +47,7 @@ import {
 } from "./types";
 import {
   callToOutcome,
+  type GameKind,
   type LiveGameCall,
   type LiveGameSession,
   type LiveParticipant,
@@ -158,23 +160,21 @@ export function GameModeClient({
       : null;
 
   // --- Session bootstrap ---------------------------------------------------
-  // If we arrived with no session (first coach in), start/join on mount so
-  // the edit lock engages and other coaches see us. We don't wait for intro
-  // dismissal — a coach who opens the URL but immediately closes the tab
-  // leaves only a stale session, which the 45-min sweep will clean up.
+  // The first coach in opens this page with no initialSession; the intro
+  // overlay doubles as the start form (kind + optional opponent) and
+  // triggers the server-side start/join on submit. Waiting for that form
+  // means closing the tab without starting leaves no stale session behind.
   const bootstrappedRef = useRef(false);
-  useEffect(() => {
-    if (session) return;
-    if (bootstrappedRef.current) return;
-    bootstrappedRef.current = true;
-    void (async () => {
-      const res = await startOrJoinGameSessionAction(playbookId);
+  const startSession = useCallback(
+    async (opts: { kind: GameKind; opponent: string | null }) => {
+      if (session || bootstrappedRef.current) return;
+      bootstrappedRef.current = true;
+      const res = await startOrJoinGameSessionAction(playbookId, opts);
       if (!res.ok) {
+        bootstrappedRef.current = false;
         toast(res.error, "error");
         return;
       }
-      // Fall through — realtime will deliver the session row. For snappier
-      // UI we also optimistically build a minimal session from what we know.
       setSession({
         id: res.sessionId,
         playbookId,
@@ -183,6 +183,8 @@ export function GameModeClient({
         currentPlayId: null,
         nextPlayId: null,
         startedAt: new Date().toISOString(),
+        kind: opts.kind,
+        opponent: opts.opponent,
       });
       setParticipants((prev) =>
         prev.some((p) => p.userId === currentUserId)
@@ -196,21 +198,12 @@ export function GameModeClient({
               },
             ],
       );
-      // If a starting play came in via ?play=…, apply it now. Only the
-      // bootstrapper (first coach in) will end up as caller, which is when
-      // this action succeeds.
       if (initialPlayId) {
         void setInitialPlayAction(res.sessionId, initialPlayId);
       }
-    })();
-  }, [
-    session,
-    playbookId,
-    initialPlayId,
-    currentUserId,
-    currentUserName,
-    toast,
-  ]);
+    },
+    [session, playbookId, currentUserId, currentUserName, initialPlayId, toast],
+  );
 
   // --- Realtime subscription -----------------------------------------------
   useEffect(() => {
@@ -242,6 +235,11 @@ export function GameModeClient({
             currentPlayId: (row.current_play_id as string | null) ?? null,
             nextPlayId: (row.next_play_id as string | null) ?? null,
             startedAt: row.started_at as string,
+            kind:
+              (row.kind as string | null) === "scrimmage"
+                ? "scrimmage"
+                : "game",
+            opponent: (row.opponent as string | null) ?? null,
           });
         },
       )
@@ -356,12 +354,16 @@ export function GameModeClient({
   }, [session, router, playbookId, toast]);
 
   // --- Actions -------------------------------------------------------------
-  function dismissIntro() {
+  async function dismissIntro(opts: {
+    kind: GameKind;
+    opponent: string | null;
+  }) {
+    await startSession(opts);
     setShowIntro(false);
-    // No-op beyond UI; bootstrap effect has already started the session.
-    if (!currentPlayId && session && isCaller) {
-      setPickerMode("current");
-    }
+    // After the session lands, show the "pick a starting play" picker.
+    // currentPlayId and session aren't read here because startSession has
+    // already set them synchronously.
+    setPickerMode("current");
   }
 
   // Optimistic UI: the device that triggers a change updates local state
@@ -542,6 +544,7 @@ export function GameModeClient({
   }
 
   function endGame(data: {
+    kind: GameKind;
     opponent: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
@@ -554,7 +557,10 @@ export function GameModeClient({
         toast(res.error, "error");
         return;
       }
-      toast("Game saved.", "success");
+      toast(
+        data.kind === "scrimmage" ? "Scrimmage saved." : "Game saved.",
+        "success",
+      );
       router.push(`/playbooks/${playbookId}`);
     });
   }
@@ -735,6 +741,8 @@ export function GameModeClient({
         startedAt={session?.startedAt ?? new Date().toISOString()}
         callCount={callCount}
         saving={saving}
+        initialKind={session?.kind ?? "game"}
+        initialOpponent={session?.opponent ?? null}
       />
     </div>
   );
@@ -971,7 +979,14 @@ function TagRail<T extends string>({
   );
 }
 
-function IntroOverlay({ onDismiss }: { onDismiss: () => void }) {
+function IntroOverlay({
+  onDismiss,
+}: {
+  onDismiss: (opts: { kind: GameKind; opponent: string | null }) => void;
+}) {
+  const [kind, setKind] = useState<GameKind>("game");
+  const [opponent, setOpponent] = useState("");
+  const [starting, setStarting] = useState(false);
   return (
     <div
       role="dialog"
@@ -984,22 +999,37 @@ function IntroOverlay({ onDismiss }: { onDismiss: () => void }) {
         <p className="mt-2 text-sm text-muted">
           A sideline tool for live play calling. Pick a play, score it with a
           thumb after the snap, then queue the next call. Other coaches on your
-          playbook can join from the playbook page to help score — everyone
-          sees the same thing, and only the caller can advance plays.
+          playbook can join to help score — everyone sees the same thing.
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-foreground">
-          <li>· Big buttons. No menus.</li>
-          <li>· Rotate to landscape for a bigger field.</li>
-          <li>· Outcomes save when you end the game.</li>
-        </ul>
+
+        <KindToggle value={kind} onChange={setKind} className="mt-4" />
+
+        <label className="mt-3 block">
+          <span className="mb-1 block text-xs font-semibold text-muted">
+            Opponent <span className="font-normal">(optional)</span>
+          </span>
+          <input
+            type="text"
+            value={opponent}
+            onChange={(e) => setOpponent(e.target.value)}
+            placeholder="e.g. Wildcats"
+            className="h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+          />
+        </label>
+
         <button
           type="button"
-          onClick={onDismiss}
-          className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          disabled={starting}
+          onClick={() => {
+            setStarting(true);
+            onDismiss({ kind, opponent: opponent.trim() || null });
+          }}
+          className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
         >
-          Start
+          {starting ? "Starting…" : `Start ${kind === "scrimmage" ? "scrimmage" : "game"}`}
         </button>
       </div>
     </div>
   );
 }
+
