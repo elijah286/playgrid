@@ -2180,6 +2180,7 @@ function RosterPanel({
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
   const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
+  const [positionEditing, setPositionEditing] = useState<PlaybookRosterMember | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   function openInvite() {
     if (!viewerIsCoach) {
@@ -2690,9 +2691,22 @@ function RosterPanel({
                         {m.jersey_number ? `#${m.jersey_number}` : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-muted">
-                        {m.positions && m.positions.length > 0
-                          ? m.positions.join(", ")
-                          : m.position || "—"}
+                        {viewerIsCoach ? (
+                          <button
+                            type="button"
+                            onClick={() => setPositionEditing(m)}
+                            className="rounded px-1 -mx-1 text-left hover:bg-surface-inset"
+                            title="Edit positions"
+                          >
+                            {m.positions && m.positions.length > 0
+                              ? m.positions.join(", ")
+                              : m.position || "—"}
+                          </button>
+                        ) : m.positions && m.positions.length > 0 ? (
+                          m.positions.join(", ")
+                        ) : (
+                          m.position || "—"
+                        )}
                       </td>
                       {viewerIsCoach && (
                         <td className="px-4 py-2.5 text-right">
@@ -2737,6 +2751,16 @@ function RosterPanel({
         onClose={() => setShowAddPlayerModal(false)}
         onAdded={() => {
           setShowAddPlayerModal(false);
+          router.refresh();
+        }}
+      />
+
+      <PositionPickerDialog
+        member={positionEditing}
+        playbookId={playbookId}
+        onClose={() => setPositionEditing(null)}
+        onSaved={() => {
+          setPositionEditing(null);
           router.refresh();
         }}
       />
@@ -3130,6 +3154,106 @@ function QuickAddDialog({
               />
             </div>
           ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function PositionPickerDialog({
+  member,
+  playbookId,
+  onClose,
+  onSaved,
+}: {
+  member: PlaybookRosterMember | null;
+  playbookId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [positions, setPositions] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (member) {
+      const initial =
+        member.positions && member.positions.length > 0
+          ? member.positions
+          : member.position
+            ? [member.position]
+            : [];
+      setPositions(new Set(initial));
+    }
+  }, [member]);
+
+  function toggle(p: string) {
+    setPositions((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
+      return next;
+    });
+  }
+
+  async function save() {
+    if (!member) return;
+    setSaving(true);
+    const res = await updateRosterEntryAction({
+      playbookId,
+      memberId: member.id,
+      positions: Array.from(positions),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      toast(`Couldn't save positions: ${res.error}`, "error");
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <Modal
+      open={!!member}
+      onClose={onClose}
+      title="Edit positions"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} loading={saving}>
+            Done
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-muted">
+          Tap positions for{" "}
+          <span className="font-semibold text-foreground">
+            {member?.label || member?.display_name || "this player"}
+          </span>
+          .
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {ADD_PLAYER_POSITIONS.map((p) => {
+            const on = positions.has(p);
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => toggle(p)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                  on
+                    ? "bg-primary/10 text-primary ring-primary/40"
+                    : "bg-surface-inset text-muted ring-border hover:text-foreground"
+                }`}
+              >
+                {p}
+              </button>
+            );
+          })}
         </div>
       </div>
     </Modal>
