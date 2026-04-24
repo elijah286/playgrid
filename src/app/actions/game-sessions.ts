@@ -38,6 +38,52 @@ function sanitizeTag(thumb: "up" | "down" | null, tag: string | null): string | 
   return null;
 }
 
+/**
+ * Builds the frozen snapshot blob written to game_plays.snapshot at call
+ * time. Captured here (not at review time) because play_versions rows are
+ * not strictly immutable — renamePlayAction can mutate the current
+ * version's document.metadata.coachName, and migrations have backfilled
+ * historical version documents. The snapshot is the authoritative render
+ * source for Game Results.
+ *
+ * Returns a literal object always; never throws. If lookups fail we still
+ * write a valid (mostly-empty) snapshot so the call row is never lost.
+ */
+async function buildPlaySnapshot(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playId: string,
+): Promise<Record<string, unknown>> {
+  const { data: play } = await supabase
+    .from("plays")
+    .select("name, group_id, current_version_id")
+    .eq("id", playId)
+    .maybeSingle();
+  const versionId = (play?.current_version_id as string | null) ?? null;
+  const groupId = (play?.group_id as string | null) ?? null;
+  const [verRes, groupRes] = await Promise.all([
+    versionId
+      ? supabase
+          .from("play_versions")
+          .select("document")
+          .eq("id", versionId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    groupId
+      ? supabase
+          .from("playbook_groups")
+          .select("name")
+          .eq("id", groupId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  return {
+    snapshotVersion: 1,
+    play: (verRes.data as { document?: unknown } | null)?.document ?? null,
+    playName: (play?.name as string | null) ?? "",
+    groupName: (groupRes.data as { name?: string | null } | null)?.name ?? null,
+  };
+}
+
 async function assertCoachOfPlaybook(playbookId: string) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -293,20 +339,21 @@ export async function advanceToNextPlayAction(sessionId: string) {
   const nextPlayId = session.next_play_id as string | null;
   if (!nextPlayId) return { ok: false as const, error: "No next play set." };
 
-  // Look up name + current_version_id for the call row.
-  const { data: playRow } = await supabase
-    .from("plays")
-    .select("name, current_version_id")
-    .eq("id", nextPlayId)
-    .maybeSingle();
-
-  const { data: lastCall } = await supabase
-    .from("game_plays")
-    .select("position")
-    .eq("session_id", sessionId)
-    .order("position", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: playRow }, { data: lastCall }, snapshot] = await Promise.all([
+    supabase
+      .from("plays")
+      .select("current_version_id")
+      .eq("id", nextPlayId)
+      .maybeSingle(),
+    supabase
+      .from("game_plays")
+      .select("position")
+      .eq("session_id", sessionId)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    buildPlaySnapshot(supabase, nextPlayId),
+  ]);
   const nextPosition = ((lastCall?.position as number | null) ?? -1) + 1;
 
   const { error: insertErr } = await supabase.from("game_plays").insert({
@@ -315,6 +362,7 @@ export async function advanceToNextPlayAction(sessionId: string) {
     play_version_id: (playRow?.current_version_id as string | null) ?? null,
     position: nextPosition,
     called_at: new Date().toISOString(),
+    snapshot,
   });
   if (insertErr) return { ok: false as const, error: insertErr.message };
 
@@ -347,12 +395,6 @@ export async function setInitialPlayAction(sessionId: string, playId: string) {
   }
   if (session.caller_user_id !== user.id) return { ok: false as const, error: "Not caller." };
 
-  const { data: playRow } = await supabase
-    .from("plays")
-    .select("current_version_id")
-    .eq("id", playId)
-    .maybeSingle();
-
   const { data: existingCall } = await supabase
     .from("game_plays")
     .select("id")
@@ -361,12 +403,21 @@ export async function setInitialPlayAction(sessionId: string, playId: string) {
     .maybeSingle();
 
   if (!existingCall) {
+    const [{ data: playRow }, snapshot] = await Promise.all([
+      supabase
+        .from("plays")
+        .select("current_version_id")
+        .eq("id", playId)
+        .maybeSingle(),
+      buildPlaySnapshot(supabase, playId),
+    ]);
     await supabase.from("game_plays").insert({
       session_id: sessionId,
       play_id: playId,
       play_version_id: (playRow?.current_version_id as string | null) ?? null,
       position: 0,
       called_at: new Date().toISOString(),
+      snapshot,
     });
   }
 
@@ -588,6 +639,12 @@ export async function saveGameSessionAction(input: SaveInput) {
         (r.current_version_id as string | null) ?? null,
       );
     }
+    const snapshotsByPlay = new Map<string, Record<string, unknown>>();
+    await Promise.all(
+      playIds.map(async (pid) => {
+        snapshotsByPlay.set(pid, await buildPlaySnapshot(supabase, pid));
+      }),
+    );
 
     const rows = input.calls.map((c, i) => ({
       session_id: sessionId,
@@ -597,6 +654,7 @@ export async function saveGameSessionAction(input: SaveInput) {
       called_at: c.calledAt,
       thumb: c.thumb,
       tag: sanitizeTag(c.thumb, c.tag),
+      snapshot: snapshotsByPlay.get(c.playId) ?? {},
     }));
     const { error: playsErr } = await supabase.from("game_plays").insert(rows);
     if (playsErr) {
