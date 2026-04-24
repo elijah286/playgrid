@@ -23,14 +23,18 @@ import {
 export function GameModeClient({
   playbookId,
   plays,
+  initialPlayId = null,
 }: {
   playbookId: string;
   plays: GameModePlay[];
+  initialPlayId?: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [showIntro, setShowIntro] = useState(true);
-  const [currentPlayId, setCurrentPlayId] = useState<string | null>(null);
+  const [currentPlayId, setCurrentPlayId] = useState<string | null>(
+    initialPlayId,
+  );
   const [nextPlayId, setNextPlayId] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<"closed" | "current" | "next">(
     "closed",
@@ -41,7 +45,9 @@ export function GameModeClient({
   // Session start is fixed at mount and read during render (passed to the
   // exit dialog) so it lives in state, not a ref.
   const [startedAt] = useState<string>(() => new Date().toISOString());
-  const playCalledAtRef = useRef<string | null>(null);
+  const playCalledAtRef = useRef<string | null>(
+    initialPlayId ? new Date().toISOString() : null,
+  );
   const [saving, startSaving] = useTransition();
 
   const playMap = useMemo(() => {

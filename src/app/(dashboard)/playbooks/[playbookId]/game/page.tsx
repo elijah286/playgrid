@@ -9,10 +9,14 @@ import { listPlaysAction } from "@/app/actions/plays";
 import type { PlayDocument } from "@/domain/play/types";
 import { GameModeClient } from "@/features/game-mode/GameModeClient";
 
-type Props = { params: Promise<{ playbookId: string }> };
+type Props = {
+  params: Promise<{ playbookId: string }>;
+  searchParams: Promise<{ play?: string }>;
+};
 
-export default async function GameModePage({ params }: Props) {
+export default async function GameModePage({ params, searchParams }: Props) {
   const { playbookId } = await params;
+  const { play: initialPlayParam } = await searchParams;
 
   if (!hasSupabaseEnv()) redirect(`/playbooks/${playbookId}`);
 
@@ -85,10 +89,16 @@ export default async function GameModePage({ params }: Props) {
     }
   }
 
+  const initialPlayId =
+    initialPlayParam && offensePlays.some((p) => p.id === initialPlayParam)
+      ? initialPlayParam
+      : null;
+
   return (
     <GameModeClient
       playbookId={playbookId}
       plays={playRows.map((e) => ({ ...e.row, document: e.doc }))}
+      initialPlayId={initialPlayId}
     />
   );
 }

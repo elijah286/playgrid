@@ -621,7 +621,7 @@ function PlayEditorClientInner({
                 )}
                 {gameModeAvailable && (
                   <Link
-                    href={`/playbooks/${playbookId}/game`}
+                    href={`/playbooks/${playbookId}/game?play=${playId}`}
                     className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-brand-green bg-brand-green text-sm font-semibold text-white hover:bg-brand-green-hover"
                   >
                     Game mode
