@@ -122,6 +122,7 @@ import {
   removeStaffMemberAction,
   setCoachTitleAction,
   setHeadCoachAction,
+  unlinkRosterEntryAction,
 } from "@/app/actions/playbook-roster";
 import {
   revokeInviteAction,
@@ -2254,6 +2255,27 @@ function RosterPanel({
     if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
     else router.refresh();
   }
+  async function unlinkUser(memberId: string, name: string) {
+    if (
+      !window.confirm(
+        `Unlink ${name} from this roster spot? They keep playbook access; the spot returns to unclaimed.`,
+      )
+    )
+      return;
+    setPendingId(memberId);
+    const res = await unlinkRosterEntryAction(playbookId, memberId);
+    setPendingId(null);
+    if (!res.ok) toast(`Unlink failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function deleteEntry(memberId: string, name: string) {
+    if (!window.confirm(`Remove ${name} from the roster?`)) return;
+    setPendingId(memberId);
+    const res = await deleteRosterEntryAction(playbookId, memberId);
+    setPendingId(null);
+    if (!res.ok) toast(`Remove failed: ${res.error}`, "error");
+    else router.refresh();
+  }
   async function approveClaim(claimId: string) {
     setPendingId(claimId);
     const res = await approveRosterClaimAction(playbookId, claimId);
@@ -2487,12 +2509,29 @@ function RosterPanel({
                   <th className="px-4 py-2.5 font-semibold">Role</th>
                   <th className="px-4 py-2.5 font-semibold">Jersey</th>
                   <th className="px-4 py-2.5 font-semibold">Position</th>
+                  {viewerIsCoach && <th className="w-10 px-4 py-2.5" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {active.map((m) => {
                   const name = m.label || m.display_name || "—";
                   const unclaimed = m.user_id === null;
+                  const items: ActionMenuItem[] = unclaimed
+                    ? [
+                        {
+                          label: "Remove from roster",
+                          icon: Trash2,
+                          danger: true,
+                          onSelect: () => deleteEntry(m.id, name),
+                        },
+                      ]
+                    : [
+                        {
+                          label: "Unlink user",
+                          icon: X,
+                          onSelect: () => unlinkUser(m.id, name),
+                        },
+                      ];
                   return (
                     <tr key={m.id}>
                       <td className="px-4 py-2.5 font-medium text-foreground">
@@ -2523,6 +2562,11 @@ function RosterPanel({
                           ? m.positions.join(", ")
                           : m.position || "—"}
                       </td>
+                      {viewerIsCoach && (
+                        <td className="px-4 py-2.5 text-right">
+                          <ActionMenu items={items} />
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

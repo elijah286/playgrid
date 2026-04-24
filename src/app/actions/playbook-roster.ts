@@ -568,6 +568,47 @@ export async function addRosterEntryAction(input: {
 }
 
 /**
+ * Coach: unlink a claimed roster entry from its user. The roster spot
+ * returns to unclaimed status and the user keeps playbook access as a
+ * fresh self-member row (so we don't silently yank access when the
+ * coach only wanted to fix a bad match).
+ */
+export async function unlinkRosterEntryAction(
+  playbookId: string,
+  memberId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("unlink_roster_entry", {
+    p_member_id: memberId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+/**
+ * Coach: link an already-joined user to an unclaimed roster entry.
+ * Absorbs the user's self-member row so they don't end up with two
+ * slots on the playbook.
+ */
+export async function linkRosterEntryAction(
+  playbookId: string,
+  memberId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("link_roster_entry", {
+    p_member_id: memberId,
+    p_user_id: userId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true };
+}
+
+/**
  * Coach: remove a roster entry. If it's unclaimed, just deletes the
  * row. If it's claimed, the corresponding user also loses playbook
  * access — callers should prefer `unlinkRosterEntryAction` when they
