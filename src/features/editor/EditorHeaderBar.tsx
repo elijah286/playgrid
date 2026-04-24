@@ -204,10 +204,25 @@ export function EditorHeaderBar({
           </div>
         )}
 
+        {/* Copy stays pinned next to the play name so it never wraps to
+            its own row on mobile. Prev/All/Next live in a sibling cluster
+            that can wrap below on narrow viewports. */}
+        {canEdit && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            leftIcon={Copy}
+            onClick={onDuplicate}
+            className={`ml-auto ${hideMobileNav ? "hidden sm:inline-flex" : ""}`}
+          >
+            Copy
+          </Button>
+        )}
         <div
-          className={`ml-auto ${
+          className={`${
             hideMobileNav ? "hidden sm:flex" : "flex"
-          } flex-wrap items-center gap-1`}
+          } w-full flex-wrap items-center gap-1 sm:ml-0 sm:w-auto`}
         >
           <Button
             type="button"
@@ -235,20 +250,6 @@ export function EditorHeaderBar({
           >
             Next play
           </Button>
-
-
-          {canEdit && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              leftIcon={Copy}
-              onClick={onDuplicate}
-              className="ml-1"
-            >
-              Copy
-            </Button>
-          )}
         </div>
       </div>
     </header>
