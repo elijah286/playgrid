@@ -35,6 +35,7 @@ import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
+import { PlayResultsCard } from "./PlayResultsCard";
 import { QuickRoutes } from "./QuickRoutes";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
@@ -926,6 +927,13 @@ function PlayEditorClientInner({
                 }
               />
             ) : null}
+            {!showToolbar && !isDefense && (
+              <PlayResultsCard
+                playbookId={playbookId}
+                playId={playId}
+                canUseGameMode={canUseGameMode}
+              />
+            )}
             {canEdit && (
               <Inspector
                 doc={doc}

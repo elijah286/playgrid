@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Pencil, Trash2 } from "lucide-react";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import type { PlayDocument, Player, Route, Zone } from "@/domain/play/types";
+import {
+  updateGameSessionFinalsAction,
+  deleteGameSessionAction,
+} from "@/app/actions/game-results";
+import { useToast } from "@/components/ui";
+import { useRouter } from "next/navigation";
 
 export type GameDetailData = {
   playbookId: string;
@@ -41,14 +49,37 @@ type View = "timeline" | "byPlay";
 
 export function GameDetailClient({ data }: { data: GameDetailData }) {
   const [view, setView] = useState<View>("timeline");
-  const { session, calls, events, playbookId } = data;
+  const { session: initialSession, calls, events, playbookId } = data;
+  const [session, setSession] = useState(initialSession);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, startDelete] = useTransition();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  const searchParams = useSearchParams();
+  const filterPlayId = searchParams?.get("play") ?? null;
+
+  const filteredCalls = useMemo(
+    () => (filterPlayId ? calls.filter((c) => c.playId === filterPlayId) : calls),
+    [calls, filterPlayId],
+  );
+  const filteredEvents = useMemo(
+    () =>
+      filterPlayId
+        ? events.filter((e) => e.playId === filterPlayId)
+        : events,
+    [events, filterPlayId],
+  );
 
   const upCount = useMemo(
-    () => calls.filter((c) => c.thumb === "up").length,
-    [calls],
+    () => filteredCalls.filter((c) => c.thumb === "up").length,
+    [filteredCalls],
   );
   const successPct =
-    calls.length > 0 ? Math.round((upCount / calls.length) * 100) : null;
+    filteredCalls.length > 0
+      ? Math.round((upCount / filteredCalls.length) * 100)
+      : null;
   const dateLabel = new Date(session.startedAt).toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -56,15 +87,40 @@ export function GameDetailClient({ data }: { data: GameDetailData }) {
     year: "numeric",
   });
 
+  const filterLabel = useMemo(() => {
+    if (!filterPlayId) return null;
+    const match = calls.find((c) => c.playId === filterPlayId);
+    const snap = match?.snapshot as { playName?: string } | undefined;
+    return snap?.playName || "Selected play";
+  }, [calls, filterPlayId]);
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 py-6">
-      <div>
+      <div className="flex items-center justify-between">
         <Link
           href={`/playbooks/${playbookId}?tab=games`}
           className="text-sm text-muted hover:text-foreground"
         >
           ← All games
         </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
+          >
+            <Pencil className="size-3.5" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:border-rose-500/50 hover:text-rose-600"
+          >
+            <Trash2 className="size-3.5" />
+            Delete
+          </button>
+        </div>
       </div>
 
       <header className="rounded-2xl border border-border bg-surface-raised p-5">
@@ -85,7 +141,7 @@ export function GameDetailClient({ data }: { data: GameDetailData }) {
             {session.scoreUs != null && session.scoreThem != null && (
               <Stat label="Score" value={`${session.scoreUs}–${session.scoreThem}`} />
             )}
-            <Stat label="Plays" value={String(calls.length)} />
+            <Stat label="Plays" value={String(filteredCalls.length)} />
             <Stat
               label="Success"
               value={successPct != null ? `${successPct}%` : "—"}
@@ -94,13 +150,231 @@ export function GameDetailClient({ data }: { data: GameDetailData }) {
         </div>
       </header>
 
+      {filterPlayId && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span className="min-w-0 truncate text-foreground">
+            Filtered by <span className="font-semibold">{filterLabel}</span>
+          </span>
+          <Link
+            href={`/playbooks/${playbookId}/games/${session.id}`}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Clear filter
+          </Link>
+        </div>
+      )}
+
       <ViewToggle value={view} onChange={setView} />
 
       {view === "timeline" ? (
-        <TimelineView calls={calls} events={events} />
+        <TimelineView
+          calls={filteredCalls}
+          events={filteredEvents}
+          highlightPlayId={filterPlayId}
+        />
       ) : (
-        <ByPlayView calls={calls} />
+        <ByPlayView calls={filteredCalls} highlightPlayId={filterPlayId} />
       )}
+
+      {editOpen && (
+        <EditFinalsDialog
+          session={session}
+          playbookId={playbookId}
+          onClose={() => setEditOpen(false)}
+          onSaved={(patch) => {
+            setSession((s) => ({ ...s, ...patch }));
+            setEditOpen(false);
+          }}
+        />
+      )}
+
+      {deleteOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !deleting && setDeleteOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-foreground">
+              Delete {session.kind === "scrimmage" ? "scrimmage" : "game"}?
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              This game and all of its play history will be permanently
+              removed. This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  startDelete(async () => {
+                    const res = await deleteGameSessionAction(
+                      playbookId,
+                      session.id,
+                    );
+                    if (!res.ok) {
+                      toast(res.error, "error");
+                      return;
+                    }
+                    router.push(`/playbooks/${playbookId}?tab=games`);
+                  });
+                }}
+                disabled={deleting}
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-rose-600 px-3 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditFinalsDialog({
+  session,
+  playbookId,
+  onClose,
+  onSaved,
+}: {
+  session: GameDetailData["session"];
+  playbookId: string;
+  onClose: () => void;
+  onSaved: (patch: Partial<GameDetailData["session"]>) => void;
+}) {
+  const [opponent, setOpponent] = useState(session.opponent ?? "");
+  const [scoreUs, setScoreUs] = useState(
+    session.scoreUs == null ? "" : String(session.scoreUs),
+  );
+  const [scoreThem, setScoreThem] = useState(
+    session.scoreThem == null ? "" : String(session.scoreThem),
+  );
+  const [saving, startSave] = useTransition();
+  const { toast } = useToast();
+  const firstRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    firstRef.current?.focus();
+  }, []);
+
+  const save = () => {
+    const parsedUs = scoreUs.trim() === "" ? null : Number(scoreUs);
+    const parsedThem = scoreThem.trim() === "" ? null : Number(scoreThem);
+    if (parsedUs != null && (!Number.isFinite(parsedUs) || parsedUs < 0)) {
+      toast("Enter a valid us score.", "error");
+      return;
+    }
+    if (parsedThem != null && (!Number.isFinite(parsedThem) || parsedThem < 0)) {
+      toast("Enter a valid opponent score.", "error");
+      return;
+    }
+    startSave(async () => {
+      const res = await updateGameSessionFinalsAction(playbookId, session.id, {
+        opponent: opponent,
+        scoreUs: parsedUs,
+        scoreThem: parsedThem,
+      });
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      onSaved({
+        opponent: opponent.trim() || null,
+        scoreUs: parsedUs == null ? null : Math.max(0, Math.trunc(parsedUs)),
+        scoreThem:
+          parsedThem == null ? null : Math.max(0, Math.trunc(parsedThem)),
+      });
+    });
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-foreground">
+          Edit {session.kind === "scrimmage" ? "scrimmage" : "game"}
+        </h2>
+        <div className="mt-4 space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
+              Opponent
+            </span>
+            <input
+              ref={firstRef}
+              type="text"
+              value={opponent}
+              onChange={(e) => setOpponent(e.target.value)}
+              placeholder="Opponent name"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
+                Us
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={scoreUs}
+                onChange={(e) => setScoreUs(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono tabular-nums text-foreground focus:border-primary focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
+                Them
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={scoreThem}
+                onChange={(e) => setScoreThem(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-mono tabular-nums text-foreground focus:border-primary focus:outline-none"
+              />
+            </label>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -181,9 +455,11 @@ type TimelineItem =
 function TimelineView({
   calls,
   events,
+  highlightPlayId,
 }: {
   calls: GameDetailData["calls"];
   events: GameDetailData["events"];
+  highlightPlayId?: string | null;
 }) {
   const items = useMemo<TimelineItem[]>(() => {
     const merged: TimelineItem[] = [
@@ -206,7 +482,13 @@ function TimelineView({
     <ul className="space-y-2">
       {items.map((item) =>
         item.kind === "call" ? (
-          <CallRow key={`c-${item.call.id}`} call={item.call} />
+          <CallRow
+            key={`c-${item.call.id}`}
+            call={item.call}
+            highlight={
+              highlightPlayId != null && item.call.playId === highlightPlayId
+            }
+          />
         ) : (
           <ScoreEventRow key={`e-${item.event.id}`} event={item.event} />
         ),
@@ -215,7 +497,13 @@ function TimelineView({
   );
 }
 
-function CallRow({ call }: { call: GameDetailData["calls"][number] }) {
+function CallRow({
+  call,
+  highlight,
+}: {
+  call: GameDetailData["calls"][number];
+  highlight?: boolean;
+}) {
   const snap = call.snapshot as {
     playName?: string;
     groupName?: string | null;
@@ -227,7 +515,14 @@ function CallRow({ call }: { call: GameDetailData["calls"][number] }) {
     minute: "2-digit",
   });
   return (
-    <li className="flex gap-3 rounded-2xl border border-border bg-surface-raised p-3">
+    <li
+      className={
+        "flex gap-3 rounded-2xl border p-3 " +
+        (highlight
+          ? "border-primary bg-primary/10"
+          : "border-border bg-surface-raised")
+      }
+    >
       <div className="w-14 shrink-0 text-xs text-muted">{timeLabel}</div>
       <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-border">
         {preview ? <PlayThumbnail preview={preview} thin /> : null}
@@ -314,7 +609,13 @@ type PlayAgg = {
   up: number;
 };
 
-function ByPlayView({ calls }: { calls: GameDetailData["calls"] }) {
+function ByPlayView({
+  calls,
+  highlightPlayId,
+}: {
+  calls: GameDetailData["calls"];
+  highlightPlayId?: string | null;
+}) {
   const [sortBy, setSortBy] = useState<"calls" | "success">("calls");
   const groups = useMemo<PlayAgg[]>(() => {
     const byPlay = new Map<string, PlayAgg>();
@@ -360,7 +661,12 @@ function ByPlayView({ calls }: { calls: GameDetailData["calls"] }) {
         {groups.map((g) => (
           <li
             key={g.playId}
-            className="flex gap-3 rounded-2xl border border-border bg-surface-raised p-3"
+            className={
+              "flex gap-3 rounded-2xl border p-3 " +
+              (highlightPlayId === g.playId
+                ? "border-primary bg-primary/10"
+                : "border-border bg-surface-raised")
+            }
           >
             <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-surface ring-1 ring-border">
               {g.preview ? <PlayThumbnail preview={g.preview} thin /> : null}

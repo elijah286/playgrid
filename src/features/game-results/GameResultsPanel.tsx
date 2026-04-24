@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { listGameResultsAction, type GameResultRow } from "@/app/actions/game-results";
+import { Trash2 } from "lucide-react";
+import {
+  listGameResultsAction,
+  deleteGameSessionAction,
+  type GameResultRow,
+} from "@/app/actions/game-results";
+import { useToast } from "@/components/ui";
 
 type KindFilter = "all" | "game" | "scrimmage";
 
@@ -10,6 +16,11 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
   const [games, setGames] = useState<GameResultRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  const [pendingDelete, setPendingDelete] = useState<GameResultRow | null>(
+    null,
+  );
+  const [deleting, startDelete] = useTransition();
+  const { toast } = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -22,6 +33,26 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
       cancelled = true;
     };
   }, [playbookId]);
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    startDelete(async () => {
+      const res = await deleteGameSessionAction(playbookId, target.id);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setGames((prev) =>
+        prev ? prev.filter((g) => g.id !== target.id) : prev,
+      );
+      setPendingDelete(null);
+      toast(
+        target.kind === "scrimmage" ? "Scrimmage deleted." : "Game deleted.",
+        "success",
+      );
+    });
+  };
 
   const filtered = useMemo(() => {
     if (!games) return null;
@@ -72,10 +103,77 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
       ) : (
         <ul className="space-y-2">
           {(filtered ?? []).map((g) => (
-            <GameRow key={g.id} playbookId={playbookId} game={g} />
+            <GameRow
+              key={g.id}
+              playbookId={playbookId}
+              game={g}
+              onDelete={() => setPendingDelete(g)}
+            />
           ))}
         </ul>
       )}
+      {pendingDelete && (
+        <ConfirmDeleteDialog
+          game={pendingDelete}
+          busy={deleting}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmDeleteDialog({
+  game,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  game: GameResultRow;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const label = game.kind === "scrimmage" ? "scrimmage" : "game";
+  const name = game.opponent ? `vs ${game.opponent}` : `this ${label}`;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-foreground">
+          Delete {label}?
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          {name} and all of its play history will be permanently removed. This
+          cannot be undone.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-rose-600 px-3 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+          >
+            {busy ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -125,9 +223,11 @@ function KindToggle({
 function GameRow({
   playbookId,
   game,
+  onDelete,
 }: {
   playbookId: string;
   game: GameResultRow;
+  onDelete: () => void;
 }) {
   const date = new Date(game.startedAt);
   const dateLabel = date.toLocaleDateString(undefined, {
@@ -142,10 +242,10 @@ function GameRow({
       ? `${game.scoreUs}–${game.scoreThem}`
       : null;
   return (
-    <li>
+    <li className="relative">
       <Link
         href={`/playbooks/${playbookId}/games/${game.id}`}
-        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4 hover:bg-surface-hover"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4 pr-14 hover:bg-surface-hover"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -179,6 +279,18 @@ function GameRow({
           </div>
         </div>
       </Link>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDelete();
+        }}
+        aria-label={`Delete ${game.kind}`}
+        className="absolute right-3 top-1/2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:border-rose-500/50 hover:text-rose-600"
+      >
+        <Trash2 className="size-4" />
+      </button>
     </li>
   );
 }
