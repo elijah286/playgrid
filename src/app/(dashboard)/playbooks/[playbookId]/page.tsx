@@ -14,6 +14,10 @@ import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import {
+  getBetaFeatures,
+  isBetaFeatureAvailable,
+} from "@/lib/site/beta-features-config";
 import { PlaybookDetailClient } from "./ui";
 
 type Props = { params: Promise<{ playbookId: string }> };
@@ -203,6 +207,16 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
 
+  const betaFeatures = await getBetaFeatures();
+  const isCoachInPlaybook =
+    effectiveRole === "owner" || effectiveRole === "editor";
+  const gameModeAvailable =
+    !isExamplePreview &&
+    isBetaFeatureAvailable(betaFeatures.game_mode, {
+      isAdmin,
+      isEntitled: isCoachInPlaybook,
+    });
+
   const publicExampleJsonLd = isPublicExample
     ? [
         {
@@ -264,6 +278,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         initialPrefs={prefsRes.ok ? prefsRes.prefs : null}
         isAdmin={isAdmin}
         freeMaxPlays={freeMaxPlays}
+        gameModeAvailable={gameModeAvailable}
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,

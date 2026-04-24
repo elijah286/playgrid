@@ -55,6 +55,7 @@ import {
   Crown,
   FileText,
   Folders,
+  Gamepad2,
   GripVertical,
   Hash,
   LayoutGrid,
@@ -249,6 +250,7 @@ function PlaybookDetailClientInner({
   headerProps,
   isAdmin = false,
   freeMaxPlays,
+  gameModeAvailable = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -262,6 +264,8 @@ function PlaybookDetailClientInner({
   initialPrefs: PlaybookViewPrefs | null;
   isAdmin?: boolean;
   freeMaxPlays: number;
+  /** When true, render the mobile "Game" button next to the search bar. */
+  gameModeAvailable?: boolean;
   // Data for the playbook banner. Rendered inside the sticky header region
   // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
   // the client can wire play-action callbacks into the banner's menu.
@@ -1070,15 +1074,26 @@ function PlaybookDetailClientInner({
           </div>
 
           <div ref={filtersPanelRef} className="relative">
+            {/* Filters button: text on desktop, icon-only on mobile to free
+                room for the Game mode button. The "•" badge remains
+                regardless to signal active filters. */}
             <Button
               variant="secondary"
               leftIcon={SlidersHorizontal}
               onClick={() => setFiltersOpen((v) => !v)}
               aria-expanded={filtersOpen}
+              aria-label="Filters"
+              title="Filters"
+              className="px-2.5 sm:px-3"
             >
-              {groupBy === "type" && typeFilter === "all" && view === "active"
-                ? "Filters"
-                : "Filters •"}
+              <span className="hidden sm:inline">
+                {groupBy === "type" && typeFilter === "all" && view === "active"
+                  ? "Filters"
+                  : "Filters •"}
+              </span>
+              {!(groupBy === "type" && typeFilter === "all" && view === "active") && (
+                <span className="sm:hidden" aria-hidden="true">•</span>
+              )}
             </Button>
             {filtersOpen && (
               <div
@@ -1204,6 +1219,20 @@ function PlaybookDetailClientInner({
               </div>
             )}
           </div>
+
+          {/* Mobile-only Game mode button. Sits next to the filter icon so
+              coaches can flip into in-game flow without leaving the plays
+              tab. Hidden when the beta feature is off for this user. */}
+          {gameModeAvailable && (
+            <Link
+              href={`/playbooks/${playbookId}/game`}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 text-sm font-semibold text-foreground hover:bg-surface sm:hidden"
+              aria-label="Game mode"
+            >
+              <Gamepad2 className="size-4" />
+              <span>Game</span>
+            </Link>
+          )}
 
           {/* Desktop: Select / Reorder / Print / New play as dedicated buttons.
               Mobile: all of these live in the team-banner kebab menu so the

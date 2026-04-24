@@ -7,6 +7,10 @@ import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
+import {
+  getBetaFeatures,
+  isBetaFeatureAvailable,
+} from "@/lib/site/beta-features-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import type { SavedFormation } from "@/app/actions/formations";
 
@@ -101,6 +105,22 @@ export default async function PlayEditPage({ params }: Props) {
 
   const mobileEditingEnabled = await getMobileEditingEnabled();
 
+  const betaFeatures = await getBetaFeatures();
+  let isAdmin = false;
+  if (user) {
+    const { data: selfRoleRow } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    isAdmin = (selfRoleRow?.role as string | null) === "admin";
+  }
+  const isCoachInPlaybook = canEdit && !isExamplePreview;
+  const gameModeAvailable = isBetaFeatureAvailable(betaFeatures.game_mode, {
+    isAdmin,
+    isEntitled: isCoachInPlaybook,
+  });
+
   return (
     <PlayEditorClient
       playId={res.play.id}
@@ -117,6 +137,7 @@ export default async function PlayEditPage({ params }: Props) {
       isExamplePreview={isExamplePreview}
       isArchived={isArchived}
       mobileEditingEnabled={mobileEditingEnabled}
+      gameModeAvailable={gameModeAvailable}
     />
   );
 }

@@ -67,6 +67,9 @@ type Props = {
    *  mode (the "Edit play" button, the formation picker dropdown) are
    *  suppressed on small screens. Desktop is unaffected. */
   mobileEditingEnabled?: boolean;
+  /** When true, show the mobile "Game mode" button next to Edit play.
+   *  Computed server-side from the beta-features site setting + viewer role. */
+  gameModeAvailable?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
@@ -97,6 +100,7 @@ function PlayEditorClientInner({
   isExamplePreview = false,
   isArchived = false,
   mobileEditingEnabled = false,
+  gameModeAvailable = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -591,28 +595,40 @@ function PlayEditorClientInner({
                 (and above the edit toolbar) so coaches can flip between
                 viewing and editing without hunting through the UI. Desktop
                 doesn't need this because it always renders in edit mode. */}
-            {canEdit && mobileEditingEnabled && (
-              <button
-                type="button"
-                onClick={() => {
-                  const next = mode === "edit" ? "view" : "edit";
-                  if (next === "view") {
-                    setSelectedPlayerId(null);
-                    setSelectedRouteId(null);
-                    setSelectedNodeId(null);
-                    setSelectedSegmentId(null);
-                    setSelectedZoneId(null);
-                  }
-                  setMode(next);
-                }}
-                className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold sm:hidden ${
-                  mode === "edit"
-                    ? "border-border bg-surface-raised text-foreground hover:bg-surface"
-                    : "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
-              >
-                {mode === "edit" ? "Done editing" : "Edit play"}
-              </button>
+            {canEdit && (mobileEditingEnabled || gameModeAvailable) && (
+              <div className="flex w-full gap-2 sm:hidden">
+                {mobileEditingEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = mode === "edit" ? "view" : "edit";
+                      if (next === "view") {
+                        setSelectedPlayerId(null);
+                        setSelectedRouteId(null);
+                        setSelectedNodeId(null);
+                        setSelectedSegmentId(null);
+                        setSelectedZoneId(null);
+                      }
+                      setMode(next);
+                    }}
+                    className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border text-sm font-semibold ${
+                      mode === "edit"
+                        ? "border-border bg-surface-raised text-foreground hover:bg-surface"
+                        : "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                    }`}
+                  >
+                    {mode === "edit" ? "Done editing" : "Edit play"}
+                  </button>
+                )}
+                {gameModeAvailable && (
+                  <Link
+                    href={`/playbooks/${playbookId}/game`}
+                    className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-semibold text-foreground hover:bg-surface"
+                  >
+                    Game mode
+                  </Link>
+                )}
+              </div>
             )}
 
             {/* The route toolbar is ALWAYS rendered — even with nothing
