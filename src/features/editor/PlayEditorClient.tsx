@@ -563,6 +563,7 @@ function PlayEditorClientInner({
         allFormations={allFormations}
         canEdit={canEdit}
         mobileEditingEnabled={mobileEditingEnabled}
+        hideMobileNav={mode === "edit"}
       />
 
       {playbookSettings &&
@@ -576,6 +577,24 @@ function PlayEditorClientInner({
       {/* Routes */}
       <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[1fr_320px]">
           <div className="flex min-h-[260px] flex-col gap-3 sm:min-h-[420px]">
+            {/* Mobile-only Edit/Done toggle. Sits directly above the field
+                (and above the edit toolbar) so coaches can flip between
+                viewing and editing without hunting through the UI. Desktop
+                doesn't need this because it always renders in edit mode. */}
+            {canEdit && mobileEditingEnabled && (
+              <button
+                type="button"
+                onClick={() => setMode(mode === "edit" ? "view" : "edit")}
+                className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold sm:hidden ${
+                  mode === "edit"
+                    ? "border-border bg-surface-raised text-foreground hover:bg-surface"
+                    : "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+              >
+                {mode === "edit" ? "Done editing" : "Edit play"}
+              </button>
+            )}
+
             {/* The route toolbar is ALWAYS rendered — even with nothing
                 selected — so the canvas never shifts when a player or
                 route is selected. When no selection exists, the buttons
@@ -737,34 +756,13 @@ function PlayEditorClientInner({
               </div>
             )}
 
-            {/* Mobile view-mode controls: play/animate + Edit toggle. Shown
-                only on mobile when the user hasn't switched to edit mode.
-                Desktop always renders the full editor instead. Viewers
-                never get an edit toggle — they see only playback. */}
+            {/* Mobile playback controls — only in view mode. The Edit toggle
+                moved above the field so this section now just surfaces
+                play/animate controls. Desktop always uses the sidebar. */}
             {mode === "view" && (
-              <div className="flex flex-col gap-3 sm:hidden">
-                <div className="rounded-xl border border-border bg-surface-raised p-4">
-                  <PlayControlsPanel anim={anim} />
-                </div>
-                {canEdit && mobileEditingEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => setMode("edit")}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-semibold text-foreground hover:bg-surface"
-                  >
-                    Edit play
-                  </button>
-                )}
+              <div className="rounded-xl border border-border bg-surface-raised p-4 sm:hidden">
+                <PlayControlsPanel anim={anim} />
               </div>
-            )}
-            {canEdit && mode === "edit" && (
-              <button
-                type="button"
-                onClick={() => setMode("view")}
-                className="inline-flex h-10 items-center justify-center gap-2 self-start rounded-lg border border-border bg-surface-raised px-3 text-xs font-semibold text-muted hover:text-foreground sm:hidden"
-              >
-                Done editing
-              </button>
             )}
 
             {/* Field size controls (below canvas) */}

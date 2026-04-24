@@ -41,6 +41,10 @@ type Props = {
   /** When false, the formation picker is read-only on mobile. Desktop is
    *  unaffected. Driven by the admin site toggle for mobile editing. */
   mobileEditingEnabled?: boolean;
+  /** When true, the sibling-play navigation (Previous/All plays/Next) and
+   *  the Copy button are hidden on small screens so the limited mobile
+   *  width goes to the edit toolbar instead. Desktop always shows them. */
+  hideMobileNav?: boolean;
 };
 
 export function EditorHeaderBar({
@@ -56,6 +60,7 @@ export function EditorHeaderBar({
   allFormations = [],
   canEdit = true,
   mobileEditingEnabled = false,
+  hideMobileNav = false,
 }: Props) {
   const [nav, setNav] = useState(initialNav);
   const [groups, setGroups] = useState(initialGroups);
@@ -199,7 +204,11 @@ export function EditorHeaderBar({
           </div>
         )}
 
-        <div className="ml-auto flex flex-wrap items-center gap-1">
+        <div
+          className={`ml-auto ${
+            hideMobileNav ? "hidden sm:flex" : "flex"
+          } flex-wrap items-center gap-1`}
+        >
           <Button
             type="button"
             size="sm"
