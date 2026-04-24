@@ -25,6 +25,17 @@ export type LiveGameCall = {
   tag: string | null;
 };
 
+/** One score-change event. Positive or negative deltas are both valid
+ *  (corrections are compensating events). `playId` is the game_plays row
+ *  that was on the field when the score moved, if any. */
+export type LiveScoreEvent = {
+  id: string;
+  side: "us" | "them";
+  delta: number;
+  playId: string | null;
+  createdAt: string;
+};
+
 /** Who is connected to the session right now. Names resolved client-side
  *  from the profiles table (only co-members of the playbook are readable
  *  by RLS). */

@@ -14,6 +14,7 @@ import type {
   LiveGameCall,
   LiveGameSession,
   LiveParticipant,
+  LiveScoreEvent,
 } from "@/features/game-mode/live-session-types";
 
 type Props = {
@@ -124,6 +125,7 @@ export default async function GameModePage({ params, searchParams }: Props) {
   let initialSession: LiveGameSession | null = null;
   let initialCalls: LiveGameCall[] = [];
   let initialParticipants: LiveParticipant[] = [];
+  let initialScoreEvents: LiveScoreEvent[] = [];
   if (sessionRow) {
     initialSession = {
       id: sessionRow.id as string,
@@ -175,7 +177,26 @@ export default async function GameModePage({ params, searchParams }: Props) {
       displayName: nameByUser.get(p.user_id as string) ?? null,
       lastSeenAt: p.last_seen_at as string,
     }));
+
+    const { data: scoreRows } = await supabase
+      .from("game_score_events")
+      .select("id, side, delta, play_id, created_at")
+      .eq("session_id", initialSession.id)
+      .order("created_at", { ascending: true });
+    initialScoreEvents = (scoreRows ?? []).map((r) => ({
+      id: r.id as string,
+      side: (r.side as "us" | "them") ?? "us",
+      delta: r.delta as number,
+      playId: (r.play_id as string | null) ?? null,
+      createdAt: r.created_at as string,
+    }));
   }
+
+  const { data: playbookRow } = await supabase
+    .from("playbooks")
+    .select("name, sport_variant")
+    .eq("id", playbookId)
+    .maybeSingle();
 
   const { data: myProfile } = await supabase
     .from("profiles")
@@ -193,6 +214,9 @@ export default async function GameModePage({ params, searchParams }: Props) {
       initialSession={initialSession}
       initialCalls={initialCalls}
       initialParticipants={initialParticipants}
+      initialScoreEvents={initialScoreEvents}
+      playbookName={(playbookRow?.name as string | null) ?? "Home"}
+      sportVariant={(playbookRow?.sport_variant as string | null) ?? "flag_7v7"}
     />
   );
 }

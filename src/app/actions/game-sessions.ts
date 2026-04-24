@@ -442,6 +442,38 @@ export async function discardGameSessionAction(sessionId: string) {
   return { ok: true as const };
 }
 
+/** Log a score change for the current session. Any playbook coach can
+ *  call this — scoring is not gated on being the play caller. `playId`
+ *  is the game_plays row on the field when the tap happened, so the
+ *  review surface can attribute which play moved the scoreboard. */
+export async function logScoreEventAction(
+  sessionId: string,
+  input: { side: "us" | "them"; delta: number; playId: string | null },
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const side = input.side === "them" ? "them" : "us";
+  const delta = Math.trunc(Number(input.delta));
+  if (!Number.isFinite(delta) || delta === 0) {
+    return { ok: false as const, error: "Invalid score delta." };
+  }
+
+  const { error } = await supabase.from("game_score_events").insert({
+    session_id: sessionId,
+    play_id: input.playId,
+    side,
+    delta,
+    created_by: user.id,
+  });
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 /** Spectator leaves the session (caller should use end/discard instead). */
 export async function leaveGameSessionAction(sessionId: string) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };

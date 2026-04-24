@@ -28,12 +28,14 @@ import {
   endGameSessionAction,
   discardGameSessionAction,
   leaveGameSessionAction,
+  logScoreEventAction,
 } from "@/app/actions/game-sessions";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { PlayPickerDialog } from "./PlayPickerDialog";
 import { ExitGameDialog } from "./ExitGameDialog";
 import { KindToggle } from "./KindToggle";
 import { GameFieldView } from "./GameFieldView";
+import { ScoreCard } from "./ScoreCard";
 import type { PlayDocument } from "@/domain/play/types";
 import type { PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import {
@@ -51,6 +53,7 @@ import {
   type LiveGameCall,
   type LiveGameSession,
   type LiveParticipant,
+  type LiveScoreEvent,
 } from "./live-session-types";
 
 const HEARTBEAT_MS = 20_000;
@@ -64,6 +67,9 @@ type Props = {
   initialSession: LiveGameSession | null;
   initialCalls: LiveGameCall[];
   initialParticipants: LiveParticipant[];
+  initialScoreEvents: LiveScoreEvent[];
+  playbookName: string;
+  sportVariant: string;
 };
 
 export function GameModeClient({
@@ -75,6 +81,9 @@ export function GameModeClient({
   initialSession,
   initialCalls,
   initialParticipants,
+  initialScoreEvents,
+  playbookName,
+  sportVariant,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -87,6 +96,9 @@ export function GameModeClient({
   const [calls, setCalls] = useState<LiveGameCall[]>(initialCalls);
   const [participants, setParticipants] =
     useState<LiveParticipant[]>(initialParticipants);
+  const [scoreEvents, setScoreEvents] =
+    useState<LiveScoreEvent[]>(initialScoreEvents);
+  const isTackle = sportVariant === "tackle_11";
 
   const [pickerMode, setPickerMode] = useState<"closed" | "current" | "next">(
     "closed",
@@ -356,6 +368,50 @@ export function GameModeClient({
           );
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "game_score_events",
+          filter: `session_id=eq.${sessionId}`,
+        },
+        (payload) => {
+          setScoreEvents((prev) => {
+            if (payload.eventType === "DELETE") {
+              const oldId = (payload.old as { id?: string }).id;
+              return prev.filter((e) => e.id !== oldId);
+            }
+            const row = payload.new as Record<string, unknown>;
+            const next: LiveScoreEvent = {
+              id: row.id as string,
+              side: (row.side as "us" | "them") ?? "us",
+              delta: row.delta as number,
+              playId: (row.play_id as string | null) ?? null,
+              createdAt: row.created_at as string,
+            };
+            // Replace any optimistic placeholder for the same delta+side
+            // so we don't double-count.
+            const pruned = prev.filter(
+              (e) =>
+                !(
+                  e.id.startsWith("optimistic:") &&
+                  e.side === next.side &&
+                  e.delta === next.delta
+                ),
+            );
+            const idx = pruned.findIndex((e) => e.id === next.id);
+            if (idx >= 0) {
+              const copy = pruned.slice();
+              copy[idx] = next;
+              return copy;
+            }
+            return [...pruned, next].sort((a, b) =>
+              a.createdAt < b.createdAt ? -1 : 1,
+            );
+          });
+        },
+      )
       .subscribe();
 
     return () => {
@@ -560,6 +616,47 @@ export function GameModeClient({
     });
   }
 
+  function addScore(side: "us" | "them", delta: number) {
+    if (!session) return;
+    if (delta === 0) return;
+    const currentCallId =
+      currentCall && currentCall.playId === session.currentPlayId
+        ? currentCall.id
+        : null;
+    // Optimistic event so the scoreboard ticks instantly on the tapping
+    // device. Realtime INSERT dedupes by matching side+delta.
+    const optimistic: LiveScoreEvent = {
+      id: `optimistic:${Date.now()}`,
+      side,
+      delta,
+      playId: currentCallId,
+      createdAt: new Date().toISOString(),
+    };
+    const snapshot = scoreEvents;
+    setScoreEvents([...scoreEvents, optimistic]);
+    startMutating(async () => {
+      const res = await logScoreEventAction(session.id, {
+        side,
+        delta,
+        playId: currentCallId,
+      });
+      if (!res.ok) {
+        toast(res.error, "error");
+        setScoreEvents(snapshot);
+      }
+    });
+  }
+
+  function overwriteScore(side: "us" | "them", target: number) {
+    if (!session) return;
+    const current = scoreEvents
+      .filter((e) => e.side === side)
+      .reduce((sum, e) => sum + e.delta, 0);
+    const delta = target - current;
+    if (delta === 0) return;
+    addScore(side, delta);
+  }
+
   function handleTopLeftClose() {
     if (!session) {
       router.push(`/playbooks/${playbookId}`);
@@ -751,6 +848,19 @@ export function GameModeClient({
             )}
           </div>
         )}
+
+        {session &&
+          session.kind === "game" &&
+          pickerMode !== "next" && (
+            <ScoreCard
+              events={scoreEvents}
+              usLabel={playbookName}
+              themLabel={session.opponent?.trim() || "Opponent"}
+              isTackle={isTackle}
+              onAdd={addScore}
+              onOverwrite={overwriteScore}
+            />
+          )}
       </div>
 
       {showIntro && <IntroOverlay onDismiss={dismissIntro} />}
