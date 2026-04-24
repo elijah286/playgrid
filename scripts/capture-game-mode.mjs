@@ -57,12 +57,25 @@ const CURSOR_INIT = () => {
   const id = "__capture_cursor__";
   if (document.getElementById(id)) return;
   // Apple-style: a single soft, translucent dot that glides smoothly
-  // around the screen. No heavy halo, no ripple burst — the dot itself
-  // briefly scales down on tap to read as a press.
-  const el = document.createElement("div");
-  el.id = id;
-  Object.assign(el.style, {
+  // around the screen. Position lives on the outer wrapper; scale/press
+  // lives on the inner dot so shrinking never shifts the hit point off
+  // what the user is clicking.
+  const wrap = document.createElement("div");
+  wrap.id = id;
+  Object.assign(wrap.style, {
     position: "fixed",
+    left: "0px",
+    top: "0px",
+    width: "0px",
+    height: "0px",
+    pointerEvents: "none",
+    zIndex: "2147483647",
+    transform: "translate(-200px,-200px)",
+    transition: "transform 850ms cubic-bezier(0.22, 1, 0.36, 1)",
+  });
+  const dot = document.createElement("div");
+  Object.assign(dot.style, {
+    position: "absolute",
     left: "0px",
     top: "0px",
     width: "30px",
@@ -74,54 +87,40 @@ const CURSOR_INIT = () => {
     boxShadow:
       "0 0 0 1px rgba(242,101,34,0.35), 0 6px 18px rgba(242,101,34,0.35), 0 2px 6px rgba(0,0,0,0.15)",
     backdropFilter: "blur(2px)",
-    pointerEvents: "none",
-    zIndex: "2147483647",
+    transformOrigin: "center center",
     transition:
-      "transform 850ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms ease-out, height 180ms ease-out, margin 180ms ease-out, opacity 240ms ease-out",
-    transform: "translate(-200px,-200px)",
+      "transform 180ms ease-out, opacity 240ms ease-out",
     opacity: "0.95",
   });
-  document.body.appendChild(el);
+  wrap.appendChild(dot);
+  document.body.appendChild(wrap);
 
-  let lastX = -200;
-  let lastY = -200;
   window.addEventListener(
     "mousemove",
     (ev) => {
-      lastX = ev.clientX;
-      lastY = ev.clientY;
-      el.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px)`;
+      wrap.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px)`;
     },
     { passive: true, capture: true },
   );
 
-  // Subtle press: shrink the dot briefly, then restore.
+  // Press scales the dot in place — no margin tricks, so the center
+  // stays exactly on the pointer.
   window.addEventListener(
     "mousedown",
     () => {
-      el.style.width = "20px";
-      el.style.height = "20px";
-      el.style.marginLeft = "-10px";
-      el.style.marginTop = "-10px";
-      el.style.opacity = "1";
+      dot.style.transform = "scale(0.66)";
+      dot.style.opacity = "1";
     },
     { passive: true, capture: true },
   );
   window.addEventListener(
     "mouseup",
     () => {
-      el.style.width = "30px";
-      el.style.height = "30px";
-      el.style.marginLeft = "-15px";
-      el.style.marginTop = "-15px";
-      el.style.opacity = "0.95";
+      dot.style.transform = "scale(1)";
+      dot.style.opacity = "0.95";
     },
     { passive: true, capture: true },
   );
-  // Silence unused-var lint on lastX/lastY — they're handy for future
-  // overlays (e.g. pinning cursor on scroll) without rewiring listeners.
-  void lastX;
-  void lastY;
 };
 
 async function installCursor(page) {
@@ -186,82 +185,93 @@ async function run() {
   await page.mouse.move(40, 780);
   await sleep(BEAT_MED);
 
-  // Step 1 — picker open ("Pick a play").
-  await shot(page, "gm-1-picker");
-
-  // Glide across the picker so viewers see "options exist" before we tap one.
-  await glideTo(page, 320, 260);
-  await sleep(600);
-  await glideTo(page, 60, 260);
-  await sleep(600);
-
-  // Pick first play in the picker.
-  const firstPlay = page.locator('[role="dialog"] button, [role="dialog"] [role="option"], [data-play-id]').first();
-  await firstPlay.waitFor({ timeout: 5000 }).catch(() => {});
-  if (await firstPlay.count()) {
-    await tap(page, firstPlay);
-  } else {
-    await glideTo(page, 195, 400);
-    await page.mouse.down();
-    await sleep(80);
-    await page.mouse.up();
-  }
-  await sleep(BEAT_LONG);
-
-  // Step 2 — field view with the picked play.
-  await shot(page, "gm-2-play");
-
-  // Step 3 — tap thumbs up to score it. Pause to let the viewer register
-  // the control, then tap.
-  const thumbsUp = page.getByRole("button", { name: /thumbs up/i });
-  if (await thumbsUp.count()) {
-    await glideToLocator(page, thumbsUp.first());
-    await sleep(BEAT_SHORT);
-    await tap(page, thumbsUp.first());
-    await sleep(BEAT_MED);
-    await shot(page, "gm-3-thumbsup");
+  // Helper: pick the Nth play in whichever picker is currently open.
+  async function pickPlayAt(n) {
+    const plays = page.locator(
+      '[role="dialog"] button, [role="dialog"] [role="option"], [data-play-id]',
+    );
+    const count = await plays.count();
+    if (count === 0) return false;
+    const target = plays.nth(Math.min(n, count - 1));
+    await tap(page, target);
+    return true;
   }
 
-  // Step 4 — open next-play picker.
-  const chooseNext = page.getByRole("button", { name: /choose next play/i });
-  if (await chooseNext.count()) {
+  // Helper: tap an outcome tag (Gain of yardage / First down / Score /
+  // Loss of yardage / etc). Assumes thumbs-up or thumbs-down has already
+  // been pressed so the tag rail is visible. Always taps thumbs-up first
+  // for the "up" cases below; no "down" flow is needed yet.
+  async function pickOutcome(label) {
+    const thumbsUp = page.getByRole("button", { name: /thumbs up/i });
+    if (await thumbsUp.count()) {
+      await tap(page, thumbsUp.first());
+      await sleep(BEAT_SHORT);
+    }
+    const tag = page.getByRole("button", { name: new RegExp(label, "i") });
+    if (await tag.count()) {
+      await tap(page, tag.first());
+      await sleep(BEAT_MED);
+    }
+  }
+
+  async function openNextPicker() {
+    const chooseNext = page.getByRole("button", { name: /choose next play/i });
+    if (!(await chooseNext.count())) return false;
     await glideToLocator(page, chooseNext.first());
     await sleep(BEAT_SHORT);
     await tap(page, chooseNext.first());
     await sleep(BEAT_MED);
-    await shot(page, "gm-4-next-picker");
+    return true;
+  }
 
-    // Scroll with the cursor hovering inside the list so there's a clear
-    // "they're browsing" beat.
-    await glideTo(page, 195, 500);
-    await sleep(400);
-    await page.mouse.wheel(0, 220);
-    await sleep(700);
-    await page.mouse.wheel(0, 180);
-    await sleep(BEAT_MED);
-    await shot(page, "gm-5-next-scrolled");
-
-    // Pick a different play (second in list) slowly.
-    const plays = page.locator('[role="dialog"] button, [data-play-id]');
-    const count = await plays.count();
-    if (count > 1) {
-      await tap(page, plays.nth(1));
-    } else if (count === 1) {
-      await tap(page, plays.first());
-    }
-    await sleep(BEAT_LONG);
-
-    // Step 6 — back to field with "next play" queued.
-    await shot(page, "gm-6-next-queued");
-
+  async function runQueuedPlay() {
     const runBtn = page.getByRole("button", { name: /^run$/i });
-    if (await runBtn.count()) {
-      await glideToLocator(page, runBtn.first());
-      await sleep(BEAT_SHORT);
-      await tap(page, runBtn.first());
-      await sleep(BEAT_LONG + 600);
-      await shot(page, "gm-7-running-next");
-    }
+    if (!(await runBtn.count())) return false;
+    await glideToLocator(page, runBtn.first());
+    await sleep(BEAT_SHORT);
+    await tap(page, runBtn.first());
+    // Hold long enough for the auto-stepped animation to play through.
+    await sleep(BEAT_LONG + 1200);
+    return true;
+  }
+
+  // Step 1 — picker open ("Pick a play"). Glide across so the viewer
+  // registers that there are several plays to choose from.
+  await shot(page, "gm-1-picker");
+  await glideTo(page, 320, 260);
+  await glideTo(page, 60, 260);
+
+  // ---- Drive 1: pick play → animation auto-runs → First down.
+  await pickPlayAt(0);
+  await sleep(BEAT_LONG + 800); // let the play auto-animate
+  await shot(page, "gm-2-play");
+
+  await pickOutcome("first down");
+  await shot(page, "gm-3-first-down");
+
+  // ---- Drive 2: choose next → pick another → run → animation → Gain of yardage.
+  if (await openNextPicker()) {
+    await shot(page, "gm-4-next-picker");
+    await glideTo(page, 195, 500);
+    await page.mouse.wheel(0, 220);
+    await sleep(BEAT_MED);
+    await pickPlayAt(1);
+    await sleep(BEAT_MED);
+    await shot(page, "gm-5-next-queued");
+
+    await runQueuedPlay();
+    await shot(page, "gm-6-drive2-animated");
+
+    await pickOutcome("gain of yardage");
+    await shot(page, "gm-7-gain");
+  }
+
+  // ---- Drive 3: one more loop so the video makes the pattern obvious.
+  if (await openNextPicker()) {
+    await pickPlayAt(2);
+    await sleep(BEAT_MED);
+    await runQueuedPlay();
+    await pickOutcome("first down");
   }
 
   // Hold on the final frame so the loop doesn't snap back instantly.

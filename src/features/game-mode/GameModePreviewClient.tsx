@@ -518,6 +518,19 @@ function CurrentPlaySectionAnimated({
   onTapTag: (dir: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) => void;
 }) {
   const anim = usePlayAnimation(document);
+  // Preview is driven by a marketing capture script — no human is here to
+  // tap the field. Auto-step through idle → motion → play → done so the
+  // Xs and Os move on their own.
+  useEffect(() => {
+    if (anim.phase === "idle") {
+      const t = setTimeout(() => anim.step(), 700);
+      return () => clearTimeout(t);
+    }
+    if (anim.phase === "motion-done") {
+      const t = setTimeout(() => anim.step(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [anim.phase, anim.step]);
   return (
     <div className="relative mx-auto flex w-full flex-col items-center justify-center landscape:h-full landscape:flex-1">
       <GameFieldView document={document} fallbackPreview={preview} anim={anim} />
