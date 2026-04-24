@@ -18,6 +18,7 @@ import {
   WristBand,
 } from "@/features/marketing/DeviceFrames";
 import { PlayAnimation } from "@/features/marketing/PlayAnimation";
+import { AnimatedGameMode } from "@/features/marketing/AnimatedGameMode";
 import { Reveal } from "@/features/marketing/Reveal";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
@@ -460,7 +461,7 @@ function GameModeSection() {
         <Reveal delay={100}>
           <div className="flex justify-center">
             <PhoneFrame>
-              <MockGameMode />
+              <AnimatedGameMode />
             </PhoneFrame>
           </div>
         </Reveal>
@@ -740,59 +741,6 @@ function FeatureBullet({
    game mode, game data). Everything editor/playbook/play-related points
    to real example playbooks instead.
    ======================================================================== */
-
-function MockGameMode() {
-  return (
-    <div className="flex h-full flex-col bg-neutral-900 text-white">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[11px]">
-        <span className="font-semibold">Q2 · 7:14</span>
-        <span>3rd & 4 · @ opp 28</span>
-      </div>
-      <div className="flex-1 space-y-1 overflow-hidden p-2">
-        {[
-          { n: "02", name: "PA Go", tag: "Shot" },
-          { n: "14", name: "Mesh", tag: "3rd" },
-          { n: "21", name: "Counter", tag: "Run" },
-          { n: "33", name: "Y-Stick", tag: "3rd" },
-          { n: "07", name: "Slant/Flat", tag: "Quick" },
-        ].map((p, i) => (
-          <div
-            key={p.n}
-            className={`flex items-center gap-2 rounded px-2 py-1.5 text-[11px] ${
-              i === 1 ? "bg-primary" : "bg-white/5"
-            }`}
-          >
-            <span
-              className="rounded px-1.5 py-0.5 text-[9px] font-bold"
-              style={{
-                background: i === 1 ? "white" : BRAND_ORANGE,
-                color: i === 1 ? BRAND_BLUE : "white",
-              }}
-            >
-              {p.n}
-            </span>
-            <span className="font-semibold">{p.name}</span>
-            <span className="ml-auto text-[9px] opacity-70">#{p.tag}</span>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-1 border-t border-white/10 p-2">
-        {["+3", "+7", "TD"].map((l, i) => (
-          <button
-            key={l}
-            className="rounded py-2 text-[10px] font-bold"
-            style={{
-              background:
-                i === 2 ? BRAND_GREEN : i === 0 ? "#374151" : BRAND_BLUE,
-            }}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function MockWristSheet() {
   return (
