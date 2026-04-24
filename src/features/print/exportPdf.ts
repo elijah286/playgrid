@@ -16,7 +16,17 @@ function sanitizeSvgForPdf(svgMarkup: string): string {
       "<style>text{font-family:helvetica;}</style>",
     )
     .replace(/font-family="[^"]*"/g, 'font-family="helvetica"')
-    .replace(/font-family:\s*[^;"']+/g, "font-family:helvetica");
+    .replace(/font-family:\s*[^;"']+/g, "font-family:helvetica")
+    // jsPDF's built-in helvetica only ships "normal" and "bold" variants, so
+    // numeric font-weights like 500/600 don't resolve and svg2pdf silently
+    // falls back to Times (serif). Normalize every weight to the closest
+    // supported style before handing off to the PDF renderer.
+    .replace(/font-weight="(\d+)"/g, (_m, n) =>
+      Number(n) >= 600 ? 'font-weight="bold"' : 'font-weight="normal"',
+    )
+    .replace(/font-weight:\s*(\d+)/g, (_m, n) =>
+      `font-weight:${Number(n) >= 600 ? "bold" : "normal"}`,
+    );
 }
 
 /** Belt-and-braces: after parsing, explicitly set font-family on every <text>
@@ -24,12 +34,21 @@ function sanitizeSvgForPdf(svgMarkup: string): string {
 function forceHelveticaOnTextNodes(svg: Element) {
   const nodes = svg.querySelectorAll("text, tspan");
   nodes.forEach((n) => {
-    (n as Element).setAttribute("font-family", "helvetica");
-    const style = (n as HTMLElement).getAttribute("style");
+    const el = n as Element;
+    el.setAttribute("font-family", "helvetica");
+    const weight = el.getAttribute("font-weight");
+    if (weight && /^\d+$/.test(weight)) {
+      el.setAttribute("font-weight", Number(weight) >= 600 ? "bold" : "normal");
+    }
+    const style = (el as HTMLElement).getAttribute("style");
     if (style) {
-      (n as HTMLElement).setAttribute(
+      (el as HTMLElement).setAttribute(
         "style",
-        style.replace(/font-family\s*:\s*[^;]+;?/g, ""),
+        style
+          .replace(/font-family\s*:\s*[^;]+;?/g, "")
+          .replace(/font-weight\s*:\s*(\d+)\s*;?/g, (_m, n) =>
+            `font-weight:${Number(n) >= 600 ? "bold" : "normal"};`,
+          ),
       );
     }
   });
