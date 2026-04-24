@@ -1096,6 +1096,7 @@ export function GameModeClient({
       {showIntro && (
         <IntroOverlay
           onDismiss={dismissIntro}
+          onCancel={() => router.push(`/playbooks/${playbookId}`)}
           isJoining={initialSession != null}
           initialKind={session?.kind ?? "game"}
           initialOpponent={session?.opponent ?? null}
@@ -1372,11 +1373,13 @@ function TagRail<T extends string>({
 
 function IntroOverlay({
   onDismiss,
+  onCancel,
   isJoining,
   initialKind,
   initialOpponent,
 }: {
   onDismiss: (opts: { kind: GameKind; opponent: string | null }) => void;
+  onCancel: () => void;
   /** True when the session was already active when we loaded the page —
    *  changes the framing from "start a game" to "join in progress". */
   isJoining: boolean;
@@ -1398,6 +1401,13 @@ function IntroOverlay({
       aria-modal="true"
       aria-label={isJoining ? "Join game mode" : "Welcome to game mode"}
       className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 p-3 sm:items-center"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onCancel();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !submitting) onCancel();
+      }}
+      tabIndex={-1}
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated">
         <h2 className="text-lg font-semibold text-foreground">
@@ -1434,6 +1444,14 @@ function IntroOverlay({
           className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
         >
           {submitting ? submittingLabel : primaryLabel}
+        </button>
+        <button
+          type="button"
+          disabled={submitting}
+          onClick={onCancel}
+          className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium text-muted hover:bg-surface-inset hover:text-foreground disabled:opacity-60"
+        >
+          Cancel
         </button>
       </div>
     </div>
