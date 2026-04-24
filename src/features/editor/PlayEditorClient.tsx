@@ -686,21 +686,6 @@ function PlayEditorClientInner({
                 onAddEllipseZone={() =>
                   dispatch({ type: "zone.add", zone: mkZone("ellipse", "") })
                 }
-                totalRouteCount={doc.layers.routes.length}
-                onClearAllRoutes={() => {
-                  if (doc.layers.routes.length === 0) return;
-                  if (
-                    !window.confirm(
-                      `Clear all ${doc.layers.routes.length} route${
-                        doc.layers.routes.length !== 1 ? "s" : ""
-                      } from this play?`,
-                    )
-                  )
-                    return;
-                  for (const r of doc.layers.routes) {
-                    dispatch({ type: "route.remove", routeId: r.id });
-                  }
-                }}
               />
             </div>
             )}
