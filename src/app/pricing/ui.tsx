@@ -53,6 +53,7 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
       "Manage players",
       "Share notes",
       "Collaborate with assistants",
+      "Game Mode — sideline view with play-by-play results tracking",
     ],
     cta: "Upgrade to Team Coach",
   },

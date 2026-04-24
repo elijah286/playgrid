@@ -7,6 +7,8 @@ import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { canUseGameMode } from "@/lib/billing/features";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
@@ -120,6 +122,8 @@ export default async function PlayEditPage({ params }: Props) {
     isAdmin,
     isEntitled: isCoachInPlaybook,
   });
+  const viewerCanUseGameMode =
+    isAdmin || canUseGameMode(await getCurrentEntitlement());
 
   return (
     <PlayEditorClient
@@ -138,6 +142,7 @@ export default async function PlayEditPage({ params }: Props) {
       isArchived={isArchived}
       mobileEditingEnabled={mobileEditingEnabled}
       gameModeAvailable={gameModeAvailable}
+      canUseGameMode={viewerCanUseGameMode}
     />
   );
 }

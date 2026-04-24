@@ -67,6 +67,12 @@ export function canUseTeamFeatures(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");
 }
 
+/** Game Mode: sideline play view with outcome tracking. Coach+ only — free
+ *  users see an upgrade prompt instead of entering the flow. */
+export function canUseGameMode(entitlement: Entitlement | null): boolean {
+  return tierAtLeast(entitlement, "coach");
+}
+
 /** AI features (placeholder — not yet implemented). Coach AI only. */
 export function canUseAiFeatures(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach_ai");

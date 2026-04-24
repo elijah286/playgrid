@@ -5,6 +5,8 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { canUseGameMode } from "@/lib/billing/features";
 import { listPlaysAction } from "@/app/actions/plays";
 import type { PlayDocument } from "@/domain/play/types";
 import { GameModeClient } from "@/features/game-mode/GameModeClient";
@@ -48,6 +50,14 @@ export default async function GameModePage({ params, searchParams }: Props) {
     isEntitled: isCoachInPlaybook,
   });
   if (!allowed) redirect(`/playbooks/${playbookId}`);
+
+  // Tier gate: Game Mode is a Team Coach feature. Admins bypass so they can
+  // QA without a paid seat. Non-entitled users hitting the URL directly land
+  // on /pricing with an upgrade hint instead of silently back on the playbook.
+  const entitlement = await getCurrentEntitlement();
+  if (!isAdmin && !canUseGameMode(entitlement)) {
+    redirect("/pricing?upgrade=game-mode");
+  }
 
   // Offense only for now — defense and special-teams game flows look
   // different and aren't covered by this beta.

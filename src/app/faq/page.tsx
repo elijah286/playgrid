@@ -55,6 +55,10 @@ function buildFaqs(freeMaxPlays: number): Faq[] {
     a: "It runs in the browser on phones and tablets, so you can pull up your playbook during a game without installing anything. Most coaches design on a laptop and reference on a phone at the field.",
   },
   {
+    q: "What is Game Mode?",
+    a: "Game Mode is a sideline-first view included with Team Coach. Open a play full-screen, tap the field to run motion and the snap, then tag the outcome with a thumbs-up or thumbs-down. When the game ends, save the session with score and notes — your call log becomes data you can use to see what's working and refine your playbook between games.",
+  },
+  {
     q: "How is this different from drawing plays in PowerPoint or Keynote?",
     a: "xogridmaker understands football. Players have positions, routes are route trees, formations are formations — not just shapes. That means the app can animate plays, keep them legible at any size, and share them as live pages instead of static images.",
   },

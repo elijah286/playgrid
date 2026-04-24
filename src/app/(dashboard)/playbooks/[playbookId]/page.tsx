@@ -12,7 +12,7 @@ import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { tierAtLeast } from "@/lib/billing/features";
+import { canUseGameMode, tierAtLeast } from "@/lib/billing/features";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   getBetaFeatures,
@@ -177,7 +177,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
   // read-only header.
   const canManage = effectiveRole === "owner";
   const canShare = effectiveRole === "owner" || effectiveRole === "editor";
-  const viewerIsCoach = tierAtLeast(await getCurrentEntitlement(), "coach");
+  const viewerEntitlement = await getCurrentEntitlement();
+  const viewerIsCoach = tierAtLeast(viewerEntitlement, "coach");
+  const viewerCanUseGameMode = canUseGameMode(viewerEntitlement);
 
   // Site admins get two extra action menu items: "Use as Example"
   // (toggle is_example) and "Publish / Unpublish" (toggle
@@ -279,6 +281,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         isAdmin={isAdmin}
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
+        canUseGameMode={viewerCanUseGameMode || isAdmin}
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,

@@ -89,6 +89,7 @@ import { listFormationsAction } from "@/app/actions/formations";
 import type { SavedFormation } from "@/app/actions/formations";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
+import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -251,6 +252,7 @@ function PlaybookDetailClientInner({
   isAdmin = false,
   freeMaxPlays,
   gameModeAvailable = false,
+  canUseGameMode = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -266,6 +268,9 @@ function PlaybookDetailClientInner({
   freeMaxPlays: number;
   /** When true, render the mobile "Game" button next to the search bar. */
   gameModeAvailable?: boolean;
+  /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
+   *  still renders but opens an upgrade prompt instead of navigating. */
+  canUseGameMode?: boolean;
   // Data for the playbook banner. Rendered inside the sticky header region
   // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
   // the client can wire play-action callbacks into the banner's menu.
@@ -319,6 +324,7 @@ function PlaybookDetailClientInner({
   const [pending, startTransition] = useTransition();
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
 
   function showPlayCapUpgrade() {
     setUpgradeNotice({
@@ -1224,14 +1230,26 @@ function PlaybookDetailClientInner({
               coaches can flip into in-game flow without leaving the plays
               tab. Hidden when the beta feature is off for this user. */}
           {gameModeAvailable && (
-            <Link
-              href={`/playbooks/${playbookId}/game`}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:hidden"
-              aria-label="Game mode"
-            >
-              <Gamepad2 className="size-4" />
-              <span>Game</span>
-            </Link>
+            canUseGameMode ? (
+              <Link
+                href={`/playbooks/${playbookId}/game`}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:hidden"
+                aria-label="Game mode"
+              >
+                <Gamepad2 className="size-4" />
+                <span>Game</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setGameModeUpgradeOpen(true)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:hidden"
+                aria-label="Game mode"
+              >
+                <Gamepad2 className="size-4" />
+                <span>Game</span>
+              </button>
+            )
           )}
 
           {/* Desktop: Select / Reorder / Print / New play as dedicated buttons.
@@ -2069,6 +2087,10 @@ function PlaybookDetailClientInner({
           </div>
         </div>
       )}
+      <GameModeUpgradeDialog
+        open={gameModeUpgradeOpen}
+        onClose={() => setGameModeUpgradeOpen(false)}
+      />
       {copyTarget && (
         <CopyToPlaybookDialog
           open={!!copyTarget}

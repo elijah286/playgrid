@@ -26,6 +26,7 @@ import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/Copy
 import { TagsCard } from "./TagsCard";
 import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
@@ -70,6 +71,9 @@ type Props = {
   /** When true, show the mobile "Game mode" button next to Edit play.
    *  Computed server-side from the beta-features site setting + viewer role. */
   gameModeAvailable?: boolean;
+  /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
+   *  still renders but opens an upgrade prompt instead of navigating. */
+  canUseGameMode?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
@@ -101,6 +105,7 @@ function PlayEditorClientInner({
   isArchived = false,
   mobileEditingEnabled = false,
   gameModeAvailable = false,
+  canUseGameMode = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -303,6 +308,7 @@ function PlayEditorClientInner({
   const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
 
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
+  const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
 
   const duplicate = useCallback(() => {
     if (
@@ -620,12 +626,22 @@ function PlayEditorClientInner({
                   </button>
                 )}
                 {gameModeAvailable && (
-                  <Link
-                    href={`/playbooks/${playbookId}/game?play=${playId}`}
-                    className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-brand-green bg-brand-green text-sm font-semibold text-white hover:bg-brand-green-hover"
-                  >
-                    Game mode
-                  </Link>
+                  canUseGameMode ? (
+                    <Link
+                      href={`/playbooks/${playbookId}/game?play=${playId}`}
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-brand-green bg-brand-green text-sm font-semibold text-white hover:bg-brand-green-hover"
+                    >
+                      Game mode
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setGameModeUpgradeOpen(true)}
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-brand-green bg-brand-green text-sm font-semibold text-white hover:bg-brand-green-hover"
+                    >
+                      Game mode
+                    </button>
+                  )
                 )}
               </div>
             )}
@@ -927,6 +943,11 @@ function PlayEditorClientInner({
         onClose={() => setUpgradeNotice(null)}
         title={upgradeNotice?.title ?? ""}
         message={upgradeNotice?.message ?? ""}
+      />
+
+      <GameModeUpgradeDialog
+        open={gameModeUpgradeOpen}
+        onClose={() => setGameModeUpgradeOpen(false)}
       />
 
     </div>
