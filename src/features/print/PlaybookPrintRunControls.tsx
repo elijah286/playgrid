@@ -149,6 +149,7 @@ function LabelSettings({
         options={[
           { value: "top-left" as PrintTextPosition, label: "Top left" },
           { value: "top-center" as PrintTextPosition, label: "Top middle" },
+          { value: "top-overlay" as PrintTextPosition, label: "On play" },
           { value: "bottom-center" as PrintTextPosition, label: "Bottom middle" },
         ]}
         onChange={onPosition}
@@ -648,6 +649,22 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                 onChange={(e) => patch({ wristbandPlayerOutline: e.target.checked })}
               />
               Outline player markers
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted">
+                Play border thickness · {Math.round(config.wristbandBorderThickness * 100)}%
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={200}
+                step={10}
+                value={Math.round(config.wristbandBorderThickness * 100)}
+                onChange={(e) =>
+                  patch({ wristbandBorderThickness: Number(e.target.value) / 100 })
+                }
+                className="accent-primary"
+              />
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input

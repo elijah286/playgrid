@@ -1091,6 +1091,11 @@ function renderTileTextHeader(params: {
   const lineH = lineFont * 1.15;
   const topBaselineY = oy + padTop + lineFont * 0.95;
   const fontWeight = colorCoding ? "600" : "500";
+  // Name/formation text is always rendered in black for maximum readability,
+  // independent of the tag color-coding (which only drives the number chip
+  // and other accent elements).
+  void labelColor;
+  const textFill = "#111827";
 
   function textAttrs(pos: PrintTextPosition): { x: number; anchor: string } {
     if (pos === "top-left") return { x: ox + padX, anchor: "start" };
@@ -1100,12 +1105,12 @@ function renderTileTextHeader(params: {
   let headerSvg = "";
   if (combined) {
     const { x, anchor } = textAttrs(formationPosition);
-    headerSvg += `<text x="${x}" y="${topBaselineY}" text-anchor="${anchor}" font-size="${lineFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(`${formation}  ·  ${name}`)}</text>`;
+    headerSvg += `<text x="${x}" y="${topBaselineY}" text-anchor="${anchor}" font-size="${lineFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(`${formation}  ·  ${name}`)}</text>`;
   } else {
     if (hasTopFormation) {
       const { x, anchor } = textAttrs(formationPosition);
       formationLines.forEach((line, i) => {
-        headerSvg += `<text x="${x}" y="${topBaselineY + i * lineH}" text-anchor="${anchor}" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+        headerSvg += `<text x="${x}" y="${topBaselineY + i * lineH}" text-anchor="${anchor}" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(line)}</text>`;
       });
     }
     if (hasTopName) {
@@ -1116,14 +1121,30 @@ function renderTileTextHeader(params: {
       // name on line 2. Otherwise the name label uses its own top row.
       const nameRowOffset = sameSlot ? formationLines.length : 0;
       nameLines.forEach((line, i) => {
-        headerSvg += `<text x="${x}" y="${topBaselineY + (nameRowOffset + i) * lineH}" text-anchor="${anchor}" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(line)}</text>`;
+        headerSvg += `<text x="${x}" y="${topBaselineY + (nameRowOffset + i) * lineH}" text-anchor="${anchor}" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(line)}</text>`;
       });
     }
   }
 
-  // Bottom-center labels are painted over the bottom of the field rect.
+  // Overlay labels (top-overlay / bottom-center) are painted directly over the
+  // field rect so they don't steal vertical space from the diagram.
   let bottomSvg = "";
+  const topInset = 0.6;
   const bottomInset = 0.6;
+  const hasOverlayTopFormation =
+    formation.length > 0 && formationPosition === "top-overlay";
+  const hasOverlayTopName = name.length > 0 && namePosition === "top-overlay";
+  if (hasOverlayTopFormation && hasOverlayTopName) {
+    const formationBaselineY = fieldY + topInset + formationFont * 0.95;
+    const nameBaselineY = formationBaselineY + formationFont * 1.15;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${formationBaselineY}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(formation)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${nameBaselineY}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(name)}</text>`;
+  } else if (hasOverlayTopFormation) {
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + topInset + formationFont * 0.95}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(formation)}</text>`;
+  } else if (hasOverlayTopName) {
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + topInset + nameFont * 0.95}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(name)}</text>`;
+  }
+
   const hasBottomFormation =
     formation.length > 0 && formationPosition === "bottom-center";
   const hasBottomName = name.length > 0 && namePosition === "bottom-center";
@@ -1131,12 +1152,12 @@ function renderTileTextHeader(params: {
     // Stack formation above name, flush to the bottom of the field.
     const nameBaselineY = fieldY + fieldH - bottomInset;
     const formationBaselineY = nameBaselineY - nameFont * 1.15;
-    bottomSvg += `<text x="${ox + cw / 2}" y="${formationBaselineY}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
-    bottomSvg += `<text x="${ox + cw / 2}" y="${nameBaselineY}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${formationBaselineY}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(formation)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${nameBaselineY}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(name)}</text>`;
   } else if (hasBottomFormation) {
-    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(formation)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${formationFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(formation)}</text>`;
   } else if (hasBottomName) {
-    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${labelColor}">${escSvgText(name)}</text>`;
+    bottomSvg += `<text x="${ox + cw / 2}" y="${fieldY + fieldH - bottomInset}" text-anchor="middle" font-size="${nameFont}" font-weight="${fontWeight}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textFill}">${escSvgText(name)}</text>`;
   }
 
   let numberBoxSvg = "";

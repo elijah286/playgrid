@@ -255,7 +255,7 @@ export function PrintPlaybookClient({
       colorCoding: config.wristbandColorCoding,
       losIntensity: config.wristbandShowLos ? 0.5 : 0,
       yardMarkersIntensity: config.wristbandShowYardMarkers ? 0.3 : 0,
-      borderThickness: 1,
+      borderThickness: config.wristbandBorderThickness,
       showPlayerLabels: config.wristbandShowPlayerLabels,
       playerOutline: config.wristbandPlayerOutline,
       cellPadding: config.wristbandCellPadding,

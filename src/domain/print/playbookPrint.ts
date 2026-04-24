@@ -27,7 +27,11 @@ export type PrintNumberPosition =
   | "bottom-left"
   | "bottom-center"
   | "below-name";
-export type PrintTextPosition = "top-left" | "top-center" | "bottom-center";
+export type PrintTextPosition =
+  | "top-left"
+  | "top-center"
+  | "top-overlay"
+  | "bottom-center";
 export type WristbandPlayerShape = "circle" | "x" | "diamond";
 
 export const WRISTBAND_WIDTHS_IN: readonly number[] = [
@@ -120,6 +124,8 @@ export type PlaybookPrintRunConfig = {
   wristbandNamePosition: PrintTextPosition;
   /** Wrap long formation/name labels onto a second line instead of truncating. */
   wristbandLabelWrap: boolean;
+  /** Wristband: play-tile border thickness multiplier (0 = invisible, 1 = default). */
+  wristbandBorderThickness: number;
   /** Wristband: draw dark outline around player markers */
   wristbandPlayerOutline: boolean;
   /** Wristband: color-code labels by group/formation */
@@ -163,7 +169,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
   playsheetCellPadding: 0.5,
-  wristbandCellPadding: 1,
+  wristbandCellPadding: 0.1,
   playsheetIncludeHeader: true,
   playsheetIconSize: "medium",
   playsheetRouteWeight: "medium",
@@ -201,6 +207,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandNameSize: 1,
   wristbandNamePosition: "top-center",
   wristbandLabelWrap: false,
+  wristbandBorderThickness: 1,
   wristbandPlayerOutline: false,
   wristbandColorCoding: true,
   wristbandShowLos: true,
