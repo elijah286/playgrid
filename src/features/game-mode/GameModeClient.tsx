@@ -13,6 +13,7 @@ import {
   StickyNote,
   ChevronDown,
   Radio,
+  Loader2,
 } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { useToast } from "@/components/ui";
@@ -92,6 +93,15 @@ export function GameModeClient({
   const [exitOpen, setExitOpen] = useState(false);
   const [saving, startSaving] = useTransition();
   const [, startMutating] = useTransition();
+  // Separate pending flag for the two interactions that change which play
+  // is on deck (picking/changing the next play, and running it). Realtime
+  // round-trips on a slow connection can take a beat, so we overlay a
+  // spinner on the next-play row until the server confirms the new state.
+  const [advancePending, setAdvancePending] = useState(false);
+  const advanceTargetRef = useRef<{
+    kind: "next" | "run";
+    playId: string;
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -323,6 +333,27 @@ export function GameModeClient({
     };
   }, [session]);
 
+  // Clear the advance spinner when realtime confirms the target state has
+  // landed, with a 6s failsafe in case the realtime packet is dropped.
+  useEffect(() => {
+    if (!advancePending) return;
+    const target = advanceTargetRef.current;
+    if (!target || !session) return;
+    const matched =
+      (target.kind === "next" && session.nextPlayId === target.playId) ||
+      (target.kind === "run" && session.currentPlayId === target.playId);
+    if (matched) {
+      advanceTargetRef.current = null;
+      setAdvancePending(false);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      advanceTargetRef.current = null;
+      setAdvancePending(false);
+    }, 6000);
+    return () => clearTimeout(timeout);
+  }, [advancePending, session]);
+
   // --- Heartbeat -----------------------------------------------------------
   useEffect(() => {
     if (!session) return;
@@ -358,6 +389,10 @@ export function GameModeClient({
     if (!session) return;
     const mode = pickerMode;
     setPickerMode("closed");
+    if (mode === "next") {
+      advanceTargetRef.current = { kind: "next", playId };
+      setAdvancePending(true);
+    }
     startMutating(async () => {
       const res =
         mode === "current"
@@ -365,15 +400,26 @@ export function GameModeClient({
           : mode === "next"
             ? await setNextPlayAction(session.id, playId)
             : { ok: true as const };
-      if (!res.ok) toast(res.error, "error");
+      if (!res.ok) {
+        toast(res.error, "error");
+        if (mode === "next") setAdvancePending(false);
+      }
     });
   }
 
   function runNextPlay() {
     if (!session) return;
+    const target = session.nextPlayId;
+    if (target) {
+      advanceTargetRef.current = { kind: "run", playId: target };
+      setAdvancePending(true);
+    }
     startMutating(async () => {
       const res = await advanceToNextPlayAction(session.id);
-      if (!res.ok) toast(res.error, "error");
+      if (!res.ok) {
+        toast(res.error, "error");
+        setAdvancePending(false);
+      }
     });
   }
 
@@ -559,7 +605,16 @@ export function GameModeClient({
             />
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-[640px] landscape:hidden">
+          <div className="relative mx-auto w-full max-w-[640px] landscape:hidden">
+            {advancePending && (
+              <div
+                role="status"
+                aria-label="Updating"
+                className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface-inset/70 backdrop-blur-sm"
+              >
+                <Loader2 className="size-8 animate-spin text-primary" />
+              </div>
+            )}
             {nextPlay ? (
               <div className="flex items-stretch gap-3 rounded-lg border border-border bg-surface-raised p-3">
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
