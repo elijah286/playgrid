@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Copy, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import {
   createGiftCodeAction,
   listGiftCodesAction,
+  reinstateGiftCodeAction,
   revokeGiftCodeAction,
   setCoachAiTierEnabledAction,
+  updateGiftCodeMaxUsesAction,
   type GiftCodeRow,
 } from "@/app/actions/admin-billing";
 import { Modal } from "@/components/ui";
@@ -120,6 +122,36 @@ export function BillingAdminClient({
     });
   }
 
+  function onReinstate(id: string) {
+    startTransition(async () => {
+      const res = await reinstateGiftCodeAction(id);
+      if (!res.ok) {
+        setMsg({ kind: "error", text: res.error });
+        return;
+      }
+      setMsg({ kind: "success", text: "Reinstated." });
+      refresh();
+    });
+  }
+
+  function onUpdateMaxUses(id: string, maxUses: number) {
+    return new Promise<boolean>((resolve) => {
+      startTransition(async () => {
+        const res = await updateGiftCodeMaxUsesAction(id, maxUses);
+        if (!res.ok) {
+          setMsg({ kind: "error", text: res.error });
+          resolve(false);
+          return;
+        }
+        setMsg({ kind: "success", text: "Max uses updated." });
+        setCodes((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, maxUses } : c)),
+        );
+        resolve(true);
+      });
+    });
+  }
+
   return (
     <div className="space-y-6">
       <StripeSettingsClient initial={stripeStatus} />
@@ -212,7 +244,7 @@ export function BillingAdminClient({
                       {c.durationDays ? `${c.durationDays} days` : "Permanent"}
                     </td>
                     <td className="px-2 py-2">
-                      {c.usedCount} / {c.maxUses}
+                      <UsesCell row={c} disabled={pending} onSave={onUpdateMaxUses} />
                     </td>
                     <td className="px-2 py-2">
                       <GiftStatusPill row={c} />
@@ -229,7 +261,16 @@ export function BillingAdminClient({
                         >
                           <Trash2 className="size-3" /> Revoke
                         </button>
-                      ) : null}
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onReinstate(c.id)}
+                          disabled={pending}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          <RotateCcw className="size-3" /> Reinstate
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -248,6 +289,87 @@ export function BillingAdminClient({
           refresh();
         }}
       />
+    </div>
+  );
+}
+
+function UsesCell({
+  row,
+  disabled,
+  onSave,
+}: {
+  row: GiftCodeRow;
+  disabled: boolean;
+  onSave: (id: string, maxUses: number) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(row.maxUses));
+
+  if (!editing) {
+    return (
+      <div className="inline-flex items-center gap-1">
+        <span>
+          {row.usedCount} / {row.maxUses}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setValue(String(row.maxUses));
+            setEditing(true);
+          }}
+          disabled={disabled}
+          className="rounded p-0.5 text-muted hover:bg-surface hover:text-foreground disabled:opacity-50"
+          title="Edit max uses"
+        >
+          <Pencil className="size-3" />
+        </button>
+      </div>
+    );
+  }
+
+  async function commit() {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1) return;
+    if (n === row.maxUses) {
+      setEditing(false);
+      return;
+    }
+    const ok = await onSave(row.id, n);
+    if (ok) setEditing(false);
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <span className="text-muted">{row.usedCount} /</span>
+      <input
+        type="number"
+        min={Math.max(1, row.usedCount)}
+        value={value}
+        autoFocus
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void commit();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="w-16 rounded-md bg-surface px-1.5 py-0.5 text-xs ring-1 ring-border"
+      />
+      <button
+        type="button"
+        onClick={() => void commit()}
+        disabled={disabled}
+        className="rounded p-0.5 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+        title="Save"
+      >
+        <Check className="size-3" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="rounded p-0.5 text-muted hover:bg-surface"
+        title="Cancel"
+      >
+        <X className="size-3" />
+      </button>
     </div>
   );
 }

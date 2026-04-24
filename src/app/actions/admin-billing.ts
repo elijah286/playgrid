@@ -367,3 +367,48 @@ export async function revokeGiftCodeAction(codeId: string) {
   revalidatePath("/settings");
   return { ok: true as const };
 }
+
+export async function reinstateGiftCodeAction(codeId: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin
+    .from("gift_codes")
+    .update({ revoked_at: null })
+    .eq("id", codeId);
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+export async function updateGiftCodeMaxUsesAction(codeId: string, maxUses: number) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  if (!Number.isFinite(maxUses) || !Number.isInteger(maxUses) || maxUses < 1) {
+    return { ok: false as const, error: "Max uses must be a positive whole number." };
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: existing, error: readErr } = await admin
+    .from("gift_codes")
+    .select("used_count")
+    .eq("id", codeId)
+    .single();
+  if (readErr) return { ok: false as const, error: readErr.message };
+  if (maxUses < (existing?.used_count ?? 0)) {
+    return {
+      ok: false as const,
+      error: `Max uses can't go below the number already redeemed (${existing.used_count}).`,
+    };
+  }
+
+  const { error } = await admin
+    .from("gift_codes")
+    .update({ max_uses: maxUses })
+    .eq("id", codeId);
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
