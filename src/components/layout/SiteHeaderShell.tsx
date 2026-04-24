@@ -26,6 +26,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
 
   return (
     <header
+      data-site-header
       className={`sticky top-0 z-30 border-b border-border bg-surface-raised/80 backdrop-blur-lg ${
         hideOnMobile ? "hidden sm:block" : ""
       }`}

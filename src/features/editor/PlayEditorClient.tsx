@@ -467,6 +467,16 @@ function PlayEditorClientInner({
     return () => document.removeEventListener("pointerdown", onDocPointer, true);
   }, [selectedPlayerId, selectedRouteId, selectedZoneId, handleDone]);
 
+  /* ---------- Hide site header on mobile when editing ---------- */
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    document.body.classList.add("editor-hide-site-header");
+    return () => {
+      document.body.classList.remove("editor-hide-site-header");
+    };
+  }, [mode]);
+
   /* ---------- Keyboard shortcuts ---------- */
 
   useEffect(() => {
