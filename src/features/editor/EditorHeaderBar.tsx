@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -273,7 +273,31 @@ function FormationTitlePicker({
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const activeFormationRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [mobileTop, setMobileTop] = useState<number | null>(null);
   const offenseFormations = allFormations.filter((f) => (f.kind ?? "offense") === "offense");
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMobileTop(null);
+      return;
+    }
+    function update() {
+      if (window.innerWidth >= 640) {
+        setMobileTop(null);
+        return;
+      }
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setMobileTop(r.bottom + 4);
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -331,6 +355,7 @@ function FormationTitlePicker({
   return (
     <span className="relative inline-flex items-center">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((p) => !p)}
         className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-muted hover:bg-surface-inset hover:text-foreground"
@@ -345,8 +370,8 @@ function FormationTitlePicker({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
-            style={{ width: 480 }}
-            className="absolute left-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg"
+            style={mobileTop != null ? { top: mobileTop } : undefined}
+            className="fixed inset-x-2 z-50 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-[480px]"
           >
             <div className="relative border-b border-border p-2">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
@@ -388,7 +413,7 @@ function FormationTitlePicker({
             )}
             <div
               data-formation-scroll
-              className="max-h-[min(75vh,720px)] overflow-y-auto p-2"
+              className="max-h-[min(70vh,720px)] overflow-y-auto p-2"
             >
               {filtered.length === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted">
