@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import type { GameModePlay } from "./types";
@@ -27,6 +27,24 @@ export function PlayPickerDialog({
   inline?: boolean;
 }) {
   const [q, setQ] = useState("");
+  const currentRef = useRef<HTMLButtonElement | null>(null);
+
+  // Scroll the highlighted current play into view on open so the coach can
+  // see at a glance which play was just called, even if it lives far down
+  // the list. Only fires while there's no active search filter — searching
+  // already re-anchors the scroll to the top of the filtered set.
+  useEffect(() => {
+    if (!open) return;
+    if (q.trim()) return;
+    if (!currentPlayId) return;
+    const el = currentRef.current;
+    if (!el) return;
+    // rAF so the DOM has painted the grid before we measure.
+    const id = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "center", behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open, q, currentPlayId]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -96,6 +114,7 @@ export function PlayPickerDialog({
               return (
                 <button
                   key={p.id}
+                  ref={isCurrent ? currentRef : undefined}
                   type="button"
                   onClick={() => onPick(p.id)}
                   className={
