@@ -1,12 +1,12 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { listPlaysAction } from "@/app/actions/plays";
+import { GameModeClient } from "@/features/game-mode/GameModeClient";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -21,7 +21,7 @@ export default async function GameModePage({ params }: Props) {
   } = await supabase.auth.getUser();
   if (!user) redirect(`/playbooks/${playbookId}`);
 
-  const [{ data: membership }, { data: profile }, betaFeatures] =
+  const [{ data: membership }, { data: profile }, betaFeatures, listed] =
     await Promise.all([
       supabase
         .from("playbook_members")
@@ -31,6 +31,7 @@ export default async function GameModePage({ params }: Props) {
         .maybeSingle(),
       supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
       getBetaFeatures(),
+      listPlaysAction(playbookId),
     ]);
 
   const role = (membership?.role as string | null) ?? null;
@@ -43,21 +44,11 @@ export default async function GameModePage({ params }: Props) {
   });
   if (!allowed) redirect(`/playbooks/${playbookId}`);
 
-  return (
-    <div className="space-y-4">
-      <Link
-        href={`/playbooks/${playbookId}`}
-        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        Back to playbook
-      </Link>
-      <h1 className="text-xl font-semibold tracking-tight text-foreground">
-        Game mode
-      </h1>
-      <p className="text-sm text-muted">
-        Game mode UI is coming soon. (Phase 3 wires up the in-game flow.)
-      </p>
-    </div>
+  // Offense only for now — defense and special-teams game flows look
+  // different and aren't covered by this beta.
+  const offensePlays = (listed.ok ? listed.plays : []).filter(
+    (p) => p.play_type === "offense" && !p.is_archived,
   );
+
+  return <GameModeClient playbookId={playbookId} plays={offensePlays} />;
 }

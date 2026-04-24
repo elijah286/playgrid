@@ -1,0 +1,122 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Search, X } from "lucide-react";
+import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import type { GameModePlay } from "./types";
+
+export function PlayPickerDialog({
+  open,
+  plays,
+  currentPlayId,
+  onPick,
+  onClose,
+  canClose,
+}: {
+  open: boolean;
+  plays: GameModePlay[];
+  currentPlayId: string | null;
+  onPick: (playId: string) => void;
+  onClose: () => void;
+  /** When false, the close (X) button is hidden — used for the initial
+   *  "pick your first play" state where there is no play to fall back to. */
+  canClose: boolean;
+}) {
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return plays;
+    return plays.filter((p) => {
+      const hay = [
+        p.name,
+        p.formation_name ?? "",
+        p.shorthand ?? "",
+        p.concept ?? "",
+        ...(p.tags ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [plays, q]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Pick a play"
+      className="fixed inset-0 z-[60] flex flex-col bg-surface-inset"
+    >
+      <div className="flex items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
+        <div className="relative flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+          />
+          <input
+            autoFocus
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by name, formation, tag…"
+            className="h-11 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+          />
+        </div>
+        {canClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="inline-flex size-11 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-hover"
+          >
+            <X className="size-5" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        {filtered.length === 0 ? (
+          <p className="mt-8 text-center text-sm text-muted">
+            No plays match &ldquo;{q}&rdquo;.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {filtered.map((p) => {
+              const isCurrent = p.id === currentPlayId;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onPick(p.id)}
+                  className={
+                    "flex flex-col gap-2 rounded-xl border bg-surface-raised p-2 text-left transition-colors active:scale-[0.99] " +
+                    (isCurrent
+                      ? "border-primary ring-2 ring-primary"
+                      : "border-border hover:border-primary")
+                  }
+                >
+                  <div className="text-sm font-semibold text-foreground line-clamp-1">
+                    {p.name}
+                  </div>
+                  {p.formation_name && (
+                    <div className="text-[11px] text-muted line-clamp-1">
+                      {p.formation_name}
+                    </div>
+                  )}
+                  {p.preview && (
+                    <div className="overflow-hidden rounded-md">
+                      <PlayThumbnail preview={p.preview} thin />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
