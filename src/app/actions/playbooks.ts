@@ -19,10 +19,18 @@ import {
 } from "@/lib/billing/features";
 import { assertNotLocked } from "@/lib/billing/downgrade-locks";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
+import {
+  assertNoActiveGameSession,
+  gameModeLockedResult,
+  type GameModeLockedResult,
+} from "@/lib/game-mode/assert-no-active-session";
 
 async function assertPlaybookNotLocked(
   playbookId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string } | GameModeLockedResult> {
+  const supabase = await createClient();
+  const gameLock = await assertNoActiveGameSession(supabase, playbookId);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
   const ownerId = await getPlaybookOwnerId(playbookId);
   if (!ownerId) return { ok: true };
   return assertNotLocked({ ownerId, playbookId });

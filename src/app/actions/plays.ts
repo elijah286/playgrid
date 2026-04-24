@@ -16,6 +16,10 @@ import {
 import { getPlaybookOwnerEntitlement, getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 import { assertNotLocked, computeDowngradeLocks } from "@/lib/billing/downgrade-locks";
+import {
+  assertNoActiveGameSession,
+  gameModeLockedResult,
+} from "@/lib/game-mode/assert-no-active-session";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 
 async function assertPlayCap(
@@ -234,6 +238,9 @@ export async function createPlayAction(
     if (!lock.ok) return { ok: false as const, error: lock.error };
   }
 
+  const gameLock = await assertNoActiveGameSession(supabase, playbookId);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
   const cap = await assertPlayCap(supabase, playbookId);
   if (!cap.ok) return { ok: false as const, error: cap.error };
 
@@ -419,6 +426,12 @@ export async function savePlayVersionAction(
     });
     if (!lock.ok) return { ok: false as const, error: lock.error };
   }
+
+  const gameLock = await assertNoActiveGameSession(
+    supabase,
+    play.playbook_id as string,
+  );
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
 
   // Drop stale FKs: if the linked formation or opponent play was deleted,
   // writing the stored UUID back to plays fails the FK. Verify they exist
@@ -1052,6 +1065,19 @@ export async function renamePlayAction(playId: string, name: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const { data: pb } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("id", playId)
+    .maybeSingle();
+  if (pb?.playbook_id) {
+    const gameLock = await assertNoActiveGameSession(
+      supabase,
+      pb.playbook_id as string,
+    );
+    if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+  }
+
   const { error } = await supabase.from("plays").update({ name: trimmed }).eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
 
@@ -1103,6 +1129,19 @@ export async function archivePlayAction(playId: string, archived: boolean) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const { data: pb } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("id", playId)
+    .maybeSingle();
+  if (pb?.playbook_id) {
+    const gameLock = await assertNoActiveGameSession(
+      supabase,
+      pb.playbook_id as string,
+    );
+    if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+  }
+
   const { error } = await supabase
     .from("plays")
     .update({ is_archived: archived })
@@ -1118,6 +1157,19 @@ export async function deletePlayAction(playId: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: pb } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("id", playId)
+    .maybeSingle();
+  if (pb?.playbook_id) {
+    const gameLock = await assertNoActiveGameSession(
+      supabase,
+      pb.playbook_id as string,
+    );
+    if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+  }
 
   const { error } = await supabase.from("plays").delete().eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
