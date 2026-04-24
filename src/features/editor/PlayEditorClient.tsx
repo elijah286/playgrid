@@ -575,7 +575,6 @@ function PlayEditorClientInner({
         onSaveAsNewFormation={saveAsNewFormation}
         allFormations={allFormations}
         canEdit={canEdit}
-        mobileEditingEnabled={mobileEditingEnabled}
         hideMobileNav={mode === "edit"}
       />
       </div>

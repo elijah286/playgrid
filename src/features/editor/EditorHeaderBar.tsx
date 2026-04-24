@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -40,9 +38,6 @@ type Props = {
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
   allFormations?: SavedFormation[];
   canEdit?: boolean;
-  /** When false, the formation picker is read-only on mobile. Desktop is
-   *  unaffected. Driven by the admin site toggle for mobile editing. */
-  mobileEditingEnabled?: boolean;
   /** When true, the sibling-play navigation (Previous/All plays/Next) and
    *  the Copy button are hidden on small screens so the limited mobile
    *  width goes to the edit toolbar instead. Desktop always shows them. */
@@ -61,7 +56,6 @@ export function EditorHeaderBar({
   onSaveAsNewFormation,
   allFormations = [],
   canEdit = true,
-  mobileEditingEnabled = false,
   hideMobileNav = false,
 }: Props) {
   const [nav, setNav] = useState(initialNav);
@@ -104,16 +98,6 @@ export function EditorHeaderBar({
   return (
     <header className="flex flex-col border-b border-border pb-1">
       <div className="flex min-w-0 items-center gap-2">
-        <Link
-          href={`/playbooks/${playbookId}`}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted ring-1 ring-border hover:bg-surface-inset hover:text-foreground"
-          aria-label="Back to playbook"
-          title="Back to playbook"
-        >
-          <ArrowLeft className="size-3.5" />
-          <span className="hidden sm:inline">Playbook</span>
-        </Link>
-
         {playNumber != null && (
           <EditablePlayNumberBadge
             value={playNumber}
@@ -154,40 +138,23 @@ export function EditorHeaderBar({
             aria-label="Play name"
           />
         ) : (
-          <div className="inline-flex min-w-0 flex-1 items-center gap-1">
-            <h1 className="flex min-w-0 flex-1 items-center text-base font-bold text-foreground">
-              {(doc.metadata.playType ?? "offense") === "offense" ? (
-                canEdit ? (
-                  <>
-                    {!mobileEditingEnabled && (
-                      <span className="inline-flex items-center px-1 py-0.5 text-muted sm:hidden">
-                        <span>{formation || "No formation"}</span>
-                        <span className="mx-1">·</span>
-                      </span>
-                    )}
-                    <span
-                      className={
-                        mobileEditingEnabled
-                          ? "inline-flex"
-                          : "hidden sm:inline-flex"
-                      }
-                    >
-                      <FormationTitlePicker
-                        currentId={formationId ?? null}
-                        currentName={formation ?? ""}
-                        allFormations={allFormations}
-                        dispatch={dispatch}
-                        onSaveAsNewFormation={onSaveAsNewFormation}
-                      />
-                    </span>
-                  </>
+          <div className="flex min-w-0 flex-1 flex-col leading-tight">
+            {(doc.metadata.playType ?? "offense") === "offense" && (
+              <div className="flex min-w-0 items-center text-[11px] text-muted">
+                {canEdit ? (
+                  <FormationTitlePicker
+                    currentId={formationId ?? null}
+                    currentName={formation ?? ""}
+                    allFormations={allFormations}
+                    dispatch={dispatch}
+                    onSaveAsNewFormation={onSaveAsNewFormation}
+                  />
                 ) : (
-                  <span className="inline-flex items-center px-1 py-0.5 text-muted">
-                    <span>{formation || "No formation"}</span>
-                    <span className="mx-1">·</span>
-                  </span>
-                )
-              ) : null}
+                  <span className="truncate px-1">{formation || "No formation"}</span>
+                )}
+              </div>
+            )}
+            <h1 className="flex min-w-0 items-center text-base font-bold text-foreground">
               {canEdit ? (
                 <button
                   type="button"
@@ -365,10 +332,9 @@ function FormationTitlePicker({
         className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-muted hover:bg-surface-inset hover:text-foreground"
         title="Change or unlink formation"
       >
-        <span>{currentName || "No formation"}</span>
-        <ChevronDown className="size-3.5" />
+        <span className="truncate">{currentName || "No formation"}</span>
+        <ChevronDown className="size-3 shrink-0" />
       </button>
-      <span className="mx-1 text-muted">·</span>
 
       {open && (
         <>
