@@ -198,7 +198,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   wristbandIconSize: "medium",
   wristbandRouteWeight: "medium",
   wristbandArrowSize: "medium",
-  wristbandLabels: { showNumber: true, showFormation: false, showName: false },
+  wristbandLabels: { showNumber: true, showFormation: false, showName: true },
   wristbandHeaderFontSize: 1,
   wristbandNumberSize: 1,
   wristbandNumberPosition: "top-left",
