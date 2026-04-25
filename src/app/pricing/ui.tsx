@@ -8,7 +8,7 @@ import {
   redeemGiftCodeAction,
 } from "@/app/actions/billing";
 import { TIER_LABEL } from "@/lib/billing/features";
-import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats";
+import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";

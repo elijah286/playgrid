@@ -1,10 +1,10 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { getUserEntitlement } from "@/lib/billing/entitlement";
-import type { SubscriptionTier } from "@/lib/billing/entitlement";
+
+type Tier = "free" | "coach" | "coach_ai";
 
 /** Concurrent session cap by tier. Free is intentionally tight (1 device);
  *  Coach allows desktop + mobile; Coach AI adds a third for power users. */
-export const SESSION_CAP_BY_TIER: Record<SubscriptionTier, number> = {
+export const SESSION_CAP_BY_TIER: Record<Tier, number> = {
   free: 1,
   coach: 2,
   coach_ai: 3,
@@ -71,9 +71,14 @@ export async function touchUserSession(input: {
  * has the most recent last_seen_at, so it survives by construction.
  */
 async function enforceSessionCap(userId: string): Promise<void> {
-  const entitlement = await getUserEntitlement(userId);
-  const cap = SESSION_CAP_BY_TIER[entitlement.tier];
   const admin = createServiceRoleClient();
+  const { data: entRow } = await admin
+    .from("user_entitlements")
+    .select("tier")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const tier = ((entRow?.tier as Tier | null) ?? "free") as Tier;
+  const cap = SESSION_CAP_BY_TIER[tier];
   const { data: active } = await admin
     .from("user_sessions")
     .select("id, last_seen_at")
