@@ -111,28 +111,34 @@ export async function clearGoogleMapsApiKeyAction() {
 async function pingGoogleMaps(
   apiKey: string,
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  // Geocode a benign well-known address as a low-cost reachability check.
-  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-  url.searchParams.set("address", "1600 Amphitheatre Parkway, Mountain View, CA");
-  url.searchParams.set("key", apiKey);
-  const res = await fetch(url, { method: "GET", cache: "no-store" });
+  // Hit Places API (New) autocomplete — the same SKU we use in production —
+  // so the test reflects whether the key is actually authorized for our calls.
+  const res = await fetch(
+    "https://places.googleapis.com/v1/places:autocomplete",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+      },
+      body: JSON.stringify({ input: "Mountain View" }),
+      cache: "no-store",
+    },
+  );
   const body = await res.text();
-  if (!res.ok) {
-    return { ok: false, error: `Request failed (${res.status}).` };
+  if (res.ok) {
+    return { ok: true, message: "Connection OK — Places API (New) responded." };
   }
   try {
-    const j = JSON.parse(body) as { status?: string; error_message?: string };
-    if (j.status === "OK") {
-      return { ok: true, message: "Connection OK — Geocoding API responded." };
-    }
+    const j = JSON.parse(body) as { error?: { message?: string } };
     return {
       ok: false,
       error:
-        j.error_message ||
-        `Google Maps returned status: ${j.status ?? "unknown"}.`,
+        j.error?.message ||
+        `Places API returned ${res.status}.`,
     };
   } catch {
-    return { ok: false, error: "Unexpected response from Google Maps." };
+    return { ok: false, error: `Places API returned ${res.status}.` };
   }
 }
 
