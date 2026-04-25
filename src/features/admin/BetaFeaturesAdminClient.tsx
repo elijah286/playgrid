@@ -37,6 +37,12 @@ const FEATURES: FeatureMeta[] = [
       "Playbook tab showing per-game and aggregate play outcomes from Game Mode.",
   },
   {
+    key: "team_calendar",
+    label: "Team Calendar",
+    description:
+      "Per-playbook calendar for practices, games, and scrimmages with RSVPs, ICS feed, email notifications, and a cross-playbook landing page view.",
+  },
+  {
     key: "marketing_content",
     label: "Enhanced marketing content",
     description:

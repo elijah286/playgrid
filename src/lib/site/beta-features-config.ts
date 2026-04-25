@@ -6,7 +6,8 @@ export type BetaFeatureKey =
   | "coach_ai"
   | "game_mode"
   | "game_results"
-  | "marketing_content";
+  | "marketing_content"
+  | "team_calendar";
 export type BetaFeatureScope = "off" | "me" | "all";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -16,6 +17,7 @@ const DEFAULTS: BetaFeatures = {
   game_mode: "off",
   game_results: "off",
   marketing_content: "off",
+  team_calendar: "off",
 };
 
 function normalize(input: unknown): BetaFeatures {
