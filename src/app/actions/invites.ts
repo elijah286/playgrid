@@ -9,6 +9,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 
 const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
@@ -282,6 +283,18 @@ export async function sharePlaybookWithEmailsAction(input: {
   const { SITE_URL } = await getSiteUrl();
   const results: ShareResultRow[] = [];
 
+  // Resolve the playbook owner. Seat math is scoped to the owner, not the
+  // caller — an editor-tier collaborator inviting more people still bills
+  // against the head coach's seat allowance.
+  const { data: ownerRow } = await admin
+    .from("playbook_members")
+    .select("user_id")
+    .eq("playbook_id", input.playbookId)
+    .eq("role", "owner")
+    .eq("status", "active")
+    .maybeSingle();
+  const ownerId = (ownerRow?.user_id as string | null) ?? null;
+
   for (const email of cleaned) {
     try {
       const { data: uidData, error: uidErr } = await admin.rpc("email_to_user_id", {
@@ -303,6 +316,20 @@ export async function sharePlaybookWithEmailsAction(input: {
           .maybeSingle();
         const alreadyActive = !!existing && existing.status === "active";
         if (!alreadyActive) {
+          // Seat guard: a new active membership consumes a seat unless the
+          // invitee already pays for Coach+ themselves. Coach+ collaborators
+          // ride free regardless of the inviter's allowance.
+          if (ownerId) {
+            const inviteeEntitlement = await getUserEntitlement(userId);
+            const isPaidInvitee = tierAtLeast(inviteeEntitlement, "coach");
+            if (!isPaidInvitee) {
+              const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+              if (!seatCheck.ok) {
+                results.push({ email, kind: "failed", error: seatCheck.error });
+                continue;
+              }
+            }
+          }
           // Direct add / upgrade an existing pending row.
           const { error: upErr } = await admin
             .from("playbook_members")
@@ -370,6 +397,16 @@ export async function sharePlaybookWithEmailsAction(input: {
           userId,
         });
       } else {
+        // No existing account — they'll sign up as free, so they'll consume
+        // a seat at acceptance. Reserve one now so a sender doesn't blast 30
+        // invites and discover only 3 land.
+        if (ownerId) {
+          const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+          if (!seatCheck.ok) {
+            results.push({ email, kind: "failed", error: seatCheck.error });
+            continue;
+          }
+        }
         // Create a scoped invite for this email and send the invite email.
         const inv = await createInviteAction({
           playbookId: input.playbookId,

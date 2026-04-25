@@ -8,6 +8,7 @@ import {
   redeemGiftCodeAction,
 } from "@/app/actions/billing";
 import { TIER_LABEL } from "@/lib/billing/features";
+import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -49,10 +50,9 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
       "Everything in Solo Coach",
       "Unlimited plays",
       "Wristbands (print + PDF)",
-      "Team invites and shared editing",
+      `${DEFAULT_INCLUDED_SEATS} collaborator seats included — $${SEAT_PRICE_USD_PER_MONTH}/seat/month after`,
       "Manage players",
       "Share notes",
-      "Collaborate with assistants",
       "Game Mode — sideline view with play-by-play results tracking",
     ],
     cta: "Upgrade to Team Coach",
@@ -284,8 +284,10 @@ export function PricingClient({
       {isAuthed && <RedeemCodePanel />}
 
       <p className="text-center text-xs text-muted">
-        Prices in USD. Team invitees collaborate free — only the head coach pays. Cancel anytime
-        from Manage billing.
+        Prices in USD. Team Coach includes {DEFAULT_INCLUDED_SEATS} collaborator
+        seats; add more for ${SEAT_PRICE_USD_PER_MONTH}/seat/month. Coaches who
+        already have their own Team Coach plan don&rsquo;t count against your
+        seats. Cancel anytime from Manage billing.
       </p>
     </div>
   );

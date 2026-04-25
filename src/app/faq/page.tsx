@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -53,6 +54,10 @@ function buildFaqs(freeMaxPlays: number): Faq[] {
   {
     q: "Does it work on the sideline?",
     a: "It runs in the browser on phones and tablets, so you can pull up your playbook during a game without installing anything. Most coaches design on a laptop and reference on a phone at the field.",
+  },
+  {
+    q: "Can my whole staff use one Team Coach plan?",
+    a: `Team Coach includes ${DEFAULT_INCLUDED_SEATS} collaborator seats — enough for a small staff. Beyond that, extra seats are $${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed to the head coach. If an assistant already has their own Team Coach plan, they don't count against your seats — they ride on their own subscription.`,
   },
   {
     q: "What is Game Mode?",
