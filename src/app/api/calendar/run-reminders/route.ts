@@ -2,18 +2,22 @@ import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { sendCalendarEventEmails } from "@/lib/calendar/notifications";
+import { expandRecurrence } from "@/lib/calendar/recurrence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Cron entrypoint. Picks reminder rows whose send_at has passed and that
-// haven't been sent yet, fans out emails, marks them sent. Idempotent —
-// `sent_at IS NULL` filter + per-row update means a duplicate cron tick is
-// harmless.
+// Cron entrypoint. For every event with reminder offsets, expand the
+// recurrence inside a small forward window, compute each occurrence's
+// send-time, and fire any that have come due since the last tick. Dedup is
+// keyed by (event_id, occurrence_date, offset_minutes) in
+// playbook_event_reminder_fires so duplicate cron ticks are harmless.
 //
-// Auth: pass header `Authorization: Bearer <CRON_SECRET>`. Any cron service
-// works (Supabase pg_cron via pg_net, Railway scheduler, GitHub Actions,
-// cron-job.org). Recommended cadence: every 5 minutes.
+// Auth: header `Authorization: Bearer <CRON_SECRET>`. Recommended cadence:
+// every 5 minutes.
+
+const TICK_LOOKBACK_MS = 15 * 60 * 1000; // tolerate a missed tick or two
+const TICK_LOOKAHEAD_MS = 60 * 1000;     // catch reminders firing right now
 
 async function handle(req: Request): Promise<NextResponse> {
   if (!hasSupabaseEnv()) {
@@ -41,35 +45,112 @@ async function handle(req: Request): Promise<NextResponse> {
   }
 
   const admin = createServiceRoleClient();
-  const nowIso = new Date().toISOString();
-  const { data: due, error } = await admin
-    .from("playbook_event_reminders")
-    .select("id, event_id")
-    .is("sent_at", null)
-    .lte("send_at", nowIso)
-    .limit(200);
+  const now = Date.now();
+  const lower = new Date(now - TICK_LOOKBACK_MS);
+  const upper = new Date(now + TICK_LOOKAHEAD_MS);
+
+  // Pull all live events with at least one reminder offset. The bound on
+  // starts_at trims old non-recurring events that can't fire again.
+  const { data: events, error } = await admin
+    .from("playbook_events")
+    .select(
+      "id, playbook_id, starts_at, recurrence_rule, recurrence_exdate, reminder_offsets_minutes",
+    )
+    .is("deleted_at", null)
+    .or(
+      `recurrence_rule.not.is.null,starts_at.gte.${new Date(now - 24 * 60 * 60 * 1000).toISOString()}`,
+    );
   if (error) {
     return NextResponse.json(
       { ok: false, error: error.message },
       { status: 500 },
     );
   }
-  const rows = (due ?? []) as { id: string; event_id: string }[];
-  if (rows.length === 0) {
+
+  type EventRow = {
+    id: string;
+    playbook_id: string;
+    starts_at: string;
+    recurrence_rule: string | null;
+    recurrence_exdate: string[] | null;
+    reminder_offsets_minutes: number[] | null;
+  };
+
+  // Compute candidate fires: an offset N fires if (occStart - N min) is within
+  // [lower, upper]. Expand each event's recurrence in a window wide enough to
+  // cover (lower + maxOffset, upper + maxOffset).
+  type Fire = {
+    eventId: string;
+    occurrenceDate: string;
+    offsetMinutes: number;
+  };
+  const candidates: Fire[] = [];
+  for (const e of (events ?? []) as EventRow[]) {
+    const offsets = e.reminder_offsets_minutes ?? [];
+    if (offsets.length === 0) continue;
+    const maxOffsetMs = Math.max(...offsets) * 60_000;
+    const windowStart = new Date(lower.getTime() + 0); // occStart >= lower + 0
+    const windowEnd = new Date(upper.getTime() + maxOffsetMs);
+    const occurrences = expandRecurrence({
+      startsAt: e.starts_at,
+      recurrenceRule: e.recurrence_rule,
+      exdates: e.recurrence_exdate ?? [],
+      windowStart,
+      windowEnd,
+    });
+    for (const occ of occurrences) {
+      const occMs = new Date(occ.startsAt).getTime();
+      for (const off of offsets) {
+        const sendMs = occMs - off * 60_000;
+        if (sendMs >= lower.getTime() && sendMs <= upper.getTime()) {
+          candidates.push({
+            eventId: e.id,
+            occurrenceDate: occ.occurrenceDate,
+            offsetMinutes: off,
+          });
+        }
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
     return NextResponse.json({ ok: true, processed: 0 });
   }
 
-  // Group by event so we don't email the team twice for an event that has
-  // both a 24h and a 1h reminder firing in the same tick.
-  const byEvent = new Map<string, string[]>();
-  for (const r of rows) {
-    const ids = byEvent.get(r.event_id) ?? [];
-    ids.push(r.id);
-    byEvent.set(r.event_id, ids);
+  // Filter out already-fired ones via the dedup table.
+  const eventIds = Array.from(new Set(candidates.map((c) => c.eventId)));
+  const { data: existingFires } = await admin
+    .from("playbook_event_reminder_fires")
+    .select("event_id, occurrence_date, offset_minutes")
+    .in("event_id", eventIds);
+  const fired = new Set(
+    ((existingFires ?? []) as {
+      event_id: string;
+      occurrence_date: string;
+      offset_minutes: number;
+    }[]).map((r) => `${r.event_id}|${r.occurrence_date}|${r.offset_minutes}`),
+  );
+  const todo = candidates.filter(
+    (c) => !fired.has(`${c.eventId}|${c.occurrenceDate}|${c.offsetMinutes}`),
+  );
+  if (todo.length === 0) {
+    return NextResponse.json({ ok: true, processed: 0 });
   }
 
-  let sent = 0;
-  for (const [eventId, ids] of byEvent.entries()) {
+  // Group by (eventId, occurrenceDate) so multiple offsets firing in the same
+  // tick produce one email — but each (event, occ, offset) still gets its own
+  // dedup row.
+  const groups = new Map<string, Fire[]>();
+  for (const t of todo) {
+    const key = `${t.eventId}|${t.occurrenceDate}`;
+    const list = groups.get(key) ?? [];
+    list.push(t);
+    groups.set(key, list);
+  }
+
+  let sentEmails = 0;
+  for (const [key, group] of groups.entries()) {
+    const [eventId] = key.split("|");
     try {
       await sendCalendarEventEmails({
         admin,
@@ -77,17 +158,18 @@ async function handle(req: Request): Promise<NextResponse> {
         kind: "reminder",
         excludeUserId: null,
       });
-      // Also write in-app notification rows so the calendar badge lights up.
-      const { data: members } = await admin
+      sentEmails += 1;
+
+      const { data: ev } = await admin
         .from("playbook_events")
         .select("playbook_id")
         .eq("id", eventId)
         .maybeSingle();
-      if (members?.playbook_id) {
+      if (ev?.playbook_id) {
         const { data: m } = await admin
           .from("playbook_members")
           .select("user_id")
-          .eq("playbook_id", members.playbook_id);
+          .eq("playbook_id", ev.playbook_id);
         const notifRows = (m ?? []).map((row) => ({
           event_id: eventId,
           user_id: row.user_id as string,
@@ -97,18 +179,26 @@ async function handle(req: Request): Promise<NextResponse> {
           await admin.from("playbook_event_notifications").insert(notifRows);
         }
       }
-      sent += 1;
     } catch {
       // best-effort
     } finally {
       await admin
-        .from("playbook_event_reminders")
-        .update({ sent_at: new Date().toISOString() })
-        .in("id", ids);
+        .from("playbook_event_reminder_fires")
+        .insert(
+          group.map((g) => ({
+            event_id: g.eventId,
+            occurrence_date: g.occurrenceDate,
+            offset_minutes: g.offsetMinutes,
+          })),
+        );
     }
   }
 
-  return NextResponse.json({ ok: true, processed: rows.length, eventsEmailed: sent });
+  return NextResponse.json({
+    ok: true,
+    processed: todo.length,
+    eventsEmailed: sentEmails,
+  });
 }
 
 export async function POST(req: Request) {
@@ -116,7 +206,5 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  // Allow GET so cron services that only support GET (e.g. cron-job.org)
-  // can trigger the runner the same way.
   return handle(req);
 }

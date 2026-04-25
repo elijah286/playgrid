@@ -68,6 +68,7 @@ function eventRowToInput(input: EventInput, playbookId: string, createdBy: strin
     opponent: isGame ? input.opponent ?? null : null,
     home_away: isGame ? input.homeAway ?? null : null,
     recurrence_rule: input.recurrenceRule ?? null,
+    reminder_offsets_minutes: input.reminderOffsetsMinutes,
     created_by: createdBy,
   };
 }
@@ -101,21 +102,6 @@ async function fanoutNotifications(
   });
 }
 
-function buildAutoReminderRows(
-  eventId: string,
-  startsAt: string,
-  offsetsMinutes: number[],
-  createdBy: string,
-) {
-  const start = new Date(startsAt).getTime();
-  return offsetsMinutes.map((mins) => ({
-    event_id: eventId,
-    send_at: new Date(start - mins * 60_000).toISOString(),
-    kind: "manual" as const,
-    created_by: createdBy,
-  }));
-}
-
 // ─── Create ───────────────────────────────────────────────────────────────
 export async function createEventAction(
   playbookId: string,
@@ -141,16 +127,6 @@ export async function createEventAction(
     .single();
   if (error || !inserted) {
     return { ok: false, error: error?.message ?? "Could not create event." };
-  }
-
-  if (input.reminderOffsetsMinutes.length > 0) {
-    const rows = buildAutoReminderRows(
-      inserted.id,
-      input.startsAt,
-      input.reminderOffsetsMinutes,
-      gate.userId,
-    );
-    await admin.from("playbook_event_reminders").insert(rows);
   }
 
   await fanoutNotifications(admin, inserted.id, playbookId, "created", gate.userId);
@@ -189,22 +165,6 @@ export async function updateEventAction(
     .update(eventRowToInput(input, existing.playbook_id, gate.userId))
     .eq("id", eventId);
   if (error) return { ok: false, error: error.message };
-
-  // Replace any pending auto-reminders to match the new offsets/start time.
-  await admin
-    .from("playbook_event_reminders")
-    .delete()
-    .eq("event_id", eventId)
-    .is("sent_at", null);
-  if (input.reminderOffsetsMinutes.length > 0) {
-    const rows = buildAutoReminderRows(
-      eventId,
-      input.startsAt,
-      input.reminderOffsetsMinutes,
-      gate.userId,
-    );
-    await admin.from("playbook_event_reminders").insert(rows);
-  }
 
   if (input.notifyAttendees) {
     await fanoutNotifications(
@@ -743,7 +703,7 @@ export async function listEventsForPlaybookAction(
   const { data: events, error } = await supabase
     .from("playbook_events")
     .select(
-      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, recurrence_exdate, deleted_at",
+      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, recurrence_exdate, reminder_offsets_minutes, deleted_at",
     )
     .eq("playbook_id", playbookId)
     .is("deleted_at", null)
@@ -755,17 +715,10 @@ export async function listEventsForPlaybookAction(
     return { ok: true, events: [] };
   }
 
-  const [rsvpsRes, remindersRes] = await Promise.all([
-    supabase
-      .from("playbook_event_rsvps")
-      .select("event_id, user_id, occurrence_date, status, note")
-      .in("event_id", eventIds),
-    supabase
-      .from("playbook_event_reminders")
-      .select("event_id, send_at")
-      .in("event_id", eventIds)
-      .is("sent_at", null),
-  ]);
+  const rsvpsRes = await supabase
+    .from("playbook_event_rsvps")
+    .select("event_id, user_id, occurrence_date, status, note")
+    .in("event_id", eventIds);
 
   type RsvpRow = {
     event_id: string;
@@ -774,9 +727,7 @@ export async function listEventsForPlaybookAction(
     status: "yes" | "no" | "maybe";
     note: string | null;
   };
-  type ReminderRow = { event_id: string; send_at: string };
   const rsvps = (rsvpsRes.data ?? []) as RsvpRow[];
-  const reminders = (remindersRes.data ?? []) as ReminderRow[];
 
   type EventRow = {
     id: string;
@@ -798,6 +749,7 @@ export async function listEventsForPlaybookAction(
     score_them: number | null;
     recurrence_rule: string | null;
     recurrence_exdate: string[] | null;
+    reminder_offsets_minutes: number[] | null;
     deleted_at: string | null;
   };
 
@@ -809,13 +761,7 @@ export async function listEventsForPlaybookAction(
 
   const rows: CalendarEventRow[] = [];
   for (const e of events as EventRow[]) {
-    const startMs = new Date(e.starts_at).getTime();
-    const reminderOffsetsMinutes = reminders
-      .filter((r) => r.event_id === e.id)
-      .map((r) =>
-        Math.max(0, Math.round((startMs - new Date(r.send_at).getTime()) / 60000)),
-      )
-      .sort((a, b) => b - a);
+    const reminderOffsetsMinutes = e.reminder_offsets_minutes ?? [];
 
     const occurrences = expandRecurrence({
       startsAt: e.starts_at,
