@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -692,7 +691,3 @@ export async function listEventAttendeesAction(
   return { ok: true, attendees };
 }
 
-// Re-export schemas for callers (so client code doesn't pull zod separately).
-export const _schemas = { eventInputSchema, updateEventInputSchema, setRsvpInputSchema };
-// suppress "z" unused in some paths
-void z;
