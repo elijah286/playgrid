@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, CircleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleAlert } from "lucide-react";
 import { Button, Card, Input, useToast } from "@/components/ui";
 import {
   clearResendConfigAction,
@@ -29,6 +29,7 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
   const [fromEmail, setFromEmail] = useState(initial.fromEmail ?? "");
   const [contactToEmail, setContactToEmail] = useState(initial.contactToEmail ?? "");
   const [draftKey, setDraftKey] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const dirty =
@@ -54,16 +55,31 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
 
   return (
     <Card className="p-5">
-      <div className="flex items-start justify-between gap-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-start justify-between gap-3 text-left"
+      >
         <div>
           <h3 className="text-base font-semibold text-foreground">Resend</h3>
           <p className="mt-0.5 text-xs text-muted">
             Powers the contact form. {statusLabel}
           </p>
         </div>
-        <StatusDot configured={configured} />
-      </div>
+        <div className="flex items-center gap-2">
+          <StatusDot configured={configured} />
+          <ChevronDown
+            className={
+              "size-4 text-muted transition-transform " +
+              (expanded ? "rotate-180" : "")
+            }
+          />
+        </div>
+      </button>
 
+      {expanded && (
+      <>
       <div className="mt-4 space-y-3">
         <Field
           label="API key"
@@ -196,6 +212,8 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
           </li>
         </ol>
       </details>
+      </>
+      )}
     </Card>
   );
 }

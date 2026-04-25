@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, CircleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleAlert } from "lucide-react";
 import { Button, Card, Input, useToast } from "@/components/ui";
 import {
   clearOpenAIApiKeyAction,
@@ -21,6 +21,7 @@ export function OpenAISettingsClient({ initial }: { initial: Initial }) {
   const [configured, setConfigured] = useState(initial.configured);
   const [statusLabel, setStatusLabel] = useState(initial.statusLabel);
   const [draftKey, setDraftKey] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function refreshStatus() {
@@ -37,16 +38,31 @@ export function OpenAISettingsClient({ initial }: { initial: Initial }) {
 
   return (
     <Card className="p-5">
-      <div className="flex items-start justify-between gap-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-start justify-between gap-3 text-left"
+      >
         <div>
           <h3 className="text-base font-semibold text-foreground">OpenAI</h3>
           <p className="mt-0.5 text-xs text-muted">
             Powers site-wide LLM features. {statusLabel}
           </p>
         </div>
-        <StatusDot configured={configured} />
-      </div>
+        <div className="flex items-center gap-2">
+          <StatusDot configured={configured} />
+          <ChevronDown
+            className={
+              "size-4 text-muted transition-transform " +
+              (expanded ? "rotate-180" : "")
+            }
+          />
+        </div>
+      </button>
 
+      {expanded && (
+      <>
       <div className="mt-4">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-foreground">API key</span>
@@ -124,6 +140,8 @@ export function OpenAISettingsClient({ initial }: { initial: Initial }) {
           </Button>
         )}
       </div>
+      </>
+      )}
     </Card>
   );
 }

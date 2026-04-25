@@ -247,6 +247,17 @@ export function SettingsClient({
 
       {tab === "integrations" && (
         <div className="space-y-4">
+          <div
+            role="alert"
+            className="rounded-2xl border-2 border-red-500 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200"
+          >
+            <p className="font-semibold">Heads up — production-critical settings</p>
+            <p className="mt-1">
+              Changing or deleting these will break or disable key functionality
+              that impacts all users. Please be very careful when modifying these
+              values.
+            </p>
+          </div>
           {integration.ok ? (
             <OpenAISettingsClient
               initial={{
