@@ -3,6 +3,7 @@
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
+  defaultPlaybookPrintRunConfig,
   PLAYSHEET_COLUMN_OPTIONS,
   WRISTBAND_HEIGHTS_IN,
   WRISTBAND_WIDTHS_IN,
@@ -182,6 +183,15 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
             value={config.product}
             onChange={(product) => patch({ product })}
           />
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ ...defaultPlaybookPrintRunConfig, product: config.product })
+            }
+            className="mt-2 text-xs text-primary underline-offset-2 hover:underline"
+          >
+            Reset to recommended defaults
+          </button>
         </div>
       )}
 
