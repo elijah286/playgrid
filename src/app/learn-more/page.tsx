@@ -506,6 +506,19 @@ function PrintoutsAndWristbands() {
           </div>
         </Reveal>
 
+        <Reveal delay={50}>
+          <div className="mt-12 overflow-hidden rounded-3xl shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
+            <Image
+              src="/marketing/photos/wristbands-callsheet.jpg"
+              alt="Printed call sheet and four wristbands on the field — generated from a real xogridmaker playbook"
+              width={1400}
+              height={1050}
+              className="block h-auto w-full"
+              sizes="(min-width: 1024px) 1024px, 100vw"
+            />
+          </div>
+        </Reveal>
+
         <div className="mt-14 grid gap-10 md:grid-cols-2 md:items-center">
           <Reveal>
             <WristBand>
