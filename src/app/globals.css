@@ -167,6 +167,22 @@ body {
   }
 }
 
+/* Native app (Capacitor iOS/Android) chrome adjustments. The `.native-app`
+ * class is added to <body> by NativeAppShell when running inside the wrapper.
+ * Goals: respect notch/home-indicator safe areas, hide web-only chrome
+ * (marketing footer, install prompts) that has no place in the native app. */
+body.native-app {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+body.native-app [data-site-footer],
+body.native-app [data-marketing-only],
+body.native-app [data-pwa-install] {
+  display: none !important;
+}
+
 /* Game-mode landscape: let the field fit the full available area while
  * keeping its aspect ratio (letterbox as needed). Overrides the small-
  * screen cap above. Scoped via .game-mode-field so only game mode uses it. */
