@@ -8,18 +8,22 @@ import {
   ExternalLink,
   MapPin,
   Pencil,
+  Rss,
   Users,
 } from "lucide-react";
 import { Button, useToast } from "@/components/ui";
 import {
   clearRsvpAction,
+  getOrCreateCalendarTokenAction,
   listEventAttendeesAction,
   listEventsForPlaybookAction,
   markCalendarSeenAction,
+  regenerateCalendarTokenAction,
   setRsvpAction,
   type CalendarAttendeeRow,
   type CalendarEventRow,
 } from "@/app/actions/calendar";
+import { SubscribeFeedModal } from "./SubscribeFeedModal";
 import { EventSheet, type EventSheetInitial } from "./EventSheet";
 import { EVENT_TYPE_META } from "./eventIcons";
 import type { SelectedPlace } from "./PlaceAutocomplete";
@@ -42,6 +46,7 @@ export function PlaybookCalendarTab({
   const [mode, setMode] = useState<Mode>("upcoming");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EventSheetInitial | null>(null);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   function load() {
     setLoading(true);
@@ -139,12 +144,23 @@ export function PlaybookCalendarTab({
             );
           })}
         </div>
-        {viewerIsCoach && (
-          <Button variant="primary" size="sm" onClick={openCreate}>
-            <CalendarPlus className="mr-1.5 size-4" />
-            New event
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSubscribeOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted ring-1 ring-border hover:bg-surface-hover hover:text-foreground"
+            title="Subscribe to this calendar"
+          >
+            <Rss className="size-3.5" />
+            Subscribe
+          </button>
+          {viewerIsCoach && (
+            <Button variant="primary" size="sm" onClick={openCreate}>
+              <CalendarPlus className="mr-1.5 size-4" />
+              New event
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading && (
@@ -188,6 +204,14 @@ export function PlaybookCalendarTab({
           playbookId={playbookId}
           initial={editTarget}
           onSaved={load}
+        />
+      )}
+
+      {subscribeOpen && (
+        <SubscribeFeedModal
+          playbookId={playbookId}
+          viewerIsCoach={viewerIsCoach}
+          onClose={() => setSubscribeOpen(false)}
         />
       )}
     </div>
