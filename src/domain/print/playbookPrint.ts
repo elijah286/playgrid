@@ -56,6 +56,8 @@ export type PlaybookPrintRunConfig = {
   playsheetNoteLines: PlaysheetNoteLines;
   /** Playsheet: 0 = no padding (edge-to-edge), 1 = current spacing. */
   playsheetCellPadding: number;
+  /** Playsheet: vertical height multiplier for each play tile (0.5–1.5, 1 = default). */
+  playsheetCellHeightScale: number;
   /** Wristband: 0 = tiles flush together, 1 = default spacing. */
   wristbandCellPadding: number;
   /** Playsheet: render the team header banner across the top of every page. */
@@ -169,6 +171,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
   playsheetCellPadding: 0.5,
+  playsheetCellHeightScale: 1,
   wristbandCellPadding: 0.1,
   playsheetIncludeHeader: true,
   playsheetIconSize: "medium",

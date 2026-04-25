@@ -271,6 +271,7 @@ export function PrintPlaybookClient({
       showNotes: config.playsheetShowNotes,
       noteLines: config.playsheetNoteLines,
       cellPadding: config.playsheetCellPadding,
+      cellHeightScale: config.playsheetCellHeightScale,
       iconSize: config.playsheetIconSize,
       routeWeight: config.playsheetRouteWeight,
       arrowSize: config.playsheetArrowSize,

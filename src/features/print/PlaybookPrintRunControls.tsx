@@ -273,6 +273,22 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                     className="accent-primary"
                   />
                 </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Play height · {Math.round(config.playsheetCellHeightScale * 100)}%
+                  </span>
+                  <input
+                    type="range"
+                    min={50}
+                    max={150}
+                    step={5}
+                    value={Math.round(config.playsheetCellHeightScale * 100)}
+                    onChange={(e) =>
+                      patch({ playsheetCellHeightScale: Number(e.target.value) / 100 })
+                    }
+                    className="accent-primary"
+                  />
+                </label>
               </div>
             </>
           )}

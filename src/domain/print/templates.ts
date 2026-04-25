@@ -360,6 +360,8 @@ export type PlaysheetOptions = PlayTileLookOptions & {
   noteLines: PlaysheetNoteLines;
   /** 0 = cells flush together with no internal padding, 1 = default. */
   cellPadding?: number;
+  /** Vertical height multiplier for each play tile (1 = default). */
+  cellHeightScale?: number;
 };
 
 export type PlaysheetHeader = {
@@ -431,7 +433,8 @@ export function compilePlaysheetPdfPages(
   const innerH = h - topOffset - margin;
   const cellW = innerW / opts.columns;
   const notesH = opts.showNotes ? opts.noteLines * 3.2 + 3 : 0;
-  const cellH = cellW * 0.72 + notesH;
+  const heightScale = Math.max(0.3, Math.min(2, opts.cellHeightScale ?? 1));
+  const cellH = cellW * 0.72 * heightScale + notesH;
   const rows = Math.max(1, Math.floor(innerH / cellH));
   const perPage = rows * opts.columns;
 
