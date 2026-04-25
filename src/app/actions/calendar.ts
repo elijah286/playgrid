@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { sendCalendarEventEmails } from "@/lib/calendar/notifications";
 import {
   eventInputSchema,
   updateEventInputSchema,
@@ -91,6 +92,12 @@ async function fanoutNotifications(
     }));
   if (rows.length === 0) return;
   await admin.from("playbook_event_notifications").insert(rows);
+  await sendCalendarEventEmails({
+    admin,
+    eventId,
+    kind,
+    excludeUserId,
+  });
 }
 
 function buildAutoReminderRows(
