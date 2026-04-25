@@ -16,6 +16,7 @@ import {
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { PlayPickerDialog } from "./PlayPickerDialog";
+import { PlayNumberBadge } from "./PlayNumberBadge";
 import { GameFieldView } from "./GameFieldView";
 import { ScoreCard } from "./ScoreCard";
 import type { PlayDocument } from "@/domain/play/types";
@@ -118,6 +119,24 @@ export function GameModePreviewClient({
   const playMap = useMemo(() => {
     const m = new Map<string, GameModePlay>();
     for (const p of plays) m.set(p.id, p);
+    return m;
+  }, [plays]);
+
+  const playNumberById = useMemo(() => {
+    const byType = new Map<string, GameModePlay[]>();
+    for (const p of plays) {
+      const arr = byType.get(p.play_type);
+      if (arr) arr.push(p);
+      else byType.set(p.play_type, [p]);
+    }
+    const m = new Map<string, string>();
+    for (const arr of byType.values()) {
+      arr.sort((a, b) => a.sort_order - b.sort_order);
+      arr.forEach((p, i) => {
+        const code = (p.wristband_code ?? "").trim();
+        m.set(p.id, code || String(i + 1).padStart(2, "0"));
+      });
+    }
     return m;
   }, [plays]);
 
@@ -287,6 +306,7 @@ export function GameModePreviewClient({
             outcome={currentOutcome}
             onTapThumb={tapThumb}
             onTapTag={tapTag}
+            playNumber={playNumberById.get(currentPlay.id) ?? null}
           />
         ) : (
           <p className="px-6 py-12 text-center text-sm text-muted">
@@ -310,6 +330,7 @@ export function GameModePreviewClient({
               onPick={pickPlay}
               onClose={() => setPickerMode("closed")}
               canClose
+              playNumberById={playNumberById}
             />
           </div>
         ) : (
@@ -320,9 +341,14 @@ export function GameModePreviewClient({
                   Next: <span className="text-foreground">{nextPlay.name}</span>
                 </div>
                 <div className="mt-1 flex items-start gap-3">
-                  <div className="w-full max-w-[200px] flex-1">
+                  <div className="relative w-full max-w-[200px] flex-1">
                     {nextPlay.preview && (
                       <PlayThumbnail preview={nextPlay.preview} thin />
+                    )}
+                    {playNumberById.get(nextPlay.id) && (
+                      <PlayNumberBadge
+                        value={playNumberById.get(nextPlay.id)!}
+                      />
                     )}
                   </div>
                   <div className="flex w-44 shrink-0 flex-col gap-1.5 sm:w-48">
@@ -376,6 +402,7 @@ export function GameModePreviewClient({
         onPick={pickPlay}
         onClose={() => setPickerMode("closed")}
         canClose={currentPlay != null}
+        playNumberById={playNumberById}
       />
     </div>
   );
@@ -453,17 +480,20 @@ function CurrentPlaySection({
   outcome,
   onTapThumb,
   onTapTag,
+  playNumber,
 }: {
   document: PlayDocument | null;
   preview: PlayThumbnailInput | null;
   outcome: PlayOutcome;
   onTapThumb: (dir: ThumbDirection) => void;
   onTapTag: (dir: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) => void;
+  playNumber: string | null;
 }) {
   if (!document) {
     return (
       <div className="relative mx-auto w-full">
         <GameFieldView document={null} fallbackPreview={preview} anim={null} />
+        {playNumber && <PlayNumberBadge value={playNumber} size="md" />}
         <ThumbButton
           direction="down"
           active={outcome?.thumb === "down"}
@@ -500,6 +530,7 @@ function CurrentPlaySection({
       outcome={outcome}
       onTapThumb={onTapThumb}
       onTapTag={onTapTag}
+      playNumber={playNumber}
     />
   );
 }
@@ -510,12 +541,14 @@ function CurrentPlaySectionAnimated({
   outcome,
   onTapThumb,
   onTapTag,
+  playNumber,
 }: {
   document: PlayDocument;
   preview: PlayThumbnailInput | null;
   outcome: PlayOutcome;
   onTapThumb: (dir: ThumbDirection) => void;
   onTapTag: (dir: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) => void;
+  playNumber: string | null;
 }) {
   const anim = usePlayAnimation(document);
   // Preview is driven by a marketing capture script — no human is here to
@@ -534,6 +567,7 @@ function CurrentPlaySectionAnimated({
   return (
     <div className="relative mx-auto flex w-full flex-col items-center justify-center landscape:h-full landscape:flex-1">
       <GameFieldView document={document} fallbackPreview={preview} anim={anim} />
+      {playNumber && <PlayNumberBadge value={playNumber} size="md" />}
       <ThumbButton
         direction="down"
         active={outcome?.thumb === "down"}

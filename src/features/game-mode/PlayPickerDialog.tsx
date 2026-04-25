@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { PlayNumberBadge } from "./PlayNumberBadge";
 import type { GameModePlay } from "./types";
 
 export function PlayPickerDialog({
@@ -13,6 +14,7 @@ export function PlayPickerDialog({
   onClose,
   canClose,
   inline = false,
+  playNumberById,
 }: {
   open: boolean;
   plays: GameModePlay[];
@@ -25,6 +27,10 @@ export function PlayPickerDialog({
   /** When true, render as an in-flow panel (no fixed overlay) so the picker
    *  replaces only the next-play row beneath the visible current play. */
   inline?: boolean;
+  /** Per-play display number (e.g. "01", "WR-7"). Mirrors the small black
+   *  chip shown on printed playsheets so coaches can match what's on the
+   *  wristband. */
+  playNumberById: Map<string, string>;
 }) {
   const [q, setQ] = useState("");
   const currentRef = useRef<HTMLButtonElement | null>(null);
@@ -55,13 +61,14 @@ export function PlayPickerDialog({
         p.formation_name ?? "",
         p.shorthand ?? "",
         p.concept ?? "",
+        playNumberById.get(p.id) ?? "",
         ...(p.tags ?? []),
       ]
         .join(" ")
         .toLowerCase();
       return hay.includes(needle);
     });
-  }, [plays, q]);
+  }, [plays, q, playNumberById]);
 
   if (!open) return null;
 
@@ -138,8 +145,11 @@ export function PlayPickerDialog({
                     </div>
                   )}
                   {p.preview && (
-                    <div className="overflow-hidden rounded-md">
+                    <div className="relative overflow-hidden rounded-md">
                       <PlayThumbnail preview={p.preview} thin />
+                      {playNumberById.get(p.id) && (
+                        <PlayNumberBadge value={playNumberById.get(p.id)!} />
+                      )}
                     </div>
                   )}
                 </button>
