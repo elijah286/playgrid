@@ -6,17 +6,20 @@ import { setHideLobbyAnimationAction } from "@/app/actions/admin-lobby";
 import { setExamplesPageEnabledAction } from "@/app/actions/admin-examples";
 import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays";
 import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editing";
+import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
 
 export function SiteSettingsAdminClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
   initialFreeMaxPlays,
   initialMobileEditingEnabled,
+  initialHideOwnerInfoAbout,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
   initialMobileEditingEnabled: boolean;
+  initialHideOwnerInfoAbout: boolean;
 }) {
   const { toast } = useToast();
 
@@ -28,6 +31,9 @@ export function SiteSettingsAdminClient({
 
   const [mobileEditingEnabled, setMobileEditingEnabled] = useState(initialMobileEditingEnabled);
   const [mobileEditingPending, startMobileEditingTransition] = useTransition();
+
+  const [hideOwnerInfoAbout, setHideOwnerInfoAbout] = useState(initialHideOwnerInfoAbout);
+  const [hideOwnerPending, startHideOwnerTransition] = useTransition();
 
   const [savedFreeMaxPlays, setSavedFreeMaxPlays] = useState(initialFreeMaxPlays);
   const [freeMaxPlaysInput, setFreeMaxPlaysInput] = useState(String(initialFreeMaxPlays));
@@ -84,6 +90,23 @@ export function SiteSettingsAdminClient({
       }
       toast(
         next ? "Mobile play editing enabled." : "Mobile play editing disabled.",
+        "success",
+      );
+    });
+  }
+
+  function toggleHideOwnerInfoAbout(next: boolean) {
+    const prev = hideOwnerInfoAbout;
+    setHideOwnerInfoAbout(next);
+    startHideOwnerTransition(async () => {
+      const res = await setHideOwnerInfoAboutAction(next);
+      if (!res.ok) {
+        setHideOwnerInfoAbout(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next ? "Owner info hidden on About page." : "Owner info shown on About page.",
         "success",
       );
     });
@@ -215,6 +238,28 @@ export function SiteSettingsAdminClient({
             onChange={(e) => toggleMobileEditing(e.target.checked)}
           />
           <span>{mobileEditingEnabled ? "On" : "Off"}</span>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Hide owner info on About page
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            When on, the About page drops the owner&apos;s name, photo, and
+            hometown and reads as written by the team behind the product.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={hideOwnerInfoAbout}
+            disabled={hideOwnerPending}
+            onChange={(e) => toggleHideOwnerInfoAbout(e.target.checked)}
+          />
+          <span>{hideOwnerInfoAbout ? "On" : "Off"}</span>
         </label>
       </div>
     </div>

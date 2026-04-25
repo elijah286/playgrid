@@ -89,6 +89,7 @@ export function SettingsClient({
   trafficError,
   initialSeeds,
   initialBetaFeatures,
+  initialHideOwnerInfoAbout,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -113,6 +114,7 @@ export function SettingsClient({
   trafficError: string | null;
   initialSeeds: SavedFormation[];
   initialBetaFeatures: BetaFeatures;
+  initialHideOwnerInfoAbout: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -325,6 +327,7 @@ export function SettingsClient({
           initialExamplesPageEnabled={initialExamplesPageEnabled}
           initialFreeMaxPlays={initialFreeMaxPlays}
           initialMobileEditingEnabled={initialMobileEditingEnabled}
+          initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
         />
       )}
     </div>

@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 
 export const metadata: Metadata = {
   title: "About · xogridmaker",
-  description: "Why xogridmaker exists — built by a coach, for coaches.",
+  description: "Why xogridmaker exists — built by coaches, for coaches.",
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const hideOwnerInfo = await getHideOwnerInfoAbout();
+
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">About xogridmaker</h1>
@@ -16,34 +19,50 @@ export default function AboutPage() {
           spend more time coaching and less time fighting with PowerPoint,
           whiteboards, or napkin sketches.
         </p>
-        <p>
-          I&apos;ve been coaching for years across flag football, youth tackle
-          and middle school 7v7. All three of my kids are quarterbacks, so we
-          spend a lot of time studying plays together — at the kitchen table,
-          in the backyard, and on the drive home from practice. xogridmaker grew
-          out of wanting a better tool for that: something fast enough to
-          sketch on the sideline, clean enough to print on a wristband, and
-          easy to share with the entire team.
-        </p>
+        {hideOwnerInfo ? (
+          <p>
+            It&apos;s built by people who have spent years on sidelines across
+            flag football, youth tackle, and middle school 7v7. xogridmaker grew
+            out of wanting a better tool for that work: something fast enough to
+            sketch on the sideline, clean enough to print on a wristband, and
+            easy to share with the entire team.
+          </p>
+        ) : (
+          <>
+            <p>
+              I&apos;ve been coaching for years across flag football, youth tackle
+              and middle school 7v7. All three of my kids are quarterbacks, so we
+              spend a lot of time studying plays together — at the kitchen table,
+              in the backyard, and on the drive home from practice. xogridmaker grew
+              out of wanting a better tool for that: something fast enough to
+              sketch on the sideline, clean enough to print on a wristband, and
+              easy to share with the entire team.
+            </p>
+          </>
+        )}
         <p>
           The goal is simple — make it easy to design plays, organize them
           into playbooks, and carry them to the field.
         </p>
-        <p className="pt-4 text-sm">
-          <em>Created by Elijah Kerry from Cedar Park.</em>
-        </p>
+        {!hideOwnerInfo && (
+          <p className="pt-4 text-sm">
+            <em>Created by Elijah Kerry from Cedar Park.</em>
+          </p>
+        )}
       </div>
-      <div className="mt-8 overflow-hidden rounded-lg">
-        <Image
-          src="/about/montage.jpg"
-          alt="Coaching moments across flag football, youth tackle, and 7v7"
-          width={1400}
-          height={466}
-          sizes="(min-width: 768px) 672px, 100vw"
-          className="h-auto w-full"
-          priority={false}
-        />
-      </div>
+      {!hideOwnerInfo && (
+        <div className="mt-8 overflow-hidden rounded-lg">
+          <Image
+            src="/about/montage.jpg"
+            alt="Coaching moments across flag football, youth tackle, and 7v7"
+            width={1400}
+            height={466}
+            sizes="(min-width: 768px) 672px, 100vw"
+            className="h-auto w-full"
+            priority={false}
+          />
+        </div>
+      )}
     </article>
   );
 }
