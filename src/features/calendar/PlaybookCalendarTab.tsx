@@ -29,9 +29,11 @@ type Mode = "upcoming" | "past";
 export function PlaybookCalendarTab({
   playbookId,
   viewerIsCoach,
+  onMarkSeen,
 }: {
   playbookId: string;
   viewerIsCoach: boolean;
+  onMarkSeen?: () => void;
 }) {
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEventRow[]>([]);
@@ -57,9 +59,11 @@ export function PlaybookCalendarTab({
 
   useEffect(() => {
     load();
-    markCalendarSeenAction(playbookId).catch(() => {
-      /* ignore — best effort */
-    });
+    markCalendarSeenAction(playbookId)
+      .then(() => onMarkSeen?.())
+      .catch(() => {
+        /* ignore — best effort */
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbookId]);
 

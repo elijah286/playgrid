@@ -270,6 +270,7 @@ function PlaybookDetailClientInner({
   canUseGameMode = false,
   gameResultsAvailable = false,
   teamCalendarAvailable = false,
+  initialCalendarUnseenCount = 0,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -290,6 +291,8 @@ function PlaybookDetailClientInner({
   gameResultsAvailable?: boolean;
   /** When true, show the "Calendar" tab gated by the team_calendar beta. */
   teamCalendarAvailable?: boolean;
+  /** Unseen calendar notifications for the viewer in this playbook. */
+  initialCalendarUnseenCount?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
@@ -341,6 +344,7 @@ function PlaybookDetailClientInner({
   const [tab, setTab] = useState<
     "plays" | "formations" | "roster" | "staff" | "games" | "calendar"
   >(initialTab);
+  const [calendarUnseen, setCalendarUnseen] = useState(initialCalendarUnseenCount);
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
   const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
@@ -1053,7 +1057,11 @@ function PlaybookDetailClientInner({
                   ? [{ key: "games" as const, label: "Games", count: null as number | null }]
                   : []),
                 ...(teamCalendarAvailable
-                  ? [{ key: "calendar" as const, label: "Calendar", count: null as number | null }]
+                  ? [{
+                      key: "calendar" as const,
+                      label: "Calendar",
+                      count: calendarUnseen > 0 ? calendarUnseen : null,
+                    }]
                   : []),
               ] satisfies Array<{ key: "plays" | "formations" | "roster" | "staff" | "games" | "calendar"; label: string; count: number | null }>
             ).map((t) => {
@@ -1395,6 +1403,7 @@ function PlaybookDetailClientInner({
         <PlaybookCalendarTab
           playbookId={playbookId}
           viewerIsCoach={headerProps.viewerIsCoach}
+          onMarkSeen={() => setCalendarUnseen(0)}
         />
       )}
 

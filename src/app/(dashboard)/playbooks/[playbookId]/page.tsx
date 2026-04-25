@@ -11,6 +11,7 @@ import {
 import { listInvitesAction } from "@/app/actions/invites";
 import { listFormationsForPlaybookAction } from "@/app/actions/formations";
 import { getPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
+import { getUnseenCalendarCountAction } from "@/app/actions/calendar";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -240,6 +241,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: true,
     });
+  const calendarUnseenCount = teamCalendarAvailable
+    ? await (async () => {
+        const res = await getUnseenCalendarCountAction(playbookId);
+        return res.ok ? res.count : 0;
+      })()
+    : 0;
 
   const publicExampleJsonLd = isPublicExample
     ? [
@@ -306,6 +313,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         gameModeAvailable={gameModeAvailable}
         gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
+        initialCalendarUnseenCount={calendarUnseenCount}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{
           name: book.name as string,
