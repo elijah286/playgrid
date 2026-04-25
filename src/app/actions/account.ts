@@ -15,6 +15,31 @@ const ALLOWED_AVATAR_TYPES = new Set([
   "image/gif",
 ]);
 
+export async function revokeUserSessionAction(input: { sessionId: string }) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin
+    .from("user_sessions")
+    .update({
+      revoked_at: new Date().toISOString(),
+      revoked_reason: "user",
+    })
+    .eq("id", input.sessionId)
+    .eq("user_id", user.id)
+    .is("revoked_at", null);
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath("/account");
+  return { ok: true as const };
+}
+
 export async function changePasswordAction(input: { password: string }) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const pwError = validatePassword(input.password ?? "");

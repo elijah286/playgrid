@@ -10,6 +10,7 @@ export function LoginForm() {
   const safeNext = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "";
   const inviteCode = searchParams.get("invite")?.trim().toUpperCase() || undefined;
   const isSignup = searchParams.get("mode") === "signup";
+  const reason = searchParams.get("reason");
 
   const [step, setStep] = useState<Step>("email");
 
@@ -31,6 +32,16 @@ export function LoginForm() {
         <h1 className="text-2xl font-extrabold tracking-tight text-foreground">{title}</h1>
         <p className="mt-2 text-sm text-muted">{subtitle}</p>
       </div>
+      {reason === "signed_out_elsewhere" ? (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800">
+          You were signed out because your account signed in on another
+          device. If that wasn&rsquo;t you,{" "}
+          <a href="/account" className="font-semibold underline">
+            change your password
+          </a>{" "}
+          after signing in.
+        </div>
+      ) : null}
       <AuthFlow
         next={safeNext || undefined}
         inviteCode={inviteCode}

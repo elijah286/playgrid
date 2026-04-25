@@ -1,5 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  DEVICE_ID_COOKIE,
+  SESSION_TOUCH_COOKIE,
+  SESSION_TOUCH_INTERVAL_MS,
+  touchUserSession,
+} from "@/lib/auth/sessions";
 
 /**
  * Paths accessible without authentication. Everything else is redirected
@@ -90,5 +96,100 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Concurrent-session tracking. Only meaningful for authenticated users on
+  // navigations (not background asset fetches). The touch is throttled by a
+  // cookie stamp so middleware stays cheap on hot paths.
+  if (user && shouldTouchSession(request, pathname)) {
+    const result = await maybeTouchSession({
+      request,
+      response: supabaseResponse,
+      userId: user.id,
+    });
+    if (result === "revoked") {
+      return signOutAndRedirect(request);
+    }
+  }
+
   return supabaseResponse;
+}
+
+function shouldTouchSession(request: NextRequest, pathname: string): boolean {
+  // Only HTML navigations and server actions — skip static assets and the
+  // Stripe webhook style API routes that are POST-only.
+  if (pathname.startsWith("/_next/")) return false;
+  if (pathname.startsWith("/api/stripe/webhook")) return false;
+  if (pathname.startsWith("/monitoring")) return false;
+  const last = request.cookies.get(SESSION_TOUCH_COOKIE)?.value;
+  if (!last) return true;
+  const ms = Number(last);
+  if (!Number.isFinite(ms)) return true;
+  return Date.now() - ms >= SESSION_TOUCH_INTERVAL_MS;
+}
+
+async function maybeTouchSession(input: {
+  request: NextRequest;
+  response: NextResponse;
+  userId: string;
+}): Promise<"ok" | "revoked"> {
+  const deviceId = ensureDeviceId(input.request, input.response);
+  const ip = clientIp(input.request);
+  const userAgent = input.request.headers.get("user-agent");
+  try {
+    const result = await touchUserSession({
+      userId: input.userId,
+      deviceId,
+      ip,
+      userAgent,
+    });
+    if (result.kind === "revoked") return "revoked";
+  } catch {
+    // Best-effort: never block navigation if session bookkeeping fails.
+    return "ok";
+  }
+  input.response.cookies.set(SESSION_TOUCH_COOKIE, String(Date.now()), {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+  return "ok";
+}
+
+function ensureDeviceId(request: NextRequest, response: NextResponse): string {
+  const existing = request.cookies.get(DEVICE_ID_COOKIE)?.value;
+  if (existing && existing.length >= 16) return existing;
+  const fresh = crypto.randomUUID();
+  response.cookies.set(DEVICE_ID_COOKIE, fresh, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 24 * 365 * 2,
+  });
+  return fresh;
+}
+
+function clientIp(request: NextRequest): string | null {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0]!.trim();
+  return request.headers.get("x-real-ip");
+}
+
+function signOutAndRedirect(request: NextRequest): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = "?reason=signed_out_elsewhere";
+  const res = NextResponse.redirect(url);
+  // Clear Supabase auth cookies, the throttle stamp, and the device id.
+  // Dropping the device id is intentional: when the user signs back in
+  // they'll get a fresh row instead of immediately re-hitting this revoked
+  // one and looping. The kicked row stays in the audit log either way.
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith("sb-")) {
+      res.cookies.delete(cookie.name);
+    }
+  }
+  res.cookies.delete(SESSION_TOUCH_COOKIE);
+  res.cookies.delete(DEVICE_ID_COOKIE);
+  return res;
 }

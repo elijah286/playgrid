@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, CreditCard, IdCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
+import { AlertTriangle, CreditCard, IdCard, KeyRound, LogOut, Monitor, Moon, Smartphone, Sun, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   deleteOwnAccountAction,
   removeAvatarAction,
+  revokeUserSessionAction,
   updateDisplayNameAction,
   uploadAvatarAction,
 } from "@/app/actions/account";
@@ -31,16 +32,27 @@ function initialsFor(email: string, displayName: string | null): string {
   return parts.slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || "?";
 }
 
+export type AccountSession = {
+  id: string;
+  label: string;
+  lastSeenAt: string;
+  createdAt: string;
+  ip: string | null;
+  isCurrent: boolean;
+};
+
 export function AccountClient({
   email,
   displayName,
   avatarUrl,
   entitlement,
+  sessions,
 }: {
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
   entitlement: Entitlement | null;
+  sessions: AccountSession[];
 }) {
   return (
     <div className="space-y-6">
@@ -50,6 +62,7 @@ export function AccountClient({
         <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
         <PlanCard entitlement={entitlement} />
         <AppearanceCard />
+        <SessionsCard sessions={sessions} />
       </div>
       <DeleteAccountCard hasPaidPlan={entitlement?.source === "stripe"} />
     </div>
@@ -674,4 +687,76 @@ function AppearanceCard() {
       </div>
     </Card>
   );
+}
+
+function SessionsCard({ sessions }: { sessions: AccountSession[] }) {
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  function revoke(id: string) {
+    setErr(null);
+    setPendingId(id);
+    startTransition(async () => {
+      const res = await revokeUserSessionAction({ sessionId: id });
+      setPendingId(null);
+      if (!res.ok) setErr(res.error);
+      else window.location.reload();
+    });
+  }
+
+  return (
+    <Card
+      icon={Smartphone}
+      title="Active sessions"
+      description="Devices currently signed in to this account. Sign out anything you don't recognize."
+    >
+      {sessions.length === 0 ? (
+        <p className="text-xs text-muted">No active sessions.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {sessions.map((s) => (
+            <li key={s.id} className="flex items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <span className="truncate">{s.label}</span>
+                  {s.isCurrent && (
+                    <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-100 dark:ring-emerald-800">
+                      This device
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-muted">
+                  Last active {formatRelative(s.lastSeenAt)}
+                  {s.ip ? ` · ${s.ip}` : ""}
+                </div>
+              </div>
+              {!s.isCurrent && (
+                <button
+                  type="button"
+                  disabled={pendingId === s.id}
+                  onClick={() => revoke(s.id)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                >
+                  <LogOut className="size-3.5" />
+                  Sign out
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </Card>
+  );
+}
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "recently";
+  const diffSec = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
 }

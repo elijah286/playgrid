@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
-import { AccountClient } from "./ui";
+import { DEVICE_ID_COOKIE } from "@/lib/auth/sessions";
+import { AccountClient, type AccountSession } from "./ui";
 
 export default async function AccountPage() {
   if (!hasSupabaseEnv()) redirect("/login");
@@ -18,15 +20,34 @@ export default async function AccountPage() {
 
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
+  let sessions: AccountSession[] = [];
   try {
     const admin = createServiceRoleClient();
-    const { data } = await admin
-      .from("profiles")
-      .select("display_name, avatar_url")
-      .eq("id", user.id)
-      .maybeSingle();
-    displayName = (data?.display_name as string | null) ?? null;
-    avatarUrl = (data?.avatar_url as string | null) ?? null;
+    const [profileResult, sessionsResult] = await Promise.all([
+      admin
+        .from("profiles")
+        .select("display_name, avatar_url")
+        .eq("id", user.id)
+        .maybeSingle(),
+      admin
+        .from("user_sessions")
+        .select("id, device_id, device_label, created_at, last_seen_at, ip")
+        .eq("user_id", user.id)
+        .is("revoked_at", null)
+        .order("last_seen_at", { ascending: false })
+        .limit(20),
+    ]);
+    displayName = (profileResult.data?.display_name as string | null) ?? null;
+    avatarUrl = (profileResult.data?.avatar_url as string | null) ?? null;
+    const currentDeviceId = (await cookies()).get(DEVICE_ID_COOKIE)?.value ?? null;
+    sessions = (sessionsResult.data ?? []).map((row) => ({
+      id: row.id as string,
+      label: (row.device_label as string | null) ?? "Unknown device",
+      lastSeenAt: row.last_seen_at as string,
+      createdAt: row.created_at as string,
+      ip: (row.ip as string | null) ?? null,
+      isCurrent: (row.device_id as string) === currentDeviceId,
+    }));
   } catch {
     /* best effort */
   }
@@ -52,6 +73,7 @@ export default async function AccountPage() {
         displayName={displayName}
         avatarUrl={avatarUrl}
         entitlement={await getCurrentEntitlement()}
+        sessions={sessions}
       />
     </div>
   );
