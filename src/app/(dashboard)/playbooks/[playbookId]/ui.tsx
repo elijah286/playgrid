@@ -133,10 +133,8 @@ import {
   revokeInviteAction,
   type PlaybookInvite,
 } from "@/app/actions/invites";
-import {
-  setPlaybookViewPrefsAction,
-  type PlaybookViewPrefs,
-} from "@/app/actions/playbook-view-prefs";
+import { setPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
+import type { PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import {
   ActionMenu,
   Badge,

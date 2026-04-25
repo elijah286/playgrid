@@ -7,8 +7,6 @@ import {
   type PlaybookViewPrefs,
 } from "@/domain/playbook/view-prefs";
 
-export type { PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
-
 export async function getPlaybookViewPrefsAction(
   playbookId: string,
 ): Promise<{ ok: true; prefs: PlaybookViewPrefs | null } | { ok: false; error: string }> {
