@@ -26,9 +26,11 @@ import {
 import { SubscribeFeedModal } from "./SubscribeFeedModal";
 import { EventSheet, type EventSheetInitial } from "./EventSheet";
 import { EVENT_TYPE_META } from "./eventIcons";
+import { MonthGrid, ymd } from "./MonthGrid";
 import type { SelectedPlace } from "./PlaceAutocomplete";
 
 type Mode = "upcoming" | "past";
+type ViewKind = "list" | "month";
 
 export function PlaybookCalendarTab({
   playbookId,
@@ -47,6 +49,8 @@ export function PlaybookCalendarTab({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EventSheetInitial | null>(null);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [view, setView] = useState<ViewKind>("list");
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -85,7 +89,13 @@ export function PlaybookCalendarTab({
     return { upcoming, past };
   }, [events, now]);
 
-  const visibleEvents = mode === "upcoming" ? partitioned.upcoming : partitioned.past;
+  const baseList = mode === "upcoming" ? partitioned.upcoming : partitioned.past;
+  const visibleEvents = useMemo(() => {
+    if (view === "month" && selectedDayKey) {
+      return events.filter((e) => ymd(new Date(e.startsAt)) === selectedDayKey);
+    }
+    return baseList;
+  }, [view, selectedDayKey, events, baseList]);
 
   function openCreate() {
     setEditTarget(null);
@@ -123,9 +133,34 @@ export function PlaybookCalendarTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
-          {(["upcoming", "past"] as const).map((m) => {
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
+            {(["list", "month"] as const).map((v) => {
+              const active = view === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => {
+                    setView(v);
+                    if (v === "list") setSelectedDayKey(null);
+                  }}
+                  className={
+                    "px-3 py-1.5 text-sm font-medium transition-colors " +
+                    (active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface text-foreground hover:bg-surface-hover")
+                  }
+                >
+                  {v === "list" ? "List" : "Month"}
+                </button>
+              );
+            })}
+          </div>
+          {view === "list" && (
+            <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
+              {(["upcoming", "past"] as const).map((m) => {
             const active = mode === m;
             return (
               <button
@@ -143,6 +178,8 @@ export function PlaybookCalendarTab({
               </button>
             );
           })}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -171,7 +208,15 @@ export function PlaybookCalendarTab({
           {error}
         </p>
       )}
-      {!loading && !error && visibleEvents.length === 0 && (
+      {view === "month" && !loading && !error && (
+        <MonthGrid
+          events={events}
+          selectedDayKey={selectedDayKey}
+          onSelectDay={(d) => setSelectedDayKey(d ? ymd(d) : null)}
+        />
+      )}
+
+      {!loading && !error && visibleEvents.length === 0 && view === "list" && (
         <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center">
           <p className="text-sm font-medium text-foreground">
             No {mode === "upcoming" ? "upcoming" : "past"} events
