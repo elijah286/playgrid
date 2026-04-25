@@ -56,6 +56,7 @@ type Props = {
   loadError: string | null;
   team: PlaysheetHeader;
   logoUrl: string | null;
+  headCoachName: string | null;
   canUseWristbands: boolean;
   canRemovePlaysheetWatermark: boolean;
 };
@@ -68,6 +69,22 @@ function compareByWristbandNumber(a: PlaybookPrintPackRow, b: PlaybookPrintPackR
   return a.nav.sort_order - b.nav.sort_order;
 }
 
+function resolveFooterText(
+  template: string,
+  playbookName: string,
+  coachName: string | null,
+): string {
+  const date = new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  return template
+    .replace(/\{playbook\}/gi, playbookName || "")
+    .replace(/\{coach\}/gi, coachName || "")
+    .replace(/\{date\}/gi, date);
+}
+
 export function PrintPlaybookClient({
   playbookId,
   initialPack,
@@ -75,6 +92,7 @@ export function PrintPlaybookClient({
   loadError,
   team,
   logoUrl,
+  headCoachName,
   canUseWristbands,
   canRemovePlaysheetWatermark,
 }: Props) {
@@ -474,8 +492,14 @@ export function PrintPlaybookClient({
       config.playsheetIncludeHeader ? team : null,
       watermark,
       !canRemovePlaysheetWatermark,
+      config.playsheetIncludeFooter
+        ? {
+            text: resolveFooterText(config.playsheetFooterText, team.teamName, headCoachName),
+            accentColor: team.accentColor,
+          }
+        : null,
     );
-  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById, wristbandPreviewMode]);
+  }, [initialPack, selected, typeFilter, sortBy, numberPlaysInOrder, config, wristbandGridOpts, playsheetOpts, team, watermark, playbookPositionById, wristbandPreviewMode, headCoachName, canRemovePlaysheetWatermark]);
 
   const pageCount = previewPages.length;
   const currentPageIdx = Math.min(previewPage, Math.max(0, pageCount - 1));
@@ -549,6 +573,17 @@ export function PrintPlaybookClient({
         groupKeys,
         config.playsheetIncludeHeader ? team : null,
         watermark,
+        !canRemovePlaysheetWatermark,
+        config.playsheetIncludeFooter
+          ? {
+              text: resolveFooterText(
+                config.playsheetFooterText,
+                team.teamName,
+                headCoachName,
+              ),
+              accentColor: team.accentColor,
+            }
+          : null,
       );
     }
     if (config.wristbandSheet === "sheet") {

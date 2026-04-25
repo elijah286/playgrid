@@ -62,6 +62,10 @@ export type PlaybookPrintRunConfig = {
   wristbandCellPadding: number;
   /** Playsheet: render the team header banner across the top of every page. */
   playsheetIncludeHeader: boolean;
+  /** Playsheet: render a matching footer band at the bottom of every page. */
+  playsheetIncludeFooter: boolean;
+  /** Playsheet footer text template. Supports {playbook}, {coach}, {date}. */
+  playsheetFooterText: string;
   /** Playsheet visual look (matches wristband options). */
   playsheetIconSize: WristbandIconSize;
   playsheetRouteWeight: WristbandRouteWeight;
@@ -174,6 +178,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetCellHeightScale: 1,
   wristbandCellPadding: 0.1,
   playsheetIncludeHeader: true,
+  playsheetIncludeFooter: true,
+  playsheetFooterText: "{playbook} · Head coach: {coach} · Printed: {date}",
   playsheetIconSize: "medium",
   playsheetRouteWeight: "medium",
   playsheetArrowSize: "medium",

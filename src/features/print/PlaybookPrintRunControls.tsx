@@ -240,6 +240,28 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
                   <input
                     type="checkbox"
                     className="size-4 accent-primary"
+                    checked={config.playsheetIncludeFooter}
+                    onChange={(e) => patch({ playsheetIncludeFooter: e.target.checked })}
+                  />
+                  Include footer on every page
+                </label>
+                {config.playsheetIncludeFooter && (
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-muted">
+                      Footer text · placeholders: {"{playbook}"}, {"{coach}"}, {"{date}"}
+                    </span>
+                    <input
+                      type="text"
+                      value={config.playsheetFooterText}
+                      onChange={(e) => patch({ playsheetFooterText: e.target.value })}
+                      className="rounded-md border border-border bg-surface-raised px-2 py-1 text-sm"
+                    />
+                  </label>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
                     checked={config.playsheetShowNotes}
                     onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
                   />

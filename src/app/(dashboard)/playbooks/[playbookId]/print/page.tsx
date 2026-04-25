@@ -99,6 +99,7 @@ export default async function PlaybookPrintPage({ params }: Props) {
         loadError={pack.ok ? null : pack.error}
         team={team}
         logoUrl={(book.logo_url as string | null) ?? null}
+        headCoachName={coachName}
         canUseWristbands={canUseWristbands(await getCurrentEntitlement())}
         canRemovePlaysheetWatermark={canRemovePlaysheetWatermark(
           await getPlaybookOwnerEntitlement(playbookId),

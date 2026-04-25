@@ -372,6 +372,7 @@ export type PlaysheetHeader = {
 };
 
 const PLAYSHEET_HEADER_H = 14;
+const PLAYSHEET_FOOTER_H = 8;
 
 function hexLum(hex: string): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
@@ -384,7 +385,12 @@ function hexLum(hex: string): number {
   return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
 }
 
-function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin: number): string {
+function renderPlaysheetHeaderBanner(
+  w: number,
+  header: PlaysheetHeader,
+  margin: number,
+  innerW: number,
+): string {
   const accent = header.accentColor || "#134e2a";
   const isLight = hexLum(accent) > 0.55;
   const textColor = isLight ? "#0f172a" : "#ffffff";
@@ -393,8 +399,10 @@ function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin:
   const badgeStroke = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.35)";
   const hH = PLAYSHEET_HEADER_H;
   const logoSize = 10;
-  const logoX = margin;
-  const logoY = (hH - logoSize) / 2;
+  const x0 = margin;
+  const y0 = margin;
+  const logoX = x0 + 2;
+  const logoY = y0 + (hH - logoSize) / 2;
   const textX = logoX + logoSize + 4;
   const name = escSvgText(header.teamName || "");
   const sub = escSvgText(header.subtext || "");
@@ -402,13 +410,35 @@ function renderPlaysheetHeaderBanner(w: number, header: PlaysheetHeader, margin:
   const logoMarkup = header.logoUrl
     ? `<image href="${escSvgText(header.logoUrl)}" x="${logoX + 1}" y="${logoY + 1}" width="${logoSize - 2}" height="${logoSize - 2}" preserveAspectRatio="xMidYMid meet"/>`
     : `<text x="${logoX + logoSize / 2}" y="${logoY + logoSize / 2 + 2.2}" text-anchor="middle" font-size="6" font-weight="bold" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textColor}">${escSvgText(initial)}</text>`;
+  void w;
   return `
   <g>
-    <rect x="0" y="0" width="${w}" height="${hH}" fill="${accent}"/>
+    <rect x="${x0}" y="${y0}" width="${innerW}" height="${hH}" rx="1.2" fill="${accent}"/>
     <rect x="${logoX}" y="${logoY}" width="${logoSize}" height="${logoSize}" rx="1.8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="0.2"/>
     ${logoMarkup}
-    <text x="${textX}" y="${hH / 2 - 0.2}" font-size="5" font-weight="bold" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
-    ${sub ? `<text x="${textX}" y="${hH / 2 + 4.2}" font-size="3" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
+    <text x="${textX}" y="${y0 + hH / 2 - 0.2}" font-size="5" font-weight="bold" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textColor}">${name}</text>
+    ${sub ? `<text x="${textX}" y="${y0 + hH / 2 + 4.2}" font-size="3" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${mutedColor}">${sub}</text>` : ""}
+  </g>`;
+}
+
+function renderPlaysheetFooterBanner(
+  h: number,
+  accentColor: string,
+  text: string,
+  margin: number,
+  innerW: number,
+): string {
+  const accent = accentColor || "#134e2a";
+  const isLight = hexLum(accent) > 0.55;
+  const textColor = isLight ? "#0f172a" : "#ffffff";
+  const hH = PLAYSHEET_FOOTER_H;
+  const x0 = margin;
+  const y0 = h - margin - hH;
+  const safeText = escSvgText(text || "");
+  return `
+  <g>
+    <rect x="${x0}" y="${y0}" width="${innerW}" height="${hH}" rx="1.2" fill="${accent}"/>
+    <text x="${x0 + innerW / 2}" y="${y0 + hH / 2 + 1.4}" text-anchor="middle" font-size="3.4" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="${textColor}">${safeText}</text>
   </g>`;
 }
 
@@ -421,16 +451,17 @@ export function compilePlaysheetPdfPages(
   header?: PlaysheetHeader | null,
   watermark?: Watermark | null,
   freeTier?: boolean,
+  footer?: { text: string; accentColor: string } | null,
 ): string[] {
   if (docs.length === 0) return [];
   const basePage = defaultFullSheetTemplate.page;
   const w = opts.orientation === "landscape" ? basePage.heightMm : basePage.widthMm;
   const h = opts.orientation === "landscape" ? basePage.widthMm : basePage.heightMm;
   const margin = 8;
-  const headerH = header ? PLAYSHEET_HEADER_H : 0;
-  const topOffset = header ? PLAYSHEET_HEADER_H + 4 : margin;
+  const topOffset = header ? margin + PLAYSHEET_HEADER_H + 4 : margin;
+  const bottomOffset = footer ? margin + PLAYSHEET_FOOTER_H + 4 : margin;
   const innerW = w - margin * 2;
-  const innerH = h - topOffset - margin;
+  const innerH = h - topOffset - bottomOffset;
   const cellW = innerW / opts.columns;
   const notesH = opts.showNotes ? opts.noteLines * 3.2 + 3 : 0;
   const heightScale = Math.max(0.3, Math.min(2, opts.cellHeightScale ?? 1));
@@ -468,6 +499,7 @@ export function compilePlaysheetPdfPages(
       rows,
       opts,
       header: header ?? null,
+      footer: footer ?? null,
       watermark: watermark ?? null,
       freeTier: freeTier ?? false,
     }),
@@ -487,11 +519,12 @@ function renderPlaysheetPage(
     rows: number;
     opts: PlaysheetOptions;
     header: PlaysheetHeader | null;
+    footer: { text: string; accentColor: string } | null;
     watermark: Watermark | null;
     freeTier: boolean;
   },
 ): string {
-  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header, watermark, freeTier } = layout;
+  const { w, h, margin, topOffset, cellW, cellH, notesH, opts, header, footer, watermark, freeTier } = layout;
   const pad = opts.cellPadding ?? 1;
   let body = "";
   for (let i = 0; i < docs.length; i++) {
@@ -501,7 +534,11 @@ function renderPlaysheetPage(
     const oy = topOffset + row * cellH;
     body += renderPlaysheetCell(docs[i]!, ox, oy, cellW, cellH, notesH, opts, pad, freeTier);
   }
-  const headerSvg = header ? renderPlaysheetHeaderBanner(w, header, margin) : "";
+  const innerW = w - margin * 2;
+  const headerSvg = header ? renderPlaysheetHeaderBanner(w, header, margin, innerW) : "";
+  const footerSvg = footer
+    ? renderPlaysheetFooterBanner(h, footer.accentColor, footer.text, margin, innerW)
+    : "";
   const freeWm = freeTier ? freeTierWatermarkSvg(w, h) : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">
@@ -510,6 +547,7 @@ function renderPlaysheetPage(
   ${freeWm}
   ${headerSvg}
   ${body}
+  ${footerSvg}
   ${watermarkSvg(w, h, watermark)}
   ${freeTier ? playsheetFooterSvg(w, h) : ""}
 </svg>`;
