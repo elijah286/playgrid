@@ -13,14 +13,17 @@
     "db:push": "supabase db push",
     "db:migrate": "node scripts/db-migrate.mjs",
     "seed:admin": "node scripts/seed-admin.mjs",
+    "cap:assets": "node scripts/build-app-assets.mjs && capacitor-assets generate",
     "cap:sync": "cap sync",
     "cap:ios": "cap open ios",
     "cap:android": "cap open android"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.3.1",
+    "@capacitor/geolocation": "^8.2.0",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.3.1",
     "@capacitor/share": "^8.0.1",
@@ -46,6 +49,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.3.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -56,6 +60,7 @@
     "eslint-config-next": "16.2.3",
     "jsdom": "^29.0.2",
     "playwright": "^1.59.1",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.4"

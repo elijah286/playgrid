@@ -299,6 +299,48 @@ export async function updateGameSessionMetaAction(
   return { ok: true as const };
 }
 
+/** Persist a coarse GPS reading captured at game-mode start. Best-effort:
+ *  the client fires this opportunistically and ignores failures. We only
+ *  write if the session is active and owned by the caller; coords are
+ *  clamped to valid ranges so a buggy/spoofed reading can't poison the row. */
+export async function setGameSessionVenueAction(
+  sessionId: string,
+  input: { latitude: number; longitude: number; accuracy: number | null },
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const lat = Number(input.latitude);
+  const lng = Number(input.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false as const, error: "Invalid coordinates." };
+  }
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return { ok: false as const, error: "Coordinates out of range." };
+  }
+  const accuracy =
+    input.accuracy != null && Number.isFinite(input.accuracy) && input.accuracy >= 0
+      ? input.accuracy
+      : null;
+
+  const { error } = await supabase
+    .from("game_sessions")
+    .update({
+      venue_lat: lat,
+      venue_lng: lng,
+      venue_accuracy_m: accuracy,
+      venue_captured_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .eq("coach_id", user.id);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 /** Caller sets the next-up play. */
 export async function setNextPlayAction(sessionId: string, playId: string | null) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };

@@ -57,6 +57,10 @@ import {
   type LiveParticipant,
   type LiveScoreEvent,
 } from "./live-session-types";
+import { hapticImpact, hapticSelection, hapticSuccess } from "@/lib/native/haptics";
+import { keepAwakeOff, keepAwakeOn } from "@/lib/native/keepAwake";
+import { captureCurrentLocation } from "@/lib/native/geolocation";
+import { setGameSessionVenueAction } from "@/app/actions/game-sessions";
 
 const HEARTBEAT_MS = 20_000;
 
@@ -141,6 +145,41 @@ export function GameModeClient({
     ? participants.find((p) => p.userId === session.callerUserId)
     : undefined;
   const callerName = callerParticipant?.displayName ?? "Another coach";
+
+  // Capture the venue once per session — first time we see a session id,
+  // ask the OS for a coarse location and persist it on the row. Silently
+  // skips if the user denies. Per-session cache via ref so resubscribes /
+  // realtime echoes don't re-prompt.
+  const venueCapturedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const id = session?.id;
+    if (!id) return;
+    if (venueCapturedFor.current === id) return;
+    venueCapturedFor.current = id;
+    (async () => {
+      const coords = await captureCurrentLocation();
+      if (!coords) return;
+      const res = await setGameSessionVenueAction(id, {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+      });
+      if (!res.ok) {
+        // Soft failure — venue is opportunistic, never block the game.
+        venueCapturedFor.current = null;
+      }
+    })();
+  }, [session?.id]);
+
+  // Keep the screen awake for the lifetime of the game-mode view. Native
+  // (Capacitor) uses the platform API; web falls back to Wake Lock where
+  // available. Sideline-friendly so the phone doesn't sleep mid-drive.
+  useEffect(() => {
+    void keepAwakeOn();
+    return () => {
+      void keepAwakeOff();
+    };
+  }, []);
 
   // --- Fullscreen (unchanged from pre-refactor) -----------------------------
   useEffect(() => {
@@ -826,6 +865,7 @@ export function GameModeClient({
   }
 
   function tapThumb(direction: ThumbDirection) {
+    void hapticSelection();
     const next: { thumb: "up" | "down" | null; tag: string | null } =
       currentOutcome?.thumb === direction
         ? { thumb: null, tag: null }
@@ -834,6 +874,7 @@ export function GameModeClient({
   }
 
   function tapTag(direction: ThumbDirection, tag: ThumbsUpTag | ThumbsDownTag) {
+    void hapticSelection();
     const next: { thumb: "up" | "down" | null; tag: string | null } = (() => {
       if (currentOutcome?.thumb !== direction) return { thumb: direction, tag };
       if (currentOutcome.tag === tag) return { thumb: direction, tag: null };
@@ -860,6 +901,10 @@ export function GameModeClient({
     if (!session) return;
     const safeDelta = toFiniteInt(delta);
     if (safeDelta == null || safeDelta === 0) return;
+    // Reward our own scores with a richer haptic; opponent scores get a
+    // lighter tap so they're acknowledged but don't feel celebratory.
+    if (side === "us") void hapticSuccess();
+    else void hapticImpact("light");
     const currentCallId =
       currentCall && currentCall.playId === session.currentPlayId
         ? currentCall.id

@@ -47,5 +47,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>xogridmaker tags your game sessions with the field you played at so you can review them later. Sharing your location is optional.</string>
 </dict>
 </plist>
