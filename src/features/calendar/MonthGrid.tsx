@@ -28,7 +28,7 @@ export function MonthGrid({
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEventRow[]>();
     for (const e of events) {
-      const key = ymd(new Date(e.startsAt));
+      const key = e.occurrenceDate || ymd(new Date(e.startsAt));
       const list = map.get(key) ?? [];
       list.push(e);
       map.set(key, list);

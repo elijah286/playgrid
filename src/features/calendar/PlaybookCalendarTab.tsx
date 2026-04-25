@@ -92,7 +92,9 @@ export function PlaybookCalendarTab({
   const baseList = mode === "upcoming" ? partitioned.upcoming : partitioned.past;
   const visibleEvents = useMemo(() => {
     if (view === "month" && selectedDayKey) {
-      return events.filter((e) => ymd(new Date(e.startsAt)) === selectedDayKey);
+      return events.filter(
+        (e) => (e.occurrenceDate || ymd(new Date(e.startsAt))) === selectedDayKey,
+      );
     }
     return baseList;
   }, [view, selectedDayKey, events, baseList]);
@@ -232,7 +234,7 @@ export function PlaybookCalendarTab({
       <ul className="space-y-3">
         {visibleEvents.map((e) => (
           <EventCard
-            key={e.id}
+            key={`${e.id}:${e.occurrenceDate}`}
             event={e}
             viewerIsCoach={viewerIsCoach}
             isPast={mode === "past"}

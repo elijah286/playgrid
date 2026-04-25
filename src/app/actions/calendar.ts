@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { sendCalendarEventEmails } from "@/lib/calendar/notifications";
+import { expandRecurrence } from "@/lib/calendar/recurrence";
 import {
   eventInputSchema,
   updateEventInputSchema,
@@ -316,14 +317,23 @@ export async function setRsvpAction(
   if (!(await isMemberOf(ev.playbook_id))) {
     return { ok: false, error: "You don't have access to this event." };
   }
-  // For non-recurring events: lock at starts_at. (Recurring events check the
-  // occurrence; we trust the client to send the right occurrence_date and
-  // simply lock against now when the date is today or earlier — full
-  // per-occurrence start-time gating lives with the recurrence work.)
-  if (!ev.recurrence_rule) {
-    if (new Date(ev.starts_at).getTime() <= Date.now()) {
-      return { ok: false, error: "RSVPs are locked once the event has started." };
-    }
+  // Lock RSVP once the specific occurrence has started. For non-recurring
+  // events the occurrence date matches starts_at; for recurring events we
+  // pin the occurrence's start to (date @ event's time-of-day in UTC).
+  const seriesStart = new Date(ev.starts_at);
+  const [y, m, d] = occurrenceDate.split("-").map(Number);
+  const occStart = new Date(
+    Date.UTC(
+      y,
+      m - 1,
+      d,
+      seriesStart.getUTCHours(),
+      seriesStart.getUTCMinutes(),
+      seriesStart.getUTCSeconds(),
+    ),
+  );
+  if (occStart.getTime() <= Date.now()) {
+    return { ok: false, error: "RSVPs are locked once the event has started." };
   }
 
   const supabase = await createClient();
@@ -511,6 +521,8 @@ export type CalendarEventRow = {
   recurrenceRule: string | null;
   reminderOffsetsMinutes: number[];
   deletedAt: string | null;
+  /** YYYY-MM-DD partition key used by per-occurrence RSVPs. */
+  occurrenceDate: string;
   rsvpCounts: { yes: number; no: number; maybe: number };
   myRsvp: { status: "yes" | "no" | "maybe"; note: string | null } | null;
 };
@@ -528,7 +540,7 @@ export async function listEventsForPlaybookAction(
   const { data: events, error } = await supabase
     .from("playbook_events")
     .select(
-      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, deleted_at",
+      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, recurrence_exdate, deleted_at",
     )
     .eq("playbook_id", playbookId)
     .is("deleted_at", null)
@@ -543,7 +555,7 @@ export async function listEventsForPlaybookAction(
   const [rsvpsRes, remindersRes] = await Promise.all([
     supabase
       .from("playbook_event_rsvps")
-      .select("event_id, user_id, status, note")
+      .select("event_id, user_id, occurrence_date, status, note")
       .in("event_id", eventIds),
     supabase
       .from("playbook_event_reminders")
@@ -555,6 +567,7 @@ export async function listEventsForPlaybookAction(
   type RsvpRow = {
     event_id: string;
     user_id: string;
+    occurrence_date: string;
     status: "yes" | "no" | "maybe";
     note: string | null;
   };
@@ -581,18 +594,18 @@ export async function listEventsForPlaybookAction(
     score_us: number | null;
     score_them: number | null;
     recurrence_rule: string | null;
+    recurrence_exdate: string[] | null;
     deleted_at: string | null;
   };
 
-  const rows: CalendarEventRow[] = (events as EventRow[]).map((e) => {
-    const myRsvp = rsvps.find(
-      (r) => r.event_id === e.id && r.user_id === gate.userId,
-    );
-    const counts = { yes: 0, no: 0, maybe: 0 };
-    for (const r of rsvps) {
-      if (r.event_id !== e.id) continue;
-      counts[r.status] += 1;
-    }
+  // Expand recurring events to one row per occurrence in a 6-month window
+  // (60 days back so "Past" still shows recent occurrences, 6 months forward
+  // for upcoming). Non-recurring events return one row.
+  const windowStart = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+  const windowEnd = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
+
+  const rows: CalendarEventRow[] = [];
+  for (const e of events as EventRow[]) {
     const startMs = new Date(e.starts_at).getTime();
     const reminderOffsetsMinutes = reminders
       .filter((r) => r.event_id === e.id)
@@ -600,35 +613,60 @@ export async function listEventsForPlaybookAction(
         Math.max(0, Math.round((startMs - new Date(r.send_at).getTime()) / 60000)),
       )
       .sort((a, b) => b - a);
-    return {
-      id: e.id,
-      playbookId: e.playbook_id,
-      type: e.type,
-      title: e.title,
+
+    const occurrences = expandRecurrence({
       startsAt: e.starts_at,
-      durationMinutes: e.duration_minutes,
-      arriveMinutesBefore: e.arrive_minutes_before,
-      timezone: e.timezone,
-      location: {
-        name: e.location_name,
-        address: e.location_address,
-        lat: e.location_lat,
-        lng: e.location_lng,
-      },
-      notes: e.notes,
-      opponent: e.opponent,
-      homeAway: e.home_away,
-      scoreUs: e.score_us,
-      scoreThem: e.score_them,
       recurrenceRule: e.recurrence_rule,
-      reminderOffsetsMinutes,
-      deletedAt: e.deleted_at,
-      rsvpCounts: counts,
-      myRsvp: myRsvp
-        ? { status: myRsvp.status, note: myRsvp.note }
-        : null,
-    };
-  });
+      exdates: e.recurrence_exdate ?? [],
+      windowStart,
+      windowEnd,
+    });
+
+    for (const occ of occurrences) {
+      const myRsvp = rsvps.find(
+        (r) =>
+          r.event_id === e.id &&
+          r.user_id === gate.userId &&
+          r.occurrence_date === occ.occurrenceDate,
+      );
+      const counts = { yes: 0, no: 0, maybe: 0 };
+      for (const r of rsvps) {
+        if (r.event_id !== e.id) continue;
+        if (r.occurrence_date !== occ.occurrenceDate) continue;
+        counts[r.status] += 1;
+      }
+      rows.push({
+        id: e.id,
+        playbookId: e.playbook_id,
+        type: e.type,
+        title: e.title,
+        startsAt: occ.startsAt,
+        durationMinutes: e.duration_minutes,
+        arriveMinutesBefore: e.arrive_minutes_before,
+        timezone: e.timezone,
+        location: {
+          name: e.location_name,
+          address: e.location_address,
+          lat: e.location_lat,
+          lng: e.location_lng,
+        },
+        notes: e.notes,
+        opponent: e.opponent,
+        homeAway: e.home_away,
+        scoreUs: e.score_us,
+        scoreThem: e.score_them,
+        recurrenceRule: e.recurrence_rule,
+        reminderOffsetsMinutes,
+        deletedAt: e.deleted_at,
+        occurrenceDate: occ.occurrenceDate,
+        rsvpCounts: counts,
+        myRsvp: myRsvp ? { status: myRsvp.status, note: myRsvp.note } : null,
+      });
+    }
+  }
+  rows.sort(
+    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+  );
 
   return { ok: true, events: rows };
 }
@@ -652,17 +690,14 @@ export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
   const playbookIds = (memberships ?? []).map((m) => m.playbook_id as string);
   if (playbookIds.length === 0) return { ok: true, events: [] };
 
-  const nowIso = new Date().toISOString();
   const { data: events, error } = await supabase
     .from("playbook_events")
     .select(
-      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, deleted_at",
+      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, recurrence_exdate, deleted_at",
     )
     .in("playbook_id", playbookIds)
     .is("deleted_at", null)
-    .gte("starts_at", nowIso)
-    .order("starts_at", { ascending: true })
-    .limit(50);
+    .order("starts_at", { ascending: true });
   if (error) return { ok: false, error: error.message };
 
   const eventIds = (events ?? []).map((e) => e.id as string);
@@ -670,7 +705,7 @@ export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
     eventIds.length > 0
       ? supabase
           .from("playbook_event_rsvps")
-          .select("event_id, user_id, status, note")
+          .select("event_id, user_id, occurrence_date, status, note")
           .in("event_id", eventIds)
       : Promise.resolve({ data: [] as unknown[] }),
     supabase
@@ -682,6 +717,7 @@ export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
   type RsvpRow = {
     event_id: string;
     user_id: string;
+    occurrence_date: string;
     status: "yes" | "no" | "maybe";
     note: string | null;
   };
@@ -709,50 +745,71 @@ export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
     score_us: number | null;
     score_them: number | null;
     recurrence_rule: string | null;
+    recurrence_exdate: string[] | null;
     deleted_at: string | null;
   };
 
-  const rows: CrossPlaybookEventRow[] = (events as EventRow[]).map((e) => {
-    const myRsvp = rsvps.find(
-      (r) => r.event_id === e.id && r.user_id === gate.userId,
-    );
-    const counts = { yes: 0, no: 0, maybe: 0 };
-    for (const r of rsvps) {
-      if (r.event_id !== e.id) continue;
-      counts[r.status] += 1;
-    }
-    const pb = pbById.get(e.playbook_id);
-    return {
-      id: e.id,
-      playbookId: e.playbook_id,
-      type: e.type,
-      title: e.title,
+  const windowStart = new Date();
+  const windowEnd = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
+  const rows: CrossPlaybookEventRow[] = [];
+  for (const e of events as EventRow[]) {
+    const occurrences = expandRecurrence({
       startsAt: e.starts_at,
-      durationMinutes: e.duration_minutes,
-      arriveMinutesBefore: e.arrive_minutes_before,
-      timezone: e.timezone,
-      location: {
-        name: e.location_name,
-        address: e.location_address,
-        lat: e.location_lat,
-        lng: e.location_lng,
-      },
-      notes: e.notes,
-      opponent: e.opponent,
-      homeAway: e.home_away,
-      scoreUs: e.score_us,
-      scoreThem: e.score_them,
       recurrenceRule: e.recurrence_rule,
-      reminderOffsetsMinutes: [],
-      deletedAt: e.deleted_at,
-      rsvpCounts: counts,
-      myRsvp: myRsvp ? { status: myRsvp.status, note: myRsvp.note } : null,
-      playbookName: pb?.name ?? "Playbook",
-      playbookColor: pb?.color ?? null,
-    };
-  });
+      exdates: e.recurrence_exdate ?? [],
+      windowStart,
+      windowEnd,
+    });
+    const pb = pbById.get(e.playbook_id);
+    for (const occ of occurrences) {
+      const myRsvp = rsvps.find(
+        (r) =>
+          r.event_id === e.id &&
+          r.user_id === gate.userId &&
+          r.occurrence_date === occ.occurrenceDate,
+      );
+      const counts = { yes: 0, no: 0, maybe: 0 };
+      for (const r of rsvps) {
+        if (r.event_id !== e.id) continue;
+        if (r.occurrence_date !== occ.occurrenceDate) continue;
+        counts[r.status] += 1;
+      }
+      rows.push({
+        id: e.id,
+        playbookId: e.playbook_id,
+        type: e.type,
+        title: e.title,
+        startsAt: occ.startsAt,
+        durationMinutes: e.duration_minutes,
+        arriveMinutesBefore: e.arrive_minutes_before,
+        timezone: e.timezone,
+        location: {
+          name: e.location_name,
+          address: e.location_address,
+          lat: e.location_lat,
+          lng: e.location_lng,
+        },
+        notes: e.notes,
+        opponent: e.opponent,
+        homeAway: e.home_away,
+        scoreUs: e.score_us,
+        scoreThem: e.score_them,
+        recurrenceRule: e.recurrence_rule,
+        reminderOffsetsMinutes: [],
+        deletedAt: e.deleted_at,
+        occurrenceDate: occ.occurrenceDate,
+        rsvpCounts: counts,
+        myRsvp: myRsvp ? { status: myRsvp.status, note: myRsvp.note } : null,
+        playbookName: pb?.name ?? "Playbook",
+        playbookColor: pb?.color ?? null,
+      });
+    }
+  }
+  rows.sort(
+    (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+  );
 
-  return { ok: true, events: rows };
+  return { ok: true, events: rows.slice(0, 50) };
 }
 
 export type CalendarAttendeeRow = {
