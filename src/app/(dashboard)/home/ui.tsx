@@ -61,6 +61,7 @@ import {
   CustomizeTeamDialog,
   InviteTeamMemberDialog,
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
+import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -973,11 +974,14 @@ export function DashboardClient({
   data,
   hideAnimation = false,
   isAdmin = false,
+  teamCalendarAvailable = false,
 }: {
   data: DashboardSummary;
   hideAnimation?: boolean;
   isAdmin?: boolean;
+  teamCalendarAvailable?: boolean;
 }) {
+  const [homeTab, setHomeTab] = useState<"playbooks" | "calendar">("playbooks");
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -1264,8 +1268,23 @@ export function DashboardClient({
     return items;
   }
 
+  if (teamCalendarAvailable && homeTab === "calendar") {
+    return (
+      <div className="space-y-6">
+        <HomeTabNav
+          tab={homeTab}
+          onChange={setHomeTab}
+        />
+        <HomeCalendarTab />
+      </div>
+    );
+  }
+
   return (
     <div className={`space-y-8 ${pending ? "cursor-wait" : ""}`}>
+      {teamCalendarAvailable && (
+        <HomeTabNav tab={homeTab} onChange={setHomeTab} />
+      )}
       {pending && (
         <div
           className="pointer-events-none fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-elevated"
@@ -1858,3 +1877,34 @@ function DuplicatePlaybookDialog({
   );
 }
 
+
+function HomeTabNav({
+  tab,
+  onChange,
+}: {
+  tab: "playbooks" | "calendar";
+  onChange: (t: "playbooks" | "calendar") => void;
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
+      {(["playbooks", "calendar"] as const).map((t) => {
+        const active = tab === t;
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onChange(t)}
+            className={
+              "px-4 py-1.5 text-sm font-medium transition-colors " +
+              (active
+                ? "bg-primary text-primary-foreground"
+                : "bg-surface text-foreground hover:bg-surface-hover")
+            }
+          >
+            {t === "playbooks" ? "Playbooks" : "Calendar"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

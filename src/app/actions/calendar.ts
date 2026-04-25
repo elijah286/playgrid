@@ -633,6 +633,128 @@ export async function listEventsForPlaybookAction(
   return { ok: true, events: rows };
 }
 
+export type CrossPlaybookEventRow = CalendarEventRow & {
+  playbookName: string;
+  playbookColor: string | null;
+};
+
+export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
+  Ok<{ events: CrossPlaybookEventRow[] }> | Err
+> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+
+  const supabase = await createClient();
+  const { data: memberships } = await supabase
+    .from("playbook_members")
+    .select("playbook_id")
+    .eq("user_id", gate.userId);
+  const playbookIds = (memberships ?? []).map((m) => m.playbook_id as string);
+  if (playbookIds.length === 0) return { ok: true, events: [] };
+
+  const nowIso = new Date().toISOString();
+  const { data: events, error } = await supabase
+    .from("playbook_events")
+    .select(
+      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, deleted_at",
+    )
+    .in("playbook_id", playbookIds)
+    .is("deleted_at", null)
+    .gte("starts_at", nowIso)
+    .order("starts_at", { ascending: true })
+    .limit(50);
+  if (error) return { ok: false, error: error.message };
+
+  const eventIds = (events ?? []).map((e) => e.id as string);
+  const [rsvpsRes, pbRes] = await Promise.all([
+    eventIds.length > 0
+      ? supabase
+          .from("playbook_event_rsvps")
+          .select("event_id, user_id, status, note")
+          .in("event_id", eventIds)
+      : Promise.resolve({ data: [] as unknown[] }),
+    supabase
+      .from("playbooks")
+      .select("id, name, color")
+      .in("id", playbookIds),
+  ]);
+
+  type RsvpRow = {
+    event_id: string;
+    user_id: string;
+    status: "yes" | "no" | "maybe";
+    note: string | null;
+  };
+  type PbRow = { id: string; name: string; color: string | null };
+  const rsvps = (rsvpsRes.data ?? []) as RsvpRow[];
+  const pbs = (pbRes.data ?? []) as PbRow[];
+  const pbById = new Map(pbs.map((p) => [p.id, p]));
+
+  type EventRow = {
+    id: string;
+    playbook_id: string;
+    type: "practice" | "game" | "scrimmage";
+    title: string;
+    starts_at: string;
+    duration_minutes: number;
+    arrive_minutes_before: number;
+    timezone: string;
+    location_name: string | null;
+    location_address: string | null;
+    location_lat: number | null;
+    location_lng: number | null;
+    notes: string | null;
+    opponent: string | null;
+    home_away: "home" | "away" | "neutral" | null;
+    score_us: number | null;
+    score_them: number | null;
+    recurrence_rule: string | null;
+    deleted_at: string | null;
+  };
+
+  const rows: CrossPlaybookEventRow[] = (events as EventRow[]).map((e) => {
+    const myRsvp = rsvps.find(
+      (r) => r.event_id === e.id && r.user_id === gate.userId,
+    );
+    const counts = { yes: 0, no: 0, maybe: 0 };
+    for (const r of rsvps) {
+      if (r.event_id !== e.id) continue;
+      counts[r.status] += 1;
+    }
+    const pb = pbById.get(e.playbook_id);
+    return {
+      id: e.id,
+      playbookId: e.playbook_id,
+      type: e.type,
+      title: e.title,
+      startsAt: e.starts_at,
+      durationMinutes: e.duration_minutes,
+      arriveMinutesBefore: e.arrive_minutes_before,
+      timezone: e.timezone,
+      location: {
+        name: e.location_name,
+        address: e.location_address,
+        lat: e.location_lat,
+        lng: e.location_lng,
+      },
+      notes: e.notes,
+      opponent: e.opponent,
+      homeAway: e.home_away,
+      scoreUs: e.score_us,
+      scoreThem: e.score_them,
+      recurrenceRule: e.recurrence_rule,
+      reminderOffsetsMinutes: [],
+      deletedAt: e.deleted_at,
+      rsvpCounts: counts,
+      myRsvp: myRsvp ? { status: myRsvp.status, note: myRsvp.note } : null,
+      playbookName: pb?.name ?? "Playbook",
+      playbookColor: pb?.color ?? null,
+    };
+  });
+
+  return { ok: true, events: rows };
+}
+
 export type CalendarAttendeeRow = {
   userId: string;
   fullName: string | null;

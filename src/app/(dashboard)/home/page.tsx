@@ -2,6 +2,10 @@ import { getDashboardSummaryAction } from "@/app/actions/plays";
 import { listPendingApprovalsForOwnerAction } from "@/app/actions/playbook-roster";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
+import {
+  getBetaFeatures,
+  isBetaFeatureAvailable,
+} from "@/lib/site/beta-features-config";
 import { PendingApprovalsCard } from "@/features/dashboard/PendingApprovalsCard";
 import { DashboardClient } from "./ui";
 
@@ -9,13 +13,19 @@ type Props = { searchParams: Promise<{ error?: string }> };
 
 export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery } = await searchParams;
-  const [res, approvals, hideAnimation, profileRes] = await Promise.all([
-    getDashboardSummaryAction(),
-    listPendingApprovalsForOwnerAction(),
-    getHideLobbyAnimation(),
-    getCurrentUserProfile(),
-  ]);
+  const [res, approvals, hideAnimation, profileRes, betaFeatures] =
+    await Promise.all([
+      getDashboardSummaryAction(),
+      listPendingApprovalsForOwnerAction(),
+      getHideLobbyAnimation(),
+      getCurrentUserProfile(),
+      getBetaFeatures(),
+    ]);
   const isAdmin = profileRes.profile?.role === "admin";
+  const teamCalendarAvailable = isBetaFeatureAvailable(
+    betaFeatures.team_calendar,
+    { isAdmin, isEntitled: true },
+  );
 
   return (
     <div className="space-y-8">
@@ -35,6 +45,7 @@ export default async function HomePage({ searchParams }: Props) {
           data={res.data}
           hideAnimation={hideAnimation}
           isAdmin={isAdmin}
+          teamCalendarAvailable={teamCalendarAvailable}
         />
       )}
     </div>
