@@ -1,8 +1,12 @@
 import * as Sentry from "@sentry/nextjs";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
-if (dsn) {
+// Skip Sentry inside the Capacitor native shell — App Store reviewers flag
+// undisclosed third-party SDKs, and we'd rather not have to enumerate Sentry
+// in the iOS privacy nutrition labels.
+if (dsn && !isNativeApp()) {
   Sentry.init({
     dsn,
     tracesSampleRate: 0.1,

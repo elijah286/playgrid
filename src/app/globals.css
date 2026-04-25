@@ -179,8 +179,22 @@ body.native-app {
 }
 body.native-app [data-site-footer],
 body.native-app [data-marketing-only],
-body.native-app [data-pwa-install] {
+body.native-app [data-pwa-install],
+/* Anything that takes payment, links out to billing, or upgrades a plan must
+ * be hidden inside the native app — Apple's Guideline 3.1.1 forbids steering
+ * users to external purchase flows for digital subscriptions. */
+body.native-app [data-web-only] {
   display: none !important;
+}
+
+/* Inverse: content that should ONLY appear inside the native app shell
+ * (e.g. "manage your plan on the web" copy that replaces a hidden Stripe
+ * checkout button). Hidden on the web by default; revealed on native. */
+[data-native-only] {
+  display: none !important;
+}
+body.native-app [data-native-only] {
+  display: revert !important;
 }
 
 /* Game-mode landscape: let the field fit the full available area while

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { recordTimeOnSiteAction } from "@/app/actions/time-on-site";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 
 const TIME_ON_SITE_KEY = "playgrid:time-on-site-seconds";
 const TICK_SEC = 15;
@@ -18,6 +19,9 @@ export function TimeOnSiteTracker() {
   const unflushedRef = useRef(0);
 
   useEffect(() => {
+    // Skip telemetry inside the Capacitor native shell — App Store privacy
+    // labels would require disclosing this otherwise.
+    if (isNativeApp()) return;
     function readLocal(): number {
       try {
         const raw = localStorage.getItem(TIME_ON_SITE_KEY);

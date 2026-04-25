@@ -70,6 +70,7 @@ export function GameModeUpgradeDialog({
         <div className="mt-5 flex flex-col gap-2">
           <Link
             href="/pricing?upgrade=game-mode"
+            data-web-only
             className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             See Team Coach plan

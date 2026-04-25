@@ -69,12 +69,28 @@ export default async function PricingPage() {
           Simple plans that scale with how you use xogridmaker. Cancel anytime.
         </p>
       </div>
-      <PricingClient
-        entitlement={entitlement}
-        showCoachAi={coachAiEnabled}
-        isAuthed={isAuthed}
-        freeMaxPlays={freeMaxPlays}
-      />
+      {/* In-app (Capacitor): show a static notice instead of the Stripe-driven
+          PricingClient. Apple Guideline 3.1.1 forbids in-app links to external
+          digital-subscription purchases, so we don't surface checkout buttons,
+          Stripe redirects, or pricing details from the iOS/Android shell. */}
+      <div data-native-only>
+        <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-foreground">
+          <p className="font-semibold">Manage your plan on the web</p>
+          <p className="mt-2 text-muted">
+            To upgrade, change, or cancel your xogridmaker subscription, sign in at
+            xogridmaker.com on a desktop or mobile browser. The free Solo Coach plan
+            is always available — no upgrade required.
+          </p>
+        </div>
+      </div>
+      <div data-web-only>
+        <PricingClient
+          entitlement={entitlement}
+          showCoachAi={coachAiEnabled}
+          isAuthed={isAuthed}
+          freeMaxPlays={freeMaxPlays}
+        />
+      </div>
     </div>
   );
 }

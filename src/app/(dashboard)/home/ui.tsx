@@ -312,6 +312,7 @@ function LockedOverlay() {
       </p>
       <Link
         href="/pricing"
+        data-web-only
         className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-neutral-100"
       >
         Upgrade to unlock

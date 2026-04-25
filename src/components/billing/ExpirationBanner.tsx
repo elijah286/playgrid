@@ -30,7 +30,7 @@ export function ExpirationBanner({ notice }: { notice: ExpirationNotice }) {
         : `Your ${tierLabel} plan is set to cancel on ${dateLabel} (${notice.daysLeft} day${notice.daysLeft === 1 ? "" : "s"}). You'll lose access to paid features.`;
 
   return (
-    <div className="border-b border-red-700 bg-red-600 text-white">
+    <div data-web-only className="border-b border-red-700 bg-red-600 text-white">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-6 py-2 text-sm">
         <AlertTriangle className="size-4 shrink-0" />
         <p className="flex-1 min-w-[200px] font-medium">{message}</p>

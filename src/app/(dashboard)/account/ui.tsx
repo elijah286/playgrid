@@ -235,6 +235,7 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
               type="button"
               onClick={openPortal}
               disabled={pending}
+              data-web-only
               className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-surface disabled:opacity-50"
             >
               Manage billing
@@ -242,6 +243,7 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
           ) : (
             <Link
               href="/pricing"
+              data-web-only
               className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
             >
               {tier === "free" ? "See pricing" : "Change plan"}

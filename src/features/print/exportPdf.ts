@@ -2,6 +2,7 @@
 
 import { jsPDF } from "jspdf";
 import { svg2pdf } from "svg2pdf.js";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 
 /** svg2pdf resolves font-family against jsPDF's built-in PDF fonts, which are
  *  only Helvetica/Times/Courier. Any other family (Inter, system-ui) falls
@@ -125,6 +126,28 @@ export async function openSvgsInPrintTab(svgPages: string[]) {
       await svg2pdf(svg, pdf, { x: 0, y: 0, width, height });
     }
   }
+  // On native (Capacitor) we can't pop a new tab — that bounces out to Safari
+  // and Apple flags it as a non-native experience. Hand the PDF to the OS
+  // share sheet, which exposes Print, Save to Files, AirDrop, Mail, etc.
+  if (isNativeApp()) {
+    const blob = pdf!.output("blob");
+    const file = new File([blob], "playbook.pdf", { type: "application/pdf" });
+    const nav = navigator as Navigator & {
+      canShare?: (data: { files?: File[] }) => boolean;
+      share?: (data: { files?: File[]; title?: string }) => Promise<void>;
+    };
+    try {
+      if (nav.canShare?.({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file], title: "Playbook" });
+        return;
+      }
+    } catch {
+      // User canceled or share unavailable — fall through to download.
+    }
+    pdf!.save("playbook.pdf");
+    return;
+  }
+
   const blobUrl = pdf!.output("bloburl");
   const win = window.open(blobUrl as unknown as string, "_blank");
   if (win) {

@@ -182,6 +182,7 @@ function LockedCard() {
           </p>
           <Link
             href="/pricing?upgrade=game-mode"
+            data-web-only
             className="mt-3 inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Upgrade to Team Coach

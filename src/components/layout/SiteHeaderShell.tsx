@@ -58,6 +58,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
             {showPricingLink && (
               <Link
                 href="/pricing"
+                data-web-only
                 className="text-sm text-muted hover:text-foreground transition-colors"
               >
                 Pricing

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { recordPageViewAction } from "@/app/actions/page-views";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 
 const SESSION_KEY = "playgrid:session-id";
 const FIRST_EVENT_KEY = "playgrid:session-first-sent";
@@ -36,6 +37,9 @@ export default function PageViewTracker() {
 
   useEffect(() => {
     if (!pathname) return;
+    // Skip telemetry inside the Capacitor native shell to keep the iOS/Android
+    // builds free of undisclosed analytics for App Store review.
+    if (isNativeApp()) return;
     if (lastSentRef.current === pathname) return;
     lastSentRef.current = pathname;
 

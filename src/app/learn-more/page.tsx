@@ -257,6 +257,7 @@ function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
               </div>
               <Link
                 href="/pricing"
+                data-web-only
                 className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-surface-raised hover:opacity-90"
               >
                 See pricing
