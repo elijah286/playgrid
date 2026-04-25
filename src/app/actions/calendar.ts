@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -256,6 +257,208 @@ export async function deleteEventAction(
   }
 
   revalidatePath(`/playbooks/${existing.playbook_id}`);
+  return { ok: true };
+}
+
+// ─── Recurrence-scoped edit / delete ──────────────────────────────────────
+//
+// "this"      → add this occurrence's datetime to the parent's EXDATE list.
+//               For an edit, also INSERT an override event row carrying the
+//               new payload, with recurrence_parent_id pointing at the parent.
+// "following" → rewrite the parent's RRULE to end just before this
+//               occurrence (UNTIL=occStart-1s). For an edit, INSERT a new
+//               recurring event starting at the occurrence with the new
+//               payload + its own RRULE (defaults to the parent's RRULE
+//               when the user didn't change it).
+// "all"       → straight-through to update/delete the parent row.
+
+function occurrenceStartIso(seriesStartIso: string, occurrenceDate: string): string {
+  const series = new Date(seriesStartIso);
+  const [y, m, d] = occurrenceDate.split("-").map(Number);
+  const occ = new Date(
+    Date.UTC(
+      y,
+      m - 1,
+      d,
+      series.getUTCHours(),
+      series.getUTCMinutes(),
+      series.getUTCSeconds(),
+    ),
+  );
+  return occ.toISOString();
+}
+
+function rruleWithUntil(rule: string, untilIso: string): string {
+  // RRULE UNTIL must be a UTC instant in the form 19980119T070000Z
+  const u = new Date(untilIso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp =
+    `${u.getUTCFullYear()}${pad(u.getUTCMonth() + 1)}${pad(u.getUTCDate())}` +
+    `T${pad(u.getUTCHours())}${pad(u.getUTCMinutes())}${pad(u.getUTCSeconds())}Z`;
+  // Strip any existing UNTIL or COUNT — they can't coexist with our new UNTIL.
+  const parts = rule
+    .split(";")
+    .filter(
+      (p) => !p.toUpperCase().startsWith("UNTIL=") && !p.toUpperCase().startsWith("COUNT="),
+    );
+  parts.push(`UNTIL=${stamp}`);
+  return parts.join(";");
+}
+
+const recurrenceScopeSchema = z.enum(["this", "following", "all"]);
+
+const occurrenceUpdateInputSchema = updateEventInputSchema.extend({
+  occurrenceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  scope: recurrenceScopeSchema,
+});
+
+export async function updateEventOccurrenceAction(
+  eventId: string,
+  rawInput: unknown,
+): Promise<Ok | Err> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+  const parsed = occurrenceUpdateInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { scope, occurrenceDate, notifyAttendees, ...inputCore } = parsed.data;
+  const input = { ...inputCore, notifyAttendees };
+
+  if (scope === "all") {
+    return updateEventAction(eventId, input);
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: parent } = await admin
+    .from("playbook_events")
+    .select(
+      "playbook_id, starts_at, recurrence_rule, recurrence_exdate",
+    )
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!parent) return { ok: false, error: "Event not found." };
+  if (!parent.recurrence_rule) {
+    // Not actually recurring — fall back to a normal update.
+    return updateEventAction(eventId, input);
+  }
+  if (!(await isCoachOf(parent.playbook_id))) {
+    return { ok: false, error: "Only coaches can edit events." };
+  }
+
+  const occIso = occurrenceStartIso(parent.starts_at, occurrenceDate);
+
+  if (scope === "this") {
+    const exdates = [...((parent.recurrence_exdate as string[] | null) ?? []), occIso];
+    const { error: pErr } = await admin
+      .from("playbook_events")
+      .update({ recurrence_exdate: exdates })
+      .eq("id", eventId);
+    if (pErr) return { ok: false, error: pErr.message };
+
+    const overrideRow = {
+      ...eventRowToInput({ ...input, recurrenceRule: null }, parent.playbook_id, gate.userId),
+      recurrence_parent_id: eventId,
+    };
+    const { error: insErr } = await admin
+      .from("playbook_events")
+      .insert(overrideRow);
+    if (insErr) return { ok: false, error: insErr.message };
+  } else {
+    // "following" — bound the original series and create a new one starting
+    // at this occurrence with the new payload + its own recurrence.
+    const newParentRule = rruleWithUntil(
+      parent.recurrence_rule as string,
+      new Date(new Date(occIso).getTime() - 1000).toISOString(),
+    );
+    const { error: pErr } = await admin
+      .from("playbook_events")
+      .update({ recurrence_rule: newParentRule })
+      .eq("id", eventId);
+    if (pErr) return { ok: false, error: pErr.message };
+
+    const followingRule =
+      input.recurrenceRule ?? (parent.recurrence_rule as string);
+    const { error: insErr } = await admin
+      .from("playbook_events")
+      .insert(
+        eventRowToInput(
+          { ...input, startsAt: occIso, recurrenceRule: followingRule },
+          parent.playbook_id,
+          gate.userId,
+        ),
+      );
+    if (insErr) return { ok: false, error: insErr.message };
+  }
+
+  if (notifyAttendees) {
+    await fanoutNotifications(admin, eventId, parent.playbook_id, "edited", gate.userId);
+  }
+  revalidatePath(`/playbooks/${parent.playbook_id}`);
+  return { ok: true };
+}
+
+const occurrenceDeleteInputSchema = z.object({
+  occurrenceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  scope: recurrenceScopeSchema,
+  notifyAttendees: z.boolean(),
+});
+
+export async function deleteEventOccurrenceAction(
+  eventId: string,
+  rawInput: unknown,
+): Promise<Ok | Err> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+  const parsed = occurrenceDeleteInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { scope, occurrenceDate, notifyAttendees } = parsed.data;
+
+  if (scope === "all") {
+    return deleteEventAction(eventId, notifyAttendees);
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: parent } = await admin
+    .from("playbook_events")
+    .select("playbook_id, starts_at, recurrence_rule, recurrence_exdate")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!parent) return { ok: false, error: "Event not found." };
+  if (!parent.recurrence_rule) {
+    return deleteEventAction(eventId, notifyAttendees);
+  }
+  if (!(await isCoachOf(parent.playbook_id))) {
+    return { ok: false, error: "Only coaches can delete events." };
+  }
+
+  const occIso = occurrenceStartIso(parent.starts_at, occurrenceDate);
+
+  if (scope === "this") {
+    const exdates = [...((parent.recurrence_exdate as string[] | null) ?? []), occIso];
+    const { error } = await admin
+      .from("playbook_events")
+      .update({ recurrence_exdate: exdates })
+      .eq("id", eventId);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const newRule = rruleWithUntil(
+      parent.recurrence_rule as string,
+      new Date(new Date(occIso).getTime() - 1000).toISOString(),
+    );
+    const { error } = await admin
+      .from("playbook_events")
+      .update({ recurrence_rule: newRule })
+      .eq("id", eventId);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  if (notifyAttendees) {
+    await fanoutNotifications(admin, eventId, parent.playbook_id, "cancelled", gate.userId);
+  }
+  revalidatePath(`/playbooks/${parent.playbook_id}`);
   return { ok: true };
 }
 

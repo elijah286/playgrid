@@ -129,6 +129,7 @@ export function PlaybookCalendarTab({
       homeAway: e.homeAway,
       recurrenceRule: e.recurrenceRule,
       reminderOffsetsMinutes: e.reminderOffsetsMinutes,
+      occurrenceDate: e.occurrenceDate,
     });
     setSheetOpen(true);
   }

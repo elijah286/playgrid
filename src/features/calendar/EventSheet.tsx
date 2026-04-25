@@ -6,7 +6,9 @@ import { Button, Input, useToast } from "@/components/ui";
 import {
   createEventAction,
   deleteEventAction,
+  deleteEventOccurrenceAction,
   updateEventAction,
+  updateEventOccurrenceAction,
 } from "@/app/actions/calendar";
 import {
   PlaceAutocomplete,
@@ -51,7 +53,12 @@ export type EventSheetInitial = {
   homeAway: "home" | "away" | "neutral" | null;
   recurrenceRule: string | null;
   reminderOffsetsMinutes: number[];
+  /** YYYY-MM-DD of the occurrence the user clicked. Required for recurring
+   *  events so "edit this / following / all" can target the right instance. */
+  occurrenceDate?: string;
 };
+
+type RecurrenceScope = "this" | "following" | "all";
 
 function localDefaultTz(): string {
   try {
@@ -105,7 +112,9 @@ export function EventSheet({
 }) {
   const { toast } = useToast();
   const isEdit = Boolean(initial);
+  const isRecurring = Boolean(initial?.recurrenceRule);
   const [pending, startTransition] = useTransition();
+  const [scopePrompt, setScopePrompt] = useState<null | "save" | "delete">(null);
 
   const [type, setType] = useState<CalendarEventType>(initial?.type ?? "practice");
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -194,6 +203,10 @@ export function EventSheet({
       toast("Add a location.", "error");
       return;
     }
+    if (isEdit && isRecurring && initial?.occurrenceDate) {
+      setScopePrompt("save");
+      return;
+    }
     startTransition(async () => {
       if (isEdit && initial) {
         const res = await updateEventAction(initial.id, {
@@ -220,6 +233,10 @@ export function EventSheet({
 
   function remove() {
     if (!isEdit || !initial) return;
+    if (isRecurring && initial.occurrenceDate) {
+      setScopePrompt("delete");
+      return;
+    }
     if (
       !globalThis.confirm(
         notifyAttendees
@@ -235,6 +252,41 @@ export function EventSheet({
         return;
       }
       toast("Event deleted.", "success");
+      onSaved?.();
+      onClose();
+    });
+  }
+
+  function applyScope(scope: RecurrenceScope) {
+    if (!initial?.occurrenceDate) return;
+    const occurrenceDate = initial.occurrenceDate;
+    const action = scopePrompt;
+    setScopePrompt(null);
+    startTransition(async () => {
+      if (action === "save") {
+        const res = await updateEventOccurrenceAction(initial.id, {
+          ...buildPayload(),
+          notifyAttendees,
+          occurrenceDate,
+          scope,
+        });
+        if (!res.ok) {
+          toast(res.error, "error");
+          return;
+        }
+        toast("Event updated.", "success");
+      } else if (action === "delete") {
+        const res = await deleteEventOccurrenceAction(initial.id, {
+          occurrenceDate,
+          scope,
+          notifyAttendees,
+        });
+        if (!res.ok) {
+          toast(res.error, "error");
+          return;
+        }
+        toast("Event deleted.", "success");
+      }
       onSaved?.();
       onClose();
     });
@@ -480,6 +532,89 @@ export function EventSheet({
               {isEdit ? "Save changes" : "Create event"}
             </Button>
           </div>
+        </div>
+      </div>
+
+      {scopePrompt && (
+        <ScopePromptDialog
+          mode={scopePrompt}
+          pending={pending}
+          onCancel={() => setScopePrompt(null)}
+          onChoose={applyScope}
+        />
+      )}
+    </div>
+  );
+}
+
+function ScopePromptDialog({
+  mode,
+  pending,
+  onCancel,
+  onChoose,
+}: {
+  mode: "save" | "delete";
+  pending: boolean;
+  onCancel: () => void;
+  onChoose: (scope: RecurrenceScope) => void;
+}) {
+  const verb = mode === "save" ? "Save" : "Delete";
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-t-2xl bg-surface p-5 shadow-xl ring-1 ring-border sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-foreground">
+          {verb} which events?
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          This is a recurring event. Pick the scope of your change.
+        </p>
+        <div className="mt-4 space-y-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onChoose("this")}
+            className="w-full rounded-lg bg-surface px-3 py-2.5 text-left text-sm font-medium text-foreground ring-1 ring-border hover:bg-surface-hover disabled:opacity-60"
+          >
+            {verb} this event only
+            <span className="block text-xs font-normal text-muted">
+              Other occurrences stay as scheduled.
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onChoose("following")}
+            className="w-full rounded-lg bg-surface px-3 py-2.5 text-left text-sm font-medium text-foreground ring-1 ring-border hover:bg-surface-hover disabled:opacity-60"
+          >
+            {verb} this and all following
+            <span className="block text-xs font-normal text-muted">
+              Past occurrences are kept untouched.
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onChoose("all")}
+            className="w-full rounded-lg bg-surface px-3 py-2.5 text-left text-sm font-medium text-foreground ring-1 ring-border hover:bg-surface-hover disabled:opacity-60"
+          >
+            {verb} all events in the series
+            <span className="block text-xs font-normal text-muted">
+              Applies to every occurrence, past and future.
+            </span>
+          </button>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button size="sm" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
