@@ -14,6 +14,7 @@ import {
 } from "@/app/actions/plays";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
+import { PlayThumbnail } from "./PlayThumbnail";
 import { RouteToolbar } from "./RouteToolbar";
 import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
@@ -746,8 +747,29 @@ function PlayEditorClientInner({
             </div>
             )}
 
+            {isExamplePreview && (
+              // Mobile lacks a cursor, so the animation playback UI doesn't
+              // really work for visitors browsing example playbooks on a
+              // phone. Swap in the static playsheet-style thumbnail instead.
+              <div className="mx-auto w-full overflow-hidden rounded-xl bg-white ring-1 ring-border sm:hidden">
+                <PlayThumbnail
+                  preview={{
+                    players: doc.layers.players,
+                    routes: doc.layers.routes,
+                    zones: doc.layers.zones,
+                    lineOfScrimmageY:
+                      typeof doc.lineOfScrimmageY === "number"
+                        ? doc.lineOfScrimmageY
+                        : 0.4,
+                  }}
+                  light
+                />
+              </div>
+            )}
             <div
               className={`field-viewport relative mx-auto w-full overflow-hidden ${
+                isExamplePreview ? "hidden sm:block" : ""
+              } ${
                 !canEdit || mode === "view"
                   ? "pointer-events-none select-none"
                   : ""
@@ -810,7 +832,7 @@ function PlayEditorClientInner({
             {/* Mobile playback controls — only in view mode. The Edit toggle
                 moved above the field so this section now just surfaces
                 play/animate controls. Desktop always uses the sidebar. */}
-            {mode === "view" && (
+            {mode === "view" && !isExamplePreview && (
               <div className="rounded-xl border border-border bg-surface-raised p-4 sm:hidden">
                 <PlayControlsPanel anim={anim} />
               </div>
