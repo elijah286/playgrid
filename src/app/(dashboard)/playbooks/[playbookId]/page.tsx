@@ -232,6 +232,14 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
+  // Calendar tab is visible to anyone who can view the playbook once the
+  // beta is enabled — coaches and players both need access to the schedule.
+  const teamCalendarAvailable =
+    !isExamplePreview &&
+    isBetaFeatureAvailable(betaFeatures.team_calendar, {
+      isAdmin,
+      isEntitled: true,
+    });
 
   const publicExampleJsonLd = isPublicExample
     ? [
@@ -297,6 +305,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
         gameResultsAvailable={gameResultsAvailable}
+        teamCalendarAvailable={teamCalendarAvailable}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{
           name: book.name as string,

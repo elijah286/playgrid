@@ -91,6 +91,7 @@ import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
+import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -217,7 +218,7 @@ const UNASSIGNED = "__unassigned__";
 type ThumbSize = "small" | "medium" | "large";
 
 type PlaybookPrefs = {
-  tab?: "plays" | "formations" | "roster" | "staff" | "games";
+  tab?: "plays" | "formations" | "roster" | "staff" | "games" | "calendar";
   view: "active" | "archived";
   typeFilter: PlayType | "all";
   groupBy: GroupBy;
@@ -268,6 +269,7 @@ function PlaybookDetailClientInner({
   gameModeAvailable = false,
   canUseGameMode = false,
   gameResultsAvailable = false,
+  teamCalendarAvailable = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -286,6 +288,8 @@ function PlaybookDetailClientInner({
   gameModeAvailable?: boolean;
   /** When true, show the "Games" tab for reviewing past game results. */
   gameResultsAvailable?: boolean;
+  /** When true, show the "Calendar" tab gated by the team_calendar beta. */
+  teamCalendarAvailable?: boolean;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
@@ -328,13 +332,14 @@ function PlaybookDetailClientInner({
       t === "formations" ||
       t === "roster" ||
       t === "staff" ||
-      t === "games"
+      t === "games" ||
+      t === "calendar"
     )
       return t;
     return "plays";
   })();
   const [tab, setTab] = useState<
-    "plays" | "formations" | "roster" | "staff" | "games"
+    "plays" | "formations" | "roster" | "staff" | "games" | "calendar"
   >(initialTab);
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
@@ -1047,7 +1052,10 @@ function PlaybookDetailClientInner({
                 ...(gameResultsAvailable
                   ? [{ key: "games" as const, label: "Games", count: null as number | null }]
                   : []),
-              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "staff" | "games"; label: string; count: number | null }>
+                ...(teamCalendarAvailable
+                  ? [{ key: "calendar" as const, label: "Calendar", count: null as number | null }]
+                  : []),
+              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "staff" | "games" | "calendar"; label: string; count: number | null }>
             ).map((t) => {
               const active = tab === t.key;
               return (
@@ -1381,6 +1389,13 @@ function PlaybookDetailClientInner({
 
       {tab === "games" && gameResultsAvailable && (
         <GameResultsPanel playbookId={playbookId} />
+      )}
+
+      {tab === "calendar" && teamCalendarAvailable && (
+        <PlaybookCalendarTab
+          playbookId={playbookId}
+          viewerIsCoach={headerProps.viewerIsCoach}
+        />
       )}
 
       {tab === "plays" && (

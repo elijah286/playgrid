@@ -481,6 +481,210 @@ export async function getUnseenCalendarCountAction(
   return { ok: true, count: count ?? 0 };
 }
 
+// ─── Listing ──────────────────────────────────────────────────────────────
+export type CalendarEventRow = {
+  id: string;
+  playbookId: string;
+  type: "practice" | "game" | "scrimmage";
+  title: string;
+  startsAt: string;
+  durationMinutes: number;
+  arriveMinutesBefore: number;
+  timezone: string;
+  location: {
+    name: string | null;
+    address: string | null;
+    lat: number | null;
+    lng: number | null;
+  };
+  notes: string | null;
+  opponent: string | null;
+  homeAway: "home" | "away" | "neutral" | null;
+  scoreUs: number | null;
+  scoreThem: number | null;
+  recurrenceRule: string | null;
+  reminderOffsetsMinutes: number[];
+  deletedAt: string | null;
+  rsvpCounts: { yes: number; no: number; maybe: number };
+  myRsvp: { status: "yes" | "no" | "maybe"; note: string | null } | null;
+};
+
+export async function listEventsForPlaybookAction(
+  playbookId: string,
+): Promise<Ok<{ events: CalendarEventRow[] }> | Err> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+  if (!(await isMemberOf(playbookId))) {
+    return { ok: false, error: "No access to this playbook." };
+  }
+
+  const supabase = await createClient();
+  const { data: events, error } = await supabase
+    .from("playbook_events")
+    .select(
+      "id, playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, score_us, score_them, recurrence_rule, deleted_at",
+    )
+    .eq("playbook_id", playbookId)
+    .is("deleted_at", null)
+    .order("starts_at", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+
+  const eventIds = (events ?? []).map((e) => e.id as string);
+  if (eventIds.length === 0) {
+    return { ok: true, events: [] };
+  }
+
+  const [rsvpsRes, remindersRes] = await Promise.all([
+    supabase
+      .from("playbook_event_rsvps")
+      .select("event_id, user_id, status, note")
+      .in("event_id", eventIds),
+    supabase
+      .from("playbook_event_reminders")
+      .select("event_id, send_at")
+      .in("event_id", eventIds)
+      .is("sent_at", null),
+  ]);
+
+  type RsvpRow = {
+    event_id: string;
+    user_id: string;
+    status: "yes" | "no" | "maybe";
+    note: string | null;
+  };
+  type ReminderRow = { event_id: string; send_at: string };
+  const rsvps = (rsvpsRes.data ?? []) as RsvpRow[];
+  const reminders = (remindersRes.data ?? []) as ReminderRow[];
+
+  type EventRow = {
+    id: string;
+    playbook_id: string;
+    type: "practice" | "game" | "scrimmage";
+    title: string;
+    starts_at: string;
+    duration_minutes: number;
+    arrive_minutes_before: number;
+    timezone: string;
+    location_name: string | null;
+    location_address: string | null;
+    location_lat: number | null;
+    location_lng: number | null;
+    notes: string | null;
+    opponent: string | null;
+    home_away: "home" | "away" | "neutral" | null;
+    score_us: number | null;
+    score_them: number | null;
+    recurrence_rule: string | null;
+    deleted_at: string | null;
+  };
+
+  const rows: CalendarEventRow[] = (events as EventRow[]).map((e) => {
+    const myRsvp = rsvps.find(
+      (r) => r.event_id === e.id && r.user_id === gate.userId,
+    );
+    const counts = { yes: 0, no: 0, maybe: 0 };
+    for (const r of rsvps) {
+      if (r.event_id !== e.id) continue;
+      counts[r.status] += 1;
+    }
+    const startMs = new Date(e.starts_at).getTime();
+    const reminderOffsetsMinutes = reminders
+      .filter((r) => r.event_id === e.id)
+      .map((r) =>
+        Math.max(0, Math.round((startMs - new Date(r.send_at).getTime()) / 60000)),
+      )
+      .sort((a, b) => b - a);
+    return {
+      id: e.id,
+      playbookId: e.playbook_id,
+      type: e.type,
+      title: e.title,
+      startsAt: e.starts_at,
+      durationMinutes: e.duration_minutes,
+      arriveMinutesBefore: e.arrive_minutes_before,
+      timezone: e.timezone,
+      location: {
+        name: e.location_name,
+        address: e.location_address,
+        lat: e.location_lat,
+        lng: e.location_lng,
+      },
+      notes: e.notes,
+      opponent: e.opponent,
+      homeAway: e.home_away,
+      scoreUs: e.score_us,
+      scoreThem: e.score_them,
+      recurrenceRule: e.recurrence_rule,
+      reminderOffsetsMinutes,
+      deletedAt: e.deleted_at,
+      rsvpCounts: counts,
+      myRsvp: myRsvp
+        ? { status: myRsvp.status, note: myRsvp.note }
+        : null,
+    };
+  });
+
+  return { ok: true, events: rows };
+}
+
+export type CalendarAttendeeRow = {
+  userId: string;
+  fullName: string | null;
+  status: "yes" | "no" | "maybe" | "no_response";
+  note: string | null;
+};
+
+export async function listEventAttendeesAction(
+  eventId: string,
+): Promise<Ok<{ attendees: CalendarAttendeeRow[] }> | Err> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+
+  const admin = createServiceRoleClient();
+  const { data: ev } = await admin
+    .from("playbook_events")
+    .select("playbook_id")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!ev) return { ok: false, error: "Event not found." };
+  if (!(await isMemberOf(ev.playbook_id))) {
+    return { ok: false, error: "No access to this event." };
+  }
+
+  const [membersRes, rsvpsRes] = await Promise.all([
+    admin
+      .from("playbook_members")
+      .select("user_id, profiles!inner(display_name)")
+      .eq("playbook_id", ev.playbook_id),
+    admin
+      .from("playbook_event_rsvps")
+      .select("user_id, status, note")
+      .eq("event_id", eventId),
+  ]);
+
+  type MemberRow = { user_id: string; profiles: { display_name: string | null } };
+  type RsvpRow = {
+    user_id: string;
+    status: "yes" | "no" | "maybe";
+    note: string | null;
+  };
+  const members = (membersRes.data ?? []) as unknown as MemberRow[];
+  const rsvps = (rsvpsRes.data ?? []) as RsvpRow[];
+  const byUser = new Map(rsvps.map((r) => [r.user_id, r]));
+
+  const attendees: CalendarAttendeeRow[] = members.map((m) => {
+    const r = byUser.get(m.user_id);
+    return {
+      userId: m.user_id,
+      fullName: m.profiles?.display_name ?? null,
+      status: r?.status ?? "no_response",
+      note: r?.note ?? null,
+    };
+  });
+
+  return { ok: true, attendees };
+}
+
 // Re-export schemas for callers (so client code doesn't pull zod separately).
 export const _schemas = { eventInputSchema, updateEventInputSchema, setRsvpInputSchema };
 // suppress "z" unused in some paths
