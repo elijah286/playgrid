@@ -26,6 +26,7 @@ const PUBLIC_EXACT = new Set<string>([
 
 const PUBLIC_PREFIXES = [
   "/invite/", // invite landing page (pre-login preview)
+  "/auth/", // OAuth/PKCE callback — runs before a session exists
   "/api/contact",
   "/api/health",
   "/api/stripe/webhook", // Stripe → server. Must accept POSTs without a session.

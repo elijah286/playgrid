@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Lock, Mail, User } from "lucide-react";
+import { Apple, ArrowLeft, Lock, Mail, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { emailHasAccountAction } from "@/app/actions/auth-lookup";
@@ -104,6 +104,28 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
   }, [step]);
 
   // ---------- Effects: step transitions ----------
+
+  async function signInWithApple() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setPending(true);
+    clearErrors();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "apple",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
+        },
+      });
+      if (error) throw error;
+      // signInWithOAuth navigates the page; nothing more to do here.
+    } catch (e: unknown) {
+      setFormError(e instanceof Error ? e.message : "Could not start Apple sign-in.");
+      setPending(false);
+      submittingRef.current = false;
+    }
+  }
 
   async function submitEmail() {
     if (!hasSupabaseEnv()) {
@@ -397,6 +419,29 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
         />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+          {/* Apple sign-in. Required by App Store Review Guideline 4.8 when
+              email/password sign-up is offered. Shown on the email step only
+              so it's not a distraction once the user is mid-flow. */}
+          {step === "email" && (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={() => void signInWithApple()}
+                disabled={pending}
+              >
+                <Apple className="mr-2 size-4" aria-hidden />
+                Continue with Apple
+              </Button>
+              <div className="flex items-center gap-2 text-xs text-muted">
+                <span className="h-px flex-1 bg-border" aria-hidden />
+                <span>or</span>
+                <span className="h-px flex-1 bg-border" aria-hidden />
+              </div>
+            </>
+          )}
+
           {/* Email — shown on every step except new-user-profile where it's implicit */}
           {step !== "new-user-profile" && step !== "set-new-password" && (
             <label className="block text-sm">
