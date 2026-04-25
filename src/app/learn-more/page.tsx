@@ -4,12 +4,17 @@ import Image from "next/image";
 import {
   ArrowRight,
   BarChart3,
+  CalendarDays,
   Check,
   Gamepad2,
   LayoutGrid,
   Printer,
   Share2,
+  Smartphone,
+  Sparkles,
+  Tag,
   Users,
+  Wallet,
 } from "lucide-react";
 import {
   LaptopFrame,
@@ -42,7 +47,7 @@ export default async function LearnMorePage() {
   return (
     <div className="bg-surface text-foreground">
       <Hero />
-      <RealPlaybooks examples={examples} />
+      <WhyDifferent freeMaxPlays={freeMaxPlays} />
       <EveryScreen />
       <FormationsAndTags />
       <PrintoutsAndWristbands />
@@ -51,6 +56,7 @@ export default async function LearnMorePage() {
       <SharingSection />
       <BuiltByACoach />
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
+      <RealPlaybooks examples={examples} />
       <FinalCta />
     </div>
   );
@@ -125,6 +131,87 @@ function Hero() {
               <source src="/marketing/screens/hero-walkthrough.webm" type="video/webm" />
             </video>
           </LaptopFrame>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Why xogridmaker is different ---------- */
+
+function WhyDifferent({ freeMaxPlays }: { freeMaxPlays: number }) {
+  const points = [
+    {
+      icon: Wallet,
+      color: BRAND_GREEN,
+      title: "Free to start, affordable for the whole team",
+      body: `A simple ${freeMaxPlays}-play playbook is free, forever. Coach plans cover your full staff without per-seat surprises.`,
+    },
+    {
+      icon: Smartphone,
+      color: BRAND_BLUE,
+      title: "Free for players on mobile",
+      body: "Players see the playbook, watch the calls, and review notes from their phone — no paid seat required.",
+    },
+    {
+      icon: Printer,
+      color: BRAND_ORANGE,
+      title: "Better-looking, customizable printouts",
+      body: "One-click PDFs for call sheets and wristbands. Tune the layout, density, and grouping to match how you actually call the game.",
+    },
+    {
+      icon: Tag,
+      color: "#8B5CF6",
+      title: "A play editor that works everywhere",
+      body: "The same fast, fun editor on desktop, tablet, and phone. Draw plays at the kitchen table or fix a route on the bus.",
+    },
+    {
+      icon: CalendarDays,
+      color: BRAND_BLUE,
+      title: "Playbook, team, and calendar in one place",
+      body: "Roster, practice schedule, and game calendar live alongside your plays. No bouncing between four apps to run a season.",
+    },
+    {
+      icon: Sparkles,
+      color: BRAND_GREEN,
+      title: "Built for how youth coaches actually work",
+      body: "Every screen is designed around real practice, real sidelines, and real volunteer-coach time budgets.",
+    },
+  ];
+
+  return (
+    <section className="relative py-24" style={{ background: "rgba(23,105,255,0.04)" }}>
+      <div className="mx-auto max-w-6xl px-6">
+        <Reveal>
+          <div className="max-w-2xl">
+            <SectionEyebrow icon={Sparkles}>Why coaches switch</SectionEyebrow>
+            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
+              The playbook tool
+              <br />
+              <span className="text-muted">that meets coaches where they are.</span>
+            </h2>
+            <p className="mt-5 text-lg text-muted">
+              A few things make xogridmaker different from the playbook apps,
+              clipboards, and slide decks coaches usually patch together.
+            </p>
+          </div>
+        </Reveal>
+
+        <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {points.map((p, i) => (
+            <Reveal key={p.title} delay={i * 60}>
+              <div className="h-full rounded-2xl border border-border bg-surface-raised p-6 shadow-[var(--shadow-card)]">
+                <div
+                  className="flex size-10 items-center justify-center rounded-lg"
+                  style={{ background: `${p.color}1A`, color: p.color }}
+                >
+                  <p.icon className="size-5" />
+                </div>
+                <h3 className="mt-4 text-lg font-bold tracking-tight">{p.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{p.body}</p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>
