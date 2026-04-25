@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { CreditCard, IdCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
+import { AlertTriangle, CreditCard, IdCard, KeyRound, Monitor, Moon, Sun, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
+  deleteOwnAccountAction,
   removeAvatarAction,
   updateDisplayNameAction,
   uploadAvatarAction,
@@ -42,13 +43,103 @@ export function AccountClient({
   entitlement: Entitlement | null;
 }) {
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <NameCard initialDisplayName={displayName} />
-      <PasswordCard />
-      <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
-      <PlanCard entitlement={entitlement} />
-      <AppearanceCard />
+    <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2">
+        <NameCard initialDisplayName={displayName} />
+        <PasswordCard />
+        <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
+        <PlanCard entitlement={entitlement} />
+        <AppearanceCard />
+      </div>
+      <DeleteAccountCard hasPaidPlan={entitlement?.source === "stripe"} />
     </div>
+  );
+}
+
+function DeleteAccountCard({ hasPaidPlan }: { hasPaidPlan: boolean }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  const matches = confirmText.trim().toLowerCase() === "delete";
+
+  function onDelete() {
+    setErr(null);
+    startTransition(async () => {
+      const res = await deleteOwnAccountAction();
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      // Hard navigation so the cleared session cookie takes effect.
+      window.location.assign("/");
+    });
+  }
+
+  return (
+    <section className="rounded-2xl border border-danger/40 bg-danger-light/40 p-6">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="size-4 text-danger" />
+        <h2 className="text-sm font-semibold text-foreground">Delete account</h2>
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Permanently delete your xogridmaker account and everything in it —
+        playbooks, plays, formations, and settings. This cannot be undone.
+      </p>
+      {hasPaidPlan && (
+        <p className="mt-3 rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
+          You have an active paid subscription. Cancel it from the Plan card
+          above before deleting your account, or you may continue to be billed.
+        </p>
+      )}
+      {!confirmOpen ? (
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          className="mt-4 rounded-lg border border-danger px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger hover:text-white"
+        >
+          Delete my account
+        </button>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <label className="block text-xs">
+            <span className="text-foreground">Type DELETE to confirm:</span>
+            <input
+              type="text"
+              autoComplete="off"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              placeholder="DELETE"
+            />
+          </label>
+          {err && <p className="text-xs text-danger">{err}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={!matches || pending}
+              className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {pending ? "Deleting…" : "Permanently delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmOpen(false);
+                setConfirmText("");
+                setErr(null);
+              }}
+              disabled={pending}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

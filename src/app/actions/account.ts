@@ -102,6 +102,35 @@ export async function uploadAvatarAction(formData: FormData) {
   return { ok: true as const, url };
 }
 
+/**
+ * Permanently delete the signed-in user's account. App Store Guideline 5.1.1(v)
+ * requires a one-tap path to account deletion inside any app that lets users
+ * sign up. This removes the auth record; FK cascades wipe the user's
+ * playbooks, plays, formations, subscriptions, page views, and feedback. Paid
+ * subscriptions are intentionally NOT auto-canceled in Stripe — the user has
+ * to do that themselves via the Stripe portal first; we surface this in the UI
+ * so they're not surprised by a charge after deletion.
+ */
+export async function deleteOwnAccountAction() {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const admin = createServiceRoleClient();
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+  if (error) return { ok: false as const, error: error.message };
+
+  // Clear the cookie session; the auth row is gone but the browser still has
+  // a stale token until we sign out.
+  await supabase.auth.signOut();
+
+  return { ok: true as const };
+}
+
 export async function removeAvatarAction() {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
 

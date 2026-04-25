@@ -11,6 +11,9 @@ export default function PrivacyPage() {
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
       <p className="mt-2 text-sm text-muted">Last updated: April 25, 2026</p>
 
+      {/* The "Your rights" section below already covers deletion — keep that
+          and the new dedicated section consistent if either is edited. */}
+
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>
           <p>
@@ -119,11 +122,18 @@ export default function PrivacyPage() {
           <h2 className="text-base font-semibold text-foreground">Your rights</h2>
           <p className="mt-2">
             You can access, export, or delete your account and content at any
-            time. Email us through the{" "}
+            time. To delete your account, sign in and use the &ldquo;Delete
+            account&rdquo; option on your{" "}
+            <a href="/account" className="text-primary hover:underline">
+              account page
+            </a>{" "}
+            — this immediately removes your auth record and cascades to your
+            playbooks, plays, formations, and usage data. For anything else,
+            reach us through the{" "}
             <a href="/contact" className="text-primary hover:underline">
               contact page
-            </a>{" "}
-            and we&apos;ll handle it promptly.
+            </a>
+            .
           </p>
         </section>
 
