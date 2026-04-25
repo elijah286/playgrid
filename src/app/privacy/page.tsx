@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: April 20, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: April 25, 2026</p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>
@@ -35,19 +35,45 @@ export default function PrivacyPage() {
               agent, timestamps) generated when you use the Service.
             </li>
             <li>
+              <strong>Product usage (first-party):</strong> the pages you visit,
+              your session ID, device class (mobile/tablet/desktop), referring
+              URL, and UTM parameters on first visit, plus aggregate
+              time-on-site. We use this to understand which features get used
+              and to size the product to actual usage. It is collected by us,
+              stored in our own database, and never shared with an analytics
+              vendor.
+            </li>
+            <li>
+              <strong>Error reports:</strong> when something goes wrong in your
+              browser, we send the error stack and the page URL to Sentry to
+              help us fix it. Errors include the same technical data above
+              but no playbook content.
+            </li>
+            <li>
+              <strong>Billing:</strong> if you subscribe to a paid plan, your
+              payment details are collected by Stripe — we never see your card
+              number. Stripe shares your customer ID, email, and subscription
+              status with us so we can grant access to paid features.
+            </li>
+            <li>
               <strong>Contact form:</strong> messages you send us through the
               contact form, which are delivered to our inbox via an email
               provider (Resend).
             </li>
           </ul>
+          <p className="mt-3">
+            <strong>Inside the iOS / Android app:</strong> product-usage and
+            error reporting are turned off entirely. The native app collects
+            only the account info, content, and standard server logs above.
+          </p>
         </section>
 
         <section>
           <h2 className="text-base font-semibold text-foreground">What we don&apos;t do</h2>
           <p className="mt-2">
-            We don&apos;t run third-party analytics, advertising trackers, or
-            behavioral profiling. We don&apos;t sell your data. We don&apos;t share your
-            content with anyone except the people you explicitly share it with.
+            We don&apos;t run advertising trackers or behavioral profiling. We
+            don&apos;t sell your data. We don&apos;t share your content with anyone
+            except the people you explicitly share it with.
           </p>
         </section>
 
@@ -70,6 +96,22 @@ export default function PrivacyPage() {
             <li>Supabase — database, authentication, and storage</li>
             <li>Vercel — application hosting</li>
             <li>Resend — transactional email (contact form)</li>
+            <li>Stripe — payment processing for paid plans</li>
+            <li>Sentry — browser and server error reporting (web only)</li>
+            <li>
+              Apple — if you choose &ldquo;Sign in with Apple,&rdquo; Apple
+              authenticates you and shares your email and name with us
+            </li>
+            <li>
+              Google Maps Platform — if your team uses the calendar venue
+              autocomplete, the address text you type is sent to Google to
+              return matching places
+            </li>
+            <li>
+              OpenAI — only if you opt into the Coach AI tier, in which case
+              the play descriptions you submit are sent to OpenAI to generate
+              suggestions
+            </li>
           </ul>
         </section>
 
