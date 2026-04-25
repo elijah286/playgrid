@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
+import { ChevronLeft, FlaskConical } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -48,6 +48,7 @@ import {
 type Props = {
   playId: string;
   playbookId: string;
+  playbookName?: string | null;
   initialDocument: PlayDocument;
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
@@ -97,6 +98,7 @@ export function PlayEditorClient(props: Props) {
 function PlayEditorClientInner({
   playId,
   playbookId,
+  playbookName,
   initialDocument,
   initialNav,
   initialGroups,
@@ -584,6 +586,13 @@ function PlayEditorClientInner({
           Done editing button moves to the very top so the field has as much
           vertical room as possible. Desktop always keeps the header. */}
       <div className={mode === "edit" ? "hidden sm:block" : ""}>
+      <Link
+        href={`/playbooks/${playbookId}`}
+        className="mb-1 inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="size-3.5" />
+        <span className="truncate">{playbookName || "Back to playbook"}</span>
+      </Link>
       <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}

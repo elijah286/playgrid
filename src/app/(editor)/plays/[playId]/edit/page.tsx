@@ -97,7 +97,7 @@ export default async function PlayEditPage({ params }: Props) {
   // but autosave is suppressed and any save attempt surfaces the CTA.
   const { data: book } = await supabase
     .from("playbooks")
-    .select("is_example, is_public_example, is_archived")
+    .select("is_example, is_public_example, is_archived, name")
     .eq("id", res.play.playbook_id)
     .maybeSingle();
   const isExamplePreview =
@@ -129,6 +129,7 @@ export default async function PlayEditPage({ params }: Props) {
     <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}
+      playbookName={(book?.name as string | null) ?? null}
       initialDocument={res.document}
       initialNav={nav.ok ? nav.plays : []}
       initialGroups={nav.ok ? nav.groups : []}
