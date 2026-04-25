@@ -5,6 +5,7 @@ import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import { listUsersForAdminAction } from "@/app/actions/admin-users";
 import { getOpenAIIntegrationStatusAction } from "@/app/actions/admin-integrations";
 import { getResendStatusAction } from "@/app/actions/admin-resend";
+import { getGoogleMapsStatusAction } from "@/app/actions/admin-google-maps";
 import {
   getFeedbackWidgetEnabledAction,
   listFeedbackForAdminAction,
@@ -33,6 +34,7 @@ export default async function SettingsPage() {
     usersRes,
     integrationRes,
     resendRes,
+    googleMapsRes,
     feedbackRes,
     invitesRes,
     feedbackWidgetRes,
@@ -50,6 +52,7 @@ export default async function SettingsPage() {
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
     getResendStatusAction(),
+    getGoogleMapsStatusAction(),
     listFeedbackForAdminAction(),
     listCoachInvitationsAction(),
     getFeedbackWidgetEnabledAction(),
@@ -103,6 +106,16 @@ export default async function SettingsPage() {
                 updatedAt: resendRes.updatedAt,
               }
             : { ok: false, error: resendRes.error }
+        }
+        googleMaps={
+          googleMapsRes.ok
+            ? {
+                ok: true,
+                configured: googleMapsRes.configured,
+                statusLabel: googleMapsRes.statusLabel,
+                updatedAt: googleMapsRes.updatedAt,
+              }
+            : { ok: false, error: googleMapsRes.error }
         }
         initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
         feedbackError={feedbackRes.ok ? null : feedbackRes.error}

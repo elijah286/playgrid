@@ -17,6 +17,7 @@ import {
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
+import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
@@ -49,6 +50,10 @@ type ResendProps =
     }
   | { ok: false; error: string };
 
+type GoogleMapsProps =
+  | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
+  | { ok: false; error: string };
+
 type Tab =
   | "users"
   | "traffic"
@@ -66,6 +71,7 @@ export function SettingsClient({
   usersError,
   integration,
   resend,
+  googleMaps,
   initialFeedback,
   feedbackError,
   initialFeedbackWidgetEnabled,
@@ -89,6 +95,7 @@ export function SettingsClient({
   usersError: string | null;
   integration: IntegrationProps;
   resend: ResendProps;
+  googleMaps: GoogleMapsProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
   initialFeedbackWidgetEnabled: boolean;
@@ -288,6 +295,18 @@ export function SettingsClient({
             />
           ) : (
             <p className="text-sm text-red-700 dark:text-red-300">{resend.error}</p>
+          )}
+
+          {googleMaps.ok ? (
+            <GoogleMapsSettingsClient
+              initial={{
+                configured: googleMaps.configured,
+                statusLabel: googleMaps.statusLabel,
+                updatedAt: googleMaps.updatedAt,
+              }}
+            />
+          ) : (
+            <p className="text-sm text-red-700 dark:text-red-300">{googleMaps.error}</p>
           )}
         </div>
       )}
