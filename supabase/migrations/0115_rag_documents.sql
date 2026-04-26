@@ -68,6 +68,7 @@ create index if not exists rag_documents_embedding_idx
   with (lists = 100)
   where embedding is not null and retired_at is null;
 
+drop trigger if exists rag_documents_set_updated_at on public.rag_documents;
 create trigger rag_documents_set_updated_at
   before update on public.rag_documents
   for each row execute function public.set_updated_at();
