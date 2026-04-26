@@ -1279,7 +1279,8 @@ export function DashboardClient({
     return items;
   }
 
-  const showTabNav = teamCalendarAvailable || inboxCount > 0 || activityCount > 0;
+  const showTabNav =
+    teamCalendarAvailable || inboxCount > 0 || activityCount > 0;
   if (showTabNav && homeTab === "calendar" && teamCalendarAvailable) {
     return (
       <div className="space-y-6">
@@ -1945,7 +1946,7 @@ function HomeTabNav({
   const tabs: HomeTab[] = ["playbooks"];
   if (showCalendar) tabs.push("calendar");
   tabs.push("inbox");
-  if (activityCount > 0) tabs.push("activity");
+  tabs.push("activity");
   const labels: Record<HomeTab, string> = {
     playbooks: "Playbooks",
     calendar: "Calendar",

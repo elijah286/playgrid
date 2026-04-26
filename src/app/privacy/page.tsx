@@ -105,7 +105,10 @@ export default function PrivacyPage() {
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Supabase — database, authentication, and storage</li>
             <li>Vercel — application hosting</li>
-            <li>Resend — transactional email (contact form)</li>
+            <li>
+              Resend — transactional email (contact form, team
+              notifications, daily digest of playbook activity)
+            </li>
             <li>Stripe — payment processing for paid plans</li>
             <li>Sentry — browser and server error reporting (web only)</li>
             <li>
