@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import {
-  getFeedbackWidgetEnabled,
+  getFeedbackWidgetSettings,
   setFeedbackWidgetEnabled,
+  setFeedbackWidgetTouchEnabled,
 } from "@/lib/site/feedback-config";
 
 export type FeedbackRow = {
@@ -133,21 +134,19 @@ export async function deleteFeedbackAction(id: string) {
 }
 
 export async function getFeedbackWidgetEnabledAction() {
-  if (!hasSupabaseEnv()) return { ok: true as const, enabled: true };
-  const enabled = await getFeedbackWidgetEnabled();
-  return { ok: true as const, enabled };
+  if (!hasSupabaseEnv()) {
+    return { ok: true as const, enabled: true, touchEnabled: false };
+  }
+  const settings = await getFeedbackWidgetSettings();
+  return { ok: true as const, ...settings };
 }
 
-export async function setFeedbackWidgetEnabledAction(enabled: boolean) {
-  if (!hasSupabaseEnv()) {
-    return { ok: false as const, error: "Supabase is not configured." };
-  }
+async function requireAdmin() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
-
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
@@ -156,9 +155,35 @@ export async function setFeedbackWidgetEnabledAction(enabled: boolean) {
   if (profile?.role !== "admin") {
     return { ok: false as const, error: "Forbidden." };
   }
+  return { ok: true as const };
+}
+
+export async function setFeedbackWidgetEnabledAction(enabled: boolean) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
 
   try {
     await setFeedbackWidgetEnabled(enabled);
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true as const, enabled };
+}
+
+export async function setFeedbackWidgetTouchEnabledAction(enabled: boolean) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+
+  try {
+    await setFeedbackWidgetTouchEnabled(enabled);
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
   }

@@ -75,6 +75,7 @@ export function SettingsClient({
   initialFeedback,
   feedbackError,
   initialFeedbackWidgetEnabled,
+  initialFeedbackWidgetTouchEnabled,
   initialInvites,
   invitesError,
   initialGiftCodes,
@@ -100,6 +101,7 @@ export function SettingsClient({
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
   initialFeedbackWidgetEnabled: boolean;
+  initialFeedbackWidgetTouchEnabled: boolean;
   initialInvites: CoachInvitationRow[];
   invitesError: string | null;
   initialGiftCodes: GiftCodeRow[];
@@ -251,6 +253,7 @@ export function SettingsClient({
           initialItems={initialFeedback}
           initialError={feedbackError}
           initialWidgetEnabled={initialFeedbackWidgetEnabled}
+          initialWidgetTouchEnabled={initialFeedbackWidgetTouchEnabled}
         />
       )}
 

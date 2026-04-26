@@ -123,6 +123,7 @@ export default async function SettingsPage() {
         initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
         feedbackError={feedbackRes.ok ? null : feedbackRes.error}
         initialFeedbackWidgetEnabled={feedbackWidgetRes.enabled}
+        initialFeedbackWidgetTouchEnabled={feedbackWidgetRes.touchEnabled}
         initialInvites={invitesRes.ok ? invitesRes.items : []}
         invitesError={invitesRes.ok ? null : invitesRes.error}
         initialGiftCodes={giftCodesRes.ok ? giftCodesRes.codes : []}

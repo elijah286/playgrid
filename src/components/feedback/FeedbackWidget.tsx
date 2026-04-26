@@ -38,7 +38,13 @@ function defaultPosition(size: { w: number; h: number }): Pos {
   };
 }
 
-export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean }) {
+export function FeedbackWidget({
+  hasCreatedPlay: _,
+  touchEnabled = false,
+}: {
+  hasCreatedPlay: boolean;
+  touchEnabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
@@ -50,6 +56,19 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
   const didDragRef = useRef(false);
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(pointer: coarse)");
+    const update = () => setIsCoarsePointer(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
+
+  // On coarse-pointer (touch) devices, render an icon-only collapsed pill.
+  const compact = isCoarsePointer;
 
   useLayoutEffect(() => {
     if (!rootRef.current) return;
@@ -69,7 +88,7 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
       /* ignore */
     }
     setPos(clampToViewport(saved ?? defaultPosition(size), size));
-  }, []);
+  }, [compact, open]);
 
   useEffect(() => {
     function onResize() {
@@ -89,6 +108,8 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
     if (!dragging) return;
     function onMove(e: PointerEvent) {
       if (!dragOffset.current || !rootRef.current) return;
+      // Suppress text selection / scroll while dragging.
+      if (e.cancelable) e.preventDefault();
       didDragRef.current = true;
       const rect = rootRef.current.getBoundingClientRect();
       const next = clampToViewport(
@@ -111,7 +132,7 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
         return p;
       });
     }
-    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     return () => {
@@ -123,9 +144,18 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
 
   const startDrag = useCallback((e: React.PointerEvent) => {
     if (!rootRef.current) return;
+    // Only initiate drag from primary button / single touch.
+    if (e.button !== 0) return;
     const rect = rootRef.current.getBoundingClientRect();
     dragOffset.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
     didDragRef.current = false;
+    // Capture the pointer so subsequent move/up events on the same pointer
+    // are routed to this element even if the finger leaves it.
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     setDragging(true);
   }, []);
 
@@ -154,7 +184,7 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
       style={style}
       className={cn(
         "fixed z-40 print:hidden select-none",
-        "hidden lg:block",
+        touchEnabled ? "block" : "hidden lg:block",
         dragging && "cursor-grabbing",
       )}
     >
@@ -162,6 +192,7 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
         <div className="w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-surface-raised shadow-toast">
           <div
             onPointerDown={startDrag}
+            style={{ touchAction: "none" }}
             className={cn(
               "flex items-start gap-2 border-b border-border px-3 py-3",
               dragging ? "cursor-grabbing" : "cursor-grab",
@@ -223,18 +254,25 @@ export function FeedbackWidget({ hasCreatedPlay: _ }: { hasCreatedPlay: boolean 
             if (didDragRef.current) return;
             setOpen(true);
           }}
+          aria-label="Send feedback"
+          style={{ touchAction: "none" }}
           className={cn(
-            "group flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg",
+            "group flex items-center gap-2 rounded-full bg-primary text-sm font-semibold text-white shadow-lg",
             "hover:bg-primary-hover active:bg-primary-dark",
             "ring-4 ring-primary/20",
+            compact ? "p-3" : "px-4 py-3",
             dragging ? "cursor-grabbing" : "cursor-grab",
           )}
         >
-          <MessageCirclePlus className="size-4" />
-          <span>Send feedback</span>
-          <span className="hidden rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline">
-            New site
-          </span>
+          <MessageCirclePlus className={compact ? "size-5" : "size-4"} />
+          {!compact && (
+            <>
+              <span>Send feedback</span>
+              <span className="hidden rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline">
+                New site
+              </span>
+            </>
+          )}
         </button>
       )}
     </div>

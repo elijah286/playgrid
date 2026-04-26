@@ -9,22 +9,27 @@ import {
   deleteFeedbackAction,
   listFeedbackForAdminAction,
   setFeedbackWidgetEnabledAction,
+  setFeedbackWidgetTouchEnabledAction,
 } from "@/app/actions/feedback";
 
 export function FeedbackAdminClient({
   initialItems,
   initialError,
   initialWidgetEnabled,
+  initialWidgetTouchEnabled,
 }: {
   initialItems: FeedbackRow[];
   initialError: string | null;
   initialWidgetEnabled: boolean;
+  initialWidgetTouchEnabled: boolean;
 }) {
   const { toast } = useToast();
   const [items, setItems] = useState(initialItems);
   const [err, setErr] = useState<string | null>(initialError);
   const [widgetEnabled, setWidgetEnabled] = useState(initialWidgetEnabled);
+  const [touchEnabled, setTouchEnabled] = useState(initialWidgetTouchEnabled);
   const [widgetPending, startWidgetTransition] = useTransition();
+  const [touchPending, startTouchTransition] = useTransition();
   const [pending, startTransition] = useTransition();
 
   function toggleWidget(next: boolean) {
@@ -39,6 +44,25 @@ export function FeedbackAdminClient({
       }
       toast(
         next ? "Feedback pill is visible to users." : "Feedback pill hidden.",
+        "success",
+      );
+    });
+  }
+
+  function toggleTouch(next: boolean) {
+    const prev = touchEnabled;
+    setTouchEnabled(next);
+    startTouchTransition(async () => {
+      const res = await setFeedbackWidgetTouchEnabledAction(next);
+      if (!res.ok) {
+        setTouchEnabled(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next
+          ? "Feedback pill enabled on touch devices."
+          : "Feedback pill hidden on touch devices.",
         "success",
       );
     });
@@ -71,25 +95,48 @@ export function FeedbackAdminClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            Floating “Send feedback” pill
-          </p>
-          <p className="mt-0.5 text-xs text-muted">
-            When off, the draggable feedback button is hidden for everyone.
-          </p>
+      <div className="rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Floating “Send feedback” pill
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              When off, the draggable feedback button is hidden for everyone.
+            </p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={widgetEnabled}
+              disabled={widgetPending}
+              onChange={(e) => toggleWidget(e.target.checked)}
+            />
+            <span>{widgetEnabled ? "On" : "Off"}</span>
+          </label>
         </div>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="size-4 accent-primary"
-            checked={widgetEnabled}
-            disabled={widgetPending}
-            onChange={(e) => toggleWidget(e.target.checked)}
-          />
-          <span>{widgetEnabled ? "On" : "Off"}</span>
-        </label>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Show on touch devices
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              Off by default. On phones and tablets the pill collapses to an
+              icon to take up less space.
+            </p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={touchEnabled}
+              disabled={touchPending || !widgetEnabled}
+              onChange={(e) => toggleTouch(e.target.checked)}
+            />
+            <span>{touchEnabled ? "On" : "Off"}</span>
+          </label>
+        </div>
       </div>
 
       <div className="flex items-center justify-between">

@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { TimeOnSiteTracker } from "@/components/TimeOnSiteTracker";
-import { getFeedbackWidgetEnabled } from "@/lib/site/feedback-config";
+import { getFeedbackWidgetSettings } from "@/lib/site/feedback-config";
 import { userHasCreatedPlayAction } from "@/app/actions/plays";
 
 // Auth is not enforced at the layout level — anon visitors may reach
@@ -18,8 +18,8 @@ export default async function EditorLayout({ children }: { children: React.React
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [feedbackEnabled, hasCreatedPlay] = await Promise.all([
-    getFeedbackWidgetEnabled(),
+  const [feedbackSettings, hasCreatedPlay] = await Promise.all([
+    getFeedbackWidgetSettings(),
     user ? userHasCreatedPlayAction() : Promise.resolve(false),
   ]);
 
@@ -29,7 +29,12 @@ export default async function EditorLayout({ children }: { children: React.React
         {children}
       </div>
       <TimeOnSiteTracker />
-      {feedbackEnabled && <FeedbackWidget hasCreatedPlay={hasCreatedPlay} />}
+      {feedbackSettings.enabled && (
+        <FeedbackWidget
+          hasCreatedPlay={hasCreatedPlay}
+          touchEnabled={feedbackSettings.touchEnabled}
+        />
+      )}
     </div>
   );
 }
