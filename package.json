@@ -13,6 +13,7 @@
     "db:push": "supabase db push",
     "db:migrate": "node scripts/db-migrate.mjs",
     "seed:admin": "node scripts/seed-admin.mjs",
+    "embed:rag": "node scripts/embed-rag.mjs",
     "cap:assets": "node scripts/build-app-assets.mjs && capacitor-assets generate",
     "cap:sync": "cap sync",
     "cap:ios": "cap open ios",
