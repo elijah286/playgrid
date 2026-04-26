@@ -663,6 +663,7 @@ export async function listUnclaimedRosterAction(
 export async function submitRosterClaimAction(input: {
   memberId: string;
   note?: string | null;
+  asManager?: boolean;
 }): Promise<{ ok: true; claimId: string } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
@@ -672,6 +673,7 @@ export async function submitRosterClaimAction(input: {
   const { data, error } = await supabase.rpc("submit_roster_claim", {
     p_member_id: input.memberId,
     p_note: input.note ?? null,
+    p_as_manager: input.asManager ?? true,
   });
   if (error) return { ok: false, error: error.message };
 

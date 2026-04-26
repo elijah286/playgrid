@@ -2747,7 +2747,7 @@ function RosterPanel({
               <tbody className="divide-y divide-border">
                 {active.map((m) => {
                   const name = m.label || m.display_name || "—";
-                  const unclaimed = m.user_id === null;
+                  const unclaimed = m.user_id === null && m.managed_by === null;
                   const items: ActionMenuItem[] = [
                     {
                       label: "Rename",
@@ -2817,6 +2817,11 @@ function RosterPanel({
                             </Badge>
                           )}
                         </span>
+                        {m.managed_by && m.user_id === null && (
+                          <div className="mt-0.5 text-[11px] font-normal text-muted">
+                            Managed by {m.manager_display_name ?? "a parent"}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         {canEditRole ? (

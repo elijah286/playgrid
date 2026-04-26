@@ -120,8 +120,8 @@ export function AcceptInviteButton({
     return (
       <ClaimPlayerStep
         entries={phase.entries}
-        onSubmit={async (memberId) => {
-          const r = await submitRosterClaimAction({ memberId });
+        onSubmit={async (memberId, asManager) => {
+          const r = await submitRosterClaimAction({ memberId, asManager });
           if (!r.ok) {
             toast(`Couldn't submit claim: ${r.error}`, "error");
             return false;
@@ -277,21 +277,32 @@ function ClaimPlayerStep({
   onSkip,
 }: {
   entries: UnclaimedRosterEntry[];
-  onSubmit: (memberId: string) => Promise<boolean>;
+  onSubmit: (memberId: string, asManager: boolean) => Promise<boolean>;
   onSkip: () => void;
 }) {
   const [pickedId, setPickedId] = useState<string | null>(null);
+  const [asManager, setAsManager] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // If only one unclaimed entry, preselect it — most common case.
   useEffect(() => {
     if (entries.length === 1 && !pickedId) setPickedId(entries[0]!.id);
   }, [entries, pickedId]);
 
+  const picked = pickedId ? entries.find((e) => e.id === pickedId) ?? null : null;
+  // Default the role toggle once a player is picked: minors default to
+  // parent/guardian, adults default to "I am the player." Caller can flip.
+  useEffect(() => {
+    if (!picked) {
+      setAsManager(null);
+      return;
+    }
+    setAsManager((prev) => (prev === null ? picked.is_minor : prev));
+  }, [picked]);
+
   async function claim() {
-    if (!pickedId) return;
+    if (!pickedId || asManager === null) return;
     setSubmitting(true);
-    const ok = await onSubmit(pickedId);
+    const ok = await onSubmit(pickedId, asManager);
     if (!ok) setSubmitting(false);
   }
 
@@ -338,14 +349,57 @@ function ClaimPlayerStep({
           );
         })}
       </ul>
+      {picked && (
+        <div className="space-y-1.5 rounded-lg border border-border bg-surface-inset p-3">
+          <p className="text-xs font-semibold text-foreground">
+            What&apos;s your relationship to {picked.label || "this player"}?
+          </p>
+          <div className="grid grid-cols-1 gap-1.5">
+            <label className="flex cursor-pointer items-start gap-2 rounded border border-border bg-surface p-2 text-xs">
+              <input
+                type="radio"
+                name="claim-role"
+                className="mt-0.5"
+                checked={asManager === false}
+                onChange={() => setAsManager(false)}
+              />
+              <span>
+                <span className="block font-semibold text-foreground">
+                  I am {picked.label || "this player"}
+                </span>
+                <span className="block text-muted">
+                  Link this slot to my account.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded border border-border bg-surface p-2 text-xs">
+              <input
+                type="radio"
+                name="claim-role"
+                className="mt-0.5"
+                checked={asManager === true}
+                onChange={() => setAsManager(true)}
+              />
+              <span>
+                <span className="block font-semibold text-foreground">
+                  I&apos;m {picked.label || "this player"}&apos;s parent or guardian
+                </span>
+                <span className="block text-muted">
+                  Manage this slot on their behalf — keeps your own account separate.
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
       <Button
         variant="primary"
-        disabled={!pickedId}
+        disabled={!pickedId || asManager === null}
         loading={submitting}
         onClick={claim}
         className="w-full"
       >
-        Claim player
+        {asManager === false ? "Claim player" : "Claim as parent"}
       </Button>
       <button
         type="button"
