@@ -72,12 +72,31 @@ export async function createInviteAction(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const entitlement = await getUserEntitlement(user.id);
-  if (!tierAtLeast(entitlement, "coach")) {
-    return {
-      ok: false,
-      error: "Sharing a playbook is a Coach feature. Upgrade to unlock.",
-    };
+  // Authorize: caller must be an active owner or editor of this playbook.
+  // Non-owner editors can issue player invites against the owner's seat
+  // allowance regardless of their own tier — the owner is the one paying.
+  const admin = createServiceRoleClient();
+  const { data: callerMem } = await admin
+    .from("playbook_members")
+    .select("role, status")
+    .eq("playbook_id", input.playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!callerMem || callerMem.status !== "active" || !["owner", "editor"].includes(callerMem.role as string)) {
+    return { ok: false, error: "You don't have permission to share this playbook." };
+  }
+  const isOwner = callerMem.role === "owner";
+
+  // Owner must be Coach+ to share at all (seat-bound features). Non-owner
+  // editors ride on the owner's tier — the owner already paid.
+  if (isOwner) {
+    const entitlement = await getUserEntitlement(user.id);
+    if (!tierAtLeast(entitlement, "coach")) {
+      return {
+        ok: false,
+        error: "Sharing a playbook is a Coach feature. Upgrade to unlock.",
+      };
+    }
   }
 
   // Coach invites are seat-bound: force single-use, owner-only, and
@@ -88,21 +107,13 @@ export async function createInviteAction(input: {
   if (input.role === "editor") {
     effectiveMaxUses = 1;
     effectiveAutoApproveLimit = null;
-    const { data: ownerRow } = await createServiceRoleClient()
-      .from("playbook_members")
-      .select("user_id")
-      .eq("playbook_id", input.playbookId)
-      .eq("role", "owner")
-      .eq("status", "active")
-      .maybeSingle();
-    const ownerId = (ownerRow?.user_id as string | null) ?? null;
-    if (ownerId !== user.id) {
+    if (!isOwner) {
       return {
         ok: false,
         error: "Only the playbook owner can grant coach (edit) access.",
       };
     }
-    const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+    const seatCheck = await ensureSeatsAvailable(user.id, 1);
     if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
   }
 
