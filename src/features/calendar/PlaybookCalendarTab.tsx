@@ -458,17 +458,14 @@ function EventCard({
       </div>
 
       {showInlineRsvp && (
-        <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">
-            Reply
-          </span>
+        <div className="mt-2 flex items-center gap-1.5">
           {(["yes", "maybe", "no"] as const).map((s) => {
             const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
             const colors = {
-              yes: "bg-emerald-100 text-emerald-900 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
+              yes: "text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950",
               maybe:
-                "bg-amber-100 text-amber-900 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
-              no: "bg-red-100 text-red-900 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
+                "text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950",
+              no: "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950",
             };
             return (
               <button
@@ -480,7 +477,7 @@ function EventCard({
                   quickRsvp(s);
                 }}
                 className={
-                  "flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 transition disabled:opacity-60 " +
+                  "rounded-md px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-60 " +
                   colors[s]
                 }
               >
