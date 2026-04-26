@@ -58,6 +58,7 @@ import {
   Gamepad2,
   GripVertical,
   Hash,
+  History,
   LayoutGrid,
   List,
   Loader2,
@@ -94,6 +95,7 @@ import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/Copy
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
+import { HistoryDrawer } from "@/features/versions/HistoryDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -363,6 +365,7 @@ function PlaybookDetailClientInner({
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   function showPlayCapUpgrade() {
     setUpgradeNotice({
@@ -1314,16 +1317,28 @@ function PlaybookDetailClientInner({
           )}
 
           {versionHistoryAvailable && (
-            <button
-              type="button"
-              onClick={() => setTrashOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/10"
-              aria-label="Open trash"
-              title="Trash"
-            >
-              <Trash2 className="size-4" />
-              <span className="hidden sm:inline">Trash</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/10"
+                aria-label="Open history"
+                title="History"
+              >
+                <History className="size-4" />
+                <span className="hidden sm:inline">History</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrashOpen(true)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/10"
+                aria-label="Open trash"
+                title="Trash"
+              >
+                <Trash2 className="size-4" />
+                <span className="hidden sm:inline">Trash</span>
+              </button>
+            </>
           )}
 
           {/* Desktop: Select / Reorder / Print / New play as dedicated buttons.
@@ -2169,6 +2184,11 @@ function PlaybookDetailClientInner({
       <TrashDrawer
         open={trashOpen}
         onClose={() => setTrashOpen(false)}
+        playbookId={playbookId}
+      />
+      <HistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
         playbookId={playbookId}
       />
       {copyTarget && (
