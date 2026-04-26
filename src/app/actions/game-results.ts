@@ -54,6 +54,7 @@ export type GameRow = {
   sessionId: string | null;
   eventId: string | null;
   when: string;
+  eventTimezone: string | null;
   status: "scheduled" | "active" | "ended";
   kind: "game" | "scrimmage";
   opponent: string | null;
@@ -83,7 +84,7 @@ export async function listGamesAction(playbookId: string) {
     supabase
       .from("playbook_events")
       .select(
-        "id, type, starts_at, opponent, home_away, location_name, score_us, score_them",
+        "id, type, starts_at, timezone, opponent, home_away, location_name, score_us, score_them",
       )
       .eq("playbook_id", playbookId)
       .in("type", ["game", "scrimmage"])
@@ -137,6 +138,7 @@ export async function listGamesAction(playbookId: string) {
       sessionId: s.id as string,
       eventId: ev ? (ev.id as string) : null,
       when: ev ? (ev.starts_at as string) : (s.started_at as string),
+      eventTimezone: ev ? ((ev.timezone as string | null) ?? null) : null,
       status: (s.status as "active" | "ended") ?? "ended",
       kind: (s.kind as string | null) === "scrimmage" ? "scrimmage" : "game",
       opponent:
@@ -158,6 +160,7 @@ export async function listGamesAction(playbookId: string) {
       sessionId: null,
       eventId: ev.id as string,
       when: ev.starts_at as string,
+      eventTimezone: (ev.timezone as string | null) ?? null,
       status: "scheduled",
       kind: (ev.type as string) === "scrimmage" ? "scrimmage" : "game",
       opponent: (ev.opponent as string | null) ?? null,
@@ -341,6 +344,62 @@ export async function updateGameOutcomeAction(
   }
 
   return { ok: true as const };
+}
+
+export async function updateScheduledEventAction(
+  playbookId: string,
+  eventId: string,
+  input: { startsAt: string; locationName: string | null },
+) {
+  const guard = await assertCoachAndGameResults(playbookId);
+  if (!guard.ok) return guard;
+  const { supabase } = guard;
+
+  const startsAt = new Date(input.startsAt);
+  if (Number.isNaN(startsAt.getTime())) {
+    return { ok: false as const, error: "Invalid date/time." };
+  }
+
+  const { error } = await supabase
+    .from("playbook_events")
+    .update({
+      starts_at: startsAt.toISOString(),
+      location_name: input.locationName?.trim() || null,
+    })
+    .eq("id", eventId)
+    .eq("playbook_id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+export async function listLinkableSessionsAction(
+  playbookId: string,
+  kind: "game" | "scrimmage",
+) {
+  const guard = await assertCoachAndGameResults(playbookId);
+  if (!guard.ok) return guard;
+  const { supabase } = guard;
+
+  const { data, error } = await supabase
+    .from("game_sessions")
+    .select("id, started_at, opponent, score_us, score_them, status")
+    .eq("playbook_id", playbookId)
+    .eq("kind", kind)
+    .is("calendar_event_id", null)
+    .in("status", ["active", "ended"])
+    .order("started_at", { ascending: false })
+    .limit(200);
+  if (error) return { ok: false as const, error: error.message };
+
+  const sessions = (data ?? []).map((s) => ({
+    id: s.id as string,
+    startedAt: s.started_at as string,
+    opponent: (s.opponent as string | null) ?? null,
+    scoreUs: (s.score_us as number | null) ?? null,
+    scoreThem: (s.score_them as number | null) ?? null,
+    status: s.status as "active" | "ended",
+  }));
+  return { ok: true as const, sessions };
 }
 
 export async function deleteScheduledEventAction(

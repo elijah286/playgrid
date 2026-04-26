@@ -7,9 +7,11 @@ import {
   deleteGameSessionAction,
   deleteScheduledEventAction,
   listGamesAction,
+  listLinkableSessionsAction,
   listSchedulableEventsAction,
   setSessionCalendarEventAction,
   updateGameOutcomeAction,
+  updateScheduledEventAction,
   type GameRow as GameRowData,
 } from "@/app/actions/game-results";
 import { useToast } from "@/components/ui";
@@ -645,6 +647,55 @@ function StatusBadge({
   );
 }
 
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+// ISO timestamp → "YYYY-MM-DDTHH:mm" in the browser's local tz, for
+// <input type="datetime-local">. Matches how the row label is rendered.
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function fromDatetimeLocal(value: string): string {
+  // The empty string would otherwise become "Invalid Date"; let the server reject.
+  return new Date(value).toISOString();
+}
+
+function linkableLabel(s: {
+  startedAt: string;
+  opponent: string | null;
+  scoreUs: number | null;
+  scoreThem: number | null;
+}): string {
+  const d = new Date(s.startedAt);
+  const date = d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const score =
+    s.scoreUs != null && s.scoreThem != null
+      ? ` (${s.scoreUs}–${s.scoreThem})`
+      : "";
+  const opp = s.opponent ? ` vs ${s.opponent}` : "";
+  return `${date} · ${time}${opp}${score}`;
+}
+
+type LinkableSession = {
+  id: string;
+  startedAt: string;
+  opponent: string | null;
+  scoreUs: number | null;
+  scoreThem: number | null;
+  status: "active" | "ended";
+};
+
 function EditGameDialog({
   playbookId,
   game,
@@ -661,8 +712,25 @@ function EditGameDialog({
   const [scoreThem, setScoreThem] = useState<string>(
     game.scoreThem == null ? "" : String(game.scoreThem),
   );
+  const [whenLocal, setWhenLocal] = useState<string>(() =>
+    game.eventId ? toDatetimeLocal(game.when) : "",
+  );
+  const [locationName, setLocationName] = useState<string>(
+    game.locationName ?? "",
+  );
+  const [linkSessionId, setLinkSessionId] = useState<string>("");
+  const [linkable, setLinkable] = useState<LinkableSession[] | null>(null);
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
+
+  const canLinkSession = !!game.eventId && !game.sessionId;
+
+  useEffect(() => {
+    if (!canLinkSession) return;
+    listLinkableSessionsAction(playbookId, game.kind).then((res) => {
+      if (res.ok) setLinkable(res.sessions);
+    });
+  }, [canLinkSession, playbookId, game.kind]);
 
   function save() {
     const us = scoreUs.trim() === "" ? null : Number(scoreUs);
@@ -676,6 +744,16 @@ function EditGameDialog({
       return;
     }
     startTransition(async () => {
+      if (game.eventId) {
+        const res = await updateScheduledEventAction(playbookId, game.eventId, {
+          startsAt: fromDatetimeLocal(whenLocal),
+          locationName: locationName.trim() || null,
+        });
+        if (!res.ok) {
+          toast(res.error, "error");
+          return;
+        }
+      }
       const res = await updateGameOutcomeAction(playbookId, {
         sessionId: game.sessionId,
         eventId: game.eventId,
@@ -686,6 +764,17 @@ function EditGameDialog({
       if (!res.ok) {
         toast(res.error, "error");
         return;
+      }
+      if (canLinkSession && linkSessionId) {
+        const linkRes = await setSessionCalendarEventAction(
+          playbookId,
+          linkSessionId,
+          game.eventId,
+        );
+        if (!linkRes.ok) {
+          toast(linkRes.error, "error");
+          return;
+        }
       }
       toast("Saved.", "success");
       onClose(true);
@@ -707,6 +796,33 @@ function EditGameDialog({
           Edit {game.kind === "scrimmage" ? "scrimmage" : "game"}
         </h2>
         <div className="mt-4 space-y-3">
+          {game.eventId && (
+            <label className="block text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                Date &amp; time
+              </span>
+              <input
+                type="datetime-local"
+                value={whenLocal}
+                onChange={(e) => setWhenLocal(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              />
+            </label>
+          )}
+          {game.eventId && (
+            <label className="block text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                Location
+              </span>
+              <input
+                type="text"
+                value={locationName}
+                onChange={(e) => setLocationName(e.target.value)}
+                placeholder="e.g. John Gupton Stadium"
+                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              />
+            </label>
+          )}
           <label className="block text-sm">
             <span className="text-xs font-medium uppercase tracking-wide text-muted">
               Opponent
@@ -747,6 +863,32 @@ function EditGameDialog({
               />
             </label>
           </div>
+          {canLinkSession && (
+            <label className="block text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                Link to recorded {game.kind === "scrimmage" ? "scrimmage" : "game"}
+              </span>
+              <select
+                value={linkSessionId}
+                onChange={(e) => setLinkSessionId(e.target.value)}
+                disabled={!linkable || linkable.length === 0}
+                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              >
+                <option value="">
+                  {linkable == null
+                    ? "Loading…"
+                    : linkable.length === 0
+                      ? "No unlinked sessions"
+                      : "— None —"}
+                </option>
+                {(linkable ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {linkableLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button
