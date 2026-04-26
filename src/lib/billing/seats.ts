@@ -13,10 +13,10 @@ export type SeatUsage = {
 };
 
 /**
- * Compute the owner's current seat ledger. `used` excludes Coach+
- * collaborators (they pay their own way) and the owner themselves.
- * Returns zero-everything for owners not on Coach+ — seats only matter
- * for paying owners.
+ * Compute the owner's current seat ledger. `used` counts only editor
+ * (coach) collaborators below Coach tier — players (viewer) and Coach+
+ * paying collaborators ride free. Returns zero-everything for owners
+ * not on Coach+ — seats only matter for paying owners.
  */
 export async function getSeatUsage(ownerId: string): Promise<SeatUsage> {
   const ownerEntitlement = await getUserEntitlement(ownerId);
@@ -57,8 +57,8 @@ export async function ensureSeatsAvailable(
     ok: false,
     usage,
     error: usage.included + usage.purchased === 0
-      ? "You need a Team Coach plan to add collaborators."
-      : `You're at your seat limit (${usage.included + usage.purchased} seat${usage.included + usage.purchased === 1 ? "" : "s"} in use). Add a seat or remove an existing collaborator.`,
+      ? "You need a Team Coach plan to add another coach."
+      : `Coach seat limit reached (${usage.included + usage.purchased} of ${usage.included + usage.purchased} in use). Add a seat or remove a coach in Account → Coach seats.`,
   };
 }
 
@@ -73,9 +73,10 @@ export type SeatCollaborator = {
 };
 
 /**
- * List the collaborators currently consuming seats for the given owner —
- * distinct active non-owner members of the owner's playbooks whose own
- * tier is below Coach. Returns an empty list for non-paying owners.
+ * List the coaches currently consuming seats for the given owner —
+ * distinct active editor-role members of the owner's playbooks whose own
+ * tier is below Coach. Players (viewer role) don't count. Returns an
+ * empty list for non-paying owners.
  */
 export async function getSeatCollaborators(
   ownerId: string,
@@ -99,7 +100,7 @@ export async function getSeatCollaborators(
     .select("user_id, playbook_id")
     .in("playbook_id", ownedIds)
     .eq("status", "active")
-    .neq("role", "owner");
+    .eq("role", "editor");
 
   const playbooksByUser = new Map<string, string[]>();
   for (const r of memberRows ?? []) {
@@ -154,6 +155,72 @@ export async function getSeatCollaborators(
       };
     })
     .sort((a, b) => (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""));
+}
+
+export type PendingCoachInvite = {
+  inviteId: string;
+  playbookId: string;
+  playbookName: string;
+  email: string | null;
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+/**
+ * Pending coach invites the owner has issued (role=editor, not yet
+ * accepted/revoked/expired) across all their playbooks. Powers the
+ * "Resend" affordance on the /account seats card.
+ */
+export async function getPendingCoachInvites(
+  ownerId: string,
+): Promise<PendingCoachInvite[]> {
+  const ownerEntitlement = await getUserEntitlement(ownerId);
+  if (!tierAtLeast(ownerEntitlement, "coach")) return [];
+
+  const admin = createServiceRoleClient();
+  const { data: ownedRows } = await admin
+    .from("playbook_members")
+    .select("playbook_id")
+    .eq("user_id", ownerId)
+    .eq("role", "owner")
+    .eq("status", "active");
+  const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
+  if (ownedIds.length === 0) return [];
+
+  const nowIso = new Date().toISOString();
+  const { data: inviteRows } = await admin
+    .from("playbook_invites")
+    .select("id, playbook_id, email, token, created_at, expires_at, max_uses, uses_count, revoked_at, role")
+    .in("playbook_id", ownedIds)
+    .eq("role", "editor")
+    .is("revoked_at", null)
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false });
+
+  const live = (inviteRows ?? []).filter((r) => {
+    const max = r.max_uses as number | null;
+    const used = (r.uses_count as number | null) ?? 0;
+    return max === null || used < max;
+  });
+  if (live.length === 0) return [];
+
+  const { data: pbRows } = await admin
+    .from("playbooks")
+    .select("id, name")
+    .in("id", Array.from(new Set(live.map((r) => r.playbook_id as string))));
+  const nameByPb = new Map<string, string>();
+  for (const r of pbRows ?? []) nameByPb.set(r.id as string, (r.name as string) ?? "Untitled");
+
+  return live.map((r) => ({
+    inviteId: r.id as string,
+    playbookId: r.playbook_id as string,
+    playbookName: nameByPb.get(r.playbook_id as string) ?? "Untitled",
+    email: (r.email as string | null) ?? null,
+    token: r.token as string,
+    createdAt: r.created_at as string,
+    expiresAt: r.expires_at as string,
+  }));
 }
 
 /** Ensure the owner has a row in owner_seat_grants (idempotent). Used by

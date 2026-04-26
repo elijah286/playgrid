@@ -16,7 +16,8 @@ import { createBillingPortalSessionAction, setSeatQuantityAction } from "@/app/a
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { TIER_LABEL } from "@/lib/billing/features";
-import type { SeatUsage, SeatCollaborator } from "@/lib/billing/seats";
+import type { SeatUsage, SeatCollaborator, PendingCoachInvite } from "@/lib/billing/seats";
+import { resendCoachInviteAction } from "@/app/actions/invites";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ export function AccountClient({
   sessions,
   seatUsage,
   seatCollaborators,
+  pendingCoachInvites,
 }: {
   email: string;
   displayName: string | null;
@@ -59,6 +61,7 @@ export function AccountClient({
   sessions: AccountSession[];
   seatUsage: SeatUsage | null;
   seatCollaborators: SeatCollaborator[];
+  pendingCoachInvites: PendingCoachInvite[];
 }) {
   return (
     <div className="space-y-6">
@@ -73,6 +76,7 @@ export function AccountClient({
           <SeatsCard
             usage={seatUsage}
             collaborators={seatCollaborators}
+            pendingInvites={pendingCoachInvites}
             canPurchase={entitlement?.source === "stripe"}
           />
         ) : null}
@@ -767,16 +771,20 @@ function SessionsCard({ sessions }: { sessions: AccountSession[] }) {
 function SeatsCard({
   usage,
   collaborators,
+  pendingInvites,
   canPurchase,
 }: {
   usage: SeatUsage;
   collaborators: SeatCollaborator[];
+  pendingInvites: PendingCoachInvite[];
   canPurchase: boolean;
 }) {
   const total = usage.included + usage.purchased;
   const pct = total === 0 ? 0 : Math.min(100, Math.round((usage.used / total) * 100));
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
   const minRemovable = Math.max(0, usage.used - usage.included);
 
   function setSeats(next: number) {
@@ -791,16 +799,29 @@ function SeatsCard({
     });
   }
 
+  async function resend(inviteId: string) {
+    setErr(null);
+    setResendNotice(null);
+    setResending(inviteId);
+    const res = await resendCoachInviteAction(inviteId);
+    setResending(null);
+    if (!res.ok) {
+      setErr(res.error);
+      return;
+    }
+    setResendNotice("Invite re-sent.");
+  }
+
   return (
     <Card
       icon={Users}
-      title="Team seats"
-      description="Collaborators on your playbooks. Coaches with their own paid plan ride free."
+      title="Coach seats"
+      description="Coaches you've granted edit access to. Players are unlimited and don't use a seat."
     >
       <div className="space-y-3">
         <div className="flex items-baseline justify-between">
           <p className="text-sm font-medium text-foreground">
-            {usage.used} of {total} seat{total === 1 ? "" : "s"} used
+            {usage.used} of {total} coach seat{total === 1 ? "" : "s"} used
           </p>
           <p className="text-xs text-muted">
             {usage.included} included
@@ -815,7 +836,7 @@ function SeatsCard({
         </div>
         {collaborators.length === 0 ? (
           <p className="text-xs text-muted">
-            No seats in use yet. Invite collaborators from any playbook to share it with your staff.
+            No coaches yet. Invite a coach with edit access from any playbook.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -854,10 +875,42 @@ function SeatsCard({
             })}
           </ul>
         )}
+        {pendingInvites.length > 0 ? (
+          <div className="border-t border-border pt-3">
+            <p className="text-xs font-medium text-foreground">
+              Pending coach invites
+            </p>
+            <ul className="mt-1 divide-y divide-border">
+              {pendingInvites.map((inv) => (
+                <li key={inv.inviteId} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-foreground">
+                      {inv.email ?? "(link-only invite)"}
+                    </div>
+                    <div className="truncate text-xs text-muted">
+                      {inv.playbookName}
+                    </div>
+                  </div>
+                  {inv.email ? (
+                    <button
+                      type="button"
+                      disabled={resending === inv.inviteId}
+                      onClick={() => resend(inv.inviteId)}
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                    >
+                      {resending === inv.inviteId ? "Sending…" : "Resend"}
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {resendNotice ? <p className="text-xs text-success">{resendNotice}</p> : null}
         {canPurchase ? (
           <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted">
-              Add seats for ${SEAT_PRICE_USD_PER_MONTH}/seat/month, prorated.
+              Add coach seats for ${SEAT_PRICE_USD_PER_MONTH}/seat/month, prorated.
             </p>
             <div className="flex items-center gap-2">
               <button

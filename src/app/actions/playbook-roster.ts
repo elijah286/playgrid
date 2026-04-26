@@ -8,6 +8,10 @@ import {
   lookupDisplayName,
   recordInboxEvent,
 } from "@/lib/inbox/record-event";
+import { ensureSeatsAvailable } from "@/lib/billing/seats";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { getUserEntitlement } from "@/lib/billing/entitlement";
+import { tierAtLeast } from "@/lib/billing/features";
 
 export type PlaybookRosterMember = {
   id: string;
@@ -834,6 +838,27 @@ export async function setMemberRoleAction(input: {
   }
   if (current.user_id === null) {
     return { ok: false, error: "Unclaimed roster spots stay as players." };
+  }
+
+  // Promoting player → coach consumes a seat. Block over-cap up front
+  // (unless the target user pays for Coach+ themselves).
+  if (input.role === "editor" && current.role !== "editor") {
+    const admin = createServiceRoleClient();
+    const { data: ownerRow } = await admin
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", input.playbookId)
+      .eq("role", "owner")
+      .eq("status", "active")
+      .maybeSingle();
+    const ownerId = (ownerRow?.user_id as string | null) ?? null;
+    if (ownerId) {
+      const targetEnt = await getUserEntitlement(current.user_id);
+      if (!tierAtLeast(targetEnt, "coach")) {
+        const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+        if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
+      }
+    }
   }
 
   const patch: Record<string, unknown> = { role: input.role };

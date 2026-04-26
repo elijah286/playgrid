@@ -7,7 +7,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { getSeatUsage, getSeatCollaborators, type SeatUsage, type SeatCollaborator } from "@/lib/billing/seats";
+import { getSeatUsage, getSeatCollaborators, getPendingCoachInvites, type SeatUsage, type SeatCollaborator, type PendingCoachInvite } from "@/lib/billing/seats";
 import { DEVICE_ID_COOKIE } from "@/lib/auth/sessions";
 import { AccountClient, type AccountSession } from "./ui";
 
@@ -27,6 +27,7 @@ export default async function AccountPage() {
   let sessions: AccountSession[] = [];
   let seatUsage: SeatUsage | null = null;
   let seatCollaborators: SeatCollaborator[] = [];
+  let pendingCoachInvites: PendingCoachInvite[] = [];
   try {
     const admin = createServiceRoleClient();
     const [profileResult, sessionsResult] = await Promise.all([
@@ -60,12 +61,14 @@ export default async function AccountPage() {
 
   if (isCoachPlus) {
     try {
-      const [usage, collabs] = await Promise.all([
+      const [usage, collabs, pending] = await Promise.all([
         getSeatUsage(user.id),
         getSeatCollaborators(user.id),
+        getPendingCoachInvites(user.id),
       ]);
       seatUsage = usage;
       seatCollaborators = collabs;
+      pendingCoachInvites = pending;
     } catch {
       /* best effort */
     }
@@ -95,6 +98,7 @@ export default async function AccountPage() {
         sessions={sessions}
         seatUsage={seatUsage}
         seatCollaborators={seatCollaborators}
+        pendingCoachInvites={pendingCoachInvites}
       />
     </div>
   );

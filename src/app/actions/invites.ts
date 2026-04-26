@@ -131,6 +131,66 @@ export async function listInvitesAction(
   return { ok: true, invites: (data ?? []) as PlaybookInvite[] };
 }
 
+/**
+ * Re-send a previously-created coach invite email. Used by the seats
+ * card on /account so an owner can poke a coach who hasn't accepted yet.
+ * Authorizes by checking the caller is the playbook owner.
+ */
+export async function resendCoachInviteAction(
+  inviteId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const admin = createServiceRoleClient();
+  const { data: inv } = await admin
+    .from("playbook_invites")
+    .select("id, playbook_id, role, email, token, expires_at, revoked_at, max_uses, uses_count")
+    .eq("id", inviteId)
+    .maybeSingle();
+  if (!inv) return { ok: false, error: "Invite not found." };
+  if (!inv.email) return { ok: false, error: "This invite has no email on file. Copy the link from the playbook instead." };
+
+  const { data: ownerRow } = await admin
+    .from("playbook_members")
+    .select("user_id")
+    .eq("playbook_id", inv.playbook_id as string)
+    .eq("role", "owner")
+    .eq("status", "active")
+    .maybeSingle();
+  if ((ownerRow?.user_id as string | null) !== user.id) {
+    return { ok: false, error: "You can only resend invites for your own playbooks." };
+  }
+
+  const { data: pb } = await admin
+    .from("playbooks")
+    .select("name")
+    .eq("id", inv.playbook_id as string)
+    .maybeSingle();
+  const teamName = ((pb?.name as string | null) ?? "your team").trim() || "your team";
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const senderName = (profile?.display_name as string | null) ?? null;
+
+  const { SITE_URL } = await getSiteUrl();
+  const inviteUrl = `${SITE_URL}/invite/${inv.token as string}`;
+  return sendPlaybookInviteEmailAction({
+    playbookId: inv.playbook_id as string,
+    toEmail: inv.email as string,
+    inviteUrl,
+    teamName,
+    senderName,
+  });
+}
+
 export async function revokeInviteAction(
   inviteId: string,
   playbookId: string,
@@ -334,10 +394,10 @@ export async function sharePlaybookWithEmailsAction(input: {
           .maybeSingle();
         const alreadyActive = !!existing && existing.status === "active";
         if (!alreadyActive) {
-          // Seat guard: a new active membership consumes a seat unless the
-          // invitee already pays for Coach+ themselves. Coach+ collaborators
-          // ride free regardless of the inviter's allowance.
-          if (ownerId) {
+          // Seat guard: only coach (editor) memberships consume seats.
+          // Player (viewer) invites are unlimited. Coach+ paying invitees
+          // ride free even when added as editors.
+          if (ownerId && input.role === "editor") {
             const inviteeEntitlement = await getUserEntitlement(userId);
             const isPaidInvitee = tierAtLeast(inviteeEntitlement, "coach");
             if (!isPaidInvitee) {
@@ -415,10 +475,9 @@ export async function sharePlaybookWithEmailsAction(input: {
           userId,
         });
       } else {
-        // No existing account — they'll sign up as free, so they'll consume
-        // a seat at acceptance. Reserve one now so a sender doesn't blast 30
-        // invites and discover only 3 land.
-        if (ownerId) {
+        // No existing account — they'll sign up as free. Only reserve a
+        // seat for coach (editor) invites; player invites are unlimited.
+        if (ownerId && input.role === "editor") {
           const seatCheck = await ensureSeatsAvailable(ownerId, 1);
           if (!seatCheck.ok) {
             results.push({ email, kind: "failed", error: seatCheck.error });
