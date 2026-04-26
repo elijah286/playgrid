@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { sendRosterClaimNotification } from "@/lib/notifications/roster-claim-email";
 
 export type PlaybookRosterMember = {
   id: string;
@@ -522,11 +523,30 @@ export async function submitRosterClaimAction(input: {
 }): Promise<{ ok: true; claimId: string } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data, error } = await supabase.rpc("submit_roster_claim", {
     p_member_id: input.memberId,
     p_note: input.note ?? null,
   });
   if (error) return { ok: false, error: error.message };
+
+  // Best-effort notification — don't block the player on email failures.
+  if (user) {
+    const { data: m } = await supabase
+      .from("playbook_members")
+      .select("playbook_id, label")
+      .eq("id", input.memberId)
+      .maybeSingle();
+    if (m?.playbook_id) {
+      await sendRosterClaimNotification({
+        playbookId: m.playbook_id as string,
+        claimingUserId: user.id,
+        rosterLabel: (m.label as string | null) ?? null,
+      }).catch(() => {});
+    }
+  }
   return { ok: true, claimId: data as string };
 }
 

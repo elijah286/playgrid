@@ -62,6 +62,8 @@ import {
   InviteTeamMemberDialog,
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
+import { InboxTab } from "@/features/dashboard/InboxTab";
+import type { InboxAlert } from "@/app/actions/inbox";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -975,13 +977,18 @@ export function DashboardClient({
   hideAnimation = false,
   isAdmin = false,
   teamCalendarAvailable = false,
+  inboxAlerts = [],
+  initialTab = "playbooks",
 }: {
   data: DashboardSummary;
   hideAnimation?: boolean;
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
+  inboxAlerts?: InboxAlert[];
+  initialTab?: HomeTab;
 }) {
-  const [homeTab, setHomeTab] = useState<"playbooks" | "calendar">("playbooks");
+  const [homeTab, setHomeTab] = useState<HomeTab>(initialTab);
+  const inboxCount = inboxAlerts.length;
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -1267,22 +1274,43 @@ export function DashboardClient({
     return items;
   }
 
-  if (teamCalendarAvailable && homeTab === "calendar") {
+  const showTabNav = teamCalendarAvailable || inboxCount > 0;
+  if (showTabNav && homeTab === "calendar" && teamCalendarAvailable) {
     return (
       <div className="space-y-6">
         <HomeTabNav
           tab={homeTab}
           onChange={setHomeTab}
+          inboxCount={inboxCount}
+          showCalendar={teamCalendarAvailable}
         />
         <HomeCalendarTab />
+      </div>
+    );
+  }
+  if (showTabNav && homeTab === "inbox") {
+    return (
+      <div className="space-y-6">
+        <HomeTabNav
+          tab={homeTab}
+          onChange={setHomeTab}
+          inboxCount={inboxCount}
+          showCalendar={teamCalendarAvailable}
+        />
+        <InboxTab initialAlerts={inboxAlerts} />
       </div>
     );
   }
 
   return (
     <div className={`space-y-8 ${pending ? "cursor-wait" : ""}`}>
-      {teamCalendarAvailable && (
-        <HomeTabNav tab={homeTab} onChange={setHomeTab} />
+      {showTabNav && (
+        <HomeTabNav
+          tab={homeTab}
+          onChange={setHomeTab}
+          inboxCount={inboxCount}
+          showCalendar={teamCalendarAvailable}
+        />
       )}
       {pending && (
         <div
@@ -1877,30 +1905,57 @@ function DuplicatePlaybookDialog({
 }
 
 
+type HomeTab = "playbooks" | "calendar" | "inbox";
+
 function HomeTabNav({
   tab,
   onChange,
+  inboxCount,
+  showCalendar,
 }: {
-  tab: "playbooks" | "calendar";
-  onChange: (t: "playbooks" | "calendar") => void;
+  tab: HomeTab;
+  onChange: (t: HomeTab) => void;
+  inboxCount: number;
+  showCalendar: boolean;
 }) {
+  const tabs: HomeTab[] = ["playbooks"];
+  if (showCalendar) tabs.push("calendar");
+  tabs.push("inbox");
+  const labels: Record<HomeTab, string> = {
+    playbooks: "Playbooks",
+    calendar: "Calendar",
+    inbox: "Inbox",
+  };
   return (
     <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
-      {(["playbooks", "calendar"] as const).map((t) => {
+      {tabs.map((t) => {
         const active = tab === t;
+        const showBadge = t === "inbox" && inboxCount > 0;
         return (
           <button
             key={t}
             type="button"
             onClick={() => onChange(t)}
             className={
-              "px-4 py-1.5 text-sm font-medium transition-colors " +
+              "flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium transition-colors " +
               (active
                 ? "bg-primary text-primary-foreground"
                 : "bg-surface text-foreground hover:bg-surface-hover")
             }
           >
-            {t === "playbooks" ? "Playbooks" : "Calendar"}
+            {labels[t]}
+            {showBadge && (
+              <span
+                className={
+                  "rounded-full px-1.5 py-px text-[10px] font-semibold " +
+                  (active
+                    ? "bg-white/25 text-primary-foreground"
+                    : "bg-primary text-primary-foreground")
+                }
+              >
+                {inboxCount}
+              </span>
+            )}
           </button>
         );
       })}

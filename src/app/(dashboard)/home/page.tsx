@@ -1,22 +1,23 @@
 import { getDashboardSummaryAction } from "@/app/actions/plays";
-import { listPendingApprovalsForOwnerAction } from "@/app/actions/playbook-roster";
+import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
-import { PendingApprovalsCard } from "@/features/dashboard/PendingApprovalsCard";
 import { DashboardClient } from "./ui";
 
-type Props = { searchParams: Promise<{ error?: string }> };
+type Props = {
+  searchParams: Promise<{ error?: string; tab?: string }>;
+};
 
 export default async function HomePage({ searchParams }: Props) {
-  const { error: errFromQuery } = await searchParams;
-  const [res, approvals, hideAnimation, profileRes, betaFeatures] =
+  const { error: errFromQuery, tab } = await searchParams;
+  const [res, inbox, hideAnimation, profileRes, betaFeatures] =
     await Promise.all([
       getDashboardSummaryAction(),
-      listPendingApprovalsForOwnerAction(),
+      listInboxAlertsAction(),
       getHideLobbyAnimation(),
       getCurrentUserProfile(),
       getBetaFeatures(),
@@ -26,6 +27,11 @@ export default async function HomePage({ searchParams }: Props) {
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
+  const inboxAlerts = inbox.ok ? inbox.alerts : [];
+  const initialTab: "playbooks" | "calendar" | "inbox" =
+    tab === "inbox" || tab === "calendar" || tab === "playbooks"
+      ? (tab as "playbooks" | "calendar" | "inbox")
+      : "playbooks";
 
   return (
     <div className="space-y-8">
@@ -37,15 +43,14 @@ export default async function HomePage({ searchParams }: Props) {
       {!res.ok && (
         <p className="rounded-lg bg-danger-light px-3 py-2 text-sm text-danger">{res.error}</p>
       )}
-      {approvals.ok && approvals.tiles.length > 0 && (
-        <PendingApprovalsCard initialTiles={approvals.tiles} />
-      )}
       {res.ok && (
         <DashboardClient
           data={res.data}
           hideAnimation={hideAnimation}
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
+          inboxAlerts={inboxAlerts}
+          initialTab={initialTab}
         />
       )}
     </div>
