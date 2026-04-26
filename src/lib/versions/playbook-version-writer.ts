@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
+import {
+  summarizePlaybookStructureDiff,
+  type PlaybookSnapshotDoc,
+} from "@/lib/versions/playbook-structure-diff";
 
 // Snapshots playbook structure (groups + play ordering, not play contents).
 // Called after structural mutations (group create/rename/delete/reorder,
@@ -43,13 +48,21 @@ export async function recordPlaybookVersion(args: RecordArgs): Promise<void> {
 
   const editorName = await lookupDisplayName(supabase, userId);
 
+  // Auto-compute detailed diff summary if caller didn't supply one.
+  let finalDiffSummary = diffSummary ?? null;
+  if (!finalDiffSummary) {
+    const prevDoc = (prev?.document as PlaybookSnapshotDoc | null) ?? null;
+    const lines = summarizePlaybookStructureDiff(prevDoc, document);
+    if (lines.length > 0) finalDiffSummary = lines.join("\n");
+  }
+
   await supabase.from("playbook_versions").insert({
     playbook_id: playbookId,
     schema_version: 1,
     document: document as unknown as Record<string, unknown>,
     parent_version_id: parentVersionId,
     note: note ?? null,
-    diff_summary: diffSummary ?? null,
+    diff_summary: finalDiffSummary,
     kind,
     restored_from_version_id: restoredFromVersionId ?? null,
     created_by: userId,
@@ -101,7 +114,19 @@ async function lookupDisplayName(
     .eq("id", userId)
     .maybeSingle();
   const name = (data?.display_name as string | null | undefined) ?? null;
-  return name && name.trim().length > 0 ? name.trim() : null;
+  if (name && name.trim().length > 0) return name.trim();
+
+  try {
+    const admin = createServiceRoleClient();
+    const { data: au } = await admin.auth.admin.getUserById(userId);
+    const u = au?.user;
+    const full = (u?.user_metadata?.full_name as string | undefined) ?? null;
+    if (full && full.trim().length > 0) return full.trim();
+    if (u?.email) return u.email;
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 function canonicalJson(value: unknown): string {

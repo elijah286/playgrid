@@ -11,6 +11,7 @@ import {
   type PlayVersionRow,
 } from "@/app/actions/versions";
 import { PlayVersionCompare } from "./PlayVersionCompare";
+import { PlaybookStructureCompare } from "./PlaybookStructureCompare";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 import type { PlayDocument } from "@/domain/play/types";
 import { useToast } from "@/components/ui";
@@ -33,6 +34,10 @@ export function HistoryView({
     rows: PlayVersionRow[];
     initialIndex: number;
     currentVersionId: string | null;
+  } | null>(null);
+  const [structureCompare, setStructureCompare] = useState<{
+    rows: PlaybookVersionRow[];
+    initialIndex: number;
   } | null>(null);
 
   useEffect(() => {
@@ -116,6 +121,14 @@ export function HistoryView({
           <StructureList
             rows={structure}
             playbookId={playbookId}
+            onCompare={(row) => {
+              const all = structure ?? [];
+              const idx = all.findIndex((r) => r.id === row.id);
+              setStructureCompare({
+                rows: all,
+                initialIndex: idx >= 0 ? idx : 0,
+              });
+            }}
             onRestored={() => {
               void listPlaybookVersionsAction(playbookId).then((res) => {
                 if (res.ok) setStructure(res.rows);
@@ -124,6 +137,21 @@ export function HistoryView({
           />
         )}
       </div>
+
+      {structureCompare && (
+        <PlaybookStructureCompare
+          open
+          onClose={() => setStructureCompare(null)}
+          playbookId={playbookId}
+          rows={structureCompare.rows}
+          initialIndex={structureCompare.initialIndex}
+          onRestored={() => {
+            void listPlaybookVersionsAction(playbookId).then((res) => {
+              if (res.ok) setStructure(res.rows);
+            });
+          }}
+        />
+      )}
 
       {compare && (
         <PlayVersionCompare
@@ -235,10 +263,12 @@ function describeFallback(kind: "create" | "edit" | "restore"): string {
 function StructureList({
   rows,
   playbookId,
+  onCompare,
   onRestored,
 }: {
   rows: PlaybookVersionRow[] | null;
   playbookId: string;
+  onCompare: (row: PlaybookVersionRow) => void;
   onRestored: () => void;
 }) {
   const { toast } = useToast();
@@ -281,20 +311,42 @@ function StructureList({
                 </span>
               </div>
               {row.diffSummary && (
-                <p className="mt-1 text-sm text-foreground/90">{row.diffSummary}</p>
+                <ul className="mt-1 space-y-0.5 text-sm text-foreground/90">
+                  {row.diffSummary
+                    .split("\n")
+                    .filter(Boolean)
+                    .slice(0, 6)
+                    .map((line, idx) => (
+                      <li key={idx}>{line}</li>
+                    ))}
+                  {row.diffSummary.split("\n").filter(Boolean).length > 6 && (
+                    <li className="text-xs text-muted">
+                      +{row.diffSummary.split("\n").filter(Boolean).length - 6} more…
+                    </li>
+                  )}
+                </ul>
               )}
               {row.note && <p className="mt-1 text-xs italic text-muted">“{row.note}”</p>}
             </div>
-            {i !== 0 && (
+            <div className="flex shrink-0 flex-col gap-1">
               <button
                 type="button"
-                onClick={() => onRestore(row)}
-                disabled={restoringId !== null}
-                className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10 disabled:opacity-50"
+                onClick={() => onCompare(row)}
+                className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10"
               >
-                {restoringId === row.id ? "Restoring…" : "Restore"}
+                See changes
               </button>
-            )}
+              {i !== 0 && (
+                <button
+                  type="button"
+                  onClick={() => onRestore(row)}
+                  disabled={restoringId !== null}
+                  className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10 disabled:opacity-50"
+                >
+                  {restoringId === row.id ? "Restoring…" : "Restore"}
+                </button>
+              )}
+            </div>
           </div>
         </li>
       ))}

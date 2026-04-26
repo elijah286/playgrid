@@ -284,6 +284,40 @@ export async function restorePlaybookVersionAction(
   return { ok: true as const };
 }
 
+// Returns the snapshot document (groups + plays parenting/ordering) for a
+// given playbook_versions row. Used by the structure compare modal to render
+// before/after side-by-side and produce a detailed diff client-side.
+export async function getPlaybookVersionDocumentAction(
+  versionId: string,
+): Promise<
+  | {
+      ok: true;
+      document: {
+        groups: { id: string; name: string; sort_order: number }[];
+        plays: { id: string; name: string; group_id: string | null; sort_order: number }[];
+      };
+    }
+  | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("playbook_versions")
+    .select("document")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Version not found." };
+  const doc = data.document as {
+    groups?: { id: string; name: string; sort_order: number }[];
+    plays?: { id: string; name: string; group_id: string | null; sort_order: number }[];
+  } | null;
+  return {
+    ok: true,
+    document: { groups: doc?.groups ?? [], plays: doc?.plays ?? [] },
+  };
+}
+
 export async function listPlaybookVersionsAction(
   playbookId: string,
 ): Promise<
