@@ -26,7 +26,12 @@ export function HistoryView({
   const [activity, setActivity] = useState<PlayVersionRow[] | null>(null);
   const [structure, setStructure] = useState<PlaybookVersionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [compare, setCompare] = useState<{ row: PlayVersionRow; currentVersionId: string | null } | null>(null);
+  const [compare, setCompare] = useState<{
+    playId: string;
+    rows: PlayVersionRow[];
+    initialIndex: number;
+    currentVersionId: string | null;
+  } | null>(null);
 
   useEffect(() => {
     setError(null);
@@ -82,9 +87,17 @@ export function HistoryView({
         {tab === "activity" && (
           <ActivityList
             rows={activity}
-            onCompare={(row) =>
-              setCompare({ row, currentVersionId: currentVersionByPlay.get(row.playId) ?? null })
-            }
+            onCompare={(row) => {
+              const all = activity ?? [];
+              const playRows = all.filter((r) => r.playId === row.playId);
+              const idx = playRows.findIndex((r) => r.id === row.id);
+              setCompare({
+                playId: row.playId,
+                rows: playRows,
+                initialIndex: idx >= 0 ? idx : 0,
+                currentVersionId: currentVersionByPlay.get(row.playId) ?? null,
+              });
+            }}
           />
         )}
 
@@ -105,8 +118,9 @@ export function HistoryView({
         <PlayVersionCompare
           open
           onClose={() => setCompare(null)}
-          playId={compare.row.playId}
-          target={compare.row}
+          playId={compare.playId}
+          rows={compare.rows}
+          initialIndex={compare.initialIndex}
           currentVersionId={compare.currentVersionId}
           onRestored={() => {
             void listPlaybookActivityAction(playbookId).then((res) => {

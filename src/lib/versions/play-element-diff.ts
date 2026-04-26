@@ -18,7 +18,7 @@ export type ElementDiffPair = {
   current: ElementDiff;
 };
 
-const POS_EPSILON = 0.005;
+const POS_EPSILON = 0.02;
 
 export function diffPlayDocuments(target: PlayDocument | null, current: PlayDocument | null): ElementDiffPair {
   const empty: ElementDiffPair = {

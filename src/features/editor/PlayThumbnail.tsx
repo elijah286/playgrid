@@ -255,7 +255,16 @@ export function PlayThumbnail({
             return (
               <g key={p.id} transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
                 {haloColor && (
-                  <circle cx={0} cy={0} r={R * 1.7} fill="none" stroke={haloColor} strokeWidth={playerSW * 3} vectorEffect="non-scaling-stroke" />
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={R * 1.9}
+                    fill="none"
+                    stroke={haloColor}
+                    strokeWidth={playerSW * 4}
+                    strokeDasharray="3 2"
+                    vectorEffect="non-scaling-stroke"
+                  />
                 )}
                 {shapeEl}
                 <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.035} fontWeight={700} fill={p.style.labelColor} style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
