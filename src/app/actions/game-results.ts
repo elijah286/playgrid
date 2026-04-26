@@ -284,14 +284,8 @@ export async function updateGameSessionFinalsAction(
   const { supabase } = guard;
 
   const opponent = input.opponent?.trim() || null;
-  const scoreUs =
-    input.scoreUs == null || !Number.isFinite(input.scoreUs)
-      ? null
-      : Math.max(0, Math.trunc(input.scoreUs));
-  const scoreThem =
-    input.scoreThem == null || !Number.isFinite(input.scoreThem)
-      ? null
-      : Math.max(0, Math.trunc(input.scoreThem));
+  const scoreUs = normalizeScore(input.scoreUs);
+  const scoreThem = normalizeScore(input.scoreThem);
 
   const { error } = await supabase
     .from("game_sessions")
@@ -299,6 +293,69 @@ export async function updateGameSessionFinalsAction(
     .eq("id", sessionId)
     .eq("playbook_id", playbookId)
     .eq("status", "ended");
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+function normalizeScore(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.trunc(value));
+}
+
+// Edit opponent + score on either a session or a calendar-only event.
+// Routes by id: prefer session if both present (session is the live truth).
+export async function updateGameOutcomeAction(
+  playbookId: string,
+  input: {
+    sessionId: string | null;
+    eventId: string | null;
+    opponent: string | null;
+    scoreUs: number | null;
+    scoreThem: number | null;
+  },
+) {
+  const guard = await assertCoachAndGameResults(playbookId);
+  if (!guard.ok) return guard;
+  const { supabase } = guard;
+
+  const opponent = input.opponent?.trim() || null;
+  const scoreUs = normalizeScore(input.scoreUs);
+  const scoreThem = normalizeScore(input.scoreThem);
+
+  if (input.sessionId) {
+    const { error } = await supabase
+      .from("game_sessions")
+      .update({ opponent, score_us: scoreUs, score_them: scoreThem })
+      .eq("id", input.sessionId)
+      .eq("playbook_id", playbookId);
+    if (error) return { ok: false as const, error: error.message };
+  }
+
+  if (input.eventId) {
+    const { error } = await supabase
+      .from("playbook_events")
+      .update({ opponent, score_us: scoreUs, score_them: scoreThem })
+      .eq("id", input.eventId)
+      .eq("playbook_id", playbookId);
+    if (error) return { ok: false as const, error: error.message };
+  }
+
+  return { ok: true as const };
+}
+
+export async function deleteScheduledEventAction(
+  playbookId: string,
+  eventId: string,
+) {
+  const guard = await assertCoachAndGameResults(playbookId);
+  if (!guard.ok) return guard;
+  const { supabase } = guard;
+
+  const { error } = await supabase
+    .from("playbook_events")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", eventId)
+    .eq("playbook_id", playbookId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };
 }

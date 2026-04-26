@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { CalendarPlus, Link2, Link2Off, Trash2 } from "lucide-react";
+import { CalendarPlus, Link2, Link2Off, Pencil, Trash2 } from "lucide-react";
 import {
   deleteGameSessionAction,
+  deleteScheduledEventAction,
   listGamesAction,
   listSchedulableEventsAction,
   setSessionCalendarEventAction,
+  updateGameOutcomeAction,
   type GameRow as GameRowData,
 } from "@/app/actions/game-results";
 import { useToast } from "@/components/ui";
@@ -28,6 +30,7 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [pendingDelete, setPendingDelete] = useState<GameRowData | null>(null);
   const [linkTarget, setLinkTarget] = useState<GameRowData | null>(null);
+  const [editTarget, setEditTarget] = useState<GameRowData | null>(null);
   const [deleting, startDelete] = useTransition();
   const { toast } = useToast();
 
@@ -51,10 +54,14 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
   }, [playbookId]);
 
   const confirmDelete = () => {
-    if (!pendingDelete?.sessionId) return;
+    if (!pendingDelete) return;
     const target = pendingDelete;
     startDelete(async () => {
-      const res = await deleteGameSessionAction(playbookId, target.sessionId!);
+      const res = target.sessionId
+        ? await deleteGameSessionAction(playbookId, target.sessionId)
+        : target.eventId
+          ? await deleteScheduledEventAction(playbookId, target.eventId)
+          : { ok: false as const, error: "Nothing to delete." };
       if (!res.ok) {
         toast(res.error, "error");
         return;
@@ -137,6 +144,7 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
               key={g.rowId}
               playbookId={playbookId}
               game={g}
+              onEdit={() => setEditTarget(g)}
               onDelete={() => setPendingDelete(g)}
               onLink={() => setLinkTarget(g)}
               onUnlink={() => handleUnlink(g)}
@@ -150,6 +158,16 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
           busy={deleting}
           onCancel={() => setPendingDelete(null)}
           onConfirm={confirmDelete}
+        />
+      )}
+      {editTarget && (
+        <EditGameDialog
+          playbookId={playbookId}
+          game={editTarget}
+          onClose={(saved) => {
+            setEditTarget(null);
+            if (saved) refresh();
+          }}
         />
       )}
       {linkTarget && linkTarget.sessionId && (
@@ -398,12 +416,14 @@ function KindToggle({
 function GameListItem({
   playbookId,
   game,
+  onEdit,
   onDelete,
   onLink,
   onUnlink,
 }: {
   playbookId: string;
   game: GameRowData;
+  onEdit: () => void;
   onDelete: () => void;
   onLink: () => void;
   onUnlink: () => void;
@@ -438,7 +458,7 @@ function GameListItem({
   const card = (
     <div
       className={
-        "flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 pr-28 transition-colors " +
+        "flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 pr-40 transition-colors " +
         (isFuture
           ? "border-dashed border-border bg-surface-raised/60 opacity-70"
           : detailHref
@@ -452,7 +472,11 @@ function GameListItem({
             {dateLabel} · {timeLabel}
           </span>
           <KindBadge kind={game.kind} />
-          <StatusBadge status={game.status} />
+          <StatusBadge
+            status={game.status}
+            isPast={date.getTime() <= Date.now()}
+            hasScore={game.scoreUs != null && game.scoreThem != null}
+          />
         </div>
         <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
       </div>
@@ -525,20 +549,31 @@ function GameListItem({
             <CalendarPlus className="size-4" />
           </button>
         )}
-        {game.sessionId && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelete();
-            }}
-            aria-label={`Delete ${game.kind}`}
-            className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:border-rose-500/50 hover:text-rose-600"
-          >
-            <Trash2 className="size-4" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onEdit();
+          }}
+          aria-label={`Edit ${game.kind}`}
+          title="Edit opponent and score"
+          className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-foreground"
+        >
+          <Pencil className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label={`Delete ${game.kind}`}
+          className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:border-rose-500/50 hover:text-rose-600"
+        >
+          <Trash2 className="size-4" />
+        </button>
       </div>
     </li>
   );
@@ -559,18 +594,161 @@ function KindBadge({ kind }: { kind: "game" | "scrimmage" }) {
   );
 }
 
-function StatusBadge({ status }: { status: "scheduled" | "active" | "ended" }) {
+function StatusBadge({
+  status,
+  isPast,
+  hasScore,
+}: {
+  status: "scheduled" | "active" | "ended";
+  isPast: boolean;
+  hasScore: boolean;
+}) {
+  if (status === "active") {
+    return (
+      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+        Live
+      </span>
+    );
+  }
   if (status === "ended") return null;
-  const label = status === "active" ? "Live" : "Scheduled";
-  const cls =
-    status === "active"
-      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-      : "bg-slate-500/10 text-slate-700 dark:text-slate-300";
+  // scheduled: future → "Scheduled"; past with no session → "Final" if a
+  // score was entered, otherwise "Complete".
+  if (!isPast) {
+    return (
+      <span className="rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+        Scheduled
+      </span>
+    );
+  }
   return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
-    >
-      {label}
+    <span className="rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+      {hasScore ? "Final" : "Complete"}
     </span>
+  );
+}
+
+function EditGameDialog({
+  playbookId,
+  game,
+  onClose,
+}: {
+  playbookId: string;
+  game: GameRowData;
+  onClose: (saved: boolean) => void;
+}) {
+  const [opponent, setOpponent] = useState(game.opponent ?? "");
+  const [scoreUs, setScoreUs] = useState<string>(
+    game.scoreUs == null ? "" : String(game.scoreUs),
+  );
+  const [scoreThem, setScoreThem] = useState<string>(
+    game.scoreThem == null ? "" : String(game.scoreThem),
+  );
+  const [pending, startTransition] = useTransition();
+  const { toast } = useToast();
+
+  function save() {
+    const us = scoreUs.trim() === "" ? null : Number(scoreUs);
+    const them = scoreThem.trim() === "" ? null : Number(scoreThem);
+    if (us != null && !Number.isFinite(us)) {
+      toast("Our score must be a number.", "error");
+      return;
+    }
+    if (them != null && !Number.isFinite(them)) {
+      toast("Opponent score must be a number.", "error");
+      return;
+    }
+    startTransition(async () => {
+      const res = await updateGameOutcomeAction(playbookId, {
+        sessionId: game.sessionId,
+        eventId: game.eventId,
+        opponent: opponent.trim() || null,
+        scoreUs: us,
+        scoreThem: them,
+      });
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      toast("Saved.", "success");
+      onClose(true);
+    });
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+      onClick={() => onClose(false)}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-foreground">
+          Edit {game.kind === "scrimmage" ? "scrimmage" : "game"}
+        </h2>
+        <div className="mt-4 space-y-3">
+          <label className="block text-sm">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+              Opponent
+            </span>
+            <input
+              type="text"
+              value={opponent}
+              onChange={(e) => setOpponent(e.target.value)}
+              placeholder="e.g. Lincoln High"
+              className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                Us
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={scoreUs}
+                onChange={(e) => setScoreUs(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm tabular-nums text-foreground"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                Them
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={scoreThem}
+                onChange={(e) => setScoreThem(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm tabular-nums text-foreground"
+              />
+            </label>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => onClose(false)}
+            disabled={pending}
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={pending}
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {pending ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
