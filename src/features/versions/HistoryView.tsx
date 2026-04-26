@@ -53,6 +53,15 @@ export function HistoryView({
     return m;
   }, [activity]);
 
+  // Hide the current version of each play — clicking Compare on it just shows
+  // "no differences". The list is meant for *previous* versions you might want
+  // to restore. The current version is always shown as the right pane in the
+  // compare dialog, so it's never lost.
+  const historicActivity = useMemo(() => {
+    if (!activity) return null;
+    return activity.filter((r) => !r.isCurrent);
+  }, [activity]);
+
   return (
     <>
       <div className="mx-auto w-full max-w-4xl">
@@ -86,9 +95,9 @@ export function HistoryView({
 
         {tab === "activity" && (
           <ActivityList
-            rows={activity}
+            rows={historicActivity}
             onCompare={(row) => {
-              const all = activity ?? [];
+              const all = historicActivity ?? [];
               const playRows = all.filter((r) => r.playId === row.playId);
               const idx = playRows.findIndex((r) => r.id === row.id);
               setCompare({

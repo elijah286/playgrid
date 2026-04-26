@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlayDocument } from "@/domain/play/types";
 import { summarizePlayDiff } from "@/lib/versions/play-diff";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 type RecordKind = "create" | "edit" | "restore";
 
@@ -90,7 +91,23 @@ async function lookupDisplayName(
     .eq("id", userId)
     .maybeSingle();
   const name = (data?.display_name as string | null | undefined) ?? null;
-  return name && name.trim().length > 0 ? name.trim() : null;
+  if (name && name.trim().length > 0) return name.trim();
+
+  // Fall back to the auth user's email/full_name. profiles.display_name can be
+  // null for legacy accounts that pre-date the on-signup trigger, or if the
+  // user cleared their display name. Going to auth.users keeps the history log
+  // attributable instead of showing "Unknown editor".
+  try {
+    const admin = createServiceRoleClient();
+    const { data: au } = await admin.auth.admin.getUserById(userId);
+    const u = au?.user;
+    const full = (u?.user_metadata?.full_name as string | undefined) ?? null;
+    if (full && full.trim().length > 0) return full.trim();
+    if (u?.email) return u.email;
+  } catch {
+    // ignore — we'll just return null and the UI will show "Unknown editor"
+  }
+  return null;
 }
 
 // Stable JSON for hashing/dedupe. Sorts object keys at every depth.
