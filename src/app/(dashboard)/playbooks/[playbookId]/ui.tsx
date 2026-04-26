@@ -267,7 +267,8 @@ function PlaybookDetailClientInner({
   canUseGameMode = false,
   gameResultsAvailable = false,
   teamCalendarAvailable = false,
-  initialCalendarUnseenCount = 0,
+  initialCalendarRsvpPending = 0,
+  initialCalendarUpcomingTotal = 0,
   versionHistoryAvailable = false,
 }: {
   playbookId: string;
@@ -291,8 +292,10 @@ function PlaybookDetailClientInner({
   teamCalendarAvailable?: boolean;
   /** When true, expose the Trash + History coach-only UIs (version_history beta). */
   versionHistoryAvailable?: boolean;
-  /** Unseen calendar notifications for the viewer in this playbook. */
-  initialCalendarUnseenCount?: number;
+  /** Upcoming events the viewer hasn't RSVP'd to — drives the red badge. */
+  initialCalendarRsvpPending?: number;
+  /** Total upcoming events — gray badge fallback when nothing's pending. */
+  initialCalendarUpcomingTotal?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
@@ -345,7 +348,12 @@ function PlaybookDetailClientInner({
   const [tab, setTab] = useState<
     "plays" | "formations" | "roster" | "games" | "calendar"
   >(initialTab);
-  const [calendarUnseen, setCalendarUnseen] = useState(initialCalendarUnseenCount);
+  const [calendarPending, setCalendarPending] = useState(
+    initialCalendarRsvpPending,
+  );
+  const [calendarUpcomingTotal, setCalendarUpcomingTotal] = useState(
+    initialCalendarUpcomingTotal,
+  );
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
   const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
@@ -1060,26 +1068,39 @@ function PlaybookDetailClientInner({
           <nav className="-mb-px flex gap-6" aria-label="Playbook sections">
             {(
               [
-                { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length },
-                { key: "formations" as const, label: "Formations", count: initialFormations.length },
+                { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length, variant: "default" as const },
+                { key: "formations" as const, label: "Formations", count: initialFormations.length, variant: "default" as const },
                 {
                   key: "roster" as const,
                   label: "Roster",
                   count: initialRoster.filter((m) => m.status === "active").length,
+                  variant: "default" as const,
                 },
                 ...(gameResultsAvailable
-                  ? [{ key: "games" as const, label: "Games", count: null as number | null }]
+                  ? [{ key: "games" as const, label: "Games", count: null as number | null, variant: "default" as const }]
                   : []),
                 ...(teamCalendarAvailable
                   ? [{
                       key: "calendar" as const,
                       label: "Calendar",
-                      count: calendarUnseen > 0 ? calendarUnseen : null,
+                      // Red badge with pending count when the viewer owes
+                      // an RSVP. Otherwise fall back to a plain count of
+                      // upcoming events so the badge is still informative.
+                      count:
+                        calendarPending > 0
+                          ? calendarPending
+                          : calendarUpcomingTotal > 0
+                            ? calendarUpcomingTotal
+                            : null,
+                      variant: (calendarPending > 0 ? "alert" : "default") as
+                        | "default"
+                        | "alert",
                     }]
                   : []),
-              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null }>
+              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null; variant: "default" | "alert" }>
             ).map((t) => {
               const active = tab === t.key;
+              const isAlert = t.variant === "alert";
               return (
                 <button
                   key={t.key}
@@ -1096,7 +1117,11 @@ function PlaybookDetailClientInner({
                   {t.count != null && (
                   <span
                     className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
-                      active ? "bg-primary/10 text-primary" : "bg-surface-inset text-muted"
+                      isAlert
+                        ? "bg-red-600 text-white"
+                        : active
+                          ? "bg-primary/10 text-primary"
+                          : "bg-surface-inset text-muted"
                     }`}
                   >
                     {t.count}
@@ -1403,7 +1428,10 @@ function PlaybookDetailClientInner({
         <PlaybookCalendarTab
           playbookId={playbookId}
           viewerIsCoach={headerProps.viewerIsCoach}
-          onMarkSeen={() => setCalendarUnseen(0)}
+          onCountsChange={(counts) => {
+            setCalendarPending(counts.pending);
+            setCalendarUpcomingTotal(counts.upcomingTotal);
+          }}
         />
       )}
 

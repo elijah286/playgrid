@@ -11,7 +11,7 @@ import {
 import { listInvitesAction } from "@/app/actions/invites";
 import { listFormationsForPlaybookAction } from "@/app/actions/formations";
 import { getPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
-import { getUnseenCalendarCountAction } from "@/app/actions/calendar";
+import { getCalendarRsvpPendingCountAction } from "@/app/actions/calendar";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -248,12 +248,14 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
-  const calendarUnseenCount = teamCalendarAvailable
+  const calendarCounts = teamCalendarAvailable
     ? await (async () => {
-        const res = await getUnseenCalendarCountAction(playbookId);
-        return res.ok ? res.count : 0;
+        const res = await getCalendarRsvpPendingCountAction(playbookId);
+        return res.ok
+          ? { pending: res.pending, upcomingTotal: res.upcomingTotal }
+          : { pending: 0, upcomingTotal: 0 };
       })()
-    : 0;
+    : { pending: 0, upcomingTotal: 0 };
 
   const publicExampleJsonLd = isPublicExample
     ? [
@@ -321,7 +323,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
         gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}
-        initialCalendarUnseenCount={calendarUnseenCount}
+        initialCalendarRsvpPending={calendarCounts.pending}
+        initialCalendarUpcomingTotal={calendarCounts.upcomingTotal}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{
           name: book.name as string,

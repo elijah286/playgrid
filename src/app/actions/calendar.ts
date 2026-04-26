@@ -660,6 +660,39 @@ export async function getUnseenCalendarCountAction(
   return { ok: true, count: count ?? 0 };
 }
 
+/**
+ * Count upcoming events in this playbook (or across all playbooks when null)
+ * for which the viewer hasn't yet recorded an RSVP, plus the total number
+ * of upcoming events. The Calendar tab badge uses pending (red) when > 0,
+ * otherwise upcomingTotal (gray) so the user always sees a useful figure.
+ */
+export async function getCalendarRsvpPendingCountAction(
+  playbookId: string | null,
+): Promise<Ok<{ pending: number; upcomingTotal: number }> | Err> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+  const now = Date.now();
+  const tally = (events: CalendarEventRow[]) => {
+    let pending = 0;
+    let upcomingTotal = 0;
+    for (const e of events) {
+      const end = new Date(e.startsAt).getTime() + e.durationMinutes * 60_000;
+      if (end < now) continue;
+      upcomingTotal += 1;
+      if (!e.myRsvp) pending += 1;
+    }
+    return { pending, upcomingTotal };
+  };
+  if (playbookId) {
+    const res = await listEventsForPlaybookAction(playbookId);
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, ...tally(res.events) };
+  }
+  const res = await listUpcomingEventsAcrossPlaybooksAction();
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, ...tally(res.events) };
+}
+
 // ─── Listing ──────────────────────────────────────────────────────────────
 export type CalendarEventRow = {
   id: string;

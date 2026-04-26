@@ -30,23 +30,27 @@ import { MonthGrid, ymd } from "./MonthGrid";
 import { WeekAgenda, CompactEventChip } from "./WeekAgenda";
 import type { SelectedPlace } from "./PlaceAutocomplete";
 
-type Mode = "upcoming" | "past";
+type Mode = "needs_rsvp" | "upcoming" | "past";
 type ViewKind = "list" | "week" | "month";
 
 export function PlaybookCalendarTab({
   playbookId,
   viewerIsCoach,
-  onMarkSeen,
+  onCountsChange,
 }: {
   playbookId: string;
   viewerIsCoach: boolean;
-  onMarkSeen?: () => void;
+  onCountsChange?: (counts: { pending: number; upcomingTotal: number }) => void;
 }) {
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("upcoming");
+  // Once the user has explicitly chosen a list mode we stop overriding it
+  // when fresh events come in — otherwise replying to one would yank them
+  // back to "Upcoming" mid-task.
+  const [modeTouched, setModeTouched] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EventSheetInitial | null>(null);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
@@ -69,11 +73,9 @@ export function PlaybookCalendarTab({
 
   useEffect(() => {
     load();
-    markCalendarSeenAction(playbookId)
-      .then(() => onMarkSeen?.())
-      .catch(() => {
-        /* ignore — best effort */
-      });
+    markCalendarSeenAction(playbookId).catch(() => {
+      /* ignore — best effort */
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbookId]);
 
@@ -81,16 +83,47 @@ export function PlaybookCalendarTab({
   const partitioned = useMemo(() => {
     const upcoming: CalendarEventRow[] = [];
     const past: CalendarEventRow[] = [];
+    const needsRsvp: CalendarEventRow[] = [];
     for (const e of events) {
       const end = new Date(e.startsAt).getTime() + e.durationMinutes * 60_000;
-      if (end >= now) upcoming.push(e);
-      else past.push(e);
+      if (end >= now) {
+        upcoming.push(e);
+        if (!e.myRsvp) needsRsvp.push(e);
+      } else {
+        past.push(e);
+      }
     }
     past.reverse();
-    return { upcoming, past };
+    return { upcoming, past, needsRsvp };
   }, [events, now]);
 
-  const baseList = mode === "upcoming" ? partitioned.upcoming : partitioned.past;
+  // Notify the parent of both counts so the tab badge stays accurate as the
+  // user RSVPs from inside this view (red → gray once the queue is clear).
+  useEffect(() => {
+    onCountsChange?.({
+      pending: partitioned.needsRsvp.length,
+      upcomingTotal: partitioned.upcoming.length,
+    });
+  }, [
+    partitioned.needsRsvp.length,
+    partitioned.upcoming.length,
+    onCountsChange,
+  ]);
+
+  // Default to "Needs RSVP" the first time a viewer enters with anything to
+  // answer. After they pick a mode themselves we leave them where they are.
+  useEffect(() => {
+    if (!modeTouched && partitioned.needsRsvp.length > 0 && mode === "upcoming") {
+      setMode("needs_rsvp");
+    }
+  }, [modeTouched, partitioned.needsRsvp.length, mode]);
+
+  const baseList =
+    mode === "needs_rsvp"
+      ? partitioned.needsRsvp
+      : mode === "upcoming"
+        ? partitioned.upcoming
+        : partitioned.past;
   const visibleEvents = useMemo(() => {
     if (view === "month" && selectedDayKey) {
       return events.filter(
@@ -164,24 +197,48 @@ export function PlaybookCalendarTab({
           </div>
           {view === "list" && (
             <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
-              {(["upcoming", "past"] as const).map((m) => {
-            const active = mode === m;
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={
-                  "px-3 py-1.5 text-sm font-medium transition-colors " +
-                  (active
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-surface text-foreground hover:bg-surface-hover")
-                }
-              >
-                {m === "upcoming" ? "Upcoming" : "Past"}
-              </button>
-            );
-          })}
+              {(
+                [
+                  ...(partitioned.needsRsvp.length > 0
+                    ? [{ key: "needs_rsvp" as const, label: "Needs RSVP" }]
+                    : []),
+                  { key: "upcoming" as const, label: "Upcoming" },
+                  { key: "past" as const, label: "Past" },
+                ]
+              ).map((m) => {
+                const active = mode === m.key;
+                const isNeedsRsvp = m.key === "needs_rsvp";
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => {
+                      setMode(m.key);
+                      setModeTouched(true);
+                    }}
+                    className={
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors " +
+                      (active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-surface text-foreground hover:bg-surface-hover")
+                    }
+                  >
+                    {m.label}
+                    {isNeedsRsvp && (
+                      <span
+                        className={
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums " +
+                          (active
+                            ? "bg-primary-foreground/20"
+                            : "bg-red-600 text-white")
+                        }
+                      >
+                        {partitioned.needsRsvp.length}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -237,7 +294,9 @@ export function PlaybookCalendarTab({
       {!loading && !error && visibleEvents.length === 0 && view === "list" && (
         <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center">
           <p className="text-sm font-medium text-foreground">
-            No {mode === "upcoming" ? "upcoming" : "past"} events
+            {mode === "needs_rsvp"
+              ? "You’re all caught up — no replies needed."
+              : `No ${mode === "upcoming" ? "upcoming" : "past"} events`}
           </p>
           {viewerIsCoach && mode === "upcoming" && (
             <p className="mt-1 text-xs text-muted">
@@ -256,6 +315,7 @@ export function PlaybookCalendarTab({
             isPast={mode === "past"}
             onEdit={() => openEdit(e)}
             onChanged={load}
+            highlightNeedsRsvp={mode === "needs_rsvp"}
           />
         ))}
       </ul>
@@ -287,17 +347,37 @@ function EventCard({
   isPast,
   onEdit,
   onChanged,
+  highlightNeedsRsvp = false,
 }: {
   event: CalendarEventRow;
   viewerIsCoach: boolean;
   isPast: boolean;
   onEdit: () => void;
   onChanged: () => void;
+  highlightNeedsRsvp?: boolean;
 }) {
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
   const meta = EVENT_TYPE_META[event.type];
   const Icon = meta.icon;
   const [expanded, setExpanded] = useState(false);
   const startDate = new Date(event.startsAt);
+
+  function quickRsvp(status: "yes" | "no" | "maybe") {
+    if (isPast) return;
+    const occurrenceDate =
+      event.occurrenceDate || new Date(event.startsAt).toISOString().slice(0, 10);
+    startTransition(async () => {
+      const res = await setRsvpAction({
+        eventId: event.id,
+        occurrenceDate,
+        status,
+        note: null,
+      });
+      if (!res.ok) toast(res.error, "error");
+      else onChanged();
+    });
+  }
   const formattedDate = startDate.toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -310,10 +390,15 @@ function EventCard({
   const totalRespondents =
     event.rsvpCounts.yes + event.rsvpCounts.no + event.rsvpCounts.maybe;
 
+  const showInlineRsvp = !isPast && !event.myRsvp;
+
   return (
     <li
       className={
-        "rounded-2xl border border-border bg-surface-raised p-4 shadow-sm " +
+        "rounded-2xl border bg-surface-raised p-4 shadow-sm " +
+        (highlightNeedsRsvp && showInlineRsvp
+          ? "border-red-300 ring-1 ring-red-200 dark:border-red-900 dark:ring-red-950 "
+          : "border-border ") +
         (isPast ? "opacity-60" : "")
       }
     >
@@ -371,6 +456,40 @@ function EventCard({
           </button>
         </div>
       </div>
+
+      {showInlineRsvp && (
+        <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">
+            Reply
+          </span>
+          {(["yes", "maybe", "no"] as const).map((s) => {
+            const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
+            const colors = {
+              yes: "bg-emerald-100 text-emerald-900 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
+              maybe:
+                "bg-amber-100 text-amber-900 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
+              no: "bg-red-100 text-red-900 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
+            };
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={pending}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  quickRsvp(s);
+                }}
+                className={
+                  "flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 transition disabled:opacity-60 " +
+                  colors[s]
+                }
+              >
+                {labels[s]}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {expanded && (
         <EventCardDetail
