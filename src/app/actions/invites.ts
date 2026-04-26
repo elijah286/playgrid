@@ -80,6 +80,27 @@ export async function createInviteAction(input: {
     };
   }
 
+  // Coach invites are seat-bound: force single-use and refuse creation
+  // if the owner is already at cap. Player invites are unlimited.
+  let effectiveMaxUses = input.maxUses;
+  let effectiveAutoApproveLimit = input.autoApproveLimit ?? null;
+  if (input.role === "editor") {
+    effectiveMaxUses = 1;
+    effectiveAutoApproveLimit = null;
+    const { data: ownerRow } = await createServiceRoleClient()
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", input.playbookId)
+      .eq("role", "owner")
+      .eq("status", "active")
+      .maybeSingle();
+    const ownerId = (ownerRow?.user_id as string | null) ?? null;
+    if (ownerId) {
+      const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+      if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
+    }
+  }
+
   const days = Math.max(1, Math.min(MAX_EXPIRY_DAYS, Math.floor(input.expiresInDays || 14)));
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
@@ -101,12 +122,12 @@ export async function createInviteAction(input: {
       token: generateToken(),
       email: input.email?.trim() || null,
       note: input.note?.trim() || null,
-      max_uses: input.maxUses,
+      max_uses: effectiveMaxUses,
       expires_at: expiresAt,
       created_by: user.id,
       filters_snapshot: sanitizeSharedPrefs(myPrefs?.preferences as PlaybookViewPrefs | null),
       auto_approve: input.autoApprove ?? true,
-      auto_approve_limit: input.autoApproveLimit ?? null,
+      auto_approve_limit: effectiveAutoApproveLimit,
     })
     .select("*")
     .single();

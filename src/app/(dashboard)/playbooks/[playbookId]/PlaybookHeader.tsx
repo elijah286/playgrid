@@ -1293,6 +1293,14 @@ export function InviteTeamMemberDialog({
     role === "editor" && seatStatus?.isCoachPlus === true && seatStatus.available <= 0;
   const needsCoachPlan =
     role === "editor" && seatStatus?.isCoachPlus === false;
+  const parsedEmailCount = emailInput
+    .split(/[\s,;]+/)
+    .map((e) => e.trim())
+    .filter(Boolean).length;
+  const coachOverCap =
+    role === "editor" &&
+    seatStatus?.isCoachPlus === true &&
+    parsedEmailCount > seatStatus.available;
 
   useEffect(() => {
     let cancelled = false;
@@ -1317,15 +1325,17 @@ export function InviteTeamMemberDialog({
       autoApprove && autoApproveLimit.trim() !== ""
         ? Math.max(1, Math.floor(Number(autoApproveLimit)))
         : null;
+    // Coach links are seat-bound, so force single-use. Player links
+    // stay unlimited per existing behavior.
     const res = await createInviteAction({
       playbookId,
       role,
       expiresInDays: 14,
-      maxUses: null,
+      maxUses: role === "editor" ? 1 : null,
       email: null,
       note: null,
       autoApprove,
-      autoApproveLimit: parsedLimit,
+      autoApproveLimit: role === "editor" ? null : parsedLimit,
     });
     setCreating(false);
     if (!res.ok) {
@@ -1559,8 +1569,9 @@ export function InviteTeamMemberDialog({
                 <div>
                   <div className="text-sm font-semibold text-foreground">Create share link</div>
                   <p className="mt-0.5 text-xs text-muted">
-                    Generate a link (or QR code) anyone can use to request access.
-                    You still approve each person.
+                    {role === "editor"
+                      ? "Single-use link or QR — perfect for handing access to one coach in person."
+                      : "Generate a link (or QR code) anyone can use to request access. You still approve each person."}
                   </p>
                 </div>
               </button>
@@ -1584,6 +1595,19 @@ export function InviteTeamMemberDialog({
                 <label className="mb-1 block text-xs font-semibold text-muted">
                   Emails
                 </label>
+                {role === "editor" && seatStatus?.isCoachPlus ? (
+                  <p className="mb-1.5 text-xs text-muted">
+                    <span className="font-medium text-foreground">
+                      {Math.max(0, seatStatus.available - parsedEmailCount)}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-medium text-foreground">
+                      {seatStatus.total}
+                    </span>{" "}
+                    coach seat{seatStatus.total === 1 ? "" : "s"} available.
+                    Coaches with their own paid plan don&rsquo;t use a seat.
+                  </p>
+                ) : null}
                 <textarea
                   value={emailInput}
                   onChange={(e) => {
@@ -1598,13 +1622,25 @@ export function InviteTeamMemberDialog({
                 <p className="mt-1 text-xs text-muted">
                   Separate with commas, spaces, or new lines.
                 </p>
+                {role === "editor" && coachOverCap ? (
+                  <p className="mt-1 text-xs text-danger">
+                    {parsedEmailCount} email{parsedEmailCount === 1 ? "" : "s"}{" "}
+                    entered, but only {seatStatus?.available ?? 0} seat
+                    {(seatStatus?.available ?? 0) === 1 ? "" : "s"} left. Add
+                    a seat in{" "}
+                    <Link href="/account" className="underline">
+                      Account
+                    </Link>{" "}
+                    or remove some emails.
+                  </p>
+                ) : null}
               </div>
               <Button
                 variant="primary"
                 leftIcon={Mail}
                 onClick={shareByEmails}
                 loading={sending}
-                disabled={!emailInput.trim()}
+                disabled={!emailInput.trim() || coachOverCap}
                 className="w-full"
               >
                 Share playbook
@@ -1659,39 +1695,53 @@ export function InviteTeamMemberDialog({
                   </span>
                 </div>
               )}
-              <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
-                <label className="flex cursor-pointer items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={autoApprove}
-                    onChange={(e) => setAutoApprove(e.target.checked)}
-                    className="mt-0.5 size-4 shrink-0 rounded border-border"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-foreground">
-                      Anyone with this link can join immediately
-                    </div>
-                    {autoApprove ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                        <span>Up to</span>
-                        <Input
-                          value={autoApproveLimit}
-                          onChange={(e) => setAutoApproveLimit(e.target.value)}
-                          placeholder="unlimited"
-                          className="h-7 w-20 text-xs"
-                        />
-                        <span>user{autoApproveLimit.trim() === "1" ? "" : "s"} — after that, you&apos;ll approve each new person.</span>
+              {role === "editor" ? (
+                <div className="rounded-lg border border-border bg-surface-inset/50 p-3 text-xs text-muted">
+                  Single-use coach link — works for one person, then expires.
+                  Hand off the link or QR in person; the next coach gets a
+                  fresh one.
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={autoApprove}
+                      onChange={(e) => setAutoApprove(e.target.checked)}
+                      className="mt-0.5 size-4 shrink-0 rounded border-border"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-foreground">
+                        Anyone with this link can join immediately
                       </div>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted">
-                        You&apos;ll approve every joiner from the Roster tab.
-                      </p>
-                    )}
-                  </div>
-                </label>
-              </div>
+                      {autoApprove ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          <span>Up to</span>
+                          <Input
+                            value={autoApproveLimit}
+                            onChange={(e) => setAutoApproveLimit(e.target.value)}
+                            placeholder="unlimited"
+                            className="h-7 w-20 text-xs"
+                          />
+                          <span>user{autoApproveLimit.trim() === "1" ? "" : "s"} — after that, you&apos;ll approve each new person.</span>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted">
+                          You&apos;ll approve every joiner from the Roster tab.
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                </div>
+              )}
               <p className="text-xs text-muted">Link is valid for 14 days.</p>
-              <Button variant="primary" onClick={generate} loading={creating} className="w-full">
+              <Button
+                variant="primary"
+                onClick={generate}
+                loading={creating}
+                disabled={role === "editor" && (outOfCoachSeats || needsCoachPlan)}
+                className="w-full"
+              >
                 Create invite link
               </Button>
             </>
