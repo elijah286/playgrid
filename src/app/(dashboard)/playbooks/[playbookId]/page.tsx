@@ -241,6 +241,13 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: true,
     });
+  // Version history (trash + history panel) is coach-only.
+  const versionHistoryAvailable =
+    !isExamplePreview &&
+    isBetaFeatureAvailable(betaFeatures.version_history, {
+      isAdmin,
+      isEntitled: isCoachInPlaybook,
+    });
   const calendarUnseenCount = teamCalendarAvailable
     ? await (async () => {
         const res = await getUnseenCalendarCountAction(playbookId);
@@ -328,6 +335,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         gameModeAvailable={gameModeAvailable}
         gameResultsAvailable={gameResultsTabVisible}
         teamCalendarAvailable={teamCalendarAvailable}
+        versionHistoryAvailable={versionHistoryAvailable}
         initialCalendarUnseenCount={calendarUnseenCount}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{

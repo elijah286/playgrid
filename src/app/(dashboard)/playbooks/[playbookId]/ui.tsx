@@ -93,6 +93,7 @@ import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
+import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -267,6 +268,7 @@ function PlaybookDetailClientInner({
   gameResultsAvailable = false,
   teamCalendarAvailable = false,
   initialCalendarUnseenCount = 0,
+  versionHistoryAvailable = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -287,6 +289,8 @@ function PlaybookDetailClientInner({
   gameResultsAvailable?: boolean;
   /** When true, show the "Calendar" tab gated by the team_calendar beta. */
   teamCalendarAvailable?: boolean;
+  /** When true, expose the Trash + History coach-only UIs (version_history beta). */
+  versionHistoryAvailable?: boolean;
   /** Unseen calendar notifications for the viewer in this playbook. */
   initialCalendarUnseenCount?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
@@ -358,6 +362,7 @@ function PlaybookDetailClientInner({
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   function showPlayCapUpgrade() {
     setUpgradeNotice({
@@ -1308,6 +1313,19 @@ function PlaybookDetailClientInner({
             )
           )}
 
+          {versionHistoryAvailable && (
+            <button
+              type="button"
+              onClick={() => setTrashOpen(true)}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/10"
+              aria-label="Open trash"
+              title="Trash"
+            >
+              <Trash2 className="size-4" />
+              <span className="hidden sm:inline">Trash</span>
+            </button>
+          )}
+
           {/* Desktop: Select / Reorder / Print / New play as dedicated buttons.
               Mobile: all of these live in the team-banner kebab menu so the
               toolbar stays focused on viewing and filtering plays. Reorder
@@ -2147,6 +2165,11 @@ function PlaybookDetailClientInner({
       <GameModeUpgradeDialog
         open={gameModeUpgradeOpen}
         onClose={() => setGameModeUpgradeOpen(false)}
+      />
+      <TrashDrawer
+        open={trashOpen}
+        onClose={() => setTrashOpen(false)}
+        playbookId={playbookId}
       />
       {copyTarget && (
         <CopyToPlaybookDialog
