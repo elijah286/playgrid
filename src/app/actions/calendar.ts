@@ -93,13 +93,21 @@ async function fanoutNotifications(
       kind,
     }));
   if (rows.length === 0) return;
-  await admin.from("playbook_event_notifications").insert(rows);
-  await sendCalendarEventEmails({
-    admin,
-    eventId,
-    kind,
-    excludeUserId,
-  });
+  // Fanout is best-effort: the event itself was already saved, so a
+  // notification insert failure or a Resend hiccup must not bubble up and
+  // fail the surrounding action (which would then crash the post-action
+  // page render).
+  try {
+    await admin.from("playbook_event_notifications").insert(rows);
+  } catch {}
+  try {
+    await sendCalendarEventEmails({
+      admin,
+      eventId,
+      kind,
+      excludeUserId,
+    });
+  } catch {}
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────

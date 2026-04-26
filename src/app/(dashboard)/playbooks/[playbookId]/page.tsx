@@ -248,12 +248,19 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
+  // Wrapped in try/catch because the count expands every event's recurrence
+  // rule — a single bad rule (or a transient Supabase blip) shouldn't crash
+  // the entire playbook page render.
   const calendarCounts = teamCalendarAvailable
     ? await (async () => {
-        const res = await getCalendarRsvpPendingCountAction(playbookId);
-        return res.ok
-          ? { pending: res.pending, upcomingTotal: res.upcomingTotal }
-          : { pending: 0, upcomingTotal: 0 };
+        try {
+          const res = await getCalendarRsvpPendingCountAction(playbookId);
+          return res.ok
+            ? { pending: res.pending, upcomingTotal: res.upcomingTotal }
+            : { pending: 0, upcomingTotal: 0 };
+        } catch {
+          return { pending: 0, upcomingTotal: 0 };
+        }
       })()
     : { pending: 0, upcomingTotal: 0 };
 

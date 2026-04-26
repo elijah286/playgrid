@@ -58,7 +58,16 @@ export function expandRecurrence(opts: {
     ];
   }
 
-  const between = rule.between(opts.windowStart, opts.windowEnd, true);
+  let between: Date[] = [];
+  try {
+    between = rule.between(opts.windowStart, opts.windowEnd, true);
+  } catch {
+    // A bad UNTIL/COUNT combo or other rrule edge case can throw inside
+    // .between — fall back to the seed occurrence so the page still renders.
+    return [
+      { startsAt: opts.startsAt, occurrenceDate: ymd(new Date(opts.startsAt)) },
+    ];
+  }
   const exdateSet = new Set(
     (opts.exdates ?? []).map((s) => new Date(s).getTime()),
   );
