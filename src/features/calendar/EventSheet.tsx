@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { X, Trash2, Bell } from "lucide-react";
+import { X, Trash2, Bell, Repeat } from "lucide-react";
 import { Button, Input, useToast } from "@/components/ui";
 import {
   createEventAction,
@@ -14,6 +14,7 @@ import {
   PlaceAutocomplete,
   type SelectedPlace,
 } from "@/features/calendar/PlaceAutocomplete";
+import { LocationMap } from "@/features/calendar/LocationMap";
 import {
   EVENT_TYPE_META,
   type CalendarEventType,
@@ -402,20 +403,54 @@ export function EventSheet({
                 onChange={setLocation}
                 placeholder="Field, gym, or address"
               />
+              {location?.lat != null && location?.lng != null && (
+                <div className="mt-2 space-y-1">
+                  <LocationMap
+                    lat={location.lat}
+                    lng={location.lng}
+                    onChange={({ lat, lng }) =>
+                      setLocation({
+                        ...location,
+                        // Manual nudge — drop the placeId so we don't re-render
+                        // the original venue's coordinates.
+                        placeId: null,
+                        lat,
+                        lng,
+                      })
+                    }
+                  />
+                  <p className="px-1 text-xs text-muted">
+                    Drag the pin or tap the map to mark the exact spot.
+                  </p>
+                </div>
+              )}
             </Field>
 
-            <Field label="Repeats">
-              <select
-                value={recurrence}
-                onChange={(e) => setRecurrence(e.target.value)}
-                className="block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-              >
-                {RECURRENCE_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+            <Field
+              label="Repeats"
+              hint="Pick a cadence to create a recurring series."
+            >
+              <div className="flex flex-wrap gap-2">
+                {RECURRENCE_PRESETS.map((p) => {
+                  const active = recurrence === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setRecurrence(p.value)}
+                      className={
+                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 transition " +
+                        (active
+                          ? "bg-primary text-primary-foreground ring-primary"
+                          : "bg-surface text-muted ring-border hover:bg-surface-inset")
+                      }
+                    >
+                      <Repeat className="size-3" />
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
 
             {type === "game" && (
