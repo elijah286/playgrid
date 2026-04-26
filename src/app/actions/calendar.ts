@@ -961,6 +961,53 @@ export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
   return { ok: true, events: rows.slice(0, 50) };
 }
 
+export type CoachablePlaybookRow = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
+export async function listMyCoachablePlaybooksAction(): Promise<
+  Ok<{ playbooks: CoachablePlaybookRow[] }> | Err
+> {
+  const gate = await requireUser();
+  if (!gate.ok) return gate;
+
+  const supabase = await createClient();
+  const { data: memberships, error: memErr } = await supabase
+    .from("playbook_members")
+    .select("playbook_id, role, status")
+    .eq("user_id", gate.userId);
+  if (memErr) return { ok: false, error: memErr.message };
+
+  const ids = (memberships ?? [])
+    .filter(
+      (m) =>
+        m.status === "active" &&
+        (m.role === "owner" || m.role === "editor"),
+    )
+    .map((m) => m.playbook_id as string);
+  if (ids.length === 0) return { ok: true, playbooks: [] };
+
+  const { data, error } = await supabase
+    .from("playbooks")
+    .select("id, name, color, is_default, is_archived")
+    .in("id", ids)
+    .eq("is_default", false)
+    .eq("is_archived", false)
+    .order("name", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+
+  return {
+    ok: true,
+    playbooks: (data ?? []).map((p) => ({
+      id: p.id as string,
+      name: p.name as string,
+      color: (p.color as string | null) ?? null,
+    })),
+  };
+}
+
 export type CalendarAttendeeRow = {
   userId: string;
   fullName: string | null;
