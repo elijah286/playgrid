@@ -4,7 +4,10 @@ import { useState, useTransition } from "react";
 import { Button, useToast } from "@/components/ui";
 import { setHideLobbyAnimationAction } from "@/app/actions/admin-lobby";
 import { setExamplesPageEnabledAction } from "@/app/actions/admin-examples";
-import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays";
+import {
+  setCoachMaxPlaysPerPlaybookAction,
+  setFreeMaxPlaysPerPlaybookAction,
+} from "@/app/actions/admin-free-plays";
 import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editing";
 import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
 
@@ -12,12 +15,14 @@ export function SiteSettingsAdminClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
   initialFreeMaxPlays,
+  initialCoachMaxPlays,
   initialMobileEditingEnabled,
   initialHideOwnerInfoAbout,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
+  initialCoachMaxPlays: number;
   initialMobileEditingEnabled: boolean;
   initialHideOwnerInfoAbout: boolean;
 }) {
@@ -39,6 +44,10 @@ export function SiteSettingsAdminClient({
   const [freeMaxPlaysInput, setFreeMaxPlaysInput] = useState(String(initialFreeMaxPlays));
   const [freeMaxPlaysPending, startFreeMaxPlaysTransition] = useTransition();
 
+  const [savedCoachMaxPlays, setSavedCoachMaxPlays] = useState(initialCoachMaxPlays);
+  const [coachMaxPlaysInput, setCoachMaxPlaysInput] = useState(String(initialCoachMaxPlays));
+  const [coachMaxPlaysPending, startCoachMaxPlaysTransition] = useTransition();
+
   function saveFreeMaxPlays() {
     const next = Number(freeMaxPlaysInput);
     if (!Number.isFinite(next) || next < 1 || next > 1000) {
@@ -58,6 +67,28 @@ export function SiteSettingsAdminClient({
       setSavedFreeMaxPlays(res.value);
       setFreeMaxPlaysInput(String(res.value));
       toast(`Free-tier play cap set to ${res.value}.`, "success");
+    });
+  }
+
+  function saveCoachMaxPlays() {
+    const next = Number(coachMaxPlaysInput);
+    if (!Number.isFinite(next) || next < 1 || next > 100000) {
+      toast("Enter a number between 1 and 100000.", "error");
+      setCoachMaxPlaysInput(String(savedCoachMaxPlays));
+      return;
+    }
+    const rounded = Math.floor(next);
+    if (rounded === savedCoachMaxPlays) return;
+    startCoachMaxPlaysTransition(async () => {
+      const res = await setCoachMaxPlaysPerPlaybookAction(rounded);
+      if (!res.ok) {
+        toast(res.error, "error");
+        setCoachMaxPlaysInput(String(savedCoachMaxPlays));
+        return;
+      }
+      setSavedCoachMaxPlays(res.value);
+      setCoachMaxPlaysInput(String(res.value));
+      toast(`Team Coach play cap set to ${res.value}.`, "success");
     });
   }
 
@@ -166,6 +197,46 @@ export function SiteSettingsAdminClient({
               Number(freeMaxPlaysInput) === savedFreeMaxPlays
             }
             onClick={saveFreeMaxPlays}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            Team Coach plays per playbook
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            The max number of plays a Team Coach account can create in a single
+            playbook. Coach AI is uncapped. Default is 200.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={100000}
+            step={1}
+            className="w-24 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border"
+            value={coachMaxPlaysInput}
+            disabled={coachMaxPlaysPending}
+            onChange={(e) => setCoachMaxPlaysInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveCoachMaxPlays();
+            }}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={coachMaxPlaysPending}
+            disabled={
+              coachMaxPlaysPending ||
+              coachMaxPlaysInput.trim() === "" ||
+              Number(coachMaxPlaysInput) === savedCoachMaxPlays
+            }
+            onClick={saveCoachMaxPlays}
           >
             Save
           </Button>

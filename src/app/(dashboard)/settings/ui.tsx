@@ -85,6 +85,7 @@ export function SettingsClient({
   initialHideLobbyAnimation,
   initialExamplesPageEnabled,
   initialFreeMaxPlays,
+  initialCoachMaxPlays,
   initialMobileEditingEnabled,
   initialTrafficSummary,
   trafficError,
@@ -111,6 +112,7 @@ export function SettingsClient({
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
+  initialCoachMaxPlays: number;
   initialMobileEditingEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
@@ -329,6 +331,7 @@ export function SettingsClient({
           initialHideLobbyAnimation={initialHideLobbyAnimation}
           initialExamplesPageEnabled={initialExamplesPageEnabled}
           initialFreeMaxPlays={initialFreeMaxPlays}
+          initialCoachMaxPlays={initialCoachMaxPlays}
           initialMobileEditingEnabled={initialMobileEditingEnabled}
           initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
         />

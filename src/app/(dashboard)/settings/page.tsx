@@ -18,7 +18,10 @@ import {
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import {
+  getCoachMaxPlaysPerPlaybook,
+  getFreeMaxPlaysPerPlaybook,
+} from "@/lib/site/free-plays-config";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
@@ -45,6 +48,7 @@ export default async function SettingsPage() {
     hideLobbyAnimation,
     examplesPageEnabled,
     freeMaxPlays,
+    coachMaxPlays,
     trafficRes,
     seedsRes,
     mobileEditingEnabled,
@@ -64,6 +68,7 @@ export default async function SettingsPage() {
     getHideLobbyAnimation(),
     getExamplesPageEnabled(),
     getFreeMaxPlaysPerPlaybook(),
+    getCoachMaxPlaysPerPlaybook(),
     getTrafficSummaryAction(30),
     listSeedFormationsAction(),
     getMobileEditingEnabled(),
@@ -152,6 +157,7 @@ export default async function SettingsPage() {
         initialHideLobbyAnimation={hideLobbyAnimation}
         initialExamplesPageEnabled={examplesPageEnabled}
         initialFreeMaxPlays={freeMaxPlays}
+        initialCoachMaxPlays={coachMaxPlays}
         initialMobileEditingEnabled={mobileEditingEnabled}
         initialTrafficSummary={
           trafficRes.ok

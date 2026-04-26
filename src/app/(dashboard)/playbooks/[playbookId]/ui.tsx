@@ -376,7 +376,7 @@ function PlaybookDetailClientInner({
     setUpgradeNotice({
       title: `Free tier is capped at ${freeMaxPlays} plays per playbook`,
       message:
-        "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
+        "Upgrade to Team Coach for a larger playbook, or Team Coach AI for unlimited plays.",
     });
   }
   // Per-playbook persisted view prefs. Server preloads the row in page.tsx

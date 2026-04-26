@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import {
+  getCoachMaxPlaysPerPlaybook,
+  getFreeMaxPlaysPerPlaybook,
+} from "@/lib/site/free-plays-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { PricingClient } from "./ui";
 
@@ -44,9 +47,10 @@ export default async function PricingPage() {
     }
   }
 
-  const [coachAiEnabled, freeMaxPlays] = await Promise.all([
+  const [coachAiEnabled, freeMaxPlays, coachMaxPlays] = await Promise.all([
     getCoachAiTierEnabled(),
     getFreeMaxPlaysPerPlaybook(),
+    getCoachMaxPlaysPerPlaybook(),
   ]);
   const isAuthed = user !== null;
 
@@ -89,6 +93,7 @@ export default async function PricingPage() {
           showCoachAi={coachAiEnabled}
           isAuthed={isAuthed}
           freeMaxPlays={freeMaxPlays}
+          coachMaxPlays={coachMaxPlays}
         />
       </div>
     </div>

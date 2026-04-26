@@ -20,7 +20,10 @@ import {
   assertNoActiveGameSession,
   gameModeLockedResult,
 } from "@/lib/game-mode/assert-no-active-session";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import {
+  getCoachMaxPlaysPerPlaybook,
+  getFreeMaxPlaysPerPlaybook,
+} from "@/lib/site/free-plays-config";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
 
@@ -29,17 +32,24 @@ async function assertPlayCap(
   playbookId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ownerEnt = await getPlaybookOwnerEntitlement(playbookId);
-  if (tierAtLeast(ownerEnt, "coach")) return { ok: true };
-  const limit = await getFreeMaxPlaysPerPlaybook();
+  if (tierAtLeast(ownerEnt, "coach_ai")) return { ok: true };
+  const isCoach = tierAtLeast(ownerEnt, "coach");
+  const limit = isCoach
+    ? await getCoachMaxPlaysPerPlaybook()
+    : await getFreeMaxPlaysPerPlaybook();
   const { count } = await supabase
     .from("plays")
     .select("id", { count: "exact", head: true })
     .eq("playbook_id", playbookId)
     .eq("is_archived", false);
   if ((count ?? 0) >= limit) {
+    const tierLabel = isCoach ? "Team Coach" : "Free";
+    const upgrade = isCoach
+      ? "Upgrade to Team Coach AI for unlimited plays."
+      : "Upgrade to Team Coach for more, or Team Coach AI for unlimited plays.";
     return {
       ok: false,
-      error: `Free tier is capped at ${limit} plays per playbook. Upgrade to Coach for unlimited plays.`,
+      error: `${tierLabel} tier is capped at ${limit} plays per playbook. ${upgrade}`,
     };
   }
   return { ok: true };

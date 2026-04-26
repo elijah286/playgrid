@@ -24,7 +24,7 @@ type TierDef = {
   cta: string;
 };
 
-function buildTiers(freeMaxPlays: number): TierDef[] {
+function buildTiers(freeMaxPlays: number, coachMaxPlays: number): TierDef[] {
   return [
   {
     id: "free",
@@ -48,7 +48,7 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
     price: { month: 9, year: 99 },
     features: [
       "Everything in Solo Coach",
-      "Unlimited plays",
+      `Up to ${coachMaxPlays} plays per playbook`,
       "Wristbands (print + PDF)",
       `${DEFAULT_INCLUDED_SEATS} collaborator seats included — $${SEAT_PRICE_USD_PER_MONTH}/seat/month after`,
       "Manage players",
@@ -64,6 +64,7 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
     price: { month: 25, year: 200 },
     features: [
       "Everything in Team Coach",
+      "Unlimited plays",
       "AI play suggestions (coming soon)",
       "Scouting report generation",
       "Automatic tagging",
@@ -97,13 +98,15 @@ export function PricingClient({
   showCoachAi,
   isAuthed = true,
   freeMaxPlays,
+  coachMaxPlays,
 }: {
   entitlement: Entitlement | null;
   showCoachAi: boolean;
   isAuthed?: boolean;
   freeMaxPlays: number;
+  coachMaxPlays: number;
 }) {
-  const allTiers = buildTiers(freeMaxPlays);
+  const allTiers = buildTiers(freeMaxPlays, coachMaxPlays);
   const tiers = showCoachAi ? allTiers : allTiers.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
   const [pending, startTransition] = useTransition();

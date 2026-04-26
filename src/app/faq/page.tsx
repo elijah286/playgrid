@@ -37,7 +37,7 @@ function buildFaqs(freeMaxPlays: number): Faq[] {
   },
   {
     q: "Is xogridmaker free?",
-    a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to design a small playbook without paying. Paid plans scale with how much you use it: unlimited plays, more playbooks, team invites, and wristbands. See the pricing page for current plan details.`,
+    a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to design a small playbook without paying. Paid plans scale with how much you use it: a much larger play limit on Team Coach (unlimited on Coach AI), more playbooks, team invites, and wristbands. See the pricing page for current plan details.`,
   },
   {
     q: "What formations and play types does it support?",
