@@ -7,6 +7,22 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 
+// Trim and require an http(s) scheme. Anything else (javascript:, data:,
+// bare domains, gibberish) becomes null so the review screen never renders
+// an unsafe href.
+function sanitizeFilmUrl(raw: string | null): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 async function assertCoachAndGameResults(playbookId: string) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -280,6 +296,7 @@ export async function updateGameSessionFinalsAction(
     opponent: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
+    filmUrl: string | null;
   },
 ) {
   const guard = await assertCoachAndGameResults(playbookId);
@@ -289,10 +306,14 @@ export async function updateGameSessionFinalsAction(
   const opponent = input.opponent?.trim() || null;
   const scoreUs = normalizeScore(input.scoreUs);
   const scoreThem = normalizeScore(input.scoreThem);
+  const filmUrl = sanitizeFilmUrl(input.filmUrl);
+  if (input.filmUrl != null && input.filmUrl.trim() !== "" && filmUrl == null) {
+    return { ok: false as const, error: "Film link must start with http:// or https://." };
+  }
 
   const { error } = await supabase
     .from("game_sessions")
-    .update({ opponent, score_us: scoreUs, score_them: scoreThem })
+    .update({ opponent, score_us: scoreUs, score_them: scoreThem, film_url: filmUrl })
     .eq("id", sessionId)
     .eq("playbook_id", playbookId)
     .eq("status", "ended");

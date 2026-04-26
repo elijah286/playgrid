@@ -47,7 +47,7 @@ export default async function GameDetailPage({ params }: Props) {
   const { data: session } = await supabase
     .from("game_sessions")
     .select(
-      "id, playbook_id, status, started_at, ended_at, kind, opponent, score_us, score_them, notes",
+      "id, playbook_id, status, started_at, ended_at, kind, opponent, score_us, score_them, notes, film_url",
     )
     .eq("id", sessionId)
     .eq("playbook_id", playbookId)
@@ -99,6 +99,7 @@ export default async function GameDetailPage({ params }: Props) {
       scoreUs: (session.score_us as number | null) ?? null,
       scoreThem: (session.score_them as number | null) ?? null,
       notes: (session.notes as string | null) ?? null,
+      filmUrl: (session.film_url as string | null) ?? null,
     },
     calls: (calls ?? []).map((c) => ({
       id: c.id as string,
