@@ -213,7 +213,7 @@ const UNASSIGNED = "__unassigned__";
 type ThumbSize = "small" | "medium" | "large";
 
 type PlaybookPrefs = {
-  tab?: "plays" | "formations" | "roster" | "staff" | "games" | "calendar";
+  tab?: "plays" | "formations" | "roster" | "games" | "calendar";
   view: "active" | "archived";
   typeFilter: PlayType | "all";
   groupBy: GroupBy;
@@ -329,15 +329,16 @@ function PlaybookDetailClientInner({
       t === "plays" ||
       t === "formations" ||
       t === "roster" ||
-      t === "staff" ||
       t === "games" ||
       t === "calendar"
     )
       return t;
+    // Legacy: staff tab merged into roster
+    if (t === "staff") return "roster";
     return "plays";
   })();
   const [tab, setTab] = useState<
-    "plays" | "formations" | "roster" | "staff" | "games" | "calendar"
+    "plays" | "formations" | "roster" | "games" | "calendar"
   >(initialTab);
   const [calendarUnseen, setCalendarUnseen] = useState(initialCalendarUnseenCount);
   const variant = sportVariant as SportVariant;
@@ -1041,7 +1042,7 @@ function PlaybookDetailClientInner({
           onGoTo={(t) => setTab(t)}
         />
 
-        {/* Tabs: on mobile, scroll horizontally so Staff stays reachable
+        {/* Tabs: on mobile, scroll horizontally so all tabs stay reachable
             at narrow widths. Edge-to-edge via -mx-6 + px-6 so the first
             tab aligns with the banner content. */}
         <div className="-mx-6 overflow-x-auto px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:overflow-visible sm:px-0">
@@ -1051,8 +1052,11 @@ function PlaybookDetailClientInner({
               [
                 { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length },
                 { key: "formations" as const, label: "Formations", count: initialFormations.length },
-                { key: "roster" as const, label: "Roster", count: initialRoster.filter((m) => m.role === "viewer").length },
-                { key: "staff" as const, label: "Staff", count: initialRoster.filter((m) => m.role !== "viewer").length },
+                {
+                  key: "roster" as const,
+                  label: "Roster",
+                  count: initialRoster.filter((m) => m.status === "active").length,
+                },
                 ...(gameResultsAvailable
                   ? [{ key: "games" as const, label: "Games", count: null as number | null }]
                   : []),
@@ -1063,7 +1067,7 @@ function PlaybookDetailClientInner({
                       count: calendarUnseen > 0 ? calendarUnseen : null,
                     }]
                   : []),
-              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "staff" | "games" | "calendar"; label: string; count: number | null }>
+              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null }>
             ).map((t) => {
               const active = tab === t.key;
               return (
@@ -1380,16 +1384,6 @@ function PlaybookDetailClientInner({
           variant={variant}
           initial={initialFormations}
           isAdmin={isAdmin}
-        />
-      )}
-
-      {tab === "staff" && (
-        <StaffPanel
-          playbookId={playbookId}
-          members={initialRoster}
-          viewerIsCoach={headerProps.viewerIsCoach}
-          teamName={headerProps.name}
-          senderName={headerProps.senderName}
         />
       )}
 
@@ -2225,14 +2219,18 @@ function RosterPanel({
   }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  // Roster tab is player-only; coaches (owner/editor) live in the Staff tab.
-  const players = members.filter((m) => m.role === "viewer");
-  // Unclaimed roster entries (user_id = null) are pre-added by a coach
-  // and haven't been linked to a user yet. They can only ever be
+  // Players (viewer role) and coaches (owner/editor) both live in this
+  // tab. Unclaimed roster entries (user_id = null) are pre-added by a
+  // coach and haven't been linked to a user yet. They can only ever be
   // role=viewer, status=active (enforced in the DB), so anything that
   // acts on a specific user — approvals, coach upgrades, staff actions
   // — is guarded by a non-null user_id narrow below.
-  const pending = players.filter(
+  const players = members.filter((m) => m.role === "viewer");
+  const coaches = members.filter(
+    (m): m is PlaybookRosterMember & { user_id: string } =>
+      m.role !== "viewer" && m.user_id !== null,
+  );
+  const pending = members.filter(
     (m): m is PlaybookRosterMember & { user_id: string } =>
       m.status === "pending" && m.user_id !== null,
   );
@@ -2243,6 +2241,7 @@ function RosterPanel({
       m.user_id !== null,
   );
   const active = players.filter((m) => m.status === "active");
+  const activeCoaches = coaches.filter((m) => m.status === "active");
   const roleLabel = (r: PlaybookRosterMember["role"]) =>
     r === "owner" ? "Coach (owner)" : r === "editor" ? "Coach" : "Player";
 
@@ -2323,6 +2322,27 @@ function RosterPanel({
     const res = await rejectRosterClaimAction(playbookId, claimId);
     setPendingId(null);
     if (!res.ok) toast(`Reject failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function toggleHeadCoach(userId: string, currentlyHead: boolean) {
+    const res = await setHeadCoachAction(playbookId, currentlyHead ? null : userId);
+    if (!res.ok) toast(`Update failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function saveCoachTitle(userId: string, title: string) {
+    const res = await setCoachTitleAction(playbookId, userId, title);
+    if (!res.ok) toast(`Update failed: ${res.error}`, "error");
+    else router.refresh();
+  }
+  async function removeStaff(userId: string, name: string) {
+    if (
+      !window.confirm(
+        `Remove ${name} from the staff? They'll lose access to this playbook.`,
+      )
+    )
+      return;
+    const res = await removeStaffMemberAction(playbookId, userId);
+    if (!res.ok) toast(`Remove failed: ${res.error}`, "error");
     else router.refresh();
   }
 
@@ -2598,12 +2618,63 @@ function RosterPanel({
         </section>
       )}
 
-      {active.length === 0 ? (
+      {activeCoaches.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Coaches
+            <span className="ml-2 rounded-full bg-surface-inset px-2 py-0.5 text-[11px] text-muted ring-1 ring-border">
+              {activeCoaches.length}
+            </span>
+          </h3>
+          <div className="rounded-xl border border-border bg-surface-raised">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
+                  <tr>
+                    <th className="px-4 py-2.5 font-semibold">Head coach</th>
+                    <th className="px-4 py-2.5 font-semibold">Name</th>
+                    <th className="px-4 py-2.5 font-semibold">Title</th>
+                    <th className="w-10 px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {activeCoaches.map((m) => {
+                    const name = m.label || m.display_name || "—";
+                    const isOwner = m.role === "owner";
+                    return (
+                      <StaffRow
+                        key={m.user_id}
+                        member={m}
+                        name={name}
+                        isOwner={isOwner}
+                        onToggleHead={() => toggleHeadCoach(m.user_id, m.is_head_coach)}
+                        onSaveTitle={(t) => saveCoachTitle(m.user_id, t)}
+                        onRename={() => setRenaming(m)}
+                        onChangeRole={isOwner ? null : () => setRoleEditing(m)}
+                        onRemove={isOwner ? null : () => removeStaff(m.user_id, name)}
+                      />
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {active.length === 0 && activeCoaches.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
           <p className="text-sm font-semibold text-foreground">No one on the roster yet</p>
           <p className="mt-1 text-xs text-muted">Use Invite to share this playbook with a player or coach.</p>
         </div>
-      ) : (
+      ) : active.length === 0 ? null : (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-foreground">
+            Players
+            <span className="ml-2 rounded-full bg-surface-inset px-2 py-0.5 text-[11px] text-muted ring-1 ring-border">
+              {active.length}
+            </span>
+          </h3>
         <div className="rounded-xl border border-border bg-surface-raised">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -2732,6 +2803,7 @@ function RosterPanel({
             </table>
           </div>
         </div>
+        </section>
       )}
 
       {showInviteModal && (
@@ -3795,231 +3867,6 @@ function PlayTypeSection({
   );
 }
 
-function StaffPanel({
-  playbookId,
-  members,
-  viewerIsCoach,
-  teamName,
-  senderName,
-}: {
-  playbookId: string;
-  members: PlaybookRosterMember[];
-  viewerIsCoach: boolean;
-  teamName: string;
-  senderName: string | null;
-}) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
-  const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
-  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
-  function openInvite() {
-    if (!viewerIsCoach) {
-      setUpgradeNotice({
-        title: "Sharing a playbook is a Coach feature",
-        message: "Upgrade to Coach ($9/mo or $99/yr) to invite coaches and share playbooks.",
-      });
-      return;
-    }
-    setShowInviteModal(true);
-  }
-  const [pendingId, setPendingId] = useState<string | null>(null);
-
-  // Coaches = owner/editor; players live in the Roster tab. Unclaimed
-  // roster entries are always role=viewer so they can't land here, but
-  // the null-narrow keeps TS happy and guards the actions below.
-  const coaches = members.filter(
-    (m): m is PlaybookRosterMember & { user_id: string } =>
-      m.role !== "viewer" && m.user_id !== null,
-  );
-  const pending = coaches.filter((m) => m.status === "pending");
-  const active = coaches.filter((m) => m.status === "active");
-  async function approve(userId: string) {
-    setPendingId(userId);
-    const res = await approveMemberAction(playbookId, userId);
-    setPendingId(null);
-    if (!res.ok) toast(`Approve failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-  async function deny(userId: string) {
-    setPendingId(userId);
-    const res = await denyMemberAction(playbookId, userId);
-    setPendingId(null);
-    if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-
-  async function toggleHeadCoach(userId: string, currentlyHead: boolean) {
-    const res = await setHeadCoachAction(playbookId, currentlyHead ? null : userId);
-    if (!res.ok) toast(`Update failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-  async function saveTitle(userId: string, title: string) {
-    const res = await setCoachTitleAction(playbookId, userId, title);
-    if (!res.ok) toast(`Update failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-  async function removeStaff(userId: string, name: string) {
-    if (
-      !window.confirm(
-        `Remove ${name} from the staff? They'll lose access to this playbook.`,
-      )
-    )
-      return;
-    const res = await removeStaffMemberAction(playbookId, userId);
-    if (!res.ok) toast(`Remove failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-foreground">Staff</h2>
-          <p className="text-xs text-muted">
-            Coaches who can edit this playbook. Mark one head coach and give
-            others a title.
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          leftIcon={Plus}
-          onClick={openInvite}
-        >
-          Invite
-        </Button>
-      </div>
-
-      {pending.length > 0 && (
-        <section className="rounded-xl border border-warning/30 bg-warning/5 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-foreground">
-            Pending approvals
-            <span className="ml-2 rounded-full bg-warning/20 px-2 py-0.5 text-[11px] text-warning">
-              {pending.length}
-            </span>
-          </h3>
-          <ul className="divide-y divide-border">
-            {pending.map((m) => (
-              <li key={m.user_id} className="flex items-center justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {m.label || m.display_name || m.user_id.slice(0, 8)}
-                  </p>
-                  <p className="text-xs text-muted">
-                    Requested {m.role === "owner" ? "Owner" : "Coach"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    leftIcon={Check}
-                    loading={pendingId === m.user_id}
-                    onClick={() => approve(m.user_id)}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    leftIcon={X}
-                    disabled={pendingId === m.user_id}
-                    onClick={() => deny(m.user_id)}
-                  >
-                    Deny
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {active.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
-          <p className="text-sm font-semibold text-foreground">No coaches yet</p>
-          <p className="mt-1 text-xs text-muted">
-            Use Invite to share this playbook with other coaches.
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border bg-surface-raised">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
-                <tr>
-                  <th className="px-4 py-2.5 font-semibold">Head coach</th>
-                  <th className="px-4 py-2.5 font-semibold">Name</th>
-                  <th className="px-4 py-2.5 font-semibold">Title</th>
-                  <th className="w-10 px-4 py-2.5" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {active.map((m) => {
-                  const name = m.label || m.display_name || "—";
-                  const isOwner = m.role === "owner";
-                  return (
-                    <StaffRow
-                      key={m.user_id}
-                      member={m}
-                      name={name}
-                      isOwner={isOwner}
-                      onToggleHead={() => toggleHeadCoach(m.user_id, m.is_head_coach)}
-                      onSaveTitle={(t) => saveTitle(m.user_id, t)}
-                      onRename={() => setRenaming(m)}
-                      onChangeRole={isOwner ? null : () => setRoleEditing(m)}
-                      onRemove={isOwner ? null : () => removeStaff(m.user_id, name)}
-                    />
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {showInviteModal && (
-        <InviteTeamMemberDialog
-          playbookId={playbookId}
-          teamName={teamName}
-          senderName={senderName}
-          onClose={() => {
-            setShowInviteModal(false);
-            router.refresh();
-          }}
-        />
-      )}
-
-      <RenamePlayerDialog
-        member={renaming}
-        playbookId={playbookId}
-        onClose={() => setRenaming(null)}
-        onSaved={() => {
-          setRenaming(null);
-          router.refresh();
-        }}
-      />
-
-      <RolePickerDialog
-        member={roleEditing}
-        playbookId={playbookId}
-        onClose={() => setRoleEditing(null)}
-        onSaved={() => {
-          setRoleEditing(null);
-          router.refresh();
-        }}
-      />
-
-      <UpgradeModal
-        open={!!upgradeNotice}
-        onClose={() => setUpgradeNotice(null)}
-        title={upgradeNotice?.title ?? ""}
-        message={upgradeNotice?.message ?? ""}
-      />
-    </div>
-  );
-}
 
 function StaffRow({
   member,
@@ -4257,7 +4104,7 @@ function PendingApprovalsBanner({
 }: {
   canManage: boolean;
   roster: PlaybookRosterMember[];
-  onGoTo: (tab: "roster" | "staff") => void;
+  onGoTo: (tab: "roster") => void;
 }) {
   if (!canManage) return null;
   const pending = roster.filter((m) => m.status === "pending");
@@ -4267,45 +4114,21 @@ function PendingApprovalsBanner({
       m.role === "viewer" &&
       m.coach_upgrade_requested_at,
   );
-  if (pending.length + upgradeRequests.length === 0) return null;
-  const viewerPending =
-    pending.filter((m) => m.role === "viewer").length + upgradeRequests.length;
-  const staffPending = pending.length - pending.filter((m) => m.role === "viewer").length;
-  const primaryTab: "roster" | "staff" =
-    viewerPending >= staffPending ? "roster" : "staff";
-  const secondaryTab: "roster" | "staff" =
-    primaryTab === "roster" ? "staff" : "roster";
-  const secondaryCount = primaryTab === "roster" ? staffPending : viewerPending;
-  const primaryCount = primaryTab === "roster" ? viewerPending : staffPending;
-  const tabLabel = (t: "roster" | "staff") =>
-    t === "roster" ? "Roster" : "Staff";
+  const total = pending.length + upgradeRequests.length;
+  if (total === 0) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
       <p className="text-sm text-foreground">
-        <span className="font-semibold">
-          {pending.length + upgradeRequests.length}
-        </span>{" "}
-        pending request
-        {pending.length + upgradeRequests.length === 1 ? "" : "s"} to review.
+        <span className="font-semibold">{total}</span> pending request
+        {total === 1 ? "" : "s"} to review.
       </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onGoTo(primaryTab)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
-        >
-          Review in {tabLabel(primaryTab)} ({primaryCount})
-        </button>
-        {secondaryCount > 0 && (
-          <button
-            type="button"
-            onClick={() => onGoTo(secondaryTab)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1 text-xs font-semibold text-foreground hover:bg-surface-inset"
-          >
-            {tabLabel(secondaryTab)} ({secondaryCount})
-          </button>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={() => onGoTo("roster")}
+        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+      >
+        Review in Roster ({total})
+      </button>
     </div>
   );
 }

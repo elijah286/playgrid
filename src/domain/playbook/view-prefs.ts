@@ -3,7 +3,7 @@
 // all need to hand it around. Anything not listed here is session-only
 // (e.g. search text).
 export type PlaybookViewPrefs = {
-  tab?: "plays" | "formations" | "roster" | "staff" | "games" | "calendar";
+  tab?: "plays" | "formations" | "roster" | "games" | "calendar";
   view?: "active" | "archived";
   typeFilter?: "all" | "offense" | "defense" | "special_teams";
   groupBy?: "type" | "formation" | "group" | "none";
