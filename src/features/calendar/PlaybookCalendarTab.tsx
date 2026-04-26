@@ -466,7 +466,7 @@ function EventCard({
           </div>
         )}
         <div className="flex items-center gap-1">
-          {viewerIsCoach && !isPast && (
+          {viewerIsCoach && (
             <button
               type="button"
               onClick={onEdit}
