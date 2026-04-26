@@ -49,6 +49,12 @@ const FEATURES: FeatureMeta[] = [
       "Per-play discussion threads with likes and replies. Visible only to playbook members. Coach controls a per-playbook on/off toggle. Privacy policy must reflect this before scope is widened beyond \"Only me\".",
   },
   {
+    key: "version_history",
+    label: "Version History",
+    description:
+      "Team coaches can view edit history for plays and playbooks, restore prior versions, and recover deleted plays from a 30-day trash. Snapshots are written for everyone regardless of this flag.",
+  },
+  {
     key: "marketing_content",
     label: "Enhanced marketing content",
     description:
