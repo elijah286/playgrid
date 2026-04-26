@@ -17,6 +17,7 @@ const DEFAULTS: BetaFeatures = {
   game_results: "off",
   marketing_content: "off",
   team_calendar: "off",
+  play_comments: "off",
 };
 
 export async function getBetaFeaturesAction() {
