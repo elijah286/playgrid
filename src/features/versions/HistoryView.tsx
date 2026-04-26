@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import {
   listPlaybookActivityAction,
   listPlaybookVersionsAction,
@@ -13,13 +15,13 @@ import { useToast } from "@/components/ui";
 
 type Tab = "activity" | "structure";
 
-type Props = {
-  open: boolean;
-  onClose: () => void;
+export function HistoryView({
+  playbookId,
+  playbookName,
+}: {
   playbookId: string;
-};
-
-export function HistoryDrawer({ open, onClose, playbookId }: Props) {
+  playbookName: string;
+}) {
   const [tab, setTab] = useState<Tab>("activity");
   const [activity, setActivity] = useState<PlayVersionRow[] | null>(null);
   const [structure, setStructure] = useState<PlaybookVersionRow[] | null>(null);
@@ -27,10 +29,7 @@ export function HistoryDrawer({ open, onClose, playbookId }: Props) {
   const [compare, setCompare] = useState<{ row: PlayVersionRow; currentVersionId: string | null } | null>(null);
 
   useEffect(() => {
-    if (!open) return;
     setError(null);
-    setActivity(null);
-    setStructure(null);
     void Promise.all([
       listPlaybookActivityAction(playbookId),
       listPlaybookVersionsAction(playbookId),
@@ -39,10 +38,8 @@ export function HistoryDrawer({ open, onClose, playbookId }: Props) {
       else setError(a.error);
       if (s.ok) setStructure(s.rows);
     });
-  }, [open, playbookId]);
+  }, [playbookId]);
 
-  // For each play, find its current version id from the activity list (the
-  // first row marked isCurrent for that playId).
   const currentVersionByPlay = useMemo(() => {
     const m = new Map<string, string | null>();
     for (const row of activity ?? []) {
@@ -51,61 +48,57 @@ export function HistoryDrawer({ open, onClose, playbookId }: Props) {
     return m;
   }, [activity]);
 
-  if (!open) return null;
-
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
-        <div className="absolute inset-0" onClick={onClose} aria-label="Close history" />
-        <aside className="relative flex h-full w-full max-w-lg flex-col bg-card text-foreground shadow-xl">
-          <header className="border-b border-border px-4 py-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">History</h2>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md px-2 py-1 text-sm text-muted hover:bg-muted/10"
-              >
-                Close
-              </button>
-            </div>
-            <p className="mt-0.5 text-xs text-muted">
-              See who changed what. Click a play edit to compare and restore.
-            </p>
-            <nav className="mt-3 flex gap-2 text-sm">
-              <TabButton active={tab === "activity"} onClick={() => setTab("activity")}>
-                Play edits
-              </TabButton>
-              <TabButton active={tab === "structure"} onClick={() => setTab("structure")}>
-                Playbook structure
-              </TabButton>
-            </nav>
-          </header>
-          <div className="flex-1 overflow-y-auto px-4 py-3">
-            {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="mb-4">
+          <Link
+            href={`/playbooks/${playbookId}`}
+            className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Back to {playbookName}
+          </Link>
+        </div>
+        <header className="mb-4 border-b border-border pb-4">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            History
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            See who changed what. Click a play edit to compare and restore.
+          </p>
+          <nav className="mt-4 flex gap-2 text-sm">
+            <TabButton active={tab === "activity"} onClick={() => setTab("activity")}>
+              Play edits
+            </TabButton>
+            <TabButton active={tab === "structure"} onClick={() => setTab("structure")}>
+              Playbook structure
+            </TabButton>
+          </nav>
+        </header>
 
-            {tab === "activity" && (
-              <ActivityList
-                rows={activity}
-                onCompare={(row) =>
-                  setCompare({ row, currentVersionId: currentVersionByPlay.get(row.playId) ?? null })
-                }
-              />
-            )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
-            {tab === "structure" && (
-              <StructureList
-                rows={structure}
-                playbookId={playbookId}
-                onRestored={() => {
-                  void listPlaybookVersionsAction(playbookId).then((res) => {
-                    if (res.ok) setStructure(res.rows);
-                  });
-                }}
-              />
-            )}
-          </div>
-        </aside>
+        {tab === "activity" && (
+          <ActivityList
+            rows={activity}
+            onCompare={(row) =>
+              setCompare({ row, currentVersionId: currentVersionByPlay.get(row.playId) ?? null })
+            }
+          />
+        )}
+
+        {tab === "structure" && (
+          <StructureList
+            rows={structure}
+            playbookId={playbookId}
+            onRestored={() => {
+              void listPlaybookVersionsAction(playbookId).then((res) => {
+                if (res.ok) setStructure(res.rows);
+              });
+            }}
+          />
+        )}
       </div>
 
       {compare && (
@@ -116,7 +109,6 @@ export function HistoryDrawer({ open, onClose, playbookId }: Props) {
           target={compare.row}
           currentVersionId={compare.currentVersionId}
           onRestored={() => {
-            // Refresh activity list so the new restore version shows.
             void listPlaybookActivityAction(playbookId).then((res) => {
               if (res.ok) setActivity(res.rows);
             });
@@ -132,7 +124,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-md px-2.5 py-1 text-sm font-medium ${
+      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
         active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"
       }`}
     >

@@ -58,7 +58,6 @@ import {
   Gamepad2,
   GripVertical,
   Hash,
-  History,
   LayoutGrid,
   List,
   Loader2,
@@ -95,7 +94,6 @@ import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/Copy
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
-import { HistoryDrawer } from "@/features/versions/HistoryDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
   defaultDefendersForVariant,
@@ -365,7 +363,6 @@ function PlaybookDetailClientInner({
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   function showPlayCapUpgrade() {
     setUpgradeNotice({
@@ -1043,6 +1040,10 @@ function PlaybookDetailClientInner({
             newFormationHref: `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}${isPreview ? "&preview=1" : ""}`,
             isViewer,
           }}
+          versionHistoryAvailable={versionHistoryAvailable}
+          onOpenTrash={
+            headerProps.canManage ? () => setTrashOpen(true) : null
+          }
         />
 
         <PendingApprovalsBanner
@@ -1289,59 +1290,7 @@ function PlaybookDetailClientInner({
             )}
           </div>
 
-          {/* Game mode button. Visible on every viewport — some coaches
-              bring a laptop to the sideline, and on mobile it's the primary
-              way into the sideline flow. Hidden when the beta feature is
-              off for this user. */}
-          {gameModeAvailable && (
-            canUseGameMode ? (
-              <Link
-                href={`/playbooks/${playbookId}/game`}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
-                aria-label="Game mode"
-              >
-                <Gamepad2 className="size-4" />
-                <span>Game</span>
-              </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setGameModeUpgradeOpen(true)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
-                aria-label="Game mode"
-              >
-                <Gamepad2 className="size-4" />
-                <span>Game</span>
-              </button>
-            )
-          )}
-
-          {versionHistoryAvailable && (
-            <>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(true)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/10"
-                aria-label="Open history"
-                title="History"
-              >
-                <History className="size-4" />
-                <span className="hidden sm:inline">History</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrashOpen(true)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/10"
-                aria-label="Open trash"
-                title="Trash"
-              >
-                <Trash2 className="size-4" />
-                <span className="hidden sm:inline">Trash</span>
-              </button>
-            </>
-          )}
-
-          {/* Desktop: Select / Reorder / Print / New play as dedicated buttons.
+          {/* Desktop: Select / Reorder / Print / Game / New play as dedicated buttons.
               Mobile: all of these live in the team-banner kebab menu so the
               toolbar stays focused on viewing and filtering plays. Reorder
               isn't exposed on mobile — drag-to-reorder is a desktop gesture. */}
@@ -1386,6 +1335,31 @@ function PlaybookDetailClientInner({
               Print playbook
             </Button>
           </Link>
+          {/* Game mode button. On every viewport — laptop sideliners on
+              desktop, the primary sideline entry on mobile. Hidden when the
+              beta feature is off for this user. */}
+          {gameModeAvailable && (
+            canUseGameMode ? (
+              <Link
+                href={`/playbooks/${playbookId}/game`}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
+                aria-label="Game mode"
+              >
+                <Gamepad2 className="size-4" />
+                <span>Game</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setGameModeUpgradeOpen(true)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
+                aria-label="Game mode"
+              >
+                <Gamepad2 className="size-4" />
+                <span>Game</span>
+              </button>
+            )
+          )}
           <Button
             variant="primary"
             leftIcon={Plus}
@@ -2184,11 +2158,6 @@ function PlaybookDetailClientInner({
       <TrashDrawer
         open={trashOpen}
         onClose={() => setTrashOpen(false)}
-        playbookId={playbookId}
-      />
-      <HistoryDrawer
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
         playbookId={playbookId}
       />
       {copyTarget && (

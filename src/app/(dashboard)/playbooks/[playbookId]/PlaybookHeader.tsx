@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -97,6 +97,8 @@ export function PlaybookHeader({
   isExamplePreview,
   isArchived,
   outstandingInviteCount,
+  versionHistoryAvailable,
+  onOpenTrash,
 }: {
   playbookId: string;
   name: string;
@@ -120,6 +122,8 @@ export function PlaybookHeader({
   isExamplePreview?: boolean;
   isArchived?: boolean;
   outstandingInviteCount?: number;
+  versionHistoryAvailable?: boolean;
+  onOpenTrash?: (() => void) | null;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -402,7 +406,6 @@ export function PlaybookHeader({
                 homeHref={homeHref}
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
-                canManage={canManage}
                 onInvite={canShare ? openInvite : null}
                 onCustomize={canManage ? () => setCustomizeOpen(true) : null}
                 onRevokeAllInvites={
@@ -412,20 +415,14 @@ export function PlaybookHeader({
                 }
                 outstandingInviteCount={outstandingInviteCount ?? 0}
                 onDuplicate={canManage ? openDuplicate : null}
-                onToggleCoachDup={canManage ? handleToggleCoachDup : null}
-                onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
-                onToggleGameResultsDup={
-                  canManage && gameResultsAvailable
-                    ? handleToggleGameResultsDup
-                    : null
+                historyHref={
+                  versionHistoryAvailable ? `/playbooks/${playbookId}/history` : null
                 }
+                onOpenTrash={versionHistoryAvailable ? (onOpenTrash ?? null) : null}
                 onArchive={canManage && !isArchived ? handleArchive : null}
                 onUnarchive={canManage && isArchived ? handleUnarchive : null}
                 onDelete={canManage ? handleDelete : null}
                 onLeave={!canManage ? handleLeave : null}
-                allowCoachDuplication={allowCoachDuplication ?? true}
-                allowPlayerDuplication={allowPlayerDuplication ?? true}
-                allowGameResultsDuplication={allowGameResultsDuplication ?? false}
                 playActions={playActions}
                 exampleAdmin={exampleAdmin ?? null}
                 onToggleExample={exampleAdmin ? handleToggleExample : null}
@@ -452,6 +449,19 @@ export function PlaybookHeader({
           }
           showExampleAuthorLabel={Boolean(exampleAdmin?.isExample)}
           onClose={() => setCustomizeOpen(false)}
+          duplicationSettings={
+            canManage
+              ? {
+                  allowCoachDuplication: allowCoachDuplication ?? true,
+                  allowPlayerDuplication: allowPlayerDuplication ?? true,
+                  allowGameResultsDuplication: allowGameResultsDuplication ?? false,
+                  gameResultsAvailable: gameResultsAvailable ?? false,
+                  onToggleCoach: handleToggleCoachDup,
+                  onTogglePlayer: handleTogglePlayerDup,
+                  onToggleGameResults: handleToggleGameResultsDup,
+                }
+              : null
+          }
         />
       )}
 
@@ -568,40 +578,68 @@ function DuplicatePlaybookDialog({
   );
 }
 
-function DupStatePill({ allowed }: { allowed: boolean }) {
+function DupToggleRow({
+  label,
+  on,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <span
-      className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${
-        allowed
-          ? "bg-success-light text-success"
-          : "bg-surface-inset text-muted"
+    <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
+      <span className="text-sm text-foreground">{label}</span>
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={onToggle}
+        className="size-4 shrink-0 rounded border-border"
+      />
+    </label>
+  );
+}
+
+const menuItemCls =
+  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset";
+
+function SectionLabel({
+  children,
+  danger,
+}: {
+  children: React.ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <div
+      className={`px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider ${
+        danger ? "text-danger" : "text-muted"
       }`}
     >
-      {allowed ? "On" : "Off"}
-    </span>
+      {children}
+    </div>
   );
+}
+
+function SectionDivider() {
+  return <div className="my-1 h-px bg-border" />;
 }
 
 function HeaderMenu({
   homeHref,
   onAccent,
   onAccentHover,
-  canManage,
   onInvite,
   onRevokeAllInvites,
   outstandingInviteCount,
   onCustomize,
   onDuplicate,
-  onToggleCoachDup,
-  onTogglePlayerDup,
-  onToggleGameResultsDup,
+  historyHref,
+  onOpenTrash,
   onArchive,
   onUnarchive,
   onDelete,
   onLeave,
-  allowCoachDuplication,
-  allowPlayerDuplication,
-  allowGameResultsDuplication,
   playActions,
   exampleAdmin,
   onToggleExample,
@@ -610,22 +648,17 @@ function HeaderMenu({
   homeHref: string;
   onAccent: string;
   onAccentHover: string;
-  canManage: boolean;
   onInvite: (() => void) | null;
   onRevokeAllInvites: (() => void) | null;
   outstandingInviteCount: number;
   onCustomize: (() => void) | null;
   onDuplicate: (() => void) | null;
-  onToggleCoachDup: (() => void) | null;
-  onTogglePlayerDup: (() => void) | null;
-  onToggleGameResultsDup: (() => void) | null;
+  historyHref: string | null;
+  onOpenTrash: (() => void) | null;
   onArchive: (() => void) | null;
   onUnarchive: (() => void) | null;
   onDelete: (() => void) | null;
   onLeave: (() => void) | null;
-  allowCoachDuplication: boolean;
-  allowPlayerDuplication: boolean;
-  allowGameResultsDuplication: boolean;
   playActions?: PlaybookHeaderPlayActions;
   exampleAdmin: ExampleAdminState | null;
   onToggleExample: (() => void) | null;
@@ -665,51 +698,41 @@ function HeaderMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 min-w-[220px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+          className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
         >
-          <Link
-            href={homeHref}
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
-          >
-            <Home className="size-4" />
-            <span>Home</span>
-          </Link>
-          {onInvite && (
-            <button
-              type="button"
+          {/* Mobile-only navigation */}
+          <div className="sm:hidden">
+            <SectionLabel>Navigate</SectionLabel>
+            <Link
+              href={homeHref}
               role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onInvite();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+              onClick={() => setOpen(false)}
+              className={menuItemCls}
             >
-              <UserPlus className="size-4" />
-              <span>Invite team member</span>
-            </button>
-          )}
-          {onRevokeAllInvites && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onRevokeAllInvites();
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
-            >
-              <MailX className="size-4 shrink-0" />
-              <span className="flex-1">Revoke all outstanding invites</span>
-              <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                {outstandingInviteCount}
-              </span>
-            </button>
-          )}
+              <Home className="size-4 shrink-0" />
+              <span>Home</span>
+            </Link>
+            {onInvite && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onInvite();
+                }}
+                className={menuItemCls}
+              >
+                <UserPlus className="size-4 shrink-0" />
+                <span>Invite team member</span>
+              </button>
+            )}
+          </div>
+
+          {/* Mobile-only play actions */}
           {playActions && (
-            <>
-              <div className="my-1 h-px bg-border sm:hidden" />
+            <div className="sm:hidden">
+              <SectionDivider />
+              <SectionLabel>Plays</SectionLabel>
               <button
                 type="button"
                 role="menuitem"
@@ -719,9 +742,9 @@ function HeaderMenu({
                   playActions.onNewPlay();
                 }}
                 title={playActions.isViewer ? "Viewers can't create plays" : undefined}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset disabled:opacity-50 sm:hidden${playActions.isViewer ? " opacity-60" : ""}`}
+                className={`${menuItemCls} disabled:opacity-50${playActions.isViewer ? " opacity-60" : ""}`}
               >
-                <Plus className="size-4" />
+                <Plus className="size-4 shrink-0" />
                 <span>New play</span>
               </button>
               {!playActions.isViewer && (
@@ -729,9 +752,9 @@ function HeaderMenu({
                   href={playActions.newFormationHref}
                   role="menuitem"
                   onClick={() => setOpen(false)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+                  className={menuItemCls}
                 >
-                  <Plus className="size-4" />
+                  <Plus className="size-4 shrink-0" />
                   <span>New formation</span>
                 </Link>
               )}
@@ -742,26 +765,28 @@ function HeaderMenu({
                   setOpen(false);
                   playActions.onToggleSelect();
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+                className={menuItemCls}
               >
-                <CheckSquare className="size-4" />
+                <CheckSquare className="size-4 shrink-0" />
                 <span>{playActions.selectionMode ? "Cancel selection" : "Select plays"}</span>
               </button>
               <Link
                 href={playActions.printHref}
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset sm:hidden"
+                className={menuItemCls}
               >
-                <Printer className="size-4" />
+                <Printer className="size-4 shrink-0" />
                 <span>Print playbook</span>
               </Link>
-              <div className="my-1 h-px bg-border sm:hidden" />
-            </>
+            </div>
           )}
-          {canManage && (onCustomize || onDuplicate || onArchive || onUnarchive || onDelete) && (
+
+          {/* Manage */}
+          {(onCustomize || onDuplicate || historyHref || onOpenTrash) && (
             <>
-              <div className="my-1 h-px bg-border" />
+              <SectionDivider />
+              <SectionLabel>Manage</SectionLabel>
               {onCustomize && (
                 <button
                   type="button"
@@ -770,9 +795,9 @@ function HeaderMenu({
                     setOpen(false);
                     onCustomize();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                  className={menuItemCls}
                 >
-                  <Settings2 className="size-4" />
+                  <Settings2 className="size-4 shrink-0" />
                   <span>Customize</span>
                 </button>
               )}
@@ -784,69 +809,68 @@ function HeaderMenu({
                     setOpen(false);
                     onDuplicate();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                  className={menuItemCls}
                 >
-                  <Copy className="size-4" />
+                  <Copy className="size-4 shrink-0" />
                   <span>Duplicate</span>
                 </button>
               )}
-              {onToggleCoachDup && (
+              {historyHref && (
+                <Link
+                  href={historyHref}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className={menuItemCls}
+                >
+                  <History className="size-4 shrink-0" />
+                  <span>History</span>
+                </Link>
+              )}
+              {onOpenTrash && (
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => {
                     setOpen(false);
-                    onToggleCoachDup();
+                    onOpenTrash();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                  className={menuItemCls}
                 >
-                  {allowCoachDuplication ? (
-                    <Unlock className="size-4 shrink-0" />
-                  ) : (
-                    <Lock className="size-4 shrink-0" />
-                  )}
-                  <span className="flex-1">Coach duplication</span>
-                  <DupStatePill allowed={allowCoachDuplication} />
+                  <Trash2 className="size-4 shrink-0" />
+                  <span>Trash</span>
                 </button>
               )}
-              {onTogglePlayerDup && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    onTogglePlayerDup();
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
-                >
-                  {allowPlayerDuplication ? (
-                    <Unlock className="size-4 shrink-0" />
-                  ) : (
-                    <Lock className="size-4 shrink-0" />
-                  )}
-                  <span className="flex-1">Player duplication</span>
-                  <DupStatePill allowed={allowPlayerDuplication} />
-                </button>
-              )}
-              {onToggleGameResultsDup && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    onToggleGameResultsDup();
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
-                >
-                  {allowGameResultsDuplication ? (
-                    <Unlock className="size-4 shrink-0" />
-                  ) : (
-                    <Lock className="size-4 shrink-0" />
-                  )}
-                  <span className="flex-1">Copy game results on duplicate</span>
-                  <DupStatePill allowed={allowGameResultsDuplication} />
-                </button>
-              )}
+            </>
+          )}
+
+          {/* Team */}
+          {onRevokeAllInvites && (
+            <>
+              <SectionDivider />
+              <SectionLabel>Team</SectionLabel>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onRevokeAllInvites();
+                }}
+                className={menuItemCls}
+              >
+                <MailX className="size-4 shrink-0" />
+                <span className="flex-1 truncate">Revoke outstanding invites</span>
+                <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                  {outstandingInviteCount}
+                </span>
+              </button>
+            </>
+          )}
+
+          {/* Status */}
+          {(onArchive || onUnarchive) && (
+            <>
+              <SectionDivider />
+              <SectionLabel>Status</SectionLabel>
               {onArchive && (
                 <button
                   type="button"
@@ -855,9 +879,9 @@ function HeaderMenu({
                     setOpen(false);
                     onArchive();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                  className={menuItemCls}
                 >
-                  <Archive className="size-4" />
+                  <Archive className="size-4 shrink-0" />
                   <span>Archive</span>
                 </button>
               )}
@@ -869,48 +893,20 @@ function HeaderMenu({
                     setOpen(false);
                     onUnarchive();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                  className={menuItemCls}
                 >
-                  <Archive className="size-4" />
+                  <Archive className="size-4 shrink-0" />
                   <span>Restore playbook</span>
                 </button>
               )}
-              {onDelete && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    onDelete();
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger-light"
-                >
-                  <Trash2 className="size-4" />
-                  <span>Delete</span>
-                </button>
-              )}
             </>
           )}
-          {onLeave && (
-            <>
-              <div className="my-1 h-px bg-border" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  onLeave();
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger-light"
-              >
-                <LogOut className="size-4" />
-                <span>Leave playbook</span>
-              </button>
-            </>
-          )}
+
+          {/* Site admin */}
           {exampleAdmin && onToggleExample && (
             <>
-              <div className="my-1 h-px bg-border" />
+              <SectionDivider />
+              <SectionLabel>Site admin</SectionLabel>
               <button
                 type="button"
                 role="menuitem"
@@ -918,9 +914,9 @@ function HeaderMenu({
                   setOpen(false);
                   onToggleExample();
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                className={menuItemCls}
               >
-                <FlaskConical className="size-4" />
+                <FlaskConical className="size-4 shrink-0" />
                 <span>
                   {exampleAdmin.isExample ? "Remove as example" : "Use as example"}
                 </span>
@@ -933,12 +929,48 @@ function HeaderMenu({
                     setOpen(false);
                     onTogglePublishExample();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+                  className={menuItemCls}
                 >
-                  <Globe className="size-4" />
+                  <Globe className="size-4 shrink-0" />
                   <span>
                     {exampleAdmin.isPublished ? "Unpublish example" : "Publish example"}
                   </span>
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Danger zone */}
+          {(onDelete || onLeave) && (
+            <>
+              <SectionDivider />
+              <SectionLabel danger>Danger zone</SectionLabel>
+              {onDelete && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onDelete();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger-light"
+                >
+                  <Trash2 className="size-4 shrink-0" />
+                  <span>Delete playbook</span>
+                </button>
+              )}
+              {onLeave && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onLeave();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger-light"
+                >
+                  <LogOut className="size-4 shrink-0" />
+                  <span>Leave playbook</span>
                 </button>
               )}
             </>
@@ -960,6 +992,7 @@ export function CustomizeTeamDialog({
   initialExampleAuthorLabel,
   showExampleAuthorLabel,
   onClose,
+  duplicationSettings,
 }: {
   playbookId: string;
   initialName: string;
@@ -971,6 +1004,15 @@ export function CustomizeTeamDialog({
   initialExampleAuthorLabel?: string | null;
   showExampleAuthorLabel?: boolean;
   onClose: () => void;
+  duplicationSettings?: {
+    allowCoachDuplication: boolean;
+    allowPlayerDuplication: boolean;
+    allowGameResultsDuplication: boolean;
+    gameResultsAvailable: boolean;
+    onToggleCoach: () => void;
+    onTogglePlayer: () => void;
+    onToggleGameResults: () => void;
+  } | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1150,6 +1192,33 @@ export function CustomizeTeamDialog({
                 placeholder='e.g. "Coach Jane" or "You!"'
                 maxLength={60}
               />
+            </div>
+          )}
+
+          {duplicationSettings && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Duplication
+              </label>
+              <div className="space-y-1.5 rounded-lg border border-border bg-surface-inset/50 p-3">
+                <DupToggleRow
+                  label="Coaches can duplicate this playbook"
+                  on={duplicationSettings.allowCoachDuplication}
+                  onToggle={duplicationSettings.onToggleCoach}
+                />
+                <DupToggleRow
+                  label="Players can duplicate this playbook"
+                  on={duplicationSettings.allowPlayerDuplication}
+                  onToggle={duplicationSettings.onTogglePlayer}
+                />
+                {duplicationSettings.gameResultsAvailable && (
+                  <DupToggleRow
+                    label="Allow copying game results"
+                    on={duplicationSettings.allowGameResultsDuplication}
+                    onToggle={duplicationSettings.onToggleGameResults}
+                  />
+                )}
+              </div>
             </div>
           )}
 
