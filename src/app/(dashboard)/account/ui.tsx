@@ -822,7 +822,7 @@ function SeatsCard({
             {collaborators.map((c) => {
               const manageHref =
                 c.playbookIds.length === 1
-                  ? `/playbooks/${c.playbookIds[0]}#roster`
+                  ? `/playbooks/${c.playbookIds[0]}?tab=roster`
                   : c.playbookIds.length > 1
                   ? "/playbooks"
                   : null;

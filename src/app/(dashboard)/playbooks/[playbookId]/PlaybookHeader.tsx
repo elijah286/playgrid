@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -1401,8 +1401,18 @@ export function InviteTeamMemberDialog({
                   ]}
                 />
                 <p className="mt-1.5 text-xs text-muted">
-                  Players can view plays and notes. Coaches can edit and create new ones.
+                  Players can view plays and notes. Coaches can edit, delete,
+                  and invite — same as you.
                 </p>
+                {role === "editor" && (
+                  <div className="mt-2 flex items-start gap-1.5 rounded-md bg-warning-light px-2.5 py-1.5 text-xs text-warning ring-1 ring-warning/30">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                      Only invite people you trust as coaches. You can demote
+                      them back to player anytime from the roster.
+                    </span>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -1516,6 +1526,17 @@ export function InviteTeamMemberDialog({
               >
                 <ArrowLeft className="size-3" /> Back
               </button>
+              {role === "editor" && (
+                <div className="flex items-start gap-2 rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    <strong>Edit-access link.</strong> Anyone who opens this
+                    link joins as a coach with full edit, delete, and invite
+                    rights. Share carefully — and remember you can revoke the
+                    link or demote individuals later.
+                  </span>
+                </div>
+              )}
               <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
                 <label className="flex cursor-pointer items-start gap-2">
                   <input
@@ -1556,6 +1577,14 @@ export function InviteTeamMemberDialog({
 
           {mode === "link" && inviteUrl && (
             <>
+              {role === "editor" && (
+                <div className="flex items-start gap-2 rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    Edit-access link — joiners become coaches.
+                  </span>
+                </div>
+              )}
               <div className="flex gap-1 rounded-lg border border-border bg-surface-inset p-1">
                 {(
                   [

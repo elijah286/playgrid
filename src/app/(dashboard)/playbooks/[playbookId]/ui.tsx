@@ -3539,8 +3539,19 @@ function RolePickerDialog({
 
   async function save() {
     if (!member || !member.user_id) return;
-    setSaving(true);
     const prevRole = member.role === "editor" ? "editor" : "viewer";
+    const promotingToCoach = role === "editor" && prevRole !== "editor";
+    if (promotingToCoach) {
+      const name = member.label || member.display_name || "this person";
+      if (
+        !window.confirm(
+          `Make ${name} a coach? They'll be able to edit and delete plays, invite others, and manage your roster. You can demote them back anytime.`,
+        )
+      ) {
+        return;
+      }
+    }
+    setSaving(true);
     if (role !== prevRole) {
       const res = await setMemberRoleAction({
         playbookId,
