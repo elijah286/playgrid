@@ -156,6 +156,16 @@ export function PlaybookCalendarTab({
 
   return (
     <div className="space-y-4">
+      {!loading && !error && partitioned.needsRsvp.length > 0 && (
+        <NeedsRsvpCard
+          events={partitioned.needsRsvp}
+          expanded={needsRsvpExpanded}
+          onToggle={() => setNeedsRsvpExpanded((v) => !v)}
+          viewerIsCoach={viewerIsCoach}
+          onEdit={openEdit}
+          onChanged={load}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
@@ -254,17 +264,6 @@ export function PlaybookCalendarTab({
               <CompactEventChip event={e} />
             </button>
           )}
-        />
-      )}
-
-      {!loading && !error && view === "list" && partitioned.needsRsvp.length > 0 && (
-        <NeedsRsvpCard
-          events={partitioned.needsRsvp}
-          expanded={needsRsvpExpanded}
-          onToggle={() => setNeedsRsvpExpanded((v) => !v)}
-          viewerIsCoach={viewerIsCoach}
-          onEdit={openEdit}
-          onChanged={load}
         />
       )}
 

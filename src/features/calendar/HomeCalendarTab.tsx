@@ -123,6 +123,14 @@ export function HomeCalendarTab({
 
   return (
     <div className="space-y-4">
+      {!empty && needsRsvp.length > 0 && (
+        <NeedsRsvpCard
+          events={needsRsvp}
+          expanded={needsRsvpExpanded}
+          onToggle={() => setNeedsRsvpExpanded((v) => !v)}
+          onChanged={load}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
           {(["list", "week", "month"] as const).map((v) => {
@@ -182,15 +190,6 @@ export function HomeCalendarTab({
               <CrossPlaybookCompact event={e} />
             </Link>
           )}
-        />
-      )}
-
-      {!empty && view === "list" && needsRsvp.length > 0 && (
-        <NeedsRsvpCard
-          events={needsRsvp}
-          expanded={needsRsvpExpanded}
-          onToggle={() => setNeedsRsvpExpanded((v) => !v)}
-          onChanged={load}
         />
       )}
 
