@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  AlertCircle,
   CalendarPlus,
   Calendar,
+  ChevronDown,
   MapPin,
   X,
 } from "lucide-react";
@@ -40,6 +42,7 @@ export function HomeCalendarTab({
     CoachablePlaybookRow[] | null
   >(null);
   const [sheetPlaybookId, setSheetPlaybookId] = useState<string | null>(null);
+  const [needsRsvpExpanded, setNeedsRsvpExpanded] = useState(true);
 
   function load() {
     listUpcomingEventsAcrossPlaybooksAction().then((res) => {
@@ -83,22 +86,14 @@ export function HomeCalendarTab({
     setSheetPlaybookId(p.id);
   }
 
-  // Sort: events needing my RSVP bubble to the top so the user sees their
-  // outstanding asks first. Within each group, keep chronological order.
-  const sorted = useMemo(() => {
-    const needs: CrossPlaybookEventRow[] = [];
-    const answered: CrossPlaybookEventRow[] = [];
-    for (const e of events) {
-      if (e.myRsvp == null) needs.push(e);
-      else answered.push(e);
-    }
-    return [...needs, ...answered];
-  }, [events]);
+  const needsRsvp = useMemo(
+    () => events.filter((e) => e.myRsvp == null),
+    [events],
+  );
 
   useEffect(() => {
-    const pending = events.filter((e) => e.myRsvp == null).length;
-    onPendingChange?.(pending);
-  }, [events, onPendingChange]);
+    onPendingChange?.(needsRsvp.length);
+  }, [needsRsvp.length, onPendingChange]);
 
   const visible = useMemo(() => {
     if (view === "month" && selectedDayKey) {
@@ -106,8 +101,8 @@ export function HomeCalendarTab({
         (e) => (e.occurrenceDate || ymd(new Date(e.startsAt))) === selectedDayKey,
       );
     }
-    return sorted;
-  }, [view, selectedDayKey, events, sorted]);
+    return events;
+  }, [view, selectedDayKey, events]);
 
   if (loading) {
     return <p className="py-12 text-center text-sm text-muted">Loading events…</p>;
@@ -187,6 +182,15 @@ export function HomeCalendarTab({
               <CrossPlaybookCompact event={e} />
             </Link>
           )}
+        />
+      )}
+
+      {!empty && view === "list" && needsRsvp.length > 0 && (
+        <NeedsRsvpCard
+          events={needsRsvp}
+          expanded={needsRsvpExpanded}
+          onToggle={() => setNeedsRsvpExpanded((v) => !v)}
+          onChanged={load}
         />
       )}
 
@@ -355,6 +359,53 @@ function CrossPlaybookCompact({ event }: { event: CrossPlaybookEventRow }) {
   );
 }
 
+function NeedsRsvpCard({
+  events,
+  expanded,
+  onToggle,
+  onChanged,
+}: {
+  events: CrossPlaybookEventRow[];
+  expanded: boolean;
+  onToggle: () => void;
+  onChanged: () => void;
+}) {
+  return (
+    <div className="rounded-2xl bg-amber-50 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <AlertCircle className="size-4 text-amber-700 dark:text-amber-300" />
+          <span className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+            {events.length} event{events.length === 1 ? "" : "s"} need your RSVP
+          </span>
+        </div>
+        <ChevronDown
+          className={
+            "size-4 text-amber-700 transition-transform dark:text-amber-300 " +
+            (expanded ? "rotate-180" : "")
+          }
+        />
+      </button>
+      {expanded && (
+        <ul className="space-y-2 px-3 pb-3">
+          {events.map((e) => (
+            <EventRow
+              key={`needs:${e.id}:${e.occurrenceDate}`}
+              event={e}
+              onChanged={onChanged}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function EventRow({
   event,
   onChanged,
@@ -405,12 +456,7 @@ function EventRow({
 
   return (
     <li
-      className={
-        "rounded-xl border-l-4 bg-surface-raised px-3 py-2.5 shadow-sm ring-1 " +
-        (needsRsvp
-          ? "border-red-300 ring-red-200 dark:border-red-900 dark:ring-red-950"
-          : "ring-border")
-      }
+      className="rounded-xl border-l-4 bg-surface-raised px-3 py-2.5 shadow-sm ring-1 ring-border"
       style={{ borderLeftColor: color }}
     >
       <div className="flex items-center gap-3">
