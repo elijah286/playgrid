@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CalendarEventRow } from "@/app/actions/calendar";
 import { EVENT_TYPE_META } from "./eventIcons";
@@ -24,6 +24,22 @@ export function MonthGrid({
   });
 
   const todayKey = ymd(new Date());
+  const todayRowRef = useRef<HTMLButtonElement | null>(null);
+
+  // When the Month view first renders for a month that contains today,
+  // scroll the page so today's week sits near the top of the viewport
+  // — coaches almost always want to see "this week and forward."
+  useEffect(() => {
+    const sameMonth =
+      cursor.getMonth() === new Date().getMonth() &&
+      cursor.getFullYear() === new Date().getFullYear();
+    if (!sameMonth) return;
+    const el = todayRowRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const targetTop = window.scrollY + rect.top - 96; // leave room for sticky tabs
+    window.scrollTo({ top: targetTop, behavior: "smooth" });
+  }, [cursor]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEventRow[]>();
@@ -93,6 +109,7 @@ export function MonthGrid({
           return (
             <button
               key={key}
+              ref={isToday ? todayRowRef : undefined}
               type="button"
               onClick={() => onSelectDay?.(isSelected ? null : day.date)}
               className={
