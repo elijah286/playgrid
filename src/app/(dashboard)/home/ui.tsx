@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -991,10 +991,28 @@ export function DashboardClient({
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
 }) {
-  const [homeTab, setHomeTab] = useState<HomeTab>(initialTab);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const homeTab: HomeTab =
+    tabParam === "calendar" ||
+    tabParam === "inbox" ||
+    tabParam === "activity" ||
+    tabParam === "playbooks"
+      ? tabParam
+      : initialTab;
+  const setHomeTab = useCallback(
+    (t: HomeTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (t === "playbooks") params.delete("tab");
+      else params.set("tab", t);
+      const qs = params.toString();
+      router.replace(qs ? `/home?${qs}` : "/home", { scroll: false });
+    },
+    [router, searchParams],
+  );
   const inboxCount = inboxAlerts.length;
   const activityCount = activityEntries.length;
-  const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
