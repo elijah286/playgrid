@@ -431,6 +431,36 @@ function EventCard({
             </p>
           )}
         </button>
+        {showInlineRsvp && (
+          <div
+            className="hidden items-center gap-1.5 sm:flex"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            {(["yes", "maybe", "no"] as const).map((s) => {
+              const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
+              const colors = {
+                yes: "bg-emerald-100 text-emerald-800 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
+                maybe:
+                  "bg-amber-100 text-amber-800 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
+                no: "bg-red-100 text-red-800 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
+              };
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => quickRsvp(s)}
+                  className={
+                    "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition disabled:opacity-60 " +
+                    colors[s]
+                  }
+                >
+                  {labels[s]}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="flex items-center gap-1">
           {viewerIsCoach && !isPast && (
             <button
@@ -458,14 +488,14 @@ function EventCard({
       </div>
 
       {showInlineRsvp && (
-        <div className="mt-2 flex items-center gap-1.5">
+        <div className="mt-3 grid grid-cols-3 gap-1.5 sm:hidden">
           {(["yes", "maybe", "no"] as const).map((s) => {
             const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
             const colors = {
-              yes: "text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950",
+              yes: "bg-emerald-100 text-emerald-800 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
               maybe:
-                "text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950",
-              no: "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950",
+                "bg-amber-100 text-amber-800 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
+              no: "bg-red-100 text-red-800 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
             };
             return (
               <button
@@ -477,7 +507,7 @@ function EventCard({
                   quickRsvp(s);
                 }}
                 className={
-                  "rounded-md px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-60 " +
+                  "rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition disabled:opacity-60 " +
                   colors[s]
                 }
               >
