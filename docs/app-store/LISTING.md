@@ -140,6 +140,11 @@ football,playbook,coach,plays,routes,formations,7v7,flag,wristband,offense,defen
 https://www.xogridmaker.com/contact
 ```
 
+## Support email
+```
+admin@xogridmaker.com
+```
+
 ## Marketing URL (optional)
 ```
 https://www.xogridmaker.com
@@ -174,7 +179,7 @@ This release includes:
 
 **Demo account** (create one before submitting):
 ```
-Email: review@xogridmaker.com
+Email: admin@xogridmaker.com
 Password: [generate; rotate after approval]
 ```
 

@@ -71,7 +71,7 @@ play in under a minute.
 
 ## Contact details
 
-**Email**: support@xogridmaker.com
+**Email**: admin@xogridmaker.com
 **Website**: https://www.xogridmaker.com
 **Phone** (optional, recommended): your business phone
 
@@ -137,7 +137,7 @@ GPS venue tagging, and native share sheet for team invites.
 
 **Demo account**:
 ```
-Email: review@xogridmaker.com
+Email: admin@xogridmaker.com
 Password: [generate; rotate after approval]
 ```
 
