@@ -1076,9 +1076,6 @@ function PlaybookDetailClientInner({
                   count: initialRoster.filter((m) => m.status === "active").length,
                   variant: "default" as const,
                 },
-                ...(gameResultsAvailable
-                  ? [{ key: "games" as const, label: "Games", count: null as number | null, variant: "default" as const }]
-                  : []),
                 ...(teamCalendarAvailable
                   ? [{
                       key: "calendar" as const,
@@ -1096,6 +1093,9 @@ function PlaybookDetailClientInner({
                         | "default"
                         | "alert",
                     }]
+                  : []),
+                ...(gameResultsAvailable
+                  ? [{ key: "games" as const, label: "Results", count: null as number | null, variant: "default" as const }]
                   : []),
               ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null; variant: "default" | "alert" }>
             ).map((t) => {
