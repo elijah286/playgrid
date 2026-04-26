@@ -195,8 +195,19 @@ export async function setSeatQuantityAction(input: {
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Comp / early-user accounts have no Stripe subscription. Let them
+  // adjust their seat allocation directly — there's nothing to bill,
+  // and removing seats still respects the in-use floor enforced above.
   if (!sub?.stripe_subscription_id) {
-    return { ok: false, error: "No active Coach subscription on file." };
+    await ensureOwnerSeatGrantRow(user.id);
+    const { error: grantErr } = await admin
+      .from("owner_seat_grants")
+      .update({ purchased_seats: input.nextPurchased })
+      .eq("owner_id", user.id);
+    if (grantErr) return { ok: false, error: grantErr.message };
+    revalidatePath("/account");
+    return { ok: true, purchased: input.nextPurchased };
   }
   if (sub.status !== "active" && sub.status !== "trialing") {
     return { ok: false, error: "Subscription must be active to change seats." };

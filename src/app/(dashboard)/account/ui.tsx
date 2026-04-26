@@ -18,6 +18,7 @@ import type { Entitlement } from "@/lib/billing/entitlement";
 import { TIER_LABEL } from "@/lib/billing/features";
 import type { SeatUsage, SeatCollaborator, PendingCoachInvite } from "@/lib/billing/seats";
 import { resendCoachInviteAction } from "@/app/actions/invites";
+import { removeCoachAccessAction } from "@/app/actions/playbook-roster";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,7 @@ export function AccountClient({
             collaborators={seatCollaborators}
             pendingInvites={pendingCoachInvites}
             canPurchase={entitlement?.source === "stripe"}
+            isComplimentary={entitlement?.source === "comp"}
           />
         ) : null}
       </div>
@@ -773,11 +775,13 @@ function SeatsCard({
   collaborators,
   pendingInvites,
   canPurchase,
+  isComplimentary,
 }: {
   usage: SeatUsage;
   collaborators: SeatCollaborator[];
   pendingInvites: PendingCoachInvite[];
   canPurchase: boolean;
+  isComplimentary: boolean;
 }) {
   const total = usage.included + usage.purchased;
   const pct = total === 0 ? 0 : Math.min(100, Math.round((usage.used / total) * 100));
@@ -785,7 +789,9 @@ function SeatsCard({
   const [err, setErr] = useState<string | null>(null);
   const [resending, setResending] = useState<string | null>(null);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const minRemovable = Math.max(0, usage.used - usage.included);
+  const canAdjustSeats = canPurchase || isComplimentary;
 
   function setSeats(next: number) {
     setErr(null);
@@ -797,6 +803,25 @@ function SeatsCard({
       }
       window.location.reload();
     });
+  }
+
+  async function removeCoach(userId: string, label: string) {
+    if (
+      !window.confirm(
+        `Remove ${label} from every playbook you own? They'll lose edit access immediately and the seat opens up.`,
+      )
+    ) {
+      return;
+    }
+    setErr(null);
+    setRemovingUserId(userId);
+    const res = await removeCoachAccessAction(userId);
+    setRemovingUserId(null);
+    if (!res.ok) {
+      setErr(res.error);
+      return;
+    }
+    window.location.reload();
   }
 
   async function resend(inviteId: string) {
@@ -869,6 +894,19 @@ function SeatsCard({
                         Manage
                       </Link>
                     ) : null}
+                    <button
+                      type="button"
+                      disabled={removingUserId === c.userId}
+                      onClick={() =>
+                        removeCoach(
+                          c.userId,
+                          c.displayName ?? c.email ?? "this coach",
+                        )
+                      }
+                      className="font-medium text-danger hover:underline disabled:opacity-50"
+                    >
+                      {removingUserId === c.userId ? "Removing…" : "Remove"}
+                    </button>
                   </div>
                 </li>
               );
@@ -907,10 +945,12 @@ function SeatsCard({
           </div>
         ) : null}
         {resendNotice ? <p className="text-xs text-success">{resendNotice}</p> : null}
-        {canPurchase ? (
+        {canAdjustSeats ? (
           <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted">
-              Add coach seats for ${SEAT_PRICE_USD_PER_MONTH}/seat/month, prorated.
+              {isComplimentary
+                ? "Adjust your coach seats — your complimentary plan covers them, no charge."
+                : `Add coach seats for $${SEAT_PRICE_USD_PER_MONTH}/seat/month, prorated.`}
             </p>
             <div className="flex items-center gap-2">
               <button

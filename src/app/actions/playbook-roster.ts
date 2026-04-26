@@ -949,6 +949,50 @@ export async function deleteRosterEntryAction(
   return { ok: true };
 }
 
+/**
+ * Revoke a coach's edit access across every playbook the caller owns.
+ * Powers the "Remove" button in the /account Coach seats card so the
+ * owner can free up a seat without hopping through each playbook.
+ */
+export async function removeCoachAccessAction(
+  coachUserId: string,
+): Promise<{ ok: true; removed: number } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (coachUserId === user.id) {
+    return { ok: false, error: "You can't remove yourself this way." };
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: ownedRows } = await admin
+    .from("playbook_members")
+    .select("playbook_id")
+    .eq("user_id", user.id)
+    .eq("role", "owner")
+    .eq("status", "active");
+  const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
+  if (ownedIds.length === 0) return { ok: true, removed: 0 };
+
+  const { data: removed, error } = await admin
+    .from("playbook_members")
+    .delete()
+    .in("playbook_id", ownedIds)
+    .eq("user_id", coachUserId)
+    .eq("role", "editor")
+    .select("playbook_id");
+  if (error) return { ok: false, error: error.message };
+
+  for (const r of removed ?? []) {
+    revalidatePath(`/playbooks/${r.playbook_id as string}`);
+  }
+  revalidatePath("/account");
+  return { ok: true, removed: removed?.length ?? 0 };
+}
+
 export async function removeStaffMemberAction(
   playbookId: string,
   userId: string,
