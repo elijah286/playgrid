@@ -22,6 +22,7 @@ import {
   WristBand,
 } from "@/features/marketing/DeviceFrames";
 import { Reveal } from "@/features/marketing/Reveal";
+import { HeroWalkthroughVideo } from "@/features/marketing/HeroWalkthroughVideo";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
@@ -46,8 +47,8 @@ export default async function LearnMorePage() {
   return (
     <div className="bg-surface text-foreground">
       <Hero />
-      <WhyDifferent freeMaxPlays={freeMaxPlays} />
       <PrintoutsAndWristbands />
+      <WhyDifferent freeMaxPlays={freeMaxPlays} />
       <EveryScreen />
       <FormationsAndTags />
       <GameModeSection />
@@ -117,20 +118,11 @@ function Hero() {
         <div className="relative">
           <div className="absolute -inset-8 -z-10 rounded-[36px] bg-gradient-to-br from-white/40 to-white/0 blur-2xl" />
           <LaptopFrame>
-            <video
-              className="block h-full w-full object-cover object-top"
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="auto"
-              controls={false}
-              disablePictureInPicture
+            <HeroWalkthroughVideo
               poster="/marketing/screens/hero-1-shelf.png"
-            >
-              <source src="/marketing/screens/hero-walkthrough.mp4" type="video/mp4" />
-              <source src="/marketing/screens/hero-walkthrough.webm" type="video/webm" />
-            </video>
+              mp4="/marketing/screens/hero-walkthrough.mp4"
+              webm="/marketing/screens/hero-walkthrough.webm"
+            />
           </LaptopFrame>
         </div>
       </div>
@@ -489,6 +481,19 @@ function PrintoutsAndWristbands() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="grid gap-12 md:grid-cols-2 md:items-center">
           <Reveal>
+            <div className="overflow-hidden rounded-3xl shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
+              <Image
+                src="/marketing/photos/wristbands-callsheet.jpg"
+                alt="Printed call sheet and four wristbands on the field — generated from a real xogridmaker playbook"
+                width={1400}
+                height={1050}
+                className="block h-auto w-full"
+                sizes="(min-width: 768px) 600px, 100vw"
+              />
+            </div>
+          </Reveal>
+
+          <Reveal delay={100}>
             <div>
               <SectionEyebrow icon={Printer} color={BRAND_ORANGE}>
                 Print-ready
@@ -506,19 +511,6 @@ function PrintoutsAndWristbands() {
               <p className="mt-3 text-sm text-muted">
                 Every example playbook has a live print preview — try one.
               </p>
-            </div>
-          </Reveal>
-
-          <Reveal delay={100}>
-            <div className="overflow-hidden rounded-3xl shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
-              <Image
-                src="/marketing/photos/wristbands-callsheet.jpg"
-                alt="Printed call sheet and four wristbands on the field — generated from a real xogridmaker playbook"
-                width={1400}
-                height={1050}
-                className="block h-auto w-full"
-                sizes="(min-width: 768px) 600px, 100vw"
-              />
             </div>
           </Reveal>
         </div>

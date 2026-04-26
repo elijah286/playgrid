@@ -34,6 +34,10 @@ const BEAT_SHORT = 600;
 const BEAT_MED = 1200;
 const BEAT_LONG = 2000;
 const GLIDE_MS = 850;
+// Post-navigation dwell. Kept small so the captured video doesn't sit on
+// dead frames while Next.js finishes hydrating — the visible content is
+// already painted by the time DOMContentLoaded fires for these routes.
+const NAV_DWELL = 350;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -164,9 +168,33 @@ async function run() {
   const page = await ctx.newPage();
   await installCursor(page);
 
+  // Warm the routes we're about to record on a throwaway page in the same
+  // context so Next.js's RSC payloads are cached. This trims the dead
+  // "loading" frames from the recorded video without changing the visible
+  // pacing of the walkthrough itself.
+  const warm = await ctx.newPage();
+  await warm.goto(`${BASE_URL}/examples`, { waitUntil: "domcontentloaded" });
+  const firstHref = await warm
+    .locator('a[href^="/playbooks/"]')
+    .first()
+    .getAttribute("href")
+    .catch(() => null);
+  if (firstHref) {
+    await warm.goto(`${BASE_URL}${firstHref}`, { waitUntil: "domcontentloaded" });
+    const firstPlay = await warm
+      .locator('a[href*="/plays/"][href*="/edit"]')
+      .first()
+      .getAttribute("href")
+      .catch(() => null);
+    if (firstPlay) {
+      await warm.goto(`${BASE_URL}${firstPlay}`, { waitUntil: "domcontentloaded" });
+    }
+  }
+  await warm.close();
+
   // ---- Step 1: bookshelf of playbooks (always unauthed).
-  await page.goto(`${BASE_URL}/examples`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(BEAT_MED);
+  await page.goto(`${BASE_URL}/examples`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(NAV_DWELL);
   await page.mouse.move(80, 780);
   await sleep(BEAT_SHORT);
   await shot(page, "hero-1-shelf");
@@ -187,8 +215,8 @@ async function run() {
     new RegExp(playbookHref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     { timeout: 15000 },
   );
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(BEAT_MED);
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(NAV_DWELL);
   await shot(page, "hero-3-playbook");
 
   // ---- Step 4: glide to a play tile and click in.
@@ -230,8 +258,8 @@ async function run() {
 
     // ---- Step 6: navigate back to the playbook so the loop reads as
     //              a repeating tour rather than freezing on the play.
-    await page.goto(`${BASE_URL}${playbookHref}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(BEAT_MED);
+    await page.goto(`${BASE_URL}${playbookHref}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(NAV_DWELL);
     await glideTo(page, 720, 500);
     await sleep(BEAT_SHORT);
     await shot(page, "hero-6-back");
