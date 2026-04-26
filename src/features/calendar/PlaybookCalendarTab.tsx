@@ -27,10 +27,11 @@ import { SubscribeFeedModal } from "./SubscribeFeedModal";
 import { EventSheet, type EventSheetInitial } from "./EventSheet";
 import { EVENT_TYPE_META } from "./eventIcons";
 import { MonthGrid, ymd } from "./MonthGrid";
+import { WeekAgenda, CompactEventChip } from "./WeekAgenda";
 import type { SelectedPlace } from "./PlaceAutocomplete";
 
 type Mode = "upcoming" | "past";
-type ViewKind = "list" | "month";
+type ViewKind = "list" | "week" | "month";
 
 export function PlaybookCalendarTab({
   playbookId,
@@ -139,7 +140,7 @@ export function PlaybookCalendarTab({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
-            {(["list", "month"] as const).map((v) => {
+            {(["list", "week", "month"] as const).map((v) => {
               const active = view === v;
               return (
                 <button
@@ -147,16 +148,16 @@ export function PlaybookCalendarTab({
                   type="button"
                   onClick={() => {
                     setView(v);
-                    if (v === "list") setSelectedDayKey(null);
+                    if (v !== "month") setSelectedDayKey(null);
                   }}
                   className={
-                    "px-3 py-1.5 text-sm font-medium transition-colors " +
+                    "px-3 py-1.5 text-sm font-medium capitalize transition-colors " +
                     (active
                       ? "bg-primary text-primary-foreground"
                       : "bg-surface text-foreground hover:bg-surface-hover")
                   }
                 >
-                  {v === "list" ? "List" : "Month"}
+                  {v}
                 </button>
               );
             })}
@@ -216,6 +217,20 @@ export function PlaybookCalendarTab({
           events={events}
           selectedDayKey={selectedDayKey}
           onSelectDay={(d) => setSelectedDayKey(d ? ymd(d) : null)}
+        />
+      )}
+      {view === "week" && !loading && !error && (
+        <WeekAgenda
+          events={events}
+          renderEvent={(e) => (
+            <button
+              type="button"
+              onClick={() => openEdit(e)}
+              className="w-full text-left"
+            >
+              <CompactEventChip event={e} />
+            </button>
+          )}
         />
       )}
 
@@ -428,6 +443,16 @@ function EventCardDetail({
       : null;
   })();
 
+  const mapsEmbedSrc = (() => {
+    if (event.location.lat != null && event.location.lng != null) {
+      return `https://maps.google.com/maps?q=${event.location.lat},${event.location.lng}&z=15&output=embed`;
+    }
+    const q = event.location.address || event.location.name;
+    return q
+      ? `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed`
+      : null;
+  })();
+
   return (
     <div className="mt-3 space-y-3 border-t border-border pt-3 text-sm">
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
@@ -438,6 +463,18 @@ function EventCardDetail({
         {event.opponent && <span>vs. {event.opponent}</span>}
         {event.homeAway && <span className="capitalize">{event.homeAway}</span>}
       </div>
+
+      {mapsEmbedSrc && (
+        <div className="overflow-hidden rounded-lg ring-1 ring-border">
+          <iframe
+            src={mapsEmbedSrc}
+            title={`Map of ${event.location.name ?? event.location.address ?? "event location"}`}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            className="block h-40 w-full sm:h-48"
+          />
+        </div>
+      )}
 
       {mapsHref && (
         <a

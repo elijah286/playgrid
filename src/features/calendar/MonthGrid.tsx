@@ -33,6 +33,11 @@ export function MonthGrid({
       list.push(e);
       map.set(key, list);
     }
+    for (const list of map.values()) {
+      list.sort(
+        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+      );
+    }
     return map;
   }, [events]);
 
@@ -91,7 +96,7 @@ export function MonthGrid({
               type="button"
               onClick={() => onSelectDay?.(isSelected ? null : day.date)}
               className={
-                "flex min-h-[64px] flex-col items-stretch gap-1 bg-surface p-1.5 text-left transition-colors " +
+                "flex min-h-[72px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5 " +
                 (inMonth ? "" : "opacity-40 ") +
                 (isSelected
                   ? "ring-2 ring-inset ring-primary "
@@ -102,18 +107,20 @@ export function MonthGrid({
                 className={
                   "text-xs font-medium " +
                   (isToday
-                    ? "inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                    ? "inline-flex size-5 items-center justify-center self-start rounded-full bg-primary text-primary-foreground"
                     : "text-foreground")
                 }
               >
                 {day.date.getDate()}
               </div>
-              <div className="flex flex-wrap gap-0.5">
+
+              {/* Mobile: dot row. Desktop: title pills. */}
+              <div className="flex flex-wrap gap-0.5 sm:hidden">
                 {dayEvents.slice(0, 4).map((e) => {
                   const meta = EVENT_TYPE_META[e.type];
                   return (
                     <span
-                      key={e.id}
+                      key={`${e.id}:${e.occurrenceDate}`}
                       title={e.title}
                       className={"size-1.5 rounded-full " + meta.dotClass}
                     />
@@ -122,6 +129,28 @@ export function MonthGrid({
                 {dayEvents.length > 4 && (
                   <span className="text-[9px] font-medium text-muted">
                     +{dayEvents.length - 4}
+                  </span>
+                )}
+              </div>
+              <div className="hidden flex-col gap-0.5 sm:flex">
+                {dayEvents.slice(0, 3).map((e) => {
+                  const meta = EVENT_TYPE_META[e.type];
+                  return (
+                    <span
+                      key={`${e.id}:${e.occurrenceDate}`}
+                      title={e.title}
+                      className={
+                        "truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight ring-1 " +
+                        meta.chipActive
+                      }
+                    >
+                      {e.title}
+                    </span>
+                  );
+                })}
+                {dayEvents.length > 3 && (
+                  <span className="px-1 text-[10px] font-medium text-muted">
+                    +{dayEvents.length - 3} more
                   </span>
                 )}
               </div>
