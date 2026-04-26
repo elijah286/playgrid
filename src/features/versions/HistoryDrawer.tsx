@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   listPlaybookActivityAction,
   listPlaybookVersionsAction,
+  restorePlaybookVersionAction,
   type PlaybookVersionRow,
   type PlayVersionRow,
 } from "@/app/actions/versions";
 import { PlayVersionCompare } from "./PlayVersionCompare";
+import { useToast } from "@/components/ui";
 
 type Tab = "activity" | "structure";
 
@@ -91,7 +93,17 @@ export function HistoryDrawer({ open, onClose, playbookId }: Props) {
               />
             )}
 
-            {tab === "structure" && <StructureList rows={structure} />}
+            {tab === "structure" && (
+              <StructureList
+                rows={structure}
+                playbookId={playbookId}
+                onRestored={() => {
+                  void listPlaybookVersionsAction(playbookId).then((res) => {
+                    if (res.ok) setStructure(res.rows);
+                  });
+                }}
+              />
+            )}
           </div>
         </aside>
       </div>
@@ -180,7 +192,18 @@ function ActivityList({
   );
 }
 
-function StructureList({ rows }: { rows: PlaybookVersionRow[] | null }) {
+function StructureList({
+  rows,
+  playbookId,
+  onRestored,
+}: {
+  rows: PlaybookVersionRow[] | null;
+  playbookId: string;
+  onRestored: () => void;
+}) {
+  const { toast } = useToast();
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
   if (rows === null) return <p className="text-sm text-muted">Loading…</p>;
   if (rows.length === 0) {
     return (
@@ -190,20 +213,49 @@ function StructureList({ rows }: { rows: PlaybookVersionRow[] | null }) {
       </p>
     );
   }
+
+  async function onRestore(row: PlaybookVersionRow) {
+    if (restoringId) return;
+    if (!confirm("Restore playbook structure to this snapshot? Folder names and ordering will be reset.")) return;
+    setRestoringId(row.id);
+    const res = await restorePlaybookVersionAction(playbookId, row.id);
+    setRestoringId(null);
+    if (!res.ok) {
+      toast(res.error, "error");
+      return;
+    }
+    toast("Playbook structure restored", "success");
+    onRestored();
+  }
+
   return (
     <ul className="space-y-2">
-      {rows.map((row) => (
+      {rows.map((row, i) => (
         <li key={row.id} className="rounded-md border border-border px-3 py-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <KindBadge kind={row.kind} />
-            <span className="text-xs text-muted">
-              {row.editorName ?? "Unknown editor"} · {fmt(row.createdAt)}
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <KindBadge kind={row.kind} />
+                <span className="text-xs text-muted">
+                  {row.editorName ?? "Unknown editor"} · {fmt(row.createdAt)}
+                </span>
+              </div>
+              {row.diffSummary && (
+                <p className="mt-1 text-sm text-foreground/90">{row.diffSummary}</p>
+              )}
+              {row.note && <p className="mt-1 text-xs italic text-muted">“{row.note}”</p>}
+            </div>
+            {i !== 0 && (
+              <button
+                type="button"
+                onClick={() => onRestore(row)}
+                disabled={restoringId !== null}
+                className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10 disabled:opacity-50"
+              >
+                {restoringId === row.id ? "Restoring…" : "Restore"}
+              </button>
+            )}
           </div>
-          {row.diffSummary && (
-            <p className="mt-1 text-sm text-foreground/90">{row.diffSummary}</p>
-          )}
-          {row.note && <p className="mt-1 text-xs italic text-muted">“{row.note}”</p>}
         </li>
       ))}
     </ul>
