@@ -200,3 +200,109 @@ export async function listInboxAlertsAction(): Promise<
   alerts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { ok: true, alerts };
 }
+
+export type ResolvedInboxEvent = {
+  id: string;
+  kind: InboxAlertKind;
+  action: "approved" | "rejected";
+  playbookId: string;
+  playbookName: string;
+  playbookLogoUrl: string | null;
+  playbookColor: string | null;
+  subjectDisplayName: string | null;
+  resolvedAt: string;
+  resolvedByDisplayName: string | null;
+  detail: {
+    rosterLabel?: string | null;
+    jerseyNumber?: string | null;
+    role?: "owner" | "editor" | "viewer" | null;
+    note?: string | null;
+  };
+};
+
+/** Most-recent-first audit log of inbox actions taken on the caller's owned playbooks. */
+export async function listResolvedInboxEventsAction(
+  limit = 100,
+): Promise<
+  | { ok: true; events: ResolvedInboxEvent[] }
+  | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: rows, error } = await supabase
+    .from("inbox_events")
+    .select(
+      "id, kind, action, playbook_id, subject_display_name, resolved_at, resolved_by, detail, playbooks!inner(id, name, logo_url, color, is_archived)",
+    )
+    .eq("playbooks.is_archived", false)
+    .order("resolved_at", { ascending: false })
+    .limit(limit);
+  if (error) return { ok: false, error: error.message };
+
+  type Row = {
+    id: string;
+    kind: InboxAlertKind;
+    action: "approved" | "rejected";
+    playbook_id: string;
+    subject_display_name: string | null;
+    resolved_at: string;
+    resolved_by: string;
+    detail: ResolvedInboxEvent["detail"] | null;
+    playbooks:
+      | {
+          id: string;
+          name: string;
+          logo_url: string | null;
+          color: string | null;
+        }
+      | {
+          id: string;
+          name: string;
+          logo_url: string | null;
+          color: string | null;
+        }[]
+      | null;
+  };
+
+  const resolverIds = Array.from(
+    new Set((rows ?? []).map((r) => (r as Row).resolved_by)),
+  );
+  const resolverNames = new Map<string, string | null>();
+  if (resolverIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", resolverIds);
+    for (const p of profs ?? []) {
+      resolverNames.set(
+        p.id as string,
+        (p.display_name as string | null) ?? null,
+      );
+    }
+  }
+
+  const events: ResolvedInboxEvent[] = [];
+  for (const r of (rows ?? []) as unknown as Row[]) {
+    const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+    if (!pb) continue;
+    events.push({
+      id: r.id,
+      kind: r.kind,
+      action: r.action,
+      playbookId: r.playbook_id,
+      playbookName: pb.name,
+      playbookLogoUrl: pb.logo_url,
+      playbookColor: pb.color,
+      subjectDisplayName: r.subject_display_name,
+      resolvedAt: r.resolved_at,
+      resolvedByDisplayName: resolverNames.get(r.resolved_by) ?? null,
+      detail: r.detail ?? {},
+    });
+  }
+  return { ok: true, events };
+}

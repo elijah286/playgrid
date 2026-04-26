@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { sendRosterClaimNotification } from "@/lib/notifications/roster-claim-email";
+import {
+  lookupDisplayName,
+  recordInboxEvent,
+} from "@/lib/inbox/record-event";
 
 export type PlaybookRosterMember = {
   id: string;
@@ -210,12 +214,26 @@ export async function approveCoachUpgradeAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const subjectName = await lookupDisplayName(supabase, userId);
   const { error } = await supabase
     .from("playbook_members")
     .update({ role: "editor", coach_upgrade_requested_at: null })
     .eq("playbook_id", playbookId)
     .eq("user_id", userId);
   if (error) return { ok: false, error: error.message };
+  await recordInboxEvent(supabase, {
+    playbookId,
+    kind: "coach_upgrade",
+    action: "approved",
+    subjectUserId: userId,
+    subjectDisplayName: subjectName,
+    detail: { role: "editor" },
+    resolvedBy: user.id,
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }
@@ -226,12 +244,25 @@ export async function denyCoachUpgradeAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const subjectName = await lookupDisplayName(supabase, userId);
   const { error } = await supabase
     .from("playbook_members")
     .update({ coach_upgrade_requested_at: null })
     .eq("playbook_id", playbookId)
     .eq("user_id", userId);
   if (error) return { ok: false, error: error.message };
+  await recordInboxEvent(supabase, {
+    playbookId,
+    kind: "coach_upgrade",
+    action: "rejected",
+    subjectUserId: userId,
+    subjectDisplayName: subjectName,
+    resolvedBy: user.id,
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }
@@ -242,12 +273,34 @@ export async function approveMemberAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { data: snap } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const subjectName = await lookupDisplayName(supabase, userId);
   const { error } = await supabase
     .from("playbook_members")
     .update({ status: "active" })
     .eq("playbook_id", playbookId)
     .eq("user_id", userId);
   if (error) return { ok: false, error: error.message };
+  await recordInboxEvent(supabase, {
+    playbookId,
+    kind: "membership",
+    action: "approved",
+    subjectUserId: userId,
+    subjectDisplayName: subjectName,
+    detail: {
+      role: (snap?.role as "editor" | "viewer" | "owner" | undefined) ?? null,
+    },
+    resolvedBy: user.id,
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }
@@ -258,12 +311,34 @@ export async function denyMemberAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { data: snap } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const subjectName = await lookupDisplayName(supabase, userId);
   const { error } = await supabase
     .from("playbook_members")
     .delete()
     .eq("playbook_id", playbookId)
     .eq("user_id", userId);
   if (error) return { ok: false, error: error.message };
+  await recordInboxEvent(supabase, {
+    playbookId,
+    kind: "membership",
+    action: "rejected",
+    subjectUserId: userId,
+    subjectDisplayName: subjectName,
+    detail: {
+      role: (snap?.role as "editor" | "viewer" | "owner" | undefined) ?? null,
+    },
+    resolvedBy: user.id,
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }
@@ -447,10 +522,39 @@ export async function approveRosterClaimAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { data: snap } = await supabase
+    .from("roster_claims")
+    .select(
+      "user_id, note, member:member_id(label, jersey_number)",
+    )
+    .eq("id", claimId)
+    .maybeSingle();
+  const claimUserId = (snap?.user_id as string | undefined) ?? null;
+  const memberSnap = Array.isArray(snap?.member) ? snap?.member[0] : snap?.member;
+  const subjectName = claimUserId
+    ? await lookupDisplayName(supabase, claimUserId)
+    : null;
   const { error } = await supabase.rpc("approve_roster_claim", {
     p_claim_id: claimId,
   });
   if (error) return { ok: false, error: error.message };
+  await recordInboxEvent(supabase, {
+    playbookId,
+    kind: "roster_claim",
+    action: "approved",
+    subjectUserId: claimUserId,
+    subjectDisplayName: subjectName,
+    detail: {
+      rosterLabel: memberSnap?.label ?? null,
+      jerseyNumber: memberSnap?.jersey_number ?? null,
+      note: snap?.note ?? null,
+    },
+    resolvedBy: user.id,
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }
@@ -461,10 +565,39 @@ export async function rejectRosterClaimAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { data: snap } = await supabase
+    .from("roster_claims")
+    .select(
+      "user_id, note, member:member_id(label, jersey_number)",
+    )
+    .eq("id", claimId)
+    .maybeSingle();
+  const claimUserId = (snap?.user_id as string | undefined) ?? null;
+  const memberSnap = Array.isArray(snap?.member) ? snap?.member[0] : snap?.member;
+  const subjectName = claimUserId
+    ? await lookupDisplayName(supabase, claimUserId)
+    : null;
   const { error } = await supabase.rpc("reject_roster_claim", {
     p_claim_id: claimId,
   });
   if (error) return { ok: false, error: error.message };
+  await recordInboxEvent(supabase, {
+    playbookId,
+    kind: "roster_claim",
+    action: "rejected",
+    subjectUserId: claimUserId,
+    subjectDisplayName: subjectName,
+    detail: {
+      rosterLabel: memberSnap?.label ?? null,
+      jerseyNumber: memberSnap?.jersey_number ?? null,
+      note: snap?.note ?? null,
+    },
+    resolvedBy: user.id,
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { ArrowUpRight, Check, Inbox, X } from "lucide-react";
 import {
   approveCoachUpgradeAction,
@@ -12,11 +12,17 @@ import {
   denyMemberAction,
   rejectRosterClaimAction,
 } from "@/app/actions/playbook-roster";
-import type { InboxAlert, InboxAlertKind } from "@/app/actions/inbox";
+import {
+  listResolvedInboxEventsAction,
+  type InboxAlert,
+  type InboxAlertKind,
+  type ResolvedInboxEvent,
+} from "@/app/actions/inbox";
 import { Button, SegmentedControl, useToast } from "@/components/ui";
 
 type SortMode = "newest" | "oldest" | "playbook";
 type FilterKind = "all" | InboxAlertKind;
+type ViewMode = "pending" | "resolved";
 
 export function InboxTab({ initialAlerts }: { initialAlerts: InboxAlert[] }) {
   const router = useRouter();
@@ -25,7 +31,28 @@ export function InboxTab({ initialAlerts }: { initialAlerts: InboxAlert[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [sort, setSort] = useState<SortMode>("newest");
   const [filter, setFilter] = useState<FilterKind>("all");
+  const [view, setView] = useState<ViewMode>("pending");
+  const [resolved, setResolved] = useState<ResolvedInboxEvent[] | null>(null);
+  const [resolvedLoading, setResolvedLoading] = useState(false);
   const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (view !== "resolved" || resolved !== null) return;
+    let cancelled = false;
+    setResolvedLoading(true);
+    listResolvedInboxEventsAction()
+      .then((res) => {
+        if (cancelled) return;
+        setResolved(res.ok ? res.events : []);
+        if (!res.ok) toast(res.error, "error");
+      })
+      .finally(() => {
+        if (!cancelled) setResolvedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, resolved, toast]);
 
   const counts = useMemo(() => {
     const c = { all: alerts.length, membership: 0, coach_upgrade: 0, roster_claim: 0 };
@@ -98,91 +125,217 @@ export function InboxTab({ initialAlerts }: { initialAlerts: InboxAlert[] }) {
     });
   }
 
-  if (alerts.length === 0) {
-    return (
-      <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
-        <Inbox className="mx-auto size-8 text-muted" />
-        <h2 className="mt-3 text-base font-bold text-foreground">
-          You're all caught up
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          Nothing waiting on you right now. New player claims and join requests
-          will show up here.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-foreground">
-            Needs your attention
+            {view === "pending" ? "Needs your attention" : "Recently resolved"}
           </h2>
           <p className="text-xs text-muted">
-            {alerts.length} item{alerts.length === 1 ? "" : "s"} waiting across your
-            playbooks.
+            {view === "pending"
+              ? `${alerts.length} item${alerts.length === 1 ? "" : "s"} waiting across your playbooks.`
+              : "History of approvals and rejections."}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SegmentedControl<SortMode>
+          <SegmentedControl<ViewMode>
             size="sm"
-            value={sort}
-            onChange={setSort}
+            value={view}
+            onChange={setView}
             options={[
-              { value: "newest", label: "Newest" },
-              { value: "oldest", label: "Oldest" },
-              { value: "playbook", label: "By playbook" },
+              { value: "pending", label: "Pending" },
+              { value: "resolved", label: "Resolved" },
             ]}
           />
+          {view === "pending" && (
+            <SegmentedControl<SortMode>
+              size="sm"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: "newest", label: "Newest" },
+                { value: "oldest", label: "Oldest" },
+                { value: "playbook", label: "By playbook" },
+              ]}
+            />
+          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        <FilterChip
-          active={filter === "all"}
-          onClick={() => setFilter("all")}
-          label="All"
-          count={counts.all}
-        />
-        {counts.roster_claim > 0 && (
-          <FilterChip
-            active={filter === "roster_claim"}
-            onClick={() => setFilter("roster_claim")}
-            label="Player claims"
-            count={counts.roster_claim}
-          />
-        )}
-        {counts.membership > 0 && (
-          <FilterChip
-            active={filter === "membership"}
-            onClick={() => setFilter("membership")}
-            label="Join requests"
-            count={counts.membership}
-          />
-        )}
-        {counts.coach_upgrade > 0 && (
-          <FilterChip
-            active={filter === "coach_upgrade"}
-            onClick={() => setFilter("coach_upgrade")}
-            label="Coach requests"
-            count={counts.coach_upgrade}
-          />
-        )}
-      </div>
-
-      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-        {visible.map((alert) => (
-          <AlertRow
-            key={alert.key}
-            alert={alert}
-            busy={busy}
-            onAct={act}
-          />
-        ))}
-      </ul>
+      {view === "pending" ? (
+        alerts.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
+            <Inbox className="mx-auto size-8 text-muted" />
+            <h2 className="mt-3 text-base font-bold text-foreground">
+              You're all caught up
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Nothing waiting on you right now. New player claims and join
+              requests will show up here.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <FilterChip
+                active={filter === "all"}
+                onClick={() => setFilter("all")}
+                label="All"
+                count={counts.all}
+              />
+              {counts.roster_claim > 0 && (
+                <FilterChip
+                  active={filter === "roster_claim"}
+                  onClick={() => setFilter("roster_claim")}
+                  label="Player claims"
+                  count={counts.roster_claim}
+                />
+              )}
+              {counts.membership > 0 && (
+                <FilterChip
+                  active={filter === "membership"}
+                  onClick={() => setFilter("membership")}
+                  label="Join requests"
+                  count={counts.membership}
+                />
+              )}
+              {counts.coach_upgrade > 0 && (
+                <FilterChip
+                  active={filter === "coach_upgrade"}
+                  onClick={() => setFilter("coach_upgrade")}
+                  label="Coach requests"
+                  count={counts.coach_upgrade}
+                />
+              )}
+            </div>
+            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+              {visible.map((alert) => (
+                <AlertRow
+                  key={alert.key}
+                  alert={alert}
+                  busy={busy}
+                  onAct={act}
+                />
+              ))}
+            </ul>
+          </>
+        )
+      ) : (
+        <ResolvedList loading={resolvedLoading} events={resolved ?? []} />
+      )}
     </div>
+  );
+}
+
+function ResolvedList({
+  loading,
+  events,
+}: {
+  loading: boolean;
+  events: ResolvedInboxEvent[];
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center text-sm text-muted">
+        Loading history…
+      </div>
+    );
+  }
+  if (events.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
+        <Inbox className="mx-auto size-8 text-muted" />
+        <h2 className="mt-3 text-base font-bold text-foreground">
+          No resolved items yet
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Once you approve or reject a request, it'll show up here.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+      {events.map((e) => (
+        <ResolvedRow key={e.id} event={e} />
+      ))}
+    </ul>
+  );
+}
+
+function ResolvedRow({ event }: { event: ResolvedInboxEvent }) {
+  const name = event.subjectDisplayName?.trim() || "Unnamed";
+  const approved = event.action === "approved";
+  let title: string;
+  if (event.kind === "roster_claim") {
+    const slot = event.detail.rosterLabel?.trim() || "an unclaimed roster spot";
+    const jersey = event.detail.jerseyNumber?.trim();
+    title = approved
+      ? `Linked ${name} to ${slot}${jersey ? ` (#${jersey})` : ""}`
+      : `Rejected ${name}'s claim on ${slot}${jersey ? ` (#${jersey})` : ""}`;
+  } else if (event.kind === "coach_upgrade") {
+    title = approved
+      ? `Granted coach access to ${name}`
+      : `Denied coach request from ${name}`;
+  } else {
+    const role = event.detail.role ?? "viewer";
+    title = approved
+      ? `Approved ${name} as ${role}`
+      : `Rejected ${name}'s request to join as ${role}`;
+  }
+  const byName = event.resolvedByDisplayName?.trim();
+  return (
+    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <PlaybookAvatar
+          name={event.playbookName}
+          logoUrl={event.playbookLogoUrl}
+          color={event.playbookColor}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/playbooks/${event.playbookId}?tab=roster`}
+              className="truncate text-xs font-semibold text-muted hover:text-foreground hover:underline"
+            >
+              {event.playbookName}
+            </Link>
+            <KindBadge kind={event.kind} />
+            <ResolutionBadge action={event.action} />
+            <span className="text-[11px] text-muted-light">
+              {timeAgo(event.resolvedAt)}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-sm text-foreground">{title}</p>
+          {byName && (
+            <p className="mt-0.5 text-xs text-muted">by {byName}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Link
+          href={`/playbooks/${event.playbookId}?tab=roster`}
+          className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          title="Open in playbook"
+        >
+          <ArrowUpRight className="size-4" />
+        </Link>
+      </div>
+    </li>
+  );
+}
+
+function ResolutionBadge({ action }: { action: "approved" | "rejected" }) {
+  const ok = action === "approved";
+  return (
+    <span
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+        ok ? "bg-success-light text-success" : "bg-danger-light text-danger"
+      }`}
+    >
+      {ok ? "approved" : "rejected"}
+    </span>
   );
 }
 
