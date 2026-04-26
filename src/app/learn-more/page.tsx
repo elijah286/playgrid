@@ -48,9 +48,9 @@ export default async function LearnMorePage() {
     <div className="bg-surface text-foreground">
       <Hero />
       <WhyDifferent freeMaxPlays={freeMaxPlays} />
+      <PrintoutsAndWristbands />
       <EveryScreen />
       <FormationsAndTags />
-      <PrintoutsAndWristbands />
       <GameModeSection />
       <GameDataSection />
       <SharingSection />
@@ -486,41 +486,43 @@ function PrintoutsAndWristbands() {
       }}
     >
       <div className="mx-auto max-w-6xl px-6">
-        <Reveal>
-          <div className="max-w-2xl">
-            <SectionEyebrow icon={Printer} color={BRAND_ORANGE}>
-              Print-ready
-            </SectionEyebrow>
-            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              From screen
-              <br />
-              <span style={{ color: BRAND_ORANGE }}>to wristband.</span>
-            </h2>
-            <p className="mt-5 max-w-lg text-lg text-muted">
-              One-click PDFs sized for wristbands, call sheets, and the
-              bench-side binder. Numbering, formations, and tags all carry
-              through so the printout reads just like the app.
-            </p>
-            <p className="mt-3 text-sm text-muted">
-              Every example playbook has a live print preview — try one.
-            </p>
-          </div>
-        </Reveal>
+        <div className="grid gap-12 md:grid-cols-2 md:items-center">
+          <Reveal>
+            <div>
+              <SectionEyebrow icon={Printer} color={BRAND_ORANGE}>
+                Print-ready
+              </SectionEyebrow>
+              <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
+                From screen
+                <br />
+                <span style={{ color: BRAND_ORANGE }}>to wristband.</span>
+              </h2>
+              <p className="mt-5 max-w-lg text-lg text-muted">
+                One-click PDFs sized for wristbands, call sheets, and the
+                bench-side binder. Numbering, formations, and tags all carry
+                through so the printout reads just like the app.
+              </p>
+              <p className="mt-3 text-sm text-muted">
+                Every example playbook has a live print preview — try one.
+              </p>
+            </div>
+          </Reveal>
 
-        <Reveal delay={50}>
-          <div className="mt-12 overflow-hidden rounded-3xl shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
-            <Image
-              src="/marketing/photos/wristbands-callsheet.jpg"
-              alt="Printed call sheet and four wristbands on the field — generated from a real xogridmaker playbook"
-              width={1400}
-              height={1050}
-              className="block h-auto w-full"
-              sizes="(min-width: 1024px) 1024px, 100vw"
-            />
-          </div>
-        </Reveal>
+          <Reveal delay={100}>
+            <div className="overflow-hidden rounded-3xl shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
+              <Image
+                src="/marketing/photos/wristbands-callsheet.jpg"
+                alt="Printed call sheet and four wristbands on the field — generated from a real xogridmaker playbook"
+                width={1400}
+                height={1050}
+                className="block h-auto w-full"
+                sizes="(min-width: 768px) 600px, 100vw"
+              />
+            </div>
+          </Reveal>
+        </div>
 
-        <div className="mt-14 grid gap-10 md:grid-cols-2 md:items-center">
+        <div className="mt-20 grid gap-10 md:grid-cols-2 md:items-center">
           <Reveal>
             <WristBand>
               <MockWristSheet />
