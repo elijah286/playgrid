@@ -80,8 +80,9 @@ export async function createInviteAction(input: {
     };
   }
 
-  // Coach invites are seat-bound: force single-use and refuse creation
-  // if the owner is already at cap. Player invites are unlimited.
+  // Coach invites are seat-bound: force single-use, owner-only, and
+  // refuse creation if the owner is already at cap. Player invites are
+  // unlimited and editors may issue them too.
   let effectiveMaxUses = input.maxUses;
   let effectiveAutoApproveLimit = input.autoApproveLimit ?? null;
   if (input.role === "editor") {
@@ -95,10 +96,14 @@ export async function createInviteAction(input: {
       .eq("status", "active")
       .maybeSingle();
     const ownerId = (ownerRow?.user_id as string | null) ?? null;
-    if (ownerId) {
-      const seatCheck = await ensureSeatsAvailable(ownerId, 1);
-      if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
+    if (ownerId !== user.id) {
+      return {
+        ok: false,
+        error: "Only the playbook owner can grant coach (edit) access.",
+      };
     }
+    const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+    if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
   }
 
   const days = Math.max(1, Math.min(MAX_EXPIRY_DAYS, Math.floor(input.expiresInDays || 14)));
@@ -367,6 +372,15 @@ export async function sharePlaybookWithEmailsAction(input: {
   if (callerErr) return { ok: false, error: callerErr.message };
   if (!callerMem || callerMem.status !== "active" || !["owner", "editor"].includes(callerMem.role)) {
     return { ok: false, error: "You don't have permission to share this playbook." };
+  }
+  // Editors can invite players, but only the owner can grant coach
+  // (edit) access — otherwise a coach could quietly burn the owner's
+  // seats and grow the edit-access circle without consent.
+  if (input.role === "editor" && callerMem.role !== "owner") {
+    return {
+      ok: false,
+      error: "Only the playbook owner can grant coach (edit) access.",
+    };
   }
 
   const cleaned = Array.from(

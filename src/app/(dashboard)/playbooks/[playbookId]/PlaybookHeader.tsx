@@ -1441,14 +1441,21 @@ export function InviteTeamMemberDialog({
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
-                <SegmentedControl
-                  value={role}
-                  onChange={(v) => setRole(v as "viewer" | "editor")}
-                  options={[
-                    { value: "viewer", label: "Player" },
-                    { value: "editor", label: "Coach" },
-                  ]}
-                />
+                {canManage ? (
+                  <SegmentedControl
+                    value={role}
+                    onChange={(v) => setRole(v as "viewer" | "editor")}
+                    options={[
+                      { value: "viewer", label: "Player" },
+                      { value: "editor", label: "Coach" },
+                    ]}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-border bg-surface-inset px-3 py-2 text-xs text-muted">
+                    You can invite players. Only the playbook owner can
+                    grant coach (edit) access.
+                  </div>
+                )}
                 <p className="mt-1.5 text-xs text-muted">
                   Players can view plays and notes. Coaches can edit and
                   delete plays, manage your roster, and invite others — same

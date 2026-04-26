@@ -840,9 +840,13 @@ export async function setMemberRoleAction(input: {
     return { ok: false, error: "Unclaimed roster spots stay as players." };
   }
 
-  // Promoting player → coach consumes a seat. Block over-cap up front
-  // (unless the target user pays for Coach+ themselves).
+  // Promoting player → coach consumes a seat and grants edit access,
+  // so only the owner is allowed to do it. Demotions are open to any
+  // coach (a head coach should be able to demote one of their own).
   if (input.role === "editor" && current.role !== "editor") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     const admin = createServiceRoleClient();
     const { data: ownerRow } = await admin
       .from("playbook_members")
@@ -852,12 +856,16 @@ export async function setMemberRoleAction(input: {
       .eq("status", "active")
       .maybeSingle();
     const ownerId = (ownerRow?.user_id as string | null) ?? null;
-    if (ownerId) {
-      const targetEnt = await getUserEntitlement(current.user_id);
-      if (!tierAtLeast(targetEnt, "coach")) {
-        const seatCheck = await ensureSeatsAvailable(ownerId, 1);
-        if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
-      }
+    if (!user || ownerId !== user.id) {
+      return {
+        ok: false,
+        error: "Only the playbook owner can promote a player to coach.",
+      };
+    }
+    const targetEnt = await getUserEntitlement(current.user_id);
+    if (!tierAtLeast(targetEnt, "coach")) {
+      const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+      if (!seatCheck.ok) return { ok: false, error: seatCheck.error };
     }
   }
 
