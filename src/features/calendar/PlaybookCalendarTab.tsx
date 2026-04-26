@@ -310,7 +310,7 @@ export function PlaybookCalendarTab({
         </div>
       )}
 
-      <ul className="space-y-3">
+      <ul className="space-y-2">
         {visibleEvents.map((e) => (
           <EventCard
             key={`${e.id}:${e.occurrenceDate}`}
@@ -399,37 +399,43 @@ function EventCard({
   return (
     <li
       className={
-        "rounded-2xl border bg-surface-raised p-4 shadow-sm " +
+        "rounded-xl border bg-surface-raised px-3 py-2.5 shadow-sm " +
         (highlightNeedsRsvp && showInlineRsvp
           ? "border-red-300 ring-1 ring-red-200 dark:border-red-900 dark:ring-red-950 "
           : "border-border ") +
         (isPast ? "opacity-60" : "")
       }
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <div
-          className={`flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ${meta.chipActive}`}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 ${meta.chipActive}`}
           aria-hidden="true"
         >
-          <Icon className="size-5" />
+          <Icon className="size-4" />
         </div>
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className="min-w-0 flex-1 text-left"
         >
-          <div className="flex flex-wrap items-baseline gap-x-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:flex-nowrap">
             <h3 className="truncate text-sm font-semibold text-foreground">
               {event.title}
             </h3>
-            <span className="text-xs text-muted">{meta.label}</span>
+            <span className="shrink-0 text-xs text-muted">{meta.label}</span>
+            <span className="shrink-0 text-xs text-muted sm:ml-2">
+              {formattedDate} · {formattedTime}
+              {event.durationMinutes ? ` · ${event.durationMinutes}m` : ""}
+            </span>
+            {event.location.name && (
+              <span className="hidden min-w-0 truncate text-xs text-muted sm:inline sm:ml-2">
+                <MapPin className="mr-1 inline size-3" />
+                {event.location.name}
+              </span>
+            )}
           </div>
-          <p className="mt-0.5 text-xs text-muted">
-            {formattedDate} · {formattedTime}
-            {event.durationMinutes ? ` · ${event.durationMinutes} min` : ""}
-          </p>
           {event.location.name && (
-            <p className="mt-0.5 truncate text-xs text-muted">
+            <p className="mt-0.5 truncate text-xs text-muted sm:hidden">
               <MapPin className="mr-1 inline size-3" />
               {event.location.name}
             </p>
