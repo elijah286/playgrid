@@ -3,7 +3,6 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowRight,
-  BarChart3,
   CalendarDays,
   Check,
   Gamepad2,
@@ -52,7 +51,7 @@ export default async function LearnMorePage() {
       <EveryScreen />
       <FormationsAndTags />
       <GameModeSection />
-      <GameDataSection />
+      <GameModeFreeSection />
       <SharingSection />
       <BuiltByACoach />
       <FreeForSolo freeMaxPlays={freeMaxPlays} />
@@ -597,59 +596,52 @@ function GameModeSection() {
   );
 }
 
-/* ---------- Game data ---------- */
+/* ---------- Game Mode (free for every coach) ---------- */
 
-function GameDataSection() {
+function GameModeFreeSection() {
+  const shots: Array<{ src: string; alt: string }> = [
+    { src: "/marketing/screens/gm-1-picker.png", alt: "Game Mode play picker on a phone" },
+    { src: "/marketing/screens/gm-2-play.png", alt: "A play opened in Game Mode" },
+    { src: "/marketing/screens/gm-7-gain.png", alt: "Logging the result of a play in Game Mode" },
+  ];
+
   return (
     <section className="relative py-24">
-      <div className="mx-auto grid max-w-6xl gap-16 px-6 md:grid-cols-2 md:items-center">
+      <div className="mx-auto max-w-6xl px-6">
         <Reveal>
-          <div className="rounded-2xl border border-border bg-surface-raised p-6 shadow-[var(--shadow-card)]">
-            <div className="flex items-baseline justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                By play — last 5 games
-              </p>
-              <span className="text-xs text-muted">Avg yards</span>
-            </div>
-            <div className="mt-4 space-y-3">
-              {CHART_ROWS.map((row) => (
-                <div key={row.name} className="flex items-center gap-3">
-                  <span className="w-36 truncate text-sm font-medium">
-                    {row.name}
-                  </span>
-                  <div className="relative h-5 flex-1 overflow-hidden rounded bg-surface-inset">
-                    <div
-                      className="h-full rounded"
-                      style={{
-                        width: `${row.pct}%`,
-                        background: row.pct > 60 ? BRAND_GREEN : BRAND_BLUE,
-                      }}
-                    />
-                  </div>
-                  <span className="w-10 text-right text-sm tabular-nums">
-                    {row.yards}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Reveal>
-
-        <Reveal delay={100}>
-          <div>
-            <SectionEyebrow icon={BarChart3}>Game Data</SectionEyebrow>
+          <div className="max-w-2xl">
+            <SectionEyebrow icon={Gamepad2} color={BRAND_GREEN}>
+              Game Mode · Free for every coach
+            </SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Call what works.
+              Call plays from your phone.
               <br />
-              <span className="text-muted">Cut what doesn&apos;t.</span>
+              <span className="text-muted">Free, on every device.</span>
             </h2>
-            <p className="mt-5 max-w-lg text-lg text-muted">
-              Every play you log in Game Mode rolls up into per-play and
-              per-situation reports. See what&apos;s hitting on 3rd-and-medium
-              before you draw up next week&apos;s script.
+            <p className="mt-5 text-lg text-muted">
+              Game Mode lets any coach call plays on the field from a phone or
+              tablet — no paid plan required. Plays show up in a clear, simple
+              interface, and you can log what worked (and what didn&apos;t) in
+              a tap or two.
             </p>
           </div>
         </Reveal>
+
+        <div className="mt-14 flex flex-wrap items-end justify-center gap-6 md:gap-10">
+          {shots.map((s, i) => (
+            <Reveal key={s.src} delay={i * 100}>
+              <PhoneFrame>
+                <Image
+                  src={s.src}
+                  alt={s.alt}
+                  width={390}
+                  height={844}
+                  className="h-full w-full object-cover object-top"
+                />
+              </PhoneFrame>
+            </Reveal>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -981,15 +973,6 @@ const FORMATIONS = [
       [40, 55],
     ] as Array<[number, number]>,
   },
-];
-
-const CHART_ROWS = [
-  { name: "02 · PA Go", yards: 11.2, pct: 92 },
-  { name: "14 · Mesh", yards: 7.4, pct: 61 },
-  { name: "33 · Y-Stick", yards: 6.8, pct: 56 },
-  { name: "21 · Counter", yards: 5.1, pct: 42 },
-  { name: "09 · Fade", yards: 4.3, pct: 35 },
-  { name: "07 · Slant/Flat", yards: 3.9, pct: 32 },
 ];
 
 const ROSTER = [
