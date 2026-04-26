@@ -16,6 +16,8 @@ import { tierAtLeast } from "@/lib/billing/features";
 export type PlaybookRosterMember = {
   id: string;
   user_id: string | null;
+  managed_by: string | null;
+  manager_display_name: string | null;
   role: "owner" | "editor" | "viewer";
   status: "pending" | "active";
   label: string | null;
@@ -46,7 +48,7 @@ export async function listPlaybookRosterAction(
   const { data, error } = await supabase
     .from("playbook_members")
     .select(
-      "id, user_id, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
+      "id, user_id, managed_by, role, status, label, jersey_number, position, positions, is_minor, is_head_coach, coach_title, created_at, coach_upgrade_requested_at, profiles:user_id(display_name), manager:managed_by(display_name)",
     )
     .eq("playbook_id", playbookId)
     .order("created_at", { ascending: true });
@@ -59,9 +61,13 @@ export async function listPlaybookRosterAction(
       | { display_name: string | null }[]
       | null;
     const profile = Array.isArray(prof) ? prof[0] ?? null : prof;
+    const mgr = (row as { manager?: { display_name: string | null } | { display_name: string | null }[] | null }).manager;
+    const manager = Array.isArray(mgr) ? mgr[0] ?? null : mgr ?? null;
     return {
       id: row.id,
       user_id: row.user_id,
+      managed_by: (row as { managed_by: string | null }).managed_by ?? null,
+      manager_display_name: manager?.display_name ?? null,
       role: row.role,
       status: row.status,
       label: row.label,

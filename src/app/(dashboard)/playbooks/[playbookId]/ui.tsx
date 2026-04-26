@@ -2260,26 +2260,25 @@ function RosterPanel({
   }
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  // Players (viewer role) and coaches (owner/editor) both live in this
-  // tab. Unclaimed roster entries (user_id = null) are pre-added by a
-  // coach and haven't been linked to a user yet. They can only ever be
-  // role=viewer, status=active (enforced in the DB), so anything that
-  // acts on a specific user — approvals, coach upgrades, staff actions
-  // — is guarded by a non-null user_id narrow below.
-  const players = members.filter((m) => m.role === "viewer");
+  // A roster slot is identified by `label IS NOT NULL` — it represents a
+  // player on the team (claimed or unclaimed). Coach/parent access rows
+  // have label=null. A user can hold both: an access row (label=null)
+  // AND manage/own one or more slots.
+  const players = members.filter((m) => m.label !== null);
   const coaches = members.filter(
     (m): m is PlaybookRosterMember & { user_id: string } =>
-      m.role !== "viewer" && m.user_id !== null,
+      m.role !== "viewer" && m.user_id !== null && m.label === null,
   );
   const pending = members.filter(
     (m): m is PlaybookRosterMember & { user_id: string } =>
-      m.status === "pending" && m.user_id !== null,
+      m.status === "pending" && m.user_id !== null && m.label === null,
   );
-  const coachUpgradeRequests = players.filter(
+  const coachUpgradeRequests = members.filter(
     (m): m is PlaybookRosterMember & { user_id: string } =>
       m.status === "active" &&
       !!m.coach_upgrade_requested_at &&
-      m.user_id !== null,
+      m.user_id !== null &&
+      m.label === null,
   );
   const active = players.filter((m) => m.status === "active");
   const activeCoaches = coaches.filter((m) => m.status === "active");
