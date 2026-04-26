@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { tierAtLeast } from "@/lib/billing/features";
+import { getSeatUsage, getSeatCollaborators, type SeatUsage, type SeatCollaborator } from "@/lib/billing/seats";
 import { DEVICE_ID_COOKIE } from "@/lib/auth/sessions";
 import { AccountClient, type AccountSession } from "./ui";
 
@@ -18,9 +20,13 @@ export default async function AccountPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const entitlement = await getCurrentEntitlement();
+  const isCoachPlus = tierAtLeast(entitlement, "coach");
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
   let sessions: AccountSession[] = [];
+  let seatUsage: SeatUsage | null = null;
+  let seatCollaborators: SeatCollaborator[] = [];
   try {
     const admin = createServiceRoleClient();
     const [profileResult, sessionsResult] = await Promise.all([
@@ -52,6 +58,19 @@ export default async function AccountPage() {
     /* best effort */
   }
 
+  if (isCoachPlus) {
+    try {
+      const [usage, collabs] = await Promise.all([
+        getSeatUsage(user.id),
+        getSeatCollaborators(user.id),
+      ]);
+      seatUsage = usage;
+      seatCollaborators = collabs;
+    } catch {
+      /* best effort */
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,8 +91,10 @@ export default async function AccountPage() {
         email={user.email ?? ""}
         displayName={displayName}
         avatarUrl={avatarUrl}
-        entitlement={await getCurrentEntitlement()}
+        entitlement={entitlement}
         sessions={sessions}
+        seatUsage={seatUsage}
+        seatCollaborators={seatCollaborators}
       />
     </div>
   );

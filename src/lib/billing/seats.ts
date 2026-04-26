@@ -62,6 +62,91 @@ export async function ensureSeatsAvailable(
   };
 }
 
+export type SeatCollaborator = {
+  userId: string;
+  displayName: string | null;
+  email: string | null;
+  playbookCount: number;
+};
+
+/**
+ * List the collaborators currently consuming seats for the given owner —
+ * distinct active non-owner members of the owner's playbooks whose own
+ * tier is below Coach. Returns an empty list for non-paying owners.
+ */
+export async function getSeatCollaborators(
+  ownerId: string,
+): Promise<SeatCollaborator[]> {
+  const ownerEntitlement = await getUserEntitlement(ownerId);
+  if (!tierAtLeast(ownerEntitlement, "coach")) return [];
+
+  const admin = createServiceRoleClient();
+  // Owner's playbooks, then memberships on those playbooks.
+  const { data: ownedRows } = await admin
+    .from("playbook_members")
+    .select("playbook_id")
+    .eq("user_id", ownerId)
+    .eq("role", "owner")
+    .eq("status", "active");
+  const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
+  if (ownedIds.length === 0) return [];
+
+  const { data: memberRows } = await admin
+    .from("playbook_members")
+    .select("user_id, playbook_id")
+    .in("playbook_id", ownedIds)
+    .eq("status", "active")
+    .neq("role", "owner");
+
+  const playbookCountByUser = new Map<string, number>();
+  for (const r of memberRows ?? []) {
+    const uid = r.user_id as string;
+    if (uid === ownerId) continue;
+    playbookCountByUser.set(uid, (playbookCountByUser.get(uid) ?? 0) + 1);
+  }
+  const candidateUserIds = Array.from(playbookCountByUser.keys());
+  if (candidateUserIds.length === 0) return [];
+
+  // Filter out Coach+ collaborators (free seats), then enrich with profile/email.
+  const { data: entRows } = await admin
+    .from("user_entitlements")
+    .select("user_id, tier")
+    .in("user_id", candidateUserIds);
+  const tierByUser = new Map<string, string>();
+  for (const r of entRows ?? []) {
+    tierByUser.set(r.user_id as string, (r.tier as string | null) ?? "free");
+  }
+  const seatedUserIds = candidateUserIds.filter(
+    (uid) => (tierByUser.get(uid) ?? "free") === "free",
+  );
+  if (seatedUserIds.length === 0) return [];
+
+  const profileResult = await admin
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", seatedUserIds);
+  const nameByUser = new Map<string, string | null>();
+  for (const r of profileResult.data ?? []) {
+    nameByUser.set(r.id as string, (r.display_name as string | null) ?? null);
+  }
+  const emailByUser = new Map<string, string | null>();
+  await Promise.all(
+    seatedUserIds.map(async (uid) => {
+      const { data } = await admin.auth.admin.getUserById(uid);
+      if (data?.user) emailByUser.set(uid, data.user.email ?? null);
+    }),
+  );
+
+  return seatedUserIds
+    .map((uid) => ({
+      userId: uid,
+      displayName: nameByUser.get(uid) ?? null,
+      email: emailByUser.get(uid) ?? null,
+      playbookCount: playbookCountByUser.get(uid) ?? 0,
+    }))
+    .sort((a, b) => (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""));
+}
+
 /** Ensure the owner has a row in owner_seat_grants (idempotent). Used by
  *  Stripe webhook when first activating a Coach subscription, and by the
  *  admin tools that grant comp seats. */

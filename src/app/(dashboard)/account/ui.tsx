@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, CreditCard, IdCard, KeyRound, LogOut, Monitor, Moon, Smartphone, Sun, UserCircle } from "lucide-react";
+import { AlertTriangle, CreditCard, IdCard, KeyRound, LogOut, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   deleteOwnAccountAction,
@@ -15,6 +15,7 @@ import {
 import { createBillingPortalSessionAction } from "@/app/actions/billing";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { TIER_LABEL } from "@/lib/billing/features";
+import type { SeatUsage, SeatCollaborator } from "@/lib/billing/seats";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
 import { cn } from "@/lib/utils";
@@ -47,12 +48,16 @@ export function AccountClient({
   avatarUrl,
   entitlement,
   sessions,
+  seatUsage,
+  seatCollaborators,
 }: {
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
   entitlement: Entitlement | null;
   sessions: AccountSession[];
+  seatUsage: SeatUsage | null;
+  seatCollaborators: SeatCollaborator[];
 }) {
   return (
     <div className="space-y-6">
@@ -63,6 +68,9 @@ export function AccountClient({
         <PlanCard entitlement={entitlement} />
         <AppearanceCard />
         <SessionsCard sessions={sessions} />
+        {seatUsage ? (
+          <SeatsCard usage={seatUsage} collaborators={seatCollaborators} />
+        ) : null}
       </div>
       <DeleteAccountCard hasPaidPlan={entitlement?.source === "stripe"} />
     </div>
@@ -747,6 +755,65 @@ function SessionsCard({ sessions }: { sessions: AccountSession[] }) {
         </ul>
       )}
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </Card>
+  );
+}
+
+function SeatsCard({
+  usage,
+  collaborators,
+}: {
+  usage: SeatUsage;
+  collaborators: SeatCollaborator[];
+}) {
+  const total = usage.included + usage.purchased;
+  const pct = total === 0 ? 0 : Math.min(100, Math.round((usage.used / total) * 100));
+  return (
+    <Card
+      icon={Users}
+      title="Team seats"
+      description="Collaborators on your playbooks. Coaches with their own paid plan ride free."
+    >
+      <div className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-medium text-foreground">
+            {usage.used} of {total} seat{total === 1 ? "" : "s"} used
+          </p>
+          <p className="text-xs text-muted">
+            {usage.included} included
+            {usage.purchased > 0 ? ` + ${usage.purchased} added` : ""}
+          </p>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-inset">
+          <div
+            className="h-full bg-primary transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {collaborators.length === 0 ? (
+          <p className="text-xs text-muted">
+            No seats in use yet. Invite collaborators from any playbook to share it with your staff.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {collaborators.map((c) => (
+              <li key={c.userId} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-foreground">
+                    {c.displayName ?? c.email ?? "Unknown user"}
+                  </div>
+                  {c.displayName && c.email ? (
+                    <div className="truncate text-xs text-muted">{c.email}</div>
+                  ) : null}
+                </div>
+                <div className="shrink-0 text-xs text-muted">
+                  {c.playbookCount} playbook{c.playbookCount === 1 ? "" : "s"}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }
