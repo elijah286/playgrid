@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
-import { getStripeClient, priceIdFor, type BillingInterval } from "@/lib/billing/stripe";
+import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
+import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
 
 async function siteOrigin(): Promise<string> {
   const h = await headers();
@@ -110,6 +111,103 @@ export async function createBillingPortalSessionAction(): Promise<
     return { ok: true, url: portal.url };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not open billing portal." };
+  }
+}
+
+/**
+ * Set the owner's purchased seat quantity to `nextPurchased` (>=0). Adds or
+ * updates a seat-priced line item on their existing Coach subscription;
+ * removes the line if `nextPurchased` is 0. Stripe prorates automatically.
+ *
+ * Refuses to drop below the count currently in use — owner must remove
+ * collaborators first.
+ */
+export async function setSeatQuantityAction(input: {
+  nextPurchased: number;
+}): Promise<{ ok: true; purchased: number } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  if (!Number.isInteger(input.nextPurchased) || input.nextPurchased < 0) {
+    return { ok: false, error: "Seat count must be a non-negative integer." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const usage = await getSeatUsage(user.id);
+  const nextTotal = usage.included + input.nextPurchased;
+  if (nextTotal < usage.used) {
+    return {
+      ok: false,
+      error: `Can't drop below ${usage.used} seats — remove collaborators first.`,
+    };
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("stripe_subscription_id, billing_interval, status")
+    .eq("user_id", user.id)
+    .not("stripe_subscription_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!sub?.stripe_subscription_id) {
+    return { ok: false, error: "No active Coach subscription on file." };
+  }
+  if (sub.status !== "active" && sub.status !== "trialing") {
+    return { ok: false, error: "Subscription must be active to change seats." };
+  }
+
+  try {
+    const { stripe, config } = await getStripeClient();
+    const stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
+    const interval =
+      (sub.billing_interval as BillingInterval | null) ??
+      (stripeSub.items.data[0]?.price.recurring?.interval as BillingInterval | undefined) ??
+      "month";
+    const seatPriceId = seatPriceIdFor(config, interval);
+    if (!seatPriceId) {
+      return {
+        ok: false,
+        error: `No seat price ID configured for ${interval} billing. Set it in admin settings.`,
+      };
+    }
+
+    const existingItem = stripeSub.items.data.find((i) =>
+      isSeatPriceId(config, i.price.id),
+    );
+
+    if (input.nextPurchased === 0) {
+      if (existingItem) {
+        await stripe.subscriptionItems.del(existingItem.id, { proration_behavior: "create_prorations" });
+      }
+    } else if (existingItem) {
+      await stripe.subscriptionItems.update(existingItem.id, {
+        quantity: input.nextPurchased,
+        proration_behavior: "create_prorations",
+      });
+    } else {
+      await stripe.subscriptionItems.create({
+        subscription: sub.stripe_subscription_id,
+        price: seatPriceId,
+        quantity: input.nextPurchased,
+        proration_behavior: "create_prorations",
+      });
+    }
+
+    // Optimistic local update; webhook will reconcile authoritatively.
+    await ensureOwnerSeatGrantRow(user.id);
+    await admin
+      .from("owner_seat_grants")
+      .update({ purchased_seats: input.nextPurchased })
+      .eq("owner_id", user.id);
+
+    revalidatePath("/account");
+    return { ok: true, purchased: input.nextPurchased };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not update seats." };
   }
 }
 

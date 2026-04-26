@@ -12,7 +12,8 @@ import {
   updateDisplayNameAction,
   uploadAvatarAction,
 } from "@/app/actions/account";
-import { createBillingPortalSessionAction } from "@/app/actions/billing";
+import { createBillingPortalSessionAction, setSeatQuantityAction } from "@/app/actions/billing";
+import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { TIER_LABEL } from "@/lib/billing/features";
 import type { SeatUsage, SeatCollaborator } from "@/lib/billing/seats";
@@ -69,7 +70,11 @@ export function AccountClient({
         <AppearanceCard />
         <SessionsCard sessions={sessions} />
         {seatUsage ? (
-          <SeatsCard usage={seatUsage} collaborators={seatCollaborators} />
+          <SeatsCard
+            usage={seatUsage}
+            collaborators={seatCollaborators}
+            canPurchase={entitlement?.source === "stripe"}
+          />
         ) : null}
       </div>
       <DeleteAccountCard hasPaidPlan={entitlement?.source === "stripe"} />
@@ -762,12 +767,30 @@ function SessionsCard({ sessions }: { sessions: AccountSession[] }) {
 function SeatsCard({
   usage,
   collaborators,
+  canPurchase,
 }: {
   usage: SeatUsage;
   collaborators: SeatCollaborator[];
+  canPurchase: boolean;
 }) {
   const total = usage.included + usage.purchased;
   const pct = total === 0 ? 0 : Math.min(100, Math.round((usage.used / total) * 100));
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const minRemovable = Math.max(0, usage.used - usage.included);
+
+  function setSeats(next: number) {
+    setErr(null);
+    startTransition(async () => {
+      const res = await setSeatQuantityAction({ nextPurchased: next });
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      window.location.reload();
+    });
+  }
+
   return (
     <Card
       icon={Users}
@@ -813,6 +836,32 @@ function SeatsCard({
             ))}
           </ul>
         )}
+        {canPurchase ? (
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+            <p className="text-xs text-muted">
+              Add seats for ${SEAT_PRICE_USD_PER_MONTH}/seat/month, prorated.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={pending || usage.purchased <= minRemovable}
+                onClick={() => setSeats(usage.purchased - 1)}
+                className="rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+              >
+                − Remove
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => setSeats(usage.purchased + 1)}
+                className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+              >
+                + Add seat
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {err ? <p className="text-xs text-red-600">{err}</p> : null}
       </div>
     </Card>
   );

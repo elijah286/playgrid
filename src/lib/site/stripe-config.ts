@@ -11,6 +11,8 @@ export type StripeConfig = {
     coach_year: string | null;
     coach_ai_month: string | null;
     coach_ai_year: string | null;
+    seat_month: string | null;
+    seat_year: string | null;
   };
 };
 
@@ -37,7 +39,7 @@ export async function getStripeConfig(): Promise<StripeConfig> {
   const { data } = await admin
     .from("site_settings")
     .select(
-      "stripe_secret_key, stripe_publishable_key, stripe_webhook_secret, stripe_price_coach_month, stripe_price_coach_year, stripe_price_coach_ai_month, stripe_price_coach_ai_year",
+      "stripe_secret_key, stripe_publishable_key, stripe_webhook_secret, stripe_price_coach_month, stripe_price_coach_year, stripe_price_coach_ai_month, stripe_price_coach_ai_year, stripe_price_seat_month, stripe_price_seat_year",
     )
     .eq("id", SITE_ROW_ID)
     .maybeSingle();
@@ -50,6 +52,8 @@ export async function getStripeConfig(): Promise<StripeConfig> {
       coach_year: data?.stripe_price_coach_year ?? null,
       coach_ai_month: data?.stripe_price_coach_ai_month ?? null,
       coach_ai_year: data?.stripe_price_coach_ai_year ?? null,
+      seat_month: data?.stripe_price_seat_month ?? null,
+      seat_year: data?.stripe_price_seat_year ?? null,
     },
   };
 }
@@ -60,7 +64,7 @@ export async function getStripeConfigStatus(): Promise<StripeConfigStatus> {
   const { data } = await admin
     .from("site_settings")
     .select(
-      "stripe_secret_key, stripe_publishable_key, stripe_webhook_secret, stripe_price_coach_month, stripe_price_coach_year, stripe_price_coach_ai_month, stripe_price_coach_ai_year, updated_at",
+      "stripe_secret_key, stripe_publishable_key, stripe_webhook_secret, stripe_price_coach_month, stripe_price_coach_year, stripe_price_coach_ai_month, stripe_price_coach_ai_year, stripe_price_seat_month, stripe_price_seat_year, updated_at",
     )
     .eq("id", SITE_ROW_ID)
     .maybeSingle();
@@ -76,6 +80,8 @@ export async function getStripeConfigStatus(): Promise<StripeConfigStatus> {
       coach_year: data?.stripe_price_coach_year ?? null,
       coach_ai_month: data?.stripe_price_coach_ai_month ?? null,
       coach_ai_year: data?.stripe_price_coach_ai_year ?? null,
+      seat_month: data?.stripe_price_seat_month ?? null,
+      seat_year: data?.stripe_price_seat_year ?? null,
     },
   };
 }

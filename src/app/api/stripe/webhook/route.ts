@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { getStripeClient, tierForPriceId } from "@/lib/billing/stripe";
+import { getStripeClient, tierForPriceId, isSeatPriceId } from "@/lib/billing/stripe";
 import { getStripeConfig } from "@/lib/site/stripe-config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 
@@ -50,12 +50,15 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
     throw new Error(`Cannot resolve user_id for subscription ${sub.id}`);
   }
 
-  const item = sub.items.data[0];
-  const priceId = item?.price.id ?? null;
+  // Pick the tier-bearing line item, skipping seat add-ons.
+  const tierItem =
+    sub.items.data.find((i) => !isSeatPriceId(config, i.price.id)) ?? sub.items.data[0];
+  const priceId = tierItem?.price.id ?? null;
   const mapped = priceId ? tierForPriceId(config, priceId) : null;
   const tier: SubscriptionTier = mapped?.tier ?? "coach";
-  const interval = mapped?.interval ?? item?.price.recurring?.interval ?? null;
-  const periodEndUnix = item?.current_period_end ?? null;
+  const interval = mapped?.interval ?? tierItem?.price.recurring?.interval ?? null;
+  const periodEndUnix = tierItem?.current_period_end ?? null;
+  const seatItem = sub.items.data.find((i) => isSeatPriceId(config, i.price.id)) ?? null;
 
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
 
@@ -76,6 +79,25 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
     .from("subscriptions")
     .upsert(row, { onConflict: "stripe_subscription_id" });
   if (error) throw new Error(`subscriptions upsert failed: ${error.message}`);
+
+  // Sync purchased_seats from the seat line item (or zero if absent). Only
+  // applies to Coach+; free/cancelled subs don't carry seats.
+  if (tier === "coach" || tier === "coach_ai") {
+    const purchased = seatItem ? seatItem.quantity ?? 0 : 0;
+    const itemId = seatItem?.id ?? null;
+    const { error: seatErr } = await admin
+      .from("owner_seat_grants")
+      .upsert(
+        {
+          owner_id: userId,
+          purchased_seats: purchased,
+          stripe_subscription_item_id: itemId,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "owner_id" },
+      );
+    if (seatErr) throw new Error(`owner_seat_grants upsert failed: ${seatErr.message}`);
+  }
 }
 
 export async function POST(req: Request): Promise<NextResponse> {

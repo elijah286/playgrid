@@ -37,6 +37,8 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
   const [pCoachY, setPCoachY] = useState(initial.priceIds.coach_year ?? "");
   const [pAiM, setPAiM] = useState(initial.priceIds.coach_ai_month ?? "");
   const [pAiY, setPAiY] = useState(initial.priceIds.coach_ai_year ?? "");
+  const [pSeatM, setPSeatM] = useState(initial.priceIds.seat_month ?? "");
+  const [pSeatY, setPSeatY] = useState(initial.priceIds.seat_year ?? "");
 
   const [showSecret, setShowSecret] = useState(false);
   const [showHook, setShowHook] = useState(false);
@@ -58,6 +60,8 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
         priceCoachYear: pCoachY,
         priceCoachAiMonth: pAiM,
         priceCoachAiYear: pAiY,
+        priceSeatMonth: pSeatM,
+        priceSeatYear: pSeatY,
       });
       if (!res.ok) {
         setMsg({ kind: "error", text: res.error });
@@ -97,6 +101,8 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
         setPCoachY("");
         setPAiM("");
         setPAiY("");
+        setPSeatM("");
+        setPSeatY("");
       }
       setMsg({ kind: "success", text: "Cleared." });
     });
@@ -240,6 +246,26 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
               type="text"
               value={pAiY}
               onChange={(e) => setPAiY(e.target.value)}
+              placeholder="price_..."
+              className="mt-1 block w-full rounded-md bg-surface px-3 py-1.5 font-mono text-xs ring-1 ring-border"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-muted">Extra seat — monthly</span>
+            <input
+              type="text"
+              value={pSeatM}
+              onChange={(e) => setPSeatM(e.target.value)}
+              placeholder="price_..."
+              className="mt-1 block w-full rounded-md bg-surface px-3 py-1.5 font-mono text-xs ring-1 ring-border"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-muted">Extra seat — annual</span>
+            <input
+              type="text"
+              value={pSeatY}
+              onChange={(e) => setPSeatY(e.target.value)}
               placeholder="price_..."
               className="mt-1 block w-full rounded-md bg-surface px-3 py-1.5 font-mono text-xs ring-1 ring-border"
             />

@@ -142,6 +142,8 @@ export default async function SettingsPage() {
                   coach_year: null,
                   coach_ai_month: null,
                   coach_ai_year: null,
+                  seat_month: null,
+                  seat_year: null,
                 },
               }
         }
