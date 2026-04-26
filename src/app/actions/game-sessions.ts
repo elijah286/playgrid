@@ -84,6 +84,72 @@ async function buildPlaySnapshot(
   };
 }
 
+/**
+ * Find the playbook_event most likely to correspond to a game session
+ * starting "now". Same calendar day in the event's timezone, matching
+ * kind, not soft-deleted, and not already linked to a different active
+ * or ended session. Closest scheduled time to now wins.
+ *
+ * Returns null when nothing matches — Game Mode still launches; the
+ * coach can manually merge later from the Games tab.
+ */
+async function findScheduledEventForNow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playbookId: string,
+  kind: "game" | "scrimmage",
+  nowIso: string,
+): Promise<string | null> {
+  const now = new Date(nowIso);
+  // 24h window covers any timezone offset; we'll narrow to "same local
+  // day" client-side per event using its stored IANA timezone.
+  const lo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const hi = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const { data: events } = await supabase
+    .from("playbook_events")
+    .select("id, starts_at, timezone")
+    .eq("playbook_id", playbookId)
+    .eq("type", kind)
+    .is("deleted_at", null)
+    .gte("starts_at", lo)
+    .lte("starts_at", hi);
+  if (!events || events.length === 0) return null;
+
+  function localDateKey(iso: string, tz: string): string {
+    try {
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      return fmt.format(new Date(iso));
+    } catch {
+      return iso.slice(0, 10);
+    }
+  }
+
+  let best: { id: string; deltaMs: number } | null = null;
+  for (const e of events) {
+    const tz = (e.timezone as string | null) || "America/New_York";
+    const startIso = e.starts_at as string;
+    if (localDateKey(nowIso, tz) !== localDateKey(startIso, tz)) continue;
+    const deltaMs = Math.abs(new Date(startIso).getTime() - now.getTime());
+    if (!best || deltaMs < best.deltaMs) best = { id: e.id as string, deltaMs };
+  }
+  if (!best) return null;
+
+  // Prefer not stealing an event that's already linked to another session.
+  const { data: claimed } = await supabase
+    .from("game_sessions")
+    .select("id")
+    .eq("calendar_event_id", best.id)
+    .limit(1)
+    .maybeSingle();
+  if (claimed) return null;
+
+  return best.id;
+}
+
 async function assertCoachOfPlaybook(playbookId: string) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -149,6 +215,24 @@ export async function startOrJoinGameSessionAction(
   if (existing) {
     sessionId = existing.id as string;
   } else {
+    // Best-effort: link the new session to a same-day scheduled event of
+    // the matching kind so the Games tab can collapse them into one row.
+    // The coach can override or break the link later from the tab.
+    const calendarEventId = await findScheduledEventForNow(
+      supabase,
+      playbookId,
+      kind,
+      nowIso,
+    );
+    let inheritedOpponent = opponent;
+    if (calendarEventId && !inheritedOpponent) {
+      const { data: ev } = await supabase
+        .from("playbook_events")
+        .select("opponent")
+        .eq("id", calendarEventId)
+        .maybeSingle();
+      inheritedOpponent = (ev?.opponent as string | null) || null;
+    }
     const { data: inserted, error } = await supabase
       .from("game_sessions")
       .insert({
@@ -159,7 +243,8 @@ export async function startOrJoinGameSessionAction(
         started_at: nowIso,
         status: "active",
         kind,
-        opponent,
+        opponent: inheritedOpponent,
+        calendar_event_id: calendarEventId,
       })
       .select("id")
       .single();

@@ -255,21 +255,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
       })()
     : 0;
 
-  // Hide the Games tab entirely until at least one session has ended in
-  // this playbook — an empty tab is worse than no tab. The duplication
-  // toggle stays visible (gated only on the beta) so owners can opt in
-  // ahead of their first game.
-  let hasEndedSessions = false;
-  if (gameResultsAvailable) {
-    const { count } = await supabase
-      .from("game_sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("playbook_id", playbookId)
-      .eq("status", "ended");
-    hasEndedSessions = (count ?? 0) > 0;
-  }
-  const gameResultsTabVisible = gameResultsAvailable && hasEndedSessions;
-
   const publicExampleJsonLd = isPublicExample
     ? [
         {
@@ -333,7 +318,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         isAdmin={isAdmin}
         freeMaxPlays={freeMaxPlays}
         gameModeAvailable={gameModeAvailable}
-        gameResultsAvailable={gameResultsTabVisible}
+        gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}
         initialCalendarUnseenCount={calendarUnseenCount}
