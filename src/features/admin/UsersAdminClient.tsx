@@ -165,7 +165,7 @@ export function UsersAdminClient({
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -282,7 +282,7 @@ export function UsersAdminClient({
                 </tr>
                 {isOpen && (
                   <tr className="bg-surface-inset/30">
-                    <td colSpan={6} className="px-4 py-4">
+                    <td colSpan={7} className="px-4 py-4">
                       <UserStatsPanel userId={u.id} />
                     </td>
                   </tr>
@@ -813,6 +813,15 @@ function UserStatsPanel({ userId }: { userId: string }) {
     const days = Math.round(hrs / 24);
     return `${days}d`;
   }
+  const locationStr = activity?.acquisition
+    ? [
+        activity.acquisition.city,
+        activity.acquisition.region,
+        activity.acquisition.country,
+      ]
+        .filter(Boolean)
+        .join(", ") || null
+    : null;
   const items = [
     { label: "Playbooks owned", value: stats?.playbooksOwned },
     { label: "Playbooks shared", value: stats?.playbooksShared },
@@ -820,6 +829,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
     { label: "People shared with", value: stats?.peopleSharedWith },
     { label: "Active days (30d)", value: stats?.activeDaysLast30 },
     { label: "First-play age", value: firstPlayAge() },
+    { label: "Location", value: locationStr ?? (activity ? "—" : undefined) },
     {
       label: "Invites sent",
       value:
@@ -841,21 +851,27 @@ function UserStatsPanel({ userId }: { userId: string }) {
     },
   ];
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
-        {items.map((it) => (
-          <div
-            key={it.label}
-            className="rounded-lg border border-border bg-surface px-3 py-2"
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-              {it.label}
-            </p>
-            <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">
-              {stats ? (it.value ?? "—") : "—"}
-            </p>
-          </div>
-        ))}
+    <div className="w-full space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10">
+        {items.map((it) => {
+          const isLong = typeof it.value === "string" && it.value.length > 6;
+          return (
+            <div
+              key={it.label}
+              className="rounded-lg border border-border bg-surface px-3 py-2"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                {it.label}
+              </p>
+              <p
+                className={`mt-0.5 font-bold tabular-nums text-foreground ${isLong ? "text-sm" : "text-xl"}`}
+                title={typeof it.value === "string" ? it.value : undefined}
+              >
+                {stats || activity ? (it.value ?? "—") : "—"}
+              </p>
+            </div>
+          );
+        })}
       </div>
       {activityError && (
         <p className="text-xs text-danger">
@@ -863,7 +879,21 @@ function UserStatsPanel({ userId }: { userId: string }) {
         </p>
       )}
       {activity && (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 md:col-span-2 xl:col-span-4">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-primary">
+              Sign-up source
+            </p>
+            <p className="text-sm font-semibold text-foreground">
+              {activity.signupSource.label}
+            </p>
+            {activity.signupSource.detail && (
+              <p className="text-xs text-muted">
+                {activity.signupSource.detail}
+              </p>
+            )}
+          </div>
+
           <div className="rounded-lg border border-border bg-surface px-3 py-2">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
               Acquisition
@@ -941,7 +971,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
           </div>
 
           {activity.sessions.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2">
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2 xl:col-span-4">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
                 Sign-in sessions
               </p>
@@ -970,7 +1000,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
           )}
 
           {activity.topPaths.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2">
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2 xl:col-span-4">
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
                 Top pages (30d)
               </p>
@@ -988,7 +1018,7 @@ function UserStatsPanel({ userId }: { userId: string }) {
           )}
 
           {activity.recentViews.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2">
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2 xl:col-span-4">
               <button
                 type="button"
                 onClick={() => setShowRecent((v) => !v)}

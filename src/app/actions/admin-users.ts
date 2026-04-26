@@ -384,6 +384,20 @@ export type AdminUserActivity = {
     city: string | null;
     device: string | null;
   } | null;
+  signupSource: {
+    kind:
+      | "coach_invite"
+      | "playbook_invite"
+      | "home"
+      | "shared_playbook"
+      | "direct"
+      | "other"
+      | "unknown";
+    label: string;
+    detail: string | null;
+    invitedByEmail: string | null;
+    playbookName: string | null;
+  };
   sessions: Array<{
     deviceLabel: string | null;
     approxLocation: string | null;
@@ -424,6 +438,8 @@ export async function getAdminUserActivityAction(
     { data: sessionRows },
     { data: pageViewRows },
     { data: recentViewRows },
+    { data: coachInviteRow },
+    { data: nonOwnerMemberships },
   ] = await Promise.all([
     admin
       .from("page_views")
@@ -453,6 +469,20 @@ export async function getAdminUserActivityAction(
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(20),
+    admin
+      .from("coach_invitations")
+      .select("created_by, redeemed_at")
+      .eq("redeemed_by", userId)
+      .order("redeemed_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("playbook_members")
+      .select("playbook_id, role, created_at")
+      .eq("user_id", userId)
+      .neq("role", "owner")
+      .order("created_at", { ascending: true })
+      .limit(1),
   ]);
 
   const pathCounts = new Map<string, number>();
@@ -473,6 +503,107 @@ export async function getAdminUserActivityAction(
     .map(([path, views]) => ({ path, views }))
     .sort((a, b) => b.views - a.views)
     .slice(0, 10);
+
+  let coachInviterEmail: string | null = null;
+  if (coachInviteRow?.created_by) {
+    const { data: u } = await admin.auth.admin.getUserById(
+      coachInviteRow.created_by as string,
+    );
+    coachInviterEmail = u?.user?.email ?? null;
+  }
+
+  let firstPlaybookName: string | null = null;
+  let firstPlaybookOwnerEmail: string | null = null;
+  const firstMembership = (nonOwnerMemberships ?? [])[0];
+  if (firstMembership) {
+    const { data: pb } = await admin
+      .from("playbooks")
+      .select("name")
+      .eq("id", firstMembership.playbook_id as string)
+      .maybeSingle();
+    firstPlaybookName = (pb?.name as string | null) ?? null;
+    const { data: ownerRow } = await admin
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", firstMembership.playbook_id as string)
+      .eq("role", "owner")
+      .limit(1)
+      .maybeSingle();
+    if (ownerRow?.user_id) {
+      const { data: ownerUser } = await admin.auth.admin.getUserById(
+        ownerRow.user_id as string,
+      );
+      firstPlaybookOwnerEmail = ownerUser?.user?.email ?? null;
+    }
+  }
+
+  const landingPath = (firstView?.path as string | null) ?? null;
+  const referrer = (firstView?.referrer as string | null) ?? null;
+
+  let signupSource: AdminUserActivity["signupSource"];
+  if (coachInviteRow) {
+    signupSource = {
+      kind: "coach_invite",
+      label: "Coach invite code",
+      detail: coachInviterEmail
+        ? `Redeemed code from ${coachInviterEmail}`
+        : "Redeemed a coach invite code",
+      invitedByEmail: coachInviterEmail,
+      playbookName: null,
+    };
+  } else if (landingPath && landingPath.startsWith("/invite/")) {
+    signupSource = {
+      kind: "playbook_invite",
+      label: "Playbook invite link",
+      detail: firstPlaybookName
+        ? `Invited to "${firstPlaybookName}"${firstPlaybookOwnerEmail ? ` by ${firstPlaybookOwnerEmail}` : ""}`
+        : "Landed on a playbook invite link",
+      invitedByEmail: firstPlaybookOwnerEmail,
+      playbookName: firstPlaybookName,
+    };
+  } else if (firstMembership && !landingPath) {
+    signupSource = {
+      kind: "playbook_invite",
+      label: "Joined a playbook",
+      detail: firstPlaybookName
+        ? `Member of "${firstPlaybookName}"${firstPlaybookOwnerEmail ? ` (owner ${firstPlaybookOwnerEmail})` : ""}`
+        : null,
+      invitedByEmail: firstPlaybookOwnerEmail,
+      playbookName: firstPlaybookName,
+    };
+  } else if (landingPath === "/" || landingPath === "/home") {
+    signupSource = {
+      kind: "home",
+      label: "Home page",
+      detail: referrer ? `via ${referrer}` : "Direct visit",
+      invitedByEmail: null,
+      playbookName: null,
+    };
+  } else if (landingPath && landingPath.startsWith("/playbook/")) {
+    signupSource = {
+      kind: "shared_playbook",
+      label: "Shared playbook link",
+      detail: `Landed on ${landingPath}`,
+      invitedByEmail: null,
+      playbookName: null,
+    };
+  } else if (landingPath) {
+    signupSource = {
+      kind: "other",
+      label: "Other landing page",
+      detail: landingPath,
+      invitedByEmail: null,
+      playbookName: null,
+    };
+  } else {
+    signupSource = {
+      kind: "unknown",
+      label: "Unknown",
+      detail: "No page-view data captured",
+      invitedByEmail: null,
+      playbookName: null,
+    };
+  }
 
   const distinctSessions = sessionStarts.size;
   let avgSessionMinutes: number | null = null;
@@ -499,6 +630,7 @@ export async function getAdminUserActivityAction(
             device: (firstView.device as string | null) ?? null,
           }
         : null,
+      signupSource,
       sessions: (sessionRows ?? []).map((s) => ({
         deviceLabel: (s.device_label as string | null) ?? null,
         approxLocation: (s.approx_location as string | null) ?? null,
