@@ -63,6 +63,13 @@ export default function PrivacyPage() {
               contact form, which are delivered to our inbox via an email
               provider (Resend).
             </li>
+            <li>
+              <strong>Edit history:</strong> when a play or playbook is edited,
+              we save a snapshot along with the editor&apos;s name, the time of
+              the edit, and (optionally) a note left by the editor. Team coaches
+              can review this history and restore prior versions. Deleted plays
+              are kept in a 30-day trash before being permanently removed.
+            </li>
           </ul>
           <p className="mt-3">
             <strong>Inside the iOS / Android app:</strong> product-usage and
