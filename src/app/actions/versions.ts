@@ -16,6 +16,7 @@ export type PlayVersionRow = {
   diffSummary: string | null;
   kind: "create" | "edit" | "restore";
   isCurrent: boolean;
+  document: PlayDocument | null;
 };
 
 export type PlaybookVersionRow = {
@@ -60,7 +61,7 @@ export async function listPlaybookActivityAction(
 
   const { data: versions, error: vErr } = await supabase
     .from("play_versions")
-    .select("id, play_id, created_at, editor_name_snapshot, note, diff_summary, kind")
+    .select("id, play_id, created_at, editor_name_snapshot, note, diff_summary, kind, document")
     .in("play_id", playIds)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -76,6 +77,7 @@ export async function listPlaybookActivityAction(
     diffSummary: (v.diff_summary as string | null) ?? null,
     kind: ((v.kind as string) || "edit") as "create" | "edit" | "restore",
     isCurrent: currentByPlay.get(v.play_id as string) === (v.id as string),
+    document: (v.document as PlayDocument | null) ?? null,
   }));
 
   return { ok: true, rows };
@@ -104,7 +106,7 @@ export async function listPlayVersionsAction(
 
   const { data: versions, error } = await supabase
     .from("play_versions")
-    .select("id, play_id, created_at, editor_name_snapshot, note, diff_summary, kind")
+    .select("id, play_id, created_at, editor_name_snapshot, note, diff_summary, kind, document")
     .eq("play_id", playId)
     .order("created_at", { ascending: false });
   if (error) return { ok: false, error: error.message };
@@ -119,6 +121,7 @@ export async function listPlayVersionsAction(
     diffSummary: (v.diff_summary as string | null) ?? null,
     kind: ((v.kind as string) || "edit") as "create" | "edit" | "restore",
     isCurrent: currentId === (v.id as string),
+    document: (v.document as PlayDocument | null) ?? null,
   }));
 
   return { ok: true, rows };

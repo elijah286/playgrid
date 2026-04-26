@@ -11,6 +11,8 @@ import {
   type PlayVersionRow,
 } from "@/app/actions/versions";
 import { PlayVersionCompare } from "./PlayVersionCompare";
+import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
+import type { PlayDocument } from "@/domain/play/types";
 import { useToast } from "@/components/ui";
 
 type Tab = "activity" | "structure";
@@ -168,27 +170,35 @@ function ActivityList({
   return (
     <ul className="space-y-2">
       {rows.map((row) => (
-        <li
-          key={row.id}
-          className="rounded-md border border-border px-3 py-2"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+        <li key={row.id} className="rounded-md border border-border px-3 py-2">
+          <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => onCompare(row)}
+              className="shrink-0 overflow-hidden rounded-md border border-border bg-surface-inset transition hover:border-primary"
+              aria-label={`Compare ${row.playName} version`}
+            >
+              <div className="h-16 w-12 sm:h-20 sm:w-16">
+                {row.document ? (
+                  <PlayThumbnail preview={toPreview(row.document)} thin />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted">
+                    —
+                  </div>
+                )}
+              </div>
+            </button>
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="truncate text-sm font-medium">{row.playName}</span>
                 <KindBadge kind={row.kind} />
-                {row.isCurrent && (
-                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                    Current
-                  </span>
-                )}
               </div>
               <p className="mt-0.5 text-xs text-muted">
                 {row.editorName ?? "Unknown editor"} · {fmt(row.createdAt)}
               </p>
-              {row.diffSummary && (
-                <p className="mt-1 text-xs text-foreground/80">{row.diffSummary}</p>
-              )}
+              <p className="mt-1 text-xs text-foreground/80">
+                {row.diffSummary || describeFallback(row.kind)}
+              </p>
               {row.note && (
                 <p className="mt-1 text-xs italic text-muted">“{row.note}”</p>
               )}
@@ -196,7 +206,7 @@ function ActivityList({
             <button
               type="button"
               onClick={() => onCompare(row)}
-              className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10"
+              className="shrink-0 self-center rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10"
             >
               Compare
             </button>
@@ -205,6 +215,21 @@ function ActivityList({
       ))}
     </ul>
   );
+}
+
+function toPreview(doc: PlayDocument): PlayThumbnailInput {
+  return {
+    players: doc.layers?.players ?? [],
+    routes: doc.layers?.routes ?? [],
+    zones: doc.layers?.zones ?? [],
+    lineOfScrimmageY: typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+  };
+}
+
+function describeFallback(kind: "create" | "edit" | "restore"): string {
+  if (kind === "create") return "Created";
+  if (kind === "restore") return "Restored to an earlier version";
+  return "Edited (no detailed diff)";
 }
 
 function StructureList({
