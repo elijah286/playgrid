@@ -280,6 +280,7 @@ export function PlaybookCalendarTab({
           events={events}
           selectedDayKey={selectedDayKey}
           onSelectDay={(d) => setSelectedDayKey(d ? ymd(d) : null)}
+          onSelectEvent={viewerIsCoach ? (e) => openEdit(e) : undefined}
         />
       )}
       {view === "week" && !loading && !error && (

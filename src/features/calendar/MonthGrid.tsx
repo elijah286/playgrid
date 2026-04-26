@@ -13,11 +13,13 @@ export function MonthGrid({
   events,
   initialDate,
   onSelectDay,
+  onSelectEvent,
   selectedDayKey,
 }: {
   events: MonthGridEvent[];
   initialDate?: Date;
   onSelectDay?: (date: Date | null) => void;
+  onSelectEvent?: (event: MonthGridEvent) => void;
   selectedDayKey?: string | null;
 }) {
   // Rolling 5-week view anchored to the Sunday of the cursor's week.
@@ -214,12 +216,19 @@ export function MonthGrid({
           const isFirstOfMonth = day.date.getDate() === 1;
           const dayEvents = eventsByDay.get(key) ?? [];
           return (
-            <button
+            <div
               key={key}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectDay?.(isSelected ? null : day.date)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" || ev.key === " ") {
+                  ev.preventDefault();
+                  onSelectDay?.(isSelected ? null : day.date);
+                }
+              }}
               className={
-                "flex min-h-[72px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5 " +
+                "flex min-h-[72px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors cursor-pointer sm:min-h-[96px] sm:p-1.5 " +
                 (isPast ? "opacity-40 " : "") +
                 (isSelected
                   ? "ring-2 ring-inset ring-primary "
@@ -271,31 +280,32 @@ export function MonthGrid({
                 )}
               </div>
               <div className="hidden flex-col gap-0.5 sm:flex">
-                {dayEvents.slice(0, 3).map((e) => {
+                {dayEvents.map((e) => {
                   const meta = EVENT_TYPE_META[e.type];
                   const color = e.playbookColor ?? null;
                   return (
-                    <span
+                    <button
                       key={`${e.id}:${e.occurrenceDate}`}
+                      type="button"
                       title={e.title}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        if (onSelectEvent) onSelectEvent(e);
+                        else onSelectDay?.(day.date);
+                      }}
                       className={
-                        "truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight ring-1 " +
+                        "truncate rounded px-1 py-0.5 text-left text-[10px] font-medium leading-tight ring-1 hover:brightness-95 " +
                         (color ? "border-l-[3px] " : "") +
                         meta.chipActive
                       }
                       style={color ? { borderLeftColor: color } : undefined}
                     >
                       {e.title}
-                    </span>
+                    </button>
                   );
                 })}
-                {dayEvents.length > 3 && (
-                  <span className="px-1 text-[10px] font-medium text-muted">
-                    +{dayEvents.length - 3} more
-                  </span>
-                )}
               </div>
-            </button>
+            </div>
           );
         })}
         </div>
