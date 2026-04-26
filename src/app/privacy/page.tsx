@@ -123,7 +123,14 @@ export default function PrivacyPage() {
             <li>
               OpenAI — only if you opt into the Coach AI tier, in which case
               the play descriptions you submit are sent to OpenAI to generate
-              suggestions
+              suggestions and to produce search embeddings for the Coach AI
+              knowledge base
+            </li>
+            <li>
+              Anthropic — only if you opt into the Coach AI tier and the
+              site administrator has selected Claude as the active provider, in
+              which case your Coach AI chat messages are sent to Anthropic to
+              generate responses
             </li>
           </ul>
         </section>

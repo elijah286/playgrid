@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdminClient";
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
+import { ClaudeSettingsClient } from "@/features/admin/ClaudeSettingsClient";
+import { LlmProviderToggleClient } from "@/features/admin/LlmProviderToggleClient";
+import type { LlmProvider } from "@/lib/site/llm-provider";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
@@ -37,6 +40,16 @@ import { cn } from "@/lib/utils";
 
 type IntegrationProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
+  | { ok: false; error: string };
+
+type ClaudeProps =
+  | {
+      ok: true;
+      configured: boolean;
+      statusLabel: string;
+      provider: LlmProvider;
+      updatedAt: string | null;
+    }
   | { ok: false; error: string };
 
 type ResendProps =
@@ -70,6 +83,7 @@ export function SettingsClient({
   initialUsers,
   usersError,
   integration,
+  claude,
   resend,
   googleMaps,
   initialFeedback,
@@ -96,6 +110,7 @@ export function SettingsClient({
   initialUsers: AdminUserRow[];
   usersError: string | null;
   integration: IntegrationProps;
+  claude: ClaudeProps;
   resend: ResendProps;
   googleMaps: GoogleMapsProps;
   initialFeedback: FeedbackRow[];
@@ -270,6 +285,22 @@ export function SettingsClient({
               values.
             </p>
           </div>
+          {claude.ok && (
+            <LlmProviderToggleClient initial={claude.provider} />
+          )}
+
+          {claude.ok ? (
+            <ClaudeSettingsClient
+              initial={{
+                configured: claude.configured,
+                statusLabel: claude.statusLabel,
+                updatedAt: claude.updatedAt,
+              }}
+            />
+          ) : (
+            <p className="text-sm text-red-700 dark:text-red-300">{claude.error}</p>
+          )}
+
           {integration.ok ? (
             <OpenAISettingsClient
               initial={{

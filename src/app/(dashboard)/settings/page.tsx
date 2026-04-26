@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import { listUsersForAdminAction } from "@/app/actions/admin-users";
-import { getOpenAIIntegrationStatusAction } from "@/app/actions/admin-integrations";
+import {
+  getClaudeIntegrationStatusAction,
+  getOpenAIIntegrationStatusAction,
+} from "@/app/actions/admin-integrations";
 import { getResendStatusAction } from "@/app/actions/admin-resend";
 import { getGoogleMapsStatusAction } from "@/app/actions/admin-google-maps";
 import {
@@ -34,6 +37,7 @@ export default async function SettingsPage() {
   const [
     usersRes,
     integrationRes,
+    claudeRes,
     resendRes,
     googleMapsRes,
     feedbackRes,
@@ -53,6 +57,7 @@ export default async function SettingsPage() {
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
+    getClaudeIntegrationStatusAction(),
     getResendStatusAction(),
     getGoogleMapsStatusAction(),
     listFeedbackForAdminAction(),
@@ -97,6 +102,17 @@ export default async function SettingsPage() {
                 updatedAt: integrationRes.updatedAt,
               }
             : { ok: false, error: integrationRes.error }
+        }
+        claude={
+          claudeRes.ok
+            ? {
+                ok: true,
+                configured: claudeRes.configured,
+                statusLabel: claudeRes.statusLabel,
+                provider: claudeRes.provider,
+                updatedAt: claudeRes.updatedAt,
+              }
+            : { ok: false, error: claudeRes.error }
         }
         resend={
           resendRes.ok

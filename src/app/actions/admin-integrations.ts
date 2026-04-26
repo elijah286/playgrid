@@ -5,6 +5,13 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredOpenAIApiKey, previewOpenAIKey } from "@/lib/site/openai-key";
+import { getStoredClaudeApiKey, previewClaudeKey } from "@/lib/site/claude-key";
+import {
+  DEFAULT_LLM_PROVIDER,
+  isLlmProvider,
+  setLlmProvider,
+  type LlmProvider,
+} from "@/lib/site/llm-provider";
 
 const SITE_ROW_ID = "default";
 
@@ -161,4 +168,161 @@ export async function testOpenAIApiKeyAction(proposedKey?: string) {
     ok: true as const,
     message: `Connection OK — OpenAI returned model “${ping.sampleModelId}”.`,
   };
+}
+
+// ─── Claude (Anthropic) ──────────────────────────────────────────────────────
+
+export async function getClaudeIntegrationStatusAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+
+  try {
+    const admin = createServiceRoleClient();
+    const { data, error } = await admin
+      .from("site_settings")
+      .select("claude_api_key, llm_provider, updated_at")
+      .eq("id", SITE_ROW_ID)
+      .maybeSingle();
+    if (error) return { ok: false as const, error: error.message };
+    const { configured, label } = previewClaudeKey(data?.claude_api_key);
+    const provider: LlmProvider = isLlmProvider(data?.llm_provider)
+      ? (data!.llm_provider as LlmProvider)
+      : DEFAULT_LLM_PROVIDER;
+    return {
+      ok: true as const,
+      configured,
+      statusLabel: label,
+      provider,
+      updatedAt: data?.updated_at ?? null,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not load settings.";
+    return { ok: false as const, error: msg };
+  }
+}
+
+export async function saveClaudeApiKeyAction(rawKey: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+
+  const key = rawKey.trim();
+  if (!key) {
+    return { ok: false as const, error: "Paste an API key before saving, or use Remove saved key." };
+  }
+  if (!key.startsWith("sk-ant-")) {
+    return {
+      ok: false as const,
+      error: "That does not look like an Anthropic API key (expected to start with sk-ant-).",
+    };
+  }
+
+  try {
+    const admin = createServiceRoleClient();
+    const { error } = await admin
+      .from("site_settings")
+      .update({ claude_api_key: key, updated_at: new Date().toISOString() })
+      .eq("id", SITE_ROW_ID);
+    if (error) return { ok: false as const, error: error.message };
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Save failed.";
+    return { ok: false as const, error: msg };
+  }
+}
+
+export async function clearClaudeApiKeyAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+
+  try {
+    const admin = createServiceRoleClient();
+    const { error } = await admin
+      .from("site_settings")
+      .update({ claude_api_key: null, updated_at: new Date().toISOString() })
+      .eq("id", SITE_ROW_ID);
+    if (error) return { ok: false as const, error: error.message };
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not remove key.";
+    return { ok: false as const, error: msg };
+  }
+}
+
+async function pingClaude(
+  apiKey: string,
+): Promise<{ ok: true; sampleModelId: string } | { ok: false; error: string }> {
+  const res = await fetch("https://api.anthropic.com/v1/models?limit=1", {
+    method: "GET",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    cache: "no-store",
+  });
+  const body = await res.text();
+  if (!res.ok) {
+    let msg = `Request failed (${res.status}).`;
+    try {
+      const j = JSON.parse(body) as { error?: { message?: string } };
+      if (j.error?.message) msg = j.error.message;
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: msg };
+  }
+  try {
+    const j = JSON.parse(body) as { data?: { id?: string }[] };
+    const id = j.data?.[0]?.id;
+    if (!id) return { ok: false, error: "Unexpected response from Anthropic (no models)." };
+    return { ok: true, sampleModelId: id };
+  } catch {
+    return { ok: false, error: "Unexpected response from Anthropic." };
+  }
+}
+
+export async function testClaudeApiKeyAction(proposedKey?: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+
+  const trimmed = (proposedKey ?? "").trim();
+  let key: string | null = trimmed.length > 0 ? trimmed : null;
+  if (!key) {
+    try {
+      key = await getStoredClaudeApiKey();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not read saved key.";
+      return { ok: false as const, error: msg };
+    }
+  }
+  if (!key) {
+    return {
+      ok: false as const,
+      error: "No key to test — paste a key above or save one first.",
+    };
+  }
+
+  const ping = await pingClaude(key);
+  if (!ping.ok) return { ok: false as const, error: ping.error };
+  return {
+    ok: true as const,
+    message: `Connection OK — Anthropic returned model “${ping.sampleModelId}”.`,
+  };
+}
+
+export async function setLlmProviderAction(provider: LlmProvider) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  if (!isLlmProvider(provider)) {
+    return { ok: false as const, error: "Invalid provider." };
+  }
+  try {
+    await setLlmProvider(provider);
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not update provider.";
+    return { ok: false as const, error: msg };
+  }
 }
