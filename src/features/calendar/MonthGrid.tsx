@@ -115,11 +115,6 @@ export function MonthGrid({
           const isToday = key === todayKey;
           const isSelected = selectedDayKey === key;
           const isPast = day.date < today && !isToday;
-          // Alternating tint by month so the boundary is visible at a
-          // glance without an explicit divider.
-          const monthOdd = day.date.getMonth() % 2 === 1;
-          // Show "MMM 1" on the first of each month so the boundary day
-          // also self-labels (helpful when month tints are subtle).
           const isFirstOfMonth = day.date.getDate() === 1;
           const dayEvents = eventsByDay.get(key) ?? [];
           return (
@@ -128,8 +123,7 @@ export function MonthGrid({
               type="button"
               onClick={() => onSelectDay?.(isSelected ? null : day.date)}
               className={
-                "flex min-h-[72px] flex-col items-stretch gap-1 p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5 " +
-                (monthOdd ? "bg-surface-inset " : "bg-surface ") +
+                "flex min-h-[72px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5 " +
                 (isPast ? "opacity-40 " : "") +
                 (isSelected
                   ? "ring-2 ring-inset ring-primary "
