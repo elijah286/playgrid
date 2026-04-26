@@ -1289,6 +1289,8 @@ export function InviteTeamMemberDialog({
     canManageSeats: boolean;
   } | null>(null);
   const [permsOpen, setPermsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [autoStarted, setAutoStarted] = useState(false);
   const outOfCoachSeats =
     role === "editor" && seatStatus?.isCoachPlus === true && seatStatus.available <= 0;
   const needsCoachPlan =
@@ -1301,6 +1303,38 @@ export function InviteTeamMemberDialog({
     role === "editor" &&
     seatStatus?.isCoachPlus === true &&
     parsedEmailCount > seatStatus.available;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // On mobile, jump straight to a player-invite QR. Coaches still need
+  // the role picker and seat math, so we don't auto-start when canManage.
+  useEffect(() => {
+    if (autoStarted) return;
+    if (!isMobile) return;
+    if (mode !== "choose") return;
+    setAutoStarted(true);
+    setRole("viewer");
+    setMode("link");
+    setLinkTab("qr");
+  }, [isMobile, mode, autoStarted]);
+
+  useEffect(() => {
+    if (mode !== "link") return;
+    if (role !== "viewer") return;
+    if (inviteUrl) return;
+    if (creating) return;
+    if (!autoStarted) return;
+    void generate();
+    // generate is stable enough for this single-shot autofill
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, role, inviteUrl, creating, autoStarted]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1435,6 +1469,21 @@ export function InviteTeamMemberDialog({
             <X className="size-4" />
           </button>
         </div>
+
+        {seatStatus?.isCoachPlus && seatStatus.canManageSeats && (
+          <Link
+            href="/account"
+            className="flex items-center justify-between gap-2 border-b border-border bg-surface-inset/60 px-5 py-2 text-xs text-muted hover:bg-surface-inset"
+          >
+            <span>
+              <span className="font-semibold text-foreground">
+                {seatStatus.used} of {seatStatus.total}
+              </span>{" "}
+              coach seat{seatStatus.total === 1 ? "" : "s"} used
+            </span>
+            <span className="font-medium text-primary">Manage coaches →</span>
+          </Link>
+        )}
 
         <div className="space-y-4 p-5">
           {mode === "choose" && (
@@ -1756,6 +1805,20 @@ export function InviteTeamMemberDialog({
 
           {mode === "link" && inviteUrl && (
             <>
+              {autoStarted && role === "viewer" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("choose");
+                    setInviteUrl(null);
+                    setQrDataUrl(null);
+                    setAutoStarted(false);
+                  }}
+                  className="-mt-1 text-xs font-medium text-muted underline hover:text-foreground"
+                >
+                  More options (email, coach invite)
+                </button>
+              )}
               {role === "editor" && (
                 <div className="flex items-start gap-2 rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
