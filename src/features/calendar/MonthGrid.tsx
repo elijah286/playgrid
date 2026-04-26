@@ -27,6 +27,7 @@ export function MonthGrid({
   const [weekStart, setWeekStart] = useState<Date>(() =>
     startOfWeek(initialDate ?? new Date()),
   );
+  const [direction, setDirection] = useState<"next" | "prev" | null>(null);
 
   const todayKey = ymd(new Date());
   const today = startOfDay(new Date());
@@ -63,7 +64,14 @@ export function MonthGrid({
   function shiftWeeks(delta: number) {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + delta * 7);
+    setDirection(delta > 0 ? "next" : "prev");
     setWeekStart(d);
+  }
+
+  function jumpTo(target: Date) {
+    const next = startOfWeek(target);
+    setDirection(next > weekStart ? "next" : "prev");
+    setWeekStart(next);
   }
 
   const todayWeekStart = startOfWeek(new Date());
@@ -85,7 +93,7 @@ export function MonthGrid({
           {!onCurrentWeek && (
             <button
               type="button"
-              onClick={() => setWeekStart(todayWeekStart)}
+              onClick={() => jumpTo(new Date())}
               className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-surface-hover"
             >
               Today
@@ -102,7 +110,18 @@ export function MonthGrid({
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg bg-border">
+      <div className="overflow-hidden">
+        <div
+          key={ymd(weekStart)}
+          className={
+            "grid grid-cols-7 gap-px overflow-hidden rounded-lg bg-border " +
+            (direction === "next"
+              ? "calendar-slide-up"
+              : direction === "prev"
+                ? "calendar-slide-down"
+                : "")
+          }
+        >
         {DAYS.map((d, i) => (
           <div
             key={i}
@@ -203,6 +222,7 @@ export function MonthGrid({
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );

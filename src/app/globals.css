@@ -113,6 +113,29 @@ body {
   animation: marching-ants 0.6s linear infinite;
 }
 
+/* Calendar week navigation — slides incoming view up or down so the user
+   keeps their bearings as they advance/retreat through weeks. */
+@keyframes calendar-slide-up {
+  from { transform: translateY(8%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes calendar-slide-down {
+  from { transform: translateY(-8%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.calendar-slide-up {
+  animation: calendar-slide-up 220ms ease-out;
+}
+.calendar-slide-down {
+  animation: calendar-slide-down 220ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar-slide-up,
+  .calendar-slide-down {
+    animation: none;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

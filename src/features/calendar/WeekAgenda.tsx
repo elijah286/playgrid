@@ -25,6 +25,7 @@ export function WeekAgenda<T extends CalendarEventRow>({
   renderEvent: (event: T) => ReactNode;
 }) {
   const [cursor, setCursor] = useState<Date>(() => startOfWeek(initialDate ?? new Date()));
+  const [direction, setDirection] = useState<"next" | "prev" | null>(null);
 
   const todayKey = ymd(new Date());
 
@@ -75,6 +76,7 @@ export function WeekAgenda<T extends CalendarEventRow>({
   function shiftWeek(delta: number) {
     const next = new Date(cursor);
     next.setDate(cursor.getDate() + delta * 7);
+    setDirection(delta > 0 ? "next" : "prev");
     setCursor(next);
   }
 
@@ -100,7 +102,17 @@ export function WeekAgenda<T extends CalendarEventRow>({
         </button>
       </div>
 
-      <ul className="space-y-2">
+      <ul
+        key={ymd(cursor)}
+        className={
+          "space-y-2 " +
+          (direction === "next"
+            ? "calendar-slide-up"
+            : direction === "prev"
+              ? "calendar-slide-down"
+              : "")
+        }
+      >
         {days.map((d) => {
           const key = ymd(d);
           const isToday = key === todayKey;
