@@ -43,6 +43,12 @@ const FEATURES: FeatureMeta[] = [
       "Per-playbook calendar for practices, games, and scrimmages with RSVPs, ICS feed, email notifications, and a cross-playbook landing page view.",
   },
   {
+    key: "play_comments",
+    label: "Play Comments",
+    description:
+      "Per-play discussion threads with likes and replies. Visible only to playbook members. Coach controls a per-playbook on/off toggle. Privacy policy must reflect this before scope is widened beyond \"Only me\".",
+  },
+  {
     key: "marketing_content",
     label: "Enhanced marketing content",
     description:
