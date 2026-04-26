@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CalendarEventRow } from "@/app/actions/calendar";
 import { EVENT_TYPE_META } from "./eventIcons";
 
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKS = 5;
 
 export function MonthGrid({
   events,
@@ -18,28 +19,16 @@ export function MonthGrid({
   onSelectDay?: (date: Date | null) => void;
   selectedDayKey?: string | null;
 }) {
-  const [cursor, setCursor] = useState<Date>(() => {
-    const base = initialDate ?? new Date();
-    return new Date(base.getFullYear(), base.getMonth(), 1);
-  });
+  // Rolling 5-week view anchored to the Sunday of the cursor's week.
+  // Default cursor = today, so the top row is always the current week
+  // and past days within it render dimmed. Convention follows Fantastical
+  // / Sunsama style "rolling month" rather than a strict calendar month.
+  const [weekStart, setWeekStart] = useState<Date>(() =>
+    startOfWeek(initialDate ?? new Date()),
+  );
 
   const todayKey = ymd(new Date());
-  const todayRowRef = useRef<HTMLButtonElement | null>(null);
-
-  // When the Month view first renders for a month that contains today,
-  // scroll the page so today's week sits near the top of the viewport
-  // — coaches almost always want to see "this week and forward."
-  useEffect(() => {
-    const sameMonth =
-      cursor.getMonth() === new Date().getMonth() &&
-      cursor.getFullYear() === new Date().getFullYear();
-    if (!sameMonth) return;
-    const el = todayRowRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const targetTop = window.scrollY + rect.top - 96; // leave room for sticky tabs
-    window.scrollTo({ top: targetTop, behavior: "smooth" });
-  }, [cursor]);
+  const today = startOfDay(new Date());
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEventRow[]>();
@@ -57,35 +46,56 @@ export function MonthGrid({
     return map;
   }, [events]);
 
-  const grid = useMemo(() => buildMonthGrid(cursor), [cursor]);
-  const monthLabel = cursor.toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
+  const grid = useMemo(() => buildRollingGrid(weekStart, WEEKS), [weekStart]);
 
-  function shiftMonth(delta: number) {
-    setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1));
+  const first = grid[0]!.date;
+  const last = grid[grid.length - 1]!.date;
+  const sameMonth =
+    first.getMonth() === last.getMonth() &&
+    first.getFullYear() === last.getFullYear();
+  const rangeLabel = sameMonth
+    ? first.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : first.getFullYear() === last.getFullYear()
+      ? `${first.toLocaleDateString(undefined, { month: "short" })} – ${last.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`
+      : `${first.toLocaleDateString(undefined, { month: "short", year: "numeric" })} – ${last.toLocaleDateString(undefined, { month: "short", year: "numeric" })}`;
+
+  function shiftWeeks(delta: number) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + delta * 7);
+    setWeekStart(d);
   }
+
+  const todayWeekStart = startOfWeek(new Date());
+  const onCurrentWeek = ymd(weekStart) === ymd(todayWeekStart);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => shiftMonth(-1)}
+          onClick={() => shiftWeeks(-1)}
           className="rounded-md p-1.5 text-muted hover:bg-surface-hover"
-          aria-label="Previous month"
+          aria-label="Previous week"
         >
           <ChevronLeft className="size-4" />
         </button>
-        <div className="text-sm font-semibold text-foreground">
-          {monthLabel}
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-semibold text-foreground">{rangeLabel}</div>
+          {!onCurrentWeek && (
+            <button
+              type="button"
+              onClick={() => setWeekStart(todayWeekStart)}
+              className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-surface-hover"
+            >
+              Today
+            </button>
+          )}
         </div>
         <button
           type="button"
-          onClick={() => shiftMonth(1)}
+          onClick={() => shiftWeeks(1)}
           className="rounded-md p-1.5 text-muted hover:bg-surface-hover"
-          aria-label="Next month"
+          aria-label="Next week"
         >
           <ChevronRight className="size-4" />
         </button>
@@ -102,33 +112,46 @@ export function MonthGrid({
         ))}
         {grid.map((day) => {
           const key = ymd(day.date);
-          const inMonth = day.date.getMonth() === cursor.getMonth();
           const isToday = key === todayKey;
           const isSelected = selectedDayKey === key;
+          const isPast = day.date < today && !isToday;
+          // Alternating tint by month so the boundary is visible at a
+          // glance without an explicit divider.
+          const monthOdd = day.date.getMonth() % 2 === 1;
+          // Show "MMM 1" on the first of each month so the boundary day
+          // also self-labels (helpful when month tints are subtle).
+          const isFirstOfMonth = day.date.getDate() === 1;
           const dayEvents = eventsByDay.get(key) ?? [];
           return (
             <button
               key={key}
-              ref={isToday ? todayRowRef : undefined}
               type="button"
               onClick={() => onSelectDay?.(isSelected ? null : day.date)}
               className={
-                "flex min-h-[72px] flex-col items-stretch gap-1 bg-surface p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5 " +
-                (inMonth ? "" : "opacity-40 ") +
+                "flex min-h-[72px] flex-col items-stretch gap-1 p-1 text-left transition-colors sm:min-h-[96px] sm:p-1.5 " +
+                (monthOdd ? "bg-surface-inset " : "bg-surface ") +
+                (isPast ? "opacity-40 " : "") +
                 (isSelected
                   ? "ring-2 ring-inset ring-primary "
                   : "hover:bg-surface-hover ")
               }
             >
-              <div
-                className={
-                  "text-xs font-medium " +
-                  (isToday
-                    ? "inline-flex size-5 items-center justify-center self-start rounded-full bg-primary text-primary-foreground"
-                    : "text-foreground")
-                }
-              >
-                {day.date.getDate()}
+              <div className="flex items-center gap-1">
+                <div
+                  className={
+                    "text-xs font-medium " +
+                    (isToday
+                      ? "inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                      : "text-foreground")
+                  }
+                >
+                  {day.date.getDate()}
+                </div>
+                {isFirstOfMonth && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    {day.date.toLocaleDateString(undefined, { month: "short" })}
+                  </span>
+                )}
               </div>
 
               {/* Mobile: dot row. Desktop: title pills. */}
@@ -184,14 +207,21 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function buildMonthGrid(firstOfMonth: Date): { date: Date }[] {
-  const startWeekday = firstOfMonth.getDay();
-  const start = new Date(firstOfMonth);
-  start.setDate(firstOfMonth.getDate() - startWeekday);
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function startOfWeek(d: Date): Date {
+  const result = startOfDay(d);
+  result.setDate(result.getDate() - result.getDay());
+  return result;
+}
+
+function buildRollingGrid(weekStart: Date, weeks: number): { date: Date }[] {
   const cells: { date: Date }[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
+  for (let i = 0; i < weeks * 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
     cells.push({ date: d });
   }
   return cells;
