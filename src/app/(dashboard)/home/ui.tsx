@@ -63,7 +63,9 @@ import {
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
+import { ActivityTab } from "@/features/dashboard/ActivityTab";
 import type { InboxAlert } from "@/app/actions/inbox";
+import type { ActivityEntry } from "@/app/actions/activity";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -978,6 +980,7 @@ export function DashboardClient({
   isAdmin = false,
   teamCalendarAvailable = false,
   inboxAlerts = [],
+  activityEntries = [],
   initialTab = "playbooks",
 }: {
   data: DashboardSummary;
@@ -985,10 +988,12 @@ export function DashboardClient({
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
   inboxAlerts?: InboxAlert[];
+  activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
 }) {
   const [homeTab, setHomeTab] = useState<HomeTab>(initialTab);
   const inboxCount = inboxAlerts.length;
+  const activityCount = activityEntries.length;
   const router = useRouter();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -1274,7 +1279,7 @@ export function DashboardClient({
     return items;
   }
 
-  const showTabNav = teamCalendarAvailable || inboxCount > 0;
+  const showTabNav = teamCalendarAvailable || inboxCount > 0 || activityCount > 0;
   if (showTabNav && homeTab === "calendar" && teamCalendarAvailable) {
     return (
       <div className="space-y-6">
@@ -1282,6 +1287,7 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
+          activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
         />
         <HomeCalendarTab />
@@ -1295,9 +1301,24 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
+          activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
         />
         <InboxTab initialAlerts={inboxAlerts} />
+      </div>
+    );
+  }
+  if (showTabNav && homeTab === "activity") {
+    return (
+      <div className="space-y-6">
+        <HomeTabNav
+          tab={homeTab}
+          onChange={setHomeTab}
+          inboxCount={inboxCount}
+          activityCount={activityCount}
+          showCalendar={teamCalendarAvailable}
+        />
+        <ActivityTab entries={activityEntries} />
       </div>
     );
   }
@@ -1309,6 +1330,7 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
+          activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
         />
       )}
@@ -1905,26 +1927,30 @@ function DuplicatePlaybookDialog({
 }
 
 
-type HomeTab = "playbooks" | "calendar" | "inbox";
+type HomeTab = "playbooks" | "calendar" | "inbox" | "activity";
 
 function HomeTabNav({
   tab,
   onChange,
   inboxCount,
+  activityCount,
   showCalendar,
 }: {
   tab: HomeTab;
   onChange: (t: HomeTab) => void;
   inboxCount: number;
+  activityCount: number;
   showCalendar: boolean;
 }) {
   const tabs: HomeTab[] = ["playbooks"];
   if (showCalendar) tabs.push("calendar");
   tabs.push("inbox");
+  if (activityCount > 0) tabs.push("activity");
   const labels: Record<HomeTab, string> = {
     playbooks: "Playbooks",
     calendar: "Calendar",
     inbox: "Inbox",
+    activity: "Activity",
   };
   return (
     <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">

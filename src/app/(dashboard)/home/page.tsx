@@ -1,5 +1,6 @@
 import { getDashboardSummaryAction } from "@/app/actions/plays";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
+import { listActivityFeedAction } from "@/app/actions/activity";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import {
@@ -14,10 +15,11 @@ type Props = {
 
 export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery, tab } = await searchParams;
-  const [res, inbox, hideAnimation, profileRes, betaFeatures] =
+  const [res, inbox, activity, hideAnimation, profileRes, betaFeatures] =
     await Promise.all([
       getDashboardSummaryAction(),
       listInboxAlertsAction(),
+      listActivityFeedAction(),
       getHideLobbyAnimation(),
       getCurrentUserProfile(),
       getBetaFeatures(),
@@ -28,9 +30,10 @@ export default async function HomePage({ searchParams }: Props) {
     { isAdmin, isEntitled: true },
   );
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
-  const initialTab: "playbooks" | "calendar" | "inbox" =
-    tab === "inbox" || tab === "calendar" || tab === "playbooks"
-      ? (tab as "playbooks" | "calendar" | "inbox")
+  const activityEntries = activity.ok ? activity.entries : [];
+  const initialTab: "playbooks" | "calendar" | "inbox" | "activity" =
+    tab === "inbox" || tab === "calendar" || tab === "playbooks" || tab === "activity"
+      ? (tab as "playbooks" | "calendar" | "inbox" | "activity")
       : "playbooks";
 
   return (
@@ -50,6 +53,7 @@ export default async function HomePage({ searchParams }: Props) {
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
           inboxAlerts={inboxAlerts}
+          activityEntries={activityEntries}
           initialTab={initialTab}
         />
       )}

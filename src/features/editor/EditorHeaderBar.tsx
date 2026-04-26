@@ -25,6 +25,7 @@ import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playb
 import { Button, Input, SegmentedControl } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
 import { EditablePlayNumberBadge } from "./PlayNumberBadge";
+import { NotifyTeamButton } from "./NotifyTeamButton";
 
 type Props = {
   playId: string;
@@ -178,16 +179,18 @@ export function EditorHeaderBar({
             its own row on mobile. Prev/All/Next live in a sibling cluster
             that can wrap below on narrow viewports. */}
         {canEdit && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            leftIcon={Copy}
-            onClick={onDuplicate}
-            className={`ml-auto ${hideMobileNav ? "hidden sm:inline-flex" : ""}`}
-          >
-            Copy
-          </Button>
+          <div className={`ml-auto flex items-center gap-1 ${hideMobileNav ? "hidden sm:flex" : ""}`}>
+            <NotifyTeamButton playId={playId} hideMobileLabel />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              leftIcon={Copy}
+              onClick={onDuplicate}
+            >
+              Copy
+            </Button>
+          </div>
         )}
       </div>
       <div
