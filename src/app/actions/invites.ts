@@ -146,6 +146,24 @@ export async function revokeInviteAction(
   return { ok: true };
 }
 
+export async function revokeAllInvitesAction(
+  playbookId: string,
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("playbook_invites")
+    .update({ revoked_at: now })
+    .eq("playbook_id", playbookId)
+    .is("revoked_at", null)
+    .gt("expires_at", now)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true, count: data?.length ?? 0 };
+}
+
 export async function previewInviteAction(
   token: string,
 ): Promise<{ ok: true; preview: InvitePreview } | { ok: false; error: string }> {

@@ -129,10 +129,7 @@ import {
   linkRosterEntryAction,
   unlinkRosterEntryAction,
 } from "@/app/actions/playbook-roster";
-import {
-  revokeInviteAction,
-  type PlaybookInvite,
-} from "@/app/actions/invites";
+import { type PlaybookInvite } from "@/app/actions/invites";
 import { setPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
 import type { PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import {
@@ -1015,6 +1012,11 @@ function PlaybookDetailClientInner({
           exampleStatus={headerProps.exampleStatus}
           isExamplePreview={headerProps.isExamplePreview}
           isArchived={isArchived}
+          outstandingInviteCount={
+            initialInvites.filter(
+              (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
+            ).length
+          }
           playActions={{
             onNewPlay: openFormationPicker,
             onToggleSelect: () => {
@@ -1365,7 +1367,6 @@ function PlaybookDetailClientInner({
           playbookId={playbookId}
           members={initialRoster}
           claims={initialRosterClaims}
-          invites={initialInvites}
           viewerIsCoach={headerProps.viewerIsCoach}
           teamName={headerProps.name}
           senderName={headerProps.senderName}
@@ -1386,7 +1387,6 @@ function PlaybookDetailClientInner({
         <StaffPanel
           playbookId={playbookId}
           members={initialRoster}
-          invites={initialInvites}
           viewerIsCoach={headerProps.viewerIsCoach}
           teamName={headerProps.name}
           senderName={headerProps.senderName}
@@ -2184,7 +2184,6 @@ function RosterPanel({
   playbookId,
   members,
   claims,
-  invites,
   viewerIsCoach,
   teamName,
   senderName,
@@ -2192,7 +2191,6 @@ function RosterPanel({
   playbookId: string;
   members: PlaybookRosterMember[];
   claims: PendingRosterClaim[];
-  invites: PlaybookInvite[];
   viewerIsCoach: boolean;
   teamName: string;
   senderName: string | null;
@@ -2245,10 +2243,6 @@ function RosterPanel({
       m.user_id !== null,
   );
   const active = players.filter((m) => m.status === "active");
-  const activeInvites = invites.filter(
-    (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
-  );
-
   const roleLabel = (r: PlaybookRosterMember["role"]) =>
     r === "owner" ? "Coach (owner)" : r === "editor" ? "Coach" : "Player";
 
@@ -2278,11 +2272,6 @@ function RosterPanel({
     const res = await denyCoachUpgradeAction(playbookId, userId);
     setPendingId(null);
     if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-  async function revoke(inviteId: string) {
-    const res = await revokeInviteAction(inviteId, playbookId);
-    if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
     else router.refresh();
   }
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(
@@ -2743,17 +2732,6 @@ function RosterPanel({
             </table>
           </div>
         </div>
-      )}
-
-      {activeInvites.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold text-foreground">Active invite links</h3>
-          <ul className="space-y-2">
-            {activeInvites.map((inv) => (
-              <InviteRow key={inv.id} invite={inv} onRevoke={() => revoke(inv.id)} />
-            ))}
-          </ul>
-        </section>
       )}
 
       {showInviteModal && (
@@ -3514,60 +3492,6 @@ function RolePickerDialog({
   );
 }
 
-function InviteRow({ invite, onRevoke }: { invite: PlaybookInvite; onRevoke: () => void }) {
-  const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
-
-  const url = `${SITE_URL}/invite/${invite.token}`;
-
-  const expiresLabel = new Date(invite.expires_at).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-  const usesLabel = invite.max_uses
-    ? `${invite.uses_count}/${invite.max_uses} used`
-    : `${invite.uses_count} used`;
-  const approvalLabel = invite.auto_approve
-    ? invite.auto_approve_limit
-      ? `auto-join (${Math.max(0, invite.auto_approve_limit - invite.uses_count)} left, then approval)`
-      : "auto-join"
-    : "approval required";
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast("Copy failed — copy the link manually.", "error");
-    }
-  }
-
-  return (
-    <li className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <Badge variant="default" className="text-[10px]">
-            {invite.role === "viewer" ? "Player" : "Coach"}
-          </Badge>
-          {invite.email && <span className="truncate text-xs text-muted">→ {invite.email}</span>}
-          {invite.note && <span className="truncate text-xs text-muted">· {invite.note}</span>}
-        </div>
-        <p className="mt-0.5 text-[11px] text-muted">
-          {approvalLabel} · {usesLabel} · expires {expiresLabel}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="ghost" leftIcon={copied ? Check : Copy} onClick={copy}>
-          {copied ? "Copied" : "Copy link"}
-        </Button>
-        <Button size="sm" variant="ghost" leftIcon={X} onClick={onRevoke}>
-          Revoke
-        </Button>
-      </div>
-    </li>
-  );
-}
 
 function ManageGroupsDialog({
   playbookId,
@@ -3874,14 +3798,12 @@ function PlayTypeSection({
 function StaffPanel({
   playbookId,
   members,
-  invites,
   viewerIsCoach,
   teamName,
   senderName,
 }: {
   playbookId: string;
   members: PlaybookRosterMember[];
-  invites: PlaybookInvite[];
   viewerIsCoach: boolean;
   teamName: string;
   senderName: string | null;
@@ -3913,10 +3835,6 @@ function StaffPanel({
   );
   const pending = coaches.filter((m) => m.status === "pending");
   const active = coaches.filter((m) => m.status === "active");
-  const activeInvites = invites.filter(
-    (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
-  );
-
   async function approve(userId: string) {
     setPendingId(userId);
     const res = await approveMemberAction(playbookId, userId);
@@ -3929,11 +3847,6 @@ function StaffPanel({
     const res = await denyMemberAction(playbookId, userId);
     setPendingId(null);
     if (!res.ok) toast(`Deny failed: ${res.error}`, "error");
-    else router.refresh();
-  }
-  async function revoke(inviteId: string) {
-    const res = await revokeInviteAction(inviteId, playbookId);
-    if (!res.ok) toast(`Revoke failed: ${res.error}`, "error");
     else router.refresh();
   }
 
@@ -4064,17 +3977,6 @@ function StaffPanel({
             </table>
           </div>
         </div>
-      )}
-
-      {activeInvites.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold text-foreground">Active invite links</h3>
-          <ul className="space-y-2">
-            {activeInvites.map((inv) => (
-              <InviteRow key={inv.id} invite={inv} onRevoke={() => revoke(inv.id)} />
-            ))}
-          </ul>
-        </section>
       )}
 
       {showInviteModal && (

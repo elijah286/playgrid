@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, Home, Lock, LogOut, Mail, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -29,6 +29,7 @@ import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import {
   createInviteAction,
+  revokeAllInvitesAction,
   sharePlaybookWithEmailsAction,
   type ShareResultRow,
 } from "@/app/actions/invites";
@@ -95,6 +96,7 @@ export function PlaybookHeader({
   exampleStatus,
   isExamplePreview,
   isArchived,
+  outstandingInviteCount,
 }: {
   playbookId: string;
   name: string;
@@ -117,6 +119,7 @@ export function PlaybookHeader({
   exampleStatus?: { isPublished: boolean } | null;
   isExamplePreview?: boolean;
   isArchived?: boolean;
+  outstandingInviteCount?: number;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -256,6 +259,17 @@ export function PlaybookHeader({
     );
   }
 
+  function handleRevokeAllInvites() {
+    const n = outstandingInviteCount ?? 0;
+    if (n <= 0) return;
+    if (!window.confirm(
+      `Revoke ${n} outstanding invite${n === 1 ? "" : "s"}? Anyone who hasn't joined yet will need a new link.`,
+    )) return;
+    run(() => revokeAllInvitesAction(playbookId).then((r) =>
+      r.ok ? { ok: true } : { ok: false, error: r.error },
+    ));
+  }
+
   function handleTogglePublishExample() {
     const next = !(exampleAdmin?.isPublished ?? false);
     run(() => setPlaybookPublicExampleAction(playbookId, next));
@@ -391,6 +405,12 @@ export function PlaybookHeader({
                 canManage={canManage}
                 onInvite={canShare ? openInvite : null}
                 onCustomize={canManage ? () => setCustomizeOpen(true) : null}
+                onRevokeAllInvites={
+                  canShare && (outstandingInviteCount ?? 0) > 0
+                    ? handleRevokeAllInvites
+                    : null
+                }
+                outstandingInviteCount={outstandingInviteCount ?? 0}
                 onDuplicate={canManage ? openDuplicate : null}
                 onToggleCoachDup={canManage ? handleToggleCoachDup : null}
                 onTogglePlayerDup={canManage ? handleTogglePlayerDup : null}
@@ -568,6 +588,8 @@ function HeaderMenu({
   onAccentHover,
   canManage,
   onInvite,
+  onRevokeAllInvites,
+  outstandingInviteCount,
   onCustomize,
   onDuplicate,
   onToggleCoachDup,
@@ -590,6 +612,8 @@ function HeaderMenu({
   onAccentHover: string;
   canManage: boolean;
   onInvite: (() => void) | null;
+  onRevokeAllInvites: (() => void) | null;
+  outstandingInviteCount: number;
   onCustomize: (() => void) | null;
   onDuplicate: (() => void) | null;
   onToggleCoachDup: (() => void) | null;
@@ -664,6 +688,23 @@ function HeaderMenu({
             >
               <UserPlus className="size-4" />
               <span>Invite team member</span>
+            </button>
+          )}
+          {onRevokeAllInvites && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onRevokeAllInvites();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-surface-inset"
+            >
+              <MailX className="size-4 shrink-0" />
+              <span className="flex-1">Revoke all outstanding invites</span>
+              <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                {outstandingInviteCount}
+              </span>
             </button>
           )}
           {playActions && (
