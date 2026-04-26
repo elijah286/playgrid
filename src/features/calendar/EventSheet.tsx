@@ -146,6 +146,7 @@ export function EventSheet({
   const isRecurring = Boolean(initial?.recurrenceRule);
   const [pending, startTransition] = useTransition();
   const [scopePrompt, setScopePrompt] = useState<null | "save" | "delete">(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   // If editing an existing event whose stored title isn't the canonical
   // derived one (e.g. legacy events typed "Practice 5/30"), open it as
@@ -318,16 +319,14 @@ export function EventSheet({
       setScopePrompt("delete");
       return;
     }
-    if (
-      !globalThis.confirm(
-        notifyAttendees
-          ? "Delete this event and email everyone?"
-          : "Delete this event? Attendees will not be notified.",
-      )
-    )
-      return;
+    setDeleteConfirm(true);
+  }
+
+  function confirmDelete(notify: boolean) {
+    if (!isEdit || !initial) return;
+    setDeleteConfirm(false);
     startTransition(async () => {
-      const res = await deleteEventAction(initial.id, notifyAttendees);
+      const res = await deleteEventAction(initial.id, notify);
       if (!res.ok) {
         toast(res.error, "error");
         return;
@@ -684,6 +683,74 @@ export function EventSheet({
           onChoose={applyScope}
         />
       )}
+
+      {deleteConfirm && (
+        <DeleteConfirmDialog
+          pending={pending}
+          onCancel={() => setDeleteConfirm(false)}
+          onConfirm={confirmDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteConfirmDialog({
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (notify: boolean) => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-6"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-t-2xl bg-surface p-5 shadow-xl ring-1 ring-border sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-semibold text-foreground">
+          Delete this event?
+        </h2>
+        <p className="mt-1 text-xs text-muted">
+          This can&apos;t be undone. Choose whether to let the team know.
+        </p>
+        <div className="mt-4 space-y-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onConfirm(true)}
+            className="w-full rounded-lg bg-danger px-3 py-2.5 text-left text-sm font-medium text-white ring-1 ring-danger hover:bg-danger/90 disabled:opacity-60"
+          >
+            Delete & notify everyone
+            <span className="block text-xs font-normal text-white/80">
+              Emails the playbook so nobody shows up to a cancelled event.
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onConfirm(false)}
+            className="w-full rounded-lg bg-surface px-3 py-2.5 text-left text-sm font-medium text-foreground ring-1 ring-border hover:bg-surface-hover disabled:opacity-60"
+          >
+            Delete without notifying
+            <span className="block text-xs font-normal text-muted">
+              Use for mistakes or duplicates the team never saw.
+            </span>
+          </button>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button size="sm" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
