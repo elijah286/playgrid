@@ -69,6 +69,7 @@ import {
   SlidersHorizontal,
   StickyNote,
   Trash2,
+  UserMinus,
   X,
 } from "lucide-react";
 import {
@@ -2302,6 +2303,23 @@ function RosterPanel({
     if (!res.ok) toast(`Unlink failed: ${res.error}`, "error");
     else router.refresh();
   }
+  async function demoteToPlayer(memberId: string, name: string) {
+    if (
+      !window.confirm(
+        `Demote ${name} to player? They'll keep view access but lose the ability to edit plays, invite others, or change the roster.`,
+      )
+    )
+      return;
+    setPendingId(memberId);
+    const res = await setMemberRoleAction({
+      playbookId,
+      memberId,
+      role: "viewer",
+    });
+    setPendingId(null);
+    if (!res.ok) toast(`Demote failed: ${res.error}`, "error");
+    else router.refresh();
+  }
   async function deleteEntry(memberId: string, name: string) {
     if (!window.confirm(`Remove ${name} from the roster?`)) return;
     setPendingId(memberId);
@@ -2706,6 +2724,15 @@ function RosterPanel({
                             onSelect: () => setRoleEditing(m),
                           },
                         ]),
+                    ...(!unclaimed && m.role === "editor"
+                      ? [
+                          {
+                            label: "Demote to player",
+                            icon: UserMinus,
+                            onSelect: () => demoteToPlayer(m.id, name),
+                          },
+                        ]
+                      : []),
                     ...(unclaimed
                       ? [
                           {
@@ -3443,8 +3470,8 @@ function RenamePlayerDialog({
 }
 
 const ROLE_OPTIONS: { value: "viewer" | "editor"; label: string; hint: string }[] = [
-  { value: "viewer", label: "Player", hint: "Can view the playbook" },
-  { value: "editor", label: "Coach", hint: "Can edit plays and invite" },
+  { value: "viewer", label: "Player", hint: "View only — no edits or invites." },
+  { value: "editor", label: "Coach", hint: "Full edit access — same as you, minus removing the owner." },
 ];
 
 function RolePickerDialog({
@@ -3538,13 +3565,22 @@ function RolePickerDialog({
                     ? "bg-primary/10 text-primary ring-primary/40"
                     : "bg-surface-inset text-muted ring-border hover:text-foreground"
                 }`}
-                title={opt.hint}
               >
                 {opt.label}
               </button>
             );
           })}
         </div>
+        <p className="text-xs text-muted">
+          {ROLE_OPTIONS.find((o) => o.value === role)?.hint}
+        </p>
+        {role === "editor" && member?.role !== "editor" && (
+          <div className="rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
+            Coaches can edit and delete plays, invite others, and manage your
+            roster. Only promote people you trust — you can demote them back
+            to player anytime.
+          </div>
+        )}
         {role === "editor" && (
           <button
             type="button"

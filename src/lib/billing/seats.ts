@@ -67,6 +67,9 @@ export type SeatCollaborator = {
   displayName: string | null;
   email: string | null;
   playbookCount: number;
+  /** Owner's playbook IDs this user is a member of (non-owner). Used by
+   *  the /account UI to deep-link to the right playbook for management. */
+  playbookIds: string[];
 };
 
 /**
@@ -98,13 +101,15 @@ export async function getSeatCollaborators(
     .eq("status", "active")
     .neq("role", "owner");
 
-  const playbookCountByUser = new Map<string, number>();
+  const playbooksByUser = new Map<string, string[]>();
   for (const r of memberRows ?? []) {
     const uid = r.user_id as string;
     if (uid === ownerId) continue;
-    playbookCountByUser.set(uid, (playbookCountByUser.get(uid) ?? 0) + 1);
+    const list = playbooksByUser.get(uid) ?? [];
+    list.push(r.playbook_id as string);
+    playbooksByUser.set(uid, list);
   }
-  const candidateUserIds = Array.from(playbookCountByUser.keys());
+  const candidateUserIds = Array.from(playbooksByUser.keys());
   if (candidateUserIds.length === 0) return [];
 
   // Filter out Coach+ collaborators (free seats), then enrich with profile/email.
@@ -138,12 +143,16 @@ export async function getSeatCollaborators(
   );
 
   return seatedUserIds
-    .map((uid) => ({
-      userId: uid,
-      displayName: nameByUser.get(uid) ?? null,
-      email: emailByUser.get(uid) ?? null,
-      playbookCount: playbookCountByUser.get(uid) ?? 0,
-    }))
+    .map((uid) => {
+      const ids = playbooksByUser.get(uid) ?? [];
+      return {
+        userId: uid,
+        displayName: nameByUser.get(uid) ?? null,
+        email: emailByUser.get(uid) ?? null,
+        playbookCount: ids.length,
+        playbookIds: ids,
+      };
+    })
     .sort((a, b) => (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""));
 }
 
