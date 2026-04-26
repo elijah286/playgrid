@@ -438,7 +438,7 @@ function GameListItem({
   const card = (
     <div
       className={
-        "flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 pr-14 transition-colors " +
+        "flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 pr-28 transition-colors " +
         (isFuture
           ? "border-dashed border-border bg-surface-raised/60 opacity-70"
           : detailHref
