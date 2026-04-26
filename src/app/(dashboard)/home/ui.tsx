@@ -85,20 +85,20 @@ function usePersistedFlag(key: string): [boolean, (v: boolean) => void] {
   return [value, update];
 }
 
-// Treat anything below the `lg` Tailwind breakpoint as tablet/phone.
-// The book-preview grid needs ~4 columns of horizontal room to read
-// sensibly, and the hover-open interaction is fiddly on touch.
-function useIsCompactViewport(): boolean {
-  const [compact, setCompact] = useState(false);
+// The book-preview animation is hover-driven and feels fiddly on touch.
+// Detect input capability rather than viewport size: a wide touch laptop
+// still gets Simple mode, a narrow desktop window keeps the animation.
+function useIsTouchDevice(): boolean {
+  const [touch, setTouch] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1023px)");
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from matchMedia
-    setCompact(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setCompact(e.matches);
+    setTouch(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setTouch(e.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
-  return compact;
+  return touch;
 }
 
 function useDashboardView(): [DashboardView, (v: DashboardView) => void] {
@@ -253,7 +253,7 @@ function PlaybookTile({
   const inner = (
     <div className="flex h-full flex-col">
       <div
-        className="flex h-32 items-center justify-center"
+        className="flex h-20 items-center justify-center"
         style={{ backgroundColor: color }}
       >
         {tile.logo_url ? (
@@ -261,23 +261,23 @@ function PlaybookTile({
           <img
             src={tile.logo_url}
             alt=""
-            className="h-20 w-20 object-contain"
+            className="h-14 w-14 object-contain"
           />
         ) : (
-          <span className="text-4xl font-black tracking-tight text-white drop-shadow">
+          <span className="text-2xl font-black tracking-tight text-white drop-shadow">
             {initials}
           </span>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="min-w-0 flex-1 truncate text-base font-bold text-foreground">
+      <div className="flex flex-1 flex-col gap-0.5 p-2.5">
+        <div className="flex items-start justify-between gap-1.5">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">
             {tile.name}
           </h3>
           {tile.is_example && <Badge variant="primary">Example</Badge>}
           {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
         </div>
-        <p className="text-xs text-muted">
+        <p className="text-[11px] text-muted">
           {tile.season ? `${tile.season} · ` : ""}
           {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
         </p>
@@ -955,16 +955,16 @@ function NewPlaybookTile({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="group flex h-full min-h-[212px] flex-col overflow-hidden rounded-2xl border-2 border-dashed border-border bg-surface-inset/40 text-left transition-colors hover:border-primary hover:bg-primary/5"
+      className="group flex h-full min-h-[140px] flex-col overflow-hidden rounded-2xl border-2 border-dashed border-border bg-surface-inset/40 text-left transition-colors hover:border-primary hover:bg-primary/5"
     >
-      <div className="flex h-32 items-center justify-center bg-surface-inset/60 group-hover:bg-primary/10">
-        <Plus className="size-10 text-muted group-hover:text-primary" strokeWidth={1.5} />
+      <div className="flex h-20 items-center justify-center bg-surface-inset/60 group-hover:bg-primary/10">
+        <Plus className="size-7 text-muted group-hover:text-primary" strokeWidth={1.5} />
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <h3 className="truncate text-base font-bold text-muted group-hover:text-primary">
+      <div className="flex flex-1 flex-col gap-0.5 p-2.5">
+        <h3 className="truncate text-sm font-bold text-muted group-hover:text-primary">
           New Playbook
         </h3>
-        <p className="text-xs text-muted">Click to create</p>
+        <p className="text-[11px] text-muted">Click to create</p>
       </div>
     </button>
   );
@@ -991,11 +991,10 @@ export function DashboardClient({
   const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
   const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
   const [storedView, setView] = useDashboardView();
-  // Tablets and phones don't have the horizontal room for the open-book
-  // preview animation, and it feels fiddly on touch. Force Simple mode
-  // and hide the toggle below the desktop breakpoint.
-  const isCompact = useIsCompactViewport();
-  const effectiveHideAnimation = hideAnimation || isCompact;
+  // The open-book hover animation is fiddly on touch — force Simple mode
+  // and hide the toggle on touch devices regardless of viewport size.
+  const isTouch = useIsTouchDevice();
+  const effectiveHideAnimation = hideAnimation || isTouch;
   const view: DashboardView = effectiveHideAnimation ? "classic" : storedView;
   const [showArchived, setShowArchived] = usePersistedFlag(
     "dashboard.showArchived",
@@ -1437,7 +1436,7 @@ export function DashboardClient({
         </section>
       ) : (
         <section className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             <NewPlaybookTile onClick={() => setShowCreate(true)} />
             {owned.map((b) => (
               <PlaybookTile
@@ -1459,7 +1458,7 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="grid grid-cols-1 gap-4 opacity-70 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {archived.map((b) => (
                   <PlaybookTile
                     key={b.id}
@@ -1483,7 +1482,7 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {examples.map((b) => (
                   <PlaybookTile
                     key={b.id}
