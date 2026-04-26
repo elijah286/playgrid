@@ -1,19 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   CalendarPlus,
   Calendar,
-  Clock,
   MapPin,
-  Repeat,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, useToast } from "@/components/ui";
 import {
   listMyCoachablePlaybooksAction,
   listUpcomingEventsAcrossPlaybooksAction,
+  setRsvpAction,
   type CoachablePlaybookRow,
   type CrossPlaybookEventRow,
 } from "@/app/actions/calendar";
@@ -26,7 +25,11 @@ type ViewKind = "list" | "week" | "month";
 
 const FALLBACK_PLAYBOOK_COLOR = "#64748B";
 
-export function HomeCalendarTab() {
+export function HomeCalendarTab({
+  onPendingChange,
+}: {
+  onPendingChange?: (pending: number) => void;
+} = {}) {
   const [events, setEvents] = useState<CrossPlaybookEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,14 +83,31 @@ export function HomeCalendarTab() {
     setSheetPlaybookId(p.id);
   }
 
+  // Sort: events needing my RSVP bubble to the top so the user sees their
+  // outstanding asks first. Within each group, keep chronological order.
+  const sorted = useMemo(() => {
+    const needs: CrossPlaybookEventRow[] = [];
+    const answered: CrossPlaybookEventRow[] = [];
+    for (const e of events) {
+      if (e.myRsvp == null) needs.push(e);
+      else answered.push(e);
+    }
+    return [...needs, ...answered];
+  }, [events]);
+
+  useEffect(() => {
+    const pending = events.filter((e) => e.myRsvp == null).length;
+    onPendingChange?.(pending);
+  }, [events, onPendingChange]);
+
   const visible = useMemo(() => {
     if (view === "month" && selectedDayKey) {
       return events.filter(
         (e) => (e.occurrenceDate || ymd(new Date(e.startsAt))) === selectedDayKey,
       );
     }
-    return events;
-  }, [view, selectedDayKey, events]);
+    return sorted;
+  }, [view, selectedDayKey, events, sorted]);
 
   if (loading) {
     return <p className="py-12 text-center text-sm text-muted">Loading events…</p>;
@@ -171,9 +191,13 @@ export function HomeCalendarTab() {
       )}
 
       {!empty && (view === "list" || (view === "month" && selectedDayKey)) && (
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {visible.map((e) => (
-            <EventRow key={`${e.id}:${e.occurrenceDate}`} event={e} />
+            <EventRow
+              key={`${e.id}:${e.occurrenceDate}`}
+              event={e}
+              onChanged={load}
+            />
           ))}
           {view === "month" && selectedDayKey && visible.length === 0 && (
             <li className="rounded-xl border border-dashed border-border bg-surface p-6 text-center text-xs text-muted">
@@ -331,7 +355,15 @@ function CrossPlaybookCompact({ event }: { event: CrossPlaybookEventRow }) {
   );
 }
 
-function EventRow({ event }: { event: CrossPlaybookEventRow }) {
+function EventRow({
+  event,
+  onChanged,
+}: {
+  event: CrossPlaybookEventRow;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
   const meta = EVENT_TYPE_META[event.type];
   const Icon = meta.icon;
   const start = new Date(event.startsAt);
@@ -344,11 +376,6 @@ function EventRow({ event }: { event: CrossPlaybookEventRow }) {
     hour: "numeric",
     minute: "2-digit",
   });
-  const location = event.location.name
-    ? event.location.address
-      ? `${event.location.name} — ${event.location.address}`
-      : event.location.name
-    : null;
   const headline =
     event.type === "game" && event.opponent
       ? `${event.homeAway === "away" ? "@" : "vs"} ${event.opponent}`
@@ -356,101 +383,162 @@ function EventRow({ event }: { event: CrossPlaybookEventRow }) {
         ? `Scrimmage ${event.homeAway === "away" ? "@" : "vs"} ${event.opponent}`
         : event.title;
   const relative = relativeDayLabel(start);
-  const rsvp = event.myRsvp?.status ?? null;
   const color = event.playbookColor ?? FALLBACK_PLAYBOOK_COLOR;
+  const needsRsvp = event.myRsvp == null;
+
+  function quickRsvp(status: "yes" | "no" | "maybe") {
+    const occurrenceDate =
+      event.occurrenceDate || new Date(event.startsAt).toISOString().slice(0, 10);
+    startTransition(async () => {
+      const res = await setRsvpAction({
+        eventId: event.id,
+        occurrenceDate,
+        status,
+        note: null,
+      });
+      if (!res.ok) toast(res.error, "error");
+      else onChanged();
+    });
+  }
+
+  const href = `/playbooks/${event.playbookId}?tab=calendar`;
 
   return (
-    <li>
-      <Link
-        href={`/playbooks/${event.playbookId}?tab=calendar`}
-        className="flex items-stretch gap-3 overflow-hidden rounded-xl border-l-4 bg-surface p-4 ring-1 ring-border transition-colors hover:bg-surface-hover"
-        style={{ borderLeftColor: color }}
-      >
-        <div className="flex w-16 shrink-0 flex-col items-center justify-center rounded-lg bg-surface-hover py-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            {dateLabel.split(",")[0]}
-          </span>
-          <span className="text-xl font-bold text-foreground">
-            {start.getDate()}
-          </span>
-          <span className="text-[10px] text-muted">{timeLabel}</span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span
-              className={
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium " +
-                meta.chipActive
-              }
-            >
-              <Icon className="size-3" />
-              {meta.label}
-            </span>
-            <span
-              className="inline-flex max-w-[12rem] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-medium ring-1"
-              style={{
-                backgroundColor: `${color}1A`,
-                color,
-                borderColor: `${color}55`,
-              }}
-              title={event.playbookName}
-            >
+    <li
+      className={
+        "rounded-xl border-l-4 bg-surface-raised px-3 py-2.5 shadow-sm ring-1 " +
+        (needsRsvp
+          ? "border-red-300 ring-red-200 dark:border-red-900 dark:ring-red-950"
+          : "ring-border")
+      }
+      style={{ borderLeftColor: color }}
+    >
+      <div className="flex items-center gap-3">
+        <Link
+          href={href}
+          className="flex min-w-0 flex-1 items-center gap-3"
+        >
+          <div
+            className={`flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 ${meta.chipActive}`}
+            aria-hidden="true"
+          >
+            <Icon className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 sm:flex-nowrap">
+              <h3 className="truncate text-sm font-semibold text-foreground">
+                {headline}
+              </h3>
               <span
-                className="inline-block size-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: color }}
-              />
-              <span className="truncate">{event.playbookName}</span>
-            </span>
-            {relative && (
-              <span className="rounded-full bg-surface-inset px-2 py-0.5 text-[11px] font-medium text-foreground">
-                {relative}
-              </span>
-            )}
-            {event.recurrenceRule && (
-              <span
-                className="text-muted"
-                title="Repeats"
-                aria-label="Repeating event"
+                className="inline-flex shrink-0 items-center gap-1 truncate text-xs font-medium"
+                style={{ color }}
+                title={event.playbookName}
               >
-                <Repeat className="size-3" />
+                <span
+                  className="inline-block size-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="max-w-[10rem] truncate">{event.playbookName}</span>
               </span>
-            )}
-            {rsvp && (
-              <span
-                className={
-                  "rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 " +
-                  (rsvp === "yes"
-                    ? "bg-emerald-100 text-emerald-900 ring-emerald-300 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800"
-                    : rsvp === "maybe"
-                      ? "bg-amber-100 text-amber-900 ring-amber-300 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800"
-                      : "bg-red-100 text-red-900 ring-red-300 dark:bg-red-950 dark:text-red-100 dark:ring-red-800")
-                }
-              >
-                {rsvp === "yes"
-                  ? "Going"
-                  : rsvp === "maybe"
-                    ? "Maybe"
-                    : "Can’t go"}
+              <span className="shrink-0 text-xs text-muted sm:ml-2">
+                {relative ?? dateLabel} · {timeLabel}
               </span>
+              {event.location.name && (
+                <span className="hidden min-w-0 truncate text-xs text-muted sm:inline sm:ml-2">
+                  <MapPin className="mr-1 inline size-3" />
+                  {event.location.name}
+                </span>
+              )}
+            </div>
+            {event.location.name && (
+              <p className="mt-0.5 truncate text-xs text-muted sm:hidden">
+                <MapPin className="mr-1 inline size-3" />
+                {event.location.name}
+              </p>
             )}
           </div>
-          <h3 className="mt-1 truncate text-sm font-semibold text-foreground">
-            {headline}
-          </h3>
-          {location && (
-            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted">
-              <MapPin className="size-3 shrink-0" />
-              <span className="truncate">{location}</span>
-            </p>
-          )}
-          {event.arriveMinutesBefore > 0 && (
-            <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
-              <Clock className="size-3" />
-              Arrive {event.arriveMinutesBefore} min early
-            </p>
-          )}
+        </Link>
+
+        {needsRsvp && (
+          <div
+            className="hidden items-center gap-1.5 sm:flex"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            {(["yes", "maybe", "no"] as const).map((s) => {
+              const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
+              const colors = {
+                yes: "bg-emerald-100 text-emerald-800 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
+                maybe:
+                  "bg-amber-100 text-amber-800 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
+                no: "bg-red-100 text-red-800 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
+              };
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => quickRsvp(s)}
+                  className={
+                    "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition disabled:opacity-60 " +
+                    colors[s]
+                  }
+                >
+                  {labels[s]}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {!needsRsvp && event.myRsvp && (
+          <span
+            className={
+              "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 " +
+              (event.myRsvp.status === "yes"
+                ? "bg-emerald-100 text-emerald-900 ring-emerald-300 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800"
+                : event.myRsvp.status === "maybe"
+                  ? "bg-amber-100 text-amber-900 ring-amber-300 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800"
+                  : "bg-red-100 text-red-900 ring-red-300 dark:bg-red-950 dark:text-red-100 dark:ring-red-800")
+            }
+          >
+            {event.myRsvp.status === "yes"
+              ? "Going"
+              : event.myRsvp.status === "maybe"
+                ? "Maybe"
+                : "Can’t go"}
+          </span>
+        )}
+      </div>
+
+      {needsRsvp && (
+        <div
+          className="mt-2.5 grid grid-cols-3 gap-1.5 sm:hidden"
+          onClick={(ev) => ev.stopPropagation()}
+        >
+          {(["yes", "maybe", "no"] as const).map((s) => {
+            const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
+            const colors = {
+              yes: "bg-emerald-100 text-emerald-800 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
+              maybe:
+                "bg-amber-100 text-amber-800 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
+              no: "bg-red-100 text-red-800 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
+            };
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={pending}
+                onClick={() => quickRsvp(s)}
+                className={
+                  "rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition disabled:opacity-60 " +
+                  colors[s]
+                }
+              >
+                {labels[s]}
+              </button>
+            );
+          })}
         </div>
-      </Link>
+      )}
     </li>
   );
 }

@@ -979,6 +979,7 @@ export function DashboardClient({
   hideAnimation = false,
   isAdmin = false,
   teamCalendarAvailable = false,
+  initialCalendarPending = 0,
   inboxAlerts = [],
   activityEntries = [],
   initialTab = "playbooks",
@@ -987,6 +988,7 @@ export function DashboardClient({
   hideAnimation?: boolean;
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
+  initialCalendarPending?: number;
   inboxAlerts?: InboxAlert[];
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
@@ -1011,6 +1013,7 @@ export function DashboardClient({
     },
     [router, searchParams],
   );
+  const [calendarPending, setCalendarPending] = useState(initialCalendarPending);
   const inboxCount = inboxAlerts.length;
   const activityCount = activityEntries.length;
   const { toast } = useToast();
@@ -1308,8 +1311,9 @@ export function DashboardClient({
           inboxCount={inboxCount}
           activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
+          calendarPending={calendarPending}
         />
-        <HomeCalendarTab />
+        <HomeCalendarTab onPendingChange={setCalendarPending} />
       </div>
     );
   }
@@ -1322,6 +1326,7 @@ export function DashboardClient({
           inboxCount={inboxCount}
           activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
+          calendarPending={calendarPending}
         />
         <InboxTab initialAlerts={inboxAlerts} />
       </div>
@@ -1336,6 +1341,7 @@ export function DashboardClient({
           inboxCount={inboxCount}
           activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
+          calendarPending={calendarPending}
         />
         <ActivityTab entries={activityEntries} />
       </div>
@@ -1351,6 +1357,7 @@ export function DashboardClient({
           inboxCount={inboxCount}
           activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
+          calendarPending={calendarPending}
         />
       )}
       {pending && (
@@ -1954,12 +1961,14 @@ function HomeTabNav({
   inboxCount,
   activityCount,
   showCalendar,
+  calendarPending = 0,
 }: {
   tab: HomeTab;
   onChange: (t: HomeTab) => void;
   inboxCount: number;
   activityCount: number;
   showCalendar: boolean;
+  calendarPending?: number;
 }) {
   const tabs: HomeTab[] = ["playbooks"];
   if (showCalendar) tabs.push("calendar");
@@ -1975,7 +1984,8 @@ function HomeTabNav({
     <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
       {tabs.map((t) => {
         const active = tab === t;
-        const showBadge = t === "inbox" && inboxCount > 0;
+        const showInboxBadge = t === "inbox" && inboxCount > 0;
+        const showCalendarBadge = t === "calendar" && calendarPending > 0;
         return (
           <button
             key={t}
@@ -1989,7 +1999,7 @@ function HomeTabNav({
             }
           >
             {labels[t]}
-            {showBadge && (
+            {showInboxBadge && (
               <span
                 className={
                   "rounded-full px-1.5 py-px text-[10px] font-semibold " +
@@ -1999,6 +2009,19 @@ function HomeTabNav({
                 }
               >
                 {inboxCount}
+              </span>
+            )}
+            {showCalendarBadge && (
+              <span
+                className={
+                  "rounded-full px-1.5 py-px text-[10px] font-semibold " +
+                  (active
+                    ? "bg-white/25 text-primary-foreground"
+                    : "bg-red-600 text-white")
+                }
+                title={`${calendarPending} event${calendarPending === 1 ? "" : "s"} need your RSVP`}
+              >
+                {calendarPending}
               </span>
             )}
           </button>

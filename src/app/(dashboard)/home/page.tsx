@@ -1,6 +1,7 @@
 import { getDashboardSummaryAction } from "@/app/actions/plays";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { listActivityFeedAction } from "@/app/actions/activity";
+import { getCalendarRsvpPendingCountAction } from "@/app/actions/calendar";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import {
@@ -29,6 +30,17 @@ export default async function HomePage({ searchParams }: Props) {
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
+  // Wrapped: a single bad recurrence rule shouldn't break the home page.
+  const calendarPending = teamCalendarAvailable
+    ? await (async () => {
+        try {
+          const res = await getCalendarRsvpPendingCountAction(null);
+          return res.ok ? res.pending : 0;
+        } catch {
+          return 0;
+        }
+      })()
+    : 0;
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" | "activity" =
@@ -52,6 +64,7 @@ export default async function HomePage({ searchParams }: Props) {
           hideAnimation={hideAnimation}
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
+          initialCalendarPending={calendarPending}
           inboxAlerts={inboxAlerts}
           activityEntries={activityEntries}
           initialTab={initialTab}
