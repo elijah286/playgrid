@@ -21,6 +21,8 @@ import {
   gameModeLockedResult,
 } from "@/lib/game-mode/assert-no-active-session";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { recordPlayVersion } from "@/lib/versions/play-version-writer";
+import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
 
 async function assertPlayCap(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -130,6 +132,7 @@ export async function listPlaysAction(
       "id, name, wristband_code, shorthand, concept, formation_name, tags, tag, group_id, sort_order, updated_at, current_version_id, is_archived, play_type, special_teams_unit",
     )
     .eq("playbook_id", playbookId)
+    .is("deleted_at", null)
     .order("updated_at", { ascending: false })
     .limit(PLAYS_LIST_CAP + 1);
 
@@ -141,6 +144,7 @@ export async function listPlaysAction(
       .from("playbook_groups")
       .select("id, name, sort_order")
       .eq("playbook_id", playbookId)
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true }),
   ]);
 
@@ -318,6 +322,7 @@ export async function createPlayAction(
       document: doc as unknown as Record<string, unknown>,
       label: "v1",
       created_by: user.id,
+      kind: "create",
     })
     .select("id")
     .single();
@@ -400,6 +405,7 @@ export async function savePlayVersionAction(
   playId: string,
   document: PlayDocument,
   label?: string,
+  note?: string | null,
 ) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };
@@ -476,20 +482,18 @@ export async function savePlayVersionAction(
     },
   };
 
-  const { data: ver, error: verErr } = await supabase
-    .from("play_versions")
-    .insert({
-      play_id: playId,
-      schema_version: 2,
-      document: sanitizedDoc as unknown as Record<string, unknown>,
-      parent_version_id: play.current_version_id,
-      label: label ?? `save ${new Date().toISOString()}`,
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
-
-  if (verErr) return { ok: false as const, error: verErr.message };
+  const recorded = await recordPlayVersion({
+    supabase,
+    playId,
+    document: sanitizedDoc,
+    parentVersionId: (play.current_version_id as string | null) ?? null,
+    userId: user.id,
+    kind: "edit",
+    note: note ?? null,
+    label: label ?? null,
+  });
+  if (!recorded.ok) return { ok: false as const, error: recorded.error };
+  const ver = { id: recorded.versionId };
 
   const { error: updErr } = await supabase
     .from("plays")
@@ -641,6 +645,7 @@ export async function installDefenseVsPlayAction(
       document: doc as unknown as Record<string, unknown>,
       label: "installed vs offense",
       created_by: user.id,
+      kind: "create",
     })
     .select("id")
     .single();
@@ -781,6 +786,7 @@ export async function duplicatePlayAction(
       label: "duplicated",
       parent_version_id: loaded.version.id,
       created_by: user.id,
+      kind: "create",
     })
     .select("id")
     .single();
@@ -1038,6 +1044,7 @@ export async function copyPlayAction(params: {
       label: "copied",
       parent_version_id: null,
       created_by: user.id,
+      kind: "create",
     })
     .select("id")
     .single();
@@ -1171,7 +1178,12 @@ export async function deletePlayAction(playId: string) {
     if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
   }
 
-  const { error } = await supabase.from("plays").delete().eq("id", playId);
+  // Soft-delete: row stays for 30 days in trash, then a nightly job hard-deletes.
+  // Restore is just clearing deleted_at, which the trash UI handles.
+  const { error } = await supabase
+    .from("plays")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };
 }
@@ -1463,6 +1475,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
       .from("playbook_groups")
       .select("id, name, sort_order")
       .eq("playbook_id", playbookId)
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true }),
     supabase
       .from("plays")
@@ -1470,6 +1483,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
         "id, name, wristband_code, shorthand, formation_name, concept, tags, tag, group_id, sort_order, current_version_id, play_type",
       )
       .eq("playbook_id", playbookId)
+      .is("deleted_at", null)
       .eq("is_archived", false),
   ]);
 
@@ -1614,6 +1628,13 @@ export async function createPlaybookGroupAction(playbookId: string, name: string
     .select("id, name, sort_order")
     .single();
   if (error || !row) return { ok: false as const, error: error?.message ?? "Insert failed" };
+  await recordPlaybookVersion({
+    supabase,
+    playbookId,
+    userId: user.id,
+    kind: "edit",
+    diffSummary: `Added group "${label}"`,
+  });
   return { ok: true as const, group: row as PlaybookGroupRow };
 }
 
@@ -1628,11 +1649,25 @@ export async function renamePlaybookGroupAction(groupId: string, name: string) {
   const label = name.trim();
   if (!label) return { ok: false as const, error: "Name cannot be empty." };
 
+  const { data: existing } = await supabase
+    .from("playbook_groups")
+    .select("playbook_id, name")
+    .eq("id", groupId)
+    .maybeSingle();
   const { error } = await supabase
     .from("playbook_groups")
     .update({ name: label })
     .eq("id", groupId);
   if (error) return { ok: false as const, error: error.message };
+  if (existing?.playbook_id) {
+    await recordPlaybookVersion({
+      supabase,
+      playbookId: existing.playbook_id as string,
+      userId: user.id,
+      kind: "edit",
+      diffSummary: `Renamed group "${existing.name ?? ""}" → "${label}"`,
+    });
+  }
   return { ok: true as const };
 }
 
@@ -1644,14 +1679,33 @@ export async function deletePlaybookGroupAction(groupId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const { data: existing } = await supabase
+    .from("playbook_groups")
+    .select("playbook_id, name")
+    .eq("id", groupId)
+    .maybeSingle();
+  // Plays inside a deleted folder stay live and unparent to the "Recovered"
+  // bucket. Soft-delete the folder so it's restorable from trash for 30 days.
   const { error: unassignErr } = await supabase
     .from("plays")
     .update({ group_id: null })
     .eq("group_id", groupId);
   if (unassignErr) return { ok: false as const, error: unassignErr.message };
 
-  const { error } = await supabase.from("playbook_groups").delete().eq("id", groupId);
+  const { error } = await supabase
+    .from("playbook_groups")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", groupId);
   if (error) return { ok: false as const, error: error.message };
+  if (existing?.playbook_id) {
+    await recordPlaybookVersion({
+      supabase,
+      playbookId: existing.playbook_id as string,
+      userId: user.id,
+      kind: "edit",
+      diffSummary: `Deleted group "${existing.name ?? ""}" (plays moved to ungrouped)`,
+    });
+  }
   return { ok: true as const };
 }
 
@@ -1673,6 +1727,13 @@ export async function reorderPlaybookGroupsAction(
       .eq("playbook_id", playbookId);
     if (error) return { ok: false as const, error: error.message };
   }
+  await recordPlaybookVersion({
+    supabase,
+    playbookId,
+    userId: user.id,
+    kind: "edit",
+    diffSummary: "Reordered groups",
+  });
   return { ok: true as const };
 }
 
@@ -1694,6 +1755,13 @@ export async function reorderPlaysAction(
       .eq("playbook_id", playbookId);
     if (error) return { ok: false as const, error: error.message };
   }
+  await recordPlaybookVersion({
+    supabase,
+    playbookId,
+    userId: user.id,
+    kind: "edit",
+    diffSummary: "Reordered plays",
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const };
 }
@@ -1732,6 +1800,13 @@ export async function swapPlaySortOrderAction(
     .eq("id", bId)
     .eq("playbook_id", playbookId);
   if (e2) return { ok: false as const, error: e2.message };
+  await recordPlaybookVersion({
+    supabase,
+    playbookId,
+    userId: user.id,
+    kind: "edit",
+    diffSummary: "Swapped play order",
+  });
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const };
 }
@@ -1744,8 +1819,22 @@ export async function setPlayGroupAction(playId: string, groupId: string | null)
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
+  const { data: existing } = await supabase
+    .from("plays")
+    .select("playbook_id")
+    .eq("id", playId)
+    .maybeSingle();
   const { error } = await supabase.from("plays").update({ group_id: groupId }).eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
+  if (existing?.playbook_id) {
+    await recordPlaybookVersion({
+      supabase,
+      playbookId: existing.playbook_id as string,
+      userId: user.id,
+      kind: "edit",
+      diffSummary: "Moved play to a different group",
+    });
+  }
   return { ok: true as const };
 }
 
