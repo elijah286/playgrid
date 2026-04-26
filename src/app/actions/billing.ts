@@ -122,6 +122,48 @@ export async function createBillingPortalSessionAction(): Promise<
  * Refuses to drop below the count currently in use — owner must remove
  * collaborators first.
  */
+/**
+ * Surface the playbook owner's coach-seat status to the invite dialog,
+ * so we can warn before the user composes an invite they can't send.
+ * Anyone with read access to the playbook (coach or player) can call
+ * it — the response is just headcount, not billing detail.
+ */
+export async function getInviteSeatStatusAction(
+  playbookId: string,
+): Promise<
+  | { ok: true; isCoachPlus: boolean; used: number; total: number; available: number; canManageSeats: boolean }
+  | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const admin = createServiceRoleClient();
+  const { data: ownerRow } = await admin
+    .from("playbook_members")
+    .select("user_id")
+    .eq("playbook_id", playbookId)
+    .eq("role", "owner")
+    .eq("status", "active")
+    .maybeSingle();
+  const ownerId = (ownerRow?.user_id as string | null) ?? null;
+  if (!ownerId) return { ok: false, error: "Playbook owner not found." };
+
+  const usage = await getSeatUsage(ownerId);
+  const total = usage.included + usage.purchased;
+  return {
+    ok: true,
+    isCoachPlus: total > 0,
+    used: usage.used,
+    total,
+    available: usage.available,
+    canManageSeats: ownerId === user.id,
+  };
+}
+
 export async function setSeatQuantityAction(input: {
   nextPurchased: number;
 }): Promise<{ ok: true; purchased: number } | { ok: false; error: string }> {

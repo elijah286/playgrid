@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -33,6 +33,7 @@ import {
   sharePlaybookWithEmailsAction,
   type ShareResultRow,
 } from "@/app/actions/invites";
+import { getInviteSeatStatusAction } from "@/app/actions/billing";
 import {
   duplicateAsExampleAction,
   setPlaybookExampleAuthorLabelAction,
@@ -470,6 +471,9 @@ export function PlaybookHeader({
           playbookId={playbookId}
           teamName={name}
           senderName={senderName ?? null}
+          canManage={canManage}
+          allowCoachDuplication={allowCoachDuplication ?? true}
+          onToggleCoachDuplication={canManage ? handleToggleCoachDup : null}
           onClose={() => setInviteOpen(false)}
         />
       )}
@@ -1250,11 +1254,17 @@ export function InviteTeamMemberDialog({
   playbookId,
   teamName,
   senderName,
+  canManage = false,
+  allowCoachDuplication = true,
+  onToggleCoachDuplication = null,
   onClose,
 }: {
   playbookId: string;
   teamName: string;
   senderName: string | null;
+  canManage?: boolean;
+  allowCoachDuplication?: boolean;
+  onToggleCoachDuplication?: (() => void) | null;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -1271,6 +1281,35 @@ export function InviteTeamMemberDialog({
   const [shareResults, setShareResults] = useState<ShareResultRow[] | null>(null);
   const [autoApprove, setAutoApprove] = useState(true);
   const [autoApproveLimit, setAutoApproveLimit] = useState<string>("25");
+  const [seatStatus, setSeatStatus] = useState<{
+    isCoachPlus: boolean;
+    used: number;
+    total: number;
+    available: number;
+    canManageSeats: boolean;
+  } | null>(null);
+  const [permsOpen, setPermsOpen] = useState(false);
+  const outOfCoachSeats =
+    role === "editor" && seatStatus?.isCoachPlus === true && seatStatus.available <= 0;
+  const needsCoachPlan =
+    role === "editor" && seatStatus?.isCoachPlus === false;
+
+  useEffect(() => {
+    let cancelled = false;
+    getInviteSeatStatusAction(playbookId).then((res) => {
+      if (cancelled || !res.ok) return;
+      setSeatStatus({
+        isCoachPlus: res.isCoachPlus,
+        used: res.used,
+        total: res.total,
+        available: res.available,
+        canManageSeats: res.canManageSeats,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [playbookId]);
 
   async function generate() {
     setCreating(true);
@@ -1401,16 +1440,99 @@ export function InviteTeamMemberDialog({
                   ]}
                 />
                 <p className="mt-1.5 text-xs text-muted">
-                  Players can view plays and notes. Coaches can edit, delete,
-                  and invite — same as you.
+                  Players can view plays and notes. Coaches can edit and
+                  delete plays, manage your roster, and invite others — same
+                  as you.
                 </p>
-                {role === "editor" && (
-                  <div className="mt-2 flex items-start gap-1.5 rounded-md bg-warning-light px-2.5 py-1.5 text-xs text-warning ring-1 ring-warning/30">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      Only invite people you trust as coaches. You can demote
-                      them back to player anytime from the roster.
-                    </span>
+                {role === "editor" && (outOfCoachSeats || needsCoachPlan) && (
+                  <div className="mt-2 flex items-start gap-2 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <div className="flex-1">
+                      {needsCoachPlan ? (
+                        <>
+                          <strong>Coaches need a Team Coach plan.</strong>
+                          {" "}You can keep inviting players for free.{" "}
+                          <Link
+                            href="/pricing"
+                            className="font-medium underline hover:no-underline"
+                          >
+                            See pricing
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <strong>Out of coach seats.</strong>{" "}
+                          {seatStatus?.used ?? 0} of {seatStatus?.total ?? 0}{" "}
+                          in use.{" "}
+                          {seatStatus?.canManageSeats ? (
+                            <Link
+                              href="/account"
+                              className="font-medium underline hover:no-underline"
+                            >
+                              Add a seat or remove a coach
+                            </Link>
+                          ) : (
+                            <span>Ask the playbook owner to add a seat.</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {role === "editor" && !outOfCoachSeats && !needsCoachPlan && (
+                  <div className="mt-2 rounded-md bg-warning-light text-xs text-warning ring-1 ring-warning/30">
+                    <button
+                      type="button"
+                      onClick={() => setPermsOpen((v) => !v)}
+                      className="flex w-full items-start gap-2 px-3 py-2 text-left"
+                    >
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                      <span className="flex-1">
+                        Coaches get full edit access. Tap for what they can
+                        and can&rsquo;t do.
+                      </span>
+                      <ChevronDown
+                        className={`mt-0.5 size-4 shrink-0 transition-transform ${permsOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {permsOpen && (
+                      <div className="space-y-2 border-t border-warning/20 px-3 py-2">
+                        <ul className="ml-4 list-disc space-y-0.5">
+                          <li>Add, edit, and delete plays</li>
+                          <li>Manage the roster — invite, remove, demote</li>
+                          <li>
+                            Cannot remove you or transfer ownership; you can
+                            demote them back to player anytime
+                          </li>
+                        </ul>
+                        {onToggleCoachDuplication ? (
+                          <label className="flex cursor-pointer items-start gap-2 rounded-md bg-warning-light/60 px-2 py-1.5 ring-1 ring-warning/20">
+                            <input
+                              type="checkbox"
+                              checked={allowCoachDuplication}
+                              onChange={onToggleCoachDuplication}
+                              className="mt-0.5 size-3.5 shrink-0 rounded border-warning/40"
+                            />
+                            <span className="text-foreground">
+                              Allow coaches to duplicate this playbook and
+                              copy plays elsewhere
+                              <span className="ml-1 text-muted">
+                                (applies to all coaches on this playbook)
+                              </span>
+                            </span>
+                          </label>
+                        ) : (
+                          <p className="text-foreground">
+                            Duplication: coaches{" "}
+                            <strong>
+                              {allowCoachDuplication ? "can" : "cannot"}
+                            </strong>{" "}
+                            duplicate this playbook or copy plays elsewhere.
+                            Only the owner can change this.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
