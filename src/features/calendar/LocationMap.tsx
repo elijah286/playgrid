@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
+import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// OpenStreetMap tiles via Leaflet — no API key needed and no client-side
-// exposure of the Google Maps key. The marker is draggable so a coach can
-// nudge it onto the exact field/lot inside a venue.
+// OpenStreetMap tiles via Leaflet. The pin is rendered as a fixed CSS
+// crosshair over the center of the map — to position it, the user pans
+// the map underneath the pin (Google-Maps-style location picker). On
+// every moveend we read the map center and report it upward.
 
 export function LocationMap({
   lat,
@@ -19,7 +20,6 @@ export function LocationMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const markerRef = useRef<LeafletMarker | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -29,15 +29,6 @@ export function LocationMap({
     (async () => {
       const L = (await import("leaflet")).default;
       if (cancelled || !containerRef.current || mapRef.current) return;
-
-      // Default marker icons reference image files that won't resolve under
-      // bundlers. Point them at the unpkg CDN copy.
-      const iconUrl =
-        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png";
-      const iconRetinaUrl =
-        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png";
-      const shadowUrl =
-        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png";
 
       const map = L.map(containerRef.current, {
         center: [lat, lng],
@@ -50,56 +41,58 @@ export function LocationMap({
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      const icon = L.icon({
-        iconUrl,
-        iconRetinaUrl,
-        shadowUrl,
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
-      });
-      const marker = L.marker([lat, lng], { draggable: true, icon }).addTo(map);
-      marker.on("dragend", () => {
-        const p = marker.getLatLng();
-        onChangeRef.current({ lat: p.lat, lng: p.lng });
-      });
-      // Click anywhere on the map to drop the pin there.
-      map.on("click", (e: { latlng: { lat: number; lng: number } }) => {
-        marker.setLatLng(e.latlng);
-        onChangeRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+      // After the user finishes panning (or zooming), report the new center.
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        onChangeRef.current({ lat: c.lat, lng: c.lng });
       });
 
       mapRef.current = map;
-      markerRef.current = marker;
     })();
     return () => {
       cancelled = true;
       mapRef.current?.remove();
       mapRef.current = null;
-      markerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep map in sync when the parent picks a different place (lat/lng change
-  // from outside, e.g. a new autocomplete selection).
+  // When the parent picks a new place from autocomplete, recenter — but
+  // skip if the change came from this map's own moveend (center already
+  // matches), so we don't fight the user's pan.
   useEffect(() => {
     const map = mapRef.current;
-    const marker = markerRef.current;
-    if (!map || !marker) return;
-    const cur = marker.getLatLng();
-    if (cur.lat === lat && cur.lng === lng) return;
-    marker.setLatLng([lat, lng]);
+    if (!map) return;
+    const c = map.getCenter();
+    if (Math.abs(c.lat - lat) < 1e-7 && Math.abs(c.lng - lng) < 1e-7) return;
     map.setView([lat, lng], map.getZoom());
   }, [lat, lng]);
 
   return (
-    <div
-      ref={containerRef}
-      role="application"
-      aria-label="Drag the pin or tap to set the exact spot"
-      className="h-48 w-full overflow-hidden rounded-lg ring-1 ring-border"
-    />
+    <div className="relative">
+      <div
+        ref={containerRef}
+        role="application"
+        aria-label="Pan the map to position the pin on the exact spot"
+        className="h-48 w-full overflow-hidden rounded-lg ring-1 ring-border"
+      />
+      {/* Centered pin overlay. pointer-events-none so the user can drag the
+          map straight through it. The translate puts the tip on the center. */}
+      <div className="pointer-events-none absolute inset-0 z-[400] flex items-center justify-center">
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className="size-9 -translate-y-4 drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)]"
+        >
+          <path
+            d="M12 2C7.6 2 4 5.6 4 10c0 5.5 7 11.5 7.3 11.7.4.4 1 .4 1.4 0C13 21.5 20 15.5 20 10c0-4.4-3.6-8-8-8z"
+            fill="#2563eb"
+            stroke="#ffffff"
+            strokeWidth="1.5"
+          />
+          <circle cx="12" cy="10" r="3" fill="#ffffff" />
+        </svg>
+      </div>
+    </div>
   );
 }

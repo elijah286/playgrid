@@ -420,7 +420,7 @@ export function EventSheet({
                     }
                   />
                   <p className="px-1 text-xs text-muted">
-                    Drag the pin or tap the map to mark the exact spot.
+                    Pan the map to position the pin on the exact spot.
                   </p>
                 </div>
               )}
