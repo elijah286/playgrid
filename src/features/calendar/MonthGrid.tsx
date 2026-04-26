@@ -40,7 +40,10 @@ export function MonthGrid({
   const eventsByDay = useMemo(() => {
     const map = new Map<string, MonthGridEvent[]>();
     for (const e of events) {
-      const key = e.occurrenceDate || ymd(new Date(e.startsAt));
+      // Display-side key uses local ymd of startsAt — not e.occurrenceDate,
+      // which is UTC-based on the server and bumps evening events to the
+      // next day for viewers west of UTC.
+      const key = ymd(new Date(e.startsAt));
       const list = map.get(key) ?? [];
       list.push(e);
       map.set(key, list);
@@ -315,6 +318,9 @@ export function MonthGrid({
 }
 
 function ymd(d: Date): string {
+  // Local components, not UTC. The grid lays out cells in the viewer's
+  // timezone, so a 7:30 PM CDT event must map to that evening's cell — not
+  // tomorrow's, which is what getUTCDate() would return.
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

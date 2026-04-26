@@ -113,7 +113,7 @@ export function PlaybookCalendarTab({
   const visibleEvents = useMemo(() => {
     if (view === "month" && selectedDayKey) {
       return events.filter(
-        (e) => (e.occurrenceDate || ymd(new Date(e.startsAt))) === selectedDayKey,
+        (e) => ymd(new Date(e.startsAt)) === selectedDayKey,
       );
     }
     return baseList;

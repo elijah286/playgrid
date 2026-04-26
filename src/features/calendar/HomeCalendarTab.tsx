@@ -98,7 +98,7 @@ export function HomeCalendarTab({
   const visible = useMemo(() => {
     if (view === "month" && selectedDayKey) {
       return events.filter(
-        (e) => (e.occurrenceDate || ymd(new Date(e.startsAt))) === selectedDayKey,
+        (e) => ymd(new Date(e.startsAt)) === selectedDayKey,
       );
     }
     return events;

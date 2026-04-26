@@ -42,7 +42,9 @@ export function WeekAgenda<T extends CalendarEventRow>({
   const eventsByDay = useMemo(() => {
     const map = new Map<string, T[]>();
     for (const e of events) {
-      const key = e.occurrenceDate || ymd(new Date(e.startsAt));
+      // Local ymd of startsAt — e.occurrenceDate is UTC and would bump
+      // late-evening events to the next day for viewers west of UTC.
+      const key = ymd(new Date(e.startsAt));
       const list = map.get(key) ?? [];
       list.push(e);
       map.set(key, list);
