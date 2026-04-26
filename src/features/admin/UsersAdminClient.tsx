@@ -5,10 +5,12 @@ import { ChevronRight, Search, UserPlus } from "lucide-react";
 import {
   createUserAsAdminAction,
   deleteUserAsAdminAction,
+  getAdminUserActivityAction,
   getAdminUserStatsAction,
   listUsersForAdminAction,
   setUserPasswordAsAdminAction,
   updateUserAsAdminAction,
+  type AdminUserActivity,
   type AdminUserStats,
 } from "@/app/actions/admin-users";
 import { grantCompAction, revokeCompAction } from "@/app/actions/admin-billing";
@@ -761,15 +763,26 @@ function ResetPasswordDialog({
 function UserStatsPanel({ userId }: { userId: string }) {
   const [stats, setStats] = useState<AdminUserStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<AdminUserActivity | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [showRecent, setShowRecent] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setStats(null);
     setError(null);
+    setActivity(null);
+    setActivityError(null);
+    setShowRecent(false);
     getAdminUserStatsAction(userId).then((res) => {
       if (cancelled) return;
       if (res.ok) setStats(res.stats);
       else setError(res.error);
+    });
+    getAdminUserActivityAction(userId).then((res) => {
+      if (cancelled) return;
+      if (res.ok) setActivity(res.activity);
+      else setActivityError(res.error);
     });
     return () => {
       cancelled = true;
@@ -844,6 +857,168 @@ function UserStatsPanel({ userId }: { userId: string }) {
           </div>
         ))}
       </div>
+      {activityError && (
+        <p className="text-xs text-danger">
+          Couldn&rsquo;t load activity: {activityError}
+        </p>
+      )}
+      {activity && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-border bg-surface px-3 py-2">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+              Acquisition
+            </p>
+            {activity.acquisition ? (
+              <ul className="space-y-0.5 text-xs text-foreground">
+                <li>
+                  <span className="text-muted">First seen:</span>{" "}
+                  {new Date(
+                    activity.acquisition.firstSeenAt ?? "",
+                  ).toLocaleString()}
+                </li>
+                <li>
+                  <span className="text-muted">Landing:</span>{" "}
+                  <span className="font-mono">
+                    {activity.acquisition.landingPath ?? "—"}
+                  </span>
+                </li>
+                <li>
+                  <span className="text-muted">Referrer:</span>{" "}
+                  <span className="font-mono">
+                    {activity.acquisition.referrer ?? "direct"}
+                  </span>
+                </li>
+                <li>
+                  <span className="text-muted">UTM:</span>{" "}
+                  {[
+                    activity.acquisition.utmSource,
+                    activity.acquisition.utmMedium,
+                    activity.acquisition.utmCampaign,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ") || "—"}
+                </li>
+                <li>
+                  <span className="text-muted">Location:</span>{" "}
+                  {[
+                    activity.acquisition.city,
+                    activity.acquisition.region,
+                    activity.acquisition.country,
+                  ]
+                    .filter(Boolean)
+                    .join(", ") || "—"}
+                </li>
+                <li>
+                  <span className="text-muted">Device:</span>{" "}
+                  {activity.acquisition.device ?? "—"}
+                </li>
+              </ul>
+            ) : (
+              <p className="text-xs text-muted">No page-view data yet.</p>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface px-3 py-2">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+              Last 30 days
+            </p>
+            <ul className="space-y-0.5 text-xs text-foreground tabular-nums">
+              <li>
+                <span className="text-muted">Page views:</span>{" "}
+                {activity.totalsLast30.pageViews}
+              </li>
+              <li>
+                <span className="text-muted">Sessions:</span>{" "}
+                {activity.totalsLast30.distinctSessions}
+              </li>
+              <li>
+                <span className="text-muted">Avg session:</span>{" "}
+                {activity.totalsLast30.avgSessionMinutes != null
+                  ? `${activity.totalsLast30.avgSessionMinutes}m`
+                  : "—"}
+              </li>
+            </ul>
+          </div>
+
+          {activity.sessions.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                Sign-in sessions
+              </p>
+              <ul className="space-y-0.5 text-xs text-foreground">
+                {activity.sessions.map((s, i) => (
+                  <li key={i} className="tabular-nums">
+                    <span className="font-medium">
+                      {s.deviceLabel ?? "Unknown device"}
+                    </span>{" "}
+                    <span className="text-muted">
+                      · {s.approxLocation ?? "unknown loc"}
+                    </span>{" "}
+                    <span className="text-muted">
+                      · {new Date(s.createdAt).toLocaleDateString()} → last seen{" "}
+                      {new Date(s.lastSeenAt).toLocaleString()}
+                    </span>
+                    {s.revokedAt && (
+                      <span className="ml-2 rounded bg-danger/10 px-1 text-[10px] uppercase text-danger">
+                        revoked{s.revokedReason ? ` (${s.revokedReason})` : ""}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {activity.topPaths.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                Top pages (30d)
+              </p>
+              <ul className="space-y-0.5 text-xs text-foreground tabular-nums">
+                {activity.topPaths.map((p) => (
+                  <li key={p.path}>
+                    <span className="inline-block w-10 text-right text-muted">
+                      {p.views}
+                    </span>{" "}
+                    <span className="font-mono">{p.path}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {activity.recentViews.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 md:col-span-2">
+              <button
+                type="button"
+                onClick={() => setShowRecent((v) => !v)}
+                className="mb-1 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-muted hover:text-foreground"
+              >
+                <span>Recent activity ({activity.recentViews.length})</span>
+                <span>{showRecent ? "Hide" : "Show"}</span>
+              </button>
+              {showRecent && (
+                <ul className="space-y-0.5 text-xs text-foreground tabular-nums">
+                  {activity.recentViews.map((v, i) => (
+                    <li key={i}>
+                      <span className="text-muted">
+                        {new Date(v.createdAt).toLocaleString()}
+                      </span>{" "}
+                      <span className="font-mono">{v.path}</span>
+                      {v.device && (
+                        <span className="ml-2 text-muted">· {v.device}</span>
+                      )}
+                      {v.country && (
+                        <span className="ml-1 text-muted">· {v.country}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {stats && stats.tierHistory.length > 0 && (
         <div className="rounded-lg border border-border bg-surface px-3 py-2">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">

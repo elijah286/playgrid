@@ -371,6 +371,158 @@ export async function getAdminUserStatsAction(
   };
 }
 
+export type AdminUserActivity = {
+  acquisition: {
+    firstSeenAt: string | null;
+    landingPath: string | null;
+    referrer: string | null;
+    utmSource: string | null;
+    utmMedium: string | null;
+    utmCampaign: string | null;
+    country: string | null;
+    region: string | null;
+    city: string | null;
+    device: string | null;
+  } | null;
+  sessions: Array<{
+    deviceLabel: string | null;
+    approxLocation: string | null;
+    createdAt: string;
+    lastSeenAt: string;
+    revokedAt: string | null;
+    revokedReason: string | null;
+  }>;
+  topPaths: Array<{ path: string; views: number }>;
+  recentViews: Array<{
+    createdAt: string;
+    path: string;
+    device: string | null;
+    country: string | null;
+  }>;
+  totalsLast30: {
+    pageViews: number;
+    distinctSessions: number;
+    avgSessionMinutes: number | null;
+  };
+};
+
+export async function getAdminUserActivityAction(
+  userId: string,
+): Promise<
+  { ok: true; activity: AdminUserActivity } | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return gate;
+
+  const admin = createServiceRoleClient();
+  const thirtyDaysAgoIso = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const [
+    { data: firstView },
+    { data: sessionRows },
+    { data: pageViewRows },
+    { data: recentViewRows },
+  ] = await Promise.all([
+    admin
+      .from("page_views")
+      .select(
+        "created_at, path, referrer, utm_source, utm_medium, utm_campaign, country, region, city, device",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("user_sessions")
+      .select(
+        "device_label, approx_location, created_at, last_seen_at, revoked_at, revoked_reason",
+      )
+      .eq("user_id", userId)
+      .order("last_seen_at", { ascending: false })
+      .limit(8),
+    admin
+      .from("page_views")
+      .select("path, session_id, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", thirtyDaysAgoIso),
+    admin
+      .from("page_views")
+      .select("created_at, path, device, country")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
+  const pathCounts = new Map<string, number>();
+  const sessionStarts = new Map<string, { first: number; last: number }>();
+  for (const r of pageViewRows ?? []) {
+    const p = r.path as string;
+    pathCounts.set(p, (pathCounts.get(p) ?? 0) + 1);
+    const sid = r.session_id as string;
+    const t = new Date(r.created_at as string).getTime();
+    const cur = sessionStarts.get(sid);
+    if (!cur) sessionStarts.set(sid, { first: t, last: t });
+    else {
+      if (t < cur.first) cur.first = t;
+      if (t > cur.last) cur.last = t;
+    }
+  }
+  const topPaths = [...pathCounts.entries()]
+    .map(([path, views]) => ({ path, views }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+
+  const distinctSessions = sessionStarts.size;
+  let avgSessionMinutes: number | null = null;
+  if (distinctSessions > 0) {
+    let totalMs = 0;
+    for (const v of sessionStarts.values()) totalMs += v.last - v.first;
+    avgSessionMinutes = Math.round(totalMs / distinctSessions / 60000);
+  }
+
+  return {
+    ok: true,
+    activity: {
+      acquisition: firstView
+        ? {
+            firstSeenAt: (firstView.created_at as string) ?? null,
+            landingPath: (firstView.path as string) ?? null,
+            referrer: (firstView.referrer as string | null) ?? null,
+            utmSource: (firstView.utm_source as string | null) ?? null,
+            utmMedium: (firstView.utm_medium as string | null) ?? null,
+            utmCampaign: (firstView.utm_campaign as string | null) ?? null,
+            country: (firstView.country as string | null) ?? null,
+            region: (firstView.region as string | null) ?? null,
+            city: (firstView.city as string | null) ?? null,
+            device: (firstView.device as string | null) ?? null,
+          }
+        : null,
+      sessions: (sessionRows ?? []).map((s) => ({
+        deviceLabel: (s.device_label as string | null) ?? null,
+        approxLocation: (s.approx_location as string | null) ?? null,
+        createdAt: s.created_at as string,
+        lastSeenAt: s.last_seen_at as string,
+        revokedAt: (s.revoked_at as string | null) ?? null,
+        revokedReason: (s.revoked_reason as string | null) ?? null,
+      })),
+      topPaths,
+      recentViews: (recentViewRows ?? []).map((r) => ({
+        createdAt: r.created_at as string,
+        path: r.path as string,
+        device: (r.device as string | null) ?? null,
+        country: (r.country as string | null) ?? null,
+      })),
+      totalsLast30: {
+        pageViews: (pageViewRows ?? []).length,
+        distinctSessions,
+        avgSessionMinutes,
+      },
+    },
+  };
+}
+
 export async function deleteUserAsAdminAction(userId: string) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
