@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useToast } from "@/components/ui";
-import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
+import { PlayThumbnail, type PlayThumbnailInput, type ThumbnailHighlights } from "@/features/editor/PlayThumbnail";
 import {
   getPlayVersionDocumentAction,
   restorePlayVersionAction,
   type PlayVersionRow,
 } from "@/app/actions/versions";
 import type { PlayDocument } from "@/domain/play/types";
+import { diffPlayDocuments } from "@/lib/versions/play-element-diff";
 
 type Props = {
   open: boolean;
@@ -71,6 +72,7 @@ export function PlayVersionCompare({
   }
 
   const isCurrent = target.id === currentVersionId;
+  const diff = diffPlayDocuments(targetDoc, currentDoc);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -95,9 +97,16 @@ export function PlayVersionCompare({
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Pane title="This version" doc={targetDoc} />
-            <Pane title={isCurrent ? "Current (same)" : "Current"} doc={currentDoc} />
+            <Pane title="This version" doc={targetDoc} highlights={diff.target} />
+            <Pane title={isCurrent ? "Current (same)" : "Current"} doc={currentDoc} highlights={diff.current} />
           </div>
+          {!isCurrent && (
+            <p className="mt-2 text-[11px] text-muted">
+              <span className="inline-block size-2 rounded-full bg-success" /> Added in this version ·
+              <span className="ml-2 inline-block size-2 rounded-full bg-warning" /> Modified ·
+              <span className="ml-2 inline-block size-2 rounded-full bg-destructive" /> Only in current
+            </p>
+          )}
 
           {target.note && (
             <div className="mt-4 rounded-md border border-border bg-muted/5 px-3 py-2 text-sm">
@@ -136,13 +145,21 @@ export function PlayVersionCompare({
   );
 }
 
-function Pane({ title, doc }: { title: string; doc: PlayDocument | null }) {
+function Pane({
+  title,
+  doc,
+  highlights,
+}: {
+  title: string;
+  doc: PlayDocument | null;
+  highlights?: ThumbnailHighlights;
+}) {
   return (
     <div>
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{title}</div>
       <div className="aspect-[3/4] overflow-hidden rounded-md border border-border bg-surface-inset">
         {doc ? (
-          <PlayThumbnail preview={toPreview(doc)} />
+          <PlayThumbnail preview={toPreview(doc)} highlights={highlights} />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-muted">Loading…</div>
         )}

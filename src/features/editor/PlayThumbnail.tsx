@@ -9,10 +9,25 @@ export type PlayThumbnailInput = {
   lineOfScrimmageY: number;
 };
 
+export type ThumbnailHighlightKind = "added" | "removed" | "modified";
+
+export type ThumbnailHighlights = {
+  players?: Map<string, ThumbnailHighlightKind>;
+  routes?: Map<string, ThumbnailHighlightKind>;
+  zones?: Map<string, ThumbnailHighlightKind>;
+};
+
+const HIGHLIGHT_COLOR: Record<ThumbnailHighlightKind, string> = {
+  added: "rgba(34,197,94,0.85)",
+  removed: "rgba(239,68,68,0.85)",
+  modified: "rgba(245,158,11,0.85)",
+};
+
 export function PlayThumbnail({
   preview,
   thin,
   light,
+  highlights,
 }: {
   preview: PlayThumbnailInput;
   thin?: boolean;
@@ -22,6 +37,7 @@ export function PlayThumbnail({
    * always read as printed playsheets.
    */
   light?: boolean;
+  highlights?: ThumbnailHighlights;
 }) {
   const routeSW = thin ? 0.9 : 1.8;
   const arrowSW = thin ? 0.5 : 0.8;
@@ -116,20 +132,37 @@ export function PlayThumbnail({
             const cy = 1 - z.center.y;
             const w = z.size.w;
             const h = z.size.h;
+            const hl = highlights?.zones?.get(z.id);
+            const haloColor = hl ? HIGHLIGHT_COLOR[hl] : null;
             if (z.kind === "rectangle") {
               return (
-                <rect key={z.id} x={cx - w} y={cy - h} width={w * 2} height={h * 2} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={zoneSW} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                <g key={z.id}>
+                  {haloColor && (
+                    <rect x={cx - w} y={cy - h} width={w * 2} height={h * 2} fill="none" stroke={haloColor} strokeWidth={zoneSW * 4} vectorEffect="non-scaling-stroke" />
+                  )}
+                  <rect x={cx - w} y={cy - h} width={w * 2} height={h * 2} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={zoneSW} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                </g>
               );
             }
             return (
-              <ellipse key={z.id} cx={cx} cy={cy} rx={w} ry={h} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={zoneSW} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+              <g key={z.id}>
+                {haloColor && (
+                  <ellipse cx={cx} cy={cy} rx={w} ry={h} fill="none" stroke={haloColor} strokeWidth={zoneSW * 4} vectorEffect="non-scaling-stroke" />
+                )}
+                <ellipse cx={cx} cy={cy} rx={w} ry={h} fill={z.style.fill} stroke={z.style.stroke} strokeWidth={zoneSW} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+              </g>
             );
           })}
           {preview.routes.map((r) => {
             const rendered = routeToRenderedSegments(r);
             const stroke = resolveRouteStroke(r, preview.players);
+            const hl = highlights?.routes?.get(r.id);
+            const haloColor = hl ? HIGHLIGHT_COLOR[hl] : null;
             return (
               <g key={r.id}>
+                {haloColor && rendered.map((rs) => (
+                  <path key={`halo-${rs.segmentId}`} d={rs.d} fill="none" stroke={haloColor} strokeWidth={routeSW * 3} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity={0.7} />
+                ))}
                 {rendered.map((rs) => (
                   <path key={rs.segmentId} d={rs.d} fill="none" stroke={stroke} strokeWidth={routeSW} strokeDasharray={rs.dash} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                 ))}
@@ -217,8 +250,13 @@ export function PlayThumbnail({
             } else {
               shapeEl = <circle cx={0} cy={0} r={R} {...common} />;
             }
+            const hl = highlights?.players?.get(p.id);
+            const haloColor = hl ? HIGHLIGHT_COLOR[hl] : null;
             return (
               <g key={p.id} transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
+                {haloColor && (
+                  <circle cx={0} cy={0} r={R * 1.7} fill="none" stroke={haloColor} strokeWidth={playerSW * 3} vectorEffect="non-scaling-stroke" />
+                )}
                 {shapeEl}
                 <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.035} fontWeight={700} fill={p.style.labelColor} style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
                   {p.label}
