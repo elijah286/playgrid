@@ -484,7 +484,8 @@ function GameListItem({
         {score && (
           <div>
             <p className="text-xs text-muted">Score</p>
-            <p className="font-semibold tabular-nums text-foreground">
+            <p className="flex items-center gap-1.5 font-semibold tabular-nums text-foreground">
+              <ResultBadge us={game.scoreUs!} them={game.scoreThem!} />
               {score}
             </p>
           </div>
@@ -590,6 +591,23 @@ function KindBadge({ kind }: { kind: "game" | "scrimmage" }) {
       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
     >
       {label}
+    </span>
+  );
+}
+
+function ResultBadge({ us, them }: { us: number; them: number }) {
+  const { letter, cls } =
+    us > them
+      ? { letter: "W", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" }
+      : us < them
+        ? { letter: "L", cls: "bg-rose-500/15 text-rose-700 dark:text-rose-300" }
+        : { letter: "T", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" };
+  return (
+    <span
+      className={`inline-flex size-5 items-center justify-center rounded-full text-[10px] font-bold ${cls}`}
+      aria-label={us > them ? "Win" : us < them ? "Loss" : "Tie"}
+    >
+      {letter}
     </span>
   );
 }
