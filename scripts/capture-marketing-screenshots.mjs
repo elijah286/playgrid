@@ -36,11 +36,28 @@ const DEVICE_PRESETS = {
 
 async function hideDemoBanner(page) {
   // Hide the visitor-facing "Demo mode" / "This is an example playbook"
-  // banners so marketing screenshots don't show them. Selector is the
-  // stable data-demo-banner attribute added to both banner components.
+  // banners so marketing screenshots don't show them. Targets:
+  //   1. The data-demo-banner attribute (set on the banner components)
+  //   2. Any element whose text matches the banner copy (fallback for
+  //      older builds that don't have the attribute yet)
   await page
     .addStyleTag({
       content: "[data-demo-banner]{display:none!important;}",
+    })
+    .catch(() => {});
+  await page
+    .evaluate(() => {
+      const phrases = [
+        "nothing here will be saved",
+        "Changes won't be saved",
+        "Changes won\u2019t be saved",
+      ];
+      for (const el of Array.from(document.querySelectorAll("div"))) {
+        const t = (el.textContent || "").trim();
+        if (phrases.some((p) => t.includes(p)) && t.length < 300) {
+          (el).style.display = "none";
+        }
+      }
     })
     .catch(() => {});
 }
