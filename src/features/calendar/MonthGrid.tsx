@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useRef, useState, type TouchEvent } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { CalendarEventRow } from "@/app/actions/calendar";
 import { EVENT_TYPE_META } from "./eventIcons";
 
@@ -28,6 +28,9 @@ export function MonthGrid({
     startOfWeek(initialDate ?? new Date()),
   );
   const [direction, setDirection] = useState<"next" | "prev" | null>(null);
+  const [dragOffset, setDragOffset] = useState<number | null>(null);
+  const [releaseRebound, setReleaseRebound] = useState(false);
+  const touchStartRef = useRef<{ y: number; x: number } | null>(null);
 
   const todayKey = ymd(new Date());
   const today = startOfDay(new Date());
@@ -74,19 +77,74 @@ export function MonthGrid({
     setWeekStart(next);
   }
 
+  // Vertical swipe to advance/retreat by one week. The grid follows the
+  // finger with rubber-banding past the threshold; on release we either
+  // commit (and let the slide animation snap the new week into place) or
+  // spring back to zero.
+  const SWIPE_THRESHOLD = 60;
+
+  function onTouchStart(e: TouchEvent) {
+    const t = e.touches[0];
+    if (!t) return;
+    touchStartRef.current = { y: t.clientY, x: t.clientX };
+    setReleaseRebound(false);
+  }
+
+  function onTouchMove(e: TouchEvent) {
+    const start = touchStartRef.current;
+    const t = e.touches[0];
+    if (!start || !t) return;
+    const dy = t.clientY - start.y;
+    const dx = t.clientX - start.x;
+    // Only engage vertical drag once it's clearly vertical — lets users
+    // tap-and-scroll-x without hijacking the gesture.
+    if (dragOffset === null && Math.abs(dy) < 8) return;
+    if (dragOffset === null && Math.abs(dx) > Math.abs(dy)) return;
+    // Rubber-band past threshold so the gesture feels resistant rather
+    // than letting users drag the grid arbitrarily far.
+    const sign = dy < 0 ? -1 : 1;
+    const mag = Math.abs(dy);
+    const damped =
+      mag <= SWIPE_THRESHOLD
+        ? mag
+        : SWIPE_THRESHOLD + (mag - SWIPE_THRESHOLD) * 0.35;
+    setDragOffset(sign * damped);
+  }
+
+  function onTouchEnd() {
+    const offset = dragOffset;
+    touchStartRef.current = null;
+    if (offset === null) return;
+    if (Math.abs(offset) >= SWIPE_THRESHOLD) {
+      // Drag UP (negative dy) reveals future weeks → next.
+      // Drag DOWN (positive dy) reveals past weeks → prev.
+      setDragOffset(null);
+      shiftWeeks(offset < 0 ? 1 : -1);
+    } else {
+      setReleaseRebound(true);
+      setDragOffset(0);
+      // Clear the rebound transition flag once it's done, so a fresh drag
+      // doesn't get an unwanted ease.
+      window.setTimeout(() => {
+        setDragOffset(null);
+        setReleaseRebound(false);
+      }, 220);
+    }
+  }
+
   const todayWeekStart = startOfWeek(new Date());
   const onCurrentWeek = ymd(weekStart) === ymd(todayWeekStart);
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-center gap-3 sm:justify-between">
         <button
           type="button"
           onClick={() => shiftWeeks(-1)}
-          className="rounded-md p-1.5 text-muted hover:bg-surface-hover"
+          className="hidden rounded-md p-1.5 text-muted hover:bg-surface-hover sm:block"
           aria-label="Previous week"
         >
-          <ChevronLeft className="size-4" />
+          <ChevronUp className="size-4" />
         </button>
         <div className="flex items-center gap-2">
           <div className="text-sm font-semibold text-foreground">{rangeLabel}</div>
@@ -103,23 +161,41 @@ export function MonthGrid({
         <button
           type="button"
           onClick={() => shiftWeeks(1)}
-          className="rounded-md p-1.5 text-muted hover:bg-surface-hover"
+          className="hidden rounded-md p-1.5 text-muted hover:bg-surface-hover sm:block"
           aria-label="Next week"
         >
-          <ChevronRight className="size-4" />
+          <ChevronDown className="size-4" />
         </button>
       </div>
 
-      <div className="overflow-hidden">
+      <div
+        className="overflow-hidden touch-pan-x"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      >
         <div
           key={ymd(weekStart)}
           className={
             "grid grid-cols-7 gap-px overflow-hidden rounded-lg bg-border " +
-            (direction === "next"
-              ? "calendar-slide-up"
-              : direction === "prev"
-                ? "calendar-slide-down"
-                : "")
+            (dragOffset !== null
+              ? ""
+              : direction === "next"
+                ? "calendar-slide-up"
+                : direction === "prev"
+                  ? "calendar-slide-down"
+                  : "")
+          }
+          style={
+            dragOffset !== null
+              ? {
+                  transform: `translateY(${dragOffset}px)`,
+                  transition: releaseRebound
+                    ? "transform 200ms cubic-bezier(0.22, 1, 0.36, 1)"
+                    : "none",
+                }
+              : undefined
           }
         >
         {DAYS.map((d, i) => (
