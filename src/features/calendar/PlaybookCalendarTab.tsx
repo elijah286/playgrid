@@ -118,9 +118,15 @@ export function PlaybookCalendarTab({
     }
   }, [modeTouched, partitioned.needsRsvp.length, mode]);
 
+  // In "needs RSVP" mode we still want the user to see the rest of their
+  // upcoming events — outstanding replies just bubble to the top so they
+  // don't get lost.
   const baseList =
     mode === "needs_rsvp"
-      ? partitioned.needsRsvp
+      ? [
+          ...partitioned.needsRsvp,
+          ...partitioned.upcoming.filter((e) => e.myRsvp != null),
+        ]
       : mode === "upcoming"
         ? partitioned.upcoming
         : partitioned.past;
@@ -294,11 +300,9 @@ export function PlaybookCalendarTab({
       {!loading && !error && visibleEvents.length === 0 && view === "list" && (
         <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center">
           <p className="text-sm font-medium text-foreground">
-            {mode === "needs_rsvp"
-              ? "You’re all caught up — no replies needed."
-              : `No ${mode === "upcoming" ? "upcoming" : "past"} events`}
+            {mode === "past" ? "No past events" : "No upcoming events"}
           </p>
-          {viewerIsCoach && mode === "upcoming" && (
+          {viewerIsCoach && mode !== "past" && (
             <p className="mt-1 text-xs text-muted">
               Tap “New event” to schedule a practice, game, or scrimmage.
             </p>
