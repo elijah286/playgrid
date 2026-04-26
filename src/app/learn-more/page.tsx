@@ -186,12 +186,12 @@ function WhyDifferent({ freeMaxPlays }: { freeMaxPlays: number }) {
           <div className="max-w-2xl">
             <SectionEyebrow icon={Sparkles}>Why coaches switch</SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              The playbook tool
+              Youth football&apos;s best
               <br />
-              <span className="text-muted">that meets coaches where they are.</span>
+              <span className="text-muted">play-design and team-management tool.</span>
             </h2>
             <p className="mt-5 text-lg text-muted">
-              A few things make xogridmaker different from the playbook apps,
+              A few things set xogridmaker apart from the playbook apps,
               clipboards, and slide decks coaches usually patch together.
             </p>
           </div>
