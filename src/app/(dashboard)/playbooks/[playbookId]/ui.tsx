@@ -70,6 +70,7 @@ import {
   StickyNote,
   Trash2,
   UserMinus,
+  UserPlus,
   X,
 } from "lucide-react";
 import {
@@ -130,6 +131,7 @@ import {
   updateRosterEntryAction,
   linkRosterEntryAction,
   unlinkRosterEntryAction,
+  claimRosterSlotAction,
 } from "@/app/actions/playbook-roster";
 import { type PlaybookInvite } from "@/app/actions/invites";
 import { setPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
@@ -2329,6 +2331,28 @@ function RosterPanel({
     if (!res.ok) toast(`Link failed: ${res.error}`, "error");
     else router.refresh();
   }
+  async function claimSlot(memberId: string, name: string, asManager: boolean) {
+    const verb = asManager
+      ? `Claim ${name} as parent or guardian?`
+      : `Link ${name} to your account? You'll appear on the roster as this player.`;
+    if (!window.confirm(verb)) return;
+    setPendingId(memberId);
+    const res = await claimRosterSlotAction(playbookId, memberId, asManager);
+    setPendingId(null);
+    if (!res.ok) {
+      toast(`Claim failed: ${res.error}`, "error");
+      return;
+    }
+    toast(
+      res.pending
+        ? "Claim sent — waiting on coach approval."
+        : asManager
+        ? `You now manage ${name}.`
+        : `Linked to ${name}.`,
+      "success",
+    );
+    router.refresh();
+  }
   async function unlinkUser(memberId: string, name: string) {
     if (
       !window.confirm(
@@ -2774,6 +2798,16 @@ function RosterPanel({
                       : []),
                     ...(unclaimed
                       ? [
+                          {
+                            label: "I'm their parent / guardian",
+                            icon: UserPlus,
+                            onSelect: () => claimSlot(m.id, name, true),
+                          },
+                          {
+                            label: `I am ${name}`,
+                            icon: UserPlus,
+                            onSelect: () => claimSlot(m.id, name, false),
+                          },
                           {
                             label: "Remove from roster",
                             icon: Trash2,

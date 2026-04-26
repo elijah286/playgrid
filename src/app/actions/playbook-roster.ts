@@ -923,16 +923,68 @@ export async function linkRosterEntryAction(
   playbookId: string,
   memberId: string,
   userId: string,
+  asManager: boolean = true,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("link_roster_entry", {
     p_member_id: memberId,
     p_user_id: userId,
+    p_as_manager: asManager,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true };
+}
+
+/**
+ * Self-claim a roster slot from the roster page. Coaches link
+ * instantly; players submit a pending claim that needs approval.
+ * `asManager=true` (default) means "I manage this player" (parent
+ * case); `false` means "I am this player" and merges identities.
+ */
+export async function claimRosterSlotAction(
+  playbookId: string,
+  memberId: string,
+  asManager: boolean = true,
+): Promise<{ ok: true; pending: boolean } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: membership } = await supabase
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .is("label", null)
+    .maybeSingle();
+
+  const role = (membership?.role as "owner" | "editor" | "viewer" | undefined) ?? null;
+  const canEdit = role === "owner" || role === "editor";
+
+  if (canEdit) {
+    const { error } = await supabase.rpc("link_roster_entry", {
+      p_member_id: memberId,
+      p_user_id: user.id,
+      p_as_manager: asManager,
+    });
+    if (error) return { ok: false, error: error.message };
+    revalidatePath(`/playbooks/${playbookId}`);
+    return { ok: true, pending: false };
+  }
+
+  const { error } = await supabase.rpc("submit_roster_claim", {
+    p_member_id: memberId,
+    p_note: null,
+    p_as_manager: asManager,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true, pending: true };
 }
 
 /**
