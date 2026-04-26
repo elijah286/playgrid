@@ -34,7 +34,19 @@ const DEVICE_PRESETS = {
   desktop: { width: 1440, height: 900, dsf: 2 },
 };
 
+async function hideDemoBanner(page) {
+  // Hide the visitor-facing "Demo mode" / "This is an example playbook"
+  // banners so marketing screenshots don't show them. Selector is the
+  // stable data-demo-banner attribute added to both banner components.
+  await page
+    .addStyleTag({
+      content: "[data-demo-banner]{display:none!important;}",
+    })
+    .catch(() => {});
+}
+
 async function shot(page, name) {
+  await hideDemoBanner(page);
   const file = path.join(OUT_DIR, `${name}.png`);
   await page.screenshot({ path: file, fullPage: false });
   console.log("  ✓", file);

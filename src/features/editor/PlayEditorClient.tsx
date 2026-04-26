@@ -1067,7 +1067,10 @@ function PlayNotesCard({
 
 function ExamplePreviewEditorBanner() {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+    <div
+      data-demo-banner=""
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm"
+    >
       <div className="inline-flex items-center gap-2 text-foreground">
         <FlaskConical className="size-4 text-primary" />
         <span>
