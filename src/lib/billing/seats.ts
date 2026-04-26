@@ -199,6 +199,7 @@ export async function getPendingCoachInvites(
     .order("created_at", { ascending: false });
 
   const live = (inviteRows ?? []).filter((r) => {
+    if (!r.email) return false;
     const max = r.max_uses as number | null;
     const used = (r.uses_count as number | null) ?? 0;
     return max === null || used < max;
