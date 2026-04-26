@@ -408,18 +408,26 @@ export async function sharePlaybookWithEmailsAction(input: {
               }
             }
           }
-          // Direct add / upgrade an existing pending row.
-          const { error: upErr } = await admin
-            .from("playbook_members")
-            .upsert(
-              {
-                playbook_id: input.playbookId,
-                user_id: userId,
-                role: input.role,
-                status: "active",
-              },
-              { onConflict: "playbook_id,user_id" },
-            );
+          // Direct add / upgrade an existing pending row. The
+          // (playbook_id, user_id) unique index is partial (only where
+          // user_id is not null), so PostgREST's ON CONFLICT can't bind
+          // to it — do it manually via select-then-insert-or-update.
+          const upErr = existing
+            ? (
+                await admin
+                  .from("playbook_members")
+                  .update({ role: input.role, status: "active" })
+                  .eq("playbook_id", input.playbookId)
+                  .eq("user_id", userId)
+              ).error
+            : (
+                await admin.from("playbook_members").insert({
+                  playbook_id: input.playbookId,
+                  user_id: userId,
+                  role: input.role,
+                  status: "active",
+                })
+              ).error;
           if (upErr) {
             results.push({ email, kind: "failed", error: upErr.message });
             continue;
