@@ -201,14 +201,21 @@ export async function sendCalendarEventEmails(opts: {
     ]),
   );
 
-  const recipients: { userId: string; email: string; name: string | null }[] =
-    [];
-  for (const userId of memberIds) {
-    const { data: u } = await admin.auth.admin.getUserById(userId);
-    const email = u?.user?.email ?? null;
-    if (!email) continue;
+  // Parallelize the per-user email lookup. Sequential `await` here was the
+  // killer: a team of even 10–15 members stacked enough wall time to push
+  // the surrounding server action past Vercel's timeout, so the event saved
+  // but the post-action revalidation render came back as a 500 / error.tsx.
+  const lookups = await Promise.allSettled(
+    memberIds.map((id) => admin.auth.admin.getUserById(id)),
+  );
+  const recipients: { userId: string; email: string; name: string | null }[] = [];
+  lookups.forEach((res, i) => {
+    if (res.status !== "fulfilled") return;
+    const email = res.value.data?.user?.email ?? null;
+    if (!email) return;
+    const userId = memberIds[i];
     recipients.push({ userId, email, name: nameById.get(userId) ?? null });
-  }
+  });
   if (recipients.length === 0) return;
 
   const resend = new Resend(apiKey);
