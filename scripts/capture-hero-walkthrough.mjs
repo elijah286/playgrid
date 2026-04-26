@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /**
  * Capture a desktop walkthrough video for the marketing page hero:
- * examples shelf → hover a book → open a playbook → scroll plays →
- * click a play → open the editor → type notes.
+ * examples shelf → hover a book → open the playbook → click a play →
+ * play the route animation (the "Motion" button) → loop back to the
+ * playbook so the video reads as a repeating tour.
+ *
+ * Always runs unauthenticated — visitors should see the same flow the
+ * marketing page promises (no login, no admin UI).
  *
  * Pacing + cursor overlay mirror scripts/capture-game-mode.mjs so the
  * visual language on the marketing page stays consistent across the
@@ -17,11 +21,9 @@
  */
 
 import { chromium } from "playwright";
-import { mkdir, readFile, rename, rm, readdir } from "node:fs/promises";
+import { mkdir, rename, rm, readdir } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { createClient } from "@supabase/supabase-js";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3456";
 const OUT_DIR = path.resolve("public/marketing/screens");
@@ -148,95 +150,10 @@ async function tap(page, locator) {
   await sleep(200);
 }
 
-async function loadEnv() {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    process.env.ENV_FILE,
-    path.resolve(here, "../.env.local"),
-    path.resolve(process.env.HOME ?? "", "playbook/.env.local"),
-  ].filter(Boolean);
-  for (const p of candidates) {
-    try {
-      const text = await readFile(p, "utf8");
-      const out = {};
-      for (const line of text.split(/\r?\n/)) {
-        const m = line.match(/^([A-Z0-9_]+)\s*=\s*(.*)$/);
-        if (!m) continue;
-        let val = m[2].trim();
-        if (
-          (val.startsWith('"') && val.endsWith('"')) ||
-          (val.startsWith("'") && val.endsWith("'"))
-        ) {
-          val = val.slice(1, -1);
-        }
-        out[m[1]] = val;
-      }
-      return out;
-    } catch {
-      // keep trying
-    }
-  }
-  return {};
-}
-
 async function run() {
   await mkdir(OUT_DIR, { recursive: true });
   await rm(VIDEO_TMP, { recursive: true, force: true });
   await mkdir(VIDEO_TMP, { recursive: true });
-
-  const env = await loadEnv();
-  const email = env.SEED_ADMIN_EMAIL;
-  const password = env.SEED_ADMIN_PASSWORD;
-  const useAuth = Boolean(email && password);
-
-  // Pick an admin-owned public example so the editor renders the full
-  // editing UI (notes field, route handles) instead of the locked
-  // preview you get as a non-member.
-  let targetPlaybookId = null;
-  let targetPlayId = null;
-  if (useAuth) {
-    const supa = createClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { persistSession: false } },
-    );
-    const { data: adminList } = await supa.auth.admin.listUsers({
-      perPage: 200,
-    });
-    const adminUser = (adminList?.users ?? []).find(
-      (u) => (u.email ?? "").toLowerCase() === email.toLowerCase(),
-    );
-    if (adminUser) {
-      const { data: ownedRows } = await supa
-        .from("playbook_members")
-        .select("playbook_id")
-        .eq("user_id", adminUser.id)
-        .eq("role", "owner");
-      const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id);
-      if (ownedIds.length > 0) {
-        const { data: pb } = await supa
-          .from("playbooks")
-          .select("id, name")
-          .in("id", ownedIds)
-          .eq("is_public_example", true)
-          .eq("is_archived", false)
-          .limit(1)
-          .maybeSingle();
-        targetPlaybookId = pb?.id ?? null;
-        if (targetPlaybookId) {
-          const { data: play } = await supa
-            .from("plays")
-            .select("id, name, sort_order")
-            .eq("playbook_id", targetPlaybookId)
-            .order("sort_order", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          targetPlayId = play?.id ?? null;
-          console.log("Target:", pb?.name, "play:", play?.name);
-        }
-      }
-    }
-  }
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
@@ -247,28 +164,7 @@ async function run() {
   const page = await ctx.newPage();
   await installCursor(page);
 
-  // Sign in if we have creds. Otherwise capture a logged-out tour
-  // (examples → example playbook → locked editor preview).
-  if (useAuth) {
-    await page.goto(`${BASE_URL}/login`, { waitUntil: "networkidle" });
-    await page.locator('input[type="email"]').fill(email);
-    await page
-      .getByRole("button", { name: /continue|next|sign in/i })
-      .first()
-      .click();
-    await page.locator('input[type="password"]').waitFor({ timeout: 10000 });
-    await page.locator('input[type="password"]').fill(password);
-    await page
-      .getByRole("button", { name: /sign in|log in|continue/i })
-      .first()
-      .click();
-    await page.waitForURL((u) => !u.pathname.startsWith("/login"), {
-      timeout: 15000,
-    });
-    console.log("Signed in.");
-  }
-
-  // ---- Step 1: bookshelf of playbooks.
+  // ---- Step 1: bookshelf of playbooks (always unauthed).
   await page.goto(`${BASE_URL}/examples`, { waitUntil: "networkidle" });
   await page.waitForTimeout(BEAT_MED);
   await page.mouse.move(80, 780);
@@ -276,48 +172,31 @@ async function run() {
   await shot(page, "hero-1-shelf");
 
   // ---- Step 2: hover over the first book so its open animation plays.
-  const firstTile = page
-    .locator('a[href^="/playbooks/"]')
-    .first();
+  const firstTile = page.locator('a[href^="/playbooks/"]').first();
   await firstTile.waitFor({ timeout: 10000 });
   await glideToLocator(page, firstTile);
-  await sleep(BEAT_LONG); // let the book "open" animation play through
+  await sleep(BEAT_LONG);
   await shot(page, "hero-2-hover");
 
-  // ---- Step 3: click → playbook detail.
-  const href = targetPlaybookId
-    ? `/playbooks/${targetPlaybookId}`
-    : (await firstTile.getAttribute("href")) ?? "/examples";
+  // ---- Step 3: click into the playbook.
+  const playbookHref = (await firstTile.getAttribute("href")) ?? "/examples";
   await page.mouse.down();
   await sleep(80);
   await page.mouse.up();
-  await page.waitForURL(new RegExp(href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), {
-    timeout: 15000,
-  });
+  await page.waitForURL(
+    new RegExp(playbookHref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    { timeout: 15000 },
+  );
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(BEAT_MED);
   await shot(page, "hero-3-playbook");
 
-  // ---- Step 4: scroll down through the plays grid.
-  await glideTo(page, 720, 600);
-  for (let i = 0; i < 4; i++) {
-    await page.mouse.wheel(0, 260);
-    await sleep(500);
-  }
-  await sleep(BEAT_MED);
-  await shot(page, "hero-4-plays");
-
-  // ---- Step 5: click a play at/near the bottom → editor.
-  let playTile = page.locator('a[href*="/plays/"][href*="/edit"]');
-  if (targetPlayId) {
-    playTile = page.locator(`a[href="/plays/${targetPlayId}/edit"]`);
-  }
-  const playCount = await playTile.count();
-  if (playCount > 0) {
-    const target = playTile.nth(Math.min(playCount - 1, playCount > 3 ? playCount - 1 : 0));
-    await target.scrollIntoViewIfNeeded();
+  // ---- Step 4: glide to a play tile and click in.
+  const playTile = page.locator('a[href*="/plays/"][href*="/edit"]').first();
+  if (await playTile.count()) {
+    await playTile.scrollIntoViewIfNeeded();
     await sleep(400);
-    await glideToLocator(page, target);
+    await glideToLocator(page, playTile);
     await sleep(BEAT_SHORT);
     await page.mouse.down();
     await sleep(80);
@@ -325,43 +204,41 @@ async function run() {
     await page.waitForURL(/\/plays\/[^/]+\/edit/, { timeout: 15000 });
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(BEAT_MED);
-    await shot(page, "hero-5-editor");
+    await shot(page, "hero-4-play");
 
-    // ---- Step 6: open/focus the notes field and type.
-    const addNotes = page.getByRole("button", { name: /add notes|edit notes/i });
-    if (await addNotes.count()) {
-      await glideToLocator(page, addNotes.first());
+    // ---- Step 5: click the Motion / playback button so the routes
+    //              animate. The button is labeled "Motion" in the
+    //              playback panel; fall back to any obvious play
+    //              control.
+    const motion = page
+      .getByRole("button", { name: /^motion$/i })
+      .or(page.getByRole("button", { name: /^play(back)?$/i }))
+      .first();
+    if (await motion.count()) {
+      await glideToLocator(page, motion);
       await sleep(BEAT_SHORT);
       await page.mouse.down();
       await sleep(80);
       await page.mouse.up();
-      await sleep(BEAT_SHORT);
-    }
-    const notesArea = page.locator(
-      'textarea[placeholder*="notes" i], [contenteditable="true"][aria-label*="notes" i], [contenteditable="true"]',
-    );
-    const notesCount = await notesArea.count();
-    if (notesCount > 0) {
-      const n = notesArea.first();
-      await glideToLocator(page, n);
-      await sleep(BEAT_SHORT);
-      await n.click().catch(() => {});
-      await sleep(400);
-      await page.keyboard.type("Hit the seam — @Y checks safety then runs ", {
-        delay: 35,
-      });
-      await sleep(500);
-      await page.keyboard.type("post.", { delay: 40 });
-      await sleep(BEAT_LONG);
-      await shot(page, "hero-6-notes");
+      // Let the route animation play through end-to-end.
+      await sleep(BEAT_LONG * 2);
+      await shot(page, "hero-5-motion");
     } else {
       await sleep(BEAT_LONG);
-      await shot(page, "hero-6-notes");
+      await shot(page, "hero-5-motion");
     }
+
+    // ---- Step 6: navigate back to the playbook so the loop reads as
+    //              a repeating tour rather than freezing on the play.
+    await page.goto(`${BASE_URL}${playbookHref}`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(BEAT_MED);
+    await glideTo(page, 720, 500);
+    await sleep(BEAT_SHORT);
+    await shot(page, "hero-6-back");
   }
 
   // Hold on the final frame so the loop doesn't snap back instantly.
-  await sleep(BEAT_LONG);
+  await sleep(BEAT_SHORT);
 
   await page.close();
   await ctx.close();

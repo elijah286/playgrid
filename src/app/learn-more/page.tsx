@@ -123,7 +123,9 @@ function Hero() {
               muted
               loop
               playsInline
-              preload="metadata"
+              preload="auto"
+              controls={false}
+              disablePictureInPicture
               poster="/marketing/screens/hero-1-shelf.png"
             >
               <source src="/marketing/screens/hero-walkthrough.mp4" type="video/mp4" />
