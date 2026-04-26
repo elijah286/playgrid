@@ -178,15 +178,40 @@ export function EventSheet({
     initial?.homeAway ?? null,
   );
   const [recurrence, setRecurrence] = useState<string>(() => {
-    const match = RECURRENCE_PRESETS.find(
-      (p) => p.rrule === (initial?.recurrenceRule ?? null),
-    );
+    const raw = initial?.recurrenceRule ?? null;
+    if (!raw) return "none";
+    const base = raw
+      .split(";")
+      .filter((p) => !p.toUpperCase().startsWith("UNTIL="))
+      .join(";");
+    const match = RECURRENCE_PRESETS.find((p) => p.rrule === base);
     return match?.value ?? "none";
+  });
+  // Recurring events must end. Default to 12 weeks out so the coach has a
+  // sensible starting point — they can extend before saving.
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>(() => {
+    const raw = initial?.recurrenceRule ?? null;
+    if (raw) {
+      const untilPart = raw
+        .split(";")
+        .find((p) => p.toUpperCase().startsWith("UNTIL="));
+      if (untilPart) {
+        const stamp = untilPart.slice(6); // YYYYMMDDTHHMMSSZ
+        const m = stamp.match(/^(\d{4})(\d{2})(\d{2})/);
+        if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      }
+    }
+    const fallback = new Date();
+    fallback.setDate(fallback.getDate() + 12 * 7);
+    return `${fallback.getFullYear()}-${pad(fallback.getMonth() + 1)}-${pad(fallback.getDate())}`;
   });
   const [reminders, setReminders] = useState<number[]>(
     initial?.reminderOffsetsMinutes ?? [24 * 60],
   );
-  const [notifyAttendees, setNotifyAttendees] = useState(!isEdit);
+  // Default ON for both create and edit. When a coach reschedules or
+  // cancels, the team needs to know — silent edits are the exception, not
+  // the rule. The coach can untick for trivial copy fixes.
+  const [notifyAttendees, setNotifyAttendees] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -202,10 +227,17 @@ export function EventSheet({
     };
   }, [open, onClose]);
 
-  const recurrenceRule = useMemo(
-    () => RECURRENCE_PRESETS.find((p) => p.value === recurrence)?.rrule ?? null,
-    [recurrence],
-  );
+  const recurrenceRule = useMemo(() => {
+    const base = RECURRENCE_PRESETS.find((p) => p.value === recurrence)?.rrule ?? null;
+    if (!base) return null;
+    // Encode UNTIL as end-of-day UTC on the chosen date so the last
+    // occurrence on that date is included.
+    const [y, mo, d] = recurrenceEndDate.split("-").map(Number);
+    if (!y || !mo || !d) return base;
+    const untilStamp =
+      `${y}${String(mo).padStart(2, "0")}${String(d).padStart(2, "0")}T235959Z`;
+    return `${base};UNTIL=${untilStamp}`;
+  }, [recurrence, recurrenceEndDate]);
 
   if (!open) return null;
 
@@ -241,6 +273,16 @@ export function EventSheet({
     if (!location) {
       toast("Add a location.", "error");
       return;
+    }
+    if (recurrence !== "none") {
+      if (!recurrenceEndDate) {
+        toast("Pick an end date for the repeating series.", "error");
+        return;
+      }
+      if (new Date(`${recurrenceEndDate}T23:59:59`) < new Date(`${date}T${time}`)) {
+        toast("End date must be on or after the first occurrence.", "error");
+        return;
+      }
     }
     if (isEdit && isRecurring && initial?.occurrenceDate) {
       setScopePrompt("save");
@@ -497,6 +539,23 @@ export function EventSheet({
                   );
                 })}
               </div>
+              {recurrence !== "none" && (
+                <div className="mt-2">
+                  <span className="mb-1 block text-xs font-medium text-foreground">
+                    Ends on
+                  </span>
+                  <Input
+                    type="date"
+                    value={recurrenceEndDate}
+                    min={date}
+                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                    required
+                  />
+                  <span className="mt-1 block text-xs text-muted">
+                    Required — the last occurrence will be on or before this date.
+                  </span>
+                </div>
+              )}
             </Field>
 
             {type === "game" && (
@@ -581,8 +640,9 @@ export function EventSheet({
                 <span className="text-sm text-foreground">
                   Email everyone about this change
                   <span className="block text-xs text-muted">
-                    Off by default for edits — turn on for material changes like
-                    time or location.
+                    On by default. Sends right away to every member of this
+                    playbook so reschedules and cancellations don&apos;t get
+                    missed. Untick only for tiny edits (typo fixes, notes).
                   </span>
                 </span>
               </label>

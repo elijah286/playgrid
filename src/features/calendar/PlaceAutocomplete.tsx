@@ -47,6 +47,12 @@ export function PlaceAutocomplete({
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<SelectedPlace | null>(initial);
+  // True only between a keystroke and the next pick/clear/blur. Gates both
+  // the suggestion fetch and the dropdown visibility so external state
+  // changes (e.g. the map pin pan writing back coords) never re-open the
+  // dropdown — fixes the bug where dragging the pin showed stale Places
+  // suggestions from earlier in the session.
+  const [userEdited, setUserEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDetails, startDetails] = useTransition();
   const [pendingList, startList] = useTransition();
@@ -57,6 +63,7 @@ export function PlaceAutocomplete({
   }, [query]);
 
   useEffect(() => {
+    if (!userEdited) return;
     if (picked && picked.name === debounced) return;
     if (debounced.trim().length < 2) {
       setSuggestions([]);
@@ -73,7 +80,7 @@ export function PlaceAutocomplete({
       setError(null);
       setSuggestions(res.suggestions);
     });
-  }, [debounced, picked]);
+  }, [debounced, picked, userEdited]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -105,6 +112,7 @@ export function PlaceAutocomplete({
       setQuery(next.name);
       setOpen(false);
       setSuggestions([]);
+      setUserEdited(false);
       onChange(next);
     });
   }
@@ -114,6 +122,7 @@ export function PlaceAutocomplete({
     setQuery("");
     setSuggestions([]);
     setOpen(false);
+    setUserEdited(false);
     onChange(null);
   }
 
@@ -134,6 +143,7 @@ export function PlaceAutocomplete({
       lng: null,
     };
     setPicked(next);
+    setUserEdited(false);
     onChange(next);
   }
 
@@ -146,12 +156,17 @@ export function PlaceAutocomplete({
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
+            setUserEdited(true);
             if (picked) {
               setPicked(null);
               onChange(null);
             }
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            // Only re-open if the user is actively re-editing — never on
+            // programmatic focus shifts triggered by other UI.
+            if (userEdited) setOpen(true);
+          }}
           onBlur={handleBlurCommit}
           placeholder={placeholder}
           aria-autocomplete="list"
@@ -181,7 +196,7 @@ export function PlaceAutocomplete({
         <p className="mt-1 px-1 text-xs text-muted">{picked.address}</p>
       )}
 
-      {open && suggestions.length > 0 && (
+      {open && userEdited && suggestions.length > 0 && (
         <ul
           id={listId}
           role="listbox"
