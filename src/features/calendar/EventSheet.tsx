@@ -33,6 +33,36 @@ const RECURRENCE_PRESETS: { value: string; label: string; rrule: string | null }
   { value: "monthly", label: "Monthly", rrule: "FREQ=MONTHLY" },
 ];
 
+const OTHER_TITLE_SUGGESTIONS = [
+  "Team party",
+  "Booster club meeting",
+  "Film session",
+  "Team meeting",
+  "Tournament",
+  "Fundraiser",
+];
+
+function deriveTitle(
+  type: CalendarEventType,
+  customTitle: string,
+  opponent: string,
+): string {
+  switch (type) {
+    case "practice":
+      return "Practice";
+    case "game": {
+      const o = opponent.trim();
+      return o ? `vs. ${o}` : "Game";
+    }
+    case "scrimmage": {
+      const o = opponent.trim();
+      return o ? `Scrimmage vs. ${o}` : "Scrimmage";
+    }
+    case "other":
+      return customTitle.trim();
+  }
+}
+
 const REMINDER_PRESETS: { label: string; minutes: number }[] = [
   { label: "1 day before", minutes: 24 * 60 },
   { label: "2 hours before", minutes: 120 },
@@ -117,7 +147,15 @@ export function EventSheet({
   const [pending, startTransition] = useTransition();
   const [scopePrompt, setScopePrompt] = useState<null | "save" | "delete">(null);
 
-  const [type, setType] = useState<CalendarEventType>(initial?.type ?? "practice");
+  // If editing an existing event whose stored title isn't the canonical
+  // derived one (e.g. legacy events typed "Practice 5/30"), open it as
+  // "Other" so the coach keeps their custom wording.
+  const [type, setType] = useState<CalendarEventType>(() => {
+    const t = initial?.type ?? "practice";
+    if (!initial) return t;
+    const derived = deriveTitle(t, initial.title ?? "", initial.opponent ?? "");
+    return derived === (initial.title ?? "") ? t : "other";
+  });
   const [title, setTitle] = useState(initial?.title ?? "");
   const start = initial
     ? localDateTimeFromIso(initial.startsAtIso)
@@ -174,7 +212,7 @@ export function EventSheet({
   function buildPayload() {
     return {
       type,
-      title: title.trim(),
+      title: deriveTitle(type, title, opponent),
       startsAt: isoFromLocalDateTime(date, time),
       durationMinutes,
       arriveMinutesBefore: arriveBefore,
@@ -196,8 +234,8 @@ export function EventSheet({
   }
 
   function save() {
-    if (!title.trim()) {
-      toast("Add a title before saving.", "error");
+    if (type === "other" && !title.trim()) {
+      toast("Give this event a title.", "error");
       return;
     }
     if (!location) {
@@ -352,20 +390,28 @@ export function EventSheet({
               })}
             </div>
 
-            <Field label="Title">
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={
-                  type === "game"
-                    ? "vs. Lincoln"
-                    : type === "scrimmage"
-                      ? "Scrimmage vs. Hilltop"
-                      : "Tuesday practice"
-                }
-                autoFocus
-              />
-            </Field>
+            {type === "other" && (
+              <Field label="Title">
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Team party, booster meeting, …"
+                  autoFocus
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {OTHER_TITLE_SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setTitle(s)}
+                      className="rounded-full bg-surface px-2.5 py-1 text-xs text-muted ring-1 ring-border hover:bg-surface-inset hover:text-foreground"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Date">

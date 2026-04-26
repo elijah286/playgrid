@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const eventTypeSchema = z.enum(["practice", "game", "scrimmage"]);
+export const eventTypeSchema = z.enum(["practice", "game", "scrimmage", "other"]);
 export const homeAwaySchema = z.enum(["home", "away", "neutral"]);
 export const rsvpStatusSchema = z.enum(["yes", "no", "maybe"]);
 

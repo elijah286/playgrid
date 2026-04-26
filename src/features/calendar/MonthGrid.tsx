@@ -7,6 +7,7 @@ import { EVENT_TYPE_META } from "./eventIcons";
 
 const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const WEEKS = 5;
+type MonthGridEvent = CalendarEventRow & { playbookColor?: string | null };
 
 export function MonthGrid({
   events,
@@ -14,7 +15,7 @@ export function MonthGrid({
   onSelectDay,
   selectedDayKey,
 }: {
-  events: CalendarEventRow[];
+  events: MonthGridEvent[];
   initialDate?: Date;
   onSelectDay?: (date: Date | null) => void;
   selectedDayKey?: string | null;
@@ -31,7 +32,7 @@ export function MonthGrid({
   const today = startOfDay(new Date());
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, CalendarEventRow[]>();
+    const map = new Map<string, MonthGridEvent[]>();
     for (const e of events) {
       const key = e.occurrenceDate || ymd(new Date(e.startsAt));
       const list = map.get(key) ?? [];
@@ -152,11 +153,19 @@ export function MonthGrid({
               <div className="flex flex-wrap gap-0.5 sm:hidden">
                 {dayEvents.slice(0, 4).map((e) => {
                   const meta = EVENT_TYPE_META[e.type];
+                  // Prefer the playbook's color (matches the list view's
+                  // colored cards). Fall back to the event-type dot when
+                  // the event came from a single-playbook context that
+                  // doesn't carry a color.
+                  const color = e.playbookColor ?? null;
                   return (
                     <span
                       key={`${e.id}:${e.occurrenceDate}`}
                       title={e.title}
-                      className={"size-1.5 rounded-full " + meta.dotClass}
+                      className={
+                        "size-1.5 rounded-full " + (color ? "" : meta.dotClass)
+                      }
+                      style={color ? { backgroundColor: color } : undefined}
                     />
                   );
                 })}
@@ -169,14 +178,17 @@ export function MonthGrid({
               <div className="hidden flex-col gap-0.5 sm:flex">
                 {dayEvents.slice(0, 3).map((e) => {
                   const meta = EVENT_TYPE_META[e.type];
+                  const color = e.playbookColor ?? null;
                   return (
                     <span
                       key={`${e.id}:${e.occurrenceDate}`}
                       title={e.title}
                       className={
                         "truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight ring-1 " +
+                        (color ? "border-l-[3px] " : "") +
                         meta.chipActive
                       }
+                      style={color ? { borderLeftColor: color } : undefined}
                     >
                       {e.title}
                     </span>

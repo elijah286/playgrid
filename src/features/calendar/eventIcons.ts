@@ -1,6 +1,6 @@
-import { ClipboardList, Swords, Trophy, type LucideIcon } from "lucide-react";
+import { ClipboardList, Sparkles, Swords, Trophy, type LucideIcon } from "lucide-react";
 
-export type CalendarEventType = "practice" | "game" | "scrimmage";
+export type CalendarEventType = "practice" | "game" | "scrimmage" | "other";
 
 export const EVENT_TYPE_META: Record<
   CalendarEventType,
@@ -41,5 +41,14 @@ export const EVENT_TYPE_META: Record<
     chipInactive:
       "bg-surface text-muted ring-border hover:bg-surface-inset",
     dotClass: "bg-amber-500",
+  },
+  other: {
+    label: "Other",
+    icon: Sparkles,
+    chipActive:
+      "bg-violet-100 text-violet-900 ring-violet-300 dark:bg-violet-950 dark:text-violet-100 dark:ring-violet-800",
+    chipInactive:
+      "bg-surface text-muted ring-border hover:bg-surface-inset",
+    dotClass: "bg-violet-500",
   },
 };

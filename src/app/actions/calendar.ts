@@ -664,7 +664,7 @@ export async function getUnseenCalendarCountAction(
 export type CalendarEventRow = {
   id: string;
   playbookId: string;
-  type: "practice" | "game" | "scrimmage";
+  type: "practice" | "game" | "scrimmage" | "other";
   title: string;
   startsAt: string;
   durationMinutes: number;
@@ -732,7 +732,7 @@ export async function listEventsForPlaybookAction(
   type EventRow = {
     id: string;
     playbook_id: string;
-    type: "practice" | "game" | "scrimmage";
+    type: "practice" | "game" | "scrimmage" | "other";
     title: string;
     starts_at: string;
     duration_minutes: number;
@@ -878,7 +878,7 @@ export async function listUpcomingEventsAcrossPlaybooksAction(): Promise<
   type EventRow = {
     id: string;
     playbook_id: string;
-    type: "practice" | "game" | "scrimmage";
+    type: "practice" | "game" | "scrimmage" | "other";
     title: string;
     starts_at: string;
     duration_minutes: number;

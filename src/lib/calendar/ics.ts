@@ -8,7 +8,7 @@ const SITE_URL =
 export type IcsEvent = {
   id: string;
   playbookId: string;
-  type: "practice" | "game" | "scrimmage";
+  type: "practice" | "game" | "scrimmage" | "other";
   title: string;
   startsAt: string; // ISO with offset
   durationMinutes: number;

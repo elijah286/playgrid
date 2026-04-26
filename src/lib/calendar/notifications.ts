@@ -13,7 +13,7 @@ export type CalendarEmailKind = "created" | "edited" | "cancelled" | "reminder";
 type EventForEmail = {
   id: string;
   playbook_id: string;
-  type: "practice" | "game" | "scrimmage";
+  type: "practice" | "game" | "scrimmage" | "other";
   title: string;
   starts_at: string;
   duration_minutes: number;
