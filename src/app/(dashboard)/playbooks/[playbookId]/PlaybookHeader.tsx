@@ -40,6 +40,9 @@ import {
   setPlaybookIsExampleAction,
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
+import { DownloadForOfflineButton } from "@/components/offline/DownloadForOfflineButton";
+import { nativeShare } from "@/lib/native/share";
+import { isNativeApp } from "@/lib/native/isNativeApp";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -404,6 +407,7 @@ export function PlaybookHeader({
             )}
             {(canShare || canManage || playActions || exampleAdmin) && (
               <HeaderMenu
+                playbookId={playbookId}
                 homeHref={homeHref}
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
@@ -630,6 +634,7 @@ function SectionDivider() {
 }
 
 function HeaderMenu({
+  playbookId,
   homeHref,
   onAccent,
   onAccentHover,
@@ -649,6 +654,7 @@ function HeaderMenu({
   onToggleExample,
   onTogglePublishExample,
 }: {
+  playbookId: string;
   homeHref: string;
   onAccent: string;
   onAccentHover: string;
@@ -844,6 +850,11 @@ function HeaderMenu({
                   <span>Trash</span>
                 </button>
               )}
+              <DownloadForOfflineButton
+                playbookId={playbookId}
+                className={menuItemCls}
+                onAction={() => setOpen(false)}
+              />
             </>
           )}
 
@@ -1397,6 +1408,23 @@ export function InviteTeamMemberDialog({
 
   async function copy() {
     if (!inviteUrl) return;
+    // Inside the native app, surface the OS share sheet so coaches can
+    // forward the invite via iMessage/Mail/Slack with a single tap. The
+    // helper falls back to clipboard if the user dismisses the sheet.
+    if (isNativeApp()) {
+      const result = await nativeShare({
+        title: "Join my playbook",
+        text: `Join my ${teamName ?? "team's"} playbook on XO Gridmaker`,
+        url: inviteUrl,
+        dialogTitle: "Share invite link",
+      });
+      if (result === "shared") return;
+      if (result === "copied") {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+        return;
+      }
+    }
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
