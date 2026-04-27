@@ -150,12 +150,45 @@ If the coach wants to capture multiple related notes, propose them as a numbered
 
 **Tone:** direct, brief. You can push back if a proposed note is vague.`;
 
-function systemPromptFor(ctx: ToolContext): string {
-  if (ctx.mode === "admin_training" && ctx.isAdmin) return ADMIN_TRAINING_PROMPT;
-  if (ctx.mode === "playbook_training" && ctx.canEditPlaybook && ctx.playbookId) {
-    return PLAYBOOK_TRAINING_PROMPT;
+function contextBlock(ctx: ToolContext): string {
+  const today = new Date();
+  const todayStr = today.toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+  const lines: string[] = ["", "---", "", "**Current context** (resolved at request time):"];
+  lines.push(`- Today's date: ${todayStr}`);
+  lines.push(`- Current year: ${today.getFullYear()}`);
+  lines.push("");
+  lines.push(
+    `**Date assumptions for scheduling:** when the coach gives a date without a year ` +
+    `(e.g., "May 10th", "next Monday", "the Tuesday of the week of May 10th"), assume ` +
+    `the CURRENT year (${today.getFullYear()}) — or next year if the date has already ` +
+    `passed in the current year. Do NOT ask "which year?" — the only acceptable years ` +
+    `for new schedules are this year or next year.`,
+  );
+  if (ctx.playbookId) {
+    lines.push("");
+    lines.push(`- Anchored playbook: yes`);
+    lines.push(`- Sport variant: ${ctx.sportVariant ?? "unknown"}`);
+    lines.push(`- Sanctioning body: ${ctx.sanctioningBody ?? "unknown"}`);
+    lines.push(`- Age division: ${ctx.ageDivision ?? "unknown"}`);
+    lines.push(`- Coach can edit this playbook: ${ctx.canEditPlaybook ? "yes" : "no"}`);
+  } else {
+    lines.push("");
+    lines.push("- Anchored playbook: NO — the coach opened Coach AI from the home/dashboard.");
   }
-  return NORMAL_PROMPT;
+  return lines.join("\n");
+}
+
+function systemPromptFor(ctx: ToolContext): string {
+  let base: string;
+  if (ctx.mode === "admin_training" && ctx.isAdmin) base = ADMIN_TRAINING_PROMPT;
+  else if (ctx.mode === "playbook_training" && ctx.canEditPlaybook && ctx.playbookId) {
+    base = PLAYBOOK_TRAINING_PROMPT;
+  } else {
+    base = NORMAL_PROMPT;
+  }
+  return base + contextBlock(ctx);
 }
 
 export type AgentStreamEvent =
