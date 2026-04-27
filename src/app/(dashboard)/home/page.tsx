@@ -43,10 +43,12 @@ export default async function HomePage({ searchParams }: Props) {
     : 0;
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
-  const initialTab: "playbooks" | "calendar" | "inbox" | "activity" =
-    tab === "inbox" || tab === "calendar" || tab === "playbooks" || tab === "activity"
-      ? (tab as "playbooks" | "calendar" | "inbox" | "activity")
-      : "playbooks";
+  const initialTab: "playbooks" | "calendar" | "inbox" =
+    tab === "inbox" || tab === "activity"
+      ? "inbox"
+      : tab === "calendar" || tab === "playbooks"
+        ? tab
+        : "playbooks";
 
   return (
     <div className="space-y-8">

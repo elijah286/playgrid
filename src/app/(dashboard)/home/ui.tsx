@@ -63,7 +63,6 @@ import {
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
-import { ActivityTab } from "@/features/dashboard/ActivityTab";
 import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 
@@ -997,12 +996,13 @@ export function DashboardClient({
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const homeTab: HomeTab =
-    tabParam === "calendar" ||
-    tabParam === "inbox" ||
-    tabParam === "activity" ||
-    tabParam === "playbooks"
-      ? tabParam
-      : initialTab;
+    tabParam === "activity"
+      ? "inbox"
+      : tabParam === "calendar" ||
+          tabParam === "inbox" ||
+          tabParam === "playbooks"
+        ? tabParam
+        : initialTab;
   const setHomeTab = useCallback(
     (t: HomeTab) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -1309,7 +1309,6 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
-          activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
           calendarPending={calendarPending}
         />
@@ -1324,26 +1323,13 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
-          activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
           calendarPending={calendarPending}
         />
-        <InboxTab initialAlerts={inboxAlerts} />
-      </div>
-    );
-  }
-  if (showTabNav && homeTab === "activity") {
-    return (
-      <div className="space-y-6">
-        <HomeTabNav
-          tab={homeTab}
-          onChange={setHomeTab}
-          inboxCount={inboxCount}
-          activityCount={activityCount}
-          showCalendar={teamCalendarAvailable}
-          calendarPending={calendarPending}
+        <InboxTab
+          initialAlerts={inboxAlerts}
+          initialActivity={activityEntries}
         />
-        <ActivityTab entries={activityEntries} />
       </div>
     );
   }
@@ -1355,7 +1341,6 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
-          activityCount={activityCount}
           showCalendar={teamCalendarAvailable}
           calendarPending={calendarPending}
         />
@@ -1953,32 +1938,28 @@ function DuplicatePlaybookDialog({
 }
 
 
-type HomeTab = "playbooks" | "calendar" | "inbox" | "activity";
+type HomeTab = "playbooks" | "calendar" | "inbox";
 
 function HomeTabNav({
   tab,
   onChange,
   inboxCount,
-  activityCount,
   showCalendar,
   calendarPending = 0,
 }: {
   tab: HomeTab;
   onChange: (t: HomeTab) => void;
   inboxCount: number;
-  activityCount: number;
   showCalendar: boolean;
   calendarPending?: number;
 }) {
   const tabs: HomeTab[] = ["playbooks"];
   if (showCalendar) tabs.push("calendar");
   tabs.push("inbox");
-  tabs.push("activity");
   const labels: Record<HomeTab, string> = {
     playbooks: "Playbooks",
     calendar: "Calendar",
     inbox: "Inbox",
-    activity: "Activity",
   };
   return (
     <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">

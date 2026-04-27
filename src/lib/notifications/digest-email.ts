@@ -41,7 +41,7 @@ export async function sendDigestEmail(input: {
   const fromEmail = cfg.fromEmail ?? DEFAULT_FROM_EMAIL;
 
   const playbookUrl = `${SITE_URL}/playbooks/${input.playbookId}`;
-  const settingsUrl = `${SITE_URL}/home?tab=activity&settings=1`;
+  const settingsUrl = `${SITE_URL}/home?tab=inbox&settings=1`;
   const totalCount = input.joins.length + input.playUpdates.length;
   const subject = `${input.playbookName}: ${totalCount} update${totalCount === 1 ? "" : "s"} since yesterday`;
 

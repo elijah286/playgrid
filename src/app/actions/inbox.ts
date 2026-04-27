@@ -2,11 +2,16 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { expandRecurrence } from "@/lib/calendar/recurrence";
 
 export type InboxAlertKind =
   | "membership"
   | "coach_upgrade"
-  | "roster_claim";
+  | "roster_claim"
+  | "rsvp_pending";
+
+/** Window for showing upcoming events without an RSVP. */
+const RSVP_LOOKAHEAD_DAYS = 14;
 
 export type InboxAlert = {
   /** Stable id for React keys + dedupe. */
@@ -30,13 +35,21 @@ export type InboxAlert = {
   jerseyNumber?: string | null;
   positions?: string[];
   note?: string | null;
+
+  // rsvp_pending
+  eventId?: string;
+  occurrenceDate?: string;
+  eventTitle?: string;
+  eventStartsAt?: string;
+  eventType?: "practice" | "game" | "scrimmage" | "other";
 };
 
 /**
- * Aggregate everything that needs the current user's attention as a
- * playbook owner: pending member approvals, coach upgrade requests, and
- * pending roster claims. Returns a flat list sorted newest-first; the
- * UI can re-sort.
+ * Aggregate everything that needs the current user's attention. Coach-side:
+ * pending member approvals, coach-upgrade requests, and pending roster
+ * claims (owner playbooks only). Player-side: upcoming event occurrences
+ * without an RSVP yet (any membership). Returns a flat list sorted
+ * newest-first; the UI can re-sort.
  */
 export async function listInboxAlertsAction(): Promise<
   { ok: true; alerts: InboxAlert[] } | { ok: false; error: string }
@@ -48,56 +61,106 @@ export async function listInboxAlertsAction(): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const { data: ownedRows, error: ownedErr } = await supabase
-    .from("playbook_members")
-    .select(
-      "playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)",
-    )
-    .eq("user_id", user.id)
-    .eq("role", "owner")
-    .eq("status", "active")
-    .eq("playbooks.is_archived", false);
-  if (ownedErr) return { ok: false, error: ownedErr.message };
+  const [ownedRowsRes, memberRowsRes] = await Promise.all([
+    supabase
+      .from("playbook_members")
+      .select(
+        "playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)",
+      )
+      .eq("user_id", user.id)
+      .eq("role", "owner")
+      .eq("status", "active")
+      .eq("playbooks.is_archived", false),
+    supabase
+      .from("playbook_members")
+      .select(
+        "playbook_id, playbooks!inner(id, name, logo_url, color, is_archived)",
+      )
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .eq("playbooks.is_archived", false),
+  ]);
+  if (ownedRowsRes.error) return { ok: false, error: ownedRowsRes.error.message };
+  if (memberRowsRes.error) return { ok: false, error: memberRowsRes.error.message };
 
-  type OwnedRow = {
+  type PbJoinRow = {
     playbook_id: string;
     playbooks:
       | { id: string; name: string; logo_url: string | null; color: string | null }
       | { id: string; name: string; logo_url: string | null; color: string | null }[]
       | null;
   };
-  const bookById = new Map<
+  function indexBooks(rows: PbJoinRow[]): Map<
     string,
     { name: string; logo_url: string | null; color: string | null }
-  >();
-  for (const r of (ownedRows ?? []) as unknown as OwnedRow[]) {
-    const b = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
-    if (!b) continue;
-    bookById.set(b.id, { name: b.name, logo_url: b.logo_url, color: b.color });
+  > {
+    const m = new Map<
+      string,
+      { name: string; logo_url: string | null; color: string | null }
+    >();
+    for (const r of rows) {
+      const b = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+      if (!b) continue;
+      m.set(b.id, { name: b.name, logo_url: b.logo_url, color: b.color });
+    }
+    return m;
   }
-  const ownedIds = Array.from(bookById.keys());
-  if (ownedIds.length === 0) return { ok: true, alerts: [] };
-
-  const [membersRes, claimsRes] = await Promise.all([
-    supabase
-      .from("playbook_members")
-      .select(
-        "playbook_id, user_id, role, status, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
-      )
-      .in("playbook_id", ownedIds)
-      .or("status.eq.pending,coach_upgrade_requested_at.not.is.null"),
-    supabase
-      .from("roster_claims")
-      .select(
-        "id, member_id, user_id, requested_at, note, member:member_id!inner(playbook_id, label, jersey_number, positions), profiles:user_id(display_name)",
-      )
-      .eq("status", "pending")
-      .in("member.playbook_id", ownedIds),
-  ]);
-  if (membersRes.error) return { ok: false, error: membersRes.error.message };
-  if (claimsRes.error) return { ok: false, error: claimsRes.error.message };
+  const ownerBookById = indexBooks(
+    (ownedRowsRes.data ?? []) as unknown as PbJoinRow[],
+  );
+  const memberBookById = indexBooks(
+    (memberRowsRes.data ?? []) as unknown as PbJoinRow[],
+  );
+  const ownedIds = Array.from(ownerBookById.keys());
+  const memberIds = Array.from(memberBookById.keys());
 
   const alerts: InboxAlert[] = [];
+
+  // ─── Owner-side alerts ───────────────────────────────────────────────
+  if (ownedIds.length > 0) {
+    const [membersRes, claimsRes] = await Promise.all([
+      supabase
+        .from("playbook_members")
+        .select(
+          "playbook_id, user_id, role, status, created_at, coach_upgrade_requested_at, profiles:user_id(display_name)",
+        )
+        .in("playbook_id", ownedIds)
+        .or("status.eq.pending,coach_upgrade_requested_at.not.is.null"),
+      supabase
+        .from("roster_claims")
+        .select(
+          "id, member_id, user_id, requested_at, note, member:member_id!inner(playbook_id, label, jersey_number, positions), profiles:user_id(display_name)",
+        )
+        .eq("status", "pending")
+        .in("member.playbook_id", ownedIds),
+    ]);
+    if (membersRes.error) return { ok: false, error: membersRes.error.message };
+    if (claimsRes.error) return { ok: false, error: claimsRes.error.message };
+
+    appendOwnerAlerts(alerts, ownerBookById, membersRes.data, claimsRes.data);
+  }
+
+  // ─── Player-side alerts: outstanding RSVPs ───────────────────────────
+  if (memberIds.length > 0) {
+    const rsvpAlerts = await buildRsvpPendingAlerts(
+      supabase,
+      user.id,
+      memberIds,
+      memberBookById,
+    );
+    alerts.push(...rsvpAlerts);
+  }
+
+  alerts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { ok: true, alerts };
+}
+
+function appendOwnerAlerts(
+  alerts: InboxAlert[],
+  bookById: Map<string, { name: string; logo_url: string | null; color: string | null }>,
+  membersData: unknown,
+  claimsData: unknown,
+): void {
 
   type MemRow = {
     playbook_id: string;
@@ -111,7 +174,7 @@ export async function listInboxAlertsAction(): Promise<
       | { display_name: string | null }[]
       | null;
   };
-  for (const raw of (membersRes.data ?? []) as unknown as MemRow[]) {
+  for (const raw of (membersData ?? []) as unknown as MemRow[]) {
     const book = bookById.get(raw.playbook_id);
     if (!book) continue;
     const prof = Array.isArray(raw.profiles) ? raw.profiles[0] ?? null : raw.profiles;
@@ -174,7 +237,7 @@ export async function listInboxAlertsAction(): Promise<
       | { display_name: string | null }[]
       | null;
   };
-  for (const raw of (claimsRes.data ?? []) as unknown as ClaimRow[]) {
+  for (const raw of (claimsData ?? []) as unknown as ClaimRow[]) {
     const m = Array.isArray(raw.member) ? raw.member[0] ?? null : raw.member;
     if (!m) continue;
     const book = bookById.get(m.playbook_id);
@@ -196,9 +259,85 @@ export async function listInboxAlertsAction(): Promise<
       note: raw.note,
     });
   }
+}
 
-  alerts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return { ok: true, alerts };
+async function buildRsvpPendingAlerts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  playbookIds: string[],
+  bookById: Map<string, { name: string; logo_url: string | null; color: string | null }>,
+): Promise<InboxAlert[]> {
+  const { data: events, error } = await supabase
+    .from("playbook_events")
+    .select(
+      "id, playbook_id, type, title, starts_at, recurrence_rule, recurrence_exdate, deleted_at",
+    )
+    .in("playbook_id", playbookIds)
+    .is("deleted_at", null);
+  if (error || !events || events.length === 0) return [];
+
+  type EventRow = {
+    id: string;
+    playbook_id: string;
+    type: "practice" | "game" | "scrimmage" | "other";
+    title: string;
+    starts_at: string;
+    recurrence_rule: string | null;
+    recurrence_exdate: string[] | null;
+  };
+
+  const now = new Date();
+  const horizon = new Date(now.getTime() + RSVP_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
+
+  const eventIds = (events as EventRow[]).map((e) => e.id);
+  const { data: existingRsvps } = await supabase
+    .from("playbook_event_rsvps")
+    .select("event_id, occurrence_date")
+    .eq("user_id", userId)
+    .in("event_id", eventIds);
+  const responded = new Set(
+    ((existingRsvps ?? []) as { event_id: string; occurrence_date: string }[]).map(
+      (r) => `${r.event_id}|${r.occurrence_date}`,
+    ),
+  );
+
+  const out: InboxAlert[] = [];
+  for (const e of events as EventRow[]) {
+    const book = bookById.get(e.playbook_id);
+    if (!book) continue;
+    const occurrences = expandRecurrence({
+      startsAt: e.starts_at,
+      recurrenceRule: e.recurrence_rule,
+      exdates: e.recurrence_exdate ?? [],
+      windowStart: now,
+      windowEnd: horizon,
+    });
+    for (const occ of occurrences) {
+      const startMs = new Date(occ.startsAt).getTime();
+      // Skip occurrences that already started (RSVP locked).
+      if (startMs <= now.getTime()) continue;
+      const k = `${e.id}|${occ.occurrenceDate}`;
+      if (responded.has(k)) continue;
+      out.push({
+        key: `rsvp:${e.id}:${occ.occurrenceDate}`,
+        kind: "rsvp_pending",
+        playbookId: e.playbook_id,
+        playbookName: book.name,
+        playbookLogoUrl: book.logo_url,
+        playbookColor: book.color,
+        displayName: null,
+        // For sort: use the event's start-time (sooner-first surfaces via
+        // newest sort because b > a on dates further in the future).
+        createdAt: occ.startsAt,
+        eventId: e.id,
+        occurrenceDate: occ.occurrenceDate,
+        eventTitle: e.title,
+        eventStartsAt: occ.startsAt,
+        eventType: e.type,
+      });
+    }
+  }
+  return out;
 }
 
 export type ResolvedInboxEvent = {
