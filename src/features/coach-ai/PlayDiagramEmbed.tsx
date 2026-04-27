@@ -329,6 +329,35 @@ function Controls({ anim }: { anim: ReturnType<typeof usePlayAnimation> }) {
 
 // ── Public component ─────────────────────────────────────────────────────────
 
+/**
+ * Heuristic: is this JSON likely still streaming in (i.e., parse-failure is
+ * expected, not an authoring bug)? We treat any of the following as "in-flight":
+ *
+ *   - It doesn't end with `}` (final closing brace not arrived yet).
+ *   - The braces are unbalanced (more `{` than `}`).
+ *   - It ends with a comma, colon, opening bracket, etc. (mid-token).
+ *
+ * String-aware brace counting (so `{` inside a JSON string doesn't count) keeps
+ * us from incorrectly flagging completed JSON-with-quoted-braces as in-flight.
+ */
+function looksIncomplete(s: string): boolean {
+  if (!s) return true;
+  if (!s.endsWith("}")) return true;
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === "{" || c === "[") depth++;
+    else if (c === "}" || c === "]") depth--;
+  }
+  return depth !== 0;
+}
+
 export function PlayDiagramEmbed({ json }: { json: string }) {
   const trimmed = json.trim();
   const parsed = useMemo<{ doc: PlayDocument | null; error: string | null }>(() => {
@@ -339,7 +368,8 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
       return { doc, error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (typeof window !== "undefined") {
+      // Don't log mid-stream failures — they're expected as JSON arrives in chunks.
+      if (typeof window !== "undefined" && !looksIncomplete(trimmed)) {
         console.warn("[PlayDiagramEmbed] failed to parse play JSON", err, trimmed.slice(0, 200));
       }
       return { doc: null, error: msg };
@@ -351,8 +381,22 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
 
   // Empty fence (mid-stream / model emitted ```play\n```) — render nothing.
   if (!trimmed) return null;
-  // Non-empty but unparseable — show a small visible diagnostic instead of
-  // silently dropping it, so we can tell when the model is producing bad JSON.
+
+  // Failed to parse, but the JSON looks like it's still streaming in. Show a
+  // quiet field-shaped placeholder instead of the angry yellow warning — the
+  // diagram will replace it the moment the closing brace arrives.
+  if (!doc && looksIncomplete(trimmed)) {
+    return (
+      <div
+        className="my-3 aspect-[16/10] w-full animate-pulse rounded-xl border border-border"
+        style={{ backgroundColor: "#2D8B4E", opacity: 0.55 }}
+        aria-label="Loading play diagram"
+      />
+    );
+  }
+
+  // Non-empty, looks complete, but failed to parse — that's a real authoring
+  // bug. Show the diagnostic so we can tell when the model emitted bad JSON.
   if (!doc) {
     return (
       <details className="my-2 rounded-lg border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">

@@ -78,8 +78,18 @@ const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor
 const STYLE_S:    PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
 const STYLE_H:    PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
 const STYLE_DEF:  PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" };
+// Interior offensive linemen are ineligible — they should be visually muted so
+// skill-position routes pop. Gray, neutral.
+const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelColor: "#0f172a" };
 
 const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_S, STYLE_H];
+
+// Labels for interior O-line — gets the muted-gray treatment regardless of
+// position-rotation order.
+const LINEMAN_LABELS = new Set([
+  "LT", "LG", "RG", "RT", "T", "G", "OL",
+  "LT1", "LG1", "RG1", "RT1",
+]);
 
 // Translucent zone palette — readable on the green field, distinct per zone.
 // Matches feel of EditorCanvas zones: dashed stroke, low-opacity fill.
@@ -162,6 +172,11 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     } else if (rawLabel === "C" || role === "C") {
       style = STYLE_C;
       label = "C";
+      shape = dp.shape ?? "circle";
+    } else if (LINEMAN_LABELS.has(rawLabel)) {
+      // Ineligible interior linemen — mute to gray so skill routes pop.
+      style = STYLE_LINEMAN;
+      label = rawLabel.slice(0, 2);
       shape = dp.shape ?? "circle";
     } else if (rawLabel === "X") { style = STYLE_X; label = "X"; shape = dp.shape ?? "circle"; }
     else if (rawLabel === "Y" || rawLabel === "TE" || role === "TE") { style = STYLE_Y; label = "Y"; shape = dp.shape ?? "circle"; }
