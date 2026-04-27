@@ -1584,7 +1584,7 @@ export function DashboardClient({
           initialName={customizing.name}
           initialSeason={customizing.season ?? ""}
           initialLogoUrl={customizing.logo_url ?? ""}
-          initialColor={customizing.color ?? "#134e2a"}
+          initialColor={customizing.color ?? colorFor(customizing)}
           initialSettings={customizing.settings}
           variantLabel={SPORT_VARIANT_LABELS[customizing.sport_variant] ?? ""}
           onClose={() => setCustomizing(null)}

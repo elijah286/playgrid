@@ -386,7 +386,11 @@ const create_playbook: CoachAiTool = {
           maximum: 11,
           description: "Players-per-side for the \"other\" variant only. Ignored otherwise.",
         },
-        color: { type: "string", description: "Optional hex color like #RRGGBB for the playbook's accent." },
+        color: {
+          type: "string",
+          description:
+            "Hex color like #RRGGBB for the playbook's accent. STRONGLY RECOMMENDED — uncolored playbooks render with an inconsistent fallback on the dashboard cover. Pick something that matches the team if known, otherwise a default like #134e2a.",
+        },
       },
       required: ["name"],
       additionalProperties: false,
@@ -541,10 +545,29 @@ const create_event: CoachAiTool = {
       if (!res.ok) return { ok: false, error: res.error };
       const url = `/playbooks/${ctx.playbookId}?tab=calendar`;
       const recurNote = recurrenceRule ? ` (recurring: ${recurrenceRule})` : "";
+      // Resolve the actual weekday from the saved start time so Cal can echo
+      // the truth back to the coach instead of hallucinating a day-of-week
+      // from the date (Claude is unreliable at calendar arithmetic).
+      let resolved = startsAt;
+      try {
+        const d = new Date(startsAt);
+        if (!Number.isNaN(d.getTime())) {
+          resolved = d.toLocaleString("en-US", {
+            timeZone: timezone,
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            timeZoneName: "short",
+          });
+        }
+      } catch { /* fall back to raw startsAt */ }
       return {
         ok: true,
         result:
-          `Scheduled "${title}" on ${startsAt}${recurNote}. Tell the coach it's saved and link them to the calendar: [Open calendar](${url}).`,
+          `Scheduled "${title}" for ${resolved}${recurNote}. Use this exact date+weekday verbatim when you tell the coach (do NOT recompute the day-of-week yourself). Link them to the calendar: [Open calendar](${url}).`,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "create_event failed";

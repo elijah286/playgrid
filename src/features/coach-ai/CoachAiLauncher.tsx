@@ -89,6 +89,23 @@ export function CoachAiLauncher({
     return m?.[1] ?? null;
   }, [playbookIdProp, pathname]);
 
+  // Clamp a (w, h) pair to the current viewport, leaving an EDGE margin on
+  // both sides. Stays within [MIN, viewport - 2*EDGE]. Caller passes the
+  // current viewport so this can run during resize handlers without
+  // re-reading window each time.
+  function clampSize(
+    s: { w: number; h: number },
+    vw: number,
+    vh: number,
+  ): { w: number; h: number } {
+    const maxW = Math.max(MIN_W, vw - 2 * EDGE);
+    const maxH = Math.max(MIN_H, vh - 2 * EDGE);
+    return {
+      w: Math.max(MIN_W, Math.min(maxW, s.w)),
+      h: Math.max(MIN_H, Math.min(maxH, s.h)),
+    };
+  }
+
   // ── Restore persisted state ────────────────────────────────────────────────
   const hasRestored = useRef(false);
   useEffect(() => {
@@ -97,7 +114,11 @@ export function CoachAiLauncher({
       if (window.localStorage.getItem("coach-ai:adminMode")    === "1") setAdminMode(true);
       if (window.localStorage.getItem("coach-ai:playbookMode") === "1") setPlaybookMode(true);
       const savedSize = readStorage<{ w: number; h: number } | null>("coach-ai:window-size", null);
-      if (savedSize?.w && savedSize?.h) setSize(savedSize);
+      // Clamp restored size: a window resized large on a bigger display must
+      // not render off-screen on a smaller viewport.
+      if (savedSize?.w && savedSize?.h) {
+        setSize(clampSize(savedSize, window.innerWidth, window.innerHeight));
+      }
       const savedFont = readStorage<number>("coach-ai:font-size", 14);
       if (FONT_SIZES.includes(savedFont as FontSize)) setFontSize(savedFont as FontSize);
     } catch { /* ignore */ }
@@ -175,23 +196,30 @@ export function CoachAiLauncher({
     if (fullscreen) setWindowPos(null);
   }, [fullscreen]);
 
-  // ── Clamp position on viewport resize ─────────────────────────────────────
-  const clampPos = useCallback(() => {
+  // ── Clamp size + position on viewport resize ──────────────────────────────
+  // Size must clamp first (a viewport that shrunk below the saved size would
+  // otherwise leave the window protruding even after position clamping).
+  const clampToViewport = useCallback(() => {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let nextSize = size;
+    setSize((s) => {
+      nextSize = clampSize(s, vw, vh);
+      return nextSize;
+    });
     setWindowPos((p) => {
       if (!p) return p;
-      const vw = window.innerWidth, vh = window.innerHeight;
       return {
-        top:  Math.max(EDGE, Math.min(vh - EDGE - size.h, p.top)),
-        left: Math.max(EDGE, Math.min(vw - EDGE - size.w, p.left)),
+        top:  Math.max(EDGE, Math.min(vh - EDGE - nextSize.h, p.top)),
+        left: Math.max(EDGE, Math.min(vw - EDGE - nextSize.w, p.left)),
       };
     });
   }, [size]);
 
   useEffect(() => {
     if (!open) return;
-    window.addEventListener("resize", clampPos);
-    return () => window.removeEventListener("resize", clampPos);
-  }, [open, clampPos]);
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
+  }, [open, clampToViewport]);
 
   // ── Drag (header) — updates windowPos directly ────────────────────────────
   const dragRef = useRef<{ startX: number; startY: number; origPos: WindowPos } | null>(null);

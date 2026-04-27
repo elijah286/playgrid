@@ -193,6 +193,28 @@ function contextBlock(ctx: ToolContext): string {
   const lines: string[] = ["", "---", "", "**Current context** (resolved at request time):"];
   lines.push(`- Today's date: ${todayStr}`);
   lines.push(`- Current year: ${today.getFullYear()}`);
+
+  // Pre-computed date table — Claude is unreliable at deriving weekdays from
+  // dates, so list the next 21 days explicitly. Cal MUST look up weekdays
+  // here instead of computing them.
+  const tableLines: string[] = [];
+  for (let i = 0; i < 21; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    const wd = d.toLocaleDateString("en-US", { weekday: "long" });
+    const md = d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+    tableLines.push(`  - ${iso} = ${wd}, ${md}`);
+  }
+  lines.push("- Upcoming 21 days (use this table to resolve weekday ↔ date — do NOT compute weekdays yourself):");
+  lines.push(...tableLines);
+  lines.push("");
+  lines.push(
+    `**Weekday rule (CRITICAL):** Never name a weekday for a date you computed in your head. ` +
+    `Either look it up in the table above, or write the date as ISO (YYYY-MM-DD) without a ` +
+    `weekday. After \`create_event\` returns, copy its resolved date+weekday string verbatim — ` +
+    `do not paraphrase or recompute.`,
+  );
   lines.push("");
   lines.push(
     `**Date assumptions for scheduling:** when the coach gives a date without a year ` +
