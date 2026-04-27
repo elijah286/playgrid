@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
@@ -180,7 +181,7 @@ export function CoachAiLauncher({
         <span className="sr-only">Coach AI</span>
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <>
           {/* Backdrop only when fullscreen or on mobile (bottom sheet). */}
           <div
@@ -318,7 +319,8 @@ export function CoachAiLauncher({
               <CoachAiChat playbookId={playbookId} mode={mode} />
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </>
   );
