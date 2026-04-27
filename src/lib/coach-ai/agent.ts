@@ -184,7 +184,7 @@ export async function runAgent(
       system,
       messages,
       tools,
-      maxTokens: 1024,
+      maxTokens: 2048,
       onTextDelta: onEvent ? (text) => onEvent({ type: "text_delta", text }) : undefined,
     });
     modelId = result.modelId;

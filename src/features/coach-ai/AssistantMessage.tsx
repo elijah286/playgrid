@@ -64,6 +64,10 @@ const components: Components = {
     if (lang === "play") return <PlayDiagramEmbed json={raw} />;
     if (lang === "diagram") return <FootballDiagram text={raw} />;
 
+    // Suppress empty code fences — they render as a thin grey pill artifact,
+    // usually from the model truncating mid-diagram or emitting ``` ``` alone.
+    if (!raw.trim()) return null;
+
     return (
       <pre className="my-2 overflow-x-auto rounded-lg bg-black/20 px-3 py-2 font-mono text-xs text-foreground/90">
         <code className={className}>{raw}</code>
