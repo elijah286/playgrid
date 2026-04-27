@@ -89,10 +89,11 @@ async function recordUsage(userId: string): Promise<void> {
 function detectOutOfScopeRefusal(text: string): boolean {
   const refusalPatterns = [
     /outside my scope|outside my wheelhouse|outside my lane/i,
-    /I'm strictly a football/i,
+    /I'm strictly a football|I'm here for football|I'm a football/i,
     /that's outside my expertise|that's not my area/i,
     /I'm a football coach|I'm a coaching AI/i,
     /not my wheelhouse|not in my scope/i,
+    /wrong franchise|that's not.*football|not.*my.*specialty/i,
   ];
   return refusalPatterns.some(p => p.test(text));
 }
