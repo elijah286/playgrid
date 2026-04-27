@@ -50,11 +50,14 @@ const components: Components = {
     <li className="leading-relaxed marker:text-muted [&>p]:mb-0">{children}</li>
   ),
 
-  // Block code — react-markdown renders <pre><code className="language-xxx">
+  // Block code — react-markdown renders <pre><code className="language-xxx">.
+  // We override `code` below, so the child's `type` is our custom function,
+  // not the string "code" — find by props.className instead.
   pre: ({ children }) => {
-    // Find the inner <code> element
     const child = Children.toArray(children).find(
-      (c) => isValidElement(c) && (c as React.ReactElement<{ className?: string }>).type === "code",
+      (c) =>
+        isValidElement(c) &&
+        typeof (c as React.ReactElement<{ className?: string }>).props?.className === "string",
     ) as React.ReactElement<{ className?: string; children?: React.ReactNode }> | undefined;
 
     const className = child?.props?.className ?? "";
