@@ -71,7 +71,7 @@ Rules:
 
 ## Scheduling and playbook selection
 
-When a coach asks to schedule something (practice, game, event) and the chat is **not** anchored to a specific playbook, call \`list_my_playbooks\` immediately. The tool returns a \`\`\`playbooks fenced block — reproduce it **verbatim** in your response (the app renders it as clickable team buttons). Do not paraphrase or replace it with text. After the block, ask for the event details you still need (date, time, duration, recurrence).
+When a coach asks to schedule something (practice, game, event) and the chat is **not** anchored to a specific playbook, call \`list_my_playbooks\` immediately — the app will automatically render the team buttons above your reply. After calling it, just ask for the event details you still need (date, time, duration, recurrence). Do not ask which team; the buttons handle selection.
 
 **Never ask for timezone.** The app handles timezone automatically from the user's browser. Just ask for date, time, title, duration, and recurrence (if applicable).
 
@@ -196,6 +196,8 @@ export async function runAgent(
   const toolCalls: string[] = [];
   let modelId = "";
   let provider: "openai" | "claude" = "claude";
+  // Blocks emitted by list_my_playbooks that must appear in the final text.
+  const injectedBlocks: string[] = [];
 
   const system = systemPromptFor(ctx);
   const tools = toolDefs(ctx);
@@ -227,10 +229,17 @@ export async function runAgent(
       onEvent?.({ type: "tool_call", name: tu.name });
       onEvent?.({ type: "status", text: TOOL_STATUS[tu.name] ?? `Running ${tu.name}…` });
       const r = await runTool(tu.name, tu.input, ctx);
+      const resultText = r.ok ? r.result : r.error;
+      // Capture any rendered blocks from list_my_playbooks so we can inject
+      // them into finalText if the LLM forgets to reproduce them.
+      if (tu.name === "list_my_playbooks" && r.ok) {
+        const blockMatch = /```playbooks[\s\S]*?```/.exec(resultText);
+        if (blockMatch) injectedBlocks.push(blockMatch[0]);
+      }
       toolResultBlocks.push({
         type: "tool_result",
         tool_use_id: tu.id,
-        content: r.ok ? r.result : r.error,
+        content: resultText,
         is_error: !r.ok,
       });
     }
@@ -248,6 +257,13 @@ export async function runAgent(
         .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
         .map((b) => b.text)
         .join("\n\n");
+  }
+
+  // Prepend any playbook-selection blocks the LLM failed to reproduce.
+  for (const block of injectedBlocks) {
+    if (!finalText.includes("```playbooks")) {
+      finalText = block + "\n\n" + finalText;
+    }
   }
 
   return { newMessages, finalText, toolCalls, modelId, provider };
