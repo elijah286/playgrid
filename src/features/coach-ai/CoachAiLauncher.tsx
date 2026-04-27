@@ -19,8 +19,9 @@ const EDGE        = 16;
 const FONT_SIZES  = [13, 14, 15, 16] as const;
 type FontSize = (typeof FONT_SIZES)[number];
 
-// ── Gradient style used on the launcher button + icon containers ────────────
 const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
+
+type WindowPos = { top: number; left: number };
 
 function readStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -43,7 +44,7 @@ function writeStorage(key: string, value: unknown) {
  *
  *   - Mobile  (<640):  bottom sheet, ~80vh tall (not draggable / resizable)
  *   - Desktop (≥640):  floating window — draggable by header,
- *                      resizable by bottom-right handle,
+ *                      resizable by bottom-right handle (top-left stays fixed),
  *                      font size A−/A+ in header toolbar
  */
 export function CoachAiLauncher({
@@ -58,11 +59,11 @@ export function CoachAiLauncher({
   const [adminMode,     setAdminMode]     = useState(false);
   const [playbookMode,  setPlaybookMode]  = useState(false);
 
-  // Window size — persisted
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
-
-  // Font size — persisted
+  const [size, setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
   const [fontSize, setFontSize] = useState<FontSize>(14);
+
+  // Desktop window position (top-left anchor). Null = use Tailwind fallback (mobile / before init).
+  const [windowPos, setWindowPos] = useState<WindowPos | null>(null);
 
   const pathname   = usePathname();
   const playbookId = useMemo<string | null>(() => {
@@ -117,52 +118,69 @@ export function CoachAiLauncher({
     return () => { document.body.style.overflow = prev; };
   }, [open, fullscreen]);
 
-  // ── Drag (header) ──────────────────────────────────────────────────────────
-  const [drag, setDrag]   = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
-  const dialogRef          = useRef<HTMLDivElement>(null);
-  const dragRef            = useRef<{ startX: number; startY: number; origDx: number; origDy: number } | null>(null);
+  // ── Window position init ──────────────────────────────────────────────────
+  // Runs when the window opens on desktop. size is already loaded from localStorage
+  // by the restore effect (which runs on mount, before any click).
+  const posInitialized = useRef(false);
 
-  useEffect(() => { if (!open || fullscreen) setDrag({ dx: 0, dy: 0 }); }, [open, fullscreen]);
+  useEffect(() => {
+    if (!open) {
+      posInitialized.current = false;
+      setWindowPos(null);
+      return;
+    }
+    if (posInitialized.current || fullscreen) return;
+    if (typeof window === "undefined" || window.innerWidth < 640) return;
+    posInitialized.current = true;
+    // Use current size (may differ from DEFAULT if restored from storage)
+    const s = size;
+    setWindowPos({
+      top:  Math.max(EDGE, window.innerHeight - EDGE - s.h),
+      left: Math.max(EDGE, window.innerWidth  - EDGE - s.w),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, fullscreen]); // intentionally excludes `size` — we read it at init time only
 
-  const clampDrag = useCallback(() => {
-    const el = dialogRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    setDrag((d) => {
-      const naturalLeft = rect.left - d.dx;
-      const naturalTop  = rect.top  - d.dy;
+  useEffect(() => {
+    if (fullscreen) setWindowPos(null);
+  }, [fullscreen]);
+
+  // ── Clamp position on viewport resize ─────────────────────────────────────
+  const clampPos = useCallback(() => {
+    setWindowPos((p) => {
+      if (!p) return p;
+      const vw = window.innerWidth, vh = window.innerHeight;
       return {
-        dx: Math.max(EDGE - naturalLeft, Math.min(vw - EDGE - rect.width  - naturalLeft, d.dx)),
-        dy: Math.max(EDGE - naturalTop,  Math.min(vh - EDGE - rect.height - naturalTop,  d.dy)),
+        top:  Math.max(EDGE, Math.min(vh - EDGE - size.h, p.top)),
+        left: Math.max(EDGE, Math.min(vw - EDGE - size.w, p.left)),
       };
     });
-  }, []);
+  }, [size]);
 
   useEffect(() => {
     if (!open) return;
-    window.addEventListener("resize", clampDrag);
-    return () => window.removeEventListener("resize", clampDrag);
-  }, [open, clampDrag]);
+    window.addEventListener("resize", clampPos);
+    return () => window.removeEventListener("resize", clampPos);
+  }, [open, clampPos]);
+
+  // ── Drag (header) — updates windowPos directly ────────────────────────────
+  const dragRef = useRef<{ startX: number; startY: number; origPos: WindowPos } | null>(null);
 
   function onHeaderPointerDown(e: React.PointerEvent<HTMLElement>) {
-    if (fullscreen || window.innerWidth < 640) return;
+    if (fullscreen || window.innerWidth < 640 || !windowPos) return;
     if ((e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
-    dragRef.current = { startX: e.clientX, startY: e.clientY, origDx: drag.dx, origDy: drag.dy };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origPos: windowPos };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onHeaderPointerMove(e: React.PointerEvent<HTMLElement>) {
     const d = dragRef.current;
-    if (!d || !dialogRef.current) return;
-    const rect = dialogRef.current.getBoundingClientRect();
+    if (!d) return;
     const vw = window.innerWidth, vh = window.innerHeight;
-    const naturalLeft = rect.left - drag.dx;
-    const naturalTop  = rect.top  - drag.dy;
-    setDrag({
-      dx: Math.max(EDGE - naturalLeft, Math.min(vw - EDGE - rect.width  - naturalLeft, d.origDx + (e.clientX - d.startX))),
-      dy: Math.max(EDGE - naturalTop,  Math.min(vh - EDGE - rect.height - naturalTop,  d.origDy + (e.clientY - d.startY))),
+    setWindowPos({
+      top:  Math.max(EDGE, Math.min(vh - EDGE - size.h, d.origPos.top  + (e.clientY - d.startY))),
+      left: Math.max(EDGE, Math.min(vw - EDGE - size.w, d.origPos.left + (e.clientX - d.startX))),
     });
   }
 
@@ -172,7 +190,7 @@ export function CoachAiLauncher({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  // ── Resize (bottom-right handle) ──────────────────────────────────────────
+  // ── Resize (bottom-right handle) — top-left stays fixed ──────────────────
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
 
   function onResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -184,12 +202,13 @@ export function CoachAiLauncher({
 
   function onResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const r = resizeRef.current;
-    if (!r) return;
-    const newW = Math.max(MIN_W, r.origW + (e.clientX - r.startX));
-    const newH = Math.max(MIN_H, r.origH + (e.clientY - r.startY));
-    // Clamp to viewport
-    const vw = window.innerWidth, vh = window.innerHeight;
-    setSize({ w: Math.min(newW, vw - EDGE * 2), h: Math.min(newH, vh - EDGE * 2) });
+    if (!r || !windowPos) return;
+    // Max dimensions: don't let the window grow beyond the viewport edge
+    const maxW = window.innerWidth  - EDGE - windowPos.left;
+    const maxH = window.innerHeight - EDGE - windowPos.top;
+    const newW = Math.max(MIN_W, Math.min(maxW, r.origW + (e.clientX - r.startX)));
+    const newH = Math.max(MIN_H, Math.min(maxH, r.origH + (e.clientY - r.startY)));
+    setSize({ w: newW, h: newH });
   }
 
   function onResizePointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -198,14 +217,14 @@ export function CoachAiLauncher({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  const dragStyle: React.CSSProperties | undefined =
-    !fullscreen && (drag.dx !== 0 || drag.dy !== 0)
-      ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` }
-      : undefined;
-
-  const windowSizeStyle: React.CSSProperties = fullscreen
-    ? {}
-    : { width: size.w, height: size.h };
+  // Inline style for the dialog window.
+  // On desktop with windowPos set: use top+left (top-left anchor so resize expands bottom-right).
+  // Fallback: let Tailwind classes handle mobile and the brief moment before windowPos initializes.
+  const windowPosStyle: React.CSSProperties = !fullscreen && windowPos
+    ? { top: windowPos.top, left: windowPos.left, right: "auto", bottom: "auto", width: size.w, height: size.h }
+    : !fullscreen
+      ? { width: size.w, height: size.h }
+      : {};
 
   return (
     <>
@@ -221,7 +240,7 @@ export function CoachAiLauncher({
         )}
         style={{ background: GRADIENT }}
       >
-        <CoachAiIcon className="size-5 text-white" />
+        <CoachAiIcon className="size-5" />
         <span className="sr-only">Coach AI</span>
       </button>
 
@@ -239,10 +258,9 @@ export function CoachAiLauncher({
 
           {/* ── Dialog window ───────────────────────────────────────────── */}
           <div
-            ref={dialogRef}
             role="dialog"
             aria-label="Coach AI chat"
-            style={{ ...dragStyle, ...windowSizeStyle }}
+            style={windowPosStyle}
             className={cn(
               "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10",
               adminTrainingActive    && "ring-2 ring-amber-400",
@@ -250,7 +268,10 @@ export function CoachAiLauncher({
               fullscreen
                 ? "inset-2 sm:inset-4"
                 : [
+                    // Mobile: bottom sheet
                     "inset-x-2 bottom-2 top-auto h-[80vh]",
+                    // Desktop: position controlled by windowPosStyle inline style;
+                    // these classes serve as fallback before windowPos initializes
                     "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
                   ].join(" "),
             )}
@@ -271,7 +292,7 @@ export function CoachAiLauncher({
                     : "border-border",
               )}
             >
-              {/* Icon container — gradient in normal mode */}
+              {/* Icon container */}
               <div
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-lg",
@@ -279,7 +300,7 @@ export function CoachAiLauncher({
                     ? "bg-amber-200 text-amber-900"
                     : playbookTrainingActive
                       ? "bg-sky-200 text-sky-900"
-                      : "text-white",
+                      : "",
                 )}
                 style={!adminTrainingActive && !playbookTrainingActive ? { background: GRADIENT } : undefined}
               >
@@ -412,7 +433,6 @@ export function CoachAiLauncher({
                 title="Drag to resize"
                 aria-hidden="true"
               >
-                {/* Corner grip dots */}
                 <svg viewBox="0 0 10 10" width={10} height={10} fill="currentColor">
                   <circle cx="8" cy="8" r="1.2" />
                   <circle cx="5" cy="8" r="1.2" />
