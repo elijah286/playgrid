@@ -33,7 +33,7 @@ unit of work.
 - [x] Rules v1 (0116, 18 chunks — kept for history)
 - [ ] Rules v2 expansion (0118, ~40 chunks)
 - [x] Penalties (0119, 30 chunks)
-- [ ] Common plays (0120)
+- [x] Common plays (0120, 23 chunks)
 - [ ] Defensive schemes (0121)
 - [ ] Strategy & tactics (0122)
 - [ ] Coaching techniques (0123)
