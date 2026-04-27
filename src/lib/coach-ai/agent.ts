@@ -37,9 +37,10 @@ JSON schema:
 {
   "title": "string (optional — play or formation name)",
   "variant": "flag_7v7" | "flag_5v5" | "tackle_11",  // default flag_7v7
+  "focus":   "O" | "D",  // which side is the diagram about; non-focus side renders gray. Default "O".
   "players": [
     { "id": "QB", "x": 0, "y": -5, "team": "O" },   // x=yards from center, y=yards from LOS (positive=upfield)
-    { "id": "CB1", "x": -12, "y": 5, "team": "D" }  // team: "O"=offense (blue), "D"=defense (red)
+    { "id": "CB1", "x": -12, "y": 5, "team": "D" }  // team: "O"=offense, "D"=defense
   ],
   "routes": [  // optional — omit for formation-only diagrams
     { "from": "WR1", "path": [[-8, 8]], "tip": "arrow" },        // tip: "arrow"|"t"|"none"
@@ -86,6 +87,10 @@ Rules:
 - For a formation-only diagram, omit the "routes" field.
 - Omit the diagram only when the question is purely about a rule or penalty (no positional concept involved).
 - **Route geometry — ALWAYS use \`get_route_template\` for named routes.** Before emitting any route waypoints in a diagram, call \`get_route_template\` with the route name (Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig, Go) plus the player's (x, y) in yards. The tool returns canonical waypoints that match the play editor's quick-route presets — drop them straight into the route's \`path\`. **Do NOT hand-author waypoints for named routes** (you'll guess wrong and produce a slant that looks like a flat). Only fall back to hand-authored paths for genuinely custom routes the coach asks for that don't match any template; in that case, briefly note "(custom route)" so the coach knows.
+- **Defender placement — defenders MUST be at y ≥ 1** (downfield from the LOS, on the defense's side). Never place a defender at y=0 or y<0 — that puts them on the offense's side of the ball, which is illegal. Typical depths: D-line/edge defenders at y≈1 (just off the line), inside LBs at y≈4-6, CBs at y≈5-7 covering WRs, safeties at y≈10-15.
+- **No two players may share the same (x, y).** Before emitting JSON, scan your players list and confirm every position is unique. If the model is tempted to place \`Y\` on top of \`RT\`, nudge \`Y\` outward by 1.5+ yards (a TE typically lines up just outside the tackle, not stacked on top). The token radius is large enough that even sub-yard overlaps look broken.
+- **Focus + non-focus rendering.** Set \`focus: "O"\` for an offense-focused diagram (route concepts, formations, plays) — the defense will render uniformly gray so it's spatial context without competing visually. Set \`focus: "D"\` for defense-focused diagrams (coverages, fronts, blitz packages) — offense will render gray. The default is "O". Pick whichever side the coach's question is actually about.
+- **Minimum players for "show me a route" questions.** When the coach asks about a single route in isolation ("show me a slant", "what does a hitch look like"), do NOT emit a full 11-man formation. Emit only the players that demonstrate the concept: the route runner, the QB (if it's a passing route — the coach reads "slant relative to QB" naturally), and 1 defender for context (typically the CB the route attacks). 3-4 players total. Skip linemen, other receivers, safeties unless the route specifically interacts with them. Save the full formation diagrams for "show me a play" or "show me a formation" requests.
 - **Route/token colors** — the renderer auto-colors skill positions by label. Use the canonical letters above and the renderer paints them correctly (X red, Y green, Z blue, H orange, S yellow, B orange, QB white, C black). **Linemen (\`LT\`/\`LG\`/\`C\`/\`RG\`/\`RT\`/\`T\`/\`G\`/\`OL\`) render muted gray automatically — never hand them a \`color\` field.** Only override \`color\` when the coach explicitly asks ("make X purple").
 - **"Color" means route color.** When a coach says "change the color of [player]" they mean the route/token color on the play diagram, not jersey color.
 

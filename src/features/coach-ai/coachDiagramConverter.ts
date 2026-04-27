@@ -57,6 +57,13 @@ export type CoachDiagramZone = {
 export type CoachDiagram = {
   title?: string;
   variant?: string;
+  /**
+   * Which side is the focus of the diagram. Players on the OTHER side render
+   * in muted gray so they provide spatial context without pulling visual
+   * attention. Default "O" for offense-focused; explicitly set "D" for a
+   * defense-focused diagram (zones, fronts, etc.).
+   */
+  focus?: "O" | "D";
   players: CoachDiagramPlayer[];
   routes?: CoachDiagramRoute[];
   zones?: CoachDiagramZone[];
@@ -81,6 +88,10 @@ const STYLE_DEF:  PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor
 // Interior offensive linemen are ineligible — they should be visually muted so
 // skill-position routes pop. Gray, neutral.
 const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelColor: "#0f172a" };
+// Non-focus side — when the diagram focuses on offense, all defenders render
+// in this very-muted gray so they're visible-as-context without competing
+// with the offense (and vice versa for defense-focused diagrams).
+const STYLE_NON_FOCUS: PlayerStyle = { fill: "#CBD5E1", stroke: "#94A3B8", labelColor: "#475569" };
 
 const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_S, STYLE_H];
 
@@ -149,6 +160,10 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     };
   }
 
+  // Default focus: offense (most common request). Defense diagrams must
+  // explicitly opt in via diagram.focus = "D".
+  const focus: "O" | "D" = diagram.focus === "D" ? "D" : "O";
+
   // Build Player objects
   const playerMap = new Map<string, Player>();
   let receiverIdx = 0;
@@ -157,42 +172,54 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     const norm = toNorm(dp.x, dp.y);
     const role = guessRole(dp);
     const rawLabel = (dp.role ?? dp.id).toUpperCase();
+    // Non-focus side gets a single uniform muted style — overrides everything
+    // (color, lineman gray, receiver rotation) so the focus side reads cleanly.
+    const isFocus = team === focus;
 
     let style: PlayerStyle;
     let label: string;
     let shape: PlayerShape;
     if (team === "D") {
-      style = STYLE_DEF;
-      label = rawLabel.slice(0, 3);
-      shape = dp.shape ?? "triangle";
-    } else if (rawLabel === "QB" || rawLabel === "Q" || role === "QB") {
-      style = STYLE_QB;
-      label = "Q";
-      shape = dp.shape ?? "circle";
-    } else if (rawLabel === "C" || role === "C") {
-      style = STYLE_C;
-      label = "C";
-      shape = dp.shape ?? "circle";
-    } else if (LINEMAN_LABELS.has(rawLabel)) {
-      // Ineligible interior linemen — mute to gray so skill routes pop.
-      style = STYLE_LINEMAN;
+      // Defenders are always triangles. The triangle's apex points toward
+      // the offense (south on the SVG) — handled in PlayDiagramEmbed.
+      style = isFocus ? STYLE_DEF : STYLE_NON_FOCUS;
+      // Hard 2-char limit — matches the play editor's label length cap.
       label = rawLabel.slice(0, 2);
-      shape = dp.shape ?? "circle";
-    } else if (rawLabel === "X") { style = STYLE_X; label = "X"; shape = dp.shape ?? "circle"; }
-    else if (rawLabel === "Y" || rawLabel === "TE" || role === "TE") { style = STYLE_Y; label = "Y"; shape = dp.shape ?? "circle"; }
-    else if (rawLabel === "Z") { style = STYLE_Z; label = "Z"; shape = dp.shape ?? "circle"; }
-    else if (rawLabel === "S" || rawLabel === "A") { style = STYLE_S; label = rawLabel.slice(0, 1); shape = dp.shape ?? "circle"; }
-    else if (rawLabel === "H" || rawLabel === "F" || rawLabel === "B" || rawLabel === "RB" || role === "RB") {
-      style = STYLE_H; label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 1); shape = dp.shape ?? "circle";
+      shape = "triangle";
     } else {
-      // Generic offensive skill (WR, WR1, WR2, slot, etc.) — rotate palette.
-      style = RECEIVER_ROTATION[receiverIdx % RECEIVER_ROTATION.length];
-      receiverIdx += 1;
-      label = rawLabel.slice(0, 3);
-      shape = dp.shape ?? "circle";
+      // Offense: ALWAYS circle. Hard rule — never honor `dp.shape: "triangle"`
+      // on the offense even if the model emits one.
+      shape = "circle";
+      if (rawLabel === "QB" || rawLabel === "Q" || role === "QB") {
+        style = STYLE_QB;
+        label = "Q";
+      } else if (rawLabel === "C" || role === "C") {
+        style = STYLE_C;
+        label = "C";
+      } else if (LINEMAN_LABELS.has(rawLabel)) {
+        style = STYLE_LINEMAN;
+        label = rawLabel.slice(0, 2);
+      } else if (rawLabel === "X") { style = STYLE_X; label = "X"; }
+      else if (rawLabel === "Y" || rawLabel === "TE" || role === "TE") { style = STYLE_Y; label = "Y"; }
+      else if (rawLabel === "Z") { style = STYLE_Z; label = "Z"; }
+      else if (rawLabel === "S" || rawLabel === "A") { style = STYLE_S; label = rawLabel.slice(0, 1); }
+      else if (rawLabel === "H" || rawLabel === "F" || rawLabel === "B" || rawLabel === "RB" || role === "RB") {
+        style = STYLE_H;
+        label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 1);
+      } else {
+        // Generic offensive skill (WR, WR1, slot, etc.) — rotate palette.
+        style = RECEIVER_ROTATION[receiverIdx % RECEIVER_ROTATION.length];
+        receiverIdx += 1;
+        // Hard 2-char limit — matches the play editor.
+        label = rawLabel.slice(0, 2);
+      }
+      // Non-focus offense overrides position-derived style.
+      if (!isFocus) style = STYLE_NON_FOCUS;
     }
 
-    if (dp.color) style = { ...style, fill: dp.color };
+    // Only honor the model's explicit `color` override on the focus side —
+    // non-focus side stays muted regardless of what the model emitted.
+    if (dp.color && isFocus) style = { ...style, fill: dp.color };
 
     const player: Player = {
       id:       uid(),

@@ -87,7 +87,11 @@ function PlayerToken({ player, cx, cy, r, sxCorr }: {
   } else if (shape === "diamond") {
     shapeEl = <polygon points={`0,${-r} ${r},0 0,${r} ${-r},0`} {...common} />;
   } else if (shape === "triangle") {
-    shapeEl = <polygon points={`0,${-r} ${r},${r} ${-r},${r}`} {...common} />;
+    // Defender triangle. The play diagram puts offense at the BOTTOM of the
+    // SVG and defense at the TOP, so we point the apex DOWN (toward the
+    // offense / play) — base across the top, tip aimed at the line of
+    // scrimmage.
+    shapeEl = <polygon points={`${-r},${-r} ${r},${-r} 0,${r}`} {...common} />;
   } else {
     shapeEl = <circle cx={0} cy={0} r={r} {...common} />;
   }
