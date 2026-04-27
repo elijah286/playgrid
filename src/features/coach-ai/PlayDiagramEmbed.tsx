@@ -278,24 +278,25 @@ function Controls({ anim }: { anim: ReturnType<typeof usePlayAnimation> }) {
 // ── Public component ─────────────────────────────────────────────────────────
 
 export function PlayDiagramEmbed({ json }: { json: string }) {
+  const trimmed = json.trim();
   const doc = useMemo<PlayDocument | null>(() => {
+    if (!trimmed) return null;
     try {
-      const diagram = JSON.parse(json) as CoachDiagram;
+      const diagram = JSON.parse(trimmed) as CoachDiagram;
       return coachDiagramToPlayDocument(diagram);
-    } catch {
+    } catch (err) {
+      if (typeof window !== "undefined") {
+        console.warn("[PlayDiagramEmbed] failed to parse play JSON", err, trimmed.slice(0, 120));
+      }
       return null;
     }
-  }, [json]);
+  }, [trimmed]);
 
   const anim = usePlayAnimation(doc ?? FALLBACK_DOC);
 
-  if (!doc) {
-    return (
-      <pre className="my-2 overflow-x-auto rounded-lg bg-black/20 px-3 py-2 font-mono text-xs text-foreground/70 whitespace-pre-wrap">
-        {json}
-      </pre>
-    );
-  }
+  // Skip render for empty or unparseable blocks — avoids the "empty grey pill" artifact
+  // from streaming partial blocks or LLM emitting an empty play fence.
+  if (!doc) return null;
 
   const hasRoutes = doc.layers.routes.length > 0;
   const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;

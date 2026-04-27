@@ -38,7 +38,7 @@ export async function searchKb(query: string, filter: KbFilter = {}): Promise<Kb
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("match_rag_documents", {
     p_query_embedding: `[${embedding.join(",")}]`,
-    p_match_count: filter.matchCount ?? 8,
+    p_match_count: filter.matchCount ?? 12,
     p_scope: filter.scope ?? null,
     p_playbook_id: filter.playbookId ?? null,
     p_sport_variant: filter.sportVariant ?? null,
