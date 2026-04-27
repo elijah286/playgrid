@@ -70,13 +70,16 @@ export type SeatCollaborator = {
   /** Owner's playbook IDs this user is a member of (non-owner). Used by
    *  the /account UI to deep-link to the right playbook for management. */
   playbookIds: string[];
+  /** Whether this coach is consuming one of the owner's seats. False when
+   *  the coach has their own paid plan (Coach+ tier rides free). */
+  consumesSeat: boolean;
 };
 
 /**
- * List the coaches currently consuming seats for the given owner —
- * distinct active editor-role members of the owner's playbooks whose own
- * tier is below Coach. Players (viewer role) don't count. Returns an
- * empty list for non-paying owners.
+ * List every coach with edit access on the owner's playbooks, flagged
+ * with whether each consumes a seat. Coach+ tier collaborators ride
+ * free (consumesSeat=false) so the UI can list them separately. Returns
+ * an empty list for non-paying owners.
  */
 export async function getSeatCollaborators(
   ownerId: string,
@@ -110,48 +113,45 @@ export async function getSeatCollaborators(
     list.push(r.playbook_id as string);
     playbooksByUser.set(uid, list);
   }
-  const candidateUserIds = Array.from(playbooksByUser.keys());
-  if (candidateUserIds.length === 0) return [];
+  const userIds = Array.from(playbooksByUser.keys());
+  if (userIds.length === 0) return [];
 
-  // Filter out Coach+ collaborators (free seats), then enrich with profile/email.
   const { data: entRows } = await admin
     .from("user_entitlements")
     .select("user_id, tier")
-    .in("user_id", candidateUserIds);
+    .in("user_id", userIds);
   const tierByUser = new Map<string, string>();
   for (const r of entRows ?? []) {
     tierByUser.set(r.user_id as string, (r.tier as string | null) ?? "free");
   }
-  const seatedUserIds = candidateUserIds.filter(
-    (uid) => (tierByUser.get(uid) ?? "free") === "free",
-  );
-  if (seatedUserIds.length === 0) return [];
 
   const profileResult = await admin
     .from("profiles")
     .select("id, display_name")
-    .in("id", seatedUserIds);
+    .in("id", userIds);
   const nameByUser = new Map<string, string | null>();
   for (const r of profileResult.data ?? []) {
     nameByUser.set(r.id as string, (r.display_name as string | null) ?? null);
   }
   const emailByUser = new Map<string, string | null>();
   await Promise.all(
-    seatedUserIds.map(async (uid) => {
+    userIds.map(async (uid) => {
       const { data } = await admin.auth.admin.getUserById(uid);
       if (data?.user) emailByUser.set(uid, data.user.email ?? null);
     }),
   );
 
-  return seatedUserIds
+  return userIds
     .map((uid) => {
       const ids = playbooksByUser.get(uid) ?? [];
+      const tier = tierByUser.get(uid) ?? "free";
       return {
         userId: uid,
         displayName: nameByUser.get(uid) ?? null,
         email: emailByUser.get(uid) ?? null,
         playbookCount: ids.length,
         playbookIds: ids,
+        consumesSeat: tier === "free",
       };
     })
     .sort((a, b) => (a.displayName ?? a.email ?? "").localeCompare(b.displayName ?? b.email ?? ""));
@@ -198,10 +198,14 @@ export async function getPendingCoachInvites(
     .gt("expires_at", nowIso)
     .order("created_at", { ascending: false });
 
+  // An invite with uses_count > 0 has already been accepted by someone;
+  // even if max_uses=null left it "live" by the database, the recipient
+  // is now an active member and the row should not show as pending.
   const live = (inviteRows ?? []).filter((r) => {
     if (!r.email) return false;
-    const max = r.max_uses as number | null;
     const used = (r.uses_count as number | null) ?? 0;
+    if (used > 0) return false;
+    const max = r.max_uses as number | null;
     return max === null || used < max;
   });
   if (live.length === 0) return [];

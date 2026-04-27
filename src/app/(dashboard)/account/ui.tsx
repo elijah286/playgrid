@@ -917,6 +917,11 @@ function SeatsCard({
             style={{ width: `${pct}%` }}
           />
         </div>
+        {collaborators.some((c) => !c.consumesSeat) ? (
+          <p className="text-xs text-muted">
+            Coaches with their own paid plan don&rsquo;t use one of your seats.
+          </p>
+        ) : null}
         {collaborators.length === 0 ? (
           <p className="text-xs text-muted">
             No coaches yet. Invite a coach with edit access from any playbook.
@@ -933,8 +938,18 @@ function SeatsCard({
               return (
                 <li key={c.userId} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-foreground">
-                      {c.displayName ?? c.email ?? "Unknown user"}
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {c.displayName ?? c.email ?? "Unknown user"}
+                      </span>
+                      {!c.consumesSeat ? (
+                        <span
+                          title="This coach has their own paid plan, so they don't use one of your seats."
+                          className="shrink-0 rounded-full bg-success-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success ring-1 ring-success/30"
+                        >
+                          Free
+                        </span>
+                      ) : null}
                     </div>
                     {c.displayName && c.email ? (
                       <div className="truncate text-xs text-muted">{c.email}</div>
