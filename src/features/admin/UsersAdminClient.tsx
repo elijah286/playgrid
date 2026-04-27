@@ -913,9 +913,22 @@ function UserStatsPanel({ userId }: { userId: string }) {
                   </span>
                 </li>
                 <li>
+                  <span className="text-muted">Source:</span>{" "}
+                  <span className="font-semibold">
+                    {activity.acquisition.source.label}
+                  </span>
+                  {activity.acquisition.source.host &&
+                    activity.acquisition.source.host !==
+                      activity.acquisition.source.label && (
+                      <span className="ml-1 text-muted">
+                        ({activity.acquisition.source.host})
+                      </span>
+                    )}
+                </li>
+                <li>
                   <span className="text-muted">Referrer:</span>{" "}
                   <span className="font-mono">
-                    {activity.acquisition.referrer ?? "direct"}
+                    {activity.acquisition.referrer ?? "—"}
                   </span>
                 </li>
                 <li>
@@ -937,6 +950,14 @@ function UserStatsPanel({ userId }: { userId: string }) {
                   ]
                     .filter(Boolean)
                     .join(", ") || "—"}
+                  {activity.acquisition.locationSource === "session_ip" && (
+                    <span
+                      className="ml-1 text-muted"
+                      title="Derived from sign-in IP — page-view geo headers were missing"
+                    >
+                      (from sign-in IP)
+                    </span>
+                  )}
                 </li>
                 <li>
                   <span className="text-muted">Device:</span>{" "}

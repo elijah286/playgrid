@@ -5,6 +5,12 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
+import {
+  classifyReferrer,
+  describeSource,
+  type ReferrerSource,
+} from "@/lib/analytics/referrer-source";
+import { lookupIpLocation } from "@/lib/analytics/ip-geo";
 
 export type AdminUserRowData = {
   id: string;
@@ -382,7 +388,14 @@ export type AdminUserActivity = {
     country: string | null;
     region: string | null;
     city: string | null;
+    /** Where geo was derived from. */
+    locationSource: "page_view" | "session_ip" | null;
     device: string | null;
+    source: {
+      kind: ReferrerSource["kind"];
+      label: string;
+      host: string | null;
+    };
   } | null;
   signupSource: {
     kind:
@@ -453,7 +466,7 @@ export async function getAdminUserActivityAction(
     admin
       .from("user_sessions")
       .select(
-        "device_label, approx_location, created_at, last_seen_at, revoked_at, revoked_reason",
+        "device_label, approx_location, ip, created_at, last_seen_at, revoked_at, revoked_reason",
       )
       .eq("user_id", userId)
       .order("last_seen_at", { ascending: false })
@@ -539,6 +552,33 @@ export async function getAdminUserActivityAction(
 
   const landingPath = (firstView?.path as string | null) ?? null;
   const referrer = (firstView?.referrer as string | null) ?? null;
+  const utmSource = (firstView?.utm_source as string | null) ?? null;
+  const utmMedium = (firstView?.utm_medium as string | null) ?? null;
+
+  const referrerSource: ReferrerSource = classifyReferrer({
+    referrer,
+    utmSource,
+    utmMedium,
+  });
+  const sourceLabel = describeSource(referrerSource);
+
+  // Geo: prefer the first page_view's Vercel-derived country, fall back to
+  // an IP lookup against the most recent user_session if that's missing.
+  let geoCountry = (firstView?.country as string | null) ?? null;
+  let geoRegion = (firstView?.region as string | null) ?? null;
+  let geoCity = (firstView?.city as string | null) ?? null;
+  let locationSource: "page_view" | "session_ip" | null = geoCountry || geoRegion || geoCity ? "page_view" : null;
+  if (!locationSource) {
+    const sessionWithIp = (sessionRows ?? []).find((s) => s.ip);
+    const ip = (sessionWithIp?.ip as string | null) ?? null;
+    const looked = await lookupIpLocation(ip);
+    if (looked && (looked.country || looked.region || looked.city)) {
+      geoCountry = looked.country;
+      geoRegion = looked.region;
+      geoCity = looked.city;
+      locationSource = "session_ip";
+    }
+  }
 
   let signupSource: AdminUserActivity["signupSource"];
   if (coachInviteRow) {
@@ -575,7 +615,10 @@ export async function getAdminUserActivityAction(
     signupSource = {
       kind: "home",
       label: "Home page",
-      detail: referrer ? `via ${referrer}` : "Direct visit",
+      detail:
+        referrerSource.kind === "none"
+          ? "Direct visit (no referrer sent)"
+          : `Found via ${sourceLabel}`,
       invitedByEmail: null,
       playbookName: null,
     };
@@ -624,10 +667,16 @@ export async function getAdminUserActivityAction(
             utmSource: (firstView.utm_source as string | null) ?? null,
             utmMedium: (firstView.utm_medium as string | null) ?? null,
             utmCampaign: (firstView.utm_campaign as string | null) ?? null,
-            country: (firstView.country as string | null) ?? null,
-            region: (firstView.region as string | null) ?? null,
-            city: (firstView.city as string | null) ?? null,
+            country: geoCountry,
+            region: geoRegion,
+            city: geoCity,
+            locationSource,
             device: (firstView.device as string | null) ?? null,
+            source: {
+              kind: referrerSource.kind,
+              label: sourceLabel,
+              host: referrerSource.host,
+            },
           }
         : null,
       signupSource,
