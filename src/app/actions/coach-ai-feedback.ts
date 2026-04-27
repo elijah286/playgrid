@@ -96,3 +96,58 @@ export async function deleteKbMissAction(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+// ─── Admin: list refusals ────────────────────────────────────────────────────
+
+export type RefusalRow = {
+  id: string;
+  user_request: string;
+  refusal_reason: string;
+  playbook_id: string | null;
+  sport_variant: string | null;
+  sanctioning_body: string | null;
+  game_level: string | null;
+  age_division: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
+export async function listCoachAiRefusalsAction(
+  reviewedFilter: "unreviewed" | "all" = "unreviewed",
+): Promise<{ ok: true; items: RefusalRow[] } | { ok: false; error: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+  let q = supabase
+    .from("coach_ai_refusals")
+    .select("id, user_request, refusal_reason, playbook_id, sport_variant, sanctioning_body, game_level, age_division, reviewed_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (reviewedFilter === "unreviewed") q = q.is("reviewed_at", null);
+  const { data, error } = await q;
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, items: (data ?? []) as RefusalRow[] };
+}
+
+export async function setRefusalReviewedAction(
+  id: string,
+  reviewed: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("coach_ai_refusals")
+    .update({ reviewed_at: reviewed ? new Date().toISOString() : null })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function deleteRefusalAction(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("coach_ai_refusals").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

@@ -390,6 +390,60 @@ const flag_outside_kb: CoachAiTool = {
   },
 };
 
+const flag_refusal: CoachAiTool = {
+  def: {
+    name: "flag_refusal",
+    description:
+      "Silently log when you must refuse a coach's request due to missing context or permissions. " +
+      "Call this when you cannot fulfill a request because: the required playbook is not anchored, " +
+      "the coach lacks permission, the input is invalid, or another constraint prevents action. " +
+      "The user does NOT see this tool — never mention it. This feeds the admin feedback queue so " +
+      "we know which features need rework or clarification.",
+    input_schema: {
+      type: "object",
+      properties: {
+        user_request: { type: "string", description: "What the coach asked for, verbatim or close." },
+        refusal_reason: {
+          type: "string",
+          enum: [
+            "playbook_required",
+            "permission_denied",
+            "invalid_input",
+            "feature_unavailable",
+            "tooling_error",
+          ],
+          description: "Why the request cannot be fulfilled.",
+        },
+      },
+      required: ["user_request", "refusal_reason"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const userRequest = typeof input.user_request === "string" ? input.user_request.trim().slice(0, 2000) : "";
+    const refusalReason = typeof input.refusal_reason === "string" ? input.refusal_reason : "tooling_error";
+    if (!userRequest) return { ok: true, result: "skipped (empty)" };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { logCoachAiRefusal } = require("./feedback-log") as typeof import("./feedback-log");
+      await logCoachAiRefusal({
+        userRequest,
+        refusalReason,
+        playbookId: ctx.playbookId,
+        sportVariant: ctx.sportVariant,
+        sanctioningBody: ctx.sanctioningBody,
+        gameLevel: ctx.gameLevel,
+        ageDivision: ctx.ageDivision,
+      });
+      return { ok: true, result: "logged" };
+    } catch (e) {
+      // Never fail the agent loop on a logging failure.
+      const msg = e instanceof Error ? e.message : "log failed";
+      return { ok: true, result: `skipped (${msg})` };
+    }
+  },
+};
+
 const set_feedback_optin: CoachAiTool = {
   def: {
     name: "set_feedback_optin",
@@ -616,6 +670,7 @@ const BASE_TOOLS: CoachAiTool[] = [
   create_formation,
   create_play,
   flag_outside_kb,
+  flag_refusal,
   set_feedback_optin,
 ];
 

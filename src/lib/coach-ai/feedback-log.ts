@@ -32,3 +32,31 @@ export async function logCoachAiKbMiss(args: {
   });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Append a row to public.coach_ai_refusals via the security-definer RPC.
+ *
+ * Used when Coach AI cannot fulfill a request (missing playbook, permission denied, etc).
+ * The RPC silently no-ops when the user has not opted in to feedback collection.
+ */
+export async function logCoachAiRefusal(args: {
+  userRequest: string;
+  refusalReason: string;
+  playbookId: string | null;
+  sportVariant: string | null;
+  sanctioningBody: string | null;
+  gameLevel: string | null;
+  ageDivision: string | null;
+}): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("log_coach_ai_refusal", {
+    p_user_request: args.userRequest,
+    p_refusal_reason: args.refusalReason,
+    p_playbook_id: args.playbookId,
+    p_sport_variant: args.sportVariant,
+    p_sanctioning_body: args.sanctioningBody,
+    p_game_level: args.gameLevel,
+    p_age_division: args.ageDivision,
+  });
+  if (error) throw new Error(error.message);
+}
