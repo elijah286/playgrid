@@ -1,8 +1,15 @@
 "use client";
 
-import { jsPDF } from "jspdf";
-import { svg2pdf } from "svg2pdf.js";
+import type { jsPDF as jsPDFType } from "jspdf";
 import { isNativeApp } from "@/lib/native/isNativeApp";
+
+async function loadPdfLibs() {
+  const [{ jsPDF }, { svg2pdf }] = await Promise.all([
+    import("jspdf"),
+    import("svg2pdf.js"),
+  ]);
+  return { jsPDF, svg2pdf };
+}
 
 /** svg2pdf resolves font-family against jsPDF's built-in PDF fonts, which are
  *  only Helvetica/Times/Courier. Any other family (Inter, system-ui) falls
@@ -56,6 +63,7 @@ function forceHelveticaOnTextNodes(svg: Element) {
 }
 
 export async function exportSvgToPdf(svgMarkup: string, filename: string) {
+  const { jsPDF, svg2pdf } = await loadPdfLibs();
   const parser = new DOMParser();
   const parsed = parser.parseFromString(sanitizeSvgForPdf(svgMarkup), "image/svg+xml");
   const svg = parsed.documentElement;
@@ -77,8 +85,9 @@ export async function exportSvgToPdf(svgMarkup: string, filename: string) {
 export async function exportSvgsToMultiPagePdf(svgPages: string[], filename: string) {
   if (svgPages.length === 0) return;
 
+  const { jsPDF, svg2pdf } = await loadPdfLibs();
   const parser = new DOMParser();
-  let pdf: jsPDF | null = null;
+  let pdf: jsPDFType | null = null;
 
   for (const svgMarkup of svgPages) {
     const parsed = parser.parseFromString(sanitizeSvgForPdf(svgMarkup), "image/svg+xml");
@@ -106,8 +115,9 @@ export async function exportSvgsToMultiPagePdf(svgPages: string[], filename: str
 /** Open the compiled PDF in a new tab and trigger the browser print dialog. */
 export async function openSvgsInPrintTab(svgPages: string[]) {
   if (svgPages.length === 0) return;
+  const { jsPDF, svg2pdf } = await loadPdfLibs();
   const parser = new DOMParser();
-  let pdf: jsPDF | null = null;
+  let pdf: jsPDFType | null = null;
   for (const svgMarkup of svgPages) {
     const parsed = parser.parseFromString(sanitizeSvgForPdf(svgMarkup), "image/svg+xml");
     const svg = parsed.documentElement;

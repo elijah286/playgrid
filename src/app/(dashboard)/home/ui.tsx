@@ -1009,9 +1009,9 @@ export function DashboardClient({
       if (t === "playbooks") params.delete("tab");
       else params.set("tab", t);
       const qs = params.toString();
-      router.replace(qs ? `/home?${qs}` : "/home", { scroll: false });
+      window.history.replaceState({}, "", qs ? `/home?${qs}` : "/home");
     },
-    [router, searchParams],
+    [searchParams],
   );
   const [calendarPending, setCalendarPending] = useState(initialCalendarPending);
   const inboxCount = inboxAlerts.length;
@@ -1302,40 +1302,9 @@ export function DashboardClient({
 
   const showTabNav =
     teamCalendarAvailable || inboxCount > 0 || activityCount > 0;
-  if (showTabNav && homeTab === "calendar" && teamCalendarAvailable) {
-    return (
-      <div className="space-y-6">
-        <HomeTabNav
-          tab={homeTab}
-          onChange={setHomeTab}
-          inboxCount={inboxCount}
-          showCalendar={teamCalendarAvailable}
-          calendarPending={calendarPending}
-        />
-        <HomeCalendarTab onPendingChange={setCalendarPending} />
-      </div>
-    );
-  }
-  if (showTabNav && homeTab === "inbox") {
-    return (
-      <div className="space-y-6">
-        <HomeTabNav
-          tab={homeTab}
-          onChange={setHomeTab}
-          inboxCount={inboxCount}
-          showCalendar={teamCalendarAvailable}
-          calendarPending={calendarPending}
-        />
-        <InboxTab
-          initialAlerts={inboxAlerts}
-          initialActivity={activityEntries}
-        />
-      </div>
-    );
-  }
 
   return (
-    <div className={`space-y-8 ${pending ? "cursor-wait" : ""}`}>
+    <div className={pending ? "cursor-wait" : undefined}>
       {showTabNav && (
         <HomeTabNav
           tab={homeTab}
@@ -1345,7 +1314,22 @@ export function DashboardClient({
           calendarPending={calendarPending}
         />
       )}
-      {pending && (
+
+      {teamCalendarAvailable && (
+        <div hidden={homeTab !== "calendar"} className="mt-6">
+          <HomeCalendarTab onPendingChange={setCalendarPending} />
+        </div>
+      )}
+
+      <div hidden={homeTab !== "inbox"} className="mt-6">
+        <InboxTab
+          initialAlerts={inboxAlerts}
+          initialActivity={activityEntries}
+        />
+      </div>
+
+      <div hidden={homeTab !== "playbooks"} className="mt-8 space-y-8">
+        {pending && (
         <div
           className="pointer-events-none fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-elevated"
           role="status"
@@ -1621,6 +1605,7 @@ export function DashboardClient({
         title={upgradeNotice?.title ?? ""}
         message={upgradeNotice?.message ?? ""}
       />
+      </div>
     </div>
   );
 }
