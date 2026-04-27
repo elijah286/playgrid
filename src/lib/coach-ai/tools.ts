@@ -420,7 +420,204 @@ const set_feedback_optin: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, draw_play, create_playbook, create_event, flag_outside_kb, set_feedback_optin];
+const list_formations: CoachAiTool = {
+  def: {
+    name: "list_formations",
+    description:
+      "List the formations saved on the current playbook. Use this BEFORE creating a new play so you can " +
+      "ask the coach whether to reuse an existing formation or build a new one. Requires the chat to be " +
+      "anchored to a playbook the coach can edit.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  async handler(_input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook anchored — open one first." };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { listFormationsForPlaybookAction } =
+        require("@/app/actions/formations") as typeof import("@/app/actions/formations");
+      const res = await listFormationsForPlaybookAction(ctx.playbookId);
+      if (!res.ok) return { ok: false, error: res.error };
+      if (res.formations.length === 0) {
+        return { ok: true, result: "No formations saved yet on this playbook." };
+      }
+      const lines = res.formations.map(
+        (f) => `- ${f.displayName} (id: ${f.id}, kind: ${f.kind}, ${f.players.length} players)`,
+      );
+      return { ok: true, result: lines.join("\n") };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "list_formations failed" };
+    }
+  },
+};
+
+const create_formation: CoachAiTool = {
+  def: {
+    name: "create_formation",
+    description:
+      "Save a new formation on the current playbook so it can be reused across plays. Use this AFTER the " +
+      "coach has confirmed the formation name and player layout. Pass the same `players` shape you'd use " +
+      "in `draw_play` (yards-based coords). Returns a formation_id you should pass to `create_play`.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Formation display name, e.g. \"Trips Right\"." },
+        kind: { type: "string", enum: ["offense", "defense", "special_teams"], description: "Default offense." },
+        spec: {
+          type: "object",
+          description:
+            "Same `spec` shape as draw_play: { variant, players: [{id, x, y, team, role?}] }. Routes/zones are ignored.",
+        },
+      },
+      required: ["name", "spec"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook anchored — open one first." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
+    if (!name) return { ok: false, error: "Formation name is required." };
+    const kindRaw = typeof input.kind === "string" ? input.kind : "offense";
+    const kind = (["offense", "defense", "special_teams"] as const).includes(kindRaw as never)
+      ? (kindRaw as "offense" | "defense" | "special_teams")
+      : "offense";
+    const spec = (input.spec ?? {}) as Record<string, unknown>;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { coachDiagramToPlayDocument } =
+        require("@/features/coach-ai/coachDiagramConverter") as typeof import("@/features/coach-ai/coachDiagramConverter");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { saveFormationAction } =
+        require("@/app/actions/formations") as typeof import("@/app/actions/formations");
+      const doc = coachDiagramToPlayDocument(spec as Parameters<typeof coachDiagramToPlayDocument>[0]);
+      const res = await saveFormationAction(
+        name,
+        doc.layers.players,
+        doc.sportProfile,
+        doc.lineOfScrimmageY,
+        kind,
+        ctx.playbookId,
+      );
+      if (!res.ok) return { ok: false, error: res.error };
+      return {
+        ok: true,
+        result: `Created formation "${name}" (id: ${res.formationId}). Pass this id as formation_id to create_play.`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "create_formation failed" };
+    }
+  },
+};
+
+const create_play: CoachAiTool = {
+  def: {
+    name: "create_play",
+    description:
+      "Save a play to the CURRENT playbook. Use this when the coach has explicitly confirmed they want " +
+      "the play added (\"yes, save it\", \"add it\"). The play stores the same diagram shape you'd pass " +
+      "to draw_play. Always pair the play with a formation: pass an existing formation_id (from " +
+      "list_formations) OR call create_formation first and pass the new id. Confirm the play name with " +
+      "the coach before calling.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Play name, ≤80 chars." },
+        formation_id: {
+          type: "string",
+          description:
+            "Formation UUID from list_formations or create_formation. Required — every play needs a formation.",
+        },
+        play_type: {
+          type: "string",
+          enum: ["offense", "defense", "special_teams"],
+          description: "Default offense.",
+        },
+        spec: {
+          type: "object",
+          description:
+            "Same `spec` shape as draw_play: { variant, players, routes?, zones? }. Coords are yards.",
+        },
+      },
+      required: ["name", "formation_id", "spec"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook anchored — open one first." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
+    if (!name) return { ok: false, error: "Play name is required." };
+    const formationId = typeof input.formation_id === "string" ? input.formation_id : "";
+    if (!formationId) return { ok: false, error: "formation_id is required — list_formations first or create_formation." };
+    const playTypeRaw = typeof input.play_type === "string" ? input.play_type : "offense";
+    const playType = (["offense", "defense", "special_teams"] as const).includes(playTypeRaw as never)
+      ? (playTypeRaw as "offense" | "defense" | "special_teams")
+      : "offense";
+    const spec = (input.spec ?? {}) as Record<string, unknown>;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { coachDiagramToPlayDocument } =
+        require("@/features/coach-ai/coachDiagramConverter") as typeof import("@/features/coach-ai/coachDiagramConverter");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createPlayAction, savePlayVersionAction } =
+        require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+
+      const doc = coachDiagramToPlayDocument(spec as Parameters<typeof coachDiagramToPlayDocument>[0]);
+      const variant = doc.sportProfile.variant ?? "flag_7v7";
+
+      const created = await createPlayAction(ctx.playbookId, {
+        playName: name,
+        formationId,
+        playType,
+        variant,
+        initialPlayers: doc.layers.players,
+      });
+      if (!created.ok || !created.playId) {
+        return { ok: false, error: created.error ?? "create_play failed" };
+      }
+
+      // Stamp the formation + name onto the document so the second save has
+      // routes/zones AND the formation link.
+      const fullDoc = {
+        ...doc,
+        metadata: {
+          ...doc.metadata,
+          formationId,
+          coachName: name,
+          playType,
+        },
+      };
+      const saved = await savePlayVersionAction(created.playId, fullDoc, "v1", null);
+      if (!saved.ok) {
+        // Play row exists but version save failed — surface the error so the
+        // coach can retry; we don't roll back the empty play row.
+        return { ok: false, error: `Play created but routes failed to save: ${saved.error}` };
+      }
+
+      const url = `/plays/${created.playId}/edit`;
+      return {
+        ok: true,
+        result:
+          `Saved play "${name}" to the playbook. Tell the coach it's added and link them: [Open ${name}](${url}).`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };
+    }
+  },
+};
+
+const BASE_TOOLS: CoachAiTool[] = [
+  search_kb,
+  draw_play,
+  create_playbook,
+  create_event,
+  list_formations,
+  create_formation,
+  create_play,
+  flag_outside_kb,
+  set_feedback_optin,
+];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {
