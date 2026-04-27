@@ -185,13 +185,30 @@ export async function runAgent(
 
       // For draw_play: stream the play fenced block to the client live and
       // remember it so we can prepend it to finalText (so it persists when
-      // the chat history is later replayed).
+      // the chat history is later replayed). Accept either shape:
+      //   draw_play({spec: {players: [...]}})  — what we asked for
+      //   draw_play({players: [...]})          — what models often emit (flat)
+      //   draw_play({spec: "{...json...}"})    — string-wrapped JSON
       if (tu.name === "draw_play" && r.ok) {
-        const spec = (tu.input as { spec?: unknown }).spec;
-        if (spec && typeof spec === "object") {
+        let spec: unknown = (tu.input as { spec?: unknown }).spec;
+        if (typeof spec === "string") {
+          try { spec = JSON.parse(spec); } catch { /* leave as string, fail below */ }
+        }
+        if (!spec || typeof spec !== "object") {
+          // Model probably flattened — treat the whole input as the spec.
+          if (tu.input && typeof tu.input === "object" && "players" in tu.input) {
+            spec = tu.input;
+          }
+        }
+        if (spec && typeof spec === "object" && "players" in (spec as Record<string, unknown>)) {
           const fenced = "```play\n" + JSON.stringify(spec, null, 2) + "\n```\n\n";
           injectedDiagrams.push(fenced);
           onEvent?.({ type: "text_delta", text: fenced });
+        } else {
+          // Diagnostic so this never silently fails again.
+          const dump = "> ⚠️ `draw_play` was called but the input shape was unrecognized:\n```json\n" + JSON.stringify(tu.input, null, 2) + "\n```\n\n";
+          injectedDiagrams.push(dump);
+          onEvent?.({ type: "text_delta", text: dump });
         }
       }
 
