@@ -273,12 +273,14 @@ function PlaybookTile({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-0.5 p-2.5">
-        <div className="flex items-start justify-between gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">
             {tile.name}
           </h3>
-          {tile.is_example && <Badge variant="primary">Example</Badge>}
-          {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
+          <div className="flex flex-wrap items-center gap-1">
+            {tile.is_example && <Badge variant="primary">Example</Badge>}
+            {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
+          </div>
         </div>
         <p className="text-[11px] text-muted">
           {tile.season ? `${tile.season} · ` : ""}
@@ -587,7 +589,7 @@ function PlaybookBookTile({
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
                   Playbook
                 </span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-end gap-1.5 max-w-[120px]">
                   {tile.is_example && <Badge variant="primary">Example</Badge>}
                   {tile.role !== "owner" && (
                     <Badge variant={tile.role === "editor" ? "primary" : "default"}>
