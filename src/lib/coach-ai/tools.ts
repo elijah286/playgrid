@@ -1,4 +1,5 @@
 import { searchKb, type KbFilter } from "./retrieve";
+import { createClient } from "@/lib/supabase/server";
 import type { ToolDef } from "./llm";
 
 export type CoachAiMode = "normal" | "admin_training" | "playbook_training";
@@ -102,7 +103,66 @@ const search_kb: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb];
+const list_my_playbooks: CoachAiTool = {
+  def: {
+    name: "list_my_playbooks",
+    description:
+      "List the playbooks the signed-in coach owns or belongs to. " +
+      "Call this whenever the coach needs to pick a team (e.g. for scheduling, " +
+      "play edits, or any other playbook-specific action) and hasn't opened one yet. " +
+      "Return the results as clickable links so the coach can navigate directly.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  async handler(_input, _ctx) {
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { ok: false, error: "Not signed in." };
+
+      const { data, error } = await supabase
+        .from("playbook_members")
+        .select("role, playbooks!inner(id, name, season, sport_variant, is_archived)")
+        .eq("user_id", user.id)
+        .order("role", { ascending: true });
+
+      if (error) return { ok: false, error: error.message };
+
+      type Row = {
+        role: string;
+        playbooks: { id: string; name: string; season: string | null; sport_variant: string | null; is_archived: boolean } | Array<{ id: string; name: string; season: string | null; sport_variant: string | null; is_archived: boolean }>;
+      };
+
+      const rows = (data as Row[] ?? []).filter((r) => {
+        const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+        return pb && !pb.is_archived;
+      });
+
+      if (rows.length === 0) return { ok: true, result: "No playbooks found." };
+
+      const lines = rows.map((r) => {
+        const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
+        const label = [pb.name, pb.season, pb.sport_variant].filter(Boolean).join(" · ");
+        return `- [${label}](/playbooks/${pb.id}) (${r.role})`;
+      });
+
+      return {
+        ok: true,
+        result:
+          "Here are your playbooks — click one to open it, then ask me again:\n\n" +
+          lines.join("\n"),
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "list_my_playbooks failed" };
+    }
+  },
+};
+
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {
