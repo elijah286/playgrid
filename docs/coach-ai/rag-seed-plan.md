@@ -55,32 +55,42 @@ unit of work.
 - [ ] Strategy & tactics
 - [ ] Coaching techniques
 
-### 4. Pop Warner (tackle)
+### 4. Pop Warner (tackle)  ✅ DONE
 - [x] Rules v1 (0097)
-- [ ] Rules v2 expansion
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Rules v2 expansion (0130, applied direct — file lost, ~10 chunks in DB)
+- [x] Penalties (shared via 0131, sanctioning_body=NULL — applied direct)
+- [x] Common plays (shared via 0132, sanctioning_body=NULL, 26 chunks)
+- [x] Defensive schemes (shared via 0133, 15 chunks)
+- [x] Strategy & tactics (shared via 0134, 20 chunks)
+- [x] Coaching techniques (shared via 0135, 15 chunks)
 
-### 5. AYF (American Youth Football, tackle)
+### 5. AYF (American Youth Football, tackle)  ✅ DONE
 - [x] Rules v1 (0098)
-- [ ] Rules v2 expansion
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Rules v2 expansion (0130, applied direct — file lost, ~10 chunks in DB)
+- [x] Penalties (shared via 0131)
+- [x] Common plays (shared via 0132)
+- [x] Defensive schemes (shared via 0133)
+- [x] Strategy & tactics (shared via 0134)
+- [x] Coaching techniques (shared via 0135)
 
 ### 6. NFHS (high school 11-man tackle)
-- [x] Rules v1 (0099)
-- [ ] Rules v2 expansion
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Rules v1 (0099) — has duplicate rows, needs dedupe
+- [ ] Rules v2 expansion (next)
+- [x] Penalties (shared via 0131)
+- [x] Common plays (shared via 0132)
+- [x] Defensive schemes (shared via 0133)
+- [x] Strategy & tactics (shared via 0134)
+- [x] Coaching techniques (shared via 0135)
+
+> **Note on shared tackle content:** plays, defenses, strategy, and coaching
+> are universal across Pop Warner / AYF / NFHS — seeded once with
+> `sport_variant='tackle_11', sanctioning_body=NULL`. League-specific
+> modifications (e.g. youth contact restrictions) live in per-league chunks.
+>
+> **Note on 0130/0131:** these were applied directly to the remote DB during
+> a context-loss recovery; migration files were not preserved. Data lives in
+> DB and is queryable; fresh-clone replay is incomplete for those two until
+> someone backfills. Seed counts confirmed via `select sport_variant, sanctioning_body, topic, count(*) ...`.
 
 ### 7. 6-man tackle
 - [x] Rules v1 (0100)
