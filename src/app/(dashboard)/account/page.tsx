@@ -9,6 +9,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 import { getSeatUsage, getSeatCollaborators, getPendingCoachInvites, type SeatUsage, type SeatCollaborator, type PendingCoachInvite } from "@/lib/billing/seats";
 import { DEVICE_ID_COOKIE } from "@/lib/auth/sessions";
+import { getAiFeedbackOptInAction } from "@/app/actions/coach-ai-feedback";
 import { AccountClient, type AccountSession } from "./ui";
 
 export default async function AccountPage() {
@@ -59,6 +60,9 @@ export default async function AccountPage() {
     /* best effort */
   }
 
+  const aiFeedbackRes = await getAiFeedbackOptInAction();
+  const aiFeedbackStatus = aiFeedbackRes.ok ? aiFeedbackRes.status : "unanswered";
+
   if (isCoachPlus) {
     try {
       const [usage, collabs, pending] = await Promise.all([
@@ -99,6 +103,7 @@ export default async function AccountPage() {
         seatUsage={seatUsage}
         seatCollaborators={seatCollaborators}
         pendingCoachInvites={pendingCoachInvites}
+        aiFeedbackStatus={aiFeedbackStatus}
       />
     </div>
   );

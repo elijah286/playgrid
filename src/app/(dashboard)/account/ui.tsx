@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, CreditCard, IdCard, KeyRound, LogOut, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
+import { AlertTriangle, CreditCard, IdCard, KeyRound, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   deleteOwnAccountAction,
@@ -18,6 +18,7 @@ import type { Entitlement } from "@/lib/billing/entitlement";
 import { TIER_LABEL } from "@/lib/billing/features";
 import type { SeatUsage, SeatCollaborator, PendingCoachInvite } from "@/lib/billing/seats";
 import { resendCoachInviteAction } from "@/app/actions/invites";
+import { setAiFeedbackOptInAction } from "@/app/actions/coach-ai-feedback";
 import { removeCoachAccessAction } from "@/app/actions/playbook-roster";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import type { ColorSchemePreference } from "@/components/theme/colorModeStorage";
@@ -54,6 +55,7 @@ export function AccountClient({
   seatUsage,
   seatCollaborators,
   pendingCoachInvites,
+  aiFeedbackStatus,
 }: {
   email: string;
   displayName: string | null;
@@ -63,6 +65,7 @@ export function AccountClient({
   seatUsage: SeatUsage | null;
   seatCollaborators: SeatCollaborator[];
   pendingCoachInvites: PendingCoachInvite[];
+  aiFeedbackStatus: "consenting" | "declined" | "unanswered";
 }) {
   return (
     <div className="space-y-10">
@@ -106,6 +109,13 @@ export function AccountClient({
 
       <Section title="Preferences" description="Customize how xogridmaker looks.">
         <AppearanceCard />
+      </Section>
+
+      <Section
+        title="Privacy"
+        description="Control what Coach AI is allowed to log about your questions."
+      >
+        <CoachAiFeedbackCard initialStatus={aiFeedbackStatus} />
       </Section>
 
       <Section title="Danger zone" tone="danger">
@@ -762,6 +772,83 @@ function AppearanceCard() {
           );
         })}
       </div>
+    </Card>
+  );
+}
+
+function CoachAiFeedbackCard({
+  initialStatus,
+}: {
+  initialStatus: "consenting" | "declined" | "unanswered";
+}) {
+  const [status, setStatus] = useState(initialStatus);
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+
+  const isOn = status === "consenting";
+
+  function setOptIn(next: boolean) {
+    if (pending) return;
+    setErr(null);
+    const prev = status;
+    setStatus(next ? "consenting" : "declined");
+    startTransition(async () => {
+      const res = await setAiFeedbackOptInAction(next);
+      if (!res.ok) {
+        setStatus(prev);
+        setErr(res.error);
+      }
+    });
+  }
+
+  return (
+    <Card
+      icon={MessageSquareQuote}
+      title="Help improve Coach AI"
+      description="When Coach AI answers from general football knowledge instead of our seeded playbook, log the topic so we know what to add next. We never log the rest of your chat."
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">Feedback logging</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {isOn
+              ? "On — we'll log the topic and your question whenever Coach AI falls back to general knowledge."
+              : status === "declined"
+                ? "Off — Coach AI won't log anything about your questions."
+                : "Off by default."}
+            {" "}
+            <Link href="/privacy" className="text-primary hover:underline">
+              Privacy policy
+            </Link>
+            .
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isOn}
+          aria-label="Help improve Coach AI"
+          disabled={pending}
+          onClick={() => setOptIn(!isOn)}
+          className={cn(
+            "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+            isOn ? "bg-primary" : "bg-surface-inset",
+            pending && "opacity-60",
+          )}
+        >
+          <span
+            className={cn(
+              "inline-block size-5 rounded-full bg-white shadow transition-transform",
+              isOn ? "translate-x-5" : "translate-x-0.5",
+            )}
+          />
+        </button>
+      </div>
+      {err && (
+        <p className="mt-3 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+          {err}
+        </p>
+      )}
     </Card>
   );
 }
