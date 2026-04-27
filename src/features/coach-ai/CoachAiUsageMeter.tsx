@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
-import { getCoachAiUsageAction, type CoachAiUsageInfo } from "@/app/actions/coach-ai-usage";
+import { getCoachAiUsageAction } from "@/app/actions/coach-ai-usage";
+import type { CoachAiUsageInfo } from "@/features/coach-ai/types";
 
 /** How many ms between background refreshes. */
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 min

@@ -1,20 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import type { CoachAiUsageInfo } from "@/features/coach-ai/types";
 
-/** Monthly message soft-limit for coach_ai tier subscribers. */
-export const COACH_AI_MONTHLY_LIMIT = 500;
-
-export type CoachAiUsageInfo = {
-  /** Messages sent this calendar month. */
-  count: number;
-  /** Soft cap — shown in the meter. */
-  limit: number;
-  /** ISO date string for first day of NEXT month (= when the counter resets). */
-  resetDate: string;
-  /** ISO timestamp of Stripe subscription period end, or null if not subscribed. */
-  periodEnd: string | null;
-};
+const COACH_AI_MONTHLY_LIMIT = 500;
 
 export async function getCoachAiUsageAction(): Promise<CoachAiUsageInfo> {
   const supabase = await createClient();
