@@ -125,14 +125,11 @@ const draw_play: CoachAiTool = {
       additionalProperties: false,
     },
   },
-  async handler(input) {
-    if (!input || typeof input !== "object" || !("spec" in input)) {
-      return { ok: false, error: "draw_play requires a 'spec' object." };
-    }
-    const spec = (input as { spec: unknown }).spec;
-    if (!spec || typeof spec !== "object") {
-      return { ok: false, error: "'spec' must be an object." };
-    }
+  async handler() {
+    // Always succeed. The agent loop is responsible for parsing the input
+    // shape (it accepts both nested `{spec: {...}}` and flat `{players: ...}`)
+    // and for surfacing a diagnostic if the input is unrecoverable. Returning
+    // ok:false here would short-circuit that recovery path.
     return { ok: true, result: "Diagram rendered to the chat. Now continue with a brief prose explanation — do NOT repeat the spec as text." };
   },
 };

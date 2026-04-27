@@ -189,7 +189,7 @@ export async function runAgent(
       //   draw_play({spec: {players: [...]}})  — what we asked for
       //   draw_play({players: [...]})          — what models often emit (flat)
       //   draw_play({spec: "{...json...}"})    — string-wrapped JSON
-      if (tu.name === "draw_play" && r.ok) {
+      if (tu.name === "draw_play") {
         let spec: unknown = (tu.input as { spec?: unknown }).spec;
         if (typeof spec === "string") {
           try { spec = JSON.parse(spec); } catch { /* leave as string, fail below */ }
