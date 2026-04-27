@@ -21,6 +21,7 @@ import {
   type RouteNode,
   type RouteSegment,
   type SportVariant,
+  type Zone,
 } from "@/domain/play/types";
 
 // ── Schema the LLM emits ────────────────────────────────────────────────────
@@ -42,11 +43,23 @@ export type CoachDiagramRoute = {
   tip?: "arrow" | "t" | "none";
 };
 
+export type CoachDiagramZone = {
+  kind: "rectangle" | "ellipse";
+  /** Center of the zone, in the same yards coord system as players. */
+  center: [number, number];
+  /** FULL width and height in yards (not half-extents). */
+  size: [number, number];
+  label: string;
+  /** Optional fill color (hex). Defaults to a rotating translucent palette. */
+  color?: string;
+};
+
 export type CoachDiagram = {
   title?: string;
   variant?: string;
   players: CoachDiagramPlayer[];
   routes?: CoachDiagramRoute[];
+  zones?: CoachDiagramZone[];
 };
 
 // ── Style palettes (mirror src/domain/play/factory.ts styleForRole) ───────
@@ -67,6 +80,17 @@ const STYLE_H:    PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor
 const STYLE_DEF:  PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" };
 
 const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_S, STYLE_H];
+
+// Translucent zone palette — readable on the green field, distinct per zone.
+// Matches feel of EditorCanvas zones: dashed stroke, low-opacity fill.
+const ZONE_PALETTE: { fill: string; stroke: string }[] = [
+  { fill: "rgba(250, 204, 21, 0.22)",  stroke: "rgba(250, 204, 21, 0.85)"  }, // amber
+  { fill: "rgba(96, 165, 250, 0.22)",  stroke: "rgba(96, 165, 250, 0.85)"  }, // blue
+  { fill: "rgba(244, 114, 182, 0.22)", stroke: "rgba(244, 114, 182, 0.85)" }, // pink
+  { fill: "rgba(167, 139, 250, 0.22)", stroke: "rgba(167, 139, 250, 0.85)" }, // violet
+  { fill: "rgba(45, 212, 191, 0.22)",  stroke: "rgba(45, 212, 191, 0.85)"  }, // teal
+  { fill: "rgba(251, 146, 60, 0.22)",  stroke: "rgba(251, 146, 60, 0.85)"  }, // orange
+];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -209,6 +233,25 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     });
   }
 
+  // Build Zone objects (yards → normalized; full size → half-extents).
+  const zones: Zone[] = (diagram.zones ?? []).map((dz, i) => {
+    const palette = ZONE_PALETTE[i % ZONE_PALETTE.length];
+    const center = toNorm(dz.center[0], dz.center[1]);
+    const halfW = Math.abs(dz.size[0]) / 2 / profile.fieldWidthYds;
+    const halfH = Math.abs(dz.size[1]) / 2 / profile.fieldLengthYds;
+    return {
+      id: uid(),
+      kind: dz.kind,
+      center,
+      size: { w: halfW, h: halfH },
+      label: dz.label,
+      style: {
+        fill: dz.color ?? palette.fill,
+        stroke: dz.color ?? palette.stroke,
+      },
+    };
+  });
+
   const players = [...playerMap.values()];
   const base = createEmptyPlayDocument({ sportProfile: { ...profile } });
 
@@ -226,7 +269,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       players,
       routes,
       annotations: [],
-      zones: [],
+      zones,
     },
   };
 }

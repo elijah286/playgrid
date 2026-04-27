@@ -35,6 +35,16 @@ function computeViewBox(doc: PlayDocument): ViewBox {
       if (sy > maxSvgY) maxSvgY = sy;
     }
   }
+  for (const z of doc.layers.zones ?? []) {
+    const left = z.center.x - z.size.w;
+    const right = z.center.x + z.size.w;
+    if (left < minX) minX = left;
+    if (right > maxX) maxX = right;
+    const top = 1 - (z.center.y + z.size.h);
+    const bot = 1 - (z.center.y - z.size.h);
+    if (top < minSvgY) minSvgY = top;
+    if (bot > maxSvgY) maxSvgY = bot;
+  }
   if (!isFinite(minSvgY)) { minX = 0; maxX = 1; minSvgY = 0.22; maxSvgY = 0.78; }
 
   const losY = 1 - (doc.lineOfScrimmageY ?? 0.4);
@@ -182,6 +192,48 @@ function DiagramCanvas({ doc, animPositions }: {
           stroke="rgba(255,255,255,0.30)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
         <line x1={vb.x} x2={vb.x + vb.w} y1={losY} y2={losY}
           stroke="rgba(255,255,255,0.55)" strokeWidth={2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+
+        {/* Zones (drawn under routes/players so markers stay legible) */}
+        {(doc.layers.zones ?? []).map((z) => {
+          const cx = z.center.x;
+          const cy = 1 - z.center.y;
+          const w = z.size.w * 2;
+          const h = z.size.h * 2;
+          const labelY = cy - z.size.h + 0.028;
+          const common = {
+            fill: z.style.fill,
+            stroke: z.style.stroke,
+            strokeWidth: 1.4,
+            strokeDasharray: "6 4",
+            vectorEffect: "non-scaling-stroke" as const,
+          };
+          return (
+            <g key={z.id}>
+              {z.kind === "ellipse" ? (
+                <ellipse cx={cx} cy={cy} rx={z.size.w} ry={z.size.h} {...common} />
+              ) : (
+                <rect x={cx - z.size.w} y={cy - z.size.h} width={w} height={h} rx={0.012} ry={0.012} {...common} />
+              )}
+              {z.label && (
+                <text
+                  x={cx}
+                  y={labelY}
+                  textAnchor="middle"
+                  dominantBaseline="hanging"
+                  fontSize={0.024}
+                  fontWeight={700}
+                  fill="rgba(255,255,255,0.92)"
+                  stroke="rgba(0,0,0,0.55)"
+                  strokeWidth={0.4}
+                  paintOrder="stroke"
+                  style={{ fontFamily: "Inter, system-ui, sans-serif" }}
+                >
+                  {z.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
 
         {/* Routes (always static) */}
         {doc.layers.routes.map((r) => {

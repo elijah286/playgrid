@@ -116,9 +116,11 @@ const draw_play: CoachAiTool = {
           type: "object",
           description:
             "Play diagram spec. Required: players (array of {id, x, y, team}). " +
-            "Optional: title, variant ('flag_7v7'|'flag_5v5'|'tackle_11', default flag_7v7), routes (array of {from, path, tip?, curve?}). " +
+            "Optional: title, variant ('flag_7v7'|'flag_5v5'|'tackle_11', default flag_7v7), routes (array of {from, path, tip?, curve?}), " +
+            "zones (array of {kind:'rectangle'|'ellipse', center:[x,y], size:[w,h], label}). " +
             "Coords: x = yards from center (negative=left), y = yards from LOS (positive=upfield). team: 'O' (offense) or 'D' (defense). " +
-            "tip: 'arrow'|'t'|'none'. For a single-route demo, use 1 WR + 1 CB + QB + C.",
+            "tip: 'arrow'|'t'|'none'. For a single-route demo, use 1 WR + 1 CB + QB + C. " +
+            "ALWAYS include zones for any zone-coverage diagram (Cover 2/3/4, Tampa 2, etc.) — draw the actual zone areas, not just defenders.",
         },
       },
       required: ["spec"],
