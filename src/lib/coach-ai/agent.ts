@@ -37,7 +37,24 @@ JSON schema:
 }
 \`\`\`
 
-Example — Trips Right Slant concept:
+Example — single-route demo (use this style when the user asks about ONE route by name like "show me a slant"):
+\`\`\`play
+{
+  "title": "Slant route",
+  "variant": "flag_7v7",
+  "players": [
+    {"id": "QB", "x":  0, "y": -5,  "team": "O"},
+    {"id": "C",  "x":  0, "y":  0,  "team": "O"},
+    {"id": "WR", "x": 10, "y":  0.5,"team": "O"},
+    {"id": "CB", "x": 10, "y":  5,  "team": "D"}
+  ],
+  "routes": [
+    {"from": "WR", "path": [[10, 2.5], [4, 6]], "tip": "arrow"}
+  ]
+}
+\`\`\`
+
+Example — full concept (Trips Right slant/go/flat):
 \`\`\`play
 {
   "title": "Trips Right — Slant / Go / Flat",
@@ -63,7 +80,9 @@ Example — Trips Right Slant concept:
 \`\`\`
 
 Rules:
-- Always include both offense and defense players for context.
+- For a single-route question ("show me a slant", "what does an out look like"), use the SINGLE-ROUTE template above. Don't ask the coach for formation context — just pick a generic WR vs CB and draw the route. One route is fine.
+- For a play/concept question, use the full template with all 11 / 7 / 5 players.
+- Always include at least one defender as context (CB or S).
 - Use realistic yard-from-LOS positions: WRs/linemen on the line (y≈0.5), QB 4-5 yards back (y≈-4), CBs 4-5 yards off (y≈5), safeties 10-15 yards deep (y≈12).
 - For 7v7 flag, field is 30 yards wide — keep x between -15 and +15.
 - For a formation-only diagram, omit the "routes" field.
