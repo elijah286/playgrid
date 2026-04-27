@@ -6,6 +6,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
+import { logCoachAiKbMiss, logCoachAiRefusal } from "@/lib/coach-ai/feedback-log";
 
 type StreamRequest = {
   history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
@@ -81,6 +82,10 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
+/** Detect KB miss only from explicit Coach AI statements like "The KB doesn't have" */
+function detectKbMiss(text: string): boolean {
+  return /the kb doesn't have|kb doesn't have|the kb has no/i.test(text);
+}
 
 export async function POST(req: Request): Promise<Response> {
   const gate = await loadCallerInfo();
@@ -134,8 +139,22 @@ export async function POST(req: Request): Promise<Response> {
           if (e.type === "text_delta") send("text_delta", { text: e.text });
         });
 
-        // Record usage asynchronously — don't block the response
+        // Record usage and log feedback asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
+
+        // Log KB miss if Coach AI explicitly says "The KB doesn't have"
+        if (detectKbMiss(result.finalText)) {
+          logCoachAiKbMiss({
+            topic: text.slice(0, 100),
+            userQuestion: text.slice(0, 500),
+            reason: "weak_results",
+            playbookId: ctx.playbookId,
+            sportVariant: ctx.sportVariant,
+            sanctioningBody: ctx.sanctioningBody,
+            gameLevel: ctx.gameLevel,
+            ageDivision: ctx.ageDivision,
+          }).catch(() => { /* non-critical */ });
+        }
 
         send("done", { toolCalls: result.toolCalls, text: result.finalText, playbookChips: result.playbookChips ?? null });
       } catch (e) {
