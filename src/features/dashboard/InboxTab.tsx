@@ -7,7 +7,6 @@ import {
   ArrowUpRight,
   Calendar,
   Check,
-  HelpCircle,
   Inbox,
   Megaphone,
   Settings,
@@ -38,9 +37,58 @@ import {
 } from "@/app/actions/digest-prefs";
 import { Button, Modal, SegmentedControl, useToast } from "@/components/ui";
 
-type SortMode = "newest" | "oldest" | "playbook";
-type FilterKind = "all" | InboxAlertKind;
+type SortMode = "urgency" | "newest" | "oldest";
+type FilterKind =
+  | "all"
+  | "billing"
+  | "rsvp"
+  | "roster"
+  | "comments"
+  | "shares";
 type ViewMode = "pending" | "resolved";
+
+/** Lower bucket = more urgent. Drives default sort and the inbox tab's red badge. */
+function urgencyBucket(a: InboxAlert): number {
+  if (a.kind === "system_alert") {
+    return a.severity === "critical" ? 0 : a.severity === "warn" ? 1 : 4;
+  }
+  if (a.kind === "rsvp_pending") {
+    const startsAt = a.eventStartsAt ? Date.parse(a.eventStartsAt) : NaN;
+    const soon =
+      Number.isFinite(startsAt) && startsAt - Date.now() < 24 * 60 * 60 * 1000;
+    return soon ? 2 : 3;
+  }
+  if (
+    a.kind === "membership" ||
+    a.kind === "coach_upgrade" ||
+    a.kind === "roster_claim"
+  ) {
+    return 5;
+  }
+  if (a.kind === "mention") return 6;
+  return 7; // share + anything else
+}
+
+function alertSortKey(a: InboxAlert): string {
+  // RSVPs sort by event time ascending; everything else by createdAt descending.
+  if (a.kind === "rsvp_pending" && a.eventStartsAt) return a.eventStartsAt;
+  return a.createdAt;
+}
+
+function matchesFilter(a: InboxAlert, f: FilterKind): boolean {
+  if (f === "all") return true;
+  if (f === "billing") return a.kind === "system_alert";
+  if (f === "rsvp") return a.kind === "rsvp_pending";
+  if (f === "roster")
+    return (
+      a.kind === "membership" ||
+      a.kind === "coach_upgrade" ||
+      a.kind === "roster_claim"
+    );
+  if (f === "comments") return a.kind === "mention";
+  if (f === "shares") return a.kind === "share";
+  return false;
+}
 
 export function InboxTab({
   initialAlerts,
@@ -53,7 +101,7 @@ export function InboxTab({
   const { toast } = useToast();
   const [alerts, setAlerts] = useState<InboxAlert[]>(initialAlerts);
   const [busy, setBusy] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortMode>("newest");
+  const [sort, setSort] = useState<SortMode>("urgency");
   const [filter, setFilter] = useState<FilterKind>("all");
   const [view, setView] = useState<ViewMode>("pending");
   const [resolved, setResolved] = useState<ResolvedInboxEvent[] | null>(null);
@@ -90,31 +138,40 @@ export function InboxTab({
   }, [view, resolved, toast]);
 
   const counts = useMemo(() => {
-    const c = {
-      all: alerts.length,
-      membership: 0,
-      coach_upgrade: 0,
-      roster_claim: 0,
-      rsvp_pending: 0,
-    };
-    for (const a of alerts) c[a.kind] += 1;
+    const c = { all: 0, billing: 0, rsvp: 0, roster: 0, comments: 0, shares: 0 };
+    for (const a of alerts) {
+      c.all += 1;
+      if (a.kind === "system_alert") c.billing += 1;
+      else if (a.kind === "rsvp_pending") c.rsvp += 1;
+      else if (
+        a.kind === "membership" ||
+        a.kind === "coach_upgrade" ||
+        a.kind === "roster_claim"
+      )
+        c.roster += 1;
+      else if (a.kind === "mention") c.comments += 1;
+      else if (a.kind === "share") c.shares += 1;
+    }
     return c;
   }, [alerts]);
 
   const visible = useMemo(() => {
-    const filtered =
-      filter === "all" ? alerts : alerts.filter((a) => a.kind === filter);
+    const filtered = alerts.filter((a) => matchesFilter(a, filter));
     const sorted = [...filtered];
-    if (sort === "newest") {
+    if (sort === "urgency") {
+      sorted.sort((a, b) => {
+        const bucketDiff = urgencyBucket(a) - urgencyBucket(b);
+        if (bucketDiff !== 0) return bucketDiff;
+        // Within bucket: RSVPs ascending by event time, everything else newest first.
+        if (a.kind === "rsvp_pending" && b.kind === "rsvp_pending") {
+          return alertSortKey(a).localeCompare(alertSortKey(b));
+        }
+        return b.createdAt.localeCompare(a.createdAt);
+      });
+    } else if (sort === "newest") {
       sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    } else if (sort === "oldest") {
-      sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     } else {
-      sorted.sort(
-        (a, b) =>
-          a.playbookName.localeCompare(b.playbookName) ||
-          b.createdAt.localeCompare(a.createdAt),
-      );
+      sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
     return sorted;
   }, [alerts, sort, filter]);
@@ -236,9 +293,9 @@ export function InboxTab({
               value={sort}
               onChange={setSort}
               options={[
+                { value: "urgency", label: "Urgency" },
                 { value: "newest", label: "Newest" },
                 { value: "oldest", label: "Oldest" },
-                { value: "playbook", label: "By playbook" },
               ]}
             />
           )}
@@ -266,36 +323,44 @@ export function InboxTab({
                 label="All"
                 count={counts.all}
               />
-              {counts.rsvp_pending > 0 && (
+              {counts.billing > 0 && (
                 <FilterChip
-                  active={filter === "rsvp_pending"}
-                  onClick={() => setFilter("rsvp_pending")}
+                  active={filter === "billing"}
+                  onClick={() => setFilter("billing")}
+                  label="Billing"
+                  count={counts.billing}
+                />
+              )}
+              {counts.rsvp > 0 && (
+                <FilterChip
+                  active={filter === "rsvp"}
+                  onClick={() => setFilter("rsvp")}
                   label="RSVPs"
-                  count={counts.rsvp_pending}
+                  count={counts.rsvp}
                 />
               )}
-              {counts.roster_claim > 0 && (
+              {counts.roster > 0 && (
                 <FilterChip
-                  active={filter === "roster_claim"}
-                  onClick={() => setFilter("roster_claim")}
-                  label="Player claims"
-                  count={counts.roster_claim}
+                  active={filter === "roster"}
+                  onClick={() => setFilter("roster")}
+                  label="Roster"
+                  count={counts.roster}
                 />
               )}
-              {counts.membership > 0 && (
+              {counts.comments > 0 && (
                 <FilterChip
-                  active={filter === "membership"}
-                  onClick={() => setFilter("membership")}
-                  label="Join requests"
-                  count={counts.membership}
+                  active={filter === "comments"}
+                  onClick={() => setFilter("comments")}
+                  label="Comments"
+                  count={counts.comments}
                 />
               )}
-              {counts.coach_upgrade > 0 && (
+              {counts.shares > 0 && (
                 <FilterChip
-                  active={filter === "coach_upgrade"}
-                  onClick={() => setFilter("coach_upgrade")}
-                  label="Coach requests"
-                  count={counts.coach_upgrade}
+                  active={filter === "shares"}
+                  onClick={() => setFilter("shares")}
+                  label="Shares"
+                  count={counts.shares}
                 />
               )}
             </div>
@@ -779,6 +844,13 @@ function AlertRow({
   if (alert.kind === "rsvp_pending") {
     return <RsvpRow alert={alert} busy={busy} onRsvp={onRsvp} />;
   }
+  if (
+    alert.kind === "system_alert" ||
+    alert.kind === "mention" ||
+    alert.kind === "share"
+  ) {
+    return <NotificationRow alert={alert} />;
+  }
   const approveKey = `a:${alert.key}`;
   const rejectKey = `r:${alert.key}`;
   const name = alert.displayName?.trim() || "Unnamed";
@@ -897,12 +969,13 @@ function RsvpRow({
         : alert.eventType === "scrimmage"
           ? "Scrimmage"
           : "Event";
-  const yesKey = `rsvp:yes:${alert.key}`;
-  const noKey = `rsvp:no:${alert.key}`;
-  const maybeKey = `rsvp:maybe:${alert.key}`;
+  const href = `/playbooks/${alert.playbookId}?tab=calendar`;
   return (
     <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <div className="flex min-w-0 items-start gap-3">
+      <Link
+        href={href}
+        className="flex min-w-0 flex-1 items-start gap-3 hover:opacity-90"
+      >
         <PlaybookAvatar
           name={alert.playbookName}
           logoUrl={alert.playbookLogoUrl}
@@ -910,12 +983,9 @@ function RsvpRow({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/playbooks/${alert.playbookId}?tab=calendar`}
-              className="truncate text-xs font-semibold text-muted hover:text-foreground hover:underline"
-            >
+            <span className="truncate text-xs font-semibold text-muted">
               {alert.playbookName}
-            </Link>
+            </span>
             <KindBadge kind={alert.kind} />
             <span className="text-[11px] text-muted-light">{startsAt}</span>
           </div>
@@ -923,42 +993,35 @@ function RsvpRow({
             {eventTypeLabel}: {title}
           </p>
         </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          size="sm"
-          variant="primary"
-          leftIcon={Check}
-          disabled={busy !== null}
-          onClick={() => onRsvp(alert, "yes")}
-        >
-          {busy === yesKey ? "…" : "Yes"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          leftIcon={HelpCircle}
-          disabled={busy !== null}
-          onClick={() => onRsvp(alert, "maybe")}
-        >
-          {busy === maybeKey ? "…" : "Maybe"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          leftIcon={X}
-          disabled={busy !== null}
-          onClick={() => onRsvp(alert, "no")}
-        >
-          {busy === noKey ? "…" : "No"}
-        </Button>
-        <Link
-          href={`/playbooks/${alert.playbookId}?tab=calendar`}
-          className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-          title="Open in calendar"
-        >
-          <Calendar className="size-4" />
-        </Link>
+      </Link>
+      <div
+        className="flex shrink-0 items-center gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {(["yes", "maybe", "no"] as const).map((s) => {
+          const labels = { yes: "Going", maybe: "Maybe", no: "Can\u2019t go" };
+          const colors = {
+            yes: "bg-emerald-100 text-emerald-800 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
+            maybe:
+              "bg-amber-100 text-amber-800 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
+            no: "bg-red-100 text-red-800 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
+          };
+          const busyKey = `rsvp:${s}:${alert.key}`;
+          return (
+            <button
+              key={s}
+              type="button"
+              disabled={busy !== null}
+              onClick={() => onRsvp(alert, s)}
+              className={
+                "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition disabled:opacity-60 " +
+                colors[s]
+              }
+            >
+              {busy === busyKey ? "\u2026" : labels[s]}
+            </button>
+          );
+        })}
       </div>
     </li>
   );
@@ -1021,6 +1084,9 @@ function KindBadge({ kind }: { kind: InboxAlertKind | ResolvedKind }) {
     coach_upgrade: { label: "coach", cls: "bg-warning-light text-warning" },
     rsvp_pending: { label: "rsvp", cls: "bg-success-light text-success" },
     rsvp_response: { label: "rsvp", cls: "bg-success-light text-success" },
+    system_alert: { label: "billing", cls: "bg-danger-light text-danger" },
+    mention: { label: "mention", cls: "bg-primary/10 text-primary" },
+    share: { label: "share", cls: "bg-secondary/10 text-secondary" },
   };
   const { label, cls } = map[kind];
   return (
@@ -1030,6 +1096,51 @@ function KindBadge({ kind }: { kind: InboxAlertKind | ResolvedKind }) {
       {label}
     </span>
   );
+}
+
+function NotificationRow({ alert }: { alert: InboxAlert }) {
+  const title = alert.displayName?.trim() || titleForKind(alert.kind);
+  const body = alert.body?.trim() || null;
+  const href = alert.href || `/playbooks/${alert.playbookId}`;
+  return (
+    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <Link href={href} className="flex min-w-0 flex-1 items-start gap-3 hover:opacity-90">
+        <PlaybookAvatar
+          name={alert.playbookName}
+          logoUrl={alert.playbookLogoUrl}
+          color={alert.playbookColor}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-xs font-semibold text-muted">
+              {alert.playbookName}
+            </span>
+            <KindBadge kind={alert.kind} />
+            <span className="text-[11px] text-muted-light">
+              {timeAgo(alert.createdAt)}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-sm text-foreground">{title}</p>
+          {body && (
+            <p className="mt-0.5 line-clamp-2 text-xs text-muted">{body}</p>
+          )}
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function titleForKind(kind: InboxAlertKind): string {
+  switch (kind) {
+    case "system_alert":
+      return "Account notice";
+    case "mention":
+      return "You were mentioned";
+    case "share":
+      return "New from your team";
+    default:
+      return "Notification";
+  }
 }
 
 function timeAgo(iso: string): string {

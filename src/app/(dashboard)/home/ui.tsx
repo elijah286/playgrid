@@ -980,7 +980,6 @@ export function DashboardClient({
   hideAnimation = false,
   isAdmin = false,
   teamCalendarAvailable = false,
-  initialCalendarPending = 0,
   inboxAlerts = [],
   activityEntries = [],
   initialTab = "playbooks",
@@ -989,7 +988,6 @@ export function DashboardClient({
   hideAnimation?: boolean;
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
-  initialCalendarPending?: number;
   inboxAlerts?: InboxAlert[];
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
@@ -1015,8 +1013,12 @@ export function DashboardClient({
     },
     [searchParams],
   );
-  const [calendarPending, setCalendarPending] = useState(initialCalendarPending);
   const inboxCount = inboxAlerts.length;
+  // Inbox is "urgent" when it contains time-pressured items: pending RSVPs
+  // or (future) billing/system alerts. Otherwise the badge stays neutral.
+  const inboxUrgent = inboxAlerts.some(
+    (a) => a.kind === "rsvp_pending" || a.kind === "system_alert",
+  );
   const activityCount = activityEntries.length;
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -1312,14 +1314,14 @@ export function DashboardClient({
           tab={homeTab}
           onChange={setHomeTab}
           inboxCount={inboxCount}
+          inboxUrgent={inboxUrgent}
           showCalendar={teamCalendarAvailable}
-          calendarPending={calendarPending}
         />
       )}
 
       {teamCalendarAvailable && (
         <div hidden={homeTab !== "calendar"} className="mt-6">
-          <HomeCalendarTab onPendingChange={setCalendarPending} />
+          <HomeCalendarTab />
         </div>
       )}
 
@@ -1932,14 +1934,14 @@ function HomeTabNav({
   tab,
   onChange,
   inboxCount,
+  inboxUrgent,
   showCalendar,
-  calendarPending = 0,
 }: {
   tab: HomeTab;
   onChange: (t: HomeTab) => void;
   inboxCount: number;
+  inboxUrgent: boolean;
   showCalendar: boolean;
-  calendarPending?: number;
 }) {
   const tabs: HomeTab[] = ["playbooks"];
   if (showCalendar) tabs.push("calendar");
@@ -1954,7 +1956,6 @@ function HomeTabNav({
       {tabs.map((t) => {
         const active = tab === t;
         const showInboxBadge = t === "inbox" && inboxCount > 0;
-        const showCalendarBadge = t === "calendar" && calendarPending > 0;
         return (
           <button
             key={t}
@@ -1974,23 +1975,17 @@ function HomeTabNav({
                   "rounded-full px-1.5 py-px text-[10px] font-semibold " +
                   (active
                     ? "bg-white/25 text-primary-foreground"
-                    : "bg-primary text-primary-foreground")
+                    : inboxUrgent
+                      ? "bg-red-600 text-white"
+                      : "bg-primary text-primary-foreground")
+                }
+                title={
+                  inboxUrgent
+                    ? `${inboxCount} item${inboxCount === 1 ? "" : "s"} need attention`
+                    : undefined
                 }
               >
                 {inboxCount}
-              </span>
-            )}
-            {showCalendarBadge && (
-              <span
-                className={
-                  "rounded-full px-1.5 py-px text-[10px] font-semibold " +
-                  (active
-                    ? "bg-white/25 text-primary-foreground"
-                    : "bg-red-600 text-white")
-                }
-                title={`${calendarPending} event${calendarPending === 1 ? "" : "s"} need your RSVP`}
-              >
-                {calendarPending}
               </span>
             )}
           </button>

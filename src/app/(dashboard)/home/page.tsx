@@ -1,7 +1,6 @@
 import { getDashboardSummaryAction } from "@/app/actions/plays";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
 import { listActivityFeedAction } from "@/app/actions/activity";
-import { getCalendarRsvpPendingCountAction } from "@/app/actions/calendar";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import {
@@ -16,7 +15,7 @@ type Props = {
 
 export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery, tab } = await searchParams;
-  const [res, inbox, activity, hideAnimation, profileRes, betaFeatures, calendarPendingRes] =
+  const [res, inbox, activity, hideAnimation, profileRes, betaFeatures] =
     await Promise.all([
       getDashboardSummaryAction(),
       listInboxAlertsAction(),
@@ -24,15 +23,12 @@ export default async function HomePage({ searchParams }: Props) {
       getHideLobbyAnimation(),
       getCurrentUserProfile(),
       getBetaFeatures(),
-      getCalendarRsvpPendingCountAction(null).catch(() => ({ ok: false as const, pending: 0 })),
     ]);
   const isAdmin = profileRes.profile?.role === "admin";
   const teamCalendarAvailable = isBetaFeatureAvailable(
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
-  const calendarPending =
-    teamCalendarAvailable && calendarPendingRes.ok ? calendarPendingRes.pending : 0;
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
@@ -58,7 +54,6 @@ export default async function HomePage({ searchParams }: Props) {
           hideAnimation={hideAnimation}
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
-          initialCalendarPending={calendarPending}
           inboxAlerts={inboxAlerts}
           activityEntries={activityEntries}
           initialTab={initialTab}

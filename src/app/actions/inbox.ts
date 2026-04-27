@@ -8,7 +8,15 @@ export type InboxAlertKind =
   | "membership"
   | "coach_upgrade"
   | "roster_claim"
-  | "rsvp_pending";
+  | "rsvp_pending"
+  // Phase 2 — backend not yet wired. Listed here so the UI can render
+  // these uniformly once the data sources land:
+  //   - system_alert: billing/trial/auth issues from a `system_alerts` table
+  //   - mention: @-mentions on plays/comments via `play_comment_mentions`
+  //   - share: head-coach broadcasts surfaced from `play_team_notifications`
+  | "system_alert"
+  | "mention"
+  | "share";
 
 /** Window for showing upcoming events without an RSVP. */
 const RSVP_LOOKAHEAD_DAYS = 14;
@@ -42,6 +50,12 @@ export type InboxAlert = {
   eventTitle?: string;
   eventStartsAt?: string;
   eventType?: "practice" | "game" | "scrimmage" | "other";
+
+  // system_alert / mention / share — generic body + optional deep-link.
+  // Severity drives urgency bucketing for system_alert.
+  body?: string | null;
+  href?: string | null;
+  severity?: "info" | "warn" | "critical";
 };
 
 /**
