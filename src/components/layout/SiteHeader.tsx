@@ -12,6 +12,7 @@ export async function SiteHeader() {
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
   let coachAiAvailable = false;
+  let showCoachCalPromo = false; // logged-in user without Coach Pro sees the CTA
 
   if (hasSupabaseEnv()) {
     try {
@@ -40,14 +41,15 @@ export async function SiteHeader() {
             getBetaFeatures(),
             getCurrentEntitlement(),
           ]);
-          // Coach AI is for the subscription payer only — admins or users
-          // with their own (non-free) entitlement. Free invitees inheriting
-          // from a Coach+ owner do NOT get the assistant.
-          const isEntitled = (entitlement?.tier ?? "free") !== "free";
+          const isEntitled = (entitlement?.tier ?? "free") === "coach_ai";
           coachAiAvailable = isBetaFeatureAvailable(betaFeatures.coach_ai, {
             isAdmin,
             isEntitled,
           });
+          // Show the promo launcher to all logged-in users when Coach Cal is
+          // launched globally (scope="all"), so they see the upgrade CTA.
+          const betaLaunched = betaFeatures.coach_ai === "all";
+          showCoachCalPromo = betaLaunched && !coachAiAvailable;
         } catch {
           /* best effort */
         }
@@ -64,6 +66,7 @@ export async function SiteHeader() {
       displayName={displayName}
       avatarUrl={avatarUrl}
       coachAiAvailable={coachAiAvailable}
+      showCoachCalPromo={showCoachCalPromo}
     />
   );
 }

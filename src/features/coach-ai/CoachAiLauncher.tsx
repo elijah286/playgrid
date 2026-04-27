@@ -47,17 +47,34 @@ function writeStorage(key: string, value: unknown) {
  *                      resizable by bottom-right handle (top-left stays fixed),
  *                      font size A−/A+ in header toolbar
  */
+const COACH_CAL_CAPABILITIES = [
+  "Generate plays and full playbooks instantly",
+  "Strategy feedback vs. specific defenses",
+  "Bulk formation edits across your playbook",
+  "Adjust plays to your team's skill level",
+  "Practice and game scheduling help",
+];
+
 export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
   isAdmin = false,
+  entitled = true,
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
+  entitled?: boolean;
 }) {
   const [open,          setOpen]          = useState(false);
   const [fullscreen,    setFullscreen]    = useState(false);
   const [adminMode,     setAdminMode]     = useState(false);
   const [playbookMode,  setPlaybookMode]  = useState(false);
+  const [promoOpen,     setPromoOpen]     = useState(false);
+  // Pulse stops once the user has acknowledged the button
+  const [pulseSeen,     setPulseSeen]     = useState(() =>
+    typeof window !== "undefined" && window.localStorage.getItem("coach-cal:promo-seen") === "1"
+  );
+  const promoRef = useRef<HTMLDivElement>(null);
+  const promoBtnRef = useRef<HTMLButtonElement>(null);
 
   const [size, setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
   const [fontSize, setFontSize] = useState<FontSize>(14);
@@ -117,6 +134,19 @@ export function CoachAiLauncher({
     if (fullscreen) document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [open, fullscreen]);
+
+  // ── Promo popover: close on outside click ─────────────────────────────────
+  useEffect(() => {
+    if (!promoOpen) return;
+    function onDown(e: MouseEvent) {
+      if (
+        promoRef.current && !promoRef.current.contains(e.target as Node) &&
+        promoBtnRef.current && !promoBtnRef.current.contains(e.target as Node)
+      ) setPromoOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [promoOpen]);
 
   // ── Window position init ──────────────────────────────────────────────────
   // Runs when the window opens on desktop. size is already loaded from localStorage
@@ -229,20 +259,85 @@ export function CoachAiLauncher({
   return (
     <>
       {/* ── Launcher button ─────────────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Open Coach AI"
-        title="Coach AI (beta)"
-        className={cn(
-          "inline-flex size-9 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-          open && "hidden",
-        )}
-        style={{ background: GRADIENT }}
-      >
-        <CoachAiIcon className="size-5" />
-        <span className="sr-only">Coach AI</span>
-      </button>
+      {!entitled ? (
+        // Non-subscriber: pulsing CTA button that opens promo popover
+        <div className="relative">
+          <button
+            ref={promoBtnRef}
+            type="button"
+            onClick={() => {
+              setPromoOpen((v) => !v);
+              if (!pulseSeen) {
+                setPulseSeen(true);
+                try { window.localStorage.setItem("coach-cal:promo-seen", "1"); } catch { /* ignore */ }
+              }
+            }}
+            aria-label="Try Coach Cal — your AI coaching partner"
+            title="Try Coach Cal free for 7 days"
+            className="relative inline-flex size-9 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            style={{ background: GRADIENT }}
+          >
+            {!pulseSeen && (
+              <span
+                className="absolute inset-0 rounded-full animate-ping opacity-60"
+                style={{ background: GRADIENT }}
+                aria-hidden="true"
+              />
+            )}
+            <CoachAiIcon className="size-5 relative" />
+            <span className="sr-only">Try Coach Cal</span>
+          </button>
+
+          {promoOpen && (
+            <div
+              ref={promoRef}
+              className="absolute bottom-full right-0 z-50 mb-3 w-72 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl" style={{ background: GRADIENT }}>
+                  <CoachAiIcon className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground">Meet Coach Cal</p>
+                  <p className="text-[11px] text-muted">Your AI coaching partner</p>
+                </div>
+              </div>
+              <ul className="mt-3 space-y-1.5">
+                {COACH_CAL_CAPABILITIES.map((c) => (
+                  <li key={c} className="flex items-start gap-2 text-[12px] text-foreground">
+                    <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">✓</span>
+                    {c}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href="/pricing"
+                className="mt-4 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
+                style={{ background: GRADIENT }}
+                onClick={() => setPromoOpen(false)}
+              >
+                Start 7-day free trial
+              </a>
+              <p className="mt-1.5 text-center text-[10px] text-muted">No charge today · cancel anytime</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open Coach Cal"
+          title="Coach Cal"
+          className={cn(
+            "inline-flex size-9 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            open && "hidden",
+          )}
+          style={{ background: GRADIENT }}
+        >
+          <CoachAiIcon className="size-5" />
+          <span className="sr-only">Coach Cal</span>
+        </button>
+      )}
 
       {open && typeof document !== "undefined" && createPortal(
         <>
@@ -259,7 +354,7 @@ export function CoachAiLauncher({
           {/* ── Dialog window ───────────────────────────────────────────── */}
           <div
             role="dialog"
-            aria-label="Coach AI chat"
+            aria-label="Coach Cal chat"
             style={windowPosStyle}
             className={cn(
               "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10",
@@ -309,7 +404,7 @@ export function CoachAiLauncher({
 
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold leading-tight text-foreground">
-                  Coach AI
+                  Coach Cal
                   {adminTrainingActive && (
                     <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
                       <GraduationCap className="size-3" /> Training
@@ -326,7 +421,7 @@ export function CoachAiLauncher({
                     ? "Curating the global knowledge base — confirms before each write."
                     : playbookTrainingActive
                       ? "Curating this playbook's notes — confirms before each write."
-                      : "Beta · grounded in your league rules"}
+                      : "Your AI coaching partner"}
                 </div>
               </div>
 

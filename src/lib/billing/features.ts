@@ -81,11 +81,11 @@ export function canUseAiFeatures(entitlement: Entitlement | null): boolean {
 export const TIER_LABEL: Record<SubscriptionTier, string> = {
   free: "Solo Coach",
   coach: "Coach",
-  coach_ai: "Coach AI",
+  coach_ai: "Coach Pro",
 };
 
 export const TIER_PRICE: Record<SubscriptionTier, { month: number | null; year: number | null }> = {
   free: { month: 0, year: 0 },
   coach: { month: 9, year: 99 },
-  coach_ai: { month: 25, year: 200 },
+  coach_ai: { month: 25, year: 250 },
 };

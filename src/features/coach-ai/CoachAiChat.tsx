@@ -324,7 +324,7 @@ export function CoachAiChat({
                 void send();
               }
             }}
-            placeholder="Ask Coach AI…"
+            placeholder="Ask Coach Cal…"
             className="flex-1 resize-none rounded-xl bg-surface-inset px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-black/5 focus:outline-none focus:ring-2 focus:ring-primary/40"
             disabled={streaming}
           />
@@ -367,17 +367,17 @@ export function CoachAiChat({
 function Empty() {
   const suggestions = [
     "What is the rush rule in NFL Flag 5v5?",
-    "Explain Cover 3 vs. Cover 4.",
-    "Build a Trips Right slants concept.",
+    "Generate a 5-play red zone package for me.",
+    "How should I attack Cover 3 with a 7v7 offense?",
   ];
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 text-center">
       <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
         <CoachAiIcon className="size-7" />
       </div>
-      <h3 className="mt-3 text-base font-semibold text-foreground">Coach AI</h3>
+      <h3 className="mt-3 text-base font-semibold text-foreground">Coach Cal</h3>
       <p className="mt-1 max-w-sm text-sm text-muted">
-        Ask about rules, formations, or play concepts. Coach AI grounds answers
+        Ask about rules, formations, or play concepts. Coach Cal grounds answers
         in a curated knowledge base and asks before assuming your league.
       </p>
       <ul className="mt-4 flex w-full max-w-sm flex-col gap-1.5">

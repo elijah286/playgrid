@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CoachAiUsageInfo } from "@/features/coach-ai/types";
 
-const COACH_AI_MONTHLY_LIMIT = 500;
+const COACH_AI_MONTHLY_LIMIT = 200;
 
 export async function getCoachAiUsageAction(): Promise<CoachAiUsageInfo> {
   const supabase = await createClient();

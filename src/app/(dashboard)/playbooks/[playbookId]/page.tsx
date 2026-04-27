@@ -23,6 +23,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { PlaybookDetailClient } from "./ui";
+import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -216,6 +217,11 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
 
   const betaFeatures = await getBetaFeatures();
+  const showCoachCalCta =
+    betaFeatures.coach_ai === "all" &&
+    (viewerEntitlement?.tier ?? "free") !== "coach_ai" &&
+    user !== null &&
+    !isAdmin;
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
   // Examples always expose Game Mode so visitors can experience the full
@@ -303,6 +309,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   return (
     <>
+      <CoachCalPlaybookCta show={showCoachCalCta} />
       {publicExampleJsonLd?.map((ld, i) => (
         <script
           key={i}

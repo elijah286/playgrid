@@ -59,17 +59,20 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
   },
   {
     id: "coach_ai",
-    name: "Team Coach AI",
-    tagline: "Team Coach + AI tools to move faster.",
-    price: { month: 25, year: 200 },
+    name: "Coach Pro",
+    tagline: "Your AI coaching partner — Coach Cal included.",
+    price: { month: 25, year: 250 },
     features: [
       "Everything in Team Coach",
-      "AI play suggestions (coming soon)",
-      "Scouting report generation",
-      "Automatic tagging",
-      "Early access to new AI features",
+      "Coach Cal AI — ask anything, get instant answers",
+      "Generate plays and full playbooks with AI",
+      "Strategy feedback vs. specific defenses",
+      "Adjust playbook to your team's skill level",
+      "Bulk formation edits across your playbook",
+      "Practice and game scheduling help",
+      "200 Coach Cal messages per month",
     ],
-    cta: "Upgrade to Coach AI",
+    cta: "Start 7-day free trial",
   },
   ];
 }
@@ -182,11 +185,24 @@ export function PricingClient({
           const isCurrent = t.id === currentTier;
           const suffix = priceSuffix(t, interval);
           const savings = interval === "year" ? annualSavings(t) : null;
+          const isProTier = t.id === "coach_ai";
           return (
             <div
               key={t.id}
-              className="relative flex flex-col rounded-2xl border border-border bg-surface-raised p-6"
+              className={cn(
+                "relative flex flex-col rounded-2xl border p-6",
+                isProTier
+                  ? "border-primary/40 bg-primary/[0.03] ring-2 ring-primary/20"
+                  : "border-border bg-surface-raised",
+              )}
             >
+              {isProTier && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="inline-flex items-center rounded-full bg-primary px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow">
+                    Most Popular
+                  </span>
+                </div>
+              )}
 
               <div className="mb-4">
                 <h2 className="text-lg font-bold text-foreground">{t.name}</h2>
@@ -259,14 +275,21 @@ export function PricingClient({
                   }
                   // Authed, paid tier they don't have = Upgrade (orange).
                   return (
-                    <button
-                      type="button"
-                      onClick={() => choose(t)}
-                      disabled={pending}
-                      className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-                    >
-                      {t.cta}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => choose(t)}
+                        disabled={pending}
+                        className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        {t.cta}
+                      </button>
+                      {isProTier && (
+                        <p className="mt-1.5 text-center text-[11px] text-muted">
+                          7-day free trial · no charge today
+                        </p>
+                      )}
+                    </>
                   );
                 })()}
               </div>

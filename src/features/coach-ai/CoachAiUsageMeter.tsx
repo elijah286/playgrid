@@ -85,7 +85,7 @@ export function CoachAiUsageMeter({ refreshTick }: { refreshTick: number }) {
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title={`${info.count} / ${info.limit} messages this month`}
+        title={`Coach Cal: ${info.count} / ${info.limit} messages this month`}
         className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-surface-inset hover:text-foreground"
       >
         <RingProgress pct={pct} danger={danger} />
@@ -101,7 +101,7 @@ export function CoachAiUsageMeter({ refreshTick }: { refreshTick: number }) {
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-foreground">Coach AI usage</p>
+              <p className="text-sm font-semibold text-foreground">Coach Cal usage</p>
               <p className="mt-0.5 text-[11px] text-muted">This calendar month</p>
             </div>
             <button
