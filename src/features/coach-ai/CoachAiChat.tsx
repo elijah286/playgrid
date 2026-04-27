@@ -5,6 +5,7 @@ import { Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
 import { chatCoachAiAction, type CoachAiTurn } from "@/app/actions/coach-ai";
 import { CoachAiIcon } from "./CoachAiIcon";
+import { AssistantMessage } from "./AssistantMessage";
 
 // Bumped if the persisted shape changes — older blobs are then ignored.
 const STORAGE_VERSION = 1;
@@ -132,37 +133,37 @@ export function CoachAiChat({
         {turns.length === 0 ? (
           <Empty />
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-5">
             {turns.map((t, i) => (
-              <li key={i} className="flex">
+              <li key={i} className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
                 {t.role === "assistant" && (
-                  <div className="mr-2 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <CoachAiIcon className="size-4" />
                   </div>
                 )}
-                <div
-                  className={
-                    t.role === "user"
-                      ? "ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground"
-                      : "max-w-[85%] rounded-2xl rounded-tl-sm bg-surface-inset px-3 py-2 text-sm text-foreground"
-                  }
-                >
-                  <div className="whitespace-pre-wrap leading-relaxed">{t.text}</div>
-                  {t.role === "assistant" && t.toolCalls.length > 0 && (
-                    <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
-                      <Wrench className="size-3" />
-                      {t.toolCalls.join(", ")}
-                    </div>
-                  )}
-                </div>
+                {t.role === "user" ? (
+                  <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2 text-sm leading-relaxed text-primary-foreground">
+                    {t.text}
+                  </div>
+                ) : (
+                  <div className="min-w-0 flex-1">
+                    <AssistantMessage text={t.text} />
+                    {t.toolCalls.length > 0 && (
+                      <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
+                        <Wrench className="size-3" />
+                        {t.toolCalls.join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
             {pending && (
-              <li className="flex">
-                <div className="mr-2 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <li className="flex items-start gap-2.5">
+                <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <CoachAiIcon className="size-4" />
                 </div>
-                <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-surface-inset px-3 py-2 text-sm text-muted">
+                <div className="rounded-2xl rounded-tl-sm bg-surface-inset px-3 py-2 text-sm text-muted">
                   <Dots />
                 </div>
               </li>
