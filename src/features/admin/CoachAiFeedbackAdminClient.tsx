@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, RefreshCw, Trash2 } from "lucide-react";
+import { Check, RefreshCw, Trash2, Eye, EyeOff } from "lucide-react";
 import { Button, IconButton, useToast } from "@/components/ui";
 import {
   deleteKbMissAction,
@@ -10,8 +10,12 @@ import {
   deleteRefusalAction,
   listCoachAiRefusalsAction,
   setRefusalReviewedAction,
+  listCoachAiPositiveFeedbackAction,
+  listCoachAiNegativeFeedbackAction,
   type KbMissRow,
   type RefusalRow,
+  type PositiveFeedbackRow,
+  type NegativeFeedbackRow,
 } from "@/app/actions/coach-ai-feedback";
 
 const KB_MISS_REASON_LABEL: Record<string, string> = {
@@ -40,7 +44,7 @@ function formatDate(iso: string): string {
   });
 }
 
-type FeedbackType = "kb_miss" | "refusal";
+type FeedbackType = "kb_miss" | "refusal" | "negative" | "positive";
 
 export function CoachAiFeedbackAdminClient({
   initialItems,
@@ -53,12 +57,26 @@ export function CoachAiFeedbackAdminClient({
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("kb_miss");
   const [kbMisses, setKbMisses] = useState(initialItems);
   const [refusals, setRefusals] = useState<RefusalRow[]>([]);
+  const [negativeFeedback, setNegativeFeedback] = useState<NegativeFeedbackRow[]>([]);
+  const [positiveFeedback, setPositiveFeedback] = useState<PositiveFeedbackRow[]>([]);
   const [err, setErr] = useState<string | null>(initialError);
   const [filter, setFilter] = useState<"unreviewed" | "all">("unreviewed");
   const [pending, startTransition] = useTransition();
-  const [refusalsLoaded, setRefusalsLoaded] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState<Record<FeedbackType, boolean>>({
+    kb_miss: true,
+    refusal: false,
+    negative: false,
+    positive: false,
+  });
 
-  const items = feedbackType === "kb_miss" ? kbMisses : refusals;
+  const items =
+    feedbackType === "kb_miss"
+      ? kbMisses
+      : feedbackType === "refusal"
+        ? refusals
+        : feedbackType === "negative"
+          ? negativeFeedback
+          : positiveFeedback;
 
   function refresh(nextFilter: "unreviewed" | "all" = filter, type: FeedbackType = feedbackType) {
     startTransition(async () => {
@@ -70,7 +88,7 @@ export function CoachAiFeedbackAdminClient({
         }
         setErr(null);
         setKbMisses(res.items);
-      } else {
+      } else if (type === "refusal") {
         const res = await listCoachAiRefusalsAction(nextFilter);
         if (!res.ok) {
           setErr(res.error);
@@ -78,6 +96,22 @@ export function CoachAiFeedbackAdminClient({
         }
         setErr(null);
         setRefusals(res.items);
+      } else if (type === "negative") {
+        const res = await listCoachAiNegativeFeedbackAction();
+        if (!res.ok) {
+          setErr(res.error);
+          return;
+        }
+        setErr(null);
+        setNegativeFeedback(res.items);
+      } else {
+        const res = await listCoachAiPositiveFeedbackAction();
+        if (!res.ok) {
+          setErr(res.error);
+          return;
+        }
+        setErr(null);
+        setPositiveFeedback(res.items);
       }
     });
   }
@@ -89,13 +123,14 @@ export function CoachAiFeedbackAdminClient({
 
   function changeType(type: FeedbackType) {
     setFeedbackType(type);
-    if (type === "refusal" && !refusalsLoaded) {
-      setRefusalsLoaded(true);
+    if (!dataLoaded[type]) {
+      setDataLoaded({ ...dataLoaded, [type]: true });
       refresh(filter, type);
     }
   }
 
   function markReviewed(id: string, reviewed: boolean) {
+    if (feedbackType === "negative" || feedbackType === "positive") return;
     const prev = feedbackType === "kb_miss" ? kbMisses : refusals;
     const updated = prev.map((it) => (it.id === id ? { ...it, reviewed_at: reviewed ? new Date().toISOString() : null } : it));
     if (feedbackType === "kb_miss") setKbMisses(updated as KbMissRow[]);
@@ -114,25 +149,43 @@ export function CoachAiFeedbackAdminClient({
 
   function remove(id: string) {
     if (!window.confirm("Delete this feedback entry?")) return;
-    const prev = feedbackType === "kb_miss" ? kbMisses : refusals;
-    if (feedbackType === "kb_miss") setKbMisses((prev as KbMissRow[]).filter((it) => it.id !== id));
-    else setRefusals((prev as RefusalRow[]).filter((it) => it.id !== id));
 
-    startTransition(async () => {
-      const action = feedbackType === "kb_miss" ? deleteKbMissAction : deleteRefusalAction;
-      const res = await action(id);
-      if (!res.ok) {
-        if (feedbackType === "kb_miss") setKbMisses(prev as KbMissRow[]);
-        else setRefusals(prev as RefusalRow[]);
-        toast(res.error, "error");
-      }
-    });
+    if (feedbackType === "kb_miss") {
+      setKbMisses(kbMisses.filter((it) => it.id !== id));
+      startTransition(async () => {
+        const res = await deleteKbMissAction(id);
+        if (!res.ok) {
+          setKbMisses(kbMisses);
+          toast(res.error, "error");
+        }
+      });
+    } else if (feedbackType === "refusal") {
+      setRefusals(refusals.filter((it) => it.id !== id));
+      startTransition(async () => {
+        const res = await deleteRefusalAction(id);
+        if (!res.ok) {
+          setRefusals(refusals);
+          toast(res.error, "error");
+        }
+      });
+    }
   }
 
   const isKbMiss = feedbackType === "kb_miss";
-  const emptyMessage = isKbMiss
-    ? filter === "unreviewed" ? "No unreviewed KB misses. Coach AI is grounded in the KB." : "No KB misses logged yet."
-    : filter === "unreviewed" ? "No unreviewed refusals. Coach AI is handling requests smoothly." : "No refusals logged yet.";
+  const isRefusal = feedbackType === "refusal";
+  const isNegative = feedbackType === "negative";
+  const isPositive = feedbackType === "positive";
+
+  let emptyMessage = "";
+  if (isKbMiss) {
+    emptyMessage = filter === "unreviewed" ? "No unreviewed KB misses. Coach AI is grounded in the KB." : "No KB misses logged yet.";
+  } else if (isRefusal) {
+    emptyMessage = filter === "unreviewed" ? "No unreviewed refusals. Coach AI is handling requests smoothly." : "No refusals logged yet.";
+  } else if (isNegative) {
+    emptyMessage = "No negative feedback (thumbs down) logged yet. Coach AI is helping users!";
+  } else {
+    emptyMessage = "No positive feedback (thumbs up) logged yet.";
+  }
 
   return (
     <div className="space-y-4">
@@ -162,7 +215,24 @@ export function CoachAiFeedbackAdminClient({
           >
             Refusals
           </button>
+          <button
+            type="button"
+            onClick={() => changeType("negative")}
+            className={`rounded px-3 py-1 ${feedbackType === "negative" ? "bg-surface-raised font-semibold text-foreground shadow" : "text-muted"}`}
+          >
+            Thumbs Down
+          </button>
+          <button
+            type="button"
+            onClick={() => changeType("positive")}
+            className={`rounded px-3 py-1 ${feedbackType === "positive" ? "bg-surface-raised font-semibold text-foreground shadow" : "text-muted"}`}
+          >
+            Thumbs Up
+          </button>
         </div>
+        {feedbackType === "positive" && (
+          <span className="ml-auto text-xs text-muted italic">For understanding what users find valuable</span>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -204,7 +274,7 @@ export function CoachAiFeedbackAdminClient({
           {items.map((it) => (
             <li
               key={it.id}
-              className={`rounded-xl bg-surface-raised p-3 text-sm ring-1 ring-black/5 ${it.reviewed_at ? "opacity-60" : ""}`}
+              className={`rounded-xl bg-surface-raised p-3 text-sm ring-1 ring-black/5 ${isKbMiss || isRefusal ? (it as KbMissRow | RefusalRow).reviewed_at ? "opacity-60" : "" : ""}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -222,7 +292,7 @@ export function CoachAiFeedbackAdminClient({
                         {formatDate(it.created_at)}
                       </p>
                     </>
-                  ) : (
+                  ) : isRefusal ? (
                     <>
                       <p className="font-semibold text-foreground">Request: &ldquo;{(it as RefusalRow).user_request}&rdquo;</p>
                       <p className="mt-1 text-xs text-muted">
@@ -235,16 +305,30 @@ export function CoachAiFeedbackAdminClient({
                         {formatDate(it.created_at)}
                       </p>
                     </>
+                  ) : isNegative ? (
+                    <>
+                      <p className="font-semibold text-foreground">User: &ldquo;{(it as NegativeFeedbackRow).user_message}&rdquo;</p>
+                      <p className="mt-1 text-foreground/80">&ldquo;{(it as NegativeFeedbackRow).response_text}&rdquo;</p>
+                      <p className="mt-1 text-xs text-muted">{formatDate(it.created_at)}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-foreground">User: &ldquo;{(it as PositiveFeedbackRow).user_message}&rdquo;</p>
+                      <p className="mt-1 text-foreground/80">&ldquo;{(it as PositiveFeedbackRow).response_text}&rdquo;</p>
+                      <p className="mt-1 text-xs text-muted">{formatDate(it.created_at)}</p>
+                    </>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <IconButton
-                    icon={Check}
-                    tooltip={it.reviewed_at ? "Mark unreviewed" : "Mark reviewed"}
-                    aria-label={it.reviewed_at ? "Mark unreviewed" : "Mark reviewed"}
-                    onClick={() => markReviewed(it.id, !it.reviewed_at)}
-                    className={it.reviewed_at ? "text-emerald-500" : "text-muted"}
-                  />
+                  {(isKbMiss || isRefusal) && (
+                    <IconButton
+                      icon={Check}
+                      tooltip={(it as KbMissRow | RefusalRow).reviewed_at ? "Mark unreviewed" : "Mark reviewed"}
+                      aria-label={(it as KbMissRow | RefusalRow).reviewed_at ? "Mark unreviewed" : "Mark reviewed"}
+                      onClick={() => markReviewed(it.id, !(it as KbMissRow | RefusalRow).reviewed_at)}
+                      className={(it as KbMissRow | RefusalRow).reviewed_at ? "text-emerald-500" : "text-muted"}
+                    />
+                  )}
                   <IconButton
                     icon={Trash2}
                     tooltip="Delete"

@@ -7,9 +7,11 @@ import type { CoachAiTurn } from "@/app/actions/coach-ai";
 import {
   getAiFeedbackOptInAction,
   setAiFeedbackOptInAction,
+  logCoachAiPositiveFeedbackAction,
+  logCoachAiNegativeFeedbackAction,
 } from "@/app/actions/coach-ai-feedback";
 import { CoachAiIcon } from "./CoachAiIcon";
-import { AssistantMessage } from "./AssistantMessage";
+import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
 
 // Bumped if the persisted shape changes — older blobs are then ignored.
@@ -247,30 +249,41 @@ export function CoachAiChat({
           <Empty />
         ) : (
           <ul className="space-y-5">
-            {turns.map((t, i) => (
-              <li key={i} className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
-                {t.role === "assistant" && (
-                  <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <CoachAiIcon className="size-4" />
-                  </div>
-                )}
-                {t.role === "user" ? (
-                  <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
-                    {t.text}
-                  </div>
-                ) : (
-                  <div className="min-w-0 flex-1">
-                    <AssistantMessage text={t.text} />
-                    {t.toolCalls.length > 0 && (
-                      <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
-                        <Wrench className="size-3" />
-                        {t.toolCalls.join(", ")}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
+            {turns.map((t, i) => {
+              const prevUserMessage = i > 0 ? turns[i - 1]?.text : "";
+              return (
+                <li key={i} className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
+                  {t.role === "assistant" && (
+                    <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CoachAiIcon className="size-4" />
+                    </div>
+                  )}
+                  {t.role === "user" ? (
+                    <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
+                      {t.text}
+                    </div>
+                  ) : (
+                    <div className="min-w-0 flex-1">
+                      <AssistantMessageWithFeedback
+                        text={t.text}
+                        onThumbsUp={() =>
+                          void logCoachAiPositiveFeedbackAction(t.text, prevUserMessage)
+                        }
+                        onThumbsDown={() =>
+                          void logCoachAiNegativeFeedbackAction(t.text, prevUserMessage)
+                        }
+                      />
+                      {t.toolCalls.length > 0 && (
+                        <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
+                          <Wrench className="size-3" />
+                          {t.toolCalls.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
 
             {/* Live streaming turn */}
             {streaming && (

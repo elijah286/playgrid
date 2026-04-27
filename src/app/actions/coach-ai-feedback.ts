@@ -151,3 +151,105 @@ export async function deleteRefusalAction(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+// ─── User feedback: thumbs up/down on responses ────────────────────────────
+
+/**
+ * Log positive feedback (thumbs up) on a Coach AI response.
+ * This reinforces the knowledge base and helps us understand what's valuable.
+ */
+export async function logCoachAiPositiveFeedbackAction(
+  response_text: string,
+  user_message: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: true }; // Silent fail for anon users
+
+  try {
+    const { error } = await supabase.from("coach_ai_positive_feedback").insert({
+      user_id: user.id,
+      response_text: response_text.slice(0, 5000),
+      user_message: user_message.slice(0, 5000),
+      created_at: new Date().toISOString(),
+    });
+    if (error) return { ok: true }; // Don't fail the chat on logging error
+    return { ok: true };
+  } catch {
+    return { ok: true }; // Silent fail
+  }
+}
+
+/**
+ * Log negative feedback (thumbs down) on a Coach AI response.
+ * Helps identify problematic responses for analysis.
+ */
+export async function logCoachAiNegativeFeedbackAction(
+  response_text: string,
+  user_message: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: true }; // Silent fail for anon users
+
+  try {
+    const { error } = await supabase.from("coach_ai_negative_feedback").insert({
+      user_id: user.id,
+      response_text: response_text.slice(0, 5000),
+      user_message: user_message.slice(0, 5000),
+      created_at: new Date().toISOString(),
+    });
+    if (error) return { ok: true }; // Don't fail the chat on logging error
+    return { ok: true };
+  } catch {
+    return { ok: true }; // Silent fail
+  }
+}
+
+// ─── Admin: view positive/negative feedback ────────────────────────────────
+
+export type PositiveFeedbackRow = {
+  id: string;
+  response_text: string;
+  user_message: string;
+  created_at: string;
+};
+
+export type NegativeFeedbackRow = {
+  id: string;
+  response_text: string;
+  user_message: string;
+  created_at: string;
+};
+
+export async function listCoachAiPositiveFeedbackAction(): Promise<
+  { ok: true; items: PositiveFeedbackRow[] } | { ok: false; error: string }
+> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("coach_ai_positive_feedback")
+    .select("id, response_text, user_message, created_at")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, items: (data ?? []) as PositiveFeedbackRow[] };
+}
+
+export async function listCoachAiNegativeFeedbackAction(): Promise<
+  { ok: true; items: NegativeFeedbackRow[] } | { ok: false; error: string }
+> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("coach_ai_negative_feedback")
+    .select("id, response_text, user_message, created_at")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, items: (data ?? []) as NegativeFeedbackRow[] };
+}
