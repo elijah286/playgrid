@@ -101,20 +101,28 @@ export function CoachAiChat({
     setTurns([...prior, userTurn]);
     setDraft("");
     startTransition(async () => {
-      const res = await chatCoachAiAction({
-        history: prior,
-        userMessage: text,
-        playbookId: playbookId ?? null,
-        mode,
-      });
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      // Catch everything — an unhandled rejection inside a transition can
+      // bubble to React's error boundary and unmount the chat tree (which
+      // reads as a "crash" / refresh to the user).
+      try {
+        const res = await chatCoachAiAction({
+          history: prior,
+          userMessage: text,
+          playbookId: playbookId ?? null,
+          mode,
+        });
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        setTurns((cur) => [
+          ...cur,
+          { role: "assistant", text: res.assistantText, toolCalls: res.toolCalls },
+        ]);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Coach AI request failed.";
+        setError(msg);
       }
-      setTurns((cur) => [
-        ...cur,
-        { role: "assistant", text: res.assistantText, toolCalls: res.toolCalls },
-      ]);
     });
   }
 

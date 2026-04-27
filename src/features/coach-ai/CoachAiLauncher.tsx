@@ -47,7 +47,10 @@ export function CoachAiLauncher({
 
   // Restore mode-toggle preferences across page reloads so an accidental
   // refresh during a curation session brings the user right back into the
-  // same training thread.
+  // same training thread. The hasRestored ref gates the save effects so the
+  // initial-render write of `false` doesn't clobber a persisted `true`
+  // before the restore effect runs.
+  const hasRestored = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -56,10 +59,11 @@ export function CoachAiLauncher({
     } catch {
       /* storage disabled — ignore */
     }
+    hasRestored.current = true;
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!hasRestored.current || typeof window === "undefined") return;
     try {
       window.localStorage.setItem("coach-ai:adminMode", adminMode ? "1" : "0");
     } catch {
@@ -68,7 +72,7 @@ export function CoachAiLauncher({
   }, [adminMode]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!hasRestored.current || typeof window === "undefined") return;
     try {
       window.localStorage.setItem("coach-ai:playbookMode", playbookMode ? "1" : "0");
     } catch {
