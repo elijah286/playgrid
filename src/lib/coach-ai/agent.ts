@@ -247,5 +247,11 @@ export async function runAgent(
     finalText = injectedDiagrams.join("") + finalText;
   }
 
+  // TRACER — temporary debug. If the user does not see this string at the
+  // top of the next reply, then finalText is not reaching the client at
+  // all (rules out markdown / SSE / streaming as the bug location).
+  const tracer = `🔧 srv=v3 toolCalls=[${toolCalls.join(",") || "none"}] injected=${injectedDiagrams.length}\n\n`;
+  finalText = tracer + finalText;
+
   return { newMessages, finalText, toolCalls, modelId, provider };
 }
