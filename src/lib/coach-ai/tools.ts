@@ -1,5 +1,6 @@
 import { searchKb, type KbFilter } from "./retrieve";
 import { createClient } from "@/lib/supabase/server";
+import { logCoachAiRefusal, logCoachAiKbMiss } from "./feedback-log";
 import type { ToolDef } from "./llm";
 
 export type CoachAiMode = "normal" | "admin_training" | "playbook_training";
@@ -165,7 +166,74 @@ const list_my_playbooks: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks];
+const log_feedback: CoachAiTool = {
+  def: {
+    name: "log_feedback",
+    description:
+      "Explicitly log feedback about this response. Call when you're refusing an out-of-scope request " +
+      "or when you realize the KB doesn't have content for what the user asked. This helps us improve.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["refusal", "kb_miss"],
+          description: "Type of feedback: 'refusal' for out-of-scope requests, 'kb_miss' for missing KB content.",
+        },
+        reason: {
+          type: "string",
+          enum: ["out_of_scope", "weak_results"],
+          description: "Detailed reason for the refusal or KB miss.",
+        },
+        user_request: {
+          type: "string",
+          description: "The user's request or question (what prompted this feedback).",
+        },
+      },
+      required: ["type", "reason", "user_request"],
+      additionalProperties: false,
+    },
+  },
+  handler: async (input, ctx) => {
+    const type = input.type as string;
+    const reason = input.reason as string;
+    const userRequest = String(input.user_request || "").slice(0, 500);
+
+    try {
+      if (type === "refusal") {
+        await logCoachAiRefusal({
+          userRequest,
+          refusalReason: reason as "out_of_scope",
+          playbookId: ctx.playbookId,
+          sportVariant: ctx.sportVariant,
+          sanctioningBody: ctx.sanctioningBody,
+          gameLevel: ctx.gameLevel,
+          ageDivision: ctx.ageDivision,
+        });
+        return { ok: true, result: "Refusal logged." };
+      } else if (type === "kb_miss") {
+        await logCoachAiKbMiss({
+          topic: userRequest.slice(0, 100),
+          userQuestion: userRequest,
+          reason: reason as "weak_results",
+          playbookId: ctx.playbookId,
+          sportVariant: ctx.sportVariant,
+          sanctioningBody: ctx.sanctioningBody,
+          gameLevel: ctx.gameLevel,
+          ageDivision: ctx.ageDivision,
+        });
+        return { ok: true, result: "KB miss logged." };
+      }
+
+      return { ok: false, error: "Invalid feedback type" };
+    } catch (e) {
+      // Don't fail on logging error
+      return { ok: true, result: "Feedback noted (logging failed silently)." };
+    }
+  },
+};
+
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, log_feedback];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {

@@ -6,7 +6,6 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
-import { logCoachAiRefusal, logCoachAiKbMiss } from "@/lib/coach-ai/feedback-log";
 
 type StreamRequest = {
   history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
@@ -82,85 +81,6 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
-/**
- * Detect if the response is an out-of-scope refusal.
- * Coach AI is trained to politely refuse requests outside football coaching scope.
- */
-function detectOutOfScopeRefusal(text: string): boolean {
-  const refusalPatterns = [
-    /outside my scope|outside my wheelhouse|outside my lane/i,
-    /I'm strictly a football|I'm here for football|I'm a football/i,
-    /that's outside my expertise|that's not my area/i,
-    /I'm a football coach|I'm a coaching AI/i,
-    /not my wheelhouse|not in my scope/i,
-    /wrong franchise|that's not.*football|not.*my.*specialty/i,
-  ];
-  return refusalPatterns.some(p => p.test(text));
-}
-
-/**
- * Detect if Coach AI fell back to general knowledge (KB miss).
- * This happens when Coach AI lacks specific KB content and admits it.
- */
-function detectKbMiss(text: string): boolean {
-  const kbMissPatterns = [
-    /isn't my specialty|not my specialty|outside my expertise|aren't my.*expertise|aren't my core|not.*my core/i,
-    /don't have specific.*content|don't have.*knowledge/i,
-    /I'd recommend|I recommend.*instead|you.*get better.*from/i,
-    /check.*official|consult.*league|ask.*athletic director|dedicated.*coach|film study/i,
-    /watching film|consulting.*coach|sports performance specialist|coaching.*resources/i,
-  ];
-  return kbMissPatterns.some(p => p.test(text));
-}
-
-/**
- * Log a refusal if detected.
- */
-async function logRefusalIfDetected(
-  finalText: string,
-  userMessage: string,
-  ctx: ToolContext,
-): Promise<void> {
-  if (!detectOutOfScopeRefusal(finalText)) return;
-  try {
-    await logCoachAiRefusal({
-      userRequest: userMessage.slice(0, 500),
-      refusalReason: "out_of_scope",
-      playbookId: ctx.playbookId,
-      sportVariant: ctx.sportVariant,
-      sanctioningBody: ctx.sanctioningBody,
-      gameLevel: ctx.gameLevel,
-      ageDivision: ctx.ageDivision,
-    });
-  } catch {
-    // Don't fail the chat on logging error
-  }
-}
-
-/**
- * Log a KB miss if detected.
- */
-async function logKbMissIfDetected(
-  finalText: string,
-  userMessage: string,
-  ctx: ToolContext,
-): Promise<void> {
-  if (!detectKbMiss(finalText)) return;
-  try {
-    await logCoachAiKbMiss({
-      topic: userMessage.slice(0, 100),
-      userQuestion: userMessage.slice(0, 500),
-      reason: "weak_results",
-      playbookId: ctx.playbookId,
-      sportVariant: ctx.sportVariant,
-      sanctioningBody: ctx.sanctioningBody,
-      gameLevel: ctx.gameLevel,
-      ageDivision: ctx.ageDivision,
-    });
-  } catch {
-    // Don't fail the chat on logging error
-  }
-}
 
 export async function POST(req: Request): Promise<Response> {
   const gate = await loadCallerInfo();
@@ -214,10 +134,8 @@ export async function POST(req: Request): Promise<Response> {
           if (e.type === "text_delta") send("text_delta", { text: e.text });
         });
 
-        // Log feedback and usage asynchronously — don't block the response
+        // Record usage asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
-        logRefusalIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
-        logKbMissIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
 
         send("done", { toolCalls: result.toolCalls, text: result.finalText, playbookChips: result.playbookChips ?? null });
       } catch (e) {
