@@ -82,68 +82,88 @@ export function CoachAiLauncher({
     };
   }, [open, fullscreen]);
 
-  // ── Floating-window position (sm+, non-fullscreen) ─────────────────────────
-  // Stored as top-left in viewport coordinates. Null = use default
-  // (anchored bottom-right). Once the user drags, we switch to explicit coords
-  // and clamp on every viewport resize so the window never escapes the screen.
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
+  // ── Floating-window drag offset (sm+, non-fullscreen) ──────────────────────
+  // The dialog is sized + anchored bottom-right via pure CSS so it can never
+  // overflow the viewport. Drag is applied as a transform offset (dx, dy)
+  // from the anchor — clamped so the dialog stays fully on-screen.
+  const [drag, setDrag] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const dialogRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    origDx: number;
+    origDy: number;
+  } | null>(null);
 
-  // Recompute size + clamp position whenever viewport changes or window opens.
-  const reflow = useCallback(() => {
-    if (typeof window === "undefined") return;
+  // Reset drag offset whenever the dialog closes or fullscreen toggles.
+  useEffect(() => {
+    if (!open || fullscreen) setDrag({ dx: 0, dy: 0 });
+  }, [open, fullscreen]);
+
+  // On viewport resize, re-clamp the drag offset so the dialog never escapes.
+  const clampDrag = useCallback(() => {
+    const el = dialogRef.current;
+    if (!el || typeof window === "undefined") return;
+    const rect = el.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const w = Math.min(DEFAULT_W, vw - EDGE * 2);
-    const h = Math.min(DEFAULT_H, vh - EDGE * 2);
-    setSize({ w, h });
-    setPos((p) => {
-      if (!p) return p;
-      const x = Math.max(EDGE, Math.min(p.x, vw - w - EDGE));
-      const y = Math.max(EDGE, Math.min(p.y, vh - h - EDGE));
-      return { x, y };
+    setDrag((d) => {
+      // rect already includes the current transform — back it out to find the
+      // dialog's natural anchor box, then re-derive the max allowable offsets.
+      const naturalLeft = rect.left - d.dx;
+      const naturalTop = rect.top - d.dy;
+      const minDx = EDGE - naturalLeft;
+      const maxDx = vw - EDGE - rect.width - naturalLeft;
+      const minDy = EDGE - naturalTop;
+      const maxDy = vh - EDGE - rect.height - naturalTop;
+      return {
+        dx: Math.max(minDx, Math.min(maxDx, d.dx)),
+        dy: Math.max(minDy, Math.min(maxDy, d.dy)),
+      };
     });
   }, []);
 
   useEffect(() => {
     if (!open) return;
-    reflow();
-    window.addEventListener("resize", reflow);
-    return () => window.removeEventListener("resize", reflow);
-  }, [open, reflow]);
-
-  // Reset position when closed so reopen lands at the default anchor.
-  useEffect(() => {
-    if (!open) setPos(null);
-  }, [open]);
+    window.addEventListener("resize", clampDrag);
+    return () => window.removeEventListener("resize", clampDrag);
+  }, [open, clampDrag]);
 
   function onHeaderPointerDown(e: React.PointerEvent<HTMLElement>) {
     if (fullscreen) return;
     if (typeof window === "undefined" || window.innerWidth < 640) return;
-    // Only react to plain primary-button drags on the header itself, not on
-    // the action buttons (which set their own click handlers).
     const target = e.target as HTMLElement;
     if (target.closest("button")) return;
     e.preventDefault();
-    const rect = dialogRef.current?.getBoundingClientRect();
-    const origX = pos?.x ?? rect?.left ?? window.innerWidth - size.w - EDGE;
-    const origY = pos?.y ?? rect?.top ?? window.innerHeight - size.h - EDGE;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, origX, origY };
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origDx: drag.dx,
+      origDy: drag.dy,
+    };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onHeaderPointerMove(e: React.PointerEvent<HTMLElement>) {
     const d = dragRef.current;
     if (!d) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
+    const el = dialogRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const naturalLeft = rect.left - drag.dx;
+    const naturalTop = rect.top - drag.dy;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const x = Math.max(EDGE, Math.min(d.origX + dx, vw - size.w - EDGE));
-    const y = Math.max(EDGE, Math.min(d.origY + dy, vh - size.h - EDGE));
-    setPos({ x, y });
+    const wantDx = d.origDx + (e.clientX - d.startX);
+    const wantDy = d.origDy + (e.clientY - d.startY);
+    const minDx = EDGE - naturalLeft;
+    const maxDx = vw - EDGE - rect.width - naturalLeft;
+    const minDy = EDGE - naturalTop;
+    const maxDy = vh - EDGE - rect.height - naturalTop;
+    setDrag({
+      dx: Math.max(minDx, Math.min(maxDx, wantDx)),
+      dy: Math.max(minDy, Math.min(maxDy, wantDy)),
+    });
   }
 
   function onHeaderPointerUp(e: React.PointerEvent<HTMLElement>) {
@@ -156,13 +176,10 @@ export function CoachAiLauncher({
     }
   }
 
-  // Inline style applied to the dialog when floating (sm+, non-fullscreen).
-  // Mobile and fullscreen use class-based positioning instead.
-  const floatStyle: React.CSSProperties | undefined =
-    typeof window !== "undefined" && !fullscreen && window.innerWidth >= 640
-      ? pos
-        ? { left: pos.x, top: pos.y, width: size.w, height: size.h }
-        : { right: EDGE, bottom: EDGE, width: size.w, height: size.h }
+  // Drag offset (sm+ only) applied via transform. Sizing + anchor are pure CSS.
+  const dragStyle: React.CSSProperties | undefined =
+    !fullscreen && (drag.dx !== 0 || drag.dy !== 0)
+      ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` }
       : undefined;
 
   return (
@@ -197,15 +214,21 @@ export function CoachAiLauncher({
             ref={dialogRef}
             role="dialog"
             aria-label="Coach AI chat"
-            style={floatStyle}
+            style={dragStyle}
             className={cn(
               "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10",
               adminTrainingActive && "ring-2 ring-amber-400",
               playbookTrainingActive && "ring-2 ring-sky-400",
               fullscreen
                 ? "inset-2 sm:inset-4"
-                : // Mobile bottom sheet — desktop overrides via inline floatStyle.
-                  "inset-x-2 bottom-2 top-auto h-[80vh] sm:inset-auto",
+                : [
+                    // Mobile bottom sheet
+                    "inset-x-2 bottom-2 top-auto h-[80vh]",
+                    // Desktop floating window — sized via min() so it can never
+                    // overflow the viewport, anchored bottom-right.
+                    "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
+                    "sm:w-[min(420px,calc(100vw-2rem))] sm:h-[min(640px,calc(100vh-2rem))]",
+                  ].join(" "),
             )}
           >
             <header
