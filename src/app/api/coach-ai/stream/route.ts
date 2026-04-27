@@ -82,9 +82,9 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
-/** Detect KB miss only from explicit Coach AI statements like "The KB doesn't have" */
+/** Detect KB miss from Coach AI's actual statements */
 function detectKbMiss(text: string): boolean {
-  return /the kb doesn't have|kb doesn't have|the kb has no/i.test(text);
+  return /the kb doesn't have|kb doesn't have|the kb has no|that's not my specialty|isn't my specialty|not my specialty|outside my.*coaching|that's outside my/i.test(text);
 }
 
 export async function POST(req: Request): Promise<Response> {
