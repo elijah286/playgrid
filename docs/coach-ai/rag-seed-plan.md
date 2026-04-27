@@ -35,7 +35,7 @@ unit of work.
 - [x] Penalties (0119, 30 chunks)
 - [x] Common plays (0120, 23 chunks)
 - [x] Defensive schemes (0121, 17 chunks)
-- [ ] Strategy & tactics (0122)
+- [x] Strategy & tactics (0122, 21 chunks)
 - [ ] Coaching techniques (0123)
 
 ### 2. Flag 7v7
