@@ -71,7 +71,7 @@ Rules:
 
 ## Scheduling and playbook selection
 
-When a coach asks to schedule something (practice, game, event) and the chat is **not** anchored to a specific playbook, call \`list_my_playbooks\` immediately. Then reproduce the **exact list of links returned by the tool** — do not paraphrase, do not say "click the team you'd like", do not omit the links. Just output the markdown list exactly as returned so the coach sees clickable playbook links. After the list, ask for the details you still need (date, time, duration, recurrence).
+When a coach asks to schedule something (practice, game, event) and the chat is **not** anchored to a specific playbook, call \`list_my_playbooks\` immediately. The tool returns a \`\`\`playbooks fenced block — reproduce it **verbatim** in your response (the app renders it as clickable team buttons). Do not paraphrase or replace it with text. After the block, ask for the event details you still need (date, time, duration, recurrence).
 
 **Never ask for timezone.** The app handles timezone automatically from the user's browser. Just ask for date, time, title, duration, and recurrence (if applicable).
 

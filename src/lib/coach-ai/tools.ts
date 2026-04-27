@@ -126,35 +126,38 @@ const list_my_playbooks: CoachAiTool = {
 
       const { data, error } = await supabase
         .from("playbook_members")
-        .select("role, playbooks!inner(id, name, season, sport_variant, is_archived)")
+        .select("role, playbooks!inner(id, name, season, sport_variant, color, is_archived, is_default, is_example)")
         .eq("user_id", user.id)
         .order("role", { ascending: true });
 
       if (error) return { ok: false, error: error.message };
 
-      type Row = {
-        role: string;
-        playbooks: { id: string; name: string; season: string | null; sport_variant: string | null; is_archived: boolean } | Array<{ id: string; name: string; season: string | null; sport_variant: string | null; is_archived: boolean }>;
+      type PbRow = {
+        id: string; name: string; season: string | null; sport_variant: string | null;
+        color: string | null; is_archived: boolean; is_default: boolean; is_example: boolean;
       };
+      type Row = { role: string; playbooks: PbRow | PbRow[] };
 
-      const rows = (data as Row[] ?? []).filter((r) => {
-        const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
-        return pb && !pb.is_archived;
-      });
+      const chips = (data as Row[] ?? [])
+        .map((r) => ({ role: r.role, pb: Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks }))
+        .filter(({ pb }) => pb && !pb.is_archived && !pb.is_default && !pb.is_example)
+        .map(({ pb }) => ({
+          id: pb.id,
+          name: pb.name,
+          color: pb.color ?? null,
+          season: pb.season ?? null,
+          variant: pb.sport_variant ?? null,
+        }));
 
-      if (rows.length === 0) return { ok: true, result: "No playbooks found." };
-
-      const lines = rows.map((r) => {
-        const pb = Array.isArray(r.playbooks) ? r.playbooks[0] : r.playbooks;
-        const label = [pb.name, pb.season, pb.sport_variant].filter(Boolean).join(" · ");
-        return `- [${label}](/playbooks/${pb.id}) (${r.role})`;
-      });
+      if (chips.length === 0) return { ok: true, result: "No active playbooks found." };
 
       return {
         ok: true,
         result:
-          "Here are your playbooks — click one to open it, then ask me again:\n\n" +
-          lines.join("\n"),
+          "Pick a team:\n\n" +
+          "```playbooks\n" +
+          JSON.stringify(chips) +
+          "\n```",
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "list_my_playbooks failed" };
