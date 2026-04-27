@@ -45,6 +45,37 @@ export function CoachAiLauncher({
     return m?.[1] ?? null;
   }, [playbookIdProp, pathname]);
 
+  // Restore mode-toggle preferences across page reloads so an accidental
+  // refresh during a curation session brings the user right back into the
+  // same training thread.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.localStorage.getItem("coach-ai:adminMode") === "1") setAdminMode(true);
+      if (window.localStorage.getItem("coach-ai:playbookMode") === "1") setPlaybookMode(true);
+    } catch {
+      /* storage disabled — ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("coach-ai:adminMode", adminMode ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [adminMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("coach-ai:playbookMode", playbookMode ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [playbookMode]);
+
   // Exit playbook training automatically when the user navigates off the playbook.
   useEffect(() => {
     if (!playbookId && playbookMode) setPlaybookMode(false);
