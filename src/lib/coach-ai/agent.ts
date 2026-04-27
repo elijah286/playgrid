@@ -185,14 +185,16 @@ export async function runAgent(
 
       // For draw_play: stream the play fenced block to the client live and
       // remember it so we can prepend it to finalText (so it persists when
-      // the chat history is later replayed). Accept either shape:
-      //   draw_play({spec: {players: [...]}})  — what we asked for
-      //   draw_play({players: [...]})          — what models often emit (flat)
-      //   draw_play({spec: "{...json...}"})    — string-wrapped JSON
+      // the chat history is later replayed).
       if (tu.name === "draw_play") {
+        // Server-side log so we can confirm via Railway logs that the
+        // handler actually ran and what input shape it got.
+        // eslint-disable-next-line no-console
+        console.log("[draw_play] input keys:", Object.keys(tu.input ?? {}), "input:", JSON.stringify(tu.input).slice(0, 500));
+
         let spec: unknown = (tu.input as { spec?: unknown }).spec;
         if (typeof spec === "string") {
-          try { spec = JSON.parse(spec); } catch { /* leave as string, fail below */ }
+          try { spec = JSON.parse(spec); } catch { /* leave as string */ }
         }
         if (!spec || typeof spec !== "object") {
           // Model probably flattened — treat the whole input as the spec.
@@ -200,16 +202,20 @@ export async function runAgent(
             spec = tu.input;
           }
         }
+
+        // ALWAYS inject something visible. If we found a usable spec, render
+        // the play. Otherwise render a loud diagnostic showing the raw input
+        // so we can see exactly what the model sent.
+        let injection: string;
         if (spec && typeof spec === "object" && "players" in (spec as Record<string, unknown>)) {
-          const fenced = "```play\n" + JSON.stringify(spec, null, 2) + "\n```\n\n";
-          injectedDiagrams.push(fenced);
-          onEvent?.({ type: "text_delta", text: fenced });
+          injection = "\n\n```play\n" + JSON.stringify(spec, null, 2) + "\n```\n\n";
         } else {
-          // Diagnostic so this never silently fails again.
-          const dump = "> ⚠️ `draw_play` was called but the input shape was unrecognized:\n```json\n" + JSON.stringify(tu.input, null, 2) + "\n```\n\n";
-          injectedDiagrams.push(dump);
-          onEvent?.({ type: "text_delta", text: dump });
+          injection =
+            "\n\n**[DIAG] draw_play input shape unrecognized — raw input:**\n\n" +
+            "```json\n" + JSON.stringify(tu.input, null, 2) + "\n```\n\n";
         }
+        injectedDiagrams.push(injection);
+        onEvent?.({ type: "text_delta", text: injection });
       }
 
       toolResultBlocks.push({
