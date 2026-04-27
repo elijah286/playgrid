@@ -291,7 +291,7 @@ export function CoachAiLauncher({
           {promoOpen && (
             <div
               ref={promoRef}
-              className="absolute bottom-full right-0 z-50 mb-3 w-72 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
+              className="absolute top-full right-0 z-50 mt-2 w-72 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
             >
               <div className="flex items-center gap-2.5">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-xl" style={{ background: GRADIENT }}>

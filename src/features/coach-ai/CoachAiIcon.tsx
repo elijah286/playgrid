@@ -1,13 +1,10 @@
 import type { SVGProps } from "react";
 
 /**
- * Coach AI mark — a brown football with seam + laces, and a four-point
- * purple AI sparkle breaking out of the top-right.
+ * Coach Cal mark — a tilted football with laces + a purple AI sparkle.
+ * The football idles at -15° and spins a full 360° every ~4.5 s.
  */
-export function CoachAiIcon({
-  className,
-  ...rest
-}: SVGProps<SVGSVGElement>) {
+export function CoachAiIcon({ className, ...rest }: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -18,37 +15,49 @@ export function CoachAiIcon({
       aria-hidden="true"
       {...rest}
     >
-      {/* Football body — brown fill */}
-      <path
-        d="M4 12 C5.5 7 18.5 7 20 12 C18.5 17 5.5 17 4 12Z"
-        fill="#7C3B10"
-        stroke="#5C2A0A"
-        strokeWidth={0.6}
-      />
-      {/* Seam */}
-      <path
-        d="M4 12 C8 9.5 16 9.5 20 12"
-        stroke="#5C2A0A"
-        strokeWidth={1.1}
-        fill="none"
-      />
-      {/* Laces — white */}
-      <line x1="11"   y1="10.4" x2="11"   y2="13.6" stroke="white" strokeWidth={1.3} />
-      <line x1="12.5" y1="10.0" x2="12.5" y2="14.0" stroke="white" strokeWidth={1.3} />
-      <line x1="14"   y1="10.4" x2="14"   y2="13.6" stroke="white" strokeWidth={1.3} />
-      {/* Horizontal lace bar */}
-      <line x1="10.6" y1="12" x2="14.4" y2="12" stroke="white" strokeWidth={1} />
+      <style>{`
+        @keyframes coach-cal-spin {
+          0%, 65%  { transform: rotate(-15deg); }
+          80%      { transform: rotate(345deg); }
+          100%     { transform: rotate(345deg); }
+        }
+        .cc-fb {
+          animation: coach-cal-spin 4.5s ease-in-out infinite;
+          transform-origin: 12px 12px;
+        }
+      `}</style>
 
-      {/* AI sparkle — four-point star, purple */}
+      {/* ── Animated football ─────────────────────────────────────── */}
+      <g className="cc-fb">
+        {/* Body — light orange-tan */}
+        <ellipse
+          cx="12" cy="12" rx="9" ry="5.4"
+          fill="#F5A35C"
+          stroke="#C96830"
+          strokeWidth="0.5"
+        />
+        {/* Seam arc */}
+        <path
+          d="M3 12 C6.5 9 17.5 9 21 12"
+          stroke="#C96830"
+          strokeWidth="1"
+          fill="none"
+        />
+        {/* Laces — white */}
+        <line x1="10.4" y1="10.1" x2="10.4" y2="13.9" stroke="white" strokeWidth="1.25"/>
+        <line x1="12"   y1="9.6"  x2="12"   y2="14.4" stroke="white" strokeWidth="1.25"/>
+        <line x1="13.6" y1="10.1" x2="13.6" y2="13.9" stroke="white" strokeWidth="1.25"/>
+        {/* Horizontal lace bar */}
+        <line x1="10.1" y1="12" x2="13.9" y2="12" stroke="white" strokeWidth="1"/>
+      </g>
+
+      {/* ── AI sparkle — static, top-right ───────────────────────── */}
       <path
-        d="M19.5 2.5 L20.1 4.4 L22 5 L20.1 5.6 L19.5 7.5 L18.9 5.6 L17 5 L18.9 4.4Z"
-        fill="#a855f7"
-        stroke="#9333ea"
-        strokeWidth={0.7}
+        d="M19.5 1.8 L20.15 3.65 L22 4.3 L20.15 4.95 L19.5 6.8 L18.85 4.95 L17 4.3 L18.85 3.65Z"
+        fill="#a78bfa"
       />
-      {/* Glint dots */}
-      <circle cx="16" cy="2.8" r="0.6" fill="#c084fc" />
-      <circle cx="22" cy="8"   r="0.5" fill="#c084fc" />
+      <circle cx="16.8" cy="2.1" r="0.58" fill="#c4b5fd"/>
+      <circle cx="21.8" cy="7.1" r="0.48" fill="#c4b5fd"/>
     </svg>
   );
 }

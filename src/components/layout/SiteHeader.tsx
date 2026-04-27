@@ -41,7 +41,7 @@ export async function SiteHeader() {
             getBetaFeatures(),
             getCurrentEntitlement(),
           ]);
-          const isEntitled = (entitlement?.tier ?? "free") === "coach_ai";
+          const isEntitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
           coachAiAvailable = isBetaFeatureAvailable(betaFeatures.coach_ai, {
             isAdmin,
             isEntitled,
