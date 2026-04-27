@@ -32,7 +32,7 @@ unit of work.
 ### 1. NFL Flag 5v5
 - [x] Rules v1 (0116, 18 chunks — kept for history)
 - [ ] Rules v2 expansion (0118, ~40 chunks)
-- [ ] Penalties (0119)
+- [x] Penalties (0119, 30 chunks)
 - [ ] Common plays (0120)
 - [ ] Defensive schemes (0121)
 - [ ] Strategy & tactics (0122)
