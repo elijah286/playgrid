@@ -661,6 +661,76 @@ const create_play: CoachAiTool = {
   },
 };
 
+const list_user_playbooks: CoachAiTool = {
+  def: {
+    name: "list_user_playbooks",
+    description:
+      "List all active playbooks the signed-in user owns or has access to. Use this when the coach asks " +
+      "to work with a playbook but hasn't specified which one, or when you need to let them choose from their playbooks. " +
+      "Returns a formatted list with playbook names and sport variants.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  async handler(_, ctx) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { ok: false, error: "Not authenticated" };
+      }
+
+      const { data: memberships, error } = await supabase
+        .from("playbook_members")
+        .select("playbook_id, playbooks(id, name, sport_variant)")
+        .eq("user_id", user.id)
+        .order("playbooks(name)");
+
+      if (error) {
+        return { ok: false, error: `Failed to load playbooks: ${error.message}` };
+      }
+
+      if (!memberships || memberships.length === 0) {
+        return {
+          ok: true,
+          result:
+            "You don't have any playbooks yet. You can create one by asking Coach Cal to create a new playbook!",
+        };
+      }
+
+      const playbooks = memberships
+        .map((m) => {
+          const pb = Array.isArray(m.playbooks) ? m.playbooks[0] : m.playbooks;
+          return pb ? { id: pb.id as string, name: pb.name as string, variant: pb.sport_variant as string | null } : null;
+        })
+        .filter((pb): pb is { id: string; name: string; variant: string | null } => pb !== null);
+
+      if (playbooks.length === 0) {
+        return {
+          ok: true,
+          result: "You don't have any active playbooks. Create one to get started!",
+        };
+      }
+
+      const lines = playbooks.map((pb, i) => {
+        const variant = pb.variant ? ` (${pb.variant})` : "";
+        return `${i + 1}. **${pb.name}**${variant}`;
+      });
+
+      return {
+        ok: true,
+        result: `Here are your playbooks:\n\n${lines.join("\n")}\n\nWhich one would you like to work with?`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "list_user_playbooks failed" };
+    }
+  },
+};
+
 const BASE_TOOLS: CoachAiTool[] = [
   search_kb,
   draw_play,
@@ -669,6 +739,7 @@ const BASE_TOOLS: CoachAiTool[] = [
   list_formations,
   create_formation,
   create_play,
+  list_user_playbooks,
   flag_outside_kb,
   flag_refusal,
   set_feedback_optin,
