@@ -67,15 +67,19 @@ async function loadToolContext(
       sanctioningBody: null,
       ageDivision: null,
       isAdmin,
+      canEditPlaybook: false,
       mode,
     };
   }
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("playbooks")
-    .select("sport_variant, game_level, sanctioning_body, age_division")
-    .eq("id", playbookId)
-    .maybeSingle();
+  const [{ data }, { data: canEdit }] = await Promise.all([
+    supabase
+      .from("playbooks")
+      .select("sport_variant, game_level, sanctioning_body, age_division")
+      .eq("id", playbookId)
+      .maybeSingle(),
+    supabase.rpc("can_edit_playbook", { pb: playbookId }),
+  ]);
   return {
     playbookId,
     sportVariant: (data?.sport_variant as string | null) ?? null,
@@ -83,6 +87,7 @@ async function loadToolContext(
     sanctioningBody: (data?.sanctioning_body as string | null) ?? null,
     ageDivision: (data?.age_division as string | null) ?? null,
     isAdmin,
+    canEditPlaybook: Boolean(canEdit),
     mode,
   };
 }
@@ -102,11 +107,25 @@ export async function chatCoachAiAction(req: ChatRequest): Promise<ChatResponse>
   const text = req.userMessage.trim();
   if (!text) return { ok: false, error: "Empty message." };
 
-  const requestedMode: CoachAiMode = req.mode === "admin_training" ? "admin_training" : "normal";
-  const mode: CoachAiMode = requestedMode === "admin_training" && gate.isAdmin ? "admin_training" : "normal";
+  const requestedMode: CoachAiMode =
+    req.mode === "admin_training" ? "admin_training"
+      : req.mode === "playbook_training" ? "playbook_training"
+      : "normal";
 
   try {
-    const ctx = await loadToolContext(req.playbookId ?? null, gate.isAdmin, mode);
+    // Resolve effective mode against actual permissions. Pre-load ctx with
+    // mode='normal' first so we can read canEditPlaybook safely, then upgrade.
+    const probe = await loadToolContext(req.playbookId ?? null, gate.isAdmin, "normal");
+    let mode: CoachAiMode = "normal";
+    if (requestedMode === "admin_training" && gate.isAdmin) mode = "admin_training";
+    else if (
+      requestedMode === "playbook_training" &&
+      probe.playbookId &&
+      probe.canEditPlaybook
+    ) {
+      mode = "playbook_training";
+    }
+    const ctx: ToolContext = { ...probe, mode };
     const history: ChatMessage[] = [
       ...turnsToHistory(req.history),
       { role: "user", content: text },

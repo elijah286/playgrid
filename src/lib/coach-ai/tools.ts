@@ -1,7 +1,7 @@
 import { searchKb, type KbFilter } from "./retrieve";
 import type { ToolDef } from "./llm";
 
-export type CoachAiMode = "normal" | "admin_training";
+export type CoachAiMode = "normal" | "admin_training" | "playbook_training";
 
 export type ToolContext = {
   /** Current playbook id, when chat is anchored to one. */
@@ -11,8 +11,10 @@ export type ToolContext = {
   gameLevel: string | null;
   sanctioningBody: string | null;
   ageDivision: string | null;
-  /** True when caller is a site admin. Required for KB write tools. */
+  /** True when caller is a site admin. Required for global KB write tools. */
   isAdmin: boolean;
+  /** True when caller can edit the current playbook. Required for playbook KB write tools. */
+  canEditPlaybook: boolean;
   /** Active mode — gates which tools are exposed to the LLM. */
   mode: CoachAiMode;
 };
@@ -110,6 +112,11 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { KB_ADMIN_TOOLS } = require("./kb-tools") as typeof import("./kb-tools");
     tools.push(...KB_ADMIN_TOOLS);
+  }
+  if (ctx.mode === "playbook_training" && ctx.canEditPlaybook && ctx.playbookId) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PLAYBOOK_KB_TOOLS } = require("./playbook-tools") as typeof import("./playbook-tools");
+    tools.push(...PLAYBOOK_KB_TOOLS);
   }
   return tools;
 }

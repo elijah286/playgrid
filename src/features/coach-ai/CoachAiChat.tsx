@@ -15,7 +15,7 @@ export function CoachAiChat({
   mode = "normal",
 }: {
   playbookId?: string | null;
-  mode?: "normal" | "admin_training";
+  mode?: "normal" | "admin_training" | "playbook_training";
 }) {
   const [turns, setTurns] = useState<CoachAiTurn[]>([]);
   const [draft, setDraft] = useState("");

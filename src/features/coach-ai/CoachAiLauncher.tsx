@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { BookOpen, GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { cn } from "@/lib/utils";
+
+const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
 
 /**
  * Floating Coach AI launcher.
@@ -20,7 +23,7 @@ import { cn } from "@/lib/utils";
  * curate the global KB. Visual cue: amber border + label.
  */
 export function CoachAiLauncher({
-  playbookId = null,
+  playbookId: playbookIdProp = null,
   isAdmin = false,
 }: {
   playbookId?: string | null;
@@ -29,7 +32,29 @@ export function CoachAiLauncher({
   const [open, setOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [adminMode, setAdminMode] = useState(false);
-  const trainingActive = isAdmin && adminMode;
+  const [playbookMode, setPlaybookMode] = useState(false);
+
+  const pathname = usePathname();
+  const playbookId = useMemo<string | null>(() => {
+    if (playbookIdProp) return playbookIdProp;
+    const m = pathname?.match(PLAYBOOK_ROUTE_RE);
+    return m?.[1] ?? null;
+  }, [playbookIdProp, pathname]);
+
+  // Exit playbook training automatically when the user navigates off the playbook.
+  useEffect(() => {
+    if (!playbookId && playbookMode) setPlaybookMode(false);
+  }, [playbookId, playbookMode]);
+
+  // Modes are mutually exclusive — admin wins.
+  const adminTrainingActive = isAdmin && adminMode;
+  const playbookTrainingActive = !adminTrainingActive && !!playbookId && playbookMode;
+  const trainingActive = adminTrainingActive || playbookTrainingActive;
+  const mode: "normal" | "admin_training" | "playbook_training" = adminTrainingActive
+    ? "admin_training"
+    : playbookTrainingActive
+      ? "playbook_training"
+      : "normal";
 
   // Esc closes (or exits fullscreen first).
   useEffect(() => {
@@ -86,7 +111,8 @@ export function CoachAiLauncher({
             aria-label="Coach AI chat"
             className={cn(
               "fixed z-50 flex flex-col overflow-hidden bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10 transition-all",
-              trainingActive && "ring-2 ring-amber-400",
+              adminTrainingActive && "ring-2 ring-amber-400",
+              playbookTrainingActive && "ring-2 ring-sky-400",
               fullscreen
                 ? "inset-2 rounded-2xl sm:inset-4"
                 : [
@@ -99,13 +125,21 @@ export function CoachAiLauncher({
             <header
               className={cn(
                 "flex items-center gap-2 border-b px-3 py-2",
-                trainingActive ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30" : "border-border",
+                adminTrainingActive
+                  ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
+                  : playbookTrainingActive
+                    ? "border-sky-300 bg-sky-50/60 dark:bg-sky-950/30"
+                    : "border-border",
               )}
             >
               <div
                 className={cn(
                   "flex size-7 items-center justify-center rounded-lg",
-                  trainingActive ? "bg-amber-200 text-amber-900" : "bg-primary/10 text-primary",
+                  adminTrainingActive
+                    ? "bg-amber-200 text-amber-900"
+                    : playbookTrainingActive
+                      ? "bg-sky-200 text-sky-900"
+                      : "bg-primary/10 text-primary",
                 )}
               >
                 <CoachAiIcon className="size-4" />
@@ -113,32 +147,56 @@ export function CoachAiLauncher({
               <div className="min-w-0">
                 <div className="text-sm font-semibold leading-tight text-foreground">
                   Coach AI
-                  {trainingActive && (
+                  {adminTrainingActive && (
                     <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
                       <GraduationCap className="size-3" /> Training
                     </span>
                   )}
+                  {playbookTrainingActive && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800 ring-1 ring-sky-300 dark:text-sky-200">
+                      <BookOpen className="size-3" /> Playbook
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11px] leading-tight text-muted">
-                  {trainingActive
+                  {adminTrainingActive
                     ? "Curating the global knowledge base — confirms before each write."
-                    : "Beta · grounded in your league rules"}
+                    : playbookTrainingActive
+                      ? "Curating this playbook's notes — confirms before each write."
+                      : "Beta · grounded in your league rules"}
                 </div>
               </div>
               <div className="ml-auto flex items-center gap-1">
+                {playbookId && !adminTrainingActive && (
+                  <button
+                    type="button"
+                    onClick={() => setPlaybookMode((v) => !v)}
+                    aria-pressed={playbookTrainingActive}
+                    className={cn(
+                      "rounded-md p-1.5 transition",
+                      playbookTrainingActive
+                        ? "bg-sky-500/20 text-sky-800 hover:bg-sky-500/30 dark:text-sky-200"
+                        : "text-muted hover:bg-surface-inset hover:text-foreground",
+                    )}
+                    aria-label={playbookTrainingActive ? "Exit playbook training" : "Enter playbook training"}
+                    title={playbookTrainingActive ? "Exit playbook training" : "Playbook training (capture team-specific knowledge)"}
+                  >
+                    <BookOpen className="size-4" />
+                  </button>
+                )}
                 {isAdmin && (
                   <button
                     type="button"
                     onClick={() => setAdminMode((v) => !v)}
-                    aria-pressed={trainingActive}
+                    aria-pressed={adminTrainingActive}
                     className={cn(
                       "rounded-md p-1.5 transition",
-                      trainingActive
+                      adminTrainingActive
                         ? "bg-amber-500/20 text-amber-800 hover:bg-amber-500/30 dark:text-amber-200"
                         : "text-muted hover:bg-surface-inset hover:text-foreground",
                     )}
-                    aria-label={trainingActive ? "Exit training mode" : "Enter training mode"}
-                    title={trainingActive ? "Exit training mode" : "Training mode (admin)"}
+                    aria-label={adminTrainingActive ? "Exit admin training" : "Enter admin training"}
+                    title={adminTrainingActive ? "Exit admin training" : "Admin training (curate global KB)"}
                   >
                     <GraduationCap className="size-4" />
                   </button>
@@ -167,7 +225,7 @@ export function CoachAiLauncher({
               </div>
             </header>
             <div className="flex-1 min-h-0">
-              <CoachAiChat playbookId={playbookId} mode={trainingActive ? "admin_training" : "normal"} />
+              <CoachAiChat playbookId={playbookId} mode={mode} />
             </div>
           </div>
         </>
