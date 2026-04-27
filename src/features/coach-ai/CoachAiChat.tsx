@@ -130,12 +130,22 @@ export function CoachAiChat({
     if (params.get("cal_from") === "1") {
       const globalKey = storageKeyFor("normal", null);
       const carried = loadTurns(globalKey);
+      const teamName = params.get("cal_team") ?? null;
+      params.delete("cal_from");
+      params.delete("cal_team");
+      const newUrl = window.location.pathname + (params.size > 0 ? "?" + params.toString() : "");
+      window.history.replaceState(null, "", newUrl);
       if (carried.length > 0) {
-        setTurns(carried);
-        saveTurns(storageKey, carried);
-        params.delete("cal_from");
-        const newUrl = window.location.pathname + (params.size > 0 ? "?" + params.toString() : "");
-        window.history.replaceState(null, "", newUrl);
+        const bridgeTurn: CoachAiTurn = {
+          role: "assistant",
+          text: teamName
+            ? `Got it — I'm now in your **${teamName}** playbook. What date and time do you want to schedule, and how long? (Recurrence is optional.)`
+            : "Got it — I'm now in this playbook. What date, time, and duration do you want to schedule?",
+          toolCalls: [],
+        };
+        const merged = [...carried, bridgeTurn];
+        setTurns(merged);
+        saveTurns(storageKey, merged);
         setError(null);
         return;
       }

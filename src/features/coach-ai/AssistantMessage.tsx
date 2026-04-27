@@ -34,7 +34,7 @@ function PlaybookButtonList({ json }: { json: string }) {
         return (
           <Link
             key={pb.id}
-            href={`/playbooks/${pb.id}?cal_from=1`}
+            href={`/playbooks/${pb.id}?cal_from=1&cal_team=${encodeURIComponent(pb.name)}`}
             style={{ backgroundColor: bg }}
             className="flex items-center rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-75"
           >
