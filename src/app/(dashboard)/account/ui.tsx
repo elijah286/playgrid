@@ -65,26 +65,84 @@ export function AccountClient({
   pendingCoachInvites: PendingCoachInvite[];
 }) {
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 md:grid-cols-2">
-        <NameCard initialDisplayName={displayName} />
-        <PasswordCard />
-        <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
-        <PlanCard entitlement={entitlement} />
+    <div className="space-y-10">
+      <Section
+        title="Profile"
+        description="How you appear to teammates and on shared playsheets."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <NameCard initialDisplayName={displayName} />
+          <AvatarCard email={email} displayName={displayName} avatarUrl={avatarUrl} />
+        </div>
+      </Section>
+
+      <Section
+        title="Subscription"
+        description="Your plan, billing, and the coaches you've granted access to."
+      >
+        <div className="space-y-4">
+          <PlanCard entitlement={entitlement} />
+          {seatUsage ? (
+            <SeatsCard
+              usage={seatUsage}
+              collaborators={seatCollaborators}
+              pendingInvites={pendingCoachInvites}
+              canPurchase={entitlement?.source === "stripe"}
+              isComplimentary={entitlement?.source === "comp"}
+            />
+          ) : null}
+        </div>
+      </Section>
+
+      <Section
+        title="Security"
+        description="Password and devices currently signed in to your account."
+      >
+        <div className="space-y-4">
+          <PasswordCard />
+          <SessionsCard sessions={sessions} />
+        </div>
+      </Section>
+
+      <Section title="Preferences" description="Customize how xogridmaker looks.">
         <AppearanceCard />
-        <SessionsCard sessions={sessions} />
-        {seatUsage ? (
-          <SeatsCard
-            usage={seatUsage}
-            collaborators={seatCollaborators}
-            pendingInvites={pendingCoachInvites}
-            canPurchase={entitlement?.source === "stripe"}
-            isComplimentary={entitlement?.source === "comp"}
-          />
-        ) : null}
-      </div>
-      <DeleteAccountCard hasPaidPlan={entitlement?.source === "stripe"} />
+      </Section>
+
+      <Section title="Danger zone" tone="danger">
+        <DeleteAccountCard hasPaidPlan={entitlement?.source === "stripe"} />
+      </Section>
     </div>
+  );
+}
+
+function Section({
+  title,
+  description,
+  tone,
+  children,
+}: {
+  title: string;
+  description?: string;
+  tone?: "danger";
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8">
+      <div>
+        <h2
+          className={cn(
+            "text-base font-semibold",
+            tone === "danger" ? "text-danger" : "text-foreground",
+          )}
+        >
+          {title}
+        </h2>
+        {description && (
+          <p className="mt-1 text-xs text-muted">{description}</p>
+        )}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   );
 }
 
