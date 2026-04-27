@@ -1,10 +1,17 @@
 "use client";
 
 import { Children, isValidElement } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { PlayDiagramEmbed } from "./PlayDiagramEmbed";
+
+function isInternalHref(href: string): boolean {
+  if (!href) return false;
+  if (href.startsWith("/") && !href.startsWith("//")) return true;
+  return false;
+}
 
 function FootballDiagram({ text }: { text: string }) {
   const lines = text.trimEnd().split("\n");
@@ -95,6 +102,29 @@ const components: Components = {
   ),
 
   hr: () => <hr className="my-3 border-border" />,
+
+  // Use next/link for in-app paths so navigating doesn't full-page reload
+  // (which would unmount the chat). External links keep default behavior.
+  a: ({ href, children }) => {
+    const url = typeof href === "string" ? href : "";
+    if (isInternalHref(url)) {
+      return (
+        <Link href={url} className="text-primary underline-offset-2 hover:underline">
+          {children}
+        </Link>
+      );
+    }
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary underline-offset-2 hover:underline"
+      >
+        {children}
+      </a>
+    );
+  },
 
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
