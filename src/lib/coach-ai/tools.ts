@@ -268,6 +268,97 @@ const flag_refusal: CoachAiTool = {
   },
 };
 
+const get_route_template: CoachAiTool = {
+  def: {
+    name: "get_route_template",
+    description:
+      "Get the canonical geometry of a named route template, matching the play editor's quick-route presets. " +
+      "ALWAYS call this BEFORE emitting any route waypoints in a play diagram so the route shape Cal draws " +
+      "stays consistent with the same route preset the coach sees in the editor. Returns waypoints in yards " +
+      "(Cal's diagram coord system), ready to drop straight into a route's `path` field. " +
+      "Available names (case-insensitive): Go, Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, " +
+      "Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Route name (case-insensitive). Must match one of the available templates.",
+        },
+        player_x: {
+          type: "number",
+          description: "Player's x-position in yards from center of field (negative=left side, positive=right side).",
+        },
+        player_y: {
+          type: "number",
+          description: "Player's y-position in yards from LOS (0 = on the line, negative = backfield, positive = downfield).",
+        },
+      },
+      required: ["name", "player_x", "player_y"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const rawName = typeof input.name === "string" ? input.name.trim() : "";
+    if (!rawName) return { ok: false, error: "Route name is required." };
+    const playerX = typeof input.player_x === "number" ? input.player_x : NaN;
+    const playerY = typeof input.player_y === "number" ? input.player_y : NaN;
+    if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) {
+      return { ok: false, error: "player_x and player_y must be numbers (yards)." };
+    }
+
+    // Lazy import — keep domain types out of module-init order.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ROUTE_TEMPLATES } = require("@/domain/play/routeTemplates") as typeof import("@/domain/play/routeTemplates");
+
+    const lookup = rawName.toLowerCase();
+    const template = ROUTE_TEMPLATES.find((t) => t.name.toLowerCase() === lookup);
+    if (!template) {
+      const available = ROUTE_TEMPLATES.map((t) => t.name).join(", ");
+      return {
+        ok: false,
+        error: `Unknown route "${rawName}". Available: ${available}.`,
+      };
+    }
+
+    // Field width depends on variant; field length is 25 yds across all
+    // variants (the display window). xSign mirrors the player's side so
+    // "outside" in the template means away-from-center for either WR.
+    const fieldWidthYds = (() => {
+      switch (ctx.sportVariant) {
+        case "flag_5v5": return 25;
+        case "flag_7v7": return 30;
+        case "tackle_11": return 53;
+        default: return 40;
+      }
+    })();
+    const fieldLengthYds = 25;
+    const xSign = template.directional ? (playerX >= 0 ? 1 : -1) : 1;
+
+    // First point is the player's start (0,0) — Cal's diagram path skips it.
+    const waypoints = template.points.slice(1).map((offset) => {
+      const xYds = playerX + offset.x * xSign * fieldWidthYds;
+      const yYds = playerY + offset.y * fieldLengthYds;
+      return [Math.round(xYds * 10) / 10, Math.round(yYds * 10) / 10] as [number, number];
+    });
+
+    const curve = template.shapes?.some((s) => s === "curve") ?? false;
+    const variantLabel = ctx.sportVariant ?? "flag_7v7";
+    const pathJson = JSON.stringify(waypoints);
+    const routeJsonFragment =
+      `{"from": "<player_id>", "path": ${pathJson}, "tip": "arrow"${curve ? ", \"curve\": true" : ""}}`;
+
+    return {
+      ok: true,
+      result:
+        `Canonical "${template.name}" from (${playerX}, ${playerY}) on ${variantLabel}:\n` +
+        `path: ${pathJson}\n` +
+        `tip: "arrow"${curve ? "\ncurve: true" : ""}\n\n` +
+        `Drop into your diagram's "routes" array as:\n${routeJsonFragment}`,
+    };
+  },
+};
+
 const create_playbook: CoachAiTool = {
   def: {
     name: "create_playbook",
@@ -462,7 +553,7 @@ const create_event: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, flag_outside_kb, flag_refusal];
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {

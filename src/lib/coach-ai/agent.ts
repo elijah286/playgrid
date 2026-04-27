@@ -85,6 +85,7 @@ Rules:
 - For 7v7 flag, field is 30 yards wide; for 5v5, 25; for tackle 11, 53. Keep x within roughly ±half the width.
 - For a formation-only diagram, omit the "routes" field.
 - Omit the diagram only when the question is purely about a rule or penalty (no positional concept involved).
+- **Route geometry — ALWAYS use \`get_route_template\` for named routes.** Before emitting any route waypoints in a diagram, call \`get_route_template\` with the route name (Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig, Go) plus the player's (x, y) in yards. The tool returns canonical waypoints that match the play editor's quick-route presets — drop them straight into the route's \`path\`. **Do NOT hand-author waypoints for named routes** (you'll guess wrong and produce a slant that looks like a flat). Only fall back to hand-authored paths for genuinely custom routes the coach asks for that don't match any template; in that case, briefly note "(custom route)" so the coach knows.
 - **Route/token colors** — the renderer auto-colors skill positions by label. Use the canonical letters above and the renderer paints them correctly (X red, Y green, Z blue, H orange, S yellow, B orange, QB white, C black). **Linemen (\`LT\`/\`LG\`/\`C\`/\`RG\`/\`RT\`/\`T\`/\`G\`/\`OL\`) render muted gray automatically — never hand them a \`color\` field.** Only override \`color\` when the coach explicitly asks ("make X purple").
 - **"Color" means route color.** When a coach says "change the color of [player]" they mean the route/token color on the play diagram, not jersey color.
 
@@ -276,7 +277,14 @@ const TOOL_STATUS: Record<string, string> = {
 };
 
 /** Silent tools — these never surface as a tool-chip or status to the user. */
-const SILENT_TOOLS = new Set(["flag_outside_kb", "flag_refusal"]);
+const SILENT_TOOLS = new Set([
+  "flag_outside_kb",
+  "flag_refusal",
+  // get_route_template can be called many times per diagram (one per route);
+  // surfacing each as a tool-chip would clutter the chat. Cal's overall
+  // narrative ("here's the slant + go + flat concept") is enough context.
+  "get_route_template",
+]);
 
 /** Tools that mutate user-visible DB state — caller should router.refresh()
  * the surrounding page after these run, so freshly created/edited rows
