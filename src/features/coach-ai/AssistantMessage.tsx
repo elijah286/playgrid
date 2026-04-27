@@ -4,6 +4,7 @@ import { Children, isValidElement } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { PlayDiagramEmbed } from "./PlayDiagramEmbed";
 
 function FootballDiagram({ text }: { text: string }) {
   const lines = text.trimEnd().split("\n");
@@ -60,6 +61,7 @@ const components: Components = {
     const lang = /language-(\w+)/.exec(className)?.[1] ?? "";
     const raw = String(child?.props?.children ?? "").replace(/\n$/, "");
 
+    if (lang === "play") return <PlayDiagramEmbed json={raw} />;
     if (lang === "diagram") return <FootballDiagram text={raw} />;
 
     return (

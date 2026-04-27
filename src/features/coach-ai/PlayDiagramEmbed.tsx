@@ -1,0 +1,316 @@
+"use client";
+
+import { useMemo } from "react";
+import { Play, Pause, RotateCcw } from "lucide-react";
+import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
+import { resolveEndDecoration, resolveRouteStroke } from "@/domain/play/factory";
+import { routeToRenderedSegments } from "@/domain/play/geometry";
+import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
+import { createEmptyPlayDocument } from "@/domain/play/factory";
+import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
+
+// ── ViewBox computation (matches PlayThumbnail auto-zoom logic) ──────────────
+
+type ViewBox = { x: number; y: number; w: number; h: number };
+
+function computeViewBox(doc: PlayDocument): ViewBox {
+  const R = 0.032;
+  const PAD = R * 1.4;
+  let minX = Infinity, maxX = -Infinity;
+  let minSvgY = Infinity, maxSvgY = -Infinity;
+
+  for (const p of doc.layers.players) {
+    if (p.position.x < minX) minX = p.position.x;
+    if (p.position.x > maxX) maxX = p.position.x;
+    const sy = 1 - p.position.y;
+    if (sy < minSvgY) minSvgY = sy;
+    if (sy > maxSvgY) maxSvgY = sy;
+  }
+  for (const r of doc.layers.routes) {
+    for (const n of r.nodes) {
+      if (n.position.x < minX) minX = n.position.x;
+      if (n.position.x > maxX) maxX = n.position.x;
+      const sy = 1 - n.position.y;
+      if (sy < minSvgY) minSvgY = sy;
+      if (sy > maxSvgY) maxSvgY = sy;
+    }
+  }
+  if (!isFinite(minSvgY)) { minX = 0; maxX = 1; minSvgY = 0.22; maxSvgY = 0.78; }
+
+  const losY = 1 - (doc.lineOfScrimmageY ?? 0.4);
+  const tenY = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.4);
+  minSvgY = Math.min(minSvgY, tenY);
+  maxSvgY = Math.max(maxSvgY, losY);
+
+  let vbX = Math.max(0, minX - PAD);
+  let vbW = Math.min(1, maxX + PAD) - vbX;
+  let vbY = Math.max(0, minSvgY - PAD);
+  let vbH = Math.min(1, maxSvgY + PAD) - vbY;
+
+  const TARGET = 16 / 10;
+  const cur = vbW / vbH;
+  if (cur < TARGET) {
+    const needed = vbH * TARGET;
+    vbX = Math.max(0, vbX - (needed - vbW) / 2);
+    vbW = Math.min(1 - vbX, needed);
+  } else if (cur > TARGET) {
+    const needed = vbW / TARGET;
+    vbY = Math.max(0, vbY - (needed - vbH) / 2);
+    vbH = Math.min(1 - vbY, needed);
+  }
+  return { x: vbX, y: vbY, w: vbW, h: vbH };
+}
+
+// ── Player token shape ───────────────────────────────────────────────────────
+
+function PlayerToken({ player, cx, cy, r, sxCorr }: {
+  player: Player; cx: number; cy: number; r: number; sxCorr: number;
+}) {
+  const fill   = player.style.fill;
+  const stroke = player.style.stroke;
+  const shape  = player.shape ?? "circle";
+  const common = { fill, stroke, strokeWidth: 1, vectorEffect: "non-scaling-stroke" as const };
+
+  let shapeEl: React.ReactNode;
+  if (shape === "square") {
+    shapeEl = <rect x={-r} y={-r} width={r * 2} height={r * 2} {...common} />;
+  } else if (shape === "diamond") {
+    shapeEl = <polygon points={`0,${-r} ${r},0 0,${r} ${-r},0`} {...common} />;
+  } else if (shape === "triangle") {
+    shapeEl = <polygon points={`0,${-r} ${r},${r} ${-r},${r}`} {...common} />;
+  } else {
+    shapeEl = <circle cx={0} cy={0} r={r} {...common} />;
+  }
+
+  return (
+    <g transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
+      {shapeEl}
+      <text x={0} y={0} textAnchor="middle" dominantBaseline="central"
+        fontSize={0.035} fontWeight={700} fill={player.style.labelColor}
+        style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
+        {player.label}
+      </text>
+    </g>
+  );
+}
+
+// ── Route end decoration (arrow / T) ─────────────────────────────────────────
+
+function RouteDecorations({ doc, stroke, R: _R }: { doc: PlayDocument; stroke: string; R: number }) {
+  return (
+    <>
+      {doc.layers.routes.map((r) => {
+        const decoration = resolveEndDecoration(r);
+        if (decoration === "none") return null;
+        const fromIds = new Set(r.segments.map((s) => s.fromNodeId));
+        const terminals = r.segments.filter((s) => !fromIds.has(s.toNodeId));
+        const routeStroke = resolveRouteStroke(r, doc.layers.players);
+        return terminals.map((seg) => {
+          const fromNode = r.nodes.find((n) => n.id === seg.fromNodeId);
+          const toNode   = r.nodes.find((n) => n.id === seg.toNodeId);
+          if (!fromNode || !toNode) return null;
+          const dirFromX = seg.shape === "curve" && seg.controlOffset ? seg.controlOffset.x : fromNode.position.x;
+          const dirFromY = seg.shape === "curve" && seg.controlOffset ? seg.controlOffset.y : fromNode.position.y;
+          const tipX = toNode.position.x;
+          const tipY = 1 - toNode.position.y;
+          const fromX = dirFromX, fromY = 1 - dirFromY;
+          const dx = tipX - fromX, dy = tipY - fromY;
+          const len = Math.hypot(dx, dy);
+          if (len < 1e-4) return null;
+          const ux = dx / len, uy = dy / len;
+          if (decoration === "arrow") {
+            const aLen = 0.05;
+            const cos = Math.cos(Math.PI / 6), sin = Math.sin(Math.PI / 6);
+            const bx = -ux, by = -uy;
+            const r1x = cos * bx - sin * by, r1y = sin * bx + cos * by;
+            const r2x = cos * bx + sin * by, r2y = -sin * bx + cos * by;
+            const p1x = tipX + aLen * r1x, p1y = tipY + aLen * r1y;
+            const p2x = tipX + aLen * r2x, p2y = tipY + aLen * r2y;
+            return (
+              <polygon key={seg.id} points={`${tipX},${tipY} ${p1x},${p1y} ${p2x},${p2y}`}
+                fill={routeStroke} stroke={routeStroke} strokeWidth={0.8}
+                strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            );
+          }
+          if (decoration === "t") {
+            const half = 0.028;
+            const px = -uy, py = ux;
+            return (
+              <line key={seg.id}
+                x1={tipX + px * half} y1={tipY + py * half}
+                x2={tipX - px * half} y2={tipY - py * half}
+                stroke={routeStroke} strokeWidth={1.8} strokeLinecap="round"
+                vectorEffect="non-scaling-stroke" />
+            );
+          }
+          return null;
+        });
+      })}
+    </>
+  );
+}
+
+// ── Main canvas ──────────────────────────────────────────────────────────────
+
+function DiagramCanvas({ doc, animPositions }: {
+  doc: PlayDocument;
+  animPositions: Map<string, Point2> | null;
+}) {
+  const vb     = useMemo(() => computeViewBox(doc), [doc]);
+  const aspect = vb.w / vb.h;
+  const TARGET = 16 / 10;
+  const sxCorr = aspect / TARGET;
+  const R      = 0.032;
+
+  const losY = 1 - (doc.lineOfScrimmageY ?? 0.4);
+  const fiveY = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.2);
+  const tenY  = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.4);
+
+  const animatingIds = new Set(animPositions?.keys() ?? []);
+
+  return (
+    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border bg-surface-inset">
+      <svg
+        viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+        width="100%" height="100%"
+        preserveAspectRatio="none"
+      >
+        {/* Field grid lines */}
+        <line x1={vb.x} x2={vb.x + vb.w} y1={losY} y2={losY}
+          stroke="rgba(100,116,139,0.55)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+        <line x1={vb.x} x2={vb.x + vb.w} y1={fiveY} y2={fiveY}
+          stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        <line x1={vb.x} x2={vb.x + vb.w} y1={tenY} y2={tenY}
+          stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+
+        {/* Routes (always static) */}
+        {doc.layers.routes.map((r) => {
+          const segs = routeToRenderedSegments(r);
+          const stroke = resolveRouteStroke(r, doc.layers.players);
+          return (
+            <g key={r.id}>
+              {segs.map((rs) => (
+                <path key={rs.segmentId} d={rs.d} fill="none" stroke={stroke}
+                  strokeWidth={1.8} strokeDasharray={rs.dash}
+                  strokeLinejoin="round" strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke" />
+              ))}
+            </g>
+          );
+        })}
+
+        {/* Route decorations */}
+        <RouteDecorations doc={doc} stroke="" R={R} />
+
+        {/* Static players (hidden during animation if they have a route) */}
+        {doc.layers.players.map((p) => {
+          if (animPositions && animatingIds.has(p.id)) return null;
+          return (
+            <PlayerToken key={p.id} player={p}
+              cx={p.position.x} cy={1 - p.position.y}
+              r={R} sxCorr={sxCorr} />
+          );
+        })}
+
+        {/* Animated player positions */}
+        {animPositions && doc.layers.players.map((p) => {
+          const pos = animPositions.get(p.id);
+          if (!pos) return null;
+          return (
+            <PlayerToken key={`anim-${p.id}`} player={p}
+              cx={pos.x} cy={1 - pos.y}
+              r={R} sxCorr={sxCorr} />
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ── Controls ─────────────────────────────────────────────────────────────────
+
+function Controls({ anim }: { anim: ReturnType<typeof usePlayAnimation> }) {
+  const isPlaying = anim.phase === "motion" || anim.phase === "play";
+  const isDone    = anim.phase === "done";
+
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => { if (isPlaying) anim.togglePause(); else anim.step(); }}
+        className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+      >
+        {isPlaying && !anim.paused
+          ? <><Pause className="size-3" /> Pause</>
+          : <><Play  className="size-3" /> {isDone ? "Replay" : "Play"}</>
+        }
+      </button>
+      {anim.phase !== "idle" && (
+        <button
+          type="button"
+          onClick={() => anim.reset()}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground transition-colors"
+        >
+          <RotateCcw className="size-3" />
+        </button>
+      )}
+      <div className="ml-auto flex items-center gap-1 text-[11px] text-muted">
+        <span>Speed:</span>
+        {[0.5, 1, 2].map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => anim.setSpeed(s)}
+            className={`rounded px-1.5 py-0.5 transition-colors ${
+              anim.speed === s
+                ? "bg-primary/15 font-semibold text-primary"
+                : "hover:bg-surface-inset"
+            }`}
+          >
+            {s}×
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Public component ─────────────────────────────────────────────────────────
+
+export function PlayDiagramEmbed({ json }: { json: string }) {
+  const doc = useMemo<PlayDocument | null>(() => {
+    try {
+      const diagram = JSON.parse(json) as CoachDiagram;
+      return coachDiagramToPlayDocument(diagram);
+    } catch {
+      return null;
+    }
+  }, [json]);
+
+  const anim = usePlayAnimation(doc ?? FALLBACK_DOC);
+
+  if (!doc) {
+    return (
+      <pre className="my-2 overflow-x-auto rounded-lg bg-black/20 px-3 py-2 font-mono text-xs text-foreground/70 whitespace-pre-wrap">
+        {json}
+      </pre>
+    );
+  }
+
+  const hasRoutes = doc.layers.routes.length > 0;
+  const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;
+
+  return (
+    <div className="my-3 space-y-1">
+      {doc.metadata.formation && (
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          {doc.metadata.formation}
+        </p>
+      )}
+      <DiagramCanvas doc={doc} animPositions={animPositions} />
+      {hasRoutes && <Controls anim={anim} />}
+    </div>
+  );
+}
+
+const FALLBACK_DOC: PlayDocument = createEmptyPlayDocument();
