@@ -247,10 +247,12 @@ export async function runAgent(
     finalText = injectedDiagrams.join("") + finalText;
   }
 
-  // TRACER — temporary debug. If the user does not see this string at the
-  // top of the next reply, then finalText is not reaching the client at
-  // all (rules out markdown / SSE / streaming as the bug location).
-  const tracer = `🔧 srv=v3 toolCalls=[${toolCalls.join(",") || "none"}] injected=${injectedDiagrams.length}\n\n`;
+  // TRACER — temporary debug. Shows what was actually injected, so we can
+  // see whether the play fence is well-formed when it reaches the client.
+  const injPreview = injectedDiagrams.length > 0
+    ? injectedDiagrams[0].slice(0, 400).replace(/`/g, "´")  // swap backticks so the preview itself doesn't form a fence
+    : "(none)";
+  const tracer = `🔧 srv=v4 toolCalls=[${toolCalls.join(",") || "none"}] injected=${injectedDiagrams.length} len=${injectedDiagrams[0]?.length ?? 0}\n\n**Injection preview (backticks→´):** \`${injPreview}\`\n\n`;
   finalText = tracer + finalText;
 
   return { newMessages, finalText, toolCalls, modelId, provider };
