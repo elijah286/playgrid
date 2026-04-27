@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
@@ -9,18 +9,21 @@ import { cn } from "@/lib/utils";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
 
+const DEFAULT_W = 420;
+const DEFAULT_H = 640;
+const EDGE = 16; // gap from viewport edge
+
 /**
  * Floating Coach AI launcher.
  *
- * Layout responds to viewport (Tailwind sm/lg breakpoints):
- *   - Mobile  (<640):    bottom sheet, ~80vh tall
- *   - Tablet  (640-1024): right-side drawer, full height, ~420 wide
- *   - Desktop (≥1024):   floating window, bottom-right, 420 × 640
+ *   - Mobile  (<640):     bottom sheet, ~80vh tall (not draggable)
+ *   - Desktop (≥640):     floating window, draggable by header,
+ *                         clamped to viewport, sized to never exceed it
  *
  * Fullscreen toggle expands to the entire viewport on any size.
  *
- * Admin Training Mode (admin-only) swaps in tools that let the agent
- * curate the global KB. Visual cue: amber border + label.
+ * Admin / Playbook Training Modes swap in tools that let the agent curate
+ * the global or per-playbook KB. Visual cues: amber / sky border + label.
  */
 export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
@@ -78,6 +81,89 @@ export function CoachAiLauncher({
     };
   }, [open, fullscreen]);
 
+  // ── Floating-window position (sm+, non-fullscreen) ─────────────────────────
+  // Stored as top-left in viewport coordinates. Null = use default
+  // (anchored bottom-right). Once the user drags, we switch to explicit coords
+  // and clamp on every viewport resize so the window never escapes the screen.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+
+  // Recompute size + clamp position whenever viewport changes or window opens.
+  const reflow = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = Math.min(DEFAULT_W, vw - EDGE * 2);
+    const h = Math.min(DEFAULT_H, vh - EDGE * 2);
+    setSize({ w, h });
+    setPos((p) => {
+      if (!p) return p;
+      const x = Math.max(EDGE, Math.min(p.x, vw - w - EDGE));
+      const y = Math.max(EDGE, Math.min(p.y, vh - h - EDGE));
+      return { x, y };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    reflow();
+    window.addEventListener("resize", reflow);
+    return () => window.removeEventListener("resize", reflow);
+  }, [open, reflow]);
+
+  // Reset position when closed so reopen lands at the default anchor.
+  useEffect(() => {
+    if (!open) setPos(null);
+  }, [open]);
+
+  function onHeaderPointerDown(e: React.PointerEvent<HTMLElement>) {
+    if (fullscreen) return;
+    if (typeof window === "undefined" || window.innerWidth < 640) return;
+    // Only react to plain primary-button drags on the header itself, not on
+    // the action buttons (which set their own click handlers).
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
+    e.preventDefault();
+    const rect = dialogRef.current?.getBoundingClientRect();
+    const origX = pos?.x ?? rect?.left ?? window.innerWidth - size.w - EDGE;
+    const origY = pos?.y ?? rect?.top ?? window.innerHeight - size.h - EDGE;
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX, origY };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onHeaderPointerMove(e: React.PointerEvent<HTMLElement>) {
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = Math.max(EDGE, Math.min(d.origX + dx, vw - size.w - EDGE));
+    const y = Math.max(EDGE, Math.min(d.origY + dy, vh - size.h - EDGE));
+    setPos({ x, y });
+  }
+
+  function onHeaderPointerUp(e: React.PointerEvent<HTMLElement>) {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Inline style applied to the dialog when floating (sm+, non-fullscreen).
+  // Mobile and fullscreen use class-based positioning instead.
+  const floatStyle: React.CSSProperties | undefined =
+    typeof window !== "undefined" && !fullscreen && window.innerWidth >= 640
+      ? pos
+        ? { left: pos.x, top: pos.y, width: size.w, height: size.h }
+        : { right: EDGE, bottom: EDGE, width: size.w, height: size.h }
+      : undefined;
+
   return (
     <>
       <button
@@ -107,24 +193,28 @@ export function CoachAiLauncher({
           />
 
           <div
+            ref={dialogRef}
             role="dialog"
             aria-label="Coach AI chat"
+            style={floatStyle}
             className={cn(
-              "fixed z-50 flex flex-col overflow-hidden bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10 transition-all",
+              "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10",
               adminTrainingActive && "ring-2 ring-amber-400",
               playbookTrainingActive && "ring-2 ring-sky-400",
               fullscreen
-                ? "inset-2 rounded-2xl sm:inset-4"
-                : [
-                    "inset-x-2 bottom-2 top-auto h-[80vh] rounded-2xl",
-                    "sm:inset-y-2 sm:right-2 sm:left-auto sm:bottom-auto sm:top-2 sm:h-auto sm:w-[420px] sm:rounded-2xl",
-                    "lg:inset-auto lg:right-4 lg:bottom-4 lg:top-auto lg:h-[640px] lg:w-[420px]",
-                  ].join(" "),
+                ? "inset-2 sm:inset-4"
+                : // Mobile bottom sheet — desktop overrides via inline floatStyle.
+                  "inset-x-2 bottom-2 top-auto h-[80vh] sm:inset-auto",
             )}
           >
             <header
+              onPointerDown={onHeaderPointerDown}
+              onPointerMove={onHeaderPointerMove}
+              onPointerUp={onHeaderPointerUp}
+              onPointerCancel={onHeaderPointerUp}
               className={cn(
-                "flex items-center gap-2 border-b px-3 py-2",
+                "flex items-center gap-2 border-b px-3 py-2 select-none",
+                !fullscreen && "sm:cursor-grab sm:active:cursor-grabbing",
                 adminTrainingActive
                   ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
                   : playbookTrainingActive
