@@ -47,13 +47,13 @@ unit of work.
 - [x] Strategy & tactics (0128, 15 chunks)
 - [x] Coaching techniques (0129, 11 chunks)
 
-### 3. Flag 4v4
+### 3. Flag 4v4  ✅ DONE
 - [x] Rules v1 (0103, 30 chunks)
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Penalties (0137, 18 chunks)
+- [x] Common plays (0138, 16 chunks)
+- [x] Defensive schemes (0139, 10 chunks)
+- [x] Strategy & tactics (0140, 8 chunks)
+- [x] Coaching techniques (0140 combined, 7 chunks)
 
 ### 4. Pop Warner (tackle)  ✅ DONE
 - [x] Rules v1 (0097)
