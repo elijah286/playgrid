@@ -103,11 +103,11 @@ function detectOutOfScopeRefusal(text: string): boolean {
  */
 function detectKbMiss(text: string): boolean {
   const kbMissPatterns = [
-    /isn't my specialty|not my specialty|outside my expertise/i,
+    /isn't my specialty|not my specialty|outside my expertise|aren't my.*expertise|aren't my core|not.*my core/i,
     /don't have specific.*content|don't have.*knowledge/i,
-    /I'd recommend|I recommend.*instead/i,
-    /check.*official|consult.*league|ask.*athletic director/i,
-    /watching film|consulting.*coach|sports performance specialist/i,
+    /I'd recommend|I recommend.*instead|you.*get better.*from/i,
+    /check.*official|consult.*league|ask.*athletic director|dedicated.*coach|film study/i,
+    /watching film|consulting.*coach|sports performance specialist|coaching.*resources/i,
   ];
   return kbMissPatterns.some(p => p.test(text));
 }
