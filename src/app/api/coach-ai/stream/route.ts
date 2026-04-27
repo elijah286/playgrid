@@ -114,7 +114,10 @@ export async function POST(req: Request): Promise<Response> {
     loadToolContext(body.playbookId ?? null, gate.isAdmin, requestedMode),
   ]);
 
-  const history = turnsToHistory(body.history);
+  const history: ChatMessage[] = [
+    ...turnsToHistory(body.history),
+    { role: "user", content: text },
+  ];
 
   const enc = new TextEncoder();
   const stream = new ReadableStream({
