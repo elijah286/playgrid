@@ -266,6 +266,128 @@ const flag_refusal: CoachAiTool = {
   },
 };
 
+const create_event: CoachAiTool = {
+  def: {
+    name: "create_event",
+    description:
+      "Schedule a practice, game, scrimmage, or other event on the current playbook's calendar. " +
+      "Requires that the chat is anchored to a playbook the coach can edit. Use this when the coach " +
+      "asks to add/schedule/book practices or games. Only call AFTER summarizing the proposed " +
+      "title/type/start/duration/recurrence back to the coach and getting an explicit yes. " +
+      "Convert natural language like \"every Mon and Wed at 5pm\" into a concrete ISO 8601 startsAt " +
+      "(the first occurrence) plus an iCal RRULE for recurrence.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["practice", "game", "scrimmage", "other"] },
+        title: { type: "string", description: "Event title, ≤200 chars." },
+        startsAt: {
+          type: "string",
+          description:
+            "ISO 8601 datetime WITH offset for the FIRST occurrence (e.g. \"2026-05-04T17:00:00-05:00\"). For recurring events, this is the first time the event happens.",
+        },
+        durationMinutes: { type: "integer", minimum: 1, maximum: 1440, description: "Default 90 for practice, 60 otherwise." },
+        arriveMinutesBefore: { type: "integer", minimum: 0, maximum: 480, description: "Default 0." },
+        timezone: { type: "string", description: "IANA tz name (e.g. \"America/Chicago\"). Default \"America/Chicago\" if unknown." },
+        recurrenceRule: {
+          type: "string",
+          description:
+            "Optional iCal RRULE for recurring events. Example for every Mon+Wed: \"FREQ=WEEKLY;BYDAY=MO,WE\". Add UNTIL=YYYYMMDDTHHMMSSZ to end the series. Omit for one-off events.",
+        },
+        location: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            address: { type: "string" },
+          },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        notes: { type: "string", description: "Optional free-form notes for the event." },
+        opponent: { type: "string", description: "Game-only: opponent name." },
+        homeAway: { type: "string", enum: ["home", "away", "neutral"], description: "Game-only." },
+        reminderOffsetsMinutes: {
+          type: "array",
+          items: { type: "integer", minimum: 0, maximum: 20160 },
+          maxItems: 8,
+          description: "Reminders, minutes before start. Default [60] (one hour before).",
+        },
+      },
+      required: ["type", "title", "startsAt", "timezone"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) {
+      return { ok: false, error: "Scheduling needs a playbook — open one from the sidebar first." };
+    }
+    if (!ctx.canEditPlaybook) {
+      return { ok: false, error: "Only coaches who can edit this playbook can schedule events." };
+    }
+    const type = input.type as string;
+    const title = typeof input.title === "string" ? input.title : "";
+    if (!title) return { ok: false, error: "Title is required." };
+    const startsAt = typeof input.startsAt === "string" ? input.startsAt : "";
+    if (!startsAt) return { ok: false, error: "startsAt is required (ISO 8601)." };
+    const timezone = typeof input.timezone === "string" && input.timezone ? input.timezone : "America/Chicago";
+    const durationMinutes = typeof input.durationMinutes === "number"
+      ? Math.round(input.durationMinutes)
+      : type === "practice" ? 90 : 60;
+    const arriveMinutesBefore = typeof input.arriveMinutesBefore === "number"
+      ? Math.round(input.arriveMinutesBefore)
+      : 0;
+    const recurrenceRule = typeof input.recurrenceRule === "string" && input.recurrenceRule ? input.recurrenceRule : null;
+    const notes = typeof input.notes === "string" ? input.notes : null;
+    const opponent = typeof input.opponent === "string" ? input.opponent : null;
+    const homeAway = typeof input.homeAway === "string" ? input.homeAway : null;
+    const reminderOffsetsMinutes = Array.isArray(input.reminderOffsetsMinutes)
+      ? (input.reminderOffsetsMinutes as unknown[]).filter((n): n is number => typeof n === "number").map(Math.round)
+      : [60];
+    const rawLocation = input.location as { name?: unknown; address?: unknown } | undefined | null;
+    const location = rawLocation && typeof rawLocation.name === "string"
+      ? {
+          name: rawLocation.name,
+          address: typeof rawLocation.address === "string" ? rawLocation.address : null,
+          lat: null,
+          lng: null,
+        }
+      : null;
+
+    const payload = {
+      type,
+      title,
+      startsAt,
+      durationMinutes,
+      arriveMinutesBefore,
+      timezone,
+      location,
+      notes,
+      opponent,
+      homeAway,
+      recurrenceRule,
+      reminderOffsetsMinutes,
+    };
+
+    try {
+      // Lazy import: server action must not be eagerly required at module init.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createEventAction } = require("@/app/actions/calendar") as typeof import("@/app/actions/calendar");
+      const res = await createEventAction(ctx.playbookId, payload);
+      if (!res.ok) return { ok: false, error: res.error };
+      const url = `/playbooks/${ctx.playbookId}?tab=calendar`;
+      const recurNote = recurrenceRule ? ` (recurring: ${recurrenceRule})` : "";
+      return {
+        ok: true,
+        result:
+          `Scheduled "${title}" on ${startsAt}${recurNote}. Tell the coach it's saved and link them to the calendar: [Open calendar](${url}).`,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "create_event failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
 const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
@@ -290,6 +412,8 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
     if (ctx.canEditPlaybook) {
       const writeTools = PLAY_TOOLS.filter((t) => t.def.name === "update_play");
       tools.push(...writeTools);
+      // Scheduling: only available to coaches who can edit the playbook.
+      tools.push(create_event);
     }
   }
   return tools;
