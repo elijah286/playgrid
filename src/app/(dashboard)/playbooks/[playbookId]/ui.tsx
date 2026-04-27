@@ -1407,6 +1407,7 @@ function PlaybookDetailClientInner({
           members={initialRoster}
           claims={initialRosterClaims}
           viewerIsCoach={headerProps.viewerIsCoach}
+          canManage={headerProps.canManage}
           teamName={headerProps.name}
           senderName={headerProps.senderName}
         />
@@ -2222,6 +2223,7 @@ function RosterPanel({
   members,
   claims,
   viewerIsCoach,
+  canManage,
   teamName,
   senderName,
 }: {
@@ -2229,6 +2231,7 @@ function RosterPanel({
   members: PlaybookRosterMember[];
   claims: PendingRosterClaim[];
   viewerIsCoach: boolean;
+  canManage: boolean;
   teamName: string;
   senderName: string | null;
 }) {
@@ -2916,6 +2919,7 @@ function RosterPanel({
           playbookId={playbookId}
           teamName={teamName}
           senderName={senderName}
+          canManage={canManage}
           onClose={() => {
             setShowInviteModal(false);
             router.refresh();

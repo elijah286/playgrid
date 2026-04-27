@@ -1610,6 +1610,7 @@ export function DashboardClient({
           playbookId={inviting.id}
           teamName={inviting.name}
           senderName={data.senderName ?? null}
+          canManage={inviting.role === "owner"}
           onClose={() => setInviting(null)}
         />
       )}
