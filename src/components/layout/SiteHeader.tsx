@@ -3,12 +3,15 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
+import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
   let isAdmin = false;
   let displayName: string | null = null;
   let avatarUrl: string | null = null;
+  let coachAiAvailable = false;
 
   if (hasSupabaseEnv()) {
     try {
@@ -32,6 +35,22 @@ export async function SiteHeader() {
         } catch {
           /* best effort */
         }
+        try {
+          const [betaFeatures, entitlement] = await Promise.all([
+            getBetaFeatures(),
+            getCurrentEntitlement(),
+          ]);
+          // Coach AI is for the subscription payer only — admins or users
+          // with their own (non-free) entitlement. Free invitees inheriting
+          // from a Coach+ owner do NOT get the assistant.
+          const isEntitled = (entitlement?.tier ?? "free") !== "free";
+          coachAiAvailable = isBetaFeatureAvailable(betaFeatures.coach_ai, {
+            isAdmin,
+            isEntitled,
+          });
+        } catch {
+          /* best effort */
+        }
       }
     } catch {
       /* unauthenticated — render anonymous header */
@@ -44,6 +63,7 @@ export async function SiteHeader() {
       isAdmin={isAdmin}
       displayName={displayName}
       avatarUrl={avatarUrl}
+      coachAiAvailable={coachAiAvailable}
     />
   );
 }

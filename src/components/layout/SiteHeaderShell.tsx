@@ -4,12 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 
 type Props = {
   user: { id: string; email: string | null } | null;
   isAdmin: boolean;
   displayName: string | null;
   avatarUrl: string | null;
+  coachAiAvailable?: boolean;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -17,7 +19,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing link is a landing-page-only nav affordance. Everywhere else
@@ -47,12 +49,15 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl }: Props
           />
         </Link>
         {user ? (
-          <UserMenu
-            email={user.email ?? ""}
-            displayName={displayName}
-            avatarUrl={avatarUrl}
-            isAdmin={isAdmin}
-          />
+          <div className="flex items-center gap-2">
+            {coachAiAvailable && <CoachAiLauncher isAdmin={isAdmin} />}
+            <UserMenu
+              email={user.email ?? ""}
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+              isAdmin={isAdmin}
+            />
+          </div>
         ) : (
           <div className="flex items-center gap-4">
             {showPricingLink && (

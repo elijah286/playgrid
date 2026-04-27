@@ -61,13 +61,11 @@ export function CoachAiLauncher({
         aria-label="Open Coach AI"
         title="Coach AI (beta)"
         className={cn(
-          "fixed z-40 flex items-center justify-center rounded-full shadow-lg",
-          "bg-primary text-primary-foreground hover:opacity-90 transition",
-          "size-12 right-4 bottom-20 sm:bottom-4 sm:right-4",
+          "inline-flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary shadow-sm transition hover:bg-primary/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           open && "hidden",
         )}
       >
-        <CoachAiIcon className="size-6" />
+        <CoachAiIcon className="size-5" />
         <span className="sr-only">Coach AI</span>
       </button>
 
