@@ -284,10 +284,10 @@ export function CoachAiFeedbackAdminClient({
                       <p className="mt-1 text-foreground/80">&ldquo;{(it as KbMissRow).user_question}&rdquo;</p>
                       <p className="mt-1 text-xs text-muted">
                         {KB_MISS_REASON_LABEL[(it as KbMissRow).reason] ?? (it as KbMissRow).reason}
-                        {it.sport_variant ? ` · ${it.sport_variant}` : ""}
-                        {it.sanctioning_body ? ` · ${it.sanctioning_body}` : ""}
-                        {it.game_level ? ` · ${it.game_level}` : ""}
-                        {it.age_division ? ` · ${it.age_division}` : ""}
+                        {(it as KbMissRow).sport_variant ? ` · ${(it as KbMissRow).sport_variant}` : ""}
+                        {(it as KbMissRow).sanctioning_body ? ` · ${(it as KbMissRow).sanctioning_body}` : ""}
+                        {(it as KbMissRow).game_level ? ` · ${(it as KbMissRow).game_level}` : ""}
+                        {(it as KbMissRow).age_division ? ` · ${(it as KbMissRow).age_division}` : ""}
                         {" · "}
                         {formatDate(it.created_at)}
                       </p>
@@ -297,10 +297,10 @@ export function CoachAiFeedbackAdminClient({
                       <p className="font-semibold text-foreground">Request: &ldquo;{(it as RefusalRow).user_request}&rdquo;</p>
                       <p className="mt-1 text-xs text-muted">
                         {REFUSAL_REASON_LABEL[(it as RefusalRow).refusal_reason] ?? (it as RefusalRow).refusal_reason}
-                        {it.sport_variant ? ` · ${it.sport_variant}` : ""}
-                        {it.sanctioning_body ? ` · ${it.sanctioning_body}` : ""}
-                        {it.game_level ? ` · ${it.game_level}` : ""}
-                        {it.age_division ? ` · ${it.age_division}` : ""}
+                        {(it as RefusalRow).sport_variant ? ` · ${(it as RefusalRow).sport_variant}` : ""}
+                        {(it as RefusalRow).sanctioning_body ? ` · ${(it as RefusalRow).sanctioning_body}` : ""}
+                        {(it as RefusalRow).game_level ? ` · ${(it as RefusalRow).game_level}` : ""}
+                        {(it as RefusalRow).age_division ? ` · ${(it as RefusalRow).age_division}` : ""}
                         {" · "}
                         {formatDate(it.created_at)}
                       </p>
