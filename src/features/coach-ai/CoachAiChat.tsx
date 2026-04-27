@@ -1,14 +1,52 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Send, Wrench } from "lucide-react";
+import { Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
 import { chatCoachAiAction, type CoachAiTurn } from "@/app/actions/coach-ai";
 import { CoachAiIcon } from "./CoachAiIcon";
 
+// Bumped if the persisted shape changes — older blobs are then ignored.
+const STORAGE_VERSION = 1;
+const MAX_PERSISTED_TURNS = 50;
+
+function storageKeyFor(mode: string, playbookId: string | null | undefined): string {
+  const scope = mode === "playbook_training" || mode === "normal" ? (playbookId ?? "global") : "global";
+  return `coach-ai:chat:v${STORAGE_VERSION}:${mode}:${scope}`;
+}
+
+function loadTurns(key: string): CoachAiTurn[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (t): t is CoachAiTurn =>
+        t && typeof t === "object" && (t.role === "user" || t.role === "assistant") && typeof t.text === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveTurns(key: string, turns: CoachAiTurn[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const trimmed = turns.slice(-MAX_PERSISTED_TURNS);
+    window.localStorage.setItem(key, JSON.stringify(trimmed));
+  } catch {
+    /* quota or disabled — ignore */
+  }
+}
+
 /**
  * Pure chat surface — fills its container. Owners (launcher / fullscreen page)
  * are responsible for sizing and outer chrome (close, fullscreen toggle).
+ *
+ * Chat history persists per (mode, scope) in localStorage so accidental
+ * refreshes don't lose work — especially important for KB curation sessions.
  */
 export function CoachAiChat({
   playbookId,
@@ -17,6 +55,7 @@ export function CoachAiChat({
   playbookId?: string | null;
   mode?: "normal" | "admin_training" | "playbook_training";
 }) {
+  const storageKey = storageKeyFor(mode, playbookId ?? null);
   const [turns, setTurns] = useState<CoachAiTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
@@ -28,11 +67,30 @@ export function CoachAiChat({
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns, pending]);
 
-  // Switching modes resets the chat — context from one mode doesn't translate.
+  // Load persisted history whenever the (mode, scope) key changes — including
+  // the initial mount. Each mode keeps its own history so the prompt stays
+  // coherent when the user switches between curation and normal Q&A.
   useEffect(() => {
+    setTurns(loadTurns(storageKey));
+    setError(null);
+  }, [storageKey]);
+
+  // Persist on every turn update.
+  useEffect(() => {
+    saveTurns(storageKey, turns);
+  }, [storageKey, turns]);
+
+  function clearChat() {
     setTurns([]);
     setError(null);
-  }, [mode]);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   function send() {
     const text = draft.trim();
@@ -137,10 +195,24 @@ export function CoachAiChat({
             <Send className="size-4" />
           </Button>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-muted">
-          Coach AI may be wrong. Most knowledge-base entries are unverified seed
-          data — double-check rule wording against the official source.
-        </p>
+        <div className="mt-2 flex items-start justify-between gap-3">
+          <p className="text-[11px] leading-snug text-muted">
+            Coach AI may be wrong. Most knowledge-base entries are unverified seed
+            data — double-check rule wording against the official source.
+          </p>
+          {turns.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Clear this chat? History will be erased.")) clearChat();
+              }}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
+              title="Clear chat history"
+            >
+              <Trash2 className="size-3" /> Clear
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
