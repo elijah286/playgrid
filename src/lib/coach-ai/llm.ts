@@ -2,7 +2,7 @@ import { getStoredClaudeApiKey } from "@/lib/site/claude-key";
 import { getStoredOpenAIApiKey } from "@/lib/site/openai-key";
 import { getLlmProvider, type LlmProvider } from "@/lib/site/llm-provider";
 
-const CLAUDE_MODEL = "claude-sonnet-4-6";
+const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 const OPENAI_MODEL = "gpt-4o-mini";
 const ANTHROPIC_VERSION = "2023-06-01";
 

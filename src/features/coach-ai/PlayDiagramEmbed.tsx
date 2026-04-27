@@ -279,24 +279,37 @@ function Controls({ anim }: { anim: ReturnType<typeof usePlayAnimation> }) {
 
 export function PlayDiagramEmbed({ json }: { json: string }) {
   const trimmed = json.trim();
-  const doc = useMemo<PlayDocument | null>(() => {
-    if (!trimmed) return null;
+  const parsed = useMemo<{ doc: PlayDocument | null; error: string | null }>(() => {
+    if (!trimmed) return { doc: null, error: null };
     try {
       const diagram = JSON.parse(trimmed) as CoachDiagram;
-      return coachDiagramToPlayDocument(diagram);
+      const doc = coachDiagramToPlayDocument(diagram);
+      return { doc, error: null };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       if (typeof window !== "undefined") {
-        console.warn("[PlayDiagramEmbed] failed to parse play JSON", err, trimmed.slice(0, 120));
+        console.warn("[PlayDiagramEmbed] failed to parse play JSON", err, trimmed.slice(0, 200));
       }
-      return null;
+      return { doc: null, error: msg };
     }
   }, [trimmed]);
 
+  const doc = parsed.doc;
   const anim = usePlayAnimation(doc ?? FALLBACK_DOC);
 
-  // Skip render for empty or unparseable blocks — avoids the "empty grey pill" artifact
-  // from streaming partial blocks or LLM emitting an empty play fence.
-  if (!doc) return null;
+  // Empty fence (mid-stream / model emitted ```play\n```) — render nothing.
+  if (!trimmed) return null;
+  // Non-empty but unparseable — show a small visible diagnostic instead of
+  // silently dropping it, so we can tell when the model is producing bad JSON.
+  if (!doc) {
+    return (
+      <details className="my-2 rounded-lg border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+        <summary className="cursor-pointer font-semibold">Diagram failed to render — tap for details</summary>
+        <p className="mt-1 font-mono text-[11px]">{parsed.error ?? "unknown parse error"}</p>
+        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-amber-900/80 dark:text-amber-200/80">{trimmed}</pre>
+      </details>
+    );
+  }
 
   const hasRoutes = doc.layers.routes.length > 0;
   const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;
