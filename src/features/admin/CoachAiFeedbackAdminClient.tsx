@@ -27,6 +27,7 @@ const REFUSAL_REASON_LABEL: Record<string, string> = {
   invalid_input: "Invalid input",
   feature_unavailable: "Feature unavailable",
   tooling_error: "Tooling error",
+  out_of_scope: "Out of scope",
 };
 
 function formatDate(iso: string): string {

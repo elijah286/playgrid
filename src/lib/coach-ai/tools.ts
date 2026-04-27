@@ -411,6 +411,7 @@ const flag_refusal: CoachAiTool = {
             "invalid_input",
             "feature_unavailable",
             "tooling_error",
+            "out_of_scope",
           ],
           description: "Why the request cannot be fulfilled.",
         },
