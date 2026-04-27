@@ -255,7 +255,7 @@ export function CoachAiChat({
                   </div>
                 )}
                 {t.role === "user" ? (
-                  <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2 text-sm leading-relaxed text-primary-foreground">
+                  <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
                     {t.text}
                   </div>
                 ) : (
