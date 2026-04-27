@@ -212,6 +212,8 @@ export type AgentResult = {
   provider: "openai" | "claude";
   /** Parsed playbook chips from list_my_playbooks, if called this turn. */
   playbookChips: Array<{ id: string; name: string; color: string | null; season: string | null }> | null;
+  /** True when at least one DB-mutating tool ran successfully — caller should refresh surrounding UI. */
+  mutated: boolean;
 };
 
 const TOOL_STATUS: Record<string, string> = {
@@ -237,6 +239,20 @@ const TOOL_STATUS: Record<string, string> = {
 /** Silent tools — these never surface as a tool-chip or status to the user. */
 const SILENT_TOOLS = new Set(["flag_outside_kb", "flag_refusal"]);
 
+/** Tools that mutate user-visible DB state — caller should router.refresh()
+ * the surrounding page after these run, so freshly created/edited rows
+ * appear without the user manually reloading. */
+const MUTATING_TOOLS = new Set([
+  "create_event",
+  "update_play",
+  "add_kb_entry",
+  "edit_kb_entry",
+  "retire_kb_entry",
+  "add_playbook_note",
+  "edit_playbook_note",
+  "retire_playbook_note",
+]);
+
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
 export async function runAgent(
   history: ChatMessage[],
@@ -250,6 +266,8 @@ export async function runAgent(
   let provider: "openai" | "claude" = "claude";
   // Chips returned by list_my_playbooks, passed through to the caller.
   let playbookChips: AgentResult["playbookChips"] = null;
+  // Set true the moment a DB-mutating tool succeeds — caller refreshes UI.
+  let mutated = false;
 
   const system = systemPromptFor(ctx);
   const tools = toolDefs(ctx);
@@ -289,6 +307,8 @@ export async function runAgent(
       }
       const r = await runTool(tu.name, tu.input, ctx);
       const resultText = r.ok ? r.result : r.error;
+      // Mark the run as mutating so the client refreshes surrounding UI.
+      if (r.ok && MUTATING_TOOLS.has(tu.name)) mutated = true;
       // Capture structured chips from list_my_playbooks for the client to render.
       if (tu.name === "list_my_playbooks" && r.ok) {
         const jsonMatch = /```playbooks\n([\s\S]*?)\n```/.exec(resultText);
@@ -319,5 +339,5 @@ export async function runAgent(
         .join("\n\n");
   }
 
-  return { newMessages, finalText, toolCalls, modelId, provider, playbookChips };
+  return { newMessages, finalText, toolCalls, modelId, provider, playbookChips, mutated };
 }

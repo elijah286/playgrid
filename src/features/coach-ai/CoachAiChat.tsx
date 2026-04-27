@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn, PlaybookChip } from "@/app/actions/coach-ai";
@@ -97,6 +98,7 @@ export function CoachAiChat({
   const [optInPending, setOptInPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const router = useRouter();
 
   // Load the user's AI-feedback opt-in status once. NULL → show modal on
   // first chat use; true/false → never show again. The modal only blocks
@@ -222,11 +224,18 @@ export function CoachAiChat({
           const finalText = (payload.text as string | undefined) || accumulated;
           const finalToolCalls = (payload.toolCalls as string[] | undefined) ?? seenToolCalls;
           const chips = (payload.playbookChips as PlaybookChip[] | null | undefined) ?? null;
+          const mutated = payload.mutated === true;
           setTurns((cur) => [
             ...cur,
             { role: "assistant", text: finalText, toolCalls: finalToolCalls, playbookChips: chips },
           ]);
           setUsageTick((n) => n + 1);
+          // If the agent ran any DB-mutating tool (create_event, update_play,
+          // KB writes, etc.), refresh the surrounding page so newly created
+          // rows appear without a manual reload. router.refresh re-runs the
+          // server components for the current route — cheap, no full reload,
+          // and leaves the chat panel mounted.
+          if (mutated) router.refresh();
           break;
         }
       }
@@ -241,7 +250,7 @@ export function CoachAiChat({
       setToolCallsDuringStream([]);
       abortRef.current = null;
     }
-  }, [draft, streaming, turns, playbookId, mode]);
+  }, [draft, streaming, turns, playbookId, mode, router]);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">

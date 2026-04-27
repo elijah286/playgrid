@@ -139,7 +139,12 @@ export async function POST(req: Request): Promise<Response> {
         // KB-miss + refusal logging now happens via the silent flag_outside_kb
         // and flag_refusal tools the agent calls directly — no post-hoc text
         // parsing needed.
-        send("done", { toolCalls: result.toolCalls, text: result.finalText, playbookChips: result.playbookChips ?? null });
+        send("done", {
+          toolCalls: result.toolCalls,
+          text: result.finalText,
+          playbookChips: result.playbookChips ?? null,
+          mutated: result.mutated,
+        });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         send("error", { message: msg });
