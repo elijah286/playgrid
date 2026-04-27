@@ -16,7 +16,7 @@ const MIN_W       = 320;
 const MIN_H       = 400;
 const EDGE        = 16;
 
-const FONT_SIZES  = [13, 14, 15, 16] as const;
+const FONT_SIZES  = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const;
 type FontSize = (typeof FONT_SIZES)[number];
 
 const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
