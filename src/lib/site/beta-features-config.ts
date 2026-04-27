@@ -1,6 +1,8 @@
+import { unstable_cache } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 const SITE_ROW_ID = "default";
+const CACHE_TAG = "site-beta-features";
 
 export type BetaFeatureKey =
   | "coach_ai"
@@ -34,19 +36,27 @@ function normalize(input: unknown): BetaFeatures {
   return out;
 }
 
+const fetchBetaFeatures = unstable_cache(
+  async (): Promise<BetaFeatures> => {
+    try {
+      const admin = createServiceRoleClient();
+      const { data, error } = await admin
+        .from("site_settings")
+        .select("beta_features")
+        .eq("id", SITE_ROW_ID)
+        .maybeSingle();
+      if (error || !data) return { ...DEFAULTS };
+      return normalize((data as { beta_features?: unknown }).beta_features);
+    } catch {
+      return { ...DEFAULTS };
+    }
+  },
+  [CACHE_TAG],
+  { tags: [CACHE_TAG], revalidate: 60 },
+);
+
 export async function getBetaFeatures(): Promise<BetaFeatures> {
-  try {
-    const admin = createServiceRoleClient();
-    const { data, error } = await admin
-      .from("site_settings")
-      .select("beta_features")
-      .eq("id", SITE_ROW_ID)
-      .maybeSingle();
-    if (error || !data) return { ...DEFAULTS };
-    return normalize((data as { beta_features?: unknown }).beta_features);
-  } catch {
-    return { ...DEFAULTS };
-  }
+  return fetchBetaFeatures();
 }
 
 export async function setBetaFeatureScope(

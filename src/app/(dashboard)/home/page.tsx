@@ -16,7 +16,7 @@ type Props = {
 
 export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery, tab } = await searchParams;
-  const [res, inbox, activity, hideAnimation, profileRes, betaFeatures] =
+  const [res, inbox, activity, hideAnimation, profileRes, betaFeatures, calendarPendingRes] =
     await Promise.all([
       getDashboardSummaryAction(),
       listInboxAlertsAction(),
@@ -24,23 +24,15 @@ export default async function HomePage({ searchParams }: Props) {
       getHideLobbyAnimation(),
       getCurrentUserProfile(),
       getBetaFeatures(),
+      getCalendarRsvpPendingCountAction(null).catch(() => ({ ok: false as const, pending: 0 })),
     ]);
   const isAdmin = profileRes.profile?.role === "admin";
   const teamCalendarAvailable = isBetaFeatureAvailable(
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
-  // Wrapped: a single bad recurrence rule shouldn't break the home page.
-  const calendarPending = teamCalendarAvailable
-    ? await (async () => {
-        try {
-          const res = await getCalendarRsvpPendingCountAction(null);
-          return res.ok ? res.pending : 0;
-        } catch {
-          return 0;
-        }
-      })()
-    : 0;
+  const calendarPending =
+    teamCalendarAvailable && calendarPendingRes.ok ? calendarPendingRes.pending : 0;
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
