@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/coach-ai-feedback";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
+import { AssistantMessage } from "./AssistantMessage";
 import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
 
 // Bumped if the persisted shape changes — older blobs are then ignored.
