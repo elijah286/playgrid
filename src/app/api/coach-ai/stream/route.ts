@@ -84,15 +84,18 @@ async function recordUsage(userId: string): Promise<void> {
 
 /** Extract and parse response metadata JSON from the end of the response */
 function extractMetadata(text: string): { metadata: { response_type?: string; reason?: string } | null; cleanText: string } {
-  // Look for JSON object on the last line
+  // Look for Coach AI's metadata JSON (must have response_type field) on the last line
   const lines = text.split('\n');
   const lastLine = lines[lines.length - 1].trim();
 
   try {
     if (lastLine.startsWith('{') && lastLine.endsWith('}')) {
-      const metadata = JSON.parse(lastLine);
-      const cleanText = lines.slice(0, -1).join('\n').trim();
-      return { metadata, cleanText };
+      const parsed = JSON.parse(lastLine);
+      // Only treat it as metadata if it has response_type field (Coach AI's format)
+      if (parsed.response_type) {
+        const cleanText = lines.slice(0, -1).join('\n').trim();
+        return { metadata: parsed, cleanText };
+      }
     }
   } catch {
     // Not valid JSON, continue with original text
