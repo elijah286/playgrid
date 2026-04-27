@@ -135,6 +135,11 @@ function systemPromptFor(ctx: ToolContext): string {
   return NORMAL_PROMPT;
 }
 
+export type AgentStreamEvent =
+  | { type: "tool_call"; name: string }
+  | { type: "status"; text: string }
+  | { type: "text_delta"; text: string };
+
 export type AgentResult = {
   /** All new turns produced this call, in order, ready to append to history. */
   newMessages: ChatMessage[];
@@ -146,10 +151,24 @@ export type AgentResult = {
   provider: "openai" | "claude";
 };
 
+const TOOL_STATUS: Record<string, string> = {
+  search_kb:          "Searching knowledge base…",
+  list_kb_topics:     "Browsing topics…",
+  get_kb_revisions:   "Reading revision history…",
+  add_kb_entry:       "Saving entry…",
+  edit_kb_entry:      "Updating entry…",
+  retire_kb_entry:    "Retiring entry…",
+  list_playbook_notes: "Reading playbook notes…",
+  add_playbook_note:  "Saving note…",
+  edit_playbook_note: "Updating note…",
+  retire_playbook_note: "Retiring note…",
+};
+
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
 export async function runAgent(
   history: ChatMessage[],
   ctx: ToolContext,
+  onEvent?: (e: AgentStreamEvent) => void,
 ): Promise<AgentResult> {
   const messages = [...history];
   const newMessages: ChatMessage[] = [];
@@ -166,6 +185,7 @@ export async function runAgent(
       messages,
       tools,
       maxTokens: 1024,
+      onTextDelta: onEvent ? (text) => onEvent({ type: "text_delta", text }) : undefined,
     });
     modelId = result.modelId;
     provider = result.provider;
@@ -183,6 +203,8 @@ export async function runAgent(
     const toolResultBlocks: ContentBlock[] = [];
     for (const tu of toolUses) {
       toolCalls.push(tu.name);
+      onEvent?.({ type: "tool_call", name: tu.name });
+      onEvent?.({ type: "status", text: TOOL_STATUS[tu.name] ?? `Running ${tu.name}…` });
       const r = await runTool(tu.name, tu.input, ctx);
       toolResultBlocks.push({
         type: "tool_result",

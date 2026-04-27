@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
-import { chatCoachAiAction, type CoachAiTurn } from "@/app/actions/coach-ai";
+import type { CoachAiTurn } from "@/app/actions/coach-ai";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessage } from "./AssistantMessage";
+import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
 
 // Bumped if the persisted shape changes — older blobs are then ignored.
 const STORAGE_VERSION = 1;
@@ -35,19 +36,38 @@ function loadTurns(key: string): CoachAiTurn[] {
 function saveTurns(key: string, turns: CoachAiTurn[]): void {
   if (typeof window === "undefined") return;
   try {
-    const trimmed = turns.slice(-MAX_PERSISTED_TURNS);
-    window.localStorage.setItem(key, JSON.stringify(trimmed));
-  } catch {
-    /* quota or disabled — ignore */
+    window.localStorage.setItem(key, JSON.stringify(turns.slice(-MAX_PERSISTED_TURNS)));
+  } catch { /* quota or disabled */ }
+}
+
+/** Minimal SSE parser — handles `event: foo\ndata: {...}\n\n` frames. */
+async function* parseSse(body: ReadableStream<Uint8Array>) {
+  const dec = new TextDecoder();
+  const reader = body.getReader();
+  let buf = "";
+  let eventName = "message";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const frames = buf.split("\n\n");
+    buf = frames.pop() ?? "";
+    for (const frame of frames) {
+      let data: string | undefined;
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+        else if (line.startsWith("data: ")) data = line.slice(6).trim();
+      }
+      if (data) yield { event: eventName, data };
+      eventName = "message";
+    }
   }
 }
 
 /**
  * Pure chat surface — fills its container. Owners (launcher / fullscreen page)
  * are responsible for sizing and outer chrome (close, fullscreen toggle).
- *
- * Chat history persists per (mode, scope) in localStorage so accidental
- * refreshes don't lose work — especially important for KB curation sessions.
  */
 export function CoachAiChat({
   playbookId,
@@ -59,24 +79,26 @@ export function CoachAiChat({
   const storageKey = storageKeyFor(mode, playbookId ?? null);
   const [turns, setTurns] = useState<CoachAiTurn[]>([]);
   const [draft, setDraft] = useState("");
-  const [pending, startTransition] = useTransition();
+  const [streaming, setStreaming] = useState(false);
+  const [statusText, setStatusText] = useState<string | null>(null);
+  const [partialText, setPartialText] = useState("");
+  const [toolCallsDuringStream, setToolCallsDuringStream] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [usageTick, setUsageTick] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // Auto-scroll whenever content changes
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns, pending]);
+  }, [turns, streaming, partialText, statusText]);
 
-  // Load persisted history whenever the (mode, scope) key changes — including
-  // the initial mount. Each mode keeps its own history so the prompt stays
-  // coherent when the user switches between curation and normal Q&A.
   useEffect(() => {
     setTurns(loadTurns(storageKey));
     setError(null);
   }, [storageKey]);
 
-  // Persist on every turn update.
   useEffect(() => {
     saveTurns(storageKey, turns);
   }, [storageKey, turns]);
@@ -85,52 +107,89 @@ export function CoachAiChat({
     setTurns([]);
     setError(null);
     if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem(storageKey);
-      } catch {
-        /* ignore */
-      }
+      try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
     }
   }
 
-  function send() {
+  const send = useCallback(async () => {
     const text = draft.trim();
-    if (!text || pending) return;
+    if (!text || streaming) return;
     setError(null);
+    setStatusText(null);
+    setPartialText("");
+    setToolCallsDuringStream([]);
+
     const userTurn: CoachAiTurn = { role: "user", text };
     const prior = turns;
-    setTurns([...prior, userTurn]);
+    setTurns((cur) => [...cur, userTurn]);
     setDraft("");
-    startTransition(async () => {
-      // Catch everything — an unhandled rejection inside a transition can
-      // bubble to React's error boundary and unmount the chat tree (which
-      // reads as a "crash" / refresh to the user).
-      try {
-        const res = await chatCoachAiAction({
-          history: prior,
-          userMessage: text,
-          playbookId: playbookId ?? null,
-          mode,
-        });
-        if (!res.ok) {
-          setError(res.error);
-          return;
-        }
-        setTurns((cur) => [
-          ...cur,
-          { role: "assistant", text: res.assistantText, toolCalls: res.toolCalls },
-        ]);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Coach AI request failed.";
-        setError(msg);
+    setStreaming(true);
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    try {
+      const res = await fetch("/api/coach-ai/stream", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ history: prior, userMessage: text, playbookId, mode }),
+        signal: ctrl.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
       }
-    });
-  }
+
+      let accumulated = "";
+      const seenToolCalls: string[] = [];
+
+      for await (const { event, data } of parseSse(res.body)) {
+        if (ctrl.signal.aborted) break;
+        let payload: Record<string, unknown>;
+        try { payload = JSON.parse(data) as Record<string, unknown>; } catch { continue; }
+
+        if (event === "status")     setStatusText(payload.text as string);
+        if (event === "tool_call") {
+          const name = payload.name as string;
+          seenToolCalls.push(name);
+          setToolCallsDuringStream([...seenToolCalls]);
+        }
+        if (event === "text_delta") {
+          accumulated += payload.text as string;
+          setPartialText(accumulated);
+          setStatusText(null); // clear "Searching…" once text starts
+        }
+        if (event === "error") {
+          setError((payload.message as string | undefined) ?? "An error occurred.");
+        }
+        if (event === "done") {
+          const finalText = (payload.text as string | undefined) || accumulated;
+          const finalToolCalls = (payload.toolCalls as string[] | undefined) ?? seenToolCalls;
+          setTurns((cur) => [
+            ...cur,
+            { role: "assistant", text: finalText, toolCalls: finalToolCalls },
+          ]);
+          setUsageTick((n) => n + 1);
+          break;
+        }
+      }
+    } catch (e) {
+      if ((e as { name?: string }).name !== "AbortError") {
+        setError(e instanceof Error ? e.message : "Coach AI request failed.");
+      }
+    } finally {
+      setStreaming(false);
+      setStatusText(null);
+      setPartialText("");
+      setToolCallsDuringStream([]);
+      abortRef.current = null;
+    }
+  }, [draft, streaming, turns, playbookId, mode]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
-        {turns.length === 0 ? (
+        {turns.length === 0 && !streaming ? (
           <Empty />
         ) : (
           <ul className="space-y-5">
@@ -158,13 +217,33 @@ export function CoachAiChat({
                 )}
               </li>
             ))}
-            {pending && (
+
+            {/* Live streaming turn */}
+            {streaming && (
               <li className="flex items-start gap-2.5">
                 <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <CoachAiIcon className="size-4" />
                 </div>
-                <div className="rounded-2xl rounded-tl-sm bg-surface-inset px-3 py-2 text-sm text-muted">
-                  <Dots />
+                <div className="min-w-0 flex-1">
+                  {partialText ? (
+                    <>
+                      <AssistantMessage text={partialText} />
+                      <span className="mt-0.5 inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-primary/60 align-middle" />
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 py-1 text-sm text-muted">
+                      <Dots />
+                      {statusText && (
+                        <span className="text-[12px] italic">{statusText}</span>
+                      )}
+                    </div>
+                  )}
+                  {toolCallsDuringStream.length > 0 && !partialText && (
+                    <div className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted">
+                      <Wrench className="size-3" />
+                      {toolCallsDuringStream.join(", ")}
+                    </div>
+                  )}
                 </div>
               </li>
             )}
@@ -182,45 +261,49 @@ export function CoachAiChat({
         <div className="flex items-end gap-2">
           <textarea
             rows={2}
+            data-coach-ai-input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                send();
+                void send();
               }
             }}
             placeholder="Ask Coach AI…"
             className="flex-1 resize-none rounded-xl bg-surface-inset px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-black/5 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            disabled={pending}
+            disabled={streaming}
           />
           <Button
             variant="primary"
             size="sm"
-            disabled={pending || !draft.trim()}
-            onClick={send}
+            disabled={streaming || !draft.trim()}
+            onClick={() => void send()}
             aria-label="Send"
           >
             <Send className="size-4" />
           </Button>
         </div>
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <p className="text-[11px] leading-snug text-muted">
-            Coach AI may be wrong. Most knowledge-base entries are unverified seed
-            data — double-check rule wording against the official source.
-          </p>
-          {turns.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm("Clear this chat? History will be erased.")) clearChat();
-              }}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
-              title="Clear chat history"
-            >
-              <Trash2 className="size-3" /> Clear
-            </button>
-          )}
+
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <p className="truncate text-[11px] leading-snug text-muted">
+              Coach AI may be wrong — double-check rules against the official source.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <CoachAiUsageMeter refreshTick={usageTick} />
+            {turns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { if (confirm("Clear this chat? History will be erased.")) clearChat(); }}
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
+                title="Clear chat history"
+              >
+                <Trash2 className="size-3" /> Clear
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -249,7 +332,7 @@ function Empty() {
             <button
               type="button"
               onClick={() => {
-                const ta = document.querySelector<HTMLTextAreaElement>('[data-coach-ai-input]');
+                const ta = document.querySelector<HTMLTextAreaElement>("[data-coach-ai-input]");
                 if (ta) {
                   ta.value = s;
                   ta.dispatchEvent(new Event("input", { bubbles: true }));

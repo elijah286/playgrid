@@ -46,6 +46,8 @@ export type ChatOptions = {
   messages: ChatMessage[];
   tools?: ToolDef[];
   maxTokens?: number;
+  /** Called for each streamed text token (Claude only; ignored by OpenAI path). */
+  onTextDelta?: (text: string) => void;
 };
 
 export async function chat(opts: ChatOptions): Promise<ChatResult> {
@@ -65,6 +67,7 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
     max_tokens: opts.maxTokens ?? 1024,
     system: opts.system,
     messages: opts.messages.map(toClaudeMessage),
+    stream: opts.onTextDelta ? true : undefined,
     ...(opts.tools && opts.tools.length > 0
       ? { tools: opts.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })) }
       : {}),
@@ -78,28 +81,98 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
     },
     body: JSON.stringify(body),
   });
-  const text = await res.text();
+
   if (!res.ok) {
+    const text = await res.text();
     throw new Error(`Anthropic ${res.status}: ${text}`);
   }
-  const json = JSON.parse(text) as {
-    content: ContentBlock[];
-    stop_reason: string;
-    model: string;
-  };
+
+  // Non-streaming path (no onTextDelta callback)
+  if (!opts.onTextDelta) {
+    const text = await res.text();
+    const json = JSON.parse(text) as { content: ContentBlock[]; stop_reason: string; model: string };
+    return {
+      message: { role: "assistant", content: json.content },
+      stopReason: normalizeStopReason(json.stop_reason),
+      provider: "claude",
+      modelId: json.model,
+    };
+  }
+
+  // Streaming path: parse Anthropic SSE events
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  const blocks: ContentBlock[] = [];
+  type PartialBlock = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; _json: string };
+  let cur: PartialBlock | null = null;
+  let stopReason = "other";
+  let modelId = CLAUDE_MODEL;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const payload = line.slice(6).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let ev: Record<string, unknown>;
+      try { ev = JSON.parse(payload) as Record<string, unknown>; } catch { continue; }
+
+      const type = ev.type as string;
+      if (type === "message_start") {
+        const msg = ev.message as { model?: string } | undefined;
+        if (msg?.model) modelId = msg.model;
+      }
+      if (type === "content_block_start") {
+        const cb = ev.content_block as { type: string; id?: string; name?: string; text?: string } | undefined;
+        if (cb?.type === "text") cur = { type: "text", text: cb.text ?? "" };
+        else if (cb?.type === "tool_use") cur = { type: "tool_use", id: cb.id ?? "", name: cb.name ?? "", _json: "" };
+      }
+      if (type === "content_block_delta" && cur) {
+        const delta = ev.delta as { type: string; text?: string; partial_json?: string } | undefined;
+        if (delta?.type === "text_delta" && cur.type === "text") {
+          cur.text += delta.text ?? "";
+          opts.onTextDelta!(delta.text ?? "");
+        }
+        if (delta?.type === "input_json_delta" && cur.type === "tool_use") {
+          cur._json += delta.partial_json ?? "";
+        }
+      }
+      if (type === "content_block_stop" && cur) {
+        if (cur.type === "text") {
+          blocks.push({ type: "text", text: cur.text });
+        } else {
+          let input: Record<string, unknown> = {};
+          try { input = JSON.parse(cur._json) as Record<string, unknown>; } catch { /* empty input */ }
+          blocks.push({ type: "tool_use", id: cur.id, name: cur.name, input });
+        }
+        cur = null;
+      }
+      if (type === "message_delta") {
+        const delta = ev.delta as { stop_reason?: string } | undefined;
+        if (delta?.stop_reason) stopReason = delta.stop_reason;
+      }
+    }
+  }
+
   return {
-    message: { role: "assistant", content: json.content },
-    stopReason:
-      json.stop_reason === "end_turn"
-        ? "end_turn"
-        : json.stop_reason === "tool_use"
-          ? "tool_use"
-          : json.stop_reason === "max_tokens"
-            ? "max_tokens"
-            : "other",
+    message: { role: "assistant", content: blocks },
+    stopReason: normalizeStopReason(stopReason),
     provider: "claude",
-    modelId: json.model,
+    modelId,
   };
+}
+
+function normalizeStopReason(r: string): "end_turn" | "tool_use" | "max_tokens" | "other" {
+  if (r === "end_turn") return "end_turn";
+  if (r === "tool_use") return "tool_use";
+  if (r === "max_tokens") return "max_tokens";
+  return "other";
 }
 
 function toClaudeMessage(m: ChatMessage): { role: "user" | "assistant"; content: string | ContentBlock[] } {
