@@ -10,21 +10,41 @@ import { cn } from "@/lib/utils";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
 
-const DEFAULT_W = 420;
-const DEFAULT_H = 640;
-const EDGE = 16; // gap from viewport edge
+const DEFAULT_W   = 420;
+const DEFAULT_H   = 640;
+const MIN_W       = 320;
+const MIN_H       = 400;
+const EDGE        = 16;
+
+const FONT_SIZES  = [13, 14, 15, 16] as const;
+type FontSize = (typeof FONT_SIZES)[number];
+
+// ── Gradient style used on the launcher button + icon containers ────────────
+const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
+
+function readStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorage(key: string, value: unknown) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+}
 
 /**
  * Floating Coach AI launcher.
  *
- *   - Mobile  (<640):     bottom sheet, ~80vh tall (not draggable)
- *   - Desktop (≥640):     floating window, draggable by header,
- *                         clamped to viewport, sized to never exceed it
- *
- * Fullscreen toggle expands to the entire viewport on any size.
- *
- * Admin / Playbook Training Modes swap in tools that let the agent curate
- * the global or per-playbook KB. Visual cues: amber / sky border + label.
+ *   - Mobile  (<640):  bottom sheet, ~80vh tall (not draggable / resizable)
+ *   - Desktop (≥640):  floating window — draggable by header,
+ *                      resizable by bottom-right handle,
+ *                      font size A−/A+ in header toolbar
  */
 export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
@@ -33,69 +53,52 @@ export function CoachAiLauncher({
   playbookId?: string | null;
   isAdmin?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [adminMode, setAdminMode] = useState(false);
-  const [playbookMode, setPlaybookMode] = useState(false);
+  const [open,          setOpen]          = useState(false);
+  const [fullscreen,    setFullscreen]    = useState(false);
+  const [adminMode,     setAdminMode]     = useState(false);
+  const [playbookMode,  setPlaybookMode]  = useState(false);
 
-  const pathname = usePathname();
+  // Window size — persisted
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
+
+  // Font size — persisted
+  const [fontSize, setFontSize] = useState<FontSize>(14);
+
+  const pathname   = usePathname();
   const playbookId = useMemo<string | null>(() => {
     if (playbookIdProp) return playbookIdProp;
     const m = pathname?.match(PLAYBOOK_ROUTE_RE);
     return m?.[1] ?? null;
   }, [playbookIdProp, pathname]);
 
-  // Restore mode-toggle preferences across page reloads so an accidental
-  // refresh during a curation session brings the user right back into the
-  // same training thread. The hasRestored ref gates the save effects so the
-  // initial-render write of `false` doesn't clobber a persisted `true`
-  // before the restore effect runs.
+  // ── Restore persisted state ────────────────────────────────────────────────
   const hasRestored = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      if (window.localStorage.getItem("coach-ai:adminMode") === "1") setAdminMode(true);
+      if (window.localStorage.getItem("coach-ai:adminMode")    === "1") setAdminMode(true);
       if (window.localStorage.getItem("coach-ai:playbookMode") === "1") setPlaybookMode(true);
-    } catch {
-      /* storage disabled — ignore */
-    }
+      const savedSize = readStorage<{ w: number; h: number } | null>("coach-ai:window-size", null);
+      if (savedSize?.w && savedSize?.h) setSize(savedSize);
+      const savedFont = readStorage<number>("coach-ai:font-size", 14);
+      if (FONT_SIZES.includes(savedFont as FontSize)) setFontSize(savedFont as FontSize);
+    } catch { /* ignore */ }
     hasRestored.current = true;
   }, []);
 
-  useEffect(() => {
-    if (!hasRestored.current || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem("coach-ai:adminMode", adminMode ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [adminMode]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",    adminMode ? "1" : "0"); },    [adminMode]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:playbookMode", playbookMode ? "1" : "0"); }, [playbookMode]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size",  size); },                     [size]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:font-size",    fontSize); },                 [fontSize]);
 
-  useEffect(() => {
-    if (!hasRestored.current || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem("coach-ai:playbookMode", playbookMode ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [playbookMode]);
+  useEffect(() => { if (!playbookId && playbookMode) setPlaybookMode(false); }, [playbookId, playbookMode]);
 
-  // Exit playbook training automatically when the user navigates off the playbook.
-  useEffect(() => {
-    if (!playbookId && playbookMode) setPlaybookMode(false);
-  }, [playbookId, playbookMode]);
-
-  // Modes are mutually exclusive — admin wins.
-  const adminTrainingActive = isAdmin && adminMode;
+  const adminTrainingActive    = isAdmin && adminMode;
   const playbookTrainingActive = !adminTrainingActive && !!playbookId && playbookMode;
-  const trainingActive = adminTrainingActive || playbookTrainingActive;
-  const mode: "normal" | "admin_training" | "playbook_training" = adminTrainingActive
-    ? "admin_training"
-    : playbookTrainingActive
-      ? "playbook_training"
-      : "normal";
+  const mode: "normal" | "admin_training" | "playbook_training" =
+    adminTrainingActive ? "admin_training" : playbookTrainingActive ? "playbook_training" : "normal";
 
-  // Esc closes (or exits fullscreen first).
+  // ── Keyboard / scroll lock ─────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -107,53 +110,31 @@ export function CoachAiLauncher({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, fullscreen]);
 
-  // Lock body scroll when fullscreen on small screens.
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     if (fullscreen) document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [open, fullscreen]);
 
-  // ── Floating-window drag offset (sm+, non-fullscreen) ──────────────────────
-  // The dialog is sized + anchored bottom-right via pure CSS so it can never
-  // overflow the viewport. Drag is applied as a transform offset (dx, dy)
-  // from the anchor — clamped so the dialog stays fully on-screen.
-  const [drag, setDrag] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{
-    startX: number;
-    startY: number;
-    origDx: number;
-    origDy: number;
-  } | null>(null);
+  // ── Drag (header) ──────────────────────────────────────────────────────────
+  const [drag, setDrag]   = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
+  const dialogRef          = useRef<HTMLDivElement>(null);
+  const dragRef            = useRef<{ startX: number; startY: number; origDx: number; origDy: number } | null>(null);
 
-  // Reset drag offset whenever the dialog closes or fullscreen toggles.
-  useEffect(() => {
-    if (!open || fullscreen) setDrag({ dx: 0, dy: 0 });
-  }, [open, fullscreen]);
+  useEffect(() => { if (!open || fullscreen) setDrag({ dx: 0, dy: 0 }); }, [open, fullscreen]);
 
-  // On viewport resize, re-clamp the drag offset so the dialog never escapes.
   const clampDrag = useCallback(() => {
     const el = dialogRef.current;
-    if (!el || typeof window === "undefined") return;
+    if (!el) return;
     const rect = el.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
     setDrag((d) => {
-      // rect already includes the current transform — back it out to find the
-      // dialog's natural anchor box, then re-derive the max allowable offsets.
       const naturalLeft = rect.left - d.dx;
-      const naturalTop = rect.top - d.dy;
-      const minDx = EDGE - naturalLeft;
-      const maxDx = vw - EDGE - rect.width - naturalLeft;
-      const minDy = EDGE - naturalTop;
-      const maxDy = vh - EDGE - rect.height - naturalTop;
+      const naturalTop  = rect.top  - d.dy;
       return {
-        dx: Math.max(minDx, Math.min(maxDx, d.dx)),
-        dy: Math.max(minDy, Math.min(maxDy, d.dy)),
+        dx: Math.max(EDGE - naturalLeft, Math.min(vw - EDGE - rect.width  - naturalLeft, d.dx)),
+        dy: Math.max(EDGE - naturalTop,  Math.min(vh - EDGE - rect.height - naturalTop,  d.dy)),
       };
     });
   }, []);
@@ -165,77 +146,88 @@ export function CoachAiLauncher({
   }, [open, clampDrag]);
 
   function onHeaderPointerDown(e: React.PointerEvent<HTMLElement>) {
-    if (fullscreen) return;
-    if (typeof window === "undefined" || window.innerWidth < 640) return;
-    const target = e.target as HTMLElement;
-    if (target.closest("button")) return;
+    if (fullscreen || window.innerWidth < 640) return;
+    if ((e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      origDx: drag.dx,
-      origDy: drag.dy,
-    };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origDx: drag.dx, origDy: drag.dy };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onHeaderPointerMove(e: React.PointerEvent<HTMLElement>) {
     const d = dragRef.current;
-    if (!d) return;
-    const el = dialogRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
+    if (!d || !dialogRef.current) return;
+    const rect = dialogRef.current.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
     const naturalLeft = rect.left - drag.dx;
-    const naturalTop = rect.top - drag.dy;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const wantDx = d.origDx + (e.clientX - d.startX);
-    const wantDy = d.origDy + (e.clientY - d.startY);
-    const minDx = EDGE - naturalLeft;
-    const maxDx = vw - EDGE - rect.width - naturalLeft;
-    const minDy = EDGE - naturalTop;
-    const maxDy = vh - EDGE - rect.height - naturalTop;
+    const naturalTop  = rect.top  - drag.dy;
     setDrag({
-      dx: Math.max(minDx, Math.min(maxDx, wantDx)),
-      dy: Math.max(minDy, Math.min(maxDy, wantDy)),
+      dx: Math.max(EDGE - naturalLeft, Math.min(vw - EDGE - rect.width  - naturalLeft, d.origDx + (e.clientX - d.startX))),
+      dy: Math.max(EDGE - naturalTop,  Math.min(vh - EDGE - rect.height - naturalTop,  d.origDy + (e.clientY - d.startY))),
     });
   }
 
   function onHeaderPointerUp(e: React.PointerEvent<HTMLElement>) {
     if (!dragRef.current) return;
     dragRef.current = null;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  // Drag offset (sm+ only) applied via transform. Sizing + anchor are pure CSS.
+  // ── Resize (bottom-right handle) ──────────────────────────────────────────
+  const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
+
+  function onResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, origW: size.w, origH: size.h };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const r = resizeRef.current;
+    if (!r) return;
+    const newW = Math.max(MIN_W, r.origW + (e.clientX - r.startX));
+    const newH = Math.max(MIN_H, r.origH + (e.clientY - r.startY));
+    // Clamp to viewport
+    const vw = window.innerWidth, vh = window.innerHeight;
+    setSize({ w: Math.min(newW, vw - EDGE * 2), h: Math.min(newH, vh - EDGE * 2) });
+  }
+
+  function onResizePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!resizeRef.current) return;
+    resizeRef.current = null;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+  }
+
   const dragStyle: React.CSSProperties | undefined =
     !fullscreen && (drag.dx !== 0 || drag.dy !== 0)
       ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` }
       : undefined;
 
+  const windowSizeStyle: React.CSSProperties = fullscreen
+    ? {}
+    : { width: size.w, height: size.h };
+
   return (
     <>
+      {/* ── Launcher button ─────────────────────────────────────────────── */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open Coach AI"
         title="Coach AI (beta)"
         className={cn(
-          "inline-flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary shadow-sm transition hover:bg-primary/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          "inline-flex size-9 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           open && "hidden",
         )}
+        style={{ background: GRADIENT }}
       >
-        <CoachAiIcon className="size-5" />
+        <CoachAiIcon className="size-5 text-white" />
         <span className="sr-only">Coach AI</span>
       </button>
 
       {open && typeof document !== "undefined" && createPortal(
         <>
-          {/* Backdrop only when fullscreen or on mobile (bottom sheet). */}
+          {/* Backdrop (fullscreen / mobile) */}
           <div
             onClick={() => setOpen(false)}
             className={cn(
@@ -245,27 +237,25 @@ export function CoachAiLauncher({
             aria-hidden="true"
           />
 
+          {/* ── Dialog window ───────────────────────────────────────────── */}
           <div
             ref={dialogRef}
             role="dialog"
             aria-label="Coach AI chat"
-            style={dragStyle}
+            style={{ ...dragStyle, ...windowSizeStyle }}
             className={cn(
               "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10",
-              adminTrainingActive && "ring-2 ring-amber-400",
+              adminTrainingActive    && "ring-2 ring-amber-400",
               playbookTrainingActive && "ring-2 ring-sky-400",
               fullscreen
                 ? "inset-2 sm:inset-4"
                 : [
-                    // Mobile bottom sheet
                     "inset-x-2 bottom-2 top-auto h-[80vh]",
-                    // Desktop floating window — sized via min() so it can never
-                    // overflow the viewport, anchored bottom-right.
                     "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
-                    "sm:w-[min(420px,calc(100vw-2rem))] sm:h-[min(640px,calc(100vh-2rem))]",
                   ].join(" "),
             )}
           >
+            {/* ── Header ─────────────────────────────────────────────────── */}
             <header
               onPointerDown={onHeaderPointerDown}
               onPointerMove={onHeaderPointerMove}
@@ -281,19 +271,22 @@ export function CoachAiLauncher({
                     : "border-border",
               )}
             >
+              {/* Icon container — gradient in normal mode */}
               <div
                 className={cn(
-                  "flex size-7 items-center justify-center rounded-lg",
+                  "flex size-7 shrink-0 items-center justify-center rounded-lg",
                   adminTrainingActive
                     ? "bg-amber-200 text-amber-900"
                     : playbookTrainingActive
                       ? "bg-sky-200 text-sky-900"
-                      : "bg-primary/10 text-primary",
+                      : "text-white",
                 )}
+                style={!adminTrainingActive && !playbookTrainingActive ? { background: GRADIENT } : undefined}
               >
                 <CoachAiIcon className="size-4" />
               </div>
-              <div className="min-w-0">
+
+              <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold leading-tight text-foreground">
                   Coach AI
                   {adminTrainingActive && (
@@ -315,7 +308,40 @@ export function CoachAiLauncher({
                       : "Beta · grounded in your league rules"}
                 </div>
               </div>
-              <div className="ml-auto flex items-center gap-1">
+
+              {/* ── Toolbar ──────────────────────────────────────────────── */}
+              <div className="ml-auto flex items-center gap-0.5">
+                {/* Font size A− / A+ */}
+                <div className="mr-1 flex items-center rounded-md bg-surface-inset px-1 py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setFontSize((f) => {
+                      const idx = FONT_SIZES.indexOf(f);
+                      return idx > 0 ? FONT_SIZES[idx - 1] : f;
+                    })}
+                    disabled={fontSize === FONT_SIZES[0]}
+                    className="rounded px-1 py-0.5 text-[11px] font-semibold text-muted transition hover:text-foreground disabled:opacity-30"
+                    title="Decrease font size"
+                    aria-label="Decrease font size"
+                  >
+                    A−
+                  </button>
+                  <span className="mx-0.5 text-[10px] tabular-nums text-muted/50">{fontSize}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFontSize((f) => {
+                      const idx = FONT_SIZES.indexOf(f);
+                      return idx < FONT_SIZES.length - 1 ? FONT_SIZES[idx + 1] : f;
+                    })}
+                    disabled={fontSize === FONT_SIZES[FONT_SIZES.length - 1]}
+                    className="rounded px-1 py-0.5 text-[11px] font-semibold text-muted transition hover:text-foreground disabled:opacity-30"
+                    title="Increase font size"
+                    aria-label="Increase font size"
+                  >
+                    A+
+                  </button>
+                </div>
+
                 {playbookId && !adminTrainingActive && (
                   <button
                     type="button"
@@ -327,12 +353,12 @@ export function CoachAiLauncher({
                         ? "bg-sky-500/20 text-sky-800 hover:bg-sky-500/30 dark:text-sky-200"
                         : "text-muted hover:bg-surface-inset hover:text-foreground",
                     )}
-                    aria-label={playbookTrainingActive ? "Exit playbook training" : "Enter playbook training"}
-                    title={playbookTrainingActive ? "Exit playbook training" : "Playbook training (capture team-specific knowledge)"}
+                    title={playbookTrainingActive ? "Exit playbook training" : "Playbook training"}
                   >
                     <BookOpen className="size-4" />
                   </button>
                 )}
+
                 {isAdmin && (
                   <button
                     type="button"
@@ -344,38 +370,56 @@ export function CoachAiLauncher({
                         ? "bg-amber-500/20 text-amber-800 hover:bg-amber-500/30 dark:text-amber-200"
                         : "text-muted hover:bg-surface-inset hover:text-foreground",
                     )}
-                    aria-label={adminTrainingActive ? "Exit admin training" : "Enter admin training"}
-                    title={adminTrainingActive ? "Exit admin training" : "Admin training (curate global KB)"}
+                    title={adminTrainingActive ? "Exit admin training" : "Admin training"}
                   >
                     <GraduationCap className="size-4" />
                   </button>
                 )}
+
                 <button
                   type="button"
                   onClick={() => setFullscreen((v) => !v)}
                   className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-                  aria-label={fullscreen ? "Exit full screen" : "Full screen"}
                   title={fullscreen ? "Exit full screen" : "Full screen"}
                 >
                   {fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 </button>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setFullscreen(false);
-                    setOpen(false);
-                  }}
+                  onClick={() => { setFullscreen(false); setOpen(false); }}
                   className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-                  aria-label="Close Coach AI"
                   title="Close"
                 >
                   <X className="size-4" />
                 </button>
               </div>
             </header>
-            <div className="flex-1 min-h-0">
+
+            {/* ── Chat content ─────────────────────────────────────────── */}
+            <div className="flex-1 min-h-0" style={{ fontSize: `${fontSize}px` }}>
               <CoachAiChat playbookId={playbookId} mode={mode} />
             </div>
+
+            {/* ── Resize handle (desktop, non-fullscreen) ──────────────── */}
+            {!fullscreen && (
+              <div
+                onPointerDown={onResizePointerDown}
+                onPointerMove={onResizePointerMove}
+                onPointerUp={onResizePointerUp}
+                onPointerCancel={onResizePointerUp}
+                className="absolute bottom-0 right-0 hidden sm:flex size-5 cursor-se-resize items-end justify-end pb-1 pr-1 text-muted/30 hover:text-muted/60 transition-colors"
+                title="Drag to resize"
+                aria-hidden="true"
+              >
+                {/* Corner grip dots */}
+                <svg viewBox="0 0 10 10" width={10} height={10} fill="currentColor">
+                  <circle cx="8" cy="8" r="1.2" />
+                  <circle cx="5" cy="8" r="1.2" />
+                  <circle cx="8" cy="5" r="1.2" />
+                </svg>
+              </div>
+            )}
           </div>
         </>,
         document.body,

@@ -1,13 +1,9 @@
 import type { SVGProps } from "react";
 
 /**
- * Coach AI mark — a simplified aerial play-diagram view.
+ * Coach AI mark — a horizontal football with seam + laces, and a four-point
+ * AI sparkle breaking out of the top-right.
  *
- * Three circles = players on the line of scrimmage (formation).
- * Two curved routes going outward and upfield = play concept.
- * Four-point sparkle at top = AI.
- *
- * Immediately connects to the app's own play-diagram visual language.
  * Stroke-only so it inherits currentColor at any size.
  */
 export function CoachAiIcon({
@@ -19,28 +15,35 @@ export function CoachAiIcon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.7}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
       aria-hidden="true"
       {...rest}
     >
-      {/* Line-of-scrimmage players */}
-      <circle cx="6"  cy="17" r="2" />
-      <circle cx="12" cy="17" r="2" />
-      <circle cx="18" cy="17" r="2" />
+      {/* Football body */}
+      <path
+        d="M4 12 C5.5 7 18.5 7 20 12 C18.5 17 5.5 17 4 12Z"
+        strokeWidth={1.6}
+      />
+      {/* Long seam — arcs from tip to tip over the top */}
+      <path
+        d="M4 12 C8 9.5 16 9.5 20 12"
+        strokeWidth={1.4}
+      />
+      {/* Laces — three short perpendicular bars */}
+      <line x1="11"   y1="10.2" x2="11"   y2="13.8" strokeWidth={1.4} />
+      <line x1="12.5" y1="9.8"  x2="12.5" y2="14.2" strokeWidth={1.4} />
+      <line x1="14"   y1="10.2" x2="14"   y2="13.8" strokeWidth={1.4} />
 
-      {/* Left route — curl out to the flat */}
-      <path d="M6 15 C 6 11, 3 9, 3 6" />
-      <polyline points="1.5,7.5 3,6 4.5,7.5" />
-
-      {/* Right route — fly / go route */}
-      <path d="M18 15 C 18 11, 21 9, 21 6" />
-      <polyline points="19.5,7.5 21,6 22.5,7.5" />
-
-      {/* AI sparkle — four-point star above center */}
-      <path d="M12 3 L12.55 4.7 L14.25 5.25 L12.55 5.8 L12 7.5 L11.45 5.8 L9.75 5.25 L11.45 4.7Z" />
+      {/* AI sparkle — four-point star breaking from top-right */}
+      <path
+        d="M19.5 2.5 L20.1 4.4 L22 5 L20.1 5.6 L19.5 7.5 L18.9 5.6 L17 5 L18.9 4.4Z"
+        strokeWidth={1.3}
+      />
+      {/* Tiny glint dots around sparkle for magic feel */}
+      <circle cx="16" cy="2.8" r="0.6" fill="currentColor" stroke="none" />
+      <circle cx="22" cy="8"   r="0.5" fill="currentColor" stroke="none" />
     </svg>
   );
 }
