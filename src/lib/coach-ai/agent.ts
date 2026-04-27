@@ -74,12 +74,18 @@ Example — Trips Right Slant concept:
 \`\`\`
 
 Rules:
-- Always include both offense and defense players for context.
-- Use realistic yard-from-LOS positions: WRs/linemen on the line (y≈0.5), QB 4-5 yards back (y≈-4), CBs 4-5 yards off (y≈5), safeties 10-15 yards deep (y≈12).
-- For 7v7 flag, field is 30 yards wide — keep x between -15 and +15.
+- Always include both offense and defense players for context (omit defense ONLY when the diagram is a formation-only request and the coach explicitly asked for the offensive look in isolation).
+- **Coordinate system:** y = 0 is exactly ON the line of scrimmage. y < 0 = behind the LOS (offensive backfield). y > 0 = downfield. **Offensive players ON the line use y = 0** (NOT 0.5) — that's the only way the token renders sitting on the LOS line instead of slightly past it. QB ≈ y=-4 to -5, RB/FB ≈ y=-3 to -5 in I-form (FB closer to LOS than HB), CBs y≈5, safeties y≈12.
+- **Player ID labels — look up the convention for THIS playbook's variant before drawing.** Naming conventions vary by sport (tackle football uses X/Y/Z/H/S/B/F/QB/LT/LG/C/RG/RT; flag football leagues often differ; some leagues use numeric labels). **Before drawing your first diagram in a turn, call \`search_kb\` with a query like "position labels {sport_variant}" or "naming conventions {sport_variant}" to get the correct convention for the coach's league.** Use what the KB returns. NEVER invent generic labels like "WR1", "WR2", "OL1" — those aren't a real convention anywhere. If the KB has no entry for the variant, fall back to a sensible standard for that sport AND silently call \`flag_outside_kb\` so we know to seed the convention. The auto-color renderer recognizes canonical tackle labels (\`X\`, \`Y\`, \`Z\`, \`H\`, \`S\`, \`B\`, \`F\`, \`TE\`, \`QB\`, \`C\`, plus linemen) — labels outside that set will fall through to a rotating receiver palette.
+- **Player count must match the sport variant — count before emitting JSON.**
+  - tackle_11 → exactly **11** offense and **11** defense
+  - flag_7v7 → exactly **7** offense and **7** defense
+  - flag_5v5 → exactly **5** offense and **5** defense
+  - Never emit a diagram with fewer players than the variant requires. If you're showing offense-only, still include all 11/7/5 offensive players.
+- For 7v7 flag, field is 30 yards wide; for 5v5, 25; for tackle 11, 53. Keep x within roughly ±half the width.
 - For a formation-only diagram, omit the "routes" field.
 - Omit the diagram only when the question is purely about a rule or penalty (no positional concept involved).
-- **Route colors** — the renderer auto-colors skill positions by label. Use canonical labels (\`X\`, \`Y\`, \`Z\`, \`H\`, \`S\`, \`B\`/\`RB\`, \`TE\`, \`QB\`, \`C\`) and the renderer paints them correctly. **Linemen (\`LT\`, \`LG\`, \`RG\`, \`RT\`, \`T\`, \`G\`, \`OL\`) render gray automatically — never hand them a \`color\` field.** Only override \`color\` when the coach explicitly asks ("make WR1 purple").
+- **Route/token colors** — the renderer auto-colors skill positions by label. Use the canonical letters above and the renderer paints them correctly (X red, Y green, Z blue, H orange, S yellow, B orange, QB white, C black). **Linemen (\`LT\`/\`LG\`/\`C\`/\`RG\`/\`RT\`/\`T\`/\`G\`/\`OL\`) render muted gray automatically — never hand them a \`color\` field.** Only override \`color\` when the coach explicitly asks ("make X purple").
 - **"Color" means route color.** When a coach says "change the color of [player]" they mean the route/token color on the play diagram, not jersey color.
 
 **Formation legality — every offensive formation MUST be legal under the playbook's rules:**
@@ -303,7 +309,7 @@ export async function runAgent(
       system,
       messages,
       tools,
-      maxTokens: 1024,
+      maxTokens: 4096,
       onTextDelta: onEvent ? (text) => onEvent({ type: "text_delta", text }) : undefined,
     });
     modelId = result.modelId;
