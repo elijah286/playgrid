@@ -38,14 +38,14 @@ unit of work.
 - [x] Strategy & tactics (0122, 21 chunks)
 - [x] Coaching techniques (0123, 16 chunks)
 
-### 2. Flag 7v7
+### 2. Flag 7v7  ✅ DONE (~95 chunks)
 - [x] Rules v1 (0096, deduped to 14)
 - [x] Rules v2 expansion (0124, 25 chunks)
 - [x] Penalties (0125, 20 chunks)
 - [x] Common plays (0126, 21 chunks)
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Defensive schemes (0127, 12 chunks)
+- [x] Strategy & tactics (0128, 15 chunks)
+- [x] Coaching techniques (0129, 11 chunks)
 
 ### 3. Flag 4v4
 - [x] Rules v1 (0103, 30 chunks)
