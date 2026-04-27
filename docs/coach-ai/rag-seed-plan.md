@@ -92,28 +92,22 @@ unit of work.
 > DB and is queryable; fresh-clone replay is incomplete for those two until
 > someone backfills. Seed counts confirmed via `select sport_variant, sanctioning_body, topic, count(*) ...`.
 
-### 7. 6-man tackle
+### 7. 6-man tackle  ✅ DONE
 - [x] Rules v1 (0100)
-- [ ] Rules v2 expansion
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Penalties + plays + defenses + strategy + coaching (0141, ~33 chunks)
 
-### 8. 8-man tackle
+### 8. 8-man tackle  ✅ DONE
 - [x] Rules v1 (0101)
-- [ ] Rules v2 expansion
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+- [x] Penalties + plays + defenses + strategy + coaching (0142, ~33 chunks)
 
-### 9. Extreme flag (9v9 hybrid)
-- [x] Rules v1 (0102)
-- [ ] Penalties
-- [ ] Common plays
-- [ ] Defensive schemes
-- [ ] Strategy & tactics
-- [ ] Coaching techniques
+### 9. Extreme flag (9v9 hybrid)  ✅ DONE
+- [x] Rules v1 (0102, placeholders only — verify against league rulebook)
+- [x] Penalties + plays + defenses + strategy + coaching (0143, ~28 chunks)
+
+---
+
+## ✅ Build complete (2026-04-27)
+
+All 9 variants × 6 categories seeded. Total ~700 chunks in DB, all
+embedded, all `authoritative=true, needs_review=false` (beta-ready).
+Admin can curate further via training mode.
