@@ -84,9 +84,9 @@ export function BetaFeaturesAdminClient({
   const { toast } = useToast();
   const [features, setFeatures] = useState<BetaFeatures>(initialFeatures);
   const [pendingKey, setPendingKey] = useState<BetaFeatureKey | null>(null);
-  const [allowlists, setAllowlists] = useState<Record<BetaFeatureKey, string[]>>({});
+  const [allowlists, setAllowlists] = useState<Record<BetaFeatureKey, string[]>>({} as Record<BetaFeatureKey, string[]>);
   const [expandedFeature, setExpandedFeature] = useState<BetaFeatureKey | null>(null);
-  const [newEmail, setNewEmail] = useState<Record<BetaFeatureKey, string>>({});
+  const [newEmail, setNewEmail] = useState<Record<BetaFeatureKey, string>>({} as Record<BetaFeatureKey, string>);
   const [, startTransition] = useTransition();
 
   function changeScope(key: BetaFeatureKey, scope: BetaFeatureScope) {
