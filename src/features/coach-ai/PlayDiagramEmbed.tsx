@@ -3,10 +3,19 @@
 import { useMemo } from "react";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
-import { resolveEndDecoration, resolveRouteStroke } from "@/domain/play/factory";
+import {
+  resolveEndDecoration,
+  resolveRouteStroke,
+  resolveShowHashMarks,
+  resolveShowYardNumbers,
+  resolveHashStyle,
+  resolveFieldZone,
+  hashColumnsForStyle,
+} from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { createEmptyPlayDocument } from "@/domain/play/factory";
+import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 
 // ── ViewBox computation (matches PlayThumbnail auto-zoom logic) ──────────────
@@ -176,26 +185,105 @@ function DiagramCanvas({ doc, animPositions }: {
   const sxCorr = aspect / TARGET;
   const R      = 0.032;
 
-  const losY = 1 - (doc.lineOfScrimmageY ?? 0.4);
-  const fiveY = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.2);
-  const tenY  = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.4);
+  // Field-chrome rendering — must mirror EditorCanvas so a coach sees the same
+  // field treatment in chat as they do in the editor. The full chrome (yard
+  // lines, yard numbers, hash marks) draws across x=0..1 of the unit-square
+  // field; the auto-computed viewBox above clips to whatever portion of the
+  // field actually contains content.
+  const losY01 = doc.lineOfScrimmageY ?? 0.4;
+  const losSvgY = 1 - losY01;
+  const theme = resolveFieldTheme(undefined); // green default, matches editor default
+  const fieldLengthYds = doc.sportProfile.fieldLengthYds || 25;
+  const losYd = Math.round(losY01 * fieldLengthYds);
+  const zone = resolveFieldZone(doc);
+  const losYardValue = zone === "midfield" ? 50 : 20;
+  const yardLabel = (yd: number): string => {
+    const delta = yd - losYd;
+    if (zone === "midfield") {
+      const v = 50 - Math.abs(delta);
+      if (v <= 0 || v % 5 !== 0) return "";
+      return String(v);
+    }
+    const v = losYardValue - delta;
+    if (v <= 0) return "G";
+    if (v >= 50 || v % 5 !== 0) return "";
+    return String(v);
+  };
+  const showYardNumbers = resolveShowYardNumbers(doc);
+  const showHash = resolveShowHashMarks(doc);
+  const [hashLeftFrac, hashRightFrac] = hashColumnsForStyle(resolveHashStyle(doc));
+  const yardLines: React.ReactNode[] = [];
+  const yardNumbers: React.ReactNode[] = [];
+  const yardInterval = 5;
+  const firstBelowLos = losYd - Math.floor(losYd / yardInterval) * yardInterval;
+  for (let yd = firstBelowLos; yd < fieldLengthYds; yd += yardInterval) {
+    if (yd <= 0) continue;
+    const y = yd / fieldLengthYds;
+    const svgY = 1 - y;
+    if (yd !== losYd) {
+      yardLines.push(
+        <line key={`h${yd}`} x1={0} y1={svgY} x2={1} y2={svgY}
+          stroke={theme.lineColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />,
+      );
+    }
+    const label = yardLabel(yd);
+    if (label && showYardNumbers) {
+      const numY = svgY + 0.018;
+      yardNumbers.push(
+        <text key={`nL${yd}`} x={0.27} y={numY} fontSize={0.04} fontWeight={700}
+          fill={theme.numberColor} textAnchor="middle" pointerEvents="none">
+          {label}
+        </text>,
+        <text key={`nR${yd}`} x={0.73} y={numY} fontSize={0.04} fontWeight={700}
+          fill={theme.numberColor} textAnchor="middle" pointerEvents="none">
+          {label}
+        </text>,
+      );
+    }
+  }
+  const hashMarks: React.ReactNode[] = [];
+  if (showHash) {
+    const TICK_HALF = 0.010;
+    const N_TICKS = 20;
+    for (let i = 1; i < N_TICKS; i++) {
+      const y = i / N_TICKS;
+      hashMarks.push(
+        <line key={`hml${i}`} x1={hashLeftFrac} y1={y - TICK_HALF}
+          x2={hashLeftFrac} y2={y + TICK_HALF}
+          stroke={theme.hashColor} strokeWidth={2.25} strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" />,
+        <line key={`hmr${i}`} x1={hashRightFrac} y1={y - TICK_HALF}
+          x2={hashRightFrac} y2={y + TICK_HALF}
+          stroke={theme.hashColor} strokeWidth={2.25} strokeLinecap="round"
+          vectorEffect="non-scaling-stroke" />,
+      );
+    }
+  }
 
   const animatingIds = new Set(animPositions?.keys() ?? []);
 
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border" style={{ backgroundColor: "#2D8B4E" }}>
+    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border">
       <svg
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         width="100%" height="100%"
         preserveAspectRatio="none"
       >
-        {/* Yard markers (dashed white) and LOS (solid dashed white, brighter) */}
-        <line x1={vb.x} x2={vb.x + vb.w} y1={fiveY} y2={fiveY}
-          stroke="rgba(255,255,255,0.30)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
-        <line x1={vb.x} x2={vb.x + vb.w} y1={tenY} y2={tenY}
-          stroke="rgba(255,255,255,0.30)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
-        <line x1={vb.x} x2={vb.x + vb.w} y1={losY} y2={losY}
-          stroke="rgba(255,255,255,0.55)" strokeWidth={2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+        <defs>
+          <linearGradient id="caiFieldGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={theme.bgMain} />
+            <stop offset="100%" stopColor={theme.bgDark} />
+          </linearGradient>
+        </defs>
+        {/* Field gradient — covers the full unit-square; viewBox clips it. */}
+        <rect x={0} y={0} width={1} height={1} fill="url(#caiFieldGrad)" />
+        {yardLines}
+        {yardNumbers}
+        {hashMarks}
+        {/* Line of scrimmage — drawn on top of yard lines, dashed. */}
+        <line x1={0} x2={1} y1={losSvgY} y2={losSvgY}
+          stroke={theme.losColor} strokeWidth={2} strokeDasharray="6 4"
+          vectorEffect="non-scaling-stroke" />
 
         {/* Zones (drawn under routes/players so markers stay legible) */}
         {(doc.layers.zones ?? []).map((z) => {

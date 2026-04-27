@@ -82,47 +82,10 @@ function snapOutsidePlayer(p: Point2, carrier: Point2): Point2 {
 
 // Background colors per mode. White is solid (main == dark) so the
 // field reads as a crisp printed diagram.
-const BG_COLORS: Record<string, { main: string; dark: string }> = {
-  green: { main: "#2D8B4E", dark: "#247540" },
-  white: { main: "#FFFFFF", dark: "#FFFFFF" },
-  black: { main: "#0A0A0A", dark: "#141414" },
-};
-
-const LINE_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.30)",
-  white: "rgba(0,0,0,0.55)",
-  black: "rgba(255,255,255,0.22)",
-};
-
-/** Hash marks render a touch brighter than yard lines so they read clearly
- *  as on-field markings rather than blending into the background. */
-const HASH_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.75)",
-  white: "rgba(0,0,0,0.70)",
-  black: "rgba(255,255,255,0.60)",
-};
-
-const NUMBER_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.85)",
-  white: "rgba(0,0,0,0.80)",
-  black: "rgba(255,255,255,0.70)",
-};
-
-/** Thin outline around the whole field so it visually separates from the
- *  page background (important on the white field theme, which otherwise
- *  blends into the app surface). */
-const BORDER_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.35)",
-  white: "rgba(0,0,0,0.50)",
-  black: "rgba(255,255,255,0.30)",
-};
-
-/** Contrasting accent color per-background for the LOS marker and ball. */
-const LOS_COLORS: Record<string, string> = {
-  green: "rgba(255,255,255,0.55)",
-  white: "rgba(0,0,0,0.55)",
-  black: "rgba(255,255,255,0.50)",
-};
+// Field theme colors live in a shared module so every play surface (editor,
+// thumbnail, Coach AI chat) renders identical chrome. Don't add color tables
+// here — extend src/domain/play/fieldTheme.ts and they propagate automatically.
+import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -1286,14 +1249,13 @@ function EditorCanvasImpl({
 
   /* ---------- Dynamic field colors ---------- */
 
-  // Legacy "gray" plays fall back to the new solid-white theme.
-  const bgKey = fieldBackground === "gray" ? "white" : (fieldBackground ?? "green");
-  const bg = BG_COLORS[bgKey];
-  const lineColor = LINE_COLORS[bgKey];
-  const hashColor = HASH_COLORS[bgKey];
-  const numberColor = NUMBER_COLORS[bgKey];
-  const borderColor = BORDER_COLORS[bgKey];
-  const losColor = LOS_COLORS[bgKey];
+  const theme = resolveFieldTheme(fieldBackground);
+  const bg = { main: theme.bgMain, dark: theme.bgDark };
+  const lineColor = theme.lineColor;
+  const hashColor = theme.hashColor;
+  const numberColor = theme.numberColor;
+  const borderColor = theme.borderColor;
+  const losColor = theme.losColor;
 
   /* ---------- Line of scrimmage ---------- */
 
