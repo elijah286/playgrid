@@ -124,6 +124,22 @@ export function CoachAiChat({
   }, [turns, streaming, partialText, statusText]);
 
   useEffect(() => {
+    // If the user navigated here via a Cal playbook button (cal_from=1),
+    // carry over the global conversation so context isn't lost.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("cal_from") === "1") {
+      const globalKey = storageKeyFor("normal", null);
+      const carried = loadTurns(globalKey);
+      if (carried.length > 0) {
+        setTurns(carried);
+        saveTurns(storageKey, carried);
+        params.delete("cal_from");
+        const newUrl = window.location.pathname + (params.size > 0 ? "?" + params.toString() : "");
+        window.history.replaceState(null, "", newUrl);
+        setError(null);
+        return;
+      }
+    }
     setTurns(loadTurns(storageKey));
     setError(null);
   }, [storageKey]);
