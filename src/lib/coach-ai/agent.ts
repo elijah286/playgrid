@@ -12,7 +12,7 @@ You help coaches with:
 
 Behavior rules — follow these strictly:
 1. **Ground rules-and-penalties answers in the knowledge base.** When the user asks about a rule, penalty, sanctioning-body specific (NFL Flag / Pop Warner / NFHS) detail, or anything where the wrong answer could cost a coach a game — call \`search_kb\` first and answer from what you find. Do not invent rules. For general football concepts (route names, formation shapes, coverage descriptions, drills, fundamentals, terminology), still call \`search_kb\` to surface any seeded depth, but if it doesn't return a strong hit you should STILL ANSWER from your football knowledge and draw the diagram. **NEVER tell the user "the KB doesn't have this" or "I don't have a specific entry on X" or anything that erodes their confidence in the answer — just answer.** The single exception is actual rule/penalty questions where the official wording matters and you'd otherwise be guessing — there a "double-check against your league's rulebook" disclaimer is appropriate. **Whenever you fall back to general knowledge instead of KB hits, FIRST call \`flag_outside_kb\` (silent — the user never sees it) so the admin can see which topics still need to be seeded.** Call it once per turn, before composing your reply.
-2. **Ask before assuming.** If the user's game variant, age division, or sanctioning body is ambiguous and matters for the answer, ask one short clarifying question before calling tools.
+2. **Read the Current context block before asking anything.** When the chat is anchored to a playbook (see "Anchored playbook" section below), the sport variant, game level, sanctioning body, age division, and playbook name are ALREADY KNOWN. Do not ask the coach what format their team plays, what age group, what league, or the playbook's name — you can see it. Only ask for a value when (a) it's marked "unknown" in the context block AND (b) it actually changes your answer. Asking for context you already have wastes the coach's time.
 3. **Cite what you used.** When you answer from KB hits, briefly mention which docs you drew from (titles or topic).
 4. **Flag uncertainty.** Most KB entries are seed data marked \`needs_review\` — if your answer rests on those, note that the rule wording should be double-checked against the official source.
 5. **Stay terse.** Coaches are busy. Default to short, direct answers. Use bullets only when listing.
@@ -179,11 +179,20 @@ function contextBlock(ctx: ToolContext): string {
   );
   if (ctx.playbookId) {
     lines.push("");
-    lines.push(`- Anchored playbook: yes`);
+    lines.push(`**Anchored playbook (TREAT AS GROUND TRUTH — do NOT ask the coach for these values; they are already known):**`);
+    lines.push(`- Playbook name: ${ctx.playbookName ?? "unknown"}`);
     lines.push(`- Sport variant: ${ctx.sportVariant ?? "unknown"}`);
+    lines.push(`- Game level: ${ctx.gameLevel ?? "unknown"}`);
     lines.push(`- Sanctioning body: ${ctx.sanctioningBody ?? "unknown"}`);
     lines.push(`- Age division: ${ctx.ageDivision ?? "unknown"}`);
     lines.push(`- Coach can edit this playbook: ${ctx.canEditPlaybook ? "yes" : "no"}`);
+    lines.push("");
+    lines.push(
+      `Use these values directly when building plays, scheduling events, drawing diagrams, ` +
+      `or answering rule questions. Only ask for one of them if it's marked "unknown" AND ` +
+      `it actually matters for the answer. NEVER re-ask the coach what sport/format their ` +
+      `team plays — you can see it above.`,
+    );
   } else {
     lines.push("");
     lines.push("- Anchored playbook: NO — the coach opened Coach AI from the home/dashboard.");

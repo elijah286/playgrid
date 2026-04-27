@@ -51,17 +51,18 @@ async function loadToolContext(
   mode: CoachAiMode,
 ): Promise<ToolContext> {
   if (!playbookId) {
-    return { playbookId: null, sportVariant: null, gameLevel: null, sanctioningBody: null, ageDivision: null, isAdmin, canEditPlaybook: false, mode };
+    return { playbookId: null, playbookName: null, sportVariant: null, gameLevel: null, sanctioningBody: null, ageDivision: null, isAdmin, canEditPlaybook: false, mode };
   }
   const supabase = await createClient();
   const [{ data }, { data: canEdit }] = await Promise.all([
     supabase.from("playbooks")
-      .select("sport_variant, game_level, sanctioning_body, age_division")
+      .select("name, sport_variant, game_level, sanctioning_body, age_division")
       .eq("id", playbookId).maybeSingle(),
     supabase.rpc("can_edit_playbook", { pb: playbookId }),
   ]);
   return {
     playbookId,
+    playbookName: (data?.name as string | null) ?? null,
     sportVariant: (data?.sport_variant as string | null) ?? null,
     gameLevel: (data?.game_level as string | null) ?? null,
     sanctioningBody: (data?.sanctioning_body as string | null) ?? null,

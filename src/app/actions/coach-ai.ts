@@ -64,6 +64,7 @@ async function loadToolContext(
   if (!playbookId) {
     return {
       playbookId: null,
+      playbookName: null,
       sportVariant: null,
       gameLevel: null,
       sanctioningBody: null,
@@ -77,13 +78,14 @@ async function loadToolContext(
   const [{ data }, { data: canEdit }] = await Promise.all([
     supabase
       .from("playbooks")
-      .select("sport_variant, game_level, sanctioning_body, age_division")
+      .select("name, sport_variant, game_level, sanctioning_body, age_division")
       .eq("id", playbookId)
       .maybeSingle(),
     supabase.rpc("can_edit_playbook", { pb: playbookId }),
   ]);
   return {
     playbookId,
+    playbookName: (data?.name as string | null) ?? null,
     sportVariant: (data?.sport_variant as string | null) ?? null,
     gameLevel: (data?.game_level as string | null) ?? null,
     sanctioningBody: (data?.sanctioning_body as string | null) ?? null,

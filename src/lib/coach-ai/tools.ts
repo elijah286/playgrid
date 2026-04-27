@@ -8,6 +8,8 @@ export type CoachAiMode = "normal" | "admin_training" | "playbook_training";
 export type ToolContext = {
   /** Current playbook id, when chat is anchored to one. */
   playbookId: string | null;
+  /** Display name of the current playbook (so Cal can refer to it by name). */
+  playbookName: string | null;
   /** Sport metadata of the current playbook (used to bias retrieval). */
   sportVariant: string | null;
   gameLevel: string | null;
