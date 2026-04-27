@@ -91,7 +91,9 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   if (!opts.onTextDelta) {
     const text = await res.text();
     const json = JSON.parse(text) as { content: ContentBlock[]; stop_reason: string; model: string };
-    const cleaned = json.content.filter((b) => b.type !== "text" || b.text.length > 0);
+    const cleaned = ensureNonEmptyAssistantContent(
+      json.content.filter((b) => b.type !== "text" || b.text.length > 0),
+    );
     return {
       message: { role: "assistant", content: cleaned },
       stopReason: normalizeStopReason(json.stop_reason),
@@ -164,11 +166,23 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   }
 
   return {
-    message: { role: "assistant", content: blocks },
+    message: { role: "assistant", content: ensureNonEmptyAssistantContent(blocks) },
     stopReason: normalizeStopReason(stopReason),
     provider: "claude",
     modelId,
   };
+}
+
+/**
+ * Anthropic 400s on assistant turns whose content array is empty OR whose only
+ * text block is empty. After we strip empty text blocks above, an assistant
+ * turn that returned nothing usable would otherwise be saved as `content: []`
+ * and crash the next request when the history is replayed. Insert a single
+ * placeholder text block so the conversation stays valid.
+ */
+function ensureNonEmptyAssistantContent(blocks: ContentBlock[]): ContentBlock[] {
+  if (blocks.length === 0) return [{ type: "text", text: "(no response)" }];
+  return blocks;
 }
 
 function normalizeStopReason(r: string): "end_turn" | "tool_use" | "max_tokens" | "other" {
