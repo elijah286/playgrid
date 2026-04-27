@@ -36,7 +36,7 @@ unit of work.
 - [x] Common plays (0120, 23 chunks)
 - [x] Defensive schemes (0121, 17 chunks)
 - [x] Strategy & tactics (0122, 21 chunks)
-- [ ] Coaching techniques (0123)
+- [x] Coaching techniques (0123, 16 chunks)
 
 ### 2. Flag 7v7
 - [x] Rules v1 (0096, 28 chunks)
