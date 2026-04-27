@@ -44,7 +44,7 @@ function formatDate(iso: string): string {
   });
 }
 
-type FeedbackType = "kb_miss" | "refusal" | "negative" | "positive";
+type FeedbackType = "all" | "kb_miss" | "refusal" | "negative" | "positive";
 
 export function CoachAiFeedbackAdminClient({
   initialItems,
@@ -54,7 +54,7 @@ export function CoachAiFeedbackAdminClient({
   initialError: string | null;
 }) {
   const { toast } = useToast();
-  const [feedbackType, setFeedbackType] = useState<FeedbackType>("kb_miss");
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>("all");
   const [kbMisses, setKbMisses] = useState(initialItems);
   const [refusals, setRefusals] = useState<RefusalRow[]>([]);
   const [negativeFeedback, setNegativeFeedback] = useState<NegativeFeedbackRow[]>([]);
@@ -63,55 +63,59 @@ export function CoachAiFeedbackAdminClient({
   const [filter, setFilter] = useState<"unreviewed" | "all">("unreviewed");
   const [pending, startTransition] = useTransition();
   const [dataLoaded, setDataLoaded] = useState<Record<FeedbackType, boolean>>({
+    all: false,
     kb_miss: true,
     refusal: false,
     negative: false,
     positive: false,
   });
 
-  const items =
-    feedbackType === "kb_miss"
-      ? kbMisses
-      : feedbackType === "refusal"
-        ? refusals
-        : feedbackType === "negative"
-          ? negativeFeedback
-          : positiveFeedback;
+  type AllFeedbackItem = (KbMissRow | RefusalRow | PositiveFeedbackRow | NegativeFeedbackRow) & { feedbackType?: string };
+
+  const items: AllFeedbackItem[] =
+    feedbackType === "all"
+      ? [
+          ...kbMisses.map(it => ({ ...it, feedbackType: "kb_miss" } as AllFeedbackItem)),
+          ...refusals.map(it => ({ ...it, feedbackType: "refusal" } as AllFeedbackItem)),
+          ...negativeFeedback.map(it => ({ ...it, feedbackType: "negative" } as AllFeedbackItem)),
+          ...positiveFeedback.map(it => ({ ...it, feedbackType: "positive" } as AllFeedbackItem)),
+        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      : feedbackType === "kb_miss"
+        ? kbMisses
+        : feedbackType === "refusal"
+          ? refusals
+          : feedbackType === "negative"
+            ? negativeFeedback
+            : positiveFeedback;
 
   function refresh(nextFilter: "unreviewed" | "all" = filter, type: FeedbackType = feedbackType) {
     startTransition(async () => {
-      if (type === "kb_miss") {
-        const res = await listCoachAiKbMissesAction(nextFilter);
-        if (!res.ok) {
-          setErr(res.error);
-          return;
+      const load = async (t: Exclude<FeedbackType, "all">) => {
+        if (t === "kb_miss") {
+          const res = await listCoachAiKbMissesAction(nextFilter);
+          if (!res.ok) { setErr(res.error); return; }
+          setKbMisses(res.items);
+        } else if (t === "refusal") {
+          const res = await listCoachAiRefusalsAction(nextFilter);
+          if (!res.ok) { setErr(res.error); return; }
+          setRefusals(res.items);
+        } else if (t === "negative") {
+          const res = await listCoachAiNegativeFeedbackAction();
+          if (!res.ok) { setErr(res.error); return; }
+          setNegativeFeedback(res.items);
+        } else if (t === "positive") {
+          const res = await listCoachAiPositiveFeedbackAction();
+          if (!res.ok) { setErr(res.error); return; }
+          setPositiveFeedback(res.items);
         }
+      };
+
+      if (type === "all") {
         setErr(null);
-        setKbMisses(res.items);
-      } else if (type === "refusal") {
-        const res = await listCoachAiRefusalsAction(nextFilter);
-        if (!res.ok) {
-          setErr(res.error);
-          return;
-        }
-        setErr(null);
-        setRefusals(res.items);
-      } else if (type === "negative") {
-        const res = await listCoachAiNegativeFeedbackAction();
-        if (!res.ok) {
-          setErr(res.error);
-          return;
-        }
-        setErr(null);
-        setNegativeFeedback(res.items);
+        await Promise.all([load("kb_miss"), load("refusal"), load("negative"), load("positive")]);
       } else {
-        const res = await listCoachAiPositiveFeedbackAction();
-        if (!res.ok) {
-          setErr(res.error);
-          return;
-        }
+        await load(type);
         setErr(null);
-        setPositiveFeedback(res.items);
       }
     });
   }
@@ -129,28 +133,31 @@ export function CoachAiFeedbackAdminClient({
     }
   }
 
-  function markReviewed(id: string, reviewed: boolean) {
-    if (feedbackType === "negative" || feedbackType === "positive") return;
-    const prev = feedbackType === "kb_miss" ? kbMisses : refusals;
+  function markReviewed(id: string, reviewed: boolean, itemType?: string) {
+    const type = itemType || feedbackType;
+    if (type === "negative" || type === "positive" || type === "all") return;
+
+    const prev = type === "kb_miss" ? kbMisses : refusals;
     const updated = prev.map((it) => (it.id === id ? { ...it, reviewed_at: reviewed ? new Date().toISOString() : null } : it));
-    if (feedbackType === "kb_miss") setKbMisses(updated as KbMissRow[]);
+    if (type === "kb_miss") setKbMisses(updated as KbMissRow[]);
     else setRefusals(updated as RefusalRow[]);
 
     startTransition(async () => {
-      const action = feedbackType === "kb_miss" ? setKbMissReviewedAction : setRefusalReviewedAction;
+      const action = type === "kb_miss" ? setKbMissReviewedAction : setRefusalReviewedAction;
       const res = await action(id, reviewed);
       if (!res.ok) {
-        if (feedbackType === "kb_miss") setKbMisses(prev as KbMissRow[]);
+        if (type === "kb_miss") setKbMisses(prev as KbMissRow[]);
         else setRefusals(prev as RefusalRow[]);
         toast(res.error, "error");
       }
     });
   }
 
-  function remove(id: string) {
+  function remove(id: string, itemType?: string) {
     if (!window.confirm("Delete this feedback entry?")) return;
 
-    if (feedbackType === "kb_miss") {
+    const type = itemType || feedbackType;
+    if (type === "kb_miss") {
       setKbMisses(kbMisses.filter((it) => it.id !== id));
       startTransition(async () => {
         const res = await deleteKbMissAction(id);
@@ -159,7 +166,7 @@ export function CoachAiFeedbackAdminClient({
           toast(res.error, "error");
         }
       });
-    } else if (feedbackType === "refusal") {
+    } else if (type === "refusal") {
       setRefusals(refusals.filter((it) => it.id !== id));
       startTransition(async () => {
         const res = await deleteRefusalAction(id);
@@ -171,13 +178,16 @@ export function CoachAiFeedbackAdminClient({
     }
   }
 
+  const isAll = feedbackType === "all";
   const isKbMiss = feedbackType === "kb_miss";
   const isRefusal = feedbackType === "refusal";
   const isNegative = feedbackType === "negative";
   const isPositive = feedbackType === "positive";
 
   let emptyMessage = "";
-  if (isKbMiss) {
+  if (isAll) {
+    emptyMessage = filter === "unreviewed" ? "No unreviewed feedback. Coach AI is running smoothly!" : "No feedback logged yet.";
+  } else if (isKbMiss) {
     emptyMessage = filter === "unreviewed" ? "No unreviewed KB misses. Coach AI is grounded in the KB." : "No KB misses logged yet.";
   } else if (isRefusal) {
     emptyMessage = filter === "unreviewed" ? "No unreviewed refusals. Coach AI is handling requests smoothly." : "No refusals logged yet.";
@@ -201,6 +211,13 @@ export function CoachAiFeedbackAdminClient({
 
       <div className="flex items-center gap-2">
         <div className="inline-flex rounded-lg bg-surface-inset p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => changeType("all")}
+            className={`rounded px-3 py-1 ${feedbackType === "all" ? "bg-surface-raised font-semibold text-foreground shadow" : "text-muted"}`}
+          >
+            All
+          </button>
           <button
             type="button"
             onClick={() => changeType("kb_miss")}
@@ -271,14 +288,43 @@ export function CoachAiFeedbackAdminClient({
         </p>
       ) : (
         <ul className="space-y-2">
-          {items.map((it) => (
+          {items.map((it) => {
+            const fType = isAll ? it.feedbackType : feedbackType;
+            const isKbMissItem = fType === "kb_miss";
+            const isRefusalItem = fType === "refusal";
+            const isNegativeItem = fType === "negative";
+            const isPositiveItem = fType === "positive";
+
+            let bgColor = "bg-surface-raised";
+            let badgeColor = "";
+            if (isKbMissItem) {
+              bgColor = "bg-red-50 dark:bg-red-950/20";
+              badgeColor = "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200";
+            } else if (isRefusalItem) {
+              bgColor = "bg-yellow-50 dark:bg-yellow-950/20";
+              badgeColor = "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200";
+            } else if (isNegativeItem) {
+              bgColor = "bg-red-50 dark:bg-red-950/20";
+              badgeColor = "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200";
+            } else if (isPositiveItem) {
+              bgColor = "bg-green-50 dark:bg-green-950/20";
+              badgeColor = "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200";
+            }
+
+            const reviewed = (isKbMissItem || isRefusalItem) ? (it as KbMissRow | RefusalRow).reviewed_at : null;
+            return (
             <li
               key={it.id}
-              className={`rounded-xl bg-surface-raised p-3 text-sm ring-1 ring-black/5 ${isKbMiss || isRefusal ? (it as KbMissRow | RefusalRow).reviewed_at ? "opacity-60" : "" : ""}`}
+              className={`rounded-xl ${bgColor} p-3 text-sm ring-1 ring-black/5 ${reviewed ? "opacity-60" : ""}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  {isKbMiss ? (
+                  {isAll && (
+                    <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${badgeColor} mb-2`}>
+                      {isKbMissItem ? "KB Miss" : isRefusalItem ? "Refusal" : isNegativeItem ? "Thumbs Down" : "Thumbs Up"}
+                    </span>
+                  )}
+                  {isKbMissItem ? (
                     <>
                       <p className="font-semibold text-foreground">{(it as KbMissRow).topic}</p>
                       <p className="mt-1 text-foreground/80">&ldquo;{(it as KbMissRow).user_question}&rdquo;</p>
@@ -292,7 +338,7 @@ export function CoachAiFeedbackAdminClient({
                         {formatDate(it.created_at)}
                       </p>
                     </>
-                  ) : isRefusal ? (
+                  ) : isRefusalItem ? (
                     <>
                       <p className="font-semibold text-foreground">Request: &ldquo;{(it as RefusalRow).user_request}&rdquo;</p>
                       <p className="mt-1 text-xs text-muted">
@@ -305,7 +351,7 @@ export function CoachAiFeedbackAdminClient({
                         {formatDate(it.created_at)}
                       </p>
                     </>
-                  ) : isNegative ? (
+                  ) : isNegativeItem ? (
                     <>
                       <p className="font-semibold text-foreground">User: &ldquo;{(it as NegativeFeedbackRow).user_message}&rdquo;</p>
                       <p className="mt-1 text-foreground/80">&ldquo;{(it as NegativeFeedbackRow).response_text}&rdquo;</p>
@@ -320,26 +366,27 @@ export function CoachAiFeedbackAdminClient({
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {(isKbMiss || isRefusal) && (
+                  {(isKbMissItem || isRefusalItem) && (
                     <IconButton
                       icon={Check}
-                      tooltip={(it as KbMissRow | RefusalRow).reviewed_at ? "Mark unreviewed" : "Mark reviewed"}
-                      aria-label={(it as KbMissRow | RefusalRow).reviewed_at ? "Mark unreviewed" : "Mark reviewed"}
-                      onClick={() => markReviewed(it.id, !(it as KbMissRow | RefusalRow).reviewed_at)}
-                      className={(it as KbMissRow | RefusalRow).reviewed_at ? "text-emerald-500" : "text-muted"}
+                      tooltip={reviewed ? "Mark unreviewed" : "Mark reviewed"}
+                      aria-label={reviewed ? "Mark unreviewed" : "Mark reviewed"}
+                      onClick={() => markReviewed(it.id, !reviewed, fType)}
+                      className={reviewed ? "text-emerald-500" : "text-muted"}
                     />
                   )}
                   <IconButton
                     icon={Trash2}
                     tooltip="Delete"
                     aria-label="Delete"
-                    onClick={() => remove(it.id)}
+                    onClick={() => remove(it.id, fType)}
                     className="text-muted"
                   />
                 </div>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

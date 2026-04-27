@@ -98,7 +98,22 @@ function detectOutOfScopeRefusal(text: string): boolean {
 }
 
 /**
- * Log a refusal and extract the user's request from history.
+ * Detect if Coach AI fell back to general knowledge (KB miss).
+ * This happens when Coach AI lacks specific KB content and admits it.
+ */
+function detectKbMiss(text: string): boolean {
+  const kbMissPatterns = [
+    /isn't my specialty|not my specialty|outside my expertise/i,
+    /don't have specific.*content|don't have.*knowledge/i,
+    /I'd recommend|I recommend.*instead/i,
+    /check.*official|consult.*league|ask.*athletic director/i,
+    /watching film|consulting.*coach|sports performance specialist/i,
+  ];
+  return kbMissPatterns.some(p => p.test(text));
+}
+
+/**
+ * Log a refusal if detected.
  */
 async function logRefusalIfDetected(
   finalText: string,
@@ -110,6 +125,31 @@ async function logRefusalIfDetected(
     await logCoachAiRefusal({
       userRequest: userMessage.slice(0, 500),
       refusalReason: "out_of_scope",
+      playbookId: ctx.playbookId,
+      sportVariant: ctx.sportVariant,
+      sanctioningBody: ctx.sanctioningBody,
+      gameLevel: ctx.gameLevel,
+      ageDivision: ctx.ageDivision,
+    });
+  } catch {
+    // Don't fail the chat on logging error
+  }
+}
+
+/**
+ * Log a KB miss if detected.
+ */
+async function logKbMissIfDetected(
+  finalText: string,
+  userMessage: string,
+  ctx: ToolContext,
+): Promise<void> {
+  if (!detectKbMiss(finalText)) return;
+  try {
+    await logCoachAiKbMiss({
+      topic: userMessage.slice(0, 100),
+      userQuestion: userMessage.slice(0, 500),
+      reason: "weak_results",
       playbookId: ctx.playbookId,
       sportVariant: ctx.sportVariant,
       sanctioningBody: ctx.sanctioningBody,
@@ -173,9 +213,10 @@ export async function POST(req: Request): Promise<Response> {
           if (e.type === "text_delta") send("text_delta", { text: e.text });
         });
 
-        // Log refusal and usage asynchronously — don't block the response
+        // Log feedback and usage asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
         logRefusalIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
+        logKbMissIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
 
         send("done", { toolCalls: result.toolCalls, text: result.finalText });
       } catch (e) {
