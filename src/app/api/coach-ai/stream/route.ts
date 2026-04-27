@@ -6,6 +6,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
+import { logCoachAiRefusal, logCoachAiKbMiss } from "@/lib/coach-ai/feedback-log";
 
 type StreamRequest = {
   history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
@@ -81,6 +82,45 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
+/**
+ * Detect if the response is an out-of-scope refusal.
+ * Coach AI is trained to politely refuse requests outside football coaching scope.
+ */
+function detectOutOfScopeRefusal(text: string): boolean {
+  const refusalPatterns = [
+    /outside my scope|outside my wheelhouse|outside my lane/i,
+    /I'm strictly a football/i,
+    /that's outside my expertise|that's not my area/i,
+    /I'm a football coach|I'm a coaching AI/i,
+    /not my wheelhouse|not in my scope/i,
+  ];
+  return refusalPatterns.some(p => p.test(text));
+}
+
+/**
+ * Log a refusal and extract the user's request from history.
+ */
+async function logRefusalIfDetected(
+  finalText: string,
+  userMessage: string,
+  ctx: ToolContext,
+): Promise<void> {
+  if (!detectOutOfScopeRefusal(finalText)) return;
+  try {
+    await logCoachAiRefusal({
+      userRequest: userMessage.slice(0, 500),
+      refusalReason: "out_of_scope",
+      playbookId: ctx.playbookId,
+      sportVariant: ctx.sportVariant,
+      sanctioningBody: ctx.sanctioningBody,
+      gameLevel: ctx.gameLevel,
+      ageDivision: ctx.ageDivision,
+    });
+  } catch {
+    // Don't fail the chat on logging error
+  }
+}
+
 export async function POST(req: Request): Promise<Response> {
   const gate = await loadCallerInfo();
   if (!gate.ok) {
@@ -133,8 +173,9 @@ export async function POST(req: Request): Promise<Response> {
           if (e.type === "text_delta") send("text_delta", { text: e.text });
         });
 
-        // Record usage asynchronously — don't block the response
+        // Log refusal and usage asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
+        logRefusalIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
 
         send("done", { toolCalls: result.toolCalls, text: result.finalText });
       } catch (e) {
