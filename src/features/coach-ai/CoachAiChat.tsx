@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn } from "@/app/actions/coach-ai";
+import {
+  getAiFeedbackOptInAction,
+  setAiFeedbackOptInAction,
+} from "@/app/actions/coach-ai-feedback";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessage } from "./AssistantMessage";
 import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
@@ -85,8 +89,30 @@ export function CoachAiChat({
   const [toolCallsDuringStream, setToolCallsDuringStream] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [usageTick, setUsageTick] = useState(0);
+  const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
+  const [optInPending, setOptInPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Load the user's AI-feedback opt-in status once. NULL → show modal on
+  // first chat use; true/false → never show again. The modal only blocks
+  // the first message — subsequent sends never see it.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await getAiFeedbackOptInAction();
+      if (cancelled) return;
+      setFeedbackOptIn(res.ok ? res.status : "declined");
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function answerOptIn(consenting: boolean) {
+    setOptInPending(true);
+    const res = await setAiFeedbackOptInAction(consenting);
+    setOptInPending(false);
+    if (res.ok) setFeedbackOptIn(consenting ? "consenting" : "declined");
+  }
 
   // Auto-scroll whenever content changes
   useEffect(() => {
@@ -187,7 +213,35 @@ export function CoachAiChat({
   }, [draft, streaming, turns, playbookId, mode]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
+      {feedbackOptIn === "unanswered" && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 px-4">
+          <div className="max-w-sm rounded-2xl bg-surface-raised p-5 shadow-xl ring-1 ring-black/10">
+            <h3 className="text-base font-semibold text-foreground">Help improve Coach AI?</h3>
+            <p className="mt-2 text-sm text-muted">
+              When Coach AI answers from general football knowledge instead of our seeded playbook,
+              we&apos;d like to log the topic of your question so we can fill that gap. We never log
+              your full chat — just the topic + your question + a few details about your playbook
+              context.
+            </p>
+            <p className="mt-2 text-sm text-muted">
+              You can change your mind anytime — just ask Coach AI to update your feedback
+              preference. Details in our{" "}
+              <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                privacy policy
+              </a>.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" disabled={optInPending} onClick={() => void answerOptIn(false)}>
+                No thanks
+              </Button>
+              <Button variant="primary" size="sm" disabled={optInPending} onClick={() => void answerOptIn(true)}>
+                Help improve
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
         {turns.length === 0 && !streaming ? (
           <Empty />

@@ -27,6 +27,7 @@ import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { listSeedFormationsAction } from "@/app/actions/formations";
+import { listCoachAiKbMissesAction } from "@/app/actions/coach-ai-feedback";
 import { SettingsClient } from "./ui";
 
 export default async function SettingsPage() {
@@ -54,6 +55,7 @@ export default async function SettingsPage() {
     mobileEditingEnabled,
     betaFeatures,
     hideOwnerInfoAbout,
+    coachAiKbMissesRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -74,6 +76,7 @@ export default async function SettingsPage() {
     getMobileEditingEnabled(),
     getBetaFeatures(),
     getHideOwnerInfoAbout(),
+    listCoachAiKbMissesAction("unreviewed"),
   ]);
 
   return (
@@ -195,6 +198,8 @@ export default async function SettingsPage() {
         initialSeeds={seedsRes.ok ? seedsRes.formations : []}
         initialBetaFeatures={betaFeatures}
         initialHideOwnerInfoAbout={hideOwnerInfoAbout}
+        initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
+        coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}
       />
     </div>
   );

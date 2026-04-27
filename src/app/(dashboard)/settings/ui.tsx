@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  Brain,
   Check,
   CreditCard,
   FlaskConical,
@@ -23,6 +24,8 @@ import type { LlmProvider } from "@/lib/site/llm-provider";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
+import { CoachAiFeedbackAdminClient } from "@/features/admin/CoachAiFeedbackAdminClient";
+import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
@@ -75,6 +78,7 @@ type Tab =
   | "payments"
   | "integrations"
   | "feedback"
+  | "ai_feedback"
   | "seeds"
   | "beta"
   | "site";
@@ -106,6 +110,8 @@ export function SettingsClient({
   initialSeeds,
   initialBetaFeatures,
   initialHideOwnerInfoAbout,
+  initialCoachAiKbMisses,
+  coachAiKbMissesError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -133,6 +139,8 @@ export function SettingsClient({
   initialSeeds: SavedFormation[];
   initialBetaFeatures: BetaFeatures;
   initialHideOwnerInfoAbout: boolean;
+  initialCoachAiKbMisses: KbMissRow[];
+  coachAiKbMissesError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -145,6 +153,7 @@ export function SettingsClient({
     { value: "payments" as const, label: "Payments", icon: CreditCard },
     { value: "integrations" as const, label: "Integrations", icon: KeyRound },
     { value: "feedback" as const, label: "Feedback", icon: MessageCircle },
+    { value: "ai_feedback" as const, label: "AI Feedback", icon: Brain },
     { value: "seeds" as const, label: "Playbook seeds", icon: Sparkles },
     { value: "beta" as const, label: "Beta features", icon: FlaskConical },
     { value: "site" as const, label: "Site", icon: SettingsIcon },
@@ -348,6 +357,13 @@ export function SettingsClient({
             <p className="text-sm text-red-700 dark:text-red-300">{googleMaps.error}</p>
           )}
         </div>
+      )}
+
+      {tab === "ai_feedback" && (
+        <CoachAiFeedbackAdminClient
+          initialItems={initialCoachAiKbMisses}
+          initialError={coachAiKbMissesError}
+        />
       )}
 
       {tab === "seeds" && (

@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: April 25, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: April 27, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -69,6 +69,18 @@ export default function PrivacyPage() {
               the edit, and (optionally) a note left by the editor. Team coaches
               can review this history and restore prior versions. Deleted plays
               are kept in a 30-day trash before being permanently removed.
+            </li>
+            <li>
+              <strong>Coach AI feedback (opt-in):</strong> if you accept the
+              one-time prompt the first time you use Coach AI, we log the
+              <em> topic</em> of any question Coach AI had to answer from
+              general football knowledge instead of our seeded playbook
+              (e.g. &ldquo;Tampa 2 defense&rdquo;), along with your question
+              text and the playbook context (sport variant, sanctioning body,
+              age division). We use this to decide which topics to add to the
+              knowledge base next. We don&apos;t log the rest of your chat. You
+              can opt out at any time by asking Coach AI to update your
+              preference.
             </li>
           </ul>
           <p className="mt-3">
