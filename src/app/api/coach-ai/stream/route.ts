@@ -82,9 +82,23 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
-/** Detect KB miss from Coach AI's actual statements */
-function detectKbMiss(text: string): boolean {
-  return /the kb doesn't have|kb doesn't have|the kb has no|that's not my specialty|isn't my specialty|not my specialty|outside my.*coaching|that's outside my/i.test(text);
+/** Extract and parse response metadata JSON from the end of the response */
+function extractMetadata(text: string): { metadata: { response_type?: string; reason?: string } | null; cleanText: string } {
+  // Look for JSON object on the last line
+  const lines = text.split('\n');
+  const lastLine = lines[lines.length - 1].trim();
+
+  try {
+    if (lastLine.startsWith('{') && lastLine.endsWith('}')) {
+      const metadata = JSON.parse(lastLine);
+      const cleanText = lines.slice(0, -1).join('\n').trim();
+      return { metadata, cleanText };
+    }
+  } catch {
+    // Not valid JSON, continue with original text
+  }
+
+  return { metadata: null, cleanText: text };
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -139,15 +153,28 @@ export async function POST(req: Request): Promise<Response> {
           if (e.type === "text_delta") send("text_delta", { text: e.text });
         });
 
-        // Record usage and log feedback asynchronously — don't block the response
+        // Record usage asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
 
-        // Log KB miss if Coach AI explicitly says "The KB doesn't have"
-        if (detectKbMiss(result.finalText)) {
+        // Extract and parse response metadata
+        const { metadata, cleanText } = extractMetadata(result.finalText);
+
+        // Log feedback based on explicit categorization
+        if (metadata?.response_type === "kb_miss") {
           logCoachAiKbMiss({
             topic: text.slice(0, 100),
             userQuestion: text.slice(0, 500),
-            reason: "weak_results",
+            reason: (metadata.reason as "weak_results") || "weak_results",
+            playbookId: ctx.playbookId,
+            sportVariant: ctx.sportVariant,
+            sanctioningBody: ctx.sanctioningBody,
+            gameLevel: ctx.gameLevel,
+            ageDivision: ctx.ageDivision,
+          }).catch(() => { /* non-critical */ });
+        } else if (metadata?.response_type === "refusal") {
+          logCoachAiRefusal({
+            userRequest: text.slice(0, 500),
+            refusalReason: (metadata.reason as "out_of_scope") || "out_of_scope",
             playbookId: ctx.playbookId,
             sportVariant: ctx.sportVariant,
             sanctioningBody: ctx.sanctioningBody,
@@ -156,7 +183,7 @@ export async function POST(req: Request): Promise<Response> {
           }).catch(() => { /* non-critical */ });
         }
 
-        send("done", { toolCalls: result.toolCalls, text: result.finalText, playbookChips: result.playbookChips ?? null });
+        send("done", { toolCalls: result.toolCalls, text: cleanText, playbookChips: result.playbookChips ?? null });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         send("error", { message: msg });
