@@ -28,6 +28,7 @@ import {
   type InboxAlert,
   type InboxAlertKind,
   type ResolvedInboxEvent,
+  type ResolvedKind,
 } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 import {
@@ -57,6 +58,7 @@ export function InboxTab({
   const [view, setView] = useState<ViewMode>("pending");
   const [resolved, setResolved] = useState<ResolvedInboxEvent[] | null>(null);
   const [resolvedLoading, setResolvedLoading] = useState(false);
+  const [showRsvps, setShowRsvps] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -311,7 +313,12 @@ export function InboxTab({
           </>
         )
       ) : (
-        <ResolvedList loading={resolvedLoading} events={resolved ?? []} />
+        <ResolvedList
+          loading={resolvedLoading}
+          events={resolved ?? []}
+          showRsvps={showRsvps}
+          onToggleRsvps={() => setShowRsvps((v) => !v)}
+        />
       )}
 
       {view === "pending" && initialActivity.length > 0 && (
@@ -541,10 +548,19 @@ function hourLabel(h: number): string {
 function ResolvedList({
   loading,
   events,
+  showRsvps,
+  onToggleRsvps,
 }: {
   loading: boolean;
   events: ResolvedInboxEvent[];
+  showRsvps: boolean;
+  onToggleRsvps: () => void;
 }) {
+  const rsvpCount = events.filter((e) => e.kind === "rsvp_response").length;
+  const visible = showRsvps
+    ? events
+    : events.filter((e) => e.kind !== "rsvp_response");
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center text-sm text-muted">
@@ -552,49 +568,86 @@ function ResolvedList({
       </div>
     );
   }
-  if (events.length === 0) {
+
+  const filterChip = rsvpCount > 0 && (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <FilterChip
+        active={showRsvps}
+        onClick={onToggleRsvps}
+        label="My RSVPs"
+        count={rsvpCount}
+      />
+    </div>
+  );
+
+  if (visible.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
-        <Inbox className="mx-auto size-8 text-muted" />
-        <h2 className="mt-3 text-base font-bold text-foreground">
-          No resolved items yet
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          Once you approve or reject a request, it'll show up here.
-        </p>
-      </div>
+      <>
+        {filterChip}
+        <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
+          <Inbox className="mx-auto size-8 text-muted" />
+          <h2 className="mt-3 text-base font-bold text-foreground">
+            No resolved items yet
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Once you approve or reject a request, it&apos;ll show up here.
+          </p>
+        </div>
+      </>
     );
   }
   return (
-    <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-      {events.map((e) => (
-        <ResolvedRow key={e.id} event={e} />
-      ))}
-    </ul>
+    <>
+      {filterChip}
+      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+        {visible.map((e) => (
+          <ResolvedRow key={e.id} event={e} />
+        ))}
+      </ul>
+    </>
   );
 }
 
 function ResolvedRow({ event }: { event: ResolvedInboxEvent }) {
+  const isRsvp = event.kind === "rsvp_response";
   const name = event.subjectDisplayName?.trim() || "Unnamed";
-  const approved = event.action === "approved";
   let title: string;
-  if (event.kind === "roster_claim") {
+  if (isRsvp) {
+    const eventTypeLabel =
+      event.detail.eventType === "game"
+        ? "Game"
+        : event.detail.eventType === "practice"
+          ? "Practice"
+          : event.detail.eventType === "scrimmage"
+            ? "Scrimmage"
+            : "Event";
+  const eventTitle = event.detail.eventTitle?.trim() || "Upcoming event";
+    const reply =
+      event.action === "yes" ? "Yes" : event.action === "no" ? "No" : "Maybe";
+    title = `RSVP'd ${reply} — ${eventTypeLabel}: ${eventTitle}`;
+  } else if (event.kind === "roster_claim") {
+    const approved = event.action === "approved";
     const slot = event.detail.rosterLabel?.trim() || "an unclaimed roster spot";
     const jersey = event.detail.jerseyNumber?.trim();
     title = approved
       ? `Linked ${name} to ${slot}${jersey ? ` (#${jersey})` : ""}`
       : `Rejected ${name}'s claim on ${slot}${jersey ? ` (#${jersey})` : ""}`;
   } else if (event.kind === "coach_upgrade") {
+    const approved = event.action === "approved";
     title = approved
       ? `Granted coach access to ${name}`
       : `Denied coach request from ${name}`;
   } else {
+    const approved = event.action === "approved";
     const role = event.detail.role ?? "viewer";
     title = approved
       ? `Approved ${name} as ${role}`
       : `Rejected ${name}'s request to join as ${role}`;
   }
   const byName = event.resolvedByDisplayName?.trim();
+  const href = isRsvp
+    ? `/playbooks/${event.playbookId}?tab=calendar`
+    : `/playbooks/${event.playbookId}?tab=roster`;
   return (
     <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="flex min-w-0 items-start gap-3">
@@ -606,7 +659,7 @@ function ResolvedRow({ event }: { event: ResolvedInboxEvent }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href={`/playbooks/${event.playbookId}?tab=roster`}
+              href={href}
               className="truncate text-xs font-semibold text-muted hover:text-foreground hover:underline"
             >
               {event.playbookName}
@@ -618,25 +671,50 @@ function ResolvedRow({ event }: { event: ResolvedInboxEvent }) {
             </span>
           </div>
           <p className="mt-0.5 truncate text-sm text-foreground">{title}</p>
-          {byName && (
+          {!isRsvp && byName && (
             <p className="mt-0.5 text-xs text-muted">by {byName}</p>
           )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <Link
-          href={`/playbooks/${event.playbookId}?tab=roster`}
+          href={href}
           className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-          title="Open in playbook"
+          title={isRsvp ? "Open in calendar" : "Open in playbook"}
         >
-          <ArrowUpRight className="size-4" />
+          {isRsvp ? <Calendar className="size-4" /> : <ArrowUpRight className="size-4" />}
         </Link>
       </div>
     </li>
   );
 }
 
-function ResolutionBadge({ action }: { action: "approved" | "rejected" }) {
+function ResolutionBadge({
+  action,
+}: {
+  action: ResolvedInboxEvent["action"];
+}) {
+  if (action === "yes") {
+    return (
+      <span className="rounded-full bg-success-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
+        yes
+      </span>
+    );
+  }
+  if (action === "no") {
+    return (
+      <span className="rounded-full bg-danger-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-danger">
+        no
+      </span>
+    );
+  }
+  if (action === "maybe") {
+    return (
+      <span className="rounded-full bg-warning-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+        maybe
+      </span>
+    );
+  }
   const ok = action === "approved";
   return (
     <span
@@ -936,12 +1014,13 @@ function PlaybookAvatar({
   );
 }
 
-function KindBadge({ kind }: { kind: InboxAlertKind }) {
-  const map: Record<InboxAlertKind, { label: string; cls: string }> = {
+function KindBadge({ kind }: { kind: InboxAlertKind | ResolvedKind }) {
+  const map: Record<InboxAlertKind | ResolvedKind, { label: string; cls: string }> = {
     roster_claim: { label: "claim", cls: "bg-primary/10 text-primary" },
     membership: { label: "join", cls: "bg-secondary/10 text-secondary" },
     coach_upgrade: { label: "coach", cls: "bg-warning-light text-warning" },
     rsvp_pending: { label: "rsvp", cls: "bg-success-light text-success" },
+    rsvp_response: { label: "rsvp", cls: "bg-success-light text-success" },
   };
   const { label, cls } = map[kind];
   return (

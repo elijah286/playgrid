@@ -340,10 +340,23 @@ async function buildRsvpPendingAlerts(
   return out;
 }
 
+export type ResolvedKind =
+  | "membership"
+  | "coach_upgrade"
+  | "roster_claim"
+  | "rsvp_response";
+
+export type ResolvedAction =
+  | "approved"
+  | "rejected"
+  | "yes"
+  | "no"
+  | "maybe";
+
 export type ResolvedInboxEvent = {
   id: string;
-  kind: InboxAlertKind;
-  action: "approved" | "rejected";
+  kind: ResolvedKind;
+  action: ResolvedAction;
   playbookId: string;
   playbookName: string;
   playbookLogoUrl: string | null;
@@ -356,6 +369,11 @@ export type ResolvedInboxEvent = {
     jerseyNumber?: string | null;
     role?: "owner" | "editor" | "viewer" | null;
     note?: string | null;
+    eventId?: string | null;
+    eventTitle?: string | null;
+    eventStartsAt?: string | null;
+    eventType?: "practice" | "game" | "scrimmage" | "other" | null;
+    occurrenceDate?: string | null;
   };
 };
 
@@ -385,7 +403,7 @@ export async function listResolvedInboxEventsAction(
 
   type Row = {
     id: string;
-    kind: InboxAlertKind;
+    kind: "membership" | "coach_upgrade" | "roster_claim";
     action: "approved" | "rejected";
     playbook_id: string;
     subject_display_name: string | null;
@@ -443,5 +461,87 @@ export async function listResolvedInboxEventsAction(
       detail: r.detail ?? {},
     });
   }
-  return { ok: true, events };
+
+  // Append the caller's own RSVP responses (newest first) so the user can see
+  // confirmation of their replies. Hidden by default in the UI; the Resolved
+  // view exposes a filter to show them.
+  const { data: rsvpRows } = await supabase
+    .from("playbook_event_rsvps")
+    .select(
+      "event_id, occurrence_date, status, updated_at, playbook_events!inner(id, title, type, playbook_id, playbooks!inner(id, name, logo_url, color, is_archived))",
+    )
+    .eq("user_id", user.id)
+    .eq("playbook_events.playbooks.is_archived", false)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  type RsvpRow = {
+    event_id: string;
+    occurrence_date: string;
+    status: "yes" | "no" | "maybe";
+    updated_at: string;
+    playbook_events:
+      | {
+          id: string;
+          title: string | null;
+          type: "practice" | "game" | "scrimmage" | "other" | null;
+          playbook_id: string;
+          playbooks:
+            | {
+                id: string;
+                name: string;
+                logo_url: string | null;
+                color: string | null;
+              }
+            | {
+                id: string;
+                name: string;
+                logo_url: string | null;
+                color: string | null;
+              }[]
+            | null;
+        }
+      | {
+          id: string;
+          title: string | null;
+          type: "practice" | "game" | "scrimmage" | "other" | null;
+          playbook_id: string;
+          playbooks: unknown;
+        }[]
+      | null;
+  };
+
+  for (const r of (rsvpRows ?? []) as unknown as RsvpRow[]) {
+    const ev = Array.isArray(r.playbook_events) ? r.playbook_events[0] : r.playbook_events;
+    if (!ev) continue;
+    const pb = Array.isArray(ev.playbooks) ? ev.playbooks[0] : ev.playbooks;
+    if (!pb || typeof pb !== "object" || !("id" in pb)) continue;
+    const book = pb as {
+      id: string;
+      name: string;
+      logo_url: string | null;
+      color: string | null;
+    };
+    events.push({
+      id: `rsvp:${r.event_id}:${r.occurrence_date}`,
+      kind: "rsvp_response",
+      action: r.status,
+      playbookId: ev.playbook_id,
+      playbookName: book.name,
+      playbookLogoUrl: book.logo_url,
+      playbookColor: book.color,
+      subjectDisplayName: null,
+      resolvedAt: r.updated_at,
+      resolvedByDisplayName: null,
+      detail: {
+        eventId: ev.id,
+        eventTitle: ev.title,
+        eventType: ev.type,
+        occurrenceDate: r.occurrence_date,
+      },
+    });
+  }
+
+  events.sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
+  return { ok: true, events: events.slice(0, limit) };
 }
