@@ -73,9 +73,9 @@ unit of work.
 - [x] Strategy & tactics (shared via 0134)
 - [x] Coaching techniques (shared via 0135)
 
-### 6. NFHS (high school 11-man tackle)
-- [x] Rules v1 (0099) — has duplicate rows, needs dedupe
-- [ ] Rules v2 expansion (next)
+### 6. NFHS (high school 11-man tackle)  ✅ DONE
+- [x] Rules v1 (0099) — deduped via 0136
+- [x] Rules v2 expansion (0136, dedupe + 20 chunks)
 - [x] Penalties (shared via 0131)
 - [x] Common plays (shared via 0132)
 - [x] Defensive schemes (shared via 0133)
