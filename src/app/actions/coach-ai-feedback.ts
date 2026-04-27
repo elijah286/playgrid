@@ -169,6 +169,14 @@ export async function logCoachAiPositiveFeedbackAction(
   if (!user) return { ok: true }; // Silent fail for anon users
 
   try {
+    // Check opt-in status
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("ai_feedback_optin")
+      .eq("id", user.id)
+      .single();
+    if (!profile?.ai_feedback_optin) return { ok: true }; // User hasn't opted in
+
     const { error } = await supabase.from("coach_ai_positive_feedback").insert({
       user_id: user.id,
       response_text: response_text.slice(0, 5000),
@@ -197,6 +205,14 @@ export async function logCoachAiNegativeFeedbackAction(
   if (!user) return { ok: true }; // Silent fail for anon users
 
   try {
+    // Check opt-in status
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("ai_feedback_optin")
+      .eq("id", user.id)
+      .single();
+    if (!profile?.ai_feedback_optin) return { ok: true }; // User hasn't opted in
+
     const { error } = await supabase.from("coach_ai_negative_feedback").insert({
       user_id: user.id,
       response_text: response_text.slice(0, 5000),
