@@ -1,6 +1,8 @@
 import { searchKb, type KbFilter } from "./retrieve";
 import type { ToolDef } from "./llm";
 
+export type CoachAiMode = "normal" | "admin_training";
+
 export type ToolContext = {
   /** Current playbook id, when chat is anchored to one. */
   playbookId: string | null;
@@ -9,6 +11,10 @@ export type ToolContext = {
   gameLevel: string | null;
   sanctioningBody: string | null;
   ageDivision: string | null;
+  /** True when caller is a site admin. Required for KB write tools. */
+  isAdmin: boolean;
+  /** Active mode — gates which tools are exposed to the LLM. */
+  mode: CoachAiMode;
 };
 
 export type ToolHandler = (
@@ -94,10 +100,22 @@ const search_kb: CoachAiTool = {
   },
 };
 
-export const COACH_AI_TOOLS: CoachAiTool[] = [search_kb];
+const BASE_TOOLS: CoachAiTool[] = [search_kb];
 
-export function toolDefs(): ToolDef[] {
-  return COACH_AI_TOOLS.map((t) => t.def);
+/** Tools exposed for a given mode/auth combo. */
+export function toolsFor(ctx: ToolContext): CoachAiTool[] {
+  const tools: CoachAiTool[] = [...BASE_TOOLS];
+  if (ctx.mode === "admin_training" && ctx.isAdmin) {
+    // Lazy import to avoid cycle at module init.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { KB_ADMIN_TOOLS } = require("./kb-tools") as typeof import("./kb-tools");
+    tools.push(...KB_ADMIN_TOOLS);
+  }
+  return tools;
+}
+
+export function toolDefs(ctx: ToolContext): ToolDef[] {
+  return toolsFor(ctx).map((t) => t.def);
 }
 
 export async function runTool(
@@ -105,7 +123,7 @@ export async function runTool(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
-  const tool = COACH_AI_TOOLS.find((t) => t.def.name === name);
-  if (!tool) return { ok: false, error: `Unknown tool: ${name}` };
+  const tool = toolsFor(ctx).find((t) => t.def.name === name);
+  if (!tool) return { ok: false, error: `Unknown or unavailable tool: ${name}` };
   return tool.handler(input, ctx);
 }

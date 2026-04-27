@@ -18,6 +18,7 @@ import { UsersAdminClient, type AdminUserRow } from "@/features/admin/UsersAdmin
 import { OpenAISettingsClient } from "@/features/admin/OpenAISettingsClient";
 import { ClaudeSettingsClient } from "@/features/admin/ClaudeSettingsClient";
 import { LlmProviderToggleClient } from "@/features/admin/LlmProviderToggleClient";
+import { RagEmbeddingsAdminClient } from "@/features/admin/RagEmbeddingsAdminClient";
 import type { LlmProvider } from "@/lib/site/llm-provider";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
@@ -288,6 +289,8 @@ export function SettingsClient({
           {claude.ok && (
             <LlmProviderToggleClient initial={claude.provider} />
           )}
+
+          <RagEmbeddingsAdminClient />
 
           {claude.ok ? (
             <ClaudeSettingsClient

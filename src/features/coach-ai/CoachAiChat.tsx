@@ -10,7 +10,13 @@ import { CoachAiIcon } from "./CoachAiIcon";
  * Pure chat surface — fills its container. Owners (launcher / fullscreen page)
  * are responsible for sizing and outer chrome (close, fullscreen toggle).
  */
-export function CoachAiChat({ playbookId }: { playbookId?: string | null }) {
+export function CoachAiChat({
+  playbookId,
+  mode = "normal",
+}: {
+  playbookId?: string | null;
+  mode?: "normal" | "admin_training";
+}) {
   const [turns, setTurns] = useState<CoachAiTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
@@ -21,6 +27,12 @@ export function CoachAiChat({ playbookId }: { playbookId?: string | null }) {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns, pending]);
+
+  // Switching modes resets the chat — context from one mode doesn't translate.
+  useEffect(() => {
+    setTurns([]);
+    setError(null);
+  }, [mode]);
 
   function send() {
     const text = draft.trim();
@@ -35,6 +47,7 @@ export function CoachAiChat({ playbookId }: { playbookId?: string | null }) {
         history: prior,
         userMessage: text,
         playbookId: playbookId ?? null,
+        mode,
       });
       if (!res.ok) {
         setError(res.error);

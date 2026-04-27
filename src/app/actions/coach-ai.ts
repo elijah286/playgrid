@@ -7,7 +7,7 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
-import type { ToolContext } from "@/lib/coach-ai/tools";
+import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 
 export type CoachAiTurn =
   | { role: "user"; text: string }
@@ -19,6 +19,8 @@ type ChatRequest = {
   userMessage: string;
   /** Optional playbook to anchor retrieval. */
   playbookId?: string | null;
+  /** "admin_training" only honored if caller is a site admin. */
+  mode?: CoachAiMode;
 };
 
 type ChatResponse =
@@ -31,7 +33,10 @@ type ChatResponse =
     }
   | { ok: false; error: string };
 
-async function assertCoachAiAvailable(): Promise<{ ok: true } | { ok: false; error: string }> {
+async function loadCallerInfo(): Promise<
+  | { ok: true; isAdmin: boolean }
+  | { ok: false; error: string }
+> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -46,10 +51,14 @@ async function assertCoachAiAvailable(): Promise<{ ok: true } | { ok: false; err
   const beta = await getBetaFeatures();
   const available = isBetaFeatureAvailable(beta.coach_ai, { isAdmin, isEntitled: true });
   if (!available) return { ok: false, error: "Coach AI is not enabled for your account." };
-  return { ok: true };
+  return { ok: true, isAdmin };
 }
 
-async function loadToolContext(playbookId: string | null): Promise<ToolContext> {
+async function loadToolContext(
+  playbookId: string | null,
+  isAdmin: boolean,
+  mode: CoachAiMode,
+): Promise<ToolContext> {
   if (!playbookId) {
     return {
       playbookId: null,
@@ -57,6 +66,8 @@ async function loadToolContext(playbookId: string | null): Promise<ToolContext> 
       gameLevel: null,
       sanctioningBody: null,
       ageDivision: null,
+      isAdmin,
+      mode,
     };
   }
   const supabase = await createClient();
@@ -71,6 +82,8 @@ async function loadToolContext(playbookId: string | null): Promise<ToolContext> 
     gameLevel: (data?.game_level as string | null) ?? null,
     sanctioningBody: (data?.sanctioning_body as string | null) ?? null,
     ageDivision: (data?.age_division as string | null) ?? null,
+    isAdmin,
+    mode,
   };
 }
 
@@ -83,14 +96,17 @@ function turnsToHistory(turns: CoachAiTurn[]): ChatMessage[] {
 }
 
 export async function chatCoachAiAction(req: ChatRequest): Promise<ChatResponse> {
-  const gate = await assertCoachAiAvailable();
+  const gate = await loadCallerInfo();
   if (!gate.ok) return { ok: false, error: gate.error };
 
   const text = req.userMessage.trim();
   if (!text) return { ok: false, error: "Empty message." };
 
+  const requestedMode: CoachAiMode = req.mode === "admin_training" ? "admin_training" : "normal";
+  const mode: CoachAiMode = requestedMode === "admin_training" && gate.isAdmin ? "admin_training" : "normal";
+
   try {
-    const ctx = await loadToolContext(req.playbookId ?? null);
+    const ctx = await loadToolContext(req.playbookId ?? null, gate.isAdmin, mode);
     const history: ChatMessage[] = [
       ...turnsToHistory(req.history),
       { role: "user", content: text },
@@ -106,5 +122,81 @@ export async function chatCoachAiAction(req: ChatRequest): Promise<ChatResponse>
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Coach AI failed.";
     return { ok: false, error: msg };
+  }
+}
+
+// ─── Admin: backfill embeddings ──────────────────────────────────────────────
+
+export async function backfillRagEmbeddingsAction(): Promise<
+  | { ok: true; embedded: number; remaining: number }
+  | { ok: false; error: string }
+> {
+  const gate = await loadCallerInfo();
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!gate.isAdmin) return { ok: false, error: "Admin only." };
+
+  try {
+    const { embedText, vectorLiteral } = await import("@/lib/coach-ai/embed");
+    const { createServiceRoleClient } = await import("@/lib/supabase/admin");
+    const admin = createServiceRoleClient();
+
+    const BATCH = 50;
+    const { data: rows, error } = await admin
+      .from("rag_documents")
+      .select("id, title, content")
+      .is("embedding", null)
+      .is("retired_at", null)
+      .limit(BATCH);
+    if (error) return { ok: false, error: error.message };
+    if (!rows || rows.length === 0) {
+      return { ok: true, embedded: 0, remaining: 0 };
+    }
+
+    let embedded = 0;
+    for (const row of rows) {
+      try {
+        const vec = await embedText(`${row.title}\n\n${row.content}`);
+        const { error: upErr } = await admin
+          .from("rag_documents")
+          .update({ embedding: vectorLiteral(vec) })
+          .eq("id", row.id);
+        if (upErr) throw new Error(upErr.message);
+        embedded++;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "embed failed";
+        return { ok: false, error: `Failed on row ${row.id}: ${msg}` };
+      }
+    }
+
+    const { count } = await admin
+      .from("rag_documents")
+      .select("id", { count: "exact", head: true })
+      .is("embedding", null)
+      .is("retired_at", null);
+
+    return { ok: true, embedded, remaining: count ?? 0 };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "backfill failed" };
+  }
+}
+
+export async function ragEmbeddingStatsAction(): Promise<
+  | { ok: true; total: number; missing: number }
+  | { ok: false; error: string }
+> {
+  const gate = await loadCallerInfo();
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!gate.isAdmin) return { ok: false, error: "Admin only." };
+
+  try {
+    const { createServiceRoleClient } = await import("@/lib/supabase/admin");
+    const admin = createServiceRoleClient();
+    const [{ count: total }, { count: missing }] = await Promise.all([
+      admin.from("rag_documents").select("id", { count: "exact", head: true }).is("retired_at", null),
+      admin.from("rag_documents").select("id", { count: "exact", head: true }).is("retired_at", null).is("embedding", null),
+    ]);
+    return { ok: true, total: total ?? 0, missing: missing ?? 0 };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "stats failed" };
   }
 }

@@ -62,7 +62,7 @@ export default async function DashboardLayout({
           touchEnabled={feedbackSettings.touchEnabled}
         />
       )}
-      {coachAiAvailable && <CoachAiLauncher />}
+      {coachAiAvailable && <CoachAiLauncher isAdmin={isAdmin} />}
     </div>
   );
 }
