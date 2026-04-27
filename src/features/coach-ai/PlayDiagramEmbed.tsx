@@ -169,19 +169,19 @@ function DiagramCanvas({ doc, animPositions }: {
   const animatingIds = new Set(animPositions?.keys() ?? []);
 
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border bg-surface-inset">
+    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border" style={{ backgroundColor: "#2D8B4E" }}>
       <svg
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         width="100%" height="100%"
         preserveAspectRatio="none"
       >
-        {/* Field grid lines */}
-        <line x1={vb.x} x2={vb.x + vb.w} y1={losY} y2={losY}
-          stroke="rgba(100,116,139,0.55)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+        {/* Yard markers (dashed white) and LOS (solid dashed white, brighter) */}
         <line x1={vb.x} x2={vb.x + vb.w} y1={fiveY} y2={fiveY}
-          stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+          stroke="rgba(255,255,255,0.30)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
         <line x1={vb.x} x2={vb.x + vb.w} y1={tenY} y2={tenY}
-          stroke="rgba(100,116,139,0.3)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+          stroke="rgba(255,255,255,0.30)" strokeWidth={1} strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        <line x1={vb.x} x2={vb.x + vb.w} y1={losY} y2={losY}
+          stroke="rgba(255,255,255,0.55)" strokeWidth={2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
 
         {/* Routes (always static) */}
         {doc.layers.routes.map((r) => {

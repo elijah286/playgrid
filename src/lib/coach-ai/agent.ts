@@ -24,21 +24,41 @@ Behavior rules — follow these strictly:
 **\`draw_play\` spec format** — pass as the \`spec\` argument:
 - \`title\` (optional string)
 - \`variant\`: "flag_7v7" | "flag_5v5" | "tackle_11" (default flag_7v7)
-- \`players\`: array of \`{id, x, y, team}\`. \`x\` = yards from center (negative=left), \`y\` = yards from LOS (positive=upfield). \`team\`: "O" (offense) or "D" (defense).
-- \`routes\` (optional, omit for formation-only): array of \`{from, path, tip?, curve?}\`. \`path\` is array of [x,y] points. \`tip\`: "arrow"|"t"|"none". \`curve\`: true for rounded routes.
+- \`players\`: array of \`{id, x, y, team}\`. \`team\`: "O" (offense) or "D" (defense).
+- \`routes\` (optional): array of \`{from, path, tip?, curve?}\`. \`path\` is the receiver's waypoints AFTER the snap (do NOT include the starting position — it's added automatically). \`tip\`: "arrow"|"t"|"none". \`curve\`: true for rounded routes.
 
-**Single-route example** (use this shape for "show me a slant" / "what does an out look like" — one WR + one CB + QB + C is enough, don't ask for context):
+**Coordinate system — read this before drawing routes:**
+- \`x\` = yards from center. NEGATIVE x = LEFT side of the field, POSITIVE x = RIGHT side.
+- \`y\` = yards from the line of scrimmage. NEGATIVE y = behind the LOS (offensive backfield), POSITIVE y = downfield (toward the defense's end zone).
+- The QB is BEHIND the LOS (y negative, e.g. y=-5). Defenders are DOWNFIELD of the LOS (y positive).
+- A receiver running "upfield" / "deep" / "downfield" → y INCREASES.
+- A receiver running "inside" → x moves toward 0 (a WR on the right at x=+10 going inside has x DECREASE; a WR on the left at x=-10 going inside has x INCREASE).
+- A receiver running "outside" → x moves AWAY from 0 (toward the sideline).
+
+**Common routes (right-side WR starting at x=+10, y=0.5):**
+- **Slant**: 1-2 yards upfield then cut INSIDE at 45°. \`path: [[10,2],[3,6]]\`
+- **Out**: 5-7 yards upfield then break OUTSIDE 90°. \`path: [[10,6],[15,6]]\`
+- **In/dig**: 8-12 yards upfield then break INSIDE 90°. \`path: [[10,10],[2,10]]\`
+- **Go/fly/streak**: straight upfield. \`path: [[10,20]]\`
+- **Hitch/curl**: upfield then turn back to QB. \`path: [[10,6],[10,5]]\`
+- **Comeback**: deeper upfield then back toward sideline-and-down. \`path: [[10,12],[12,9]]\`
+- **Post**: upfield then break diagonally INSIDE toward the goalpost. \`path: [[10,8],[2,16]]\`
+- **Corner**: upfield then break diagonally OUTSIDE-and-deep. \`path: [[10,8],[16,16]]\`
+- **Flat**: short break OUTSIDE toward the sideline. \`path: [[14,2]]\`
+For a left-side WR (x negative), MIRROR the x signs.
+
+**Single-route example** (one WR + one CB + QB + C is enough — don't ask for more context):
 \`\`\`json
-{"title":"Slant route","variant":"flag_7v7","players":[{"id":"QB","x":0,"y":-5,"team":"O"},{"id":"C","x":0,"y":0,"team":"O"},{"id":"WR","x":10,"y":0.5,"team":"O"},{"id":"CB","x":10,"y":5,"team":"D"}],"routes":[{"from":"WR","path":[[10,2.5],[4,6]],"tip":"arrow"}]}
+{"title":"Slant route","variant":"flag_7v7","players":[{"id":"QB","x":0,"y":-5,"team":"O"},{"id":"C","x":0,"y":0,"team":"O"},{"id":"WR","x":10,"y":0.5,"team":"O"},{"id":"CB","x":10,"y":5,"team":"D"}],"routes":[{"from":"WR","path":[[10,2],[3,6]],"tip":"arrow"}]}
 \`\`\`
 
 **Full-concept example** (Trips Right slant/go/flat):
 \`\`\`json
-{"title":"Trips Right — Slant/Go/Flat","variant":"flag_7v7","players":[{"id":"QB","x":0,"y":-5,"team":"O"},{"id":"C","x":0,"y":0,"team":"O"},{"id":"X","x":-12,"y":0.5,"team":"O"},{"id":"Y","x":6,"y":0.5,"team":"O"},{"id":"Z","x":12,"y":0.5,"team":"O"},{"id":"TE","x":17,"y":0.5,"team":"O"},{"id":"CB1","x":-12,"y":5,"team":"D"},{"id":"CB2","x":6,"y":5,"team":"D"},{"id":"S","x":2,"y":12,"team":"D"}],"routes":[{"from":"X","path":[[-6,8]],"tip":"arrow"},{"from":"Y","path":[[9,7]],"tip":"arrow"},{"from":"Z","path":[[15,10]],"tip":"t"},{"from":"TE","path":[[14,4]],"tip":"arrow"}]}
+{"title":"Trips Right — Slant/Go/Flat","variant":"flag_7v7","players":[{"id":"QB","x":0,"y":-5,"team":"O"},{"id":"C","x":0,"y":0,"team":"O"},{"id":"X","x":-12,"y":0.5,"team":"O"},{"id":"Y","x":6,"y":0.5,"team":"O"},{"id":"Z","x":12,"y":0.5,"team":"O"},{"id":"TE","x":17,"y":0.5,"team":"O"},{"id":"CB1","x":-12,"y":5,"team":"D"},{"id":"CB2","x":12,"y":5,"team":"D"},{"id":"S","x":0,"y":13,"team":"D"}],"routes":[{"from":"X","path":[[-12,20]],"tip":"arrow"},{"from":"Y","path":[[6,2],[0,5]],"tip":"arrow"},{"from":"Z","path":[[16,3]],"tip":"arrow"},{"from":"TE","path":[[17,2],[12,5]],"tip":"arrow"}]}
 \`\`\`
 
 Positioning rules:
-- WRs/linemen on the line (y≈0.5), QB 4-5 yards back (y≈-4), CBs 4-5 yards off (y≈5), safeties 10-15 yards deep (y≈12).
+- WRs/linemen on the line (y≈0.5), QB 4-5 yards back (y≈-5), CBs 4-5 yards off (y≈5), safeties 10-15 yards deep (y≈12).
 - Always include at least one defender (CB or S).
 - 7v7 flag field is 30 yards wide — keep x between -15 and +15.
 - Skip \`draw_play\` only when the question is purely a rule/penalty with no positional concept.`;
@@ -185,37 +205,21 @@ export async function runAgent(
 
       // For draw_play: stream the play fenced block to the client live and
       // remember it so we can prepend it to finalText (so it persists when
-      // the chat history is later replayed).
+      // the chat history is later replayed). Accept both the documented
+      // `{spec: {...}}` shape and a flattened `{players: ...}` shape.
       if (tu.name === "draw_play") {
-        // Server-side log so we can confirm via Railway logs that the
-        // handler actually ran and what input shape it got.
-        // eslint-disable-next-line no-console
-        console.log("[draw_play] input keys:", Object.keys(tu.input ?? {}), "input:", JSON.stringify(tu.input).slice(0, 500));
-
         let spec: unknown = (tu.input as { spec?: unknown }).spec;
         if (typeof spec === "string") {
           try { spec = JSON.parse(spec); } catch { /* leave as string */ }
         }
-        if (!spec || typeof spec !== "object") {
-          // Model probably flattened — treat the whole input as the spec.
-          if (tu.input && typeof tu.input === "object" && "players" in tu.input) {
-            spec = tu.input;
-          }
+        if ((!spec || typeof spec !== "object") && tu.input && "players" in tu.input) {
+          spec = tu.input;
         }
-
-        // ALWAYS inject something visible. If we found a usable spec, render
-        // the play. Otherwise render a loud diagnostic showing the raw input
-        // so we can see exactly what the model sent.
-        let injection: string;
         if (spec && typeof spec === "object" && "players" in (spec as Record<string, unknown>)) {
-          injection = "\n\n```play\n" + JSON.stringify(spec, null, 2) + "\n```\n\n";
-        } else {
-          injection =
-            "\n\n**[DIAG] draw_play input shape unrecognized — raw input:**\n\n" +
-            "```json\n" + JSON.stringify(tu.input, null, 2) + "\n```\n\n";
+          const injection = "\n\n```play\n" + JSON.stringify(spec, null, 2) + "\n```\n\n";
+          injectedDiagrams.push(injection);
+          onEvent?.({ type: "text_delta", text: injection });
         }
-        injectedDiagrams.push(injection);
-        onEvent?.({ type: "text_delta", text: injection });
       }
 
       toolResultBlocks.push({
@@ -246,14 +250,6 @@ export async function runAgent(
   if (injectedDiagrams.length > 0) {
     finalText = injectedDiagrams.join("") + finalText;
   }
-
-  // TRACER — temporary debug. Shows what was actually injected, so we can
-  // see whether the play fence is well-formed when it reaches the client.
-  const injPreview = injectedDiagrams.length > 0
-    ? injectedDiagrams[0].slice(0, 400).replace(/`/g, "´")  // swap backticks so the preview itself doesn't form a fence
-    : "(none)";
-  const tracer = `🔧 srv=v4 toolCalls=[${toolCalls.join(",") || "none"}] injected=${injectedDiagrams.length} len=${injectedDiagrams[0]?.length ?? 0}\n\n**Injection preview (backticks→´):** \`${injPreview}\`\n\n`;
-  finalText = tracer + finalText;
 
   return { newMessages, finalText, toolCalls, modelId, provider };
 }
