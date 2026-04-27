@@ -170,6 +170,8 @@ export type AgentResult = {
   toolCalls: string[];
   modelId: string;
   provider: "openai" | "claude";
+  /** Parsed playbook chips from list_my_playbooks, if called this turn. */
+  playbookChips: Array<{ id: string; name: string; color: string | null; season: string | null }> | null;
 };
 
 const TOOL_STATUS: Record<string, string> = {
@@ -196,8 +198,8 @@ export async function runAgent(
   const toolCalls: string[] = [];
   let modelId = "";
   let provider: "openai" | "claude" = "claude";
-  // Blocks emitted by list_my_playbooks that must appear in the final text.
-  const injectedBlocks: string[] = [];
+  // Chips returned by list_my_playbooks, passed through to the caller.
+  let playbookChips: AgentResult["playbookChips"] = null;
 
   const system = systemPromptFor(ctx);
   const tools = toolDefs(ctx);
@@ -230,11 +232,12 @@ export async function runAgent(
       onEvent?.({ type: "status", text: TOOL_STATUS[tu.name] ?? `Running ${tu.name}…` });
       const r = await runTool(tu.name, tu.input, ctx);
       const resultText = r.ok ? r.result : r.error;
-      // Capture any rendered blocks from list_my_playbooks so we can inject
-      // them into finalText if the LLM forgets to reproduce them.
+      // Capture structured chips from list_my_playbooks for the client to render.
       if (tu.name === "list_my_playbooks" && r.ok) {
-        const blockMatch = /```playbooks[\s\S]*?```/.exec(resultText);
-        if (blockMatch) injectedBlocks.push(blockMatch[0]);
+        const jsonMatch = /```playbooks\n([\s\S]*?)\n```/.exec(resultText);
+        if (jsonMatch) {
+          try { playbookChips = JSON.parse(jsonMatch[1]); } catch { /* ignore */ }
+        }
       }
       toolResultBlocks.push({
         type: "tool_result",
@@ -259,12 +262,5 @@ export async function runAgent(
         .join("\n\n");
   }
 
-  // Prepend any playbook-selection blocks the LLM failed to reproduce.
-  for (const block of injectedBlocks) {
-    if (!finalText.includes("```playbooks")) {
-      finalText = block + "\n\n" + finalText;
-    }
-  }
-
-  return { newMessages, finalText, toolCalls, modelId, provider };
+  return { newMessages, finalText, toolCalls, modelId, provider, playbookChips };
 }

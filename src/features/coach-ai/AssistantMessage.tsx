@@ -13,38 +13,6 @@ function isInternalHref(href: string): boolean {
   return false;
 }
 
-type PlaybookChip = {
-  id: string;
-  name: string;
-  color?: string | null;
-  season?: string | null;
-  variant?: string | null;
-};
-
-function PlaybookButtonList({ json }: { json: string }) {
-  let items: PlaybookChip[] = [];
-  try { items = JSON.parse(json); } catch { return null; }
-  if (!Array.isArray(items) || items.length === 0) return null;
-
-  return (
-    <div className="my-2 flex flex-col gap-1.5">
-      {items.map((pb) => {
-        const bg = pb.color ?? "#134e2a";
-        const label = [pb.name, pb.season].filter(Boolean).join(" · ");
-        return (
-          <Link
-            key={pb.id}
-            href={`/playbooks/${pb.id}?cal_from=1&cal_team=${encodeURIComponent(pb.name)}`}
-            style={{ backgroundColor: bg }}
-            className="flex items-center rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-75"
-          >
-            {label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
 
 function FootballDiagram({ text }: { text: string }) {
   const lines = text.trimEnd().split("\n");
@@ -106,7 +74,6 @@ const components: Components = {
 
     if (lang === "play") return <PlayDiagramEmbed json={raw} />;
     if (lang === "diagram") return <FootballDiagram text={raw} />;
-    if (lang === "playbooks") return <PlaybookButtonList json={raw} />;
 
     // Suppress empty code fences — they render as a thin grey pill artifact,
     // usually from the model truncating mid-diagram or emitting ``` ``` alone.

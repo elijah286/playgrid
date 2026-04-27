@@ -9,9 +9,11 @@ import {
 } from "@/lib/site/beta-features-config";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 
+export type PlaybookChip = { id: string; name: string; color: string | null; season: string | null };
+
 export type CoachAiTurn =
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string; toolCalls: string[] };
+  | { role: "assistant"; text: string; toolCalls: string[]; playbookChips?: PlaybookChip[] | null };
 
 type ChatRequest = {
   /** Prior turns from the UI (no tool internals — just user/assistant text). */

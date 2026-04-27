@@ -218,7 +218,7 @@ export async function POST(req: Request): Promise<Response> {
         logRefusalIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
         logKbMissIfDetected(result.finalText, text, ctx).catch(() => { /* non-critical */ });
 
-        send("done", { toolCalls: result.toolCalls, text: result.finalText });
+        send("done", { toolCalls: result.toolCalls, text: result.finalText, playbookChips: result.playbookChips ?? null });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         send("error", { message: msg });

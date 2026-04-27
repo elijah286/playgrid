@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
-import type { CoachAiTurn } from "@/app/actions/coach-ai";
+import type { CoachAiTurn, PlaybookChip } from "@/app/actions/coach-ai";
+import Link from "next/link";
 import {
   getAiFeedbackOptInAction,
   setAiFeedbackOptInAction,
@@ -220,9 +221,10 @@ export function CoachAiChat({
         if (event === "done") {
           const finalText = (payload.text as string | undefined) || accumulated;
           const finalToolCalls = (payload.toolCalls as string[] | undefined) ?? seenToolCalls;
+          const chips = (payload.playbookChips as PlaybookChip[] | null | undefined) ?? null;
           setTurns((cur) => [
             ...cur,
-            { role: "assistant", text: finalText, toolCalls: finalToolCalls },
+            { role: "assistant", text: finalText, toolCalls: finalToolCalls, playbookChips: chips },
           ]);
           setUsageTick((n) => n + 1);
           break;
@@ -291,6 +293,20 @@ export function CoachAiChat({
                     </div>
                   ) : (
                     <div className="min-w-0 flex-1">
+                      {t.role === "assistant" && t.playbookChips && t.playbookChips.length > 0 && (
+                        <div className="mb-2 flex flex-col gap-1.5">
+                          {t.playbookChips.map((pb) => (
+                            <Link
+                              key={pb.id}
+                              href={`/playbooks/${pb.id}?cal_from=1&cal_team=${encodeURIComponent(pb.name)}`}
+                              style={{ backgroundColor: pb.color ?? "#134e2a" }}
+                              className="flex items-center rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-75"
+                            >
+                              {[pb.name, pb.season].filter(Boolean).join(" · ")}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
                       <AssistantMessageWithFeedback
                         text={t.text}
                         onThumbsUp={() =>
