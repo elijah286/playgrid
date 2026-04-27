@@ -350,6 +350,18 @@ function PlaybookDetailClientInner({
   const [tab, setTab] = useState<
     "plays" | "formations" | "roster" | "games" | "calendar"
   >(initialTab);
+
+  // Re-sync tab when ?tab= changes mid-mount — e.g. clicking an "Open calendar"
+  // link Coach Cal emitted while the user is already on this playbook page.
+  // Without this, useState's initial value sticks and the tab doesn't move.
+  useEffect(() => {
+    const t = searchParams?.get("tab");
+    if (t === "plays" || t === "formations" || t === "roster" || t === "games" || t === "calendar") {
+      setTab(t);
+    } else if (t === "staff") {
+      setTab("roster");
+    }
+  }, [searchParams]);
   const [calendarPending, setCalendarPending] = useState(
     initialCalendarRsvpPending,
   );
