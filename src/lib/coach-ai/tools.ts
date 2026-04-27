@@ -102,7 +102,42 @@ const search_kb: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb];
+const draw_play: CoachAiTool = {
+  def: {
+    name: "draw_play",
+    description:
+      "Render a play/formation/route diagram in the chat. Call this WHENEVER the user asks about anything visual " +
+      "(a route, formation, coverage, scheme, concept) or uses words like show/draw/diagram/illustrate/look like. " +
+      "The diagram appears in chat immediately. After calling this, continue with a brief prose explanation.",
+    input_schema: {
+      type: "object",
+      properties: {
+        spec: {
+          type: "object",
+          description:
+            "Play diagram spec. Required: players (array of {id, x, y, team}). " +
+            "Optional: title, variant ('flag_7v7'|'flag_5v5'|'tackle_11', default flag_7v7), routes (array of {from, path, tip?, curve?}). " +
+            "Coords: x = yards from center (negative=left), y = yards from LOS (positive=upfield). team: 'O' (offense) or 'D' (defense). " +
+            "tip: 'arrow'|'t'|'none'. For a single-route demo, use 1 WR + 1 CB + QB + C.",
+        },
+      },
+      required: ["spec"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input) {
+    if (!input || typeof input !== "object" || !("spec" in input)) {
+      return { ok: false, error: "draw_play requires a 'spec' object." };
+    }
+    const spec = (input as { spec: unknown }).spec;
+    if (!spec || typeof spec !== "object") {
+      return { ok: false, error: "'spec' must be an object." };
+    }
+    return { ok: true, result: "Diagram rendered to the chat. Now continue with a brief prose explanation — do NOT repeat the spec as text." };
+  },
+};
+
+const BASE_TOOLS: CoachAiTool[] = [search_kb, draw_play];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {
