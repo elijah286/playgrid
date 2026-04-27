@@ -6,7 +6,6 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
-import { logCoachAiKbMiss, logCoachAiRefusal } from "@/lib/coach-ai/feedback-log";
 
 type StreamRequest = {
   history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
@@ -82,28 +81,6 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
-/** Extract and parse response metadata JSON from the end of the response */
-function extractMetadata(text: string): { metadata: { response_type?: string; reason?: string } | null; cleanText: string } {
-  // Look for Coach AI's metadata JSON (must have response_type field) on the last line
-  const lines = text.split('\n');
-  const lastLine = lines[lines.length - 1].trim();
-
-  try {
-    if (lastLine.startsWith('{') && lastLine.endsWith('}')) {
-      const parsed = JSON.parse(lastLine);
-      // Only treat it as metadata if it has response_type field (Coach AI's format)
-      if (parsed.response_type) {
-        const cleanText = lines.slice(0, -1).join('\n').trim();
-        return { metadata: parsed, cleanText };
-      }
-    }
-  } catch {
-    // Not valid JSON, continue with original text
-  }
-
-  return { metadata: null, cleanText: text };
-}
-
 export async function POST(req: Request): Promise<Response> {
   const gate = await loadCallerInfo();
   if (!gate.ok) {
@@ -159,34 +136,10 @@ export async function POST(req: Request): Promise<Response> {
         // Record usage asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
 
-        // Extract and parse response metadata
-        const { metadata, cleanText } = extractMetadata(result.finalText);
-
-        // Log feedback based on explicit categorization
-        if (metadata?.response_type === "kb_miss") {
-          logCoachAiKbMiss({
-            topic: text.slice(0, 100),
-            userQuestion: text.slice(0, 500),
-            reason: (metadata.reason as "weak_results") || "weak_results",
-            playbookId: ctx.playbookId,
-            sportVariant: ctx.sportVariant,
-            sanctioningBody: ctx.sanctioningBody,
-            gameLevel: ctx.gameLevel,
-            ageDivision: ctx.ageDivision,
-          }).catch(() => { /* non-critical */ });
-        } else if (metadata?.response_type === "refusal") {
-          logCoachAiRefusal({
-            userRequest: text.slice(0, 500),
-            refusalReason: (metadata.reason as "out_of_scope") || "out_of_scope",
-            playbookId: ctx.playbookId,
-            sportVariant: ctx.sportVariant,
-            sanctioningBody: ctx.sanctioningBody,
-            gameLevel: ctx.gameLevel,
-            ageDivision: ctx.ageDivision,
-          }).catch(() => { /* non-critical */ });
-        }
-
-        send("done", { toolCalls: result.toolCalls, text: cleanText, playbookChips: result.playbookChips ?? null });
+        // KB-miss + refusal logging now happens via the silent flag_outside_kb
+        // and flag_refusal tools the agent calls directly — no post-hoc text
+        // parsing needed.
+        send("done", { toolCalls: result.toolCalls, text: result.finalText, playbookChips: result.playbookChips ?? null });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         send("error", { message: msg });

@@ -11,19 +11,15 @@ You help coaches with:
 - Strategic Q&A grounded in the user's playbook when possible.
 
 Behavior rules — follow these strictly:
-1. **Ground answers in the knowledge base.** Whenever a user asks about a rule, formation, or play concept, call the \`search_kb\` tool first. Do not invent rules. If the KB has no answer, say so clearly.
+1. **Ground rules-and-penalties answers in the knowledge base.** When the user asks about a rule, penalty, sanctioning-body specific (NFL Flag / Pop Warner / NFHS) detail, or anything where the wrong answer could cost a coach a game — call \`search_kb\` first and answer from what you find. Do not invent rules. For general football concepts (route names, formation shapes, coverage descriptions, drills, fundamentals, terminology), still call \`search_kb\` to surface any seeded depth, but if it doesn't return a strong hit you should STILL ANSWER from your football knowledge and draw the diagram. **NEVER tell the user "the KB doesn't have this" or "I don't have a specific entry on X" or anything that erodes their confidence in the answer — just answer.** The single exception is actual rule/penalty questions where the official wording matters and you'd otherwise be guessing — there a "double-check against your league's rulebook" disclaimer is appropriate. **Whenever you fall back to general knowledge instead of KB hits, FIRST call \`flag_outside_kb\` (silent — the user never sees it) so the admin can see which topics still need to be seeded.** Call it once per turn, before composing your reply.
 2. **Ask before assuming.** If the user's game variant, age division, or sanctioning body is ambiguous and matters for the answer, ask one short clarifying question before calling tools.
 3. **Cite what you used.** When you answer from KB hits, briefly mention which docs you drew from (titles or topic).
 4. **Flag uncertainty.** Most KB entries are seed data marked \`needs_review\` — if your answer rests on those, note that the rule wording should be double-checked against the official source.
 5. **Stay terse.** Coaches are busy. Default to short, direct answers. Use bullets only when listing.
 6. **No legal/medical advice.** For injury protocol or liability questions, recommend the coach consult their league or sanctioning body.
-7. **ALWAYS include response metadata at the end.** Every final response MUST end with a JSON object on its own line that categorizes the response:
-   - **Normal response (you have KB content):** \`{"response_type": "normal"}\`
-   - **Refusal (question is out-of-scope):** \`{"response_type": "refusal", "reason": "out_of_scope"}\`
-   - **KB miss (you lack specific content):** \`{"response_type": "kb_miss", "reason": "weak_results"}\`
-   - This metadata is REQUIRED. Do not omit it. The system strips it before showing to the user, so it won't appear in the chat. It's used for feedback logging.
-   - **Important:** Only add metadata to your FINAL response text, not to tool results or intermediate steps. Tool calls are separate from this requirement.
-8. **Draw interactive diagrams for formations and plays.** Whenever you explain a formation, play concept, route tree, or defensive scheme, include a fenced code block with language \`play\` containing a JSON diagram spec. The app renders it as an animated SVG play diagram with Play/Pause controls.
+7. **You CAN schedule practices, games, scrimmages, and any other team event.** Scheduling is a first-class capability of this app — calendar events live ON each playbook. **NEVER refuse a scheduling request, never call it "outside your wheelhouse," and never tell the coach to use Google Calendar / TeamSnap / their league platform.** This is the league platform. If the chat isn't anchored to a playbook, call \`list_my_playbooks\` immediately so the coach can pick a team — buttons render automatically above your reply (see "Scheduling and playbook selection" below). Once anchored, ask for the event details you still need (date, time, duration, recurrence) and confirm before saving.
+8. **When you must refuse a request, silently log it via \`flag_refusal\` BEFORE your refusal message.** This includes: missing playbook context, permission denied, invalid input, feature unavailable, OR if the request is outside your scope (entertainment, trivia, general non-football). The user does NOT see the tool call. Examples: coach asks "what's the best TV show for kids?" → flag_refusal as "out_of_scope", then briefly explain you focus on football strategy; coach lacks permission to edit the anchored playbook → flag_refusal as "permission_denied", then explain who can make this change.
+9. **Draw interactive diagrams for formations and plays.** Whenever you explain a formation, play concept, route tree, or defensive scheme, include a fenced code block with language \`play\` containing a JSON diagram spec. The app renders it as an animated SVG play diagram with Play/Pause controls.
 
 JSON schema:
 \`\`\`
@@ -182,6 +178,7 @@ export type AgentResult = {
 
 const TOOL_STATUS: Record<string, string> = {
   search_kb:          "Searching knowledge base…",
+  list_my_playbooks:  "Loading your playbooks…",
   list_kb_topics:     "Browsing topics…",
   get_kb_revisions:   "Reading revision history…",
   add_kb_entry:       "Saving entry…",
@@ -191,7 +188,15 @@ const TOOL_STATUS: Record<string, string> = {
   add_playbook_note:  "Saving note…",
   edit_playbook_note: "Updating note…",
   retire_playbook_note: "Retiring note…",
+  list_plays:         "Reading plays…",
+  get_play:           "Fetching play…",
+  update_play:        "Saving play…",
+  // flag_outside_kb + flag_refusal are silent (intentionally no entry —
+  // skipped before the status line is emitted, see runAgent).
 };
+
+/** Silent tools — these never surface as a tool-chip or status to the user. */
+const SILENT_TOOLS = new Set(["flag_outside_kb", "flag_refusal"]);
 
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
 export async function runAgent(
@@ -233,9 +238,16 @@ export async function runAgent(
 
     const toolResultBlocks: ContentBlock[] = [];
     for (const tu of toolUses) {
-      toolCalls.push(tu.name);
-      onEvent?.({ type: "tool_call", name: tu.name });
-      onEvent?.({ type: "status", text: TOOL_STATUS[tu.name] ?? `Running ${tu.name}…` });
+      // Silent tools (flag_outside_kb, flag_refusal) are server-side logs.
+      // Don't surface them via tool-chip rows or status — that would
+      // advertise "the AI fell back / is refusing," eroding the confidence
+      // we explicitly preserve in rule 1.
+      const silent = SILENT_TOOLS.has(tu.name);
+      if (!silent) {
+        toolCalls.push(tu.name);
+        onEvent?.({ type: "tool_call", name: tu.name });
+        onEvent?.({ type: "status", text: TOOL_STATUS[tu.name] ?? `Running ${tu.name}…` });
+      }
       const r = await runTool(tu.name, tu.input, ctx);
       const resultText = r.ok ? r.result : r.error;
       // Capture structured chips from list_my_playbooks for the client to render.

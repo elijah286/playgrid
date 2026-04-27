@@ -166,74 +166,107 @@ const list_my_playbooks: CoachAiTool = {
   },
 };
 
-const log_feedback: CoachAiTool = {
+const flag_outside_kb: CoachAiTool = {
   def: {
-    name: "log_feedback",
+    name: "flag_outside_kb",
     description:
-      "Explicitly log feedback about this response. Call when you're refusing an out-of-scope request " +
-      "or when you realize the KB doesn't have content for what the user asked. This helps us improve.",
+      "Silently log when you had to answer from general football knowledge instead of the seeded knowledge base. " +
+      "Call this BEFORE composing your reply, every time the user's question wasn't well-covered by search_kb hits " +
+      "(no matches, weak matches, or matches that don't actually answer the question). The user does NOT see this " +
+      "tool — never mention to them that the KB was missing the answer. This feeds the admin AI Feedback queue so " +
+      "we know which topics to seed next.",
     input_schema: {
       type: "object",
       properties: {
-        type: {
-          type: "string",
-          enum: ["refusal", "kb_miss"],
-          description: "Type of feedback: 'refusal' for out-of-scope requests, 'kb_miss' for missing KB content.",
-        },
+        topic: { type: "string", description: "Short topic label, e.g. \"Tampa 2 defense\", \"trips bunch\"." },
+        user_question: { type: "string", description: "The coach's question, verbatim or close to it." },
         reason: {
           type: "string",
-          enum: ["out_of_scope", "weak_results"],
-          description: "Detailed reason for the refusal or KB miss.",
-        },
-        user_request: {
-          type: "string",
-          description: "The user's request or question (what prompted this feedback).",
+          enum: ["no_results", "weak_results", "irrelevant_results", "concept_not_seeded"],
+          description: "Why you fell back to general knowledge.",
         },
       },
-      required: ["type", "reason", "user_request"],
+      required: ["topic", "user_question", "reason"],
       additionalProperties: false,
     },
   },
-  handler: async (input, ctx) => {
-    const type = input.type as string;
-    const reason = input.reason as string;
-    const userRequest = String(input.user_request || "").slice(0, 500);
-
+  async handler(input, ctx) {
+    const topic = typeof input.topic === "string" ? input.topic.trim().slice(0, 200) : "";
+    const userQuestion = typeof input.user_question === "string" ? input.user_question.trim().slice(0, 2000) : "";
+    const reason = typeof input.reason === "string" ? input.reason : "no_results";
+    if (!topic || !userQuestion) return { ok: true, result: "skipped (empty)" };
     try {
-      if (type === "refusal") {
-        await logCoachAiRefusal({
-          userRequest,
-          refusalReason: reason as "out_of_scope",
-          playbookId: ctx.playbookId,
-          sportVariant: ctx.sportVariant,
-          sanctioningBody: ctx.sanctioningBody,
-          gameLevel: ctx.gameLevel,
-          ageDivision: ctx.ageDivision,
-        });
-        return { ok: true, result: "Refusal logged." };
-      } else if (type === "kb_miss") {
-        await logCoachAiKbMiss({
-          topic: userRequest.slice(0, 100),
-          userQuestion: userRequest,
-          reason: reason as "weak_results",
-          playbookId: ctx.playbookId,
-          sportVariant: ctx.sportVariant,
-          sanctioningBody: ctx.sanctioningBody,
-          gameLevel: ctx.gameLevel,
-          ageDivision: ctx.ageDivision,
-        });
-        return { ok: true, result: "KB miss logged." };
-      }
-
-      return { ok: false, error: "Invalid feedback type" };
+      await logCoachAiKbMiss({
+        topic,
+        userQuestion,
+        reason,
+        playbookId: ctx.playbookId,
+        sportVariant: ctx.sportVariant,
+        sanctioningBody: ctx.sanctioningBody,
+        gameLevel: ctx.gameLevel,
+        ageDivision: ctx.ageDivision,
+      });
+      return { ok: true, result: "logged" };
     } catch (e) {
-      // Don't fail on logging error
-      return { ok: true, result: "Feedback noted (logging failed silently)." };
+      const msg = e instanceof Error ? e.message : "log failed";
+      return { ok: true, result: `skipped (${msg})` };
     }
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, log_feedback];
+const flag_refusal: CoachAiTool = {
+  def: {
+    name: "flag_refusal",
+    description:
+      "Silently log when you must refuse a coach's request. Call this BEFORE your refusal message any time you " +
+      "cannot fulfill what the coach asked for: missing playbook context, permission denied, invalid input, " +
+      "feature unavailable, OR when the request is outside your scope (entertainment, trivia, general non-football). " +
+      "The user does NOT see this tool — never mention it. This feeds the admin feedback queue so we know which " +
+      "features need rework or what users keep asking about.",
+    input_schema: {
+      type: "object",
+      properties: {
+        user_request: { type: "string", description: "What the coach asked for, verbatim or close." },
+        refusal_reason: {
+          type: "string",
+          enum: [
+            "playbook_required",
+            "permission_denied",
+            "invalid_input",
+            "feature_unavailable",
+            "tooling_error",
+            "out_of_scope",
+          ],
+          description: "Why the request cannot be fulfilled.",
+        },
+      },
+      required: ["user_request", "refusal_reason"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const userRequest = typeof input.user_request === "string" ? input.user_request.trim().slice(0, 2000) : "";
+    const refusalReason = typeof input.refusal_reason === "string" ? input.refusal_reason : "tooling_error";
+    if (!userRequest) return { ok: true, result: "skipped (empty)" };
+    try {
+      await logCoachAiRefusal({
+        userRequest,
+        refusalReason,
+        playbookId: ctx.playbookId,
+        sportVariant: ctx.sportVariant,
+        sanctioningBody: ctx.sanctioningBody,
+        gameLevel: ctx.gameLevel,
+        ageDivision: ctx.ageDivision,
+      });
+      return { ok: true, result: "logged" };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "log failed";
+      return { ok: true, result: `skipped (${msg})` };
+    }
+  },
+};
+
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {
