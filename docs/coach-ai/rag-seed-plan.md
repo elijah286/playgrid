@@ -39,7 +39,8 @@ unit of work.
 - [x] Coaching techniques (0123, 16 chunks)
 
 ### 2. Flag 7v7
-- [x] Rules v1 (0096, 28 chunks)
+- [x] Rules v1 (0096, deduped to 14)
+- [x] Rules v2 expansion (0124, 25 chunks)
 - [ ] Rules v2 expansion
 - [ ] Penalties
 - [ ] Common plays
