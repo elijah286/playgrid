@@ -6,6 +6,9 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import {
   getBetaFeatures,
   setBetaFeatureScope,
+  getBetaFeatureAllowlistEmails,
+  addEmailToAllowlist,
+  removeEmailFromAllowlist,
   type BetaFeatureKey,
   type BetaFeatureScope,
   type BetaFeatures,
@@ -57,6 +60,106 @@ export async function setBetaFeatureScopeAction(
     return {
       ok: false as const,
       error: e instanceof Error ? e.message : "Save failed.",
+    };
+  }
+}
+
+export async function getBetaFeatureAllowlistAction(feature: BetaFeatureKey) {
+  if (!hasSupabaseEnv()) {
+    return { ok: true as const, emails: [] };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") {
+    return { ok: false as const, error: "Forbidden." };
+  }
+
+  try {
+    const emails = await getBetaFeatureAllowlistEmails(feature);
+    return { ok: true as const, emails };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Failed to fetch allowlist.",
+    };
+  }
+}
+
+export async function addEmailToAllowlistAction(
+  feature: BetaFeatureKey,
+  email: string,
+) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") {
+    return { ok: false as const, error: "Forbidden." };
+  }
+
+  try {
+    await addEmailToAllowlist(feature, email, user.id);
+    const emails = await getBetaFeatureAllowlistEmails(feature);
+    revalidatePath("/", "layout");
+    return { ok: true as const, emails };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Failed to add email.",
+    };
+  }
+}
+
+export async function removeEmailFromAllowlistAction(
+  feature: BetaFeatureKey,
+  email: string,
+) {
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") {
+    return { ok: false as const, error: "Forbidden." };
+  }
+
+  try {
+    await removeEmailFromAllowlist(feature, email);
+    const emails = await getBetaFeatureAllowlistEmails(feature);
+    revalidatePath("/", "layout");
+    return { ok: true as const, emails };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Failed to remove email.",
     };
   }
 }

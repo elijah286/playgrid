@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useToast } from "@/components/ui";
-import { setBetaFeatureScopeAction } from "@/app/actions/admin-beta-features";
+import {
+  setBetaFeatureScopeAction,
+  getBetaFeatureAllowlistAction,
+  addEmailToAllowlistAction,
+  removeEmailFromAllowlistAction,
+} from "@/app/actions/admin-beta-features";
 import type {
   BetaFeatureKey,
   BetaFeatureScope,
@@ -68,6 +73,7 @@ const SCOPE_OPTIONS: { value: BetaFeatureScope; label: string; hint: string }[] 
   { value: "off", label: "Off", hint: "Hidden from everyone" },
   { value: "me", label: "Only me", hint: "Site admins only" },
   { value: "all", label: "Everyone entitled", hint: "All coaches" },
+  { value: "custom", label: "Custom emails", hint: "Specific users only" },
 ];
 
 export function BetaFeaturesAdminClient({
@@ -78,6 +84,9 @@ export function BetaFeaturesAdminClient({
   const { toast } = useToast();
   const [features, setFeatures] = useState<BetaFeatures>(initialFeatures);
   const [pendingKey, setPendingKey] = useState<BetaFeatureKey | null>(null);
+  const [allowlists, setAllowlists] = useState<Record<BetaFeatureKey, string[]>>({});
+  const [expandedFeature, setExpandedFeature] = useState<BetaFeatureKey | null>(null);
+  const [newEmail, setNewEmail] = useState<Record<BetaFeatureKey, string>>({});
   const [, startTransition] = useTransition();
 
   function changeScope(key: BetaFeatureKey, scope: BetaFeatureScope) {
@@ -95,6 +104,48 @@ export function BetaFeaturesAdminClient({
       }
       setFeatures(res.features);
       toast("Beta feature updated.", "success");
+      // Load allowlist when switching to custom scope
+      if (scope === "custom") {
+        loadAllowlist(key);
+      }
+    });
+  }
+
+  async function loadAllowlist(key: BetaFeatureKey) {
+    const res = await getBetaFeatureAllowlistAction(key);
+    if (res.ok) {
+      setAllowlists({ ...allowlists, [key]: res.emails });
+      setExpandedFeature(key);
+    } else {
+      toast(res.error, "error");
+    }
+  }
+
+  async function addEmail(key: BetaFeatureKey) {
+    const email = newEmail[key]?.trim() || "";
+    if (!email) return;
+
+    startTransition(async () => {
+      const res = await addEmailToAllowlistAction(key, email);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setAllowlists({ ...allowlists, [key]: res.emails });
+      setNewEmail({ ...newEmail, [key]: "" });
+      toast("Email added to allowlist.", "success");
+    });
+  }
+
+  async function removeEmail(key: BetaFeatureKey, email: string) {
+    startTransition(async () => {
+      const res = await removeEmailFromAllowlistAction(key, email);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setAllowlists({ ...allowlists, [key]: res.emails });
+      toast("Email removed from allowlist.", "success");
     });
   }
 
@@ -103,11 +154,13 @@ export function BetaFeaturesAdminClient({
       <p className="text-sm text-muted">
         Toggle in-development features. &ldquo;Only me&rdquo; lets you test in production
         without exposing it to other users. &ldquo;Everyone entitled&rdquo; turns it on for
-        all coaches.
+        all coaches. &ldquo;Custom emails&rdquo; enables it for specific users only.
       </p>
       {FEATURES.map((f) => {
         const current = features[f.key];
         const isPending = pendingKey === f.key;
+        const isExpanded = expandedFeature === f.key;
+        const emails = allowlists[f.key] ?? [];
         return (
           <div
             key={f.key}
@@ -160,6 +213,60 @@ export function BetaFeaturesAdminClient({
                 })}
               </div>
             </div>
+            {current === "custom" && (
+              <div className="mt-4 border-t border-border pt-4">
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      placeholder="email@example.com"
+                      value={newEmail[f.key] || ""}
+                      onChange={(e) =>
+                        setNewEmail({ ...newEmail, [f.key]: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") addEmail(f.key);
+                      }}
+                      disabled={isPending}
+                      className="flex-1 rounded border border-border bg-surface px-2 py-1.5 text-xs placeholder-muted disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addEmail(f.key)}
+                      disabled={isPending || !newEmail[f.key]?.trim()}
+                      className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {emails.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted">
+                        Allowed emails ({emails.length}):
+                      </p>
+                      <div className="space-y-1">
+                        {emails.map((email) => (
+                          <div
+                            key={email}
+                            className="flex items-center justify-between gap-2 rounded bg-surface px-2 py-1.5"
+                          >
+                            <span className="text-xs text-foreground">{email}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeEmail(f.key, email)}
+                              disabled={isPending}
+                              className="text-xs text-destructive hover:underline disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
