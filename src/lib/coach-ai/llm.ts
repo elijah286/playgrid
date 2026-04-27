@@ -91,8 +91,9 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   if (!opts.onTextDelta) {
     const text = await res.text();
     const json = JSON.parse(text) as { content: ContentBlock[]; stop_reason: string; model: string };
+    const cleaned = json.content.filter((b) => b.type !== "text" || b.text.length > 0);
     return {
-      message: { role: "assistant", content: json.content },
+      message: { role: "assistant", content: cleaned },
       stopReason: normalizeStopReason(json.stop_reason),
       provider: "claude",
       modelId: json.model,
@@ -145,7 +146,9 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
       }
       if (type === "content_block_stop" && cur) {
         if (cur.type === "text") {
-          blocks.push({ type: "text", text: cur.text });
+          // Skip empty text blocks — Anthropic rejects them on the next turn
+          // with "text content blocks must be non-empty".
+          if (cur.text.length > 0) blocks.push({ type: "text", text: cur.text });
         } else {
           let input: Record<string, unknown> = {};
           try { input = JSON.parse(cur._json) as Record<string, unknown>; } catch { /* empty input */ }

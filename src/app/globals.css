@@ -136,6 +136,25 @@ body {
   }
 }
 
+/* iOS Safari zooms in on focus when an input's font-size is < 16px, which
+ * expands the page horizontally and chops off the right side of layouts.
+ * Force a 16px minimum on all text-entry controls on small viewports.
+ * Desktop styles are unaffected. */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="password"],
+  input:not([type]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
