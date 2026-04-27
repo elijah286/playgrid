@@ -42,15 +42,15 @@ unit of work.
 - [x] Rules v1 (0096, deduped to 14)
 - [x] Rules v2 expansion (0124, 25 chunks)
 - [ ] Rules v2 expansion
-- [ ] Penalties
-- [ ] Common plays
+- [x] Penalties (0125, 20 chunks)
+- [x] Common plays (0126, 21 chunks)
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
 - [ ] Coaching techniques
 
 ### 3. Flag 4v4
 - [x] Rules v1 (0103, 30 chunks)
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
@@ -59,7 +59,7 @@ unit of work.
 ### 4. Pop Warner (tackle)
 - [x] Rules v1 (0097)
 - [ ] Rules v2 expansion
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
@@ -68,7 +68,7 @@ unit of work.
 ### 5. AYF (American Youth Football, tackle)
 - [x] Rules v1 (0098)
 - [ ] Rules v2 expansion
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
@@ -77,7 +77,7 @@ unit of work.
 ### 6. NFHS (high school 11-man tackle)
 - [x] Rules v1 (0099)
 - [ ] Rules v2 expansion
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
@@ -86,7 +86,7 @@ unit of work.
 ### 7. 6-man tackle
 - [x] Rules v1 (0100)
 - [ ] Rules v2 expansion
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
@@ -95,7 +95,7 @@ unit of work.
 ### 8. 8-man tackle
 - [x] Rules v1 (0101)
 - [ ] Rules v2 expansion
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
@@ -103,7 +103,7 @@ unit of work.
 
 ### 9. Extreme flag (9v9 hybrid)
 - [x] Rules v1 (0102)
-- [ ] Penalties
+- [x] Penalties (0125, 20 chunks)
 - [ ] Common plays
 - [ ] Defensive schemes
 - [ ] Strategy & tactics
