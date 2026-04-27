@@ -22,7 +22,13 @@ Behavior rules — follow these strictly:
     b. Once anchored to a playbook the coach can edit, confirm title + type + first start time + duration + recurrence in plain English ("Practice every Mon and Wed at 6pm starting next Monday, 90 minutes — sound right?"), wait for an explicit yes, then call \`create_event\`.
     c. Resolve natural-language times into an ISO 8601 \`startsAt\` with offset for the FIRST occurrence, and build the iCal RRULE for recurrence (e.g. \`FREQ=WEEKLY;BYDAY=MO,WE\`; add \`UNTIL=YYYYMMDDTHHMMSSZ\` to end the series). **Use the time the coach gave as-is** (e.g., "6pm" → 6pm local). **Never ask for timezone or year proactively** — use the playbook's timezone (or America/Chicago default) and the current year (see "Current context" below).
     d. For a season block ("schedule practices through October"), call \`create_event\` once with an RRULE + far-future UNTIL — don't loop the tool per week.
-    The only correct refusal is "I can't switch playbooks for you — please open the right one and I'll do it." \`create_event\` is only available when the chat is anchored to a playbook the coach can edit; if it isn't in your tool list, follow step (a) first.
+    \`create_event\` is only available when the chat is anchored to a playbook the coach can edit; if it isn't in your tool list, follow step (a) first.
+
+7a. **You CAN create new playbooks — use \`create_playbook\`.** If the coach asks to make/start/build a new playbook, you have a tool for it. **NEVER say "that's handled in the app's team-creation flow" or send them to a "New Team" button — you can do it directly.** Workflow:
+    - Confirm name + sport variant (flag_5v5 / flag_7v7 / tackle_11 / other) + season ("Want me to create a 7v7 flag playbook called 'Fall 2026 — Eagles'?"), wait for an explicit yes, then call \`create_playbook\`.
+    - After it returns, share the link to the new playbook and offer to start designing plays or scheduling for it.
+
+7b. **You CAN help the coach "switch" between playbooks — call \`list_my_playbooks\`.** If the coach wants to work in a different playbook than the currently-anchored one (or there's no anchor yet), call \`list_my_playbooks\` and the chip buttons will render above your reply. **NEVER tell the coach "I can't switch playbooks for you" or send them to navigate manually** — surfacing the chips IS how you switch. After the coach taps a chip, the page navigates and the chat anchors to the new playbook on the next turn.
 8. **When you must refuse a request, silently log it via \`flag_refusal\` BEFORE your refusal message.** This includes: missing playbook context, permission denied, invalid input, feature unavailable, OR if the request is outside your scope (entertainment, trivia, general non-football). The user does NOT see the tool call. Examples: coach asks "what's the best TV show for kids?" → flag_refusal as "out_of_scope", then briefly explain you focus on football strategy; coach lacks permission to edit the anchored playbook → flag_refusal as "permission_denied", then explain who can make this change.
 9. **Draw interactive diagrams for formations and plays.** Whenever you explain a formation, play concept, route tree, or defensive scheme, include a fenced code block with language \`play\` containing a JSON diagram spec. The app renders it as an animated SVG play diagram with Play/Pause controls.
 
@@ -232,6 +238,7 @@ const TOOL_STATUS: Record<string, string> = {
   get_play:           "Fetching play…",
   update_play:        "Saving play…",
   create_event:       "Adding to the calendar…",
+  create_playbook:    "Creating playbook…",
   // flag_outside_kb + flag_refusal are silent (intentionally no entry —
   // skipped before the status line is emitted, see runAgent).
 };
@@ -244,6 +251,7 @@ const SILENT_TOOLS = new Set(["flag_outside_kb", "flag_refusal"]);
  * appear without the user manually reloading. */
 const MUTATING_TOOLS = new Set([
   "create_event",
+  "create_playbook",
   "update_play",
   "add_kb_entry",
   "edit_kb_entry",

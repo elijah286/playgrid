@@ -266,6 +266,78 @@ const flag_refusal: CoachAiTool = {
   },
 };
 
+const create_playbook: CoachAiTool = {
+  def: {
+    name: "create_playbook",
+    description:
+      "Create a brand-new playbook in the current user's account. Use this when the coach asks " +
+      "you to make/start/build a new playbook. Only call AFTER summarizing the proposed name, " +
+      "sport variant, and season back to the coach and receiving explicit confirmation " +
+      "(\"yes\", \"go\", \"create it\"). Never call on a vague \"ok\". The result includes a URL the coach can follow.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Playbook name. 1-80 chars. Required." },
+        sport_variant: {
+          type: "string",
+          enum: ["flag_5v5", "flag_7v7", "tackle_11", "other"],
+          description: "Sport variant. flag_7v7 (default) | flag_5v5 | tackle_11 | other (custom 4-11 player count, requires custom_offense_count).",
+        },
+        season: {
+          type: "string",
+          description: "Optional free-form season label, e.g. \"Fall 2026\". ≤60 chars.",
+        },
+        custom_offense_count: {
+          type: "integer",
+          minimum: 4,
+          maximum: 11,
+          description: "Players-per-side for the \"other\" variant only. Ignored otherwise.",
+        },
+        color: { type: "string", description: "Optional hex color like #RRGGBB for the playbook's accent." },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input) {
+    const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
+    if (!name) return { ok: false, error: "Playbook name is required." };
+    const allowedVariants = ["flag_5v5", "flag_7v7", "tackle_11", "other"] as const;
+    type Variant = (typeof allowedVariants)[number];
+    const variantRaw = typeof input.sport_variant === "string" ? input.sport_variant : "flag_7v7";
+    const sportVariant: Variant = (allowedVariants as readonly string[]).includes(variantRaw)
+      ? (variantRaw as Variant)
+      : "flag_7v7";
+    const season = typeof input.season === "string" ? input.season : null;
+    const color = typeof input.color === "string" ? input.color : null;
+    const customOffenseCount =
+      typeof input.custom_offense_count === "number" ? Math.round(input.custom_offense_count) : null;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createPlaybookAction } = require("@/app/actions/playbooks") as typeof import("@/app/actions/playbooks");
+      const res = await createPlaybookAction(
+        name,
+        sportVariant,
+        color ? { color } : undefined,
+        customOffenseCount,
+        season,
+      );
+      if (!res.ok) return { ok: false, error: res.error };
+      const url = `/playbooks/${res.id}`;
+      return {
+        ok: true,
+        result:
+          `Created playbook "${name}" (${sportVariant}). Tell the coach it's ready and link them: ` +
+          `[Open ${name}](${url}). Then offer to start designing plays or scheduling.`,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "create_playbook failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
 const create_event: CoachAiTool = {
   def: {
     name: "create_event",
@@ -388,7 +460,7 @@ const create_event: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, flag_outside_kb, flag_refusal];
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {
