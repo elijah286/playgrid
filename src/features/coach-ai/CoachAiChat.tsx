@@ -190,7 +190,13 @@ export function CoachAiChat({
       const res = await fetch("/api/coach-ai/stream", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ history: prior, userMessage: text, playbookId, mode }),
+        body: JSON.stringify({
+          history: prior,
+          userMessage: text,
+          playbookId,
+          mode,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
         signal: ctrl.signal,
       });
 

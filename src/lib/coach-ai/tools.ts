@@ -21,6 +21,9 @@ export type ToolContext = {
   canEditPlaybook: boolean;
   /** Active mode — gates which tools are exposed to the LLM. */
   mode: CoachAiMode;
+  /** Caller's IANA timezone (from the browser). Used so "today" / weekday tables
+   *  in the system prompt match the coach's local clock instead of the server's UTC. */
+  timezone: string | null;
 };
 
 export type ToolHandler = (
@@ -532,7 +535,13 @@ const create_event: CoachAiTool = {
       "asks to add/schedule/book practices or games. Only call AFTER summarizing the proposed " +
       "title/type/start/duration/recurrence back to the coach and getting an explicit yes. " +
       "Convert natural language like \"every Mon and Wed at 5pm\" into a concrete ISO 8601 startsAt " +
-      "(the first occurrence) plus an iCal RRULE for recurrence.",
+      "(the first occurrence) plus an iCal RRULE for recurrence. " +
+      "**Type selection — match the event's true nature, not the title's wording:** " +
+      "\"game\" for ANY competitive matchup against another team (titles like \"Game vs. X\", \"vs. X\", \"@ X\", \"X scrimmage\" if it counts as a real game); " +
+      "\"scrimmage\" only when the coach explicitly calls it a scrimmage; " +
+      "\"practice\" for team practices, walkthroughs, or film sessions; " +
+      "\"other\" ONLY as a last resort when none of the above fit (team meetings, banquets, picture day). " +
+      "Never default to \"other\" for a matchup against a named opponent — that's always \"game\".",
     input_schema: {
       type: "object",
       properties: {

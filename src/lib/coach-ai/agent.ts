@@ -198,24 +198,44 @@ If the coach wants to capture multiple related notes, propose them as a numbered
 **Tone:** direct, brief. You can push back if a proposed note is vague.`;
 
 function contextBlock(ctx: ToolContext): string {
-  const today = new Date();
-  const todayStr = today.toLocaleDateString("en-US", {
-    weekday: "long", year: "numeric", month: "long", day: "numeric",
-  });
+  // Resolve "today" in the coach's timezone, not the server's. Vercel runs in
+  // UTC, so without this a coach asking at 9pm CDT would see "tomorrow" rolled
+  // forward by a day.
+  const tz = ctx.timezone || "America/Chicago";
+  const now = new Date();
+  const partsOf = (d: Date) => {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    });
+    const parts = Object.fromEntries(
+      fmt.formatToParts(d).map((p) => [p.type, p.value]),
+    ) as { year: string; month: string; day: string };
+    return parts;
+  };
+  const todayParts = partsOf(now);
+  const todayIso = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+  // Anchor a Date at noon in the coach's TZ so day-by-day arithmetic doesn't
+  // flip across DST or UTC midnight.
+  const anchor = new Date(`${todayIso}T12:00:00Z`);
+  const todayStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric",
+  }).format(now);
   const lines: string[] = ["", "---", "", "**Current context** (resolved at request time):"];
   lines.push(`- Today's date: ${todayStr}`);
-  lines.push(`- Current year: ${today.getFullYear()}`);
+  lines.push(`- Current year: ${todayParts.year}`);
+  lines.push(`- Coach's timezone: ${tz}`);
 
   // Pre-computed date table — Claude is unreliable at deriving weekdays from
   // dates, so list the next 21 days explicitly. Cal MUST look up weekdays
   // here instead of computing them.
   const tableLines: string[] = [];
   for (let i = 0; i < 21; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    const iso = d.toISOString().slice(0, 10);
-    const wd = d.toLocaleDateString("en-US", { weekday: "long" });
-    const md = d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+    const d = new Date(anchor);
+    d.setUTCDate(d.getUTCDate() + i);
+    const p = partsOf(d);
+    const iso = `${p.year}-${p.month}-${p.day}`;
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" }).format(d);
+    const md = new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "long", day: "numeric" }).format(d);
     tableLines.push(`  - ${iso} = ${wd}, ${md}`);
   }
   lines.push("- Upcoming 21 days (use this table to resolve weekday ↔ date — do NOT compute weekdays yourself):");
@@ -231,7 +251,7 @@ function contextBlock(ctx: ToolContext): string {
   lines.push(
     `**Date assumptions for scheduling:** when the coach gives a date without a year ` +
     `(e.g., "May 10th", "next Monday", "the Tuesday of the week of May 10th"), assume ` +
-    `the CURRENT year (${today.getFullYear()}) — or next year if the date has already ` +
+    `the CURRENT year (${todayParts.year}) — or next year if the date has already ` +
     `passed in the current year. Do NOT ask "which year?" — the only acceptable years ` +
     `for new schedules are this year or next year.`,
   );

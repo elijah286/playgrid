@@ -23,6 +23,8 @@ type ChatRequest = {
   playbookId?: string | null;
   /** "admin_training" only honored if caller is a site admin. */
   mode?: CoachAiMode;
+  /** Caller's IANA timezone (from the browser). */
+  timezone?: string | null;
 };
 
 type ChatResponse =
@@ -60,6 +62,7 @@ async function loadToolContext(
   playbookId: string | null,
   isAdmin: boolean,
   mode: CoachAiMode,
+  timezone: string | null,
 ): Promise<ToolContext> {
   if (!playbookId) {
     return {
@@ -72,6 +75,7 @@ async function loadToolContext(
       isAdmin,
       canEditPlaybook: false,
       mode,
+      timezone,
     };
   }
   const supabase = await createClient();
@@ -93,6 +97,7 @@ async function loadToolContext(
     isAdmin,
     canEditPlaybook: Boolean(canEdit),
     mode,
+    timezone,
   };
 }
 
@@ -119,7 +124,8 @@ export async function chatCoachAiAction(req: ChatRequest): Promise<ChatResponse>
   try {
     // Resolve effective mode against actual permissions. Pre-load ctx with
     // mode='normal' first so we can read canEditPlaybook safely, then upgrade.
-    const probe = await loadToolContext(req.playbookId ?? null, gate.isAdmin, "normal");
+    const tz = typeof req.timezone === "string" && req.timezone ? req.timezone : null;
+    const probe = await loadToolContext(req.playbookId ?? null, gate.isAdmin, "normal", tz);
     let mode: CoachAiMode = "normal";
     if (requestedMode === "admin_training" && gate.isAdmin) mode = "admin_training";
     else if (

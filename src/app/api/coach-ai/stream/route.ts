@@ -12,6 +12,7 @@ type StreamRequest = {
   userMessage: string;
   playbookId?: string | null;
   mode?: CoachAiMode;
+  timezone?: string | null;
 };
 
 function sseChunk(event: string, data: unknown): string {
@@ -49,9 +50,10 @@ async function loadToolContext(
   playbookId: string | null,
   isAdmin: boolean,
   mode: CoachAiMode,
+  timezone: string | null,
 ): Promise<ToolContext> {
   if (!playbookId) {
-    return { playbookId: null, playbookName: null, sportVariant: null, gameLevel: null, sanctioningBody: null, ageDivision: null, isAdmin, canEditPlaybook: false, mode };
+    return { playbookId: null, playbookName: null, sportVariant: null, gameLevel: null, sanctioningBody: null, ageDivision: null, isAdmin, canEditPlaybook: false, mode, timezone };
   }
   const supabase = await createClient();
   const [{ data }, { data: canEdit }] = await Promise.all([
@@ -70,6 +72,7 @@ async function loadToolContext(
     isAdmin,
     canEditPlaybook: Boolean(canEdit),
     mode,
+    timezone,
   };
 }
 
@@ -111,8 +114,9 @@ export async function POST(req: Request): Promise<Response> {
       : body.mode === "playbook_training" ? "playbook_training"
       : "normal";
 
+  const tz = typeof body.timezone === "string" && body.timezone ? body.timezone : null;
   const [ctx] = await Promise.all([
-    loadToolContext(body.playbookId ?? null, gate.isAdmin, requestedMode),
+    loadToolContext(body.playbookId ?? null, gate.isAdmin, requestedMode, tz),
   ]);
 
   const history: ChatMessage[] = [
