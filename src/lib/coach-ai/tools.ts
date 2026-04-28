@@ -364,15 +364,25 @@ const get_route_template: CoachAiTool = {
     const routeJsonFragment =
       `{"from": "<player_id>", "path": ${pathJson}, "tip": "arrow"${curve ? ", \"curve\": true" : ""}}`;
 
+    const dirLabel = (() => {
+      switch (template.breakDir) {
+        case "toward_qb": return "TOWARD QB / inside (final waypoint moves toward the middle of the field)";
+        case "toward_sideline": return "TOWARD SIDELINE / outside (final waypoint moves toward the boundary)";
+        case "vertical": return "VERTICAL (final waypoint stays roughly aligned with the player's start)";
+        case "varies": return "varies";
+      }
+    })();
+
     return {
       ok: true,
       result:
-        `Canonical "${template.name}" (${template.breakStyle} break) from (${playerX}, ${playerY}) on ${variantLabel}.\n\n` +
+        `Canonical "${template.name}" (${template.breakStyle} break, ${template.breakDir}) from (${playerX}, ${playerY}) on ${variantLabel}.\n\n` +
         `DEFINITION (use this wording verbatim when explaining the route):\n${template.description}\n\n` +
+        `Direction: ${dirLabel}.\n` +
         `path: ${pathJson}\n` +
         `curve: ${curve}\n` +
         `tip: "arrow"\n\n` +
-        `Drop into your diagram's "routes" array (copy curve flag exactly!):\n${routeJsonFragment}`,
+        `Drop into your diagram's "routes" array (copy path AND curve flag exactly):\n${routeJsonFragment}`,
     };
   },
 };
