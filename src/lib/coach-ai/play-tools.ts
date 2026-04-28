@@ -305,4 +305,121 @@ const update_play: CoachAiTool = {
   },
 };
 
-export const PLAY_TOOLS: CoachAiTool[] = [list_plays, get_play, update_play];
+const create_play: CoachAiTool = {
+  def: {
+    name: "create_play",
+    description:
+      "Create a brand-new play in the current playbook. Use this when the coach asks " +
+      "you to make/add/build a new play (or accepts your offer to do so). Requires " +
+      "edit access to the playbook. Always confirm name + diagram with the coach " +
+      "before calling — show them the play diagram and wait for an explicit 'yes'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Play name. 1-80 chars. Required." },
+        diagram: {
+          type: "object",
+          description:
+            "CoachDiagram JSON — same format as diagrams rendered in chat. Must include " +
+            "a players array with at least the offensive personnel. Routes are optional " +
+            "(formation-only plays are valid).",
+        },
+        formation_name: {
+          type: "string",
+          description: "Optional formation label (e.g. \"Trips Right\", \"Spread\"). ≤60 chars.",
+        },
+        play_type: {
+          type: "string",
+          enum: ["offense", "defense", "special_teams"],
+          description: "Play type. Defaults to \"offense\".",
+        },
+        note: {
+          type: "string",
+          description: "Optional short note recorded on the initial version (1-2 sentences).",
+        },
+      },
+      required: ["name", "diagram"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+
+    const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
+    if (!name) return { ok: false, error: "Play name is required." };
+
+    let diagram: CoachDiagram;
+    try {
+      diagram = input.diagram as CoachDiagram;
+      if (!Array.isArray(diagram?.players)) throw new Error("diagram.players must be an array");
+    } catch (e) {
+      return { ok: false, error: `Invalid diagram: ${e instanceof Error ? e.message : "bad format"}` };
+    }
+
+    const playType = (typeof input.play_type === "string" && ["offense", "defense", "special_teams"].includes(input.play_type)
+      ? input.play_type
+      : "offense") as "offense" | "defense" | "special_teams";
+    const formationName = typeof input.formation_name === "string" ? input.formation_name.slice(0, 60) : undefined;
+
+    const resolvedVariant = (ctx.sportVariant ?? diagram.variant ?? "flag_7v7") as SportVariant;
+
+    try {
+      // Create the play (empty, with default players for the variant — we'll
+      // overwrite with the diagram in the next step).
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createPlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+      const createRes = await createPlayAction(ctx.playbookId, {
+        playName: name,
+        playType,
+        formationName,
+        variant: resolvedVariant,
+      });
+      if (!createRes.ok) return { ok: false, error: createRes.error };
+
+      // Now save the diagram as a new version on the freshly created play.
+      const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
+      const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
+      newDoc.metadata.coachName = name;
+      if (formationName) newDoc.metadata.formation = formationName;
+      newDoc.metadata.playType = playType;
+
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { ok: false, error: "Not signed in." };
+
+      const admin = createServiceRoleClient();
+      const versionResult = await recordPlayVersion({
+        supabase: admin,
+        playId: createRes.playId,
+        document: newDoc,
+        parentVersionId: createRes.versionId,
+        userId: user.id,
+        kind: "edit",
+        note: typeof input.note === "string" ? input.note : "Created by Coach Cal",
+      });
+      if (!versionResult.ok) return { ok: false, error: versionResult.error };
+
+      const finalVersionId = versionResult.deduped ? createRes.versionId : versionResult.versionId;
+      if (!versionResult.deduped) {
+        const { error: upErr } = await admin
+          .from("plays")
+          .update({ current_version_id: finalVersionId, updated_at: new Date().toISOString() })
+          .eq("id", createRes.playId);
+        if (upErr) return { ok: false, error: upErr.message };
+      }
+
+      const url = `/plays/${createRes.playId}/edit`;
+      return {
+        ok: true,
+        result:
+          `Created play "${name}" in the current playbook. Tell the coach it's ready and link them: ` +
+          `[Open ${name}](${url}).`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };
+    }
+  },
+};
+
+export const PLAY_TOOLS: CoachAiTool[] = [list_plays, get_play, create_play, update_play];

@@ -30,6 +30,11 @@ Behavior rules — follow these strictly:
     - Confirm name + sport variant (flag_5v5 / flag_7v7 / tackle_11 / other) + season ("Want me to create a 7v7 flag playbook called 'Fall 2026 — Eagles'?"), wait for an explicit yes, then call \`create_playbook\`.
     - After it returns, share the link to the new playbook and offer to start designing plays or scheduling for it.
 
+7c. **You CAN add brand-new plays to the anchored playbook — use \`create_play\`.** When the coach asks to "create play 1", "add this play to my playbook", "save this as a play", or accepts your offer to add a concept you just diagrammed, you have a tool for it. **NEVER say "I don't have a direct tool to create individual plays" or tell the coach to open the playbook and click + New Play — you can do it directly.** Workflow:
+    - You should already have a diagram in chat (rule 9 has you draw one by default). Confirm the play name and that the diagram on screen is what they want saved ("Save this as 'Spread Slant' in your CPYFA playbook?"), wait for an explicit yes, then call \`create_play\` with that same diagram JSON.
+    - After it returns, share the link to the new play and offer to add another or tweak it.
+    - Only available when the chat is anchored to a playbook the coach can edit. If \`create_play\` isn't in your tool list, fall back to \`list_my_playbooks\` so the coach can pick one.
+
 7b. **You CAN help the coach "switch" between playbooks — call \`list_my_playbooks\`.** If the coach wants to work in a different playbook than the currently-anchored one (or there's no anchor yet), call \`list_my_playbooks\` and the chip buttons will render above your reply. **NEVER tell the coach "I can't switch playbooks for you" or send them to navigate manually** — surfacing the chips IS how you switch. After the coach taps a chip, the page navigates and the chat anchors to the new playbook on the next turn.
 8. **When you must refuse a request, silently log it via \`flag_refusal\` BEFORE your refusal message.** This includes: missing playbook context, permission denied, invalid input, feature unavailable, OR if the request is outside your scope (entertainment, trivia, general non-football). The user does NOT see the tool call. Examples: coach asks "what's the best TV show for kids?" → flag_refusal as "out_of_scope", then briefly explain you focus on football strategy; coach lacks permission to edit the anchored playbook → flag_refusal as "permission_denied", then explain who can make this change.
 9. **ALWAYS draw a diagram by default — words are the SUPPLEMENT, not the answer.** Whenever the coach asks about anything spatial — a route, a formation, a play concept, a coverage, a front, a blitz, a blocking scheme, a release, a tempo, "what is X" / "how does Y work" / "what does Z look like" / "show me" / "explain" / "diagram" — include a fenced code block with language \`play\` containing a JSON diagram spec. **Default to YES. Do not wait for the coach to say "show me" or "diagram it" — they are visual coaches and they want the picture every time.** The app renders the JSON as an animated SVG with Play/Pause controls. Skip the diagram only when the question is purely a rule, penalty, or scheduling question that has zero positional content (e.g., "how many timeouts per half?" — no diagram). When in doubt, draw it.
@@ -299,6 +304,7 @@ const TOOL_STATUS: Record<string, string> = {
   place_defense:      "Aligning defense…",
   list_plays:         "Reading plays…",
   get_play:           "Fetching play…",
+  create_play:        "Creating play…",
   update_play:        "Saving play…",
   create_event:       "Adding to the calendar…",
   list_events:        "Reading the calendar…",
@@ -330,6 +336,7 @@ const MUTATING_TOOLS = new Set([
   "update_event",
   "cancel_event",
   "create_playbook",
+  "create_play",
   "update_play",
   "add_kb_entry",
   "edit_kb_entry",

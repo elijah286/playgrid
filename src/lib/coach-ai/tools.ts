@@ -1102,12 +1102,13 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
   if (ctx.playbookId) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PLAY_TOOLS } = require("./play-tools") as typeof import("./play-tools");
-    const readTools = PLAY_TOOLS.filter((t) => t.def.name !== "update_play");
+    const writeNames = new Set(["update_play", "create_play"]);
+    const readTools = PLAY_TOOLS.filter((t) => !writeNames.has(t.def.name));
     tools.push(...readTools);
     // Reading the calendar is available to anyone with the playbook anchored.
     tools.push(list_events);
     if (ctx.canEditPlaybook) {
-      const writeTools = PLAY_TOOLS.filter((t) => t.def.name === "update_play");
+      const writeTools = PLAY_TOOLS.filter((t) => writeNames.has(t.def.name));
       tools.push(...writeTools);
       // Scheduling: only available to coaches who can edit the playbook.
       tools.push(create_event, update_event, cancel_event);
