@@ -19,7 +19,7 @@ const EDGE        = 16;
 const FONT_SIZES  = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const;
 type FontSize = (typeof FONT_SIZES)[number];
 
-const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
+const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 
 type WindowPos = { top: number; left: number };
 
@@ -427,7 +427,7 @@ export function CoachAiLauncher({
                 )}
                 style={!adminTrainingActive && !playbookTrainingActive ? { background: GRADIENT } : undefined}
               >
-                <CoachAiIcon className="size-4" />
+                <CoachAiIcon className="size-5" />
               </div>
 
               <div className="min-w-0 flex-1">
