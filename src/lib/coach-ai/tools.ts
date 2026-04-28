@@ -285,18 +285,22 @@ const get_route_template: CoachAiTool = {
   def: {
     name: "get_route_template",
     description:
-      "Get the canonical geometry of a named route template, matching the play editor's quick-route presets. " +
-      "ALWAYS call this BEFORE emitting any route waypoints in a play diagram so the route shape Cal draws " +
-      "stays consistent with the same route preset the coach sees in the editor. Returns waypoints in yards " +
-      "(Cal's diagram coord system), ready to drop straight into a route's `path` field. " +
-      "Available names (case-insensitive): Go, Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, " +
-      "Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig.",
+      "Get the CANONICAL geometry, break shape, and prose definition of a named route. " +
+      "MANDATORY for every named route you draw or describe. Returns: " +
+      "(1) `path` waypoints in yards — drop verbatim into the diagram route's `path`, " +
+      "(2) `curve` flag — set the diagram route's `curve` field to this exact value (TRUE for " +
+      "rounded routes like curl/hitch/comeback/wheel/fade/sit, FALSE for sharp routes like " +
+      "slant/out/in/post/corner/dig), and (3) `description` — the canonical wording to use when " +
+      "explaining the route to the coach. Available names (case-insensitive, aliases supported): " +
+      "Go (Fly/Streak), Slant, Hitch, Out (Square-Out), In, Post, Corner (Flag), Curl (Hook), " +
+      "Comeback, Flat, Wheel, Out & Up, Arrow, Sit (Stick), Drag (Shallow), Seam, Fade, Bubble, " +
+      "Spot (Snag), Skinny Post (Glance), Whip, Z-Out, Z-In, Stop & Go (Sluggo), Quick Out (Speed Out), Dig.",
     input_schema: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Route name (case-insensitive). Must match one of the available templates.",
+          description: "Route name or alias (case-insensitive).",
         },
         player_x: {
           type: "number",
@@ -322,15 +326,14 @@ const get_route_template: CoachAiTool = {
 
     // Lazy import — keep domain types out of module-init order.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { ROUTE_TEMPLATES } = require("@/domain/play/routeTemplates") as typeof import("@/domain/play/routeTemplates");
+    const { ROUTE_TEMPLATES, findTemplate } = require("@/domain/play/routeTemplates") as typeof import("@/domain/play/routeTemplates");
 
-    const lookup = rawName.toLowerCase();
-    const template = ROUTE_TEMPLATES.find((t) => t.name.toLowerCase() === lookup);
+    const template = findTemplate(rawName);
     if (!template) {
       const available = ROUTE_TEMPLATES.map((t) => t.name).join(", ");
       return {
         ok: false,
-        error: `Unknown route "${rawName}". Available: ${available}.`,
+        error: `Unknown route "${rawName}". Available: ${available}. (Aliases also accepted.)`,
       };
     }
 
@@ -364,10 +367,12 @@ const get_route_template: CoachAiTool = {
     return {
       ok: true,
       result:
-        `Canonical "${template.name}" from (${playerX}, ${playerY}) on ${variantLabel}:\n` +
+        `Canonical "${template.name}" (${template.breakStyle} break) from (${playerX}, ${playerY}) on ${variantLabel}.\n\n` +
+        `DEFINITION (use this wording verbatim when explaining the route):\n${template.description}\n\n` +
         `path: ${pathJson}\n` +
-        `tip: "arrow"${curve ? "\ncurve: true" : ""}\n\n` +
-        `Drop into your diagram's "routes" array as:\n${routeJsonFragment}`,
+        `curve: ${curve}\n` +
+        `tip: "arrow"\n\n` +
+        `Drop into your diagram's "routes" array (copy curve flag exactly!):\n${routeJsonFragment}`,
     };
   },
 };
@@ -536,21 +541,26 @@ const create_playbook: CoachAiTool = {
       typeof input.custom_offense_count === "number" ? Math.round(input.custom_offense_count) : null;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createPlaybookAction } = require("@/app/actions/playbooks") as typeof import("@/app/actions/playbooks");
-      const res = await createPlaybookAction(
+      // Call the shared helper directly. Going through createPlaybookAction
+      // via require() in Next.js 16 / Turbopack returned a stub that didn't
+      // execute the insert — Cal would say "Playbook created!" with a
+      // working-looking link, but no row was ever written.
+      const { createClient } = await import("@/lib/supabase/server");
+      const { createPlaybookForUser } = await import("@/lib/data/playbook-create");
+      const supabase = await createClient();
+      const res = await createPlaybookForUser(supabase, {
         name,
         sportVariant,
-        color ? { color } : undefined,
+        color: color,
         customOffenseCount,
         season,
-      );
+      });
       if (!res.ok) return { ok: false, error: res.error };
       const url = `/playbooks/${res.id}`;
       return {
         ok: true,
         result:
-          `Created playbook "${name}" (${sportVariant}). Tell the coach it's ready and link them: ` +
+          `Created playbook "${name}" (${sportVariant}), id=${res.id}. Tell the coach it's ready and link them: ` +
           `[Open ${name}](${url}). Then offer to start designing plays or scheduling.`,
       };
     } catch (e) {

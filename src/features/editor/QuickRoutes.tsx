@@ -91,9 +91,11 @@ export function QuickRoutes({ player, dispatch, activeStyle, existingRouteIds }:
   const [query, setQuery] = useState("");
 
   const filtered = query.trim()
-    ? ROUTE_TEMPLATES.filter((t) =>
-        t.name.toLowerCase().includes(query.trim().toLowerCase()),
-      )
+    ? ROUTE_TEMPLATES.filter((t) => {
+        const q = query.trim().toLowerCase();
+        if (t.name.toLowerCase().includes(q)) return true;
+        return t.aliases?.some((a) => a.toLowerCase().includes(q)) ?? false;
+      })
     : ROUTE_TEMPLATES;
 
   return (

@@ -16,14 +16,30 @@ const OFFENSE_LETTERS = new Set([
 ]);
 
 type Player = { id: string; x: number; y: number; team?: "O" | "D" };
+type DiagramRoute = {
+  from?: string;
+  path?: Array<[number, number]>;
+  curve?: boolean;
+};
 type Diagram = {
   variant?: string;
   players?: Player[];
-  routes?: unknown[];
+  routes?: DiagramRoute[];
 };
 
 type PlaceDefenseSnapshot = {
   players: Array<{ id: string; x: number; y: number }>;
+};
+
+/** Snapshot of one get_route_template call this turn. The validator uses
+ *  these to verify Cal copied the tool result into the diagram instead of
+ *  hand-authoring (the curl-bug class of failure). */
+export type RouteTemplateSnapshot = {
+  name: string;
+  playerX: number;
+  playerY: number;
+  path: Array<[number, number]>;
+  curve: boolean;
 };
 
 export function expectedFullCount(variant: string | null | undefined): number {
@@ -57,6 +73,10 @@ export function validateDiagrams(opts: {
   /** Most recent place_defense return, if any. Used to catch the model
    *  silently repositioning, renaming, or dropping defenders. */
   lastPlaceDefense: PlaceDefenseSnapshot | null;
+  /** Every get_route_template call from this turn. If non-empty, every
+   *  route in the diagram must match one of these snapshots (path AND
+   *  curve flag) — catches hand-authored named routes. */
+  routeTemplates?: RouteTemplateSnapshot[];
 }): ValidationResult {
   const fences = extractPlayFences(opts.text);
   if (fences.length === 0) return { ok: true };
@@ -113,6 +133,78 @@ export function validateDiagrams(opts: {
         errors.push(`${tag}players "${prior}" and "${p.id}" overlap at (${p.x}, ${p.y}).`);
       } else {
         seen.set(key, p.id);
+      }
+    }
+
+    // ── Named-route compliance ────────────────────────────────────
+    //
+    // If get_route_template was called THIS TURN, every route in the
+    // diagram authored by an OFFENSIVE player should match one of those
+    // snapshots. Catches the "Cal hand-authored a curl as a vertical
+    // line" failure mode.
+    //
+    // Defender routes are intentionally excluded — Cal hand-authors
+    // those (zone reposition / man tracking) and they're not named
+    // template routes.
+    const snapshots = opts.routeTemplates ?? [];
+    if (snapshots.length > 0 && Array.isArray(json.routes)) {
+      const playerById = new Map<string, Player>();
+      for (const p of players) playerById.set(p.id, p);
+
+      for (const route of json.routes) {
+        if (!route || typeof route !== "object") continue;
+        const from = typeof route.from === "string" ? route.from : null;
+        if (!from) continue;
+        const player = playerById.get(from);
+        if (!player) continue;
+        if (player.team === "D") continue; // skip defender movement
+        const path = Array.isArray(route.path) ? route.path : [];
+        if (path.length === 0) continue;
+
+        // Find closest snapshot by player position (within 1.5 yds).
+        let best: { snap: RouteTemplateSnapshot; dist: number } | null = null;
+        for (const s of snapshots) {
+          const dist = Math.hypot(s.playerX - player.x, s.playerY - player.y);
+          if (!best || dist < best.dist) best = { snap: s, dist };
+        }
+        if (!best || best.dist > 1.5) {
+          // No template snapshot near this player. If the path is non-
+          // trivial (≥2 waypoints), this looks like a hand-authored named
+          // route — flag it. Single-waypoint paths are likely simple
+          // custom routes (drag, flat) and we don't fail-stop those.
+          if (path.length >= 2) {
+            errors.push(
+              `${tag}route from "${from}" appears hand-authored (${path.length} waypoints, no get_route_template call near player position). If this is a named route (Curl, Slant, Hitch, etc.), call get_route_template and use its output verbatim. If genuinely custom, label "(custom route)" in your prose.`,
+            );
+          }
+          continue;
+        }
+
+        // Verify path waypoints match the snapshot.
+        const expected = best.snap.path;
+        if (path.length !== expected.length) {
+          errors.push(
+            `${tag}route from "${from}" has ${path.length} waypoint(s); get_route_template for "${best.snap.name}" returned ${expected.length}. Use the tool's path verbatim.`,
+          );
+          continue;
+        }
+        const mismatch = path.some((wp, idx) => {
+          const ex = expected[idx];
+          if (!Array.isArray(wp) || wp.length < 2 || !Array.isArray(ex)) return true;
+          return Math.abs(wp[0] - ex[0]) > 1.5 || Math.abs(wp[1] - ex[1]) > 1.5;
+        });
+        if (mismatch) {
+          errors.push(
+            `${tag}route from "${from}" path doesn't match get_route_template's "${best.snap.name}" output. Tool returned ${JSON.stringify(expected)}; diagram has ${JSON.stringify(path)}. Use the tool's path verbatim.`,
+          );
+        }
+        // Verify curve flag matches.
+        const diagramCurve = route.curve === true;
+        if (diagramCurve !== best.snap.curve) {
+          errors.push(
+            `${tag}route from "${from}" has curve=${diagramCurve}, but get_route_template's "${best.snap.name}" returned curve=${best.snap.curve}. A ${best.snap.curve ? "rounded" : "sharp"} route drawn ${diagramCurve ? "rounded" : "sharp"} renders wrong (curl as straight line, slant as arc).`,
+          );
+        }
       }
     }
 

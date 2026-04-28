@@ -52,7 +52,7 @@ JSON schema:
   ],
   "routes": [  // optional — omit for formation-only diagrams
     { "from": "WR1", "path": [[-8, 8]], "tip": "arrow" },        // tip: "arrow"|"t"|"none"
-    { "from": "WR2", "path": [[11, 6], [14, 10]], "curve": true } // curve: true for rounded routes
+    { "from": "WR2", "path": [[11, 6], [14, 10]], "curve": true } // curve MUST match get_route_template's return — true for curl/hitch/comeback/wheel/fade/sit, false for slant/out/in/post/corner/dig
   ]
 }
 \`\`\`
@@ -99,8 +99,12 @@ Rules:
 - For 7v7 flag, field is 30 yards wide; for 5v5, 25; for tackle 11, 53. Keep x within roughly ±half the width.
 - For a formation-only diagram, omit the "routes" field.
 - Omit the diagram only when the question is purely about a rule or penalty (no positional concept involved).
-- **Route geometry — ALWAYS use \`get_route_template\` for named routes.** Before emitting any route waypoints in a diagram, call \`get_route_template\` with the route name (Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig, Go) plus the player's (x, y) in yards. The tool returns canonical waypoints that match the play editor's quick-route presets — drop them straight into the route's \`path\`. **Do NOT hand-author waypoints for named routes** (you'll guess wrong and produce a slant that looks like a flat). Only fall back to hand-authored paths for genuinely custom routes the coach asks for that don't match any template; in that case, briefly note "(custom route)" so the coach knows.
-- **Route geometry — defend the canonical definition; don't capitulate.** When a coach questions a route's shape ("shouldn't a slant be 45°?", "isn't a curl deeper than that?", "doesn't a post break at 12 yards?"), DO NOT hedge, apologize, or redraw to match their guess. The KB entry + the route template ARE the source of truth for this app. Workflow: (1) call \`search_kb\` for the route (e.g. subtopic "route_slant") to pull the canonical written definition; (2) reply with the canonical definition cited from KB — depth, break angle, step count — and respectfully explain the convention. Example for slant: "The canonical slant in your playbook is a 3-yard vertical stem then a 25°-above-horizontal cut across the middle (mostly lateral with a shallow upfield lean, catching around 5-6 yds). That's what the diagram shows." A coach who recalls a different number may be working from a different system; confirming their alternative trains the app inconsistently. The only time you adjust is if the coach explicitly asks for a *custom* variation ("draw me a steeper-angle slant for our 8-yr-olds") — emit a hand-authored path and label it "(custom route)". **Angle convention in this app: route break angles are always measured from horizontal (LOS / sideline-to-sideline axis), unless the KB entry says otherwise.** A 25° slant means 25° above the LOS, not 25° off vertical — i.e., mostly lateral, not mostly vertical.
+- **Route geometry — \`get_route_template\` is MANDATORY for every named route.** Before emitting route waypoints AND before describing a named route in prose, call \`get_route_template\` with the route name + the player's (x, y) in yards. Available names (case-insensitive, aliases supported): Go (Fly/Streak), Slant, Hitch, Out (Square-Out), In, Post, Corner (Flag), Curl (Hook), Comeback, Flat, Wheel, Out & Up, Arrow, Sit (Stick), Drag (Shallow), Seam, Fade, Bubble, Spot (Snag), Skinny Post (Glance), Whip, Z-Out, Z-In, Stop & Go (Sluggo), Quick Out (Speed Out), Dig.
+  - The tool returns THREE things you must use TOGETHER: (1) \`path\` — drop straight into the diagram route's \`path\` field, (2) \`curve\` — set the diagram route's \`curve\` field to this exact boolean (TRUE for rounded routes: curl, hitch, comeback, wheel, fade, sit, bubble, stop & go; FALSE for sharp routes: slant, out, in, post, corner, dig, etc.), (3) \`description\` — the canonical wording. Use it verbatim or paraphrase tightly when explaining; do NOT invent your own description.
+  - **Hand-authoring waypoints for a named route is FORBIDDEN.** Every freehand has produced a wrong shape (slant that looks like a flat, curl with no curl-back, hitch that's just a vertical line). Only skip the tool for genuinely custom variations ("draw a 7-yard skinny slant") — emit hand-authored waypoints AND label "(custom route)" in your prose.
+  - **\`curve\` is not optional.** A curl with \`curve: false\` renders as a straight line — that's the curl-bug. Read the tool result's \`curve:\` line and copy the exact boolean.
+  - A server-side validator runs after every diagram. If it sees a route whose \`path\` or \`curve\` doesn't match the corresponding \`get_route_template\` snapshot, it forces a re-emit. Save the round trip — get the tool call right the first time.
+- **Route geometry — defend the canonical definition; don't capitulate.** When a coach questions a route's shape ("shouldn't a slant be 45°?", "isn't a curl deeper than that?", "doesn't a post break at 12 yards?"), DO NOT hedge, apologize, or redraw to match their guess. The route template + KB entry ARE the source of truth for this app. Workflow: (1) call \`get_route_template\` (or \`search_kb\` for the route subtopic, e.g. "route_slant") to pull the canonical written definition; (2) reply with that definition cited verbatim — stem, break shape (sharp/rounded), break angle, depth — and hold the line. A coach who recalls a different number may be working from a different system; confirming their alternative trains the app inconsistently. The only time you adjust is if the coach explicitly asks for a *custom* variation — emit a hand-authored path and label "(custom route)". **Angle convention: route break angles are measured FROM HORIZONTAL (the LOS / sideline-to-sideline axis), unless the route entry says otherwise.** A 25° slant means 25° above the LOS — mostly lateral with a shallow upfield lean.
 - **Zones come from \`place_defense\`, not your imagination.** When \`place_defense\` returns a zones JSON array (any zone-coverage call), drop it into the diagram's \`zones\` field verbatim — the catalog has correct geometry. For MAN coverages, \`place_defense\` will tell you NOT to emit zones; draw assignment lines instead (see "Defender movement" below).
 - **Defender movement — show how the coverage adjusts.** Whenever the matchup bucket fires ("how does the defense play this", "show me the defense vs Play X", "Tampa 2 read against play 1"), don't draw defenders as static dots. Author defender ROUTES (same \`routes\` field as offense; carriers with \`team:"D"\`) that depict the post-snap reaction. Two patterns:
   - **Zone coverage:** deep defenders stay in their zones; underneath defenders rally to the closest threat. Most defender routes are short re-positions (1-3 yards) — show the coverage's reaction shape, not full pursuit.
@@ -133,12 +137,13 @@ If a coach asks for a formation and you're not 100% sure of the rules for their 
 
 **Pre-emit checklist — run through this BEFORE writing the \`\`\`play fence:**
 1. Which bucket is this? (single route / play-or-scheme / matchup)
-2. If the bucket includes a full defense, did I call \`place_defense\` THIS TURN? (If not, stop and call it now.)
-3. Offense count matches the variant? (tackle_11 → 11, flag_7v7 → 7, flag_5v5 → 5)
-4. Defense count matches the variant when defense is included? (same numbers)
-5. Are all defender ids from \`place_defense\`'s return — none reusing offense letters (F, B, Y, Z, X, H, S, TE, QB, C)?
-6. No duplicate (x, y) pairs?
-If any check fails, fix it before emitting. A diagram with the wrong count or a label collision is worse than no diagram — coaches can't act on it.
+2. **For EVERY named route in the diagram, did I call \`get_route_template\` THIS TURN and copy the \`path\` AND \`curve\` value verbatim?** (If any route doesn't have a corresponding tool call, stop and call it now. A curl with \`curve: false\` is the curl-bug. The validator will reject the diagram if you skip this.)
+3. If the bucket includes a full defense, did I call \`place_defense\` THIS TURN? (If not, stop and call it now.)
+4. Offense count matches the variant? (tackle_11 → 11, flag_7v7 → 7, flag_5v5 → 5)
+5. Defense count matches the variant when defense is included? (same numbers)
+6. Are all defender ids from \`place_defense\`'s return — none reusing offense letters (F, B, Y, Z, X, H, S, TE, QB, C)?
+7. No duplicate (x, y) pairs?
+If any check fails, fix it before emitting. A diagram with a hand-authored named route, the wrong count, or a label collision is worse than no diagram — coaches can't trust it.
 
 **Multi-diagram requests — ONE DIAGRAM PER RESPONSE:**
 When the coach asks for multiple plays/formations in a single request ("show me three formations", "build me a starter playbook with 5 plays", "give me a red-zone package"), do NOT try to emit them all in one response — long responses get truncated mid-JSON and the trailing diagrams render as blank placeholders. Instead:
@@ -475,9 +480,18 @@ export async function runAgent(
   let placeDefenseInvoked = false;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
+  /** Every get_route_template call this turn — lets the validator catch
+   *  hand-authored named routes (the curl-as-vertical-line bug). */
+  const routeTemplateCalls: Array<{
+    name: string;
+    playerX: number;
+    playerY: number;
+    path: Array<[number, number]>;
+    curve: boolean;
+  }> = [];
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-    const shouldBuffer = placeDefenseInvoked && !validatorRetried;
+    const shouldBuffer = (placeDefenseInvoked || routeTemplateCalls.length > 0) && !validatorRetried;
     const result = await chat({
       system,
       messages,
@@ -502,6 +516,7 @@ export async function runAgent(
           text: bufferedText,
           variant: ctx.sportVariant,
           lastPlaceDefense,
+          routeTemplates: routeTemplateCalls,
         });
         if (!validation.ok && !validatorRetried) {
           // Discard the broken assistant turn and feed the model a critique.
@@ -516,12 +531,13 @@ export async function runAgent(
                   "INTERNAL VALIDATION — do not mention this message to the coach. " +
                   "Your previous diagram failed validation:\n" +
                   validation.errors.map((e) => `- ${e}`).join("\n") +
-                  "\n\nRe-emit your previous response with a corrected diagram. " +
-                  "Use EXACTLY the players from place_defense's last return for " +
-                  "the defense — do not rename, reposition, or drop any of them. " +
-                  "If you need offense, hit the variant's full count (7 for " +
-                  "flag_7v7, 11 for tackle_11, 5 for flag_5v5). Keep all of your " +
-                  "explanatory prose, only fix the diagram JSON.",
+                  "\n\nRe-emit with a corrected diagram. Specifically: " +
+                  "(a) For every named route, copy the `path` AND `curve` value from get_route_template VERBATIM — " +
+                  "if you don't have a snapshot for a route's player, call get_route_template now. " +
+                  "A curl with curve=false renders as a straight line, which is the bug. " +
+                  "(b) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops. " +
+                  "(c) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown. " +
+                  "Keep all of your explanatory prose; only fix the diagram JSON.",
               },
             ],
           };
@@ -563,6 +579,31 @@ export async function runAgent(
         const jsonMatch = /```playbooks\n([\s\S]*?)\n```/.exec(resultText);
         if (jsonMatch) {
           try { playbookChips = JSON.parse(jsonMatch[1]); } catch { /* ignore */ }
+        }
+      }
+      // Capture get_route_template returns so the validator can verify
+      // every named route in the diagram matches what the tool returned
+      // (catches "curl drawn as a straight line" hand-authoring).
+      if (tu.name === "get_route_template" && r.ok) {
+        const inp = tu.input as { name?: unknown; player_x?: unknown; player_y?: unknown };
+        const px = typeof inp.player_x === "number" ? inp.player_x : NaN;
+        const py = typeof inp.player_y === "number" ? inp.player_y : NaN;
+        const pathMatch = /path:\s*(\[[\s\S]+?\])\s*\n/.exec(resultText);
+        const curveMatch = /curve:\s*(true|false)/.exec(resultText);
+        const nameMatch = /Canonical "([^"]+)"/.exec(resultText);
+        if (pathMatch && Number.isFinite(px) && Number.isFinite(py)) {
+          try {
+            const path = JSON.parse(pathMatch[1]) as Array<[number, number]>;
+            if (Array.isArray(path)) {
+              routeTemplateCalls.push({
+                name: nameMatch?.[1] ?? (typeof inp.name === "string" ? inp.name : "unknown"),
+                playerX: px,
+                playerY: py,
+                path,
+                curve: curveMatch?.[1] === "true",
+              });
+            }
+          } catch { /* ignore — validator will skip if no snapshot */ }
         }
       }
       // Capture place_defense's return so the validator can compare the
