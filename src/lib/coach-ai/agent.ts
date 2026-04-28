@@ -275,6 +275,20 @@ function contextBlock(ctx: ToolContext): string {
     lines.push("");
     lines.push("- Anchored playbook: NO — the coach opened Coach AI from the home/dashboard.");
   }
+  if (ctx.playId) {
+    lines.push("");
+    lines.push(`**Anchored play (the coach has this play open in the editor RIGHT NOW):**`);
+    lines.push(`- Play id: ${ctx.playId}`);
+    lines.push(`- Play name: ${ctx.playName ?? "unknown"}`);
+    lines.push(`- Formation: ${ctx.playFormation ?? "unknown"}`);
+    lines.push("");
+    lines.push(
+      `When the coach says "this play", "this one", "the play I'm looking at", or asks ` +
+      `something with no other play context (e.g. "what's the best defense against this?"), ` +
+      `interpret it as the anchored play above. Do NOT ask the coach to clarify which play. ` +
+      `Use \`get_play\` with the anchored play id when you need its diagram details.`,
+    );
+  }
   return lines.join("\n");
 }
 

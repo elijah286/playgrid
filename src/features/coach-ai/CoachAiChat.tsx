@@ -80,9 +80,11 @@ async function* parseSse(body: ReadableStream<Uint8Array>) {
  */
 export function CoachAiChat({
   playbookId,
+  playId,
   mode = "normal",
 }: {
   playbookId?: string | null;
+  playId?: string | null;
   mode?: "normal" | "admin_training" | "playbook_training";
 }) {
   const storageKey = storageKeyFor(mode, playbookId ?? null);
@@ -194,6 +196,7 @@ export function CoachAiChat({
           history: prior,
           userMessage: text,
           playbookId,
+          playId,
           mode,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
@@ -256,7 +259,7 @@ export function CoachAiChat({
       setToolCallsDuringStream([]);
       abortRef.current = null;
     }
-  }, [draft, streaming, turns, playbookId, mode, router]);
+  }, [draft, streaming, turns, playbookId, playId, mode, router]);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">

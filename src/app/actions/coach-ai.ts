@@ -76,6 +76,9 @@ async function loadToolContext(
       canEditPlaybook: false,
       mode,
       timezone,
+      playId: null,
+      playName: null,
+      playFormation: null,
     };
   }
   const supabase = await createClient();
@@ -98,6 +101,9 @@ async function loadToolContext(
     canEditPlaybook: Boolean(canEdit),
     mode,
     timezone,
+    playId: null,
+    playName: null,
+    playFormation: null,
   };
 }
 

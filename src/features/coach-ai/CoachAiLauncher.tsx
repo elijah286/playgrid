@@ -9,6 +9,7 @@ import { CoachAiIcon } from "./CoachAiIcon";
 import { cn } from "@/lib/utils";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
+const PLAY_ROUTE_RE = /^\/plays\/([0-9a-f-]{8,})(?:\/|$)/i;
 
 const DEFAULT_W   = 420;
 const DEFAULT_H   = 640;
@@ -88,6 +89,10 @@ export function CoachAiLauncher({
     const m = pathname?.match(PLAYBOOK_ROUTE_RE);
     return m?.[1] ?? null;
   }, [playbookIdProp, pathname]);
+  const playId = useMemo<string | null>(() => {
+    const m = pathname?.match(PLAY_ROUTE_RE);
+    return m?.[1] ?? null;
+  }, [pathname]);
 
   // Clamp a (w, h) pair to the current viewport, leaving an EDGE margin on
   // both sides. Stays within [MIN, viewport - 2*EDGE]. Caller passes the
@@ -542,7 +547,7 @@ export function CoachAiLauncher({
 
             {/* ── Chat content ─────────────────────────────────────────── */}
             <div className="flex-1 min-h-0" style={{ fontSize: `${fontSize}px` }}>
-              <CoachAiChat playbookId={playbookId} mode={mode} />
+              <CoachAiChat playbookId={playbookId} playId={playId} mode={mode} />
             </div>
 
             {/* ── Resize handle (desktop, non-fullscreen) ──────────────── */}

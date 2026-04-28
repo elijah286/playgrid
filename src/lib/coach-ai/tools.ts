@@ -24,6 +24,12 @@ export type ToolContext = {
   /** Caller's IANA timezone (from the browser). Used so "today" / weekday tables
    *  in the system prompt match the coach's local clock instead of the server's UTC. */
   timezone: string | null;
+  /** Current play id, when chat is opened from inside the play editor. */
+  playId: string | null;
+  /** Display name of the current play (e.g. "Trips Left 03"). */
+  playName: string | null;
+  /** Formation label of the current play (e.g. "Trips Left"). */
+  playFormation: string | null;
 };
 
 export type ToolHandler = (

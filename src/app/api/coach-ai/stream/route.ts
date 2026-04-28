@@ -11,6 +11,8 @@ type StreamRequest = {
   history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
   userMessage: string;
   playbookId?: string | null;
+  /** Set by the chat when the launcher is open from within the play editor. */
+  playId?: string | null;
   mode?: CoachAiMode;
   timezone?: string | null;
 };
@@ -48,22 +50,53 @@ async function loadCallerInfo(): Promise<
 
 async function loadToolContext(
   playbookId: string | null,
+  playId: string | null,
   isAdmin: boolean,
   mode: CoachAiMode,
   timezone: string | null,
 ): Promise<ToolContext> {
-  if (!playbookId) {
-    return { playbookId: null, playbookName: null, sportVariant: null, gameLevel: null, sanctioningBody: null, ageDivision: null, isAdmin, canEditPlaybook: false, mode, timezone };
-  }
   const supabase = await createClient();
+
+  // Resolve play first — if the chat was opened from the editor we have a
+  // playId but might not have a playbookId from the URL. The play row tells
+  // us its parent playbook, which we then anchor to like normal.
+  let resolvedPlay: { id: string; name: string | null; formation: string | null; playbookId: string | null } | null = null;
+  if (playId) {
+    const { data: playRow } = await supabase
+      .from("plays")
+      .select("id, name, formation_name, playbook_id")
+      .eq("id", playId)
+      .maybeSingle();
+    if (playRow) {
+      resolvedPlay = {
+        id: playRow.id as string,
+        name: (playRow.name as string | null) ?? null,
+        formation: (playRow.formation_name as string | null) ?? null,
+        playbookId: (playRow.playbook_id as string | null) ?? null,
+      };
+    }
+  }
+
+  const effectivePlaybookId = playbookId ?? resolvedPlay?.playbookId ?? null;
+
+  if (!effectivePlaybookId) {
+    return {
+      playbookId: null, playbookName: null, sportVariant: null, gameLevel: null,
+      sanctioningBody: null, ageDivision: null, isAdmin, canEditPlaybook: false, mode,
+      timezone,
+      playId: resolvedPlay?.id ?? null,
+      playName: resolvedPlay?.name ?? null,
+      playFormation: resolvedPlay?.formation ?? null,
+    };
+  }
   const [{ data }, { data: canEdit }] = await Promise.all([
     supabase.from("playbooks")
       .select("name, sport_variant, game_level, sanctioning_body, age_division")
-      .eq("id", playbookId).maybeSingle(),
-    supabase.rpc("can_edit_playbook", { pb: playbookId }),
+      .eq("id", effectivePlaybookId).maybeSingle(),
+    supabase.rpc("can_edit_playbook", { pb: effectivePlaybookId }),
   ]);
   return {
-    playbookId,
+    playbookId: effectivePlaybookId,
     playbookName: (data?.name as string | null) ?? null,
     sportVariant: (data?.sport_variant as string | null) ?? null,
     gameLevel: (data?.game_level as string | null) ?? null,
@@ -73,6 +106,9 @@ async function loadToolContext(
     canEditPlaybook: Boolean(canEdit),
     mode,
     timezone,
+    playId: resolvedPlay?.id ?? null,
+    playName: resolvedPlay?.name ?? null,
+    playFormation: resolvedPlay?.formation ?? null,
   };
 }
 
@@ -116,7 +152,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const tz = typeof body.timezone === "string" && body.timezone ? body.timezone : null;
   const [ctx] = await Promise.all([
-    loadToolContext(body.playbookId ?? null, gate.isAdmin, requestedMode, tz),
+    loadToolContext(body.playbookId ?? null, body.playId ?? null, gate.isAdmin, requestedMode, tz),
   ]);
 
   const history: ChatMessage[] = [
