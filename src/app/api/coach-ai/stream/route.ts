@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { runAgent, type AgentStreamEvent } from "@/lib/coach-ai/agent";
+import { playDocumentToCoachDiagram } from "@/lib/coach-ai/play-tools";
+import type { PlayDocument } from "@/domain/play/types";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import {
   getBetaFeatures,
@@ -61,10 +63,11 @@ async function loadToolContext(
   // playId but might not have a playbookId from the URL. The play row tells
   // us its parent playbook, which we then anchor to like normal.
   let resolvedPlay: { id: string; name: string | null; formation: string | null; playbookId: string | null } | null = null;
+  let playDiagramText: string | null = null;
   if (playId) {
     const { data: playRow } = await supabase
       .from("plays")
-      .select("id, name, formation_name, playbook_id")
+      .select("id, name, formation_name, playbook_id, current_version_id")
       .eq("id", playId)
       .maybeSingle();
     if (playRow) {
@@ -74,6 +77,21 @@ async function loadToolContext(
         formation: (playRow.formation_name as string | null) ?? null,
         playbookId: (playRow.playbook_id as string | null) ?? null,
       };
+      const versionId = (playRow.current_version_id as string | null) ?? null;
+      if (versionId) {
+        const { data: version } = await supabase
+          .from("play_versions")
+          .select("document")
+          .eq("id", versionId)
+          .maybeSingle();
+        const doc = (version?.document ?? null) as PlayDocument | null;
+        if (doc) {
+          try {
+            const diagram = playDocumentToCoachDiagram(doc, resolvedPlay.name ?? "play");
+            playDiagramText = JSON.stringify(diagram);
+          } catch { /* malformed doc — fall back to no diagram, model can still call get_play */ }
+        }
+      }
     }
   }
 
@@ -87,6 +105,7 @@ async function loadToolContext(
       playId: resolvedPlay?.id ?? null,
       playName: resolvedPlay?.name ?? null,
       playFormation: resolvedPlay?.formation ?? null,
+      playDiagramText,
     };
   }
   const [{ data }, { data: canEdit }] = await Promise.all([
@@ -109,6 +128,7 @@ async function loadToolContext(
     playId: resolvedPlay?.id ?? null,
     playName: resolvedPlay?.name ?? null,
     playFormation: resolvedPlay?.formation ?? null,
+    playDiagramText,
   };
 }
 

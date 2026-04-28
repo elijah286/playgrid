@@ -297,9 +297,24 @@ function contextBlock(ctx: ToolContext): string {
     lines.push(
       `When the coach says "this play", "this one", "the play I'm looking at", or asks ` +
       `something with no other play context (e.g. "what's the best defense against this?"), ` +
-      `interpret it as the anchored play above. Do NOT ask the coach to clarify which play. ` +
-      `Use \`get_play\` with the anchored play id when you need its diagram details.`,
+      `interpret it as the anchored play above. Do NOT ask the coach to clarify which play.`,
     );
+    if (ctx.playDiagramText) {
+      lines.push("");
+      lines.push(`**Anchored play diagram (CoachDiagram JSON — this is the EXACT play the coach has open; do NOT invent a generic example):**`);
+      lines.push("```json");
+      lines.push(ctx.playDiagramText);
+      lines.push("```");
+      lines.push("");
+      lines.push(
+        `Use this diagram as ground truth for personnel, formation, and routes. When asked ` +
+        `to draw or describe the current play, use these exact players and routes — do not ` +
+        `substitute a generic 11-personnel example. You only need to call \`get_play\` if you ` +
+        `need fresher data (e.g. after an edit was just made).`,
+      );
+    } else {
+      lines.push(`Use \`get_play\` with the anchored play id when you need its diagram details.`);
+    }
   }
   return lines.join("\n");
 }

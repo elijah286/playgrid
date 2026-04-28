@@ -30,6 +30,10 @@ export type ToolContext = {
   playName: string | null;
   /** Formation label of the current play (e.g. "Trips Left"). */
   playFormation: string | null;
+  /** Pre-fetched CoachDiagram JSON for the anchored play, if any. Injected into the
+   *  system prompt so Cal answers questions about the visible play without having
+   *  to call get_play (and without inventing a generic example diagram). */
+  playDiagramText: string | null;
 };
 
 export type ToolHandler = (

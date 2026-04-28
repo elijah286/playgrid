@@ -17,7 +17,7 @@ import type { CoachAiTool } from "./tools";
 const LOS_Y = 0.4;
 
 /** Convert a saved PlayDocument back into the CoachDiagram yard-based format. */
-function playDocumentToCoachDiagram(doc: PlayDocument, name: string): CoachDiagram {
+export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): CoachDiagram {
   const { fieldWidthYds, fieldLengthYds, variant } = doc.sportProfile;
   const players = doc.layers.players.map((p) => ({
     id: p.label || p.id,
