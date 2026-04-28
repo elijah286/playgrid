@@ -1,8 +1,8 @@
 import type { SVGProps } from "react";
 
 /**
- * Coach Cal mark — a tilted football with laces + a purple AI sparkle.
- * The football idles at -15° and spins a full 360° every ~4.5 s.
+ * Coach Cal mark — a coach's headset (brand orange) with a purple AI spark.
+ * The spark gently pulses to signal the AI side of the persona.
  */
 export function CoachAiIcon({ className, ...rest }: SVGProps<SVGSVGElement>) {
   return (
@@ -16,48 +16,66 @@ export function CoachAiIcon({ className, ...rest }: SVGProps<SVGSVGElement>) {
       {...rest}
     >
       <style>{`
-        @keyframes coach-cal-spin {
-          0%, 65%  { transform: rotate(-15deg); }
-          80%      { transform: rotate(345deg); }
-          100%     { transform: rotate(345deg); }
+        @keyframes coach-cal-spark {
+          0%, 100% { transform: scale(1);   opacity: 1; }
+          50%      { transform: scale(1.18); opacity: 0.85; }
         }
-        .cc-fb {
-          animation: coach-cal-spin 4.5s ease-in-out infinite;
-          transform-origin: 12px 12px;
+        .cc-spark {
+          animation: coach-cal-spark 2.4s ease-in-out infinite;
+          transform-origin: 19.5px 4.2px;
         }
       `}</style>
 
-      {/* ── Animated football ─────────────────────────────────────── */}
-      <g className="cc-fb">
-        {/* Body — light orange-tan */}
-        <ellipse
-          cx="12" cy="12" rx="9" ry="5.4"
-          fill="#F5A35C"
-          stroke="#C96830"
-          strokeWidth="0.5"
-        />
-        {/* Seam arc */}
-        <path
-          d="M3 12 C6.5 9 17.5 9 21 12"
-          stroke="#C96830"
-          strokeWidth="1"
-          fill="none"
-        />
-        {/* Laces — white */}
-        <line x1="10.4" y1="10.1" x2="10.4" y2="13.9" stroke="white" strokeWidth="1.25"/>
-        <line x1="12"   y1="9.6"  x2="12"   y2="14.4" stroke="white" strokeWidth="1.25"/>
-        <line x1="13.6" y1="10.1" x2="13.6" y2="13.9" stroke="white" strokeWidth="1.25"/>
-        {/* Horizontal lace bar */}
-        <line x1="10.1" y1="12" x2="13.9" y2="12" stroke="white" strokeWidth="1"/>
-      </g>
-
-      {/* ── AI sparkle — static, top-right ───────────────────────── */}
+      {/* ── Headband arc ─────────────────────────────────────────── */}
       <path
-        d="M19.5 1.8 L20.15 3.65 L22 4.3 L20.15 4.95 L19.5 6.8 L18.85 4.95 L17 4.3 L18.85 3.65Z"
-        fill="#a78bfa"
+        d="M5 13 Q12 4 19 13"
+        stroke="#F26522"
+        strokeWidth="1.8"
+        fill="none"
       />
-      <circle cx="16.8" cy="2.1" r="0.58" fill="#c4b5fd"/>
-      <circle cx="21.8" cy="7.1" r="0.48" fill="#c4b5fd"/>
+
+      {/* ── Left earcup ──────────────────────────────────────────── */}
+      <rect
+        x="3" y="12" width="4.6" height="6.2" rx="1.6"
+        fill="#F26522"
+      />
+      <rect
+        x="3.7" y="12.7" width="3.2" height="2.2" rx="0.9"
+        fill="#FFB17A"
+        opacity="0.55"
+      />
+
+      {/* ── Right earcup ─────────────────────────────────────────── */}
+      <rect
+        x="16.4" y="12" width="4.6" height="6.2" rx="1.6"
+        fill="#F26522"
+      />
+      <rect
+        x="17.1" y="12.7" width="3.2" height="2.2" rx="0.9"
+        fill="#FFB17A"
+        opacity="0.55"
+      />
+
+      {/* ── Boom mic — curves from right earcup toward the mouth ── */}
+      <path
+        d="M18.7 18 Q17 21.5 12.6 21.4"
+        stroke="#F26522"
+        strokeWidth="1.6"
+        fill="none"
+      />
+      {/* Mic foam tip */}
+      <circle cx="12.2" cy="21.4" r="1.35" fill="#1C1C1E"/>
+      <circle cx="11.8" cy="21" r="0.35" fill="#FFB17A" opacity="0.7"/>
+
+      {/* ── AI spark — pulsing, top-right ────────────────────────── */}
+      <g className="cc-spark">
+        <path
+          d="M19.5 1.8 L20.2 3.6 L22 4.3 L20.2 5 L19.5 6.8 L18.8 5 L17 4.3 L18.8 3.6Z"
+          fill="#a78bfa"
+        />
+      </g>
+      <circle cx="16.6" cy="2.2" r="0.5" fill="#c4b5fd"/>
+      <circle cx="22"   cy="7.2" r="0.42" fill="#c4b5fd"/>
     </svg>
   );
 }
