@@ -284,11 +284,17 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   }
 
   // Build Zone objects (yards → normalized; full size → half-extents).
+  // Ignore the AI's `color` for FILL — models often emit opaque dark hexes
+  // which stack into a black blob over the field. Use the translucent
+  // palette for fill regardless; stroke can still take the AI hint.
+  // Also clamp half-extents so a single zone can't dominate the field.
+  const MAX_HALF_W = 0.32;
+  const MAX_HALF_H = 0.32;
   const zones: Zone[] = (diagram.zones ?? []).map((dz, i) => {
     const palette = ZONE_PALETTE[i % ZONE_PALETTE.length];
     const center = toNorm(dz.center[0], dz.center[1]);
-    const halfW = Math.abs(dz.size[0]) / 2 / profile.fieldWidthYds;
-    const halfH = Math.abs(dz.size[1]) / 2 / profile.fieldLengthYds;
+    const halfW = Math.min(Math.abs(dz.size[0]) / 2 / profile.fieldWidthYds, MAX_HALF_W);
+    const halfH = Math.min(Math.abs(dz.size[1]) / 2 / profile.fieldLengthYds, MAX_HALF_H);
     return {
       id: uid(),
       kind: dz.kind,
@@ -296,7 +302,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       size: { w: halfW, h: halfH },
       label: dz.label,
       style: {
-        fill: dz.color ?? palette.fill,
+        fill: palette.fill,
         stroke: dz.color ?? palette.stroke,
       },
     };
