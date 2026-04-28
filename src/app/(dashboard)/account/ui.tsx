@@ -1004,11 +1004,19 @@ function SeatsCard({
             style={{ width: `${pct}%` }}
           />
         </div>
-        {collaborators.some((c) => !c.consumesSeat) ? (
-          <p className="text-xs text-muted">
-            Coaches with their own paid plan don&rsquo;t use one of your seats.
-          </p>
-        ) : null}
+        {(() => {
+          const freeRiderCount = collaborators.filter((c) => !c.consumesSeat).length;
+          if (freeRiderCount === 0) return null;
+          const lead =
+            freeRiderCount === 1
+              ? "1 coach below has"
+              : `${freeRiderCount} coaches below have`;
+          return (
+            <p className="text-xs text-muted">
+              {lead} their own paid plan and don&rsquo;t count against your seats.
+            </p>
+          );
+        })()}
         {collaborators.length === 0 ? (
           <p className="text-xs text-muted">
             No coaches yet. Invite a coach with edit access from any playbook.
@@ -1034,7 +1042,7 @@ function SeatsCard({
                           title="This coach has their own paid plan, so they don't use one of your seats."
                           className="shrink-0 rounded-full bg-success-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success ring-1 ring-success/30"
                         >
-                          Free
+                          Free for you
                         </span>
                       ) : null}
                     </div>

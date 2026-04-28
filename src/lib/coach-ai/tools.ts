@@ -421,6 +421,7 @@ const place_defense: CoachAiTool = {
       findDefensiveAlignment,
       listDefensiveAlignments,
       alignmentForStrength,
+      zonesForStrength,
     } = require("@/domain/play/defensiveAlignments") as typeof import("@/domain/play/defensiveAlignments");
 
     const variant = ctx.sportVariant ?? "flag_7v7";
@@ -450,13 +451,36 @@ const place_defense: CoachAiTool = {
     const playersJson = JSON.stringify(
       players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" })),
     );
-    return {
-      ok: true,
-      result:
-        `Canonical "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):\n` +
-        `${alignment.description}\n\n` +
-        `Drop these players into your diagram (team:"D"):\n${playersJson}`,
-    };
+
+    const isMan = alignment.manCoverage === true;
+    const zones = isMan ? [] : zonesForStrength(alignment, strength);
+    const zonesJson = JSON.stringify(zones);
+
+    const lines: string[] = [
+      `Canonical "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):`,
+      alignment.description,
+      "",
+      `Drop these players into your diagram (team:"D"):`,
+      playersJson,
+    ];
+    if (isMan) {
+      lines.push(
+        "",
+        "MAN COVERAGE: do NOT emit zones for this look. Instead, draw an " +
+        "assignment line (a route from each defender to the receiver they're " +
+        "matched on) so the coach can see who has whom. The animation " +
+        "engine will track those routes during playback — set a small " +
+        "startDelaySec (~0.1-0.3s) on each defender route so they react to " +
+        "the snap rather than moving simultaneously with the offense.",
+      );
+    } else {
+      lines.push(
+        "",
+        "Zones for this coverage (drop into your diagram's `zones` field):",
+        zonesJson,
+      );
+    }
+    return { ok: true, result: lines.join("\n") };
   },
 };
 

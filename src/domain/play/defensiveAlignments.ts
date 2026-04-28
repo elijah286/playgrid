@@ -21,6 +21,21 @@ export type DefensiveAlignmentPlayer = {
   y: number;
 };
 
+/**
+ * Canonical zone shape attached to a (front, coverage) entry. Yards, authored
+ * for strength="right" (mirrors with the players when strength flips). Same
+ * fields as `CoachDiagramZone` so the AI tool can pass them straight through.
+ */
+export type DefensiveAlignmentZone = {
+  kind: "rectangle" | "ellipse";
+  /** Center of the zone in yards. */
+  center: [number, number];
+  /** FULL width and height in yards. */
+  size: [number, number];
+  /** Short label drawn inside the zone (e.g. "Deep third L"). */
+  label: string;
+};
+
 export type DefensiveAlignment = {
   /** Front name as a coach would say it. */
   front: string;
@@ -32,6 +47,18 @@ export type DefensiveAlignment = {
   description: string;
   /** Players in canonical positions, authored for strength="right". */
   players: DefensiveAlignmentPlayer[];
+  /**
+   * Zone shapes — only meaningful when `manCoverage !== true`. Same coord
+   * system as `players`. Optional: legacy alignments without zones simply
+   * render dots only.
+   */
+  zones?: DefensiveAlignmentZone[];
+  /**
+   * True for pure-man coverages (Cover 0, Cover 1 with man on every receiver,
+   * 7v7 Man). Suppresses zone rendering and tells the AI to draw assignment
+   * lines (defender → receiver) instead.
+   */
+  manCoverage?: boolean;
 };
 
 // ── Tackle 11-on-11 ─────────────────────────────────────────────────────────
@@ -171,6 +198,17 @@ const F7_COVER_3: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 13 },
     { id: "CB", x: 12,  y: 11 },
   ],
+  zones: [
+    // Underneath (4 zones, y≈1-9)
+    { kind: "rectangle", center: [-11, 5], size: [8,  8], label: "Flat L" },
+    { kind: "rectangle", center: [-4,  5], size: [6,  8], label: "Hook L" },
+    { kind: "rectangle", center: [ 4,  5], size: [6,  8], label: "Hook R" },
+    { kind: "rectangle", center: [11,  5], size: [8,  8], label: "Flat R" },
+    // Deep thirds (3 zones, y≈9-25)
+    { kind: "rectangle", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
+    { kind: "rectangle", center: [ 0,  17], size: [10, 16], label: "Deep 1/3 M" },
+    { kind: "rectangle", center: [10,  17], size: [10, 16], label: "Deep 1/3 R" },
+  ],
 };
 
 const F7_COVER_2: DefensiveAlignment = {
@@ -188,6 +226,79 @@ const F7_COVER_2: DefensiveAlignment = {
     { id: "FS", x: -7,  y: 12 },  // split-half safeties
     { id: "SS", x:  7,  y: 12 },
   ],
+  zones: [
+    // Underneath (5 zones, y≈1-9)
+    { kind: "rectangle", center: [-12, 5], size: [6, 8], label: "Flat L" },
+    { kind: "rectangle", center: [-5,  5], size: [6, 8], label: "Hook L" },
+    { kind: "rectangle", center: [ 0,  5], size: [6, 8], label: "Hook M" },
+    { kind: "rectangle", center: [ 5,  5], size: [6, 8], label: "Hook R" },
+    { kind: "rectangle", center: [12,  5], size: [6, 8], label: "Flat R" },
+    // Deep halves (2 zones, y≈9-25)
+    { kind: "rectangle", center: [-7.5, 17], size: [15, 16], label: "Deep 1/2 L" },
+    { kind: "rectangle", center: [ 7.5, 17], size: [15, 16], label: "Deep 1/2 R" },
+  ],
+};
+
+const F7_TAMPA_2: DefensiveAlignment = {
+  front: "7v7 Zone",
+  coverage: "Tampa 2",
+  variant: "flag_7v7",
+  description:
+    "7v7 Tampa 2 — Cover 2 shell with the middle hook (M) carrying any vertical " +
+    "down the deep middle. Effectively a 3-deep, 4-under look out of a 2-high disguise.",
+  // Same player layout as F7_COVER_2; the M's depth is canonical pre-snap, the
+  // carry is a post-snap responsibility expressed in the zones below.
+  players: [
+    { id: "CB", x: -12, y: 5 },
+    { id: "HL", x: -5,  y: 5 },
+    { id: "M",  x:  0,  y: 6 },   // middle hook — carries the seam
+    { id: "HR", x:  5,  y: 5 },
+    { id: "CB", x: 12,  y: 5 },
+    { id: "FS", x: -7,  y: 12 },
+    { id: "SS", x:  7,  y: 12 },
+  ],
+  zones: [
+    // 4-under
+    { kind: "rectangle", center: [-12, 5], size: [6, 8], label: "Flat L" },
+    { kind: "rectangle", center: [-5,  5], size: [6, 8], label: "Hook L" },
+    { kind: "rectangle", center: [ 5,  5], size: [6, 8], label: "Hook R" },
+    { kind: "rectangle", center: [12,  5], size: [6, 8], label: "Flat R" },
+    // Deep — M carries the middle pole between the two safety halves.
+    { kind: "rectangle", center: [-9, 17], size: [12, 16], label: "Deep 1/2 L" },
+    { kind: "rectangle", center: [ 0, 17], size: [6,  16], label: "Deep mid (M)" },
+    { kind: "rectangle", center: [ 9, 17], size: [12, 16], label: "Deep 1/2 R" },
+  ],
+};
+
+const F7_COVER_4: DefensiveAlignment = {
+  front: "7v7 Zone",
+  coverage: "Cover 4",
+  variant: "flag_7v7",
+  description:
+    "7v7 Quarters — four deep defenders each take a quarter of the field, three underneath. " +
+    "Strong vs verticals; soft underneath.",
+  players: [
+    // Three underneath
+    { id: "FL", x: -10, y: 5 },
+    { id: "M",  x:   0, y: 5 },
+    { id: "FR", x:  10, y: 5 },
+    // Four deep quarters
+    { id: "CB", x: -13, y: 11 },
+    { id: "FS", x:  -5, y: 13 },
+    { id: "SS", x:   5, y: 13 },
+    { id: "CB", x:  13, y: 11 },
+  ],
+  zones: [
+    // Underneath
+    { kind: "rectangle", center: [-10, 5], size: [10, 8], label: "Curl/Flat L" },
+    { kind: "rectangle", center: [  0, 5], size: [8,  8], label: "Hook M" },
+    { kind: "rectangle", center: [ 10, 5], size: [10, 8], label: "Curl/Flat R" },
+    // Quarters
+    { kind: "rectangle", center: [-11, 17], size: [8, 16], label: "Deep 1/4" },
+    { kind: "rectangle", center: [ -4, 17], size: [6, 16], label: "Deep 1/4" },
+    { kind: "rectangle", center: [  4, 17], size: [6, 16], label: "Deep 1/4" },
+    { kind: "rectangle", center: [ 11, 17], size: [8, 16], label: "Deep 1/4" },
+  ],
 };
 
 const F7_COVER_1: DefensiveAlignment = {
@@ -196,6 +307,7 @@ const F7_COVER_1: DefensiveAlignment = {
   variant: "flag_7v7",
   description:
     "7v7 man-free — six defenders in man on the six skill receivers, single-high FS over the top.",
+  manCoverage: true,
   players: [
     { id: "CB", x: -12, y: 5 },
     { id: "NB", x: -6,  y: 5 },
@@ -204,6 +316,25 @@ const F7_COVER_1: DefensiveAlignment = {
     { id: "CB", x: 12,  y: 5 },
     { id: "SS", x:  4,  y: 6 },   // matched on TE/slot
     { id: "FS", x:  0,  y: 13 },  // single-high
+  ],
+};
+
+const F7_COVER_0: DefensiveAlignment = {
+  front: "7v7 Man",
+  coverage: "Cover 0",
+  variant: "flag_7v7",
+  description:
+    "7v7 Cover 0 — every defender in pure man, no deep help. Rare, used to bait an aggressive throw " +
+    "or on critical down/distance.",
+  manCoverage: true,
+  players: [
+    { id: "CB", x: -12, y: 5 },
+    { id: "NB", x: -6,  y: 5 },
+    { id: "LB", x:  0,  y: 4 },
+    { id: "NB", x:  6,  y: 5 },
+    { id: "CB", x: 12,  y: 5 },
+    { id: "SS", x:  6,  y: 6 },
+    { id: "FS", x: -4,  y: 6 },
   ],
 };
 
@@ -230,6 +361,7 @@ const F5_COVER_1: DefensiveAlignment = {
   variant: "flag_5v5",
   description:
     "5v5 man — four defenders in man on the four skill players, one free safety deep.",
+  manCoverage: true,
   players: [
     { id: "CB", x: -8,  y: 5 },
     { id: "NB", x: -3,  y: 5 },
@@ -247,7 +379,10 @@ export const DEFENSIVE_ALIGNMENTS: DefensiveAlignment[] = [
   T11_46_BEAR_COVER_1,
   F7_COVER_3,
   F7_COVER_2,
+  F7_TAMPA_2,
+  F7_COVER_4,
   F7_COVER_1,
+  F7_COVER_0,
   F5_COVER_3,
   F5_COVER_1,
 ];
@@ -284,4 +419,16 @@ export function alignmentForStrength(
 ): DefensiveAlignmentPlayer[] {
   if (strength === "right") return alignment.players;
   return alignment.players.map((p) => ({ ...p, x: -p.x }));
+}
+
+export function zonesForStrength(
+  alignment: DefensiveAlignment,
+  strength: "left" | "right",
+): DefensiveAlignmentZone[] {
+  const zones = alignment.zones ?? [];
+  if (strength === "right") return zones;
+  return zones.map((z) => ({
+    ...z,
+    center: [-z.center[0], z.center[1]],
+  }));
 }

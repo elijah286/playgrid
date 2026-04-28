@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
-import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
 
 type Faq = { q: string; a: string };
 
-function buildFaqs(freeMaxPlays: number): Faq[] {
+function buildFaqs(freeMaxPlays: number, coachSeats: number): Faq[] {
   return [
   {
     q: "What is xogridmaker?",
@@ -57,7 +58,7 @@ function buildFaqs(freeMaxPlays: number): Faq[] {
   },
   {
     q: "Can my whole staff use one Team Coach plan?",
-    a: `Team Coach includes ${DEFAULT_INCLUDED_SEATS} collaborator seats — enough for a small staff. Beyond that, extra seats are $${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed to the head coach. If an assistant already has their own Team Coach plan, they don't count against your seats — they ride on their own subscription.`,
+    a: `Team Coach includes ${coachSeats} collaborator seat${coachSeats === 1 ? "" : "s"} — enough for a small staff. Beyond that, extra seats are $${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed to the head coach. If an assistant already has their own Team Coach plan, they don't count against your seats — they ride on their own subscription.`,
   },
   {
     q: "What is Game Mode?",
@@ -79,8 +80,11 @@ function buildFaqs(freeMaxPlays: number): Faq[] {
 }
 
 export default async function FaqPage() {
-  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
-  const faqs = buildFaqs(freeMaxPlays);
+  const [freeMaxPlays, seatDefaults] = await Promise.all([
+    getFreeMaxPlaysPerPlaybook(),
+    getSeatDefaults(),
+  ]);
+  const faqs = buildFaqs(freeMaxPlays, seatDefaults.coach);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",

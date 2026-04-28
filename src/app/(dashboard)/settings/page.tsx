@@ -19,6 +19,8 @@ import {
   listGiftCodesAction,
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
+import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
+import { listCoachBonusGrantsAction } from "@/app/actions/admin-seat-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
@@ -74,6 +76,8 @@ export default async function SettingsPage() {
     opexEntriesRes,
     anthropicAdminKeyRes,
     openaiAdminKeyRes,
+    seatDefaults,
+    coachBonusRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -99,6 +103,8 @@ export default async function SettingsPage() {
     listOpexEntriesAction(opexPeriod),
     getAnthropicAdminKeyStatusAction(),
     getOpenAIAdminKeyStatusAction(),
+    getSeatDefaults(),
+    listCoachBonusGrantsAction(),
   ]);
 
   return (
@@ -242,6 +248,8 @@ export default async function SettingsPage() {
             ? { configured: openaiAdminKeyRes.configured, statusLabel: openaiAdminKeyRes.statusLabel }
             : { configured: false, statusLabel: "No admin key is saved yet." }
         }
+        initialSeatDefaults={seatDefaults}
+        initialCoachBonusRows={coachBonusRes.ok ? coachBonusRes.rows : []}
       />
     </div>
   );

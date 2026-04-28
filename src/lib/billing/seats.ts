@@ -1,9 +1,10 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
-import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import { getDefaultIncludedSeatsForTier } from "@/lib/site/seat-defaults-config";
 
-export { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH };
+export { SEAT_PRICE_USD_PER_MONTH };
 
 export type SeatUsage = {
   used: number;
@@ -25,16 +26,18 @@ export async function getSeatUsage(ownerId: string): Promise<SeatUsage> {
   }
 
   const admin = createServiceRoleClient();
-  const [grantResult, usedResult] = await Promise.all([
+  const [grantResult, usedResult, tierDefault] = await Promise.all([
     admin
       .from("owner_seat_grants")
-      .select("included_seats, purchased_seats")
+      .select("bonus_seats, purchased_seats")
       .eq("owner_id", ownerId)
       .maybeSingle(),
     admin.rpc("seats_used", { p_owner_id: ownerId }),
+    getDefaultIncludedSeatsForTier(ownerEntitlement.tier),
   ]);
 
-  const included = (grantResult.data?.included_seats as number | null) ?? DEFAULT_INCLUDED_SEATS;
+  const bonus = (grantResult.data?.bonus_seats as number | null) ?? 0;
+  const included = tierDefault + bonus;
   const purchased = (grantResult.data?.purchased_seats as number | null) ?? 0;
   const used = (usedResult.data as number | null) ?? 0;
   const available = Math.max(0, included + purchased - used);

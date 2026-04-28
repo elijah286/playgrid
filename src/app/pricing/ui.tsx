@@ -8,7 +8,8 @@ import {
   redeemGiftCodeAction,
 } from "@/app/actions/billing";
 import { TIER_LABEL } from "@/lib/billing/features";
-import { DEFAULT_INCLUDED_SEATS, SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,7 @@ type TierDef = {
   cta: string;
 };
 
-function buildTiers(freeMaxPlays: number): TierDef[] {
+function buildTiers(freeMaxPlays: number, seatDefaults: SeatDefaults): TierDef[] {
   return [
   {
     id: "free",
@@ -50,7 +51,7 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
       "Everything in Solo Coach",
       "Unlimited plays",
       "Wristbands (print + PDF)",
-      `${DEFAULT_INCLUDED_SEATS} collaborator seats included — $${SEAT_PRICE_USD_PER_MONTH}/seat/month after`,
+      `${seatDefaults.coach} collaborator seat${seatDefaults.coach === 1 ? "" : "s"} included — $${SEAT_PRICE_USD_PER_MONTH}/seat/month after`,
       "Manage players",
       "Share notes",
       "Game Mode — sideline view with play-by-play results tracking",
@@ -64,6 +65,7 @@ function buildTiers(freeMaxPlays: number): TierDef[] {
     price: { month: 25, year: 250 },
     features: [
       "Everything in Team Coach",
+      `${seatDefaults.coachPro} collaborator seat${seatDefaults.coachPro === 1 ? "" : "s"} included`,
       "Coach Cal AI — ask anything, get instant answers",
       "Generate plays and full playbooks with AI",
       "Strategy feedback vs. specific defenses",
@@ -100,13 +102,15 @@ export function PricingClient({
   showCoachAi,
   isAuthed = true,
   freeMaxPlays,
+  seatDefaults,
 }: {
   entitlement: Entitlement | null;
   showCoachAi: boolean;
   isAuthed?: boolean;
   freeMaxPlays: number;
+  seatDefaults: SeatDefaults;
 }) {
-  const allTiers = buildTiers(freeMaxPlays);
+  const allTiers = buildTiers(freeMaxPlays, seatDefaults);
   const tiers = showCoachAi ? allTiers : allTiers.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
   const [pending, startTransition] = useTransition();
@@ -307,10 +311,13 @@ export function PricingClient({
       {isAuthed && <RedeemCodePanel />}
 
       <p className="text-center text-xs text-muted">
-        Prices in USD. Team Coach includes {DEFAULT_INCLUDED_SEATS} collaborator
-        seats; add more for ${SEAT_PRICE_USD_PER_MONTH}/seat/month. Coaches who
-        already have their own Team Coach plan don&rsquo;t count against your
-        seats. Cancel anytime from Manage billing.
+        Prices in USD. Team Coach includes {seatDefaults.coach} collaborator
+        seat{seatDefaults.coach === 1 ? "" : "s"}; add more for ${SEAT_PRICE_USD_PER_MONTH}/seat/month.
+        {showCoachAi
+          ? ` Coach Pro includes ${seatDefaults.coachPro} collaborator seat${seatDefaults.coachPro === 1 ? "" : "s"}.`
+          : ""}{" "}
+        Coaches who already have their own paid plan don&rsquo;t count against
+        your seats. Cancel anytime from Manage billing.
       </p>
     </div>
   );

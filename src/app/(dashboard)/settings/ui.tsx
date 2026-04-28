@@ -31,6 +31,9 @@ import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAd
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
+import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
+import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
+import type { CoachBonusRow } from "@/app/actions/admin-seat-config";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
 import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
@@ -124,6 +127,8 @@ export function SettingsClient({
   opexError,
   anthropicAdminKey,
   openaiAdminKey,
+  initialSeatDefaults,
+  initialCoachBonusRows,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -159,6 +164,8 @@ export function SettingsClient({
   opexError: string | null;
   anthropicAdminKey: AdminKeyProps;
   openaiAdminKey: AdminKeyProps;
+  initialSeatDefaults: SeatDefaults;
+  initialCoachBonusRows: CoachBonusRow[];
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -405,13 +412,19 @@ export function SettingsClient({
       )}
 
       {tab === "site" && (
-        <SiteSettingsAdminClient
-          initialHideLobbyAnimation={initialHideLobbyAnimation}
-          initialExamplesPageEnabled={initialExamplesPageEnabled}
-          initialFreeMaxPlays={initialFreeMaxPlays}
-          initialMobileEditingEnabled={initialMobileEditingEnabled}
-          initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
-        />
+        <div className="space-y-4">
+          <CoachSeatsAdminClient
+            initialDefaults={initialSeatDefaults}
+            initialBonusRows={initialCoachBonusRows}
+          />
+          <SiteSettingsAdminClient
+            initialHideLobbyAnimation={initialHideLobbyAnimation}
+            initialExamplesPageEnabled={initialExamplesPageEnabled}
+            initialFreeMaxPlays={initialFreeMaxPlays}
+            initialMobileEditingEnabled={initialMobileEditingEnabled}
+            initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
+          />
+        </div>
       )}
     </div>
   );
