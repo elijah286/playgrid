@@ -38,6 +38,15 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      {
+        // Force HTML documents to revalidate so browsers (notably Safari)
+        // can't pin a stale shell across deploys. Hashed assets under
+        // /_next/static remain immutable and are excluded.
+        source: "/:path((?!_next/static|_next/image|favicon.ico).*)",
+        headers: [
+          { key: "Cache-Control", value: "no-store, must-revalidate" },
+        ],
+      },
     ];
   },
 };
