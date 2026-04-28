@@ -9,8 +9,12 @@ import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import {
+  createCustomOpponentAction,
   installDefenseVsPlayAction,
+  promoteCustomOpponentAction,
   savePlayVersionAction,
+  setOpponentHiddenAction,
+  updateCustomOpponentPlayersAction,
 } from "@/app/actions/plays";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
@@ -81,6 +85,13 @@ type Props = {
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
+  /** ID of the hidden custom-opponent play attached to this play, if any.
+   *  When present, the opposing-side players in `vs_play_snapshot` are
+   *  drag-editable (they back this hidden play). */
+  initialCustomOpponentPlayId?: string | null;
+  /** When true, the user "cleared" the opponent overlay: the custom data is
+   *  preserved but the snapshot is hidden in the canvas. */
+  initialOpponentHidden?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
@@ -114,6 +125,8 @@ function PlayEditorClientInner({
   mobileEditingEnabled = false,
   gameModeAvailable = false,
   canUseGameMode = false,
+  initialCustomOpponentPlayId = null,
+  initialOpponentHidden = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -182,6 +195,14 @@ function PlayEditorClientInner({
 
   // Transient opponent overlay (never saved, resets on navigation)
   const [opponentPlayers, setOpponentPlayers] = useState<Player[] | null>(null);
+
+  // Custom opponent state — backed by a hidden play attached to this play.
+  // `customOpponentPlayId` is null when no custom is attached. `opponentHidden`
+  // toggles whether the snapshot renders without deleting the data.
+  const [customOpponentPlayId, setCustomOpponentPlayId] = useState<string | null>(
+    initialCustomOpponentPlayId,
+  );
+  const [opponentHidden, setOpponentHidden] = useState(initialOpponentHidden);
 
   // Active drawing style (defaults for new routes)
   const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
@@ -805,7 +826,10 @@ function PlayEditorClientInner({
                 fieldBackground={doc.fieldBackground}
                 animatingPlayerIds={animatingPlayerIds}
                 opponentFormation={opponentFormation ?? null}
-                opponentPlayers={opponentPlayers ?? vsSnapshot?.players ?? null}
+                opponentPlayers={
+                  opponentPlayers ??
+                  (opponentHidden ? null : vsSnapshot?.players ?? null)
+                }
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
             </div>
@@ -934,8 +958,49 @@ function PlayEditorClientInner({
                 playType={doc.metadata.playType ?? "offense"}
                 nav={initialNav}
                 allFormations={opponentFormations ?? allFormations}
-                hasSelection={opponentPlayers != null}
+                hasSelection={
+                  opponentPlayers != null ||
+                  (customOpponentPlayId != null && !opponentHidden)
+                }
                 onChange={setOpponentPlayers}
+                hasCustomOpponent={customOpponentPlayId != null}
+                opponentHidden={opponentHidden}
+                canEditCustom={canEdit && !isExamplePreview}
+                onCreateCustom={async () => {
+                  if (
+                    blockIfPreview(
+                      "Custom opponents aren't saved on example plays. Start your own playbook to keep changes.",
+                    )
+                  ) {
+                    return;
+                  }
+                  const res = await createCustomOpponentAction(playId);
+                  if (!res.ok) {
+                    toast(res.error, "error");
+                    return;
+                  }
+                  setCustomOpponentPlayId(res.hiddenPlayId);
+                  setOpponentHidden(false);
+                  setOpponentPlayers(null);
+                  router.refresh();
+                }}
+                onSetHidden={async (hidden) => {
+                  const res = await setOpponentHiddenAction(playId, hidden);
+                  if (!res.ok) {
+                    toast(res.error, "error");
+                    return;
+                  }
+                  setOpponentHidden(hidden);
+                }}
+                onSaveCustomAsPlay={async (name) => {
+                  const res = await promoteCustomOpponentAction(playId, name);
+                  if (!res.ok) {
+                    toast(res.error, "error");
+                    return;
+                  }
+                  toast(`Saved "${name}" as a defensive play.`, "success");
+                  router.push(`/plays/${res.playId}/edit`);
+                }}
                 onInstallVsPlay={
                   isDefense
                     ? async (offId: string) => {

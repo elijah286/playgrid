@@ -144,6 +144,8 @@ export default async function PlayEditPage({ params }: Props) {
       mobileEditingEnabled={mobileEditingEnabled}
       gameModeAvailable={gameModeAvailable}
       canUseGameMode={viewerCanUseGameMode}
+      initialCustomOpponentPlayId={res.customOpponentPlayId}
+      initialOpponentHidden={res.opponentHidden}
     />
   );
 }

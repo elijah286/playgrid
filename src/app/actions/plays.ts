@@ -396,11 +396,29 @@ export async function getPlayForEditorAction(playId: string) {
     },
   };
 
+  // Detect a hidden custom-opponent child attached to this play. The parent
+  // links to it via vs_play_id, but the editor needs to know whether the
+  // opposing-side players come from a hidden play (drag-editable) vs a
+  // regular standalone play (read-only mirror).
+  let customOpponentPlayId: string | null = null;
+  if (play.vs_play_id) {
+    const { data: linked } = await supabase
+      .from("plays")
+      .select("id, attached_to_play_id")
+      .eq("id", play.vs_play_id as string)
+      .maybeSingle();
+    if (linked && (linked.attached_to_play_id as string | null) === play.id) {
+      customOpponentPlayId = linked.id as string;
+    }
+  }
+
   return {
     ok: true as const,
     play,
     version: ver,
     document: docWithLink,
+    customOpponentPlayId,
+    opponentHidden: Boolean(play.opponent_hidden),
   };
 }
 

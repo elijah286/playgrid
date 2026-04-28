@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ChevronRight, Search, Swords, Users, X } from "lucide-react";
+import { ChevronRight, Eye, EyeOff, Pencil, Save, Search, Swords, Users, X } from "lucide-react";
 import type { PlayDocument, Player } from "@/domain/play/types";
 import type { PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import type { SavedFormation } from "@/app/actions/formations";
@@ -23,10 +23,25 @@ type Props = {
    * expected to snapshot the offense into a new matchup play and navigate.
    */
   onInstallVsPlay?: (offensivePlayId: string) => Promise<void> | void;
+  /** True when a hidden custom-opponent play is attached to this play. */
+  hasCustomOpponent?: boolean;
+  /** True when the user "cleared" the overlay — custom data preserved but
+   *  hidden in the canvas. */
+  opponentHidden?: boolean;
+  /** Whether the viewer can mutate the custom opponent (canEdit + not in
+   *  game mode). Drag and Save-as actions are disabled when false. */
+  canEditCustom?: boolean;
+  /** Create a new custom opponent (drops default defenders/offense). */
+  onCreateCustom?: () => Promise<void> | void;
+  /** Toggle opponent_hidden (Clear vs Show). */
+  onSetHidden?: (hidden: boolean) => Promise<void> | void;
+  /** Promote the hidden custom into a standalone play under the given name. */
+  onSaveCustomAsPlay?: (name: string) => Promise<void> | void;
 };
 
 type Selection =
   | { kind: "none" }
+  | { kind: "custom" }
   | { kind: "formation"; id: string; label: string }
   | { kind: "play"; id: string; label: string };
 
@@ -45,14 +60,25 @@ export function OpponentOverlayCard({
   hasSelection,
   onChange,
   onInstallVsPlay,
+  hasCustomOpponent = false,
+  opponentHidden = false,
+  canEditCustom = false,
+  onCreateCustom,
+  onSetHidden,
+  onSaveCustomAsPlay,
 }: Props) {
   const { toast } = useToast();
-  const [selection, setSelection] = useState<Selection>({ kind: "none" });
+  const [selection, setSelection] = useState<Selection>(
+    hasCustomOpponent ? { kind: "custom" } : { kind: "none" },
+  );
   const [query, setQuery] = useState("");
   const [formationsOpen, setFormationsOpen] = useState(false);
   const [playsOpen, setPlaysOpen] = useState(true);
   const [pending, startTransition] = useTransition();
   const [installing, startInstall] = useTransition();
+  const [customPending, startCustomPending] = useTransition();
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
 
   const wantKinds: Array<"offense" | "defense" | "special_teams"> =
     playType === "offense"
@@ -128,8 +154,46 @@ export function OpponentOverlayCard({
   };
 
   const clear = () => {
+    // For custom opponents, "clear" means hide-without-deleting via the
+    // server (preserves the hidden play). For transient picks (formation/
+    // play), it just resets local state.
+    if (hasCustomOpponent && onSetHidden) {
+      startCustomPending(async () => {
+        await onSetHidden(true);
+      });
+      return;
+    }
     setSelection({ kind: "none" });
     onChange(null);
+  };
+
+  const showCustom = () => {
+    if (!onSetHidden) return;
+    startCustomPending(async () => {
+      await onSetHidden(false);
+    });
+  };
+
+  const pickCustom = () => {
+    if (!onCreateCustom) return;
+    startCustomPending(async () => {
+      await onCreateCustom();
+      setSelection({ kind: "custom" });
+    });
+  };
+
+  const submitSave = () => {
+    if (!onSaveCustomAsPlay) return;
+    const name = saveName.trim();
+    if (!name) {
+      toast("Enter a name for the new defensive play.", "error");
+      return;
+    }
+    startCustomPending(async () => {
+      await onSaveCustomAsPlay(name);
+      setSaveOpen(false);
+      setSaveName("");
+    });
   };
 
   const label =
@@ -177,7 +241,92 @@ export function OpponentOverlayCard({
         />
       </div>
 
-      {selection.kind !== "none" && (
+      {selection.kind === "custom" && hasCustomOpponent && (
+        <div className="mx-3 mt-2 flex flex-col gap-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1 text-foreground">
+              <Pencil className="size-3 text-amber-500" />
+              <span className="font-medium">Custom opponent</span>
+              {opponentHidden && (
+                <span className="ml-1 rounded bg-surface-inset px-1 py-0.5 text-[10px] text-muted">
+                  hidden
+                </span>
+              )}
+            </span>
+            {customPending && <span className="text-[10px] text-muted">working…</span>}
+          </div>
+          <p className="text-[11px] leading-snug text-muted">
+            {canEditCustom
+              ? "Drag opposing players on the field to position them. Saved automatically."
+              : "Saved with this play. Switch to edit mode to drag."}
+          </p>
+          <div className="flex flex-wrap items-center gap-1">
+            {opponentHidden ? (
+              <button
+                type="button"
+                disabled={customPending}
+                onClick={showCustom}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-raised px-2 py-1 text-[11px] font-medium text-foreground hover:bg-surface-inset disabled:opacity-60"
+              >
+                <Eye className="size-3" />
+                Show
+              </button>
+            ) : null}
+            {canEditCustom && onSaveCustomAsPlay && (
+              <button
+                type="button"
+                disabled={customPending}
+                onClick={() => {
+                  setSaveName("");
+                  setSaveOpen(true);
+                }}
+                className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              >
+                <Save className="size-3" />
+                Save as defensive play
+              </button>
+            )}
+          </div>
+          {saveOpen && (
+            <div className="mt-1 flex flex-col gap-1 rounded border border-border bg-surface-raised p-2">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                New play name
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitSave();
+                  if (e.key === "Escape") setSaveOpen(false);
+                }}
+                placeholder="e.g. Cover 2 Zone"
+                className="w-full rounded border border-border bg-surface-inset px-2 py-1 text-xs text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+              <div className="flex justify-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSaveOpen(false)}
+                  className="rounded px-2 py-1 text-[11px] text-muted hover:bg-surface-inset hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={customPending || saveName.trim().length === 0}
+                  onClick={submitSave}
+                  className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {selection.kind !== "none" && selection.kind !== "custom" && (
         <div className="mx-3 mt-2 flex flex-col gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs">
           <div className="flex items-center justify-between">
             <span className="min-w-0 truncate text-foreground">
@@ -208,7 +357,26 @@ export function OpponentOverlayCard({
       )}
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-        {empty && (
+        {canEditCustom && onCreateCustom && !hasCustomOpponent && q.length === 0 && (
+          <div className="px-2 pb-2">
+            <button
+              type="button"
+              disabled={customPending}
+              onClick={pickCustom}
+              className="flex w-full items-center gap-2 rounded-md border border-dashed border-amber-400/50 bg-amber-400/5 px-2 py-2 text-left text-xs text-foreground transition-colors hover:bg-amber-400/10 disabled:opacity-60"
+            >
+              <Pencil className="size-3.5 text-amber-500" />
+              <span className="flex flex-col">
+                <span className="font-medium">Custom</span>
+                <span className="text-[11px] text-muted">
+                  Drop a default opponent and arrange it for this play
+                </span>
+              </span>
+            </button>
+          </div>
+        )}
+
+        {empty && !hasCustomOpponent && !onCreateCustom && (
           <p className="px-3 py-6 text-center text-xs text-muted">
             {q ? "No matches." : "No eligible plays or formations yet."}
           </p>
