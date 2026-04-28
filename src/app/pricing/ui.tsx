@@ -8,7 +8,11 @@ import {
   redeemGiftCodeAction,
 } from "@/app/actions/billing";
 import { TIER_LABEL } from "@/lib/billing/features";
-import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
+import {
+  MESSAGE_PACK_PRICE_USD_PER_MONTH,
+  MESSAGE_PACK_SIZE,
+  SEAT_PRICE_USD_PER_MONTH,
+} from "@/lib/billing/seats-config";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import { SegmentedControl } from "@/components/ui";
@@ -22,6 +26,7 @@ type TierDef = {
   tagline: string;
   price: { month: number; year: number };
   features: string[];
+  addOns?: string;
   cta: string;
 };
 
@@ -51,11 +56,12 @@ function buildTiers(freeMaxPlays: number, seatDefaults: SeatDefaults): TierDef[]
       "Everything in Solo Coach",
       "Unlimited plays",
       "Wristbands (print + PDF)",
-      `${seatDefaults.coach} collaborator seat${seatDefaults.coach === 1 ? "" : "s"} included — $${SEAT_PRICE_USD_PER_MONTH}/seat/month after`,
+      `${seatDefaults.coach} collaborator seat${seatDefaults.coach === 1 ? "" : "s"} included`,
       "Manage players",
       "Share notes",
       "Game Mode — sideline view with play-by-play results tracking",
     ],
+    addOns: `Need more? +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo`,
     cta: "Upgrade to Team Coach",
   },
   {
@@ -74,6 +80,7 @@ function buildTiers(freeMaxPlays: number, seatDefaults: SeatDefaults): TierDef[]
       "Practice and game scheduling help",
       "200 Coach Cal messages per month",
     ],
+    addOns: `Scale up: +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo · +$${MESSAGE_PACK_PRICE_USD_PER_MONTH}/mo per ${MESSAGE_PACK_SIZE} extra messages`,
     cta: "Start 7-day free trial",
   },
   ];
@@ -227,7 +234,7 @@ export function PricingClient({
                 ) : null}
               </div>
 
-              <ul className="mb-6 space-y-2 text-sm">
+              <ul className="mb-3 space-y-2 text-sm">
                 {t.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <Check className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -235,6 +242,11 @@ export function PricingClient({
                   </li>
                 ))}
               </ul>
+              {t.addOns ? (
+                <p className="mb-6 pl-6 text-[11px] text-muted">{t.addOns}</p>
+              ) : (
+                <div className="mb-6" />
+              )}
 
               <div className="mt-auto">
                 {(() => {
@@ -310,15 +322,53 @@ export function PricingClient({
 
       {isAuthed && <RedeemCodePanel />}
 
+      <AddOnsDisclosure showCoachAi={showCoachAi} />
+
       <p className="text-center text-xs text-muted">
-        Prices in USD. Team Coach includes {seatDefaults.coach} collaborator
-        seat{seatDefaults.coach === 1 ? "" : "s"}; add more for ${SEAT_PRICE_USD_PER_MONTH}/seat/month.
-        {showCoachAi
-          ? ` Coach Pro includes ${seatDefaults.coachPro} collaborator seat${seatDefaults.coachPro === 1 ? "" : "s"}.`
-          : ""}{" "}
-        Coaches who already have their own paid plan don&rsquo;t count against
-        your seats. Cancel anytime from Manage billing.
+        Prices in USD. Coaches who already have their own paid plan
+        don&rsquo;t count against your seats. Cancel anytime from Manage
+        billing.
       </p>
+    </div>
+  );
+}
+
+function AddOnsDisclosure({ showCoachAi }: { showCoachAi: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mx-auto max-w-md text-center">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
+      >
+        {open ? "Hide add-ons" : "See add-ons"}
+      </button>
+      {open ? (
+        <div className="mt-3 rounded-xl border border-border bg-surface-raised p-4 text-left text-xs text-foreground">
+          <dl className="space-y-3">
+            <div>
+              <dt className="font-semibold">Extra collaborator seats</dt>
+              <dd className="text-muted">
+                ${SEAT_PRICE_USD_PER_MONTH}/seat/month, billed with your plan.
+                Add or remove seats anytime from Manage billing. Coaches who
+                already pay for their own plan don&rsquo;t count.
+              </dd>
+            </div>
+            {showCoachAi ? (
+              <div>
+                <dt className="font-semibold">Extra Coach Cal messages</dt>
+                <dd className="text-muted">
+                  ${MESSAGE_PACK_PRICE_USD_PER_MONTH}/month per pack of{" "}
+                  {MESSAGE_PACK_SIZE} additional messages on Coach Pro. Stack
+                  as many packs as you need; unused messages don&rsquo;t roll
+                  over.
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      ) : null}
     </div>
   );
 }
