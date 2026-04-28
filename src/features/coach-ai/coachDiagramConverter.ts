@@ -210,8 +210,17 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     }
   }
 
-  // Build Player objects
-  const playerMap = new Map<string, Player>();
+  // Build Player objects.
+  //
+  // We track players two ways:
+  //   - `allPlayers` — every player, preserving duplicates (defensive
+  //     alignments routinely return TWO defenders with the same label,
+  //     e.g. "CB" left + "CB" right in Cover 3).
+  //   - `routeLookup` — id → first-occurrence Player, used only for
+  //     route carrier resolution. Routes are offensive in practice and
+  //     offense ids are unique, so first-occurrence is safe.
+  const allPlayers: Player[] = [];
+  const routeLookup = new Map<string, Player>();
   let receiverIdx = 0;
   for (const sp of staged) {
     const dp = sp.dp;
@@ -277,13 +286,14 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       style,
       shape,
     };
-    playerMap.set(dp.id, player);
+    allPlayers.push(player);
+    if (!routeLookup.has(dp.id)) routeLookup.set(dp.id, player);
   }
 
   // Build Route objects
   const routes: Route[] = [];
   for (const dr of diagram.routes ?? []) {
-    const carrier = playerMap.get(dr.from);
+    const carrier = routeLookup.get(dr.from);
     if (!carrier) continue;
 
     // Nodes: start from player position, then each waypoint
@@ -347,7 +357,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     };
   });
 
-  const players = [...playerMap.values()];
+  const players = allPlayers;
   const base = createEmptyPlayDocument({ sportProfile: { ...profile } });
 
   return {
