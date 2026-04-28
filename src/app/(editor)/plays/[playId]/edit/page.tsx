@@ -15,6 +15,7 @@ import {
 } from "@/lib/site/beta-features-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
+import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 import type { SavedFormation } from "@/app/actions/formations";
 
 type Props = { params: Promise<{ playId: string }> };
@@ -123,8 +124,13 @@ export default async function PlayEditPage({ params }: Props) {
     isAdmin,
     isEntitled: isCoachInPlaybook,
   });
-  const viewerCanUseGameMode =
-    isAdmin || canUseGameMode(await getCurrentEntitlement());
+  const editorEntitlement = await getCurrentEntitlement();
+  const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
+  const showCoachCalCta =
+    betaFeatures.coach_ai === "all" &&
+    (editorEntitlement?.tier ?? "free") !== "coach_ai" &&
+    user !== null &&
+    !isAdmin;
 
   return (
     <>
@@ -133,6 +139,7 @@ export default async function PlayEditPage({ params }: Props) {
         playbookName={(book?.name as string | null) ?? null}
         playbookColor={(book?.color as string | null) ?? null}
       />
+      <CoachCalPlaybookCta show={showCoachCalCta} />
       <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}

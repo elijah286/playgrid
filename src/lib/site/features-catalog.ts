@@ -219,6 +219,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-10-01",
   },
   {
+    id: "playbook-header-team-coach-locks",
+    name: "Locked menu items show \"Team Coach\" badge",
+    description:
+      "In the playbook header overflow menu, items that require Team Coach (Invite team member, Send a copy, Duplicate) now display a small lock badge for free users instead of revealing they're locked only on click. The full upgrade modal still fires when the item is clicked.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
+    id: "coach-cal-cta-play-editor",
+    name: "Coach Cal teaser inside the play editor",
+    description:
+      "The Coach Cal CTA banner — previously only on the playbook list — also fires on the individual play editor for non-Coach-Pro users. Coaches deep in the editing workflow now discover Coach Cal at the moment they could most use AI suggestions, not just on the playbook overview.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "play-cap-soft-warn",
     name: "Play-cap soft warning",
     description:

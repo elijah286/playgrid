@@ -444,6 +444,7 @@ export function PlaybookHeader({
                 homeHref={homeHref}
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
+                lockTeamCoachItems={!viewerIsCoach}
                 onInvite={canShare ? openInvite : null}
                 onCustomize={canManage ? () => setCustomizeOpen(true) : null}
                 onRevokeAllInvites={
@@ -848,11 +849,21 @@ function SectionDivider() {
   return <div className="my-1 h-px bg-border" />;
 }
 
+function TeamCoachLockBadge() {
+  return (
+    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+      <Lock className="size-2.5" />
+      Team Coach
+    </span>
+  );
+}
+
 function HeaderMenu({
   playbookId,
   homeHref,
   onAccent,
   onAccentHover,
+  lockTeamCoachItems,
   onInvite,
   onRevokeAllInvites,
   outstandingInviteCount,
@@ -874,6 +885,8 @@ function HeaderMenu({
   homeHref: string;
   onAccent: string;
   onAccentHover: string;
+  /** When true, items that require Team Coach show a small lock badge. */
+  lockTeamCoachItems: boolean;
   onInvite: (() => void) | null;
   onRevokeAllInvites: (() => void) | null;
   outstandingInviteCount: number;
@@ -951,6 +964,7 @@ function HeaderMenu({
               >
                 <UserPlus className="size-4 shrink-0" />
                 <span>Invite team member</span>
+                {lockTeamCoachItems && <TeamCoachLockBadge />}
               </button>
             )}
           </div>
@@ -1025,6 +1039,7 @@ function HeaderMenu({
               >
                 <Send className="size-4 shrink-0" />
                 <span>Send a copy</span>
+                {lockTeamCoachItems && <TeamCoachLockBadge />}
               </button>
             </>
           )}
@@ -1060,6 +1075,7 @@ function HeaderMenu({
                 >
                   <Copy className="size-4 shrink-0" />
                   <span>Duplicate</span>
+                  {lockTeamCoachItems && <TeamCoachLockBadge />}
                 </button>
               )}
               {historyHref && (
