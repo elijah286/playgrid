@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, FlaskConical } from "lucide-react";
-import type { EndDecoration, PlayDocument, Player, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, Player, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
@@ -865,7 +865,8 @@ function PlayEditorClientInner({
                       })
                     }
                     players={doc.layers.players}
-                    placeholder={'Type notes here. Use "@F" or "@Q" to link to a player.'}
+                    routes={doc.layers.routes}
+                    placeholder={'Type notes here. Use "@F", "@Q", or "@yellow" to link to a player.'}
                   />
                 </div>
                 <button
@@ -889,6 +890,7 @@ function PlayEditorClientInner({
               <PlayNotesCard
                 value={doc.metadata.notes ?? ""}
                 players={doc.layers.players}
+                routes={doc.layers.routes}
                 readOnly={!canEdit}
                 onChange={(notes) =>
                   dispatch({ type: "document.setMetadata", patch: { notes } })
@@ -1017,11 +1019,13 @@ function PlayEditorClientInner({
 function PlayNotesCard({
   value,
   players,
+  routes,
   onChange,
   readOnly = false,
 }: {
   value: string;
   players: Player[];
+  routes?: Route[];
   onChange: (next: string) => void;
   readOnly?: boolean;
 }) {
@@ -1056,7 +1060,8 @@ function PlayNotesCard({
               value={value}
               onChange={onChange}
               players={players}
-              placeholder={'Type notes for players here. Try typing "@F" or "@Q" to link notes to specific players.'}
+              routes={routes}
+              placeholder={'Type notes for players here. Try "@F", "@Q", or "@yellow" to link notes to a player.'}
             />
           )}
         </div>

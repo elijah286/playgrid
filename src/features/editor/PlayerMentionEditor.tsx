@@ -1,18 +1,99 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Player } from "@/domain/play/types";
+import type { Player, Route } from "@/domain/play/types";
 import { playerChipHtml } from "./PlayerChip";
 
 type Props = {
   value: string;
   onChange: (next: string) => void;
   players: Player[];
+  routes?: Route[];
   placeholder?: string;
   className?: string;
 };
 
 const MENTION_ATTR = "data-mention";
+
+const NAMED_COLORS: Array<{ name: string; rgb: [number, number, number] }> = [
+  { name: "red", rgb: [239, 68, 68] },
+  { name: "orange", rgb: [242, 101, 34] },
+  { name: "yellow", rgb: [250, 204, 21] },
+  { name: "green", rgb: [34, 197, 94] },
+  { name: "teal", rgb: [20, 184, 166] },
+  { name: "cyan", rgb: [6, 182, 212] },
+  { name: "blue", rgb: [59, 130, 246] },
+  { name: "purple", rgb: [139, 92, 246] },
+  { name: "pink", rgb: [236, 72, 153] },
+  { name: "brown", rgb: [120, 53, 15] },
+  { name: "white", rgb: [255, 255, 255] },
+  { name: "black", rgb: [28, 28, 30] },
+  { name: "gray", rgb: [148, 163, 184] },
+];
+
+function parseColor(c: string): [number, number, number] | null {
+  if (!c) return null;
+  const s = c.trim();
+  const hex = s.startsWith("#") ? s.slice(1) : null;
+  if (hex && (hex.length === 3 || hex.length === 6)) {
+    const full =
+      hex.length === 3
+        ? hex.split("").map((ch) => ch + ch).join("")
+        : hex;
+    const n = parseInt(full, 16);
+    if (Number.isFinite(n)) return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(s);
+  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+  return null;
+}
+
+function nearestColorName(c: string): string | null {
+  const rgb = parseColor(c);
+  if (!rgb) return null;
+  let best = NAMED_COLORS[0];
+  let bestDist = Infinity;
+  for (const nc of NAMED_COLORS) {
+    const dr = rgb[0] - nc.rgb[0];
+    const dg = rgb[1] - nc.rgb[1];
+    const db = rgb[2] - nc.rgb[2];
+    const d = dr * dr + dg * dg + db * db;
+    if (d < bestDist) {
+      bestDist = d;
+      best = nc;
+    }
+  }
+  return best.name;
+}
+
+function buildPlayerColorMap(
+  players: Player[],
+  routes: Route[] | undefined,
+): Map<string, Player[]> {
+  const routeStrokeByCarrier = new Map<string, string>();
+  for (const r of routes ?? []) {
+    if (!routeStrokeByCarrier.has(r.carrierPlayerId)) {
+      routeStrokeByCarrier.set(r.carrierPlayerId, r.style.stroke);
+    }
+  }
+  const byColor = new Map<string, Player[]>();
+  const seen = new Map<string, Set<string>>();
+  const add = (name: string | null, p: Player) => {
+    if (!name) return;
+    if (!seen.has(name)) seen.set(name, new Set());
+    const s = seen.get(name)!;
+    if (s.has(p.id)) return;
+    s.add(p.id);
+    if (!byColor.has(name)) byColor.set(name, []);
+    byColor.get(name)!.push(p);
+  };
+  for (const p of players) {
+    add(nearestColorName(p.style.fill), p);
+    const stroke = routeStrokeByCarrier.get(p.id);
+    if (stroke) add(nearestColorName(stroke), p);
+  }
+  return byColor;
+}
 
 function escapeHtml(s: string) {
   return s
@@ -21,22 +102,31 @@ function escapeHtml(s: string) {
     .replace(/>/g, "&gt;");
 }
 
-function renderValueToHtml(value: string, players: Player[]): string {
+function renderValueToHtml(
+  value: string,
+  players: Player[],
+  routes?: Route[],
+): string {
   if (!value) return "";
   const byLabel = new Map<string, Player>();
   for (const p of players) if (p.label && !byLabel.has(p.label)) byLabel.set(p.label, p);
+  const byColor = buildPlayerColorMap(players, routes);
 
   const out: string[] = [];
-  const re = /@([A-Za-z0-9]{1,4})/g;
+  const re = /@([A-Za-z0-9]{1,10})/g;
   let lastIdx = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(value)) !== null) {
-    const label = m[1];
-    const player = byLabel.get(label);
+    const token = m[1];
+    let player = byLabel.get(token);
+    if (!player) {
+      const matches = byColor.get(token.toLowerCase());
+      if (matches && matches.length > 0) player = matches[0];
+    }
     if (!player) continue;
     if (m.index > lastIdx) out.push(escapeHtml(value.slice(lastIdx, m.index)));
     out.push(
-      `<span ${MENTION_ATTR}="${escapeHtml(label)}" contenteditable="false" class="pme-chip" style="display:inline-block;margin:0 1px;line-height:1;vertical-align:middle;">${playerChipHtml(player, 16)}</span>`,
+      `<span ${MENTION_ATTR}="${escapeHtml(token)}" contenteditable="false" class="pme-chip" style="display:inline-block;margin:0 1px;line-height:1;vertical-align:middle;">${playerChipHtml(player, 16)}</span>`,
     );
     lastIdx = m.index + m[0].length;
   }
@@ -208,6 +298,7 @@ export function PlayerMentionEditor({
   value,
   onChange,
   players,
+  routes,
   placeholder,
   className,
 }: Props) {
@@ -219,8 +310,18 @@ export function PlayerMentionEditor({
   const isEmpty = !value && localEmpty;
 
   const playersSig = useMemo(
-    () => players.map((p) => `${p.id}:${p.label}:${p.style.fill}:${p.style.stroke}:${p.style.labelColor}`).join("|"),
-    [players],
+    () =>
+      players
+        .map((p) => `${p.id}:${p.label}:${p.style.fill}:${p.style.stroke}:${p.style.labelColor}`)
+        .join("|") +
+      "||" +
+      (routes ?? []).map((r) => `${r.id}:${r.carrierPlayerId}:${r.style.stroke}`).join("|"),
+    [players, routes],
+  );
+
+  const colorIndex = useMemo(
+    () => buildPlayerColorMap(players, routes),
+    [players, routes],
   );
 
   // Sync DOM from value when external value or players change.
@@ -234,7 +335,7 @@ export function PlayerMentionEditor({
       return;
     }
     const caret = getCaretCharIndex(el);
-    el.innerHTML = renderValueToHtml(value, players);
+    el.innerHTML = renderValueToHtml(value, players, routes);
     lastSerializedRef.current = value;
     lastPlayersSigRef.current = playersSig;
     if (caret != null && document.activeElement === el) {
@@ -263,7 +364,7 @@ export function PlayerMentionEditor({
     }
     const text = node.nodeValue ?? "";
     const before = text.slice(0, offset);
-    const match = /@([A-Za-z0-9]{0,4})$/.exec(before);
+    const match = /@([A-Za-z0-9]{0,10})$/.exec(before);
     if (!match) {
       setMention(null);
       return;
@@ -335,10 +436,25 @@ export function PlayerMentionEditor({
   const candidates = useMemo(() => {
     if (!mention) return [];
     const q = mention.query.toLowerCase();
-    return players
-      .filter((p) => p.label && (q === "" || p.label.toLowerCase().startsWith(q)))
-      .slice(0, 8);
-  }, [mention, players]);
+    const seen = new Set<string>();
+    const out: Player[] = [];
+    const push = (p: Player) => {
+      if (!p.label || seen.has(p.id)) return;
+      seen.add(p.id);
+      out.push(p);
+    };
+    for (const p of players) {
+      if (q === "" || p.label.toLowerCase().startsWith(q)) push(p);
+    }
+    if (q !== "") {
+      for (const [colorName, ps] of colorIndex) {
+        if (colorName.startsWith(q)) {
+          for (const p of ps) push(p);
+        }
+      }
+    }
+    return out.slice(0, 8);
+  }, [mention, players, colorIndex]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
