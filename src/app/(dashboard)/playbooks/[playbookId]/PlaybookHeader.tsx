@@ -518,6 +518,10 @@ export function PlaybookHeader({
           canManage={canManage}
           allowCoachDuplication={allowCoachDuplication ?? true}
           onToggleCoachDuplication={canManage ? handleToggleCoachDup : null}
+          onSwitchToSendCopy={() => {
+            setInviteOpen(false);
+            openSendCopy();
+          }}
           onClose={() => setInviteOpen(false)}
         />
       )}
@@ -1501,6 +1505,7 @@ export function InviteTeamMemberDialog({
   canManage = false,
   allowCoachDuplication = true,
   onToggleCoachDuplication = null,
+  onSwitchToSendCopy = null,
   onClose,
 }: {
   playbookId: string;
@@ -1509,6 +1514,12 @@ export function InviteTeamMemberDialog({
   canManage?: boolean;
   allowCoachDuplication?: boolean;
   onToggleCoachDuplication?: (() => void) | null;
+  /** Lets a coach pivot from "invite a co-coach" to "send a copy" without
+   *  closing and re-finding the menu. The two flows are conceptually
+   *  parallel — surfacing the choice in one dialog avoids the
+   *  "wait, you can also..." moment after they've already sent an
+   *  invite they didn't really want. */
+  onSwitchToSendCopy?: (() => void) | null;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -1863,6 +1874,26 @@ export function InviteTeamMemberDialog({
                   </div>
                 )}
               </div>
+              {role === "editor" && onSwitchToSendCopy && (
+                <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                    Two kinds of coach invite
+                  </p>
+                  <p className="mt-1 text-xs text-foreground">
+                    Adding them as a <strong>co-coach</strong> (below) lets them
+                    edit <em>this</em> playbook with you — changes are shared in
+                    real time. If instead you want to give them their own
+                    independent playbook based on this one, use Send a copy.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onSwitchToSendCopy}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-surface-raised px-2.5 py-1 text-xs font-semibold text-primary ring-1 ring-primary/30 hover:bg-primary/10"
+                  >
+                    <Send className="size-3.5" /> Send a copy instead
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setMode("email")}
@@ -1870,10 +1901,13 @@ export function InviteTeamMemberDialog({
               >
                 <Mail className="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
-                  <div className="text-sm font-semibold text-foreground">Share by email</div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {role === "editor" ? "Add as co-coach by email" : "Share by email"}
+                  </div>
                   <p className="mt-0.5 text-xs text-muted">
-                    Add one or more people by email. Existing users get instant access;
-                    new users receive a sign-up link.
+                    {role === "editor"
+                      ? "They join this playbook as a coach. Existing users get instant access; new users receive a sign-up link."
+                      : "Add one or more people by email. Existing users get instant access; new users receive a sign-up link."}
                   </p>
                 </div>
               </button>
@@ -1884,10 +1918,12 @@ export function InviteTeamMemberDialog({
               >
                 <Copy className="mt-0.5 size-5 shrink-0 text-primary" />
                 <div>
-                  <div className="text-sm font-semibold text-foreground">Create share link</div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {role === "editor" ? "Add as co-coach by link or QR" : "Create share link"}
+                  </div>
                   <p className="mt-0.5 text-xs text-muted">
                     {role === "editor"
-                      ? "Single-use link or QR — perfect for handing access to one coach in person."
+                      ? "Single-use link or QR — perfect for handing co-coach access in person."
                       : "Generate a link (or QR code) anyone can use to request access. You still approve each person."}
                   </p>
                 </div>
