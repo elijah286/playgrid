@@ -48,6 +48,7 @@ function MiniBarChart({ data }: { data: Array<{ day: string; views: number; sign
         const x = pad + i * barW;
         const vH = (d.views / maxViews) * (h - 20);
         const sH = (d.signups / maxSignups) * (h - 20);
+        const tip = `${d.day} — ${formatInt(d.views)} view${d.views === 1 ? "" : "s"}, ${formatInt(d.signups)} signup${d.signups === 1 ? "" : "s"}`;
         return (
           <g key={d.day}>
             <rect
@@ -64,6 +65,17 @@ function MiniBarChart({ data }: { data: Array<{ day: string; views: number; sign
               height={sH}
               className="fill-emerald-400/90"
             />
+            {/* Full-column hit zone so the tooltip works anywhere over
+                the day, not only on the (often tiny) bars themselves. */}
+            <rect
+              x={x}
+              y={0}
+              width={barW}
+              height={h}
+              className="fill-transparent"
+            >
+              <title>{tip}</title>
+            </rect>
           </g>
         );
       })}
