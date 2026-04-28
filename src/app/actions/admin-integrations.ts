@@ -311,6 +311,126 @@ export async function testClaudeApiKeyAction(proposedKey?: string) {
   };
 }
 
+// ─── Admin/Org keys for cost APIs (Opex) ────────────────────────────────────
+
+function previewAdminKey(key: string | null | undefined): {
+  configured: boolean;
+  statusLabel: string;
+} {
+  const t = (key ?? "").trim();
+  if (!t) return { configured: false, statusLabel: "No admin key is saved yet." };
+  const tail = t.length >= 4 ? t.slice(-4) : "••••";
+  return { configured: true, statusLabel: `Admin key saved (ends with …${tail}).` };
+}
+
+export async function getAnthropicAdminKeyStatusAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  try {
+    const admin = createServiceRoleClient();
+    const { data, error } = await admin
+      .from("site_settings")
+      .select("anthropic_admin_api_key, updated_at")
+      .eq("id", SITE_ROW_ID)
+      .maybeSingle();
+    if (error) return { ok: false as const, error: error.message };
+    const { configured, statusLabel } = previewAdminKey(data?.anthropic_admin_api_key);
+    return { ok: true as const, configured, statusLabel, updatedAt: data?.updated_at ?? null };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Could not load." };
+  }
+}
+
+export async function saveAnthropicAdminKeyAction(rawKey: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  const key = rawKey.trim();
+  if (!key) return { ok: false as const, error: "Paste an admin key before saving." };
+  try {
+    const admin = createServiceRoleClient();
+    const { error } = await admin
+      .from("site_settings")
+      .update({ anthropic_admin_api_key: key, updated_at: new Date().toISOString() })
+      .eq("id", SITE_ROW_ID);
+    if (error) return { ok: false as const, error: error.message };
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
+  }
+}
+
+export async function clearAnthropicAdminKeyAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  try {
+    const admin = createServiceRoleClient();
+    const { error } = await admin
+      .from("site_settings")
+      .update({ anthropic_admin_api_key: null, updated_at: new Date().toISOString() })
+      .eq("id", SITE_ROW_ID);
+    if (error) return { ok: false as const, error: error.message };
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Could not remove key." };
+  }
+}
+
+export async function getOpenAIAdminKeyStatusAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  try {
+    const admin = createServiceRoleClient();
+    const { data, error } = await admin
+      .from("site_settings")
+      .select("openai_admin_api_key, updated_at")
+      .eq("id", SITE_ROW_ID)
+      .maybeSingle();
+    if (error) return { ok: false as const, error: error.message };
+    const { configured, statusLabel } = previewAdminKey(data?.openai_admin_api_key);
+    return { ok: true as const, configured, statusLabel, updatedAt: data?.updated_at ?? null };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Could not load." };
+  }
+}
+
+export async function saveOpenAIAdminKeyAction(rawKey: string) {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  const key = rawKey.trim();
+  if (!key) return { ok: false as const, error: "Paste an admin key before saving." };
+  try {
+    const admin = createServiceRoleClient();
+    const { error } = await admin
+      .from("site_settings")
+      .update({ openai_admin_api_key: key, updated_at: new Date().toISOString() })
+      .eq("id", SITE_ROW_ID);
+    if (error) return { ok: false as const, error: error.message };
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Save failed." };
+  }
+}
+
+export async function clearOpenAIAdminKeyAction() {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  try {
+    const admin = createServiceRoleClient();
+    const { error } = await admin
+      .from("site_settings")
+      .update({ openai_admin_api_key: null, updated_at: new Date().toISOString() })
+      .eq("id", SITE_ROW_ID);
+    if (error) return { ok: false as const, error: error.message };
+    revalidatePath("/settings");
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Could not remove key." };
+  }
+}
+
 export async function setLlmProviderAction(provider: LlmProvider) {
   const gate = await assertAdmin();
   if (!gate.ok) return { ok: false as const, error: gate.error };

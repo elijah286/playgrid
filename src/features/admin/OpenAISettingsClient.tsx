@@ -8,6 +8,9 @@ import {
   getOpenAIIntegrationStatusAction,
   saveOpenAIApiKeyAction,
   testOpenAIApiKeyAction,
+  clearOpenAIAdminKeyAction,
+  getOpenAIAdminKeyStatusAction,
+  saveOpenAIAdminKeyAction,
 } from "@/app/actions/admin-integrations";
 
 type Initial = {
@@ -16,13 +19,39 @@ type Initial = {
   updatedAt: string | null;
 };
 
-export function OpenAISettingsClient({ initial }: { initial: Initial }) {
+type AdminInitial = {
+  configured: boolean;
+  statusLabel: string;
+};
+
+export function OpenAISettingsClient({
+  initial,
+  adminInitial,
+}: {
+  initial: Initial;
+  adminInitial: AdminInitial;
+}) {
   const { toast } = useToast();
   const [configured, setConfigured] = useState(initial.configured);
   const [statusLabel, setStatusLabel] = useState(initial.statusLabel);
   const [draftKey, setDraftKey] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [adminConfigured, setAdminConfigured] = useState(adminInitial.configured);
+  const [adminStatusLabel, setAdminStatusLabel] = useState(adminInitial.statusLabel);
+  const [adminDraftKey, setAdminDraftKey] = useState("");
+
+  function refreshAdminStatus() {
+    startTransition(async () => {
+      const res = await getOpenAIAdminKeyStatusAction();
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setAdminConfigured(res.configured);
+      setAdminStatusLabel(res.statusLabel);
+    });
+  }
 
   function refreshStatus() {
     startTransition(async () => {
@@ -139,6 +168,74 @@ export function OpenAISettingsClient({ initial }: { initial: Initial }) {
             Remove
           </Button>
         )}
+      </div>
+
+      <div className="mt-6 border-t border-black/5 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Admin API key (cost reports)</h4>
+            <p className="mt-0.5 text-xs text-muted">
+              Used by the Opex tab to fetch monthly cost. Separate from the API key above. {adminStatusLabel}
+            </p>
+          </div>
+          <StatusDot configured={adminConfigured} />
+        </div>
+        <div className="mt-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-foreground">Admin key</span>
+            <Input
+              type="password"
+              autoComplete="off"
+              value={adminDraftKey}
+              onChange={(e) => setAdminDraftKey(e.target.value)}
+              placeholder={adminConfigured ? "••••••••••••" : "sk-admin-…"}
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            loading={pending}
+            disabled={pending || !adminDraftKey.trim()}
+            onClick={() => {
+              startTransition(async () => {
+                const res = await saveOpenAIAdminKeyAction(adminDraftKey);
+                if (!res.ok) {
+                  toast(res.error, "error");
+                  return;
+                }
+                setAdminDraftKey("");
+                toast("Admin key saved.", "success");
+                refreshAdminStatus();
+              });
+            }}
+          >
+            Save admin key
+          </Button>
+          {adminConfigured && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                if (!globalThis.confirm("Remove the saved OpenAI admin key?")) return;
+                startTransition(async () => {
+                  const res = await clearOpenAIAdminKeyAction();
+                  if (!res.ok) {
+                    toast(res.error, "error");
+                    return;
+                  }
+                  toast("Admin key removed.", "success");
+                  refreshAdminStatus();
+                });
+              }}
+              className="text-danger hover:bg-danger/10 hover:text-danger"
+            >
+              Remove
+            </Button>
+          )}
+        </div>
       </div>
       </>
       )}

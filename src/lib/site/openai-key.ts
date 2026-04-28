@@ -30,3 +30,17 @@ export async function getStoredOpenAIApiKey(): Promise<string | null> {
   const t = typeof v === "string" ? v.trim() : "";
   return t.length > 0 ? t : null;
 }
+
+/** Server-only: returns trimmed OpenAI organization Admin key (for cost API) or null. */
+export async function getStoredOpenAIAdminApiKey(): Promise<string | null> {
+  const admin = createServiceRoleClient();
+  const { data, error } = await admin
+    .from("site_settings")
+    .select("openai_admin_api_key")
+    .eq("id", SITE_ROW_ID)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const v = data?.openai_admin_api_key;
+  const t = typeof v === "string" ? v.trim() : "";
+  return t.length > 0 ? t : null;
+}

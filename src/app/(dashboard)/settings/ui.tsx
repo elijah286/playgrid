@@ -6,6 +6,7 @@ import {
   Brain,
   Check,
   CreditCard,
+  DollarSign,
   FlaskConical,
   KeyRound,
   Menu as MenuIcon,
@@ -32,6 +33,8 @@ import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
+import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
+import type { OpexService, OpexEntry } from "@/app/actions/admin-opex";
 import type { BetaFeatures } from "@/lib/site/beta-features-config";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { FeedbackRow } from "@/app/actions/feedback";
@@ -71,6 +74,8 @@ type GoogleMapsProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
   | { ok: false; error: string };
 
+type AdminKeyProps = { configured: boolean; statusLabel: string };
+
 type Tab =
   | "users"
   | "traffic"
@@ -81,6 +86,7 @@ type Tab =
   | "ai_feedback"
   | "seeds"
   | "beta"
+  | "opex"
   | "site";
 
 export function SettingsClient({
@@ -112,6 +118,12 @@ export function SettingsClient({
   initialHideOwnerInfoAbout,
   initialCoachAiKbMisses,
   coachAiKbMissesError,
+  initialOpexServices,
+  initialOpexEntries,
+  initialOpexPeriod,
+  opexError,
+  anthropicAdminKey,
+  openaiAdminKey,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -141,6 +153,12 @@ export function SettingsClient({
   initialHideOwnerInfoAbout: boolean;
   initialCoachAiKbMisses: KbMissRow[];
   coachAiKbMissesError: string | null;
+  initialOpexServices: OpexService[];
+  initialOpexEntries: OpexEntry[];
+  initialOpexPeriod: string;
+  opexError: string | null;
+  anthropicAdminKey: AdminKeyProps;
+  openaiAdminKey: AdminKeyProps;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -156,6 +174,7 @@ export function SettingsClient({
     { value: "ai_feedback" as const, label: "AI Feedback", icon: Brain },
     { value: "seeds" as const, label: "Playbook seeds", icon: Sparkles },
     { value: "beta" as const, label: "Beta features", icon: FlaskConical },
+    { value: "opex" as const, label: "Opex", icon: DollarSign },
     { value: "site" as const, label: "Site", icon: SettingsIcon },
   ];
   const activeOption = tabOptions.find((o) => o.value === tab) ?? tabOptions[0];
@@ -308,6 +327,7 @@ export function SettingsClient({
                 statusLabel: claude.statusLabel,
                 updatedAt: claude.updatedAt,
               }}
+              adminInitial={anthropicAdminKey}
             />
           ) : (
             <p className="text-sm text-red-700 dark:text-red-300">{claude.error}</p>
@@ -320,6 +340,7 @@ export function SettingsClient({
                 statusLabel: integration.statusLabel,
                 updatedAt: integration.updatedAt,
               }}
+              adminInitial={openaiAdminKey}
             />
           ) : (
             <div className="space-y-2">
@@ -372,6 +393,15 @@ export function SettingsClient({
 
       {tab === "beta" && (
         <BetaFeaturesAdminClient initialFeatures={initialBetaFeatures} />
+      )}
+
+      {tab === "opex" && (
+        <OpexAdminClient
+          initialServices={initialOpexServices}
+          initialEntries={initialOpexEntries}
+          initialPeriodMonth={initialOpexPeriod}
+          initialError={opexError}
+        />
       )}
 
       {tab === "site" && (

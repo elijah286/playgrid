@@ -28,13 +28,27 @@ import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { listCoachAiKbMissesAction } from "@/app/actions/coach-ai-feedback";
+import {
+  listOpexServicesAction,
+  listOpexEntriesAction,
+} from "@/app/actions/admin-opex";
+import {
+  getAnthropicAdminKeyStatusAction,
+  getOpenAIAdminKeyStatusAction,
+} from "@/app/actions/admin-integrations";
 import { SettingsClient } from "./ui";
+
+function currentMonthYM(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 export default async function SettingsPage() {
   const { user, profile } = await getCurrentUserProfile();
   if (!user) redirect("/login");
   if (profile?.role !== "admin") redirect("/home");
 
+  const opexPeriod = currentMonthYM();
   const [
     usersRes,
     integrationRes,
@@ -56,6 +70,10 @@ export default async function SettingsPage() {
     betaFeatures,
     hideOwnerInfoAbout,
     coachAiKbMissesRes,
+    opexServicesRes,
+    opexEntriesRes,
+    anthropicAdminKeyRes,
+    openaiAdminKeyRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -77,6 +95,10 @@ export default async function SettingsPage() {
     getBetaFeatures(),
     getHideOwnerInfoAbout(),
     listCoachAiKbMissesAction("unreviewed"),
+    listOpexServicesAction(),
+    listOpexEntriesAction(opexPeriod),
+    getAnthropicAdminKeyStatusAction(),
+    getOpenAIAdminKeyStatusAction(),
   ]);
 
   return (
@@ -200,6 +222,26 @@ export default async function SettingsPage() {
         initialHideOwnerInfoAbout={hideOwnerInfoAbout}
         initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
         coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}
+        initialOpexServices={opexServicesRes.ok ? opexServicesRes.services : []}
+        initialOpexEntries={opexEntriesRes.ok ? opexEntriesRes.entries : []}
+        initialOpexPeriod={opexPeriod}
+        opexError={
+          opexServicesRes.ok && opexEntriesRes.ok
+            ? null
+            : opexServicesRes.ok
+              ? (opexEntriesRes as { ok: false; error: string }).error
+              : (opexServicesRes as { ok: false; error: string }).error
+        }
+        anthropicAdminKey={
+          anthropicAdminKeyRes.ok
+            ? { configured: anthropicAdminKeyRes.configured, statusLabel: anthropicAdminKeyRes.statusLabel }
+            : { configured: false, statusLabel: "No admin key is saved yet." }
+        }
+        openaiAdminKey={
+          openaiAdminKeyRes.ok
+            ? { configured: openaiAdminKeyRes.configured, statusLabel: openaiAdminKeyRes.statusLabel }
+            : { configured: false, statusLabel: "No admin key is saved yet." }
+        }
       />
     </div>
   );
