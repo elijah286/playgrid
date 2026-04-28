@@ -2229,6 +2229,29 @@ function PlaybookDetailClientInner({
           }}
         />
       )}
+
+      {/* AI Chat modal — mobile only, lower half of screen */}
+      {aiChatOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col sm:hidden">
+          <div className="flex-1" onClick={() => setAiChatOpen(false)} />
+          <div className="h-1/2 flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-surface ring-1 ring-black/5">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="text-base font-semibold text-foreground">Coach AI</h2>
+              <button
+                type="button"
+                onClick={() => setAiChatOpen(false)}
+                className="rounded-lg p-1 text-muted hover:bg-surface-inset hover:text-foreground"
+                aria-label="Close"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <CoachAiChat playbookId={playbookId} mode="normal" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2989,28 +3012,6 @@ function RosterPanel({
         message={upgradeNotice?.message ?? ""}
       />
 
-      {/* AI Chat modal — mobile only, lower half of screen */}
-      {aiChatOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col sm:hidden">
-          <div className="flex-1" onClick={() => setAiChatOpen(false)} />
-          <div className="h-1/2 flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-surface ring-1 ring-black/5">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-base font-semibold text-foreground">Coach AI</h2>
-              <button
-                type="button"
-                onClick={() => setAiChatOpen(false)}
-                className="rounded-lg p-1 text-muted hover:bg-surface-inset hover:text-foreground"
-                aria-label="Close"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <CoachAiChat playbookId={playbookId} mode="normal" />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
