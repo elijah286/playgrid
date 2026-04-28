@@ -58,6 +58,7 @@ export type CoachBonusRow = {
   displayName: string | null;
   tier: "coach" | "coach_ai";
   bonusSeats: number;
+  bonusMessages: number;
 };
 
 /** List paying owners (Coach / Coach Pro) with their current bonus_seats.
@@ -80,13 +81,15 @@ export async function listCoachBonusGrantsAction(): Promise<
   const [grantsRes, profilesRes] = await Promise.all([
     admin
       .from("owner_seat_grants")
-      .select("owner_id, bonus_seats")
+      .select("owner_id, bonus_seats, bonus_messages")
       .in("owner_id", userIds),
     admin.from("profiles").select("id, display_name").in("id", userIds),
   ]);
   const bonusByUser = new Map<string, number>();
+  const bonusMsgByUser = new Map<string, number>();
   for (const r of grantsRes.data ?? []) {
     bonusByUser.set(r.owner_id as string, (r.bonus_seats as number | null) ?? 0);
+    bonusMsgByUser.set(r.owner_id as string, (r.bonus_messages as number | null) ?? 0);
   }
   const nameByUser = new Map<string, string | null>();
   for (const r of profilesRes.data ?? []) {
@@ -115,23 +118,27 @@ export async function listCoachBonusGrantsAction(): Promise<
       displayName: nameByUser.get(uid) ?? null,
       tier: tierByUser.get(uid) ?? "coach",
       bonusSeats: bonusByUser.get(uid) ?? 0,
+      bonusMessages: bonusMsgByUser.get(uid) ?? 0,
     }))
     .sort((a, b) => {
-      if (a.bonusSeats !== b.bonusSeats) return b.bonusSeats - a.bonusSeats;
+      const aTotal = a.bonusSeats + a.bonusMessages;
+      const bTotal = b.bonusSeats + b.bonusMessages;
+      if (aTotal !== bTotal) return bTotal - aTotal;
       return (a.email ?? "").localeCompare(b.email ?? "");
     });
   return { ok: true, rows };
 }
 
-export async function setCoachBonusSeatsByEmailAction(
+type GrantContext = {
+  userId: string;
+  email: string;
+  tier: "coach" | "coach_ai";
+};
+
+async function resolveGrantTarget(
   email: string,
-  bonusSeats: number,
-): Promise<{ ok: true; row: CoachBonusRow } | { ok: false; error: string }> {
-  const guard = await requireAdmin();
-  if (!guard.ok) return guard;
-  if (!Number.isFinite(bonusSeats) || bonusSeats < 0 || bonusSeats > 1000) {
-    return { ok: false, error: "Bonus seats must be between 0 and 1000." };
-  }
+  scope: "seats" | "messages",
+): Promise<{ ok: true; ctx: GrantContext } | { ok: false; error: string }> {
   const trimmed = email.trim().toLowerCase();
   if (!trimmed) return { ok: false, error: "Email required." };
 
@@ -157,45 +164,103 @@ export async function setCoachBonusSeatsByEmailAction(
   }
   if (!userId) return { ok: false, error: "No user with that email." };
 
-  // Verify the user is on a paying tier — bonus seats only matter for them.
   const { data: ent } = await admin
     .from("user_entitlements")
     .select("tier")
     .eq("user_id", userId)
     .maybeSingle();
   const tier = (ent?.tier as string | null) ?? "free";
-  if (tier !== "coach" && tier !== "coach_ai") {
-    return {
-      ok: false,
-      error: "User is on the free tier. Bonus seats only apply to Team Coach or Coach Pro.",
-    };
+  if (scope === "seats") {
+    if (tier !== "coach" && tier !== "coach_ai") {
+      return {
+        ok: false,
+        error: "User is on the free tier. Bonus seats only apply to Team Coach or Coach Pro.",
+      };
+    }
+  } else {
+    // Coach Cal is Coach Pro only. Granting messages to a Team Coach
+    // user wouldn't do anything — they don't have Cal access.
+    if (tier !== "coach_ai") {
+      return {
+        ok: false,
+        error: "Bonus messages only apply to Coach Pro users (Coach Cal is Pro-only).",
+      };
+    }
   }
 
+  return {
+    ok: true,
+    ctx: { userId, email: trimmed, tier: tier as "coach" | "coach_ai" },
+  };
+}
+
+async function buildBonusRow(ctx: GrantContext): Promise<CoachBonusRow> {
+  const admin = createServiceRoleClient();
+  const [profRes, grantRes] = await Promise.all([
+    admin.from("profiles").select("display_name").eq("id", ctx.userId).maybeSingle(),
+    admin
+      .from("owner_seat_grants")
+      .select("bonus_seats, bonus_messages")
+      .eq("owner_id", ctx.userId)
+      .maybeSingle(),
+  ]);
+  return {
+    ownerId: ctx.userId,
+    email: ctx.email,
+    displayName: (profRes.data?.display_name as string | null) ?? null,
+    tier: ctx.tier,
+    bonusSeats: (grantRes.data?.bonus_seats as number | null) ?? 0,
+    bonusMessages: (grantRes.data?.bonus_messages as number | null) ?? 0,
+  };
+}
+
+export async function setCoachBonusSeatsByEmailAction(
+  email: string,
+  bonusSeats: number,
+): Promise<{ ok: true; row: CoachBonusRow } | { ok: false; error: string }> {
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard;
+  if (!Number.isFinite(bonusSeats) || bonusSeats < 0 || bonusSeats > 1000) {
+    return { ok: false, error: "Bonus seats must be between 0 and 1000." };
+  }
+  const target = await resolveGrantTarget(email, "seats");
+  if (!target.ok) return target;
+
+  const admin = createServiceRoleClient();
   const rounded = Math.floor(bonusSeats);
   const { error: upsertErr } = await admin
     .from("owner_seat_grants")
     .upsert(
-      { owner_id: userId, bonus_seats: rounded },
+      { owner_id: target.ctx.userId, bonus_seats: rounded },
       { onConflict: "owner_id" },
     );
   if (upsertErr) return { ok: false, error: upsertErr.message };
 
-  // Fetch profile for the response row.
-  const { data: prof } = await admin
-    .from("profiles")
-    .select("display_name")
-    .eq("id", userId)
-    .maybeSingle();
-
   revalidatePath("/account");
-  return {
-    ok: true,
-    row: {
-      ownerId: userId,
-      email: trimmed,
-      displayName: (prof?.display_name as string | null) ?? null,
-      tier: tier as "coach" | "coach_ai",
-      bonusSeats: rounded,
-    },
-  };
+  return { ok: true, row: await buildBonusRow(target.ctx) };
+}
+
+export async function setCoachBonusMessagesByEmailAction(
+  email: string,
+  bonusMessages: number,
+): Promise<{ ok: true; row: CoachBonusRow } | { ok: false; error: string }> {
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard;
+  if (!Number.isFinite(bonusMessages) || bonusMessages < 0 || bonusMessages > 100000) {
+    return { ok: false, error: "Bonus messages must be between 0 and 100000." };
+  }
+  const target = await resolveGrantTarget(email, "messages");
+  if (!target.ok) return target;
+
+  const admin = createServiceRoleClient();
+  const rounded = Math.floor(bonusMessages);
+  const { error: upsertErr } = await admin
+    .from("owner_seat_grants")
+    .upsert(
+      { owner_id: target.ctx.userId, bonus_messages: rounded },
+      { onConflict: "owner_id" },
+    );
+  if (upsertErr) return { ok: false, error: upsertErr.message };
+
+  return { ok: true, row: await buildBonusRow(target.ctx) };
 }
