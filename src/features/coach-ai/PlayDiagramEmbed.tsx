@@ -119,8 +119,9 @@ function PlayerToken({ player, cx, cy, r, sxCorr }: {
       <text x={0} y={labelY} textAnchor="middle" dominantBaseline="central"
         fontSize={labelFont} fontWeight={700} fill={player.style.labelColor}
         stroke={isTriangle ? "rgba(0,0,0,0.55)" : undefined}
-        strokeWidth={isTriangle ? 0.4 : undefined}
+        strokeWidth={isTriangle ? 1.2 : undefined}
         paintOrder={isTriangle ? "stroke" : undefined}
+        vectorEffect={isTriangle ? "non-scaling-stroke" : undefined}
         style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
         {player.label}
       </text>
