@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, RefreshCw, Trash2, Eye, EyeOff } from "lucide-react";
 import { Button, IconButton, useToast } from "@/components/ui";
+import { AssistantMessage } from "@/features/coach-ai/AssistantMessage";
 import {
   deleteKbMissAction,
   listCoachAiKbMissesAction,
@@ -354,13 +355,17 @@ export function CoachAiFeedbackAdminClient({
                   ) : isNegativeItem ? (
                     <>
                       <p className="font-semibold text-foreground">User: &ldquo;{(it as NegativeFeedbackRow).user_message}&rdquo;</p>
-                      <p className="mt-1 text-foreground/80">&ldquo;{(it as NegativeFeedbackRow).response_text}&rdquo;</p>
+                      <div className="mt-1 rounded-lg bg-surface-raised/50 p-2 ring-1 ring-black/5">
+                        <AssistantMessage text={(it as NegativeFeedbackRow).response_text} />
+                      </div>
                       <p className="mt-1 text-xs text-muted">{formatDate(it.created_at)}</p>
                     </>
                   ) : (
                     <>
                       <p className="font-semibold text-foreground">User: &ldquo;{(it as PositiveFeedbackRow).user_message}&rdquo;</p>
-                      <p className="mt-1 text-foreground/80">&ldquo;{(it as PositiveFeedbackRow).response_text}&rdquo;</p>
+                      <div className="mt-1 rounded-lg bg-surface-raised/50 p-2 ring-1 ring-black/5">
+                        <AssistantMessage text={(it as PositiveFeedbackRow).response_text} />
+                      </div>
                       <p className="mt-1 text-xs text-muted">{formatDate(it.created_at)}</p>
                     </>
                   )}
