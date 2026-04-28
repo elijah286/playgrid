@@ -14,6 +14,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import type { SavedFormation } from "@/app/actions/formations";
 
 type Props = { params: Promise<{ playId: string }> };
@@ -97,7 +98,7 @@ export default async function PlayEditPage({ params }: Props) {
   // but autosave is suppressed and any save attempt surfaces the CTA.
   const { data: book } = await supabase
     .from("playbooks")
-    .select("is_example, is_public_example, is_archived, name")
+    .select("is_example, is_public_example, is_archived, name, color")
     .eq("id", res.play.playbook_id)
     .maybeSingle();
   const isExamplePreview =
@@ -126,7 +127,13 @@ export default async function PlayEditPage({ params }: Props) {
     isAdmin || canUseGameMode(await getCurrentEntitlement());
 
   return (
-    <PlayEditorClient
+    <>
+      <PlaybookAnchorPublisher
+        playbookId={res.play.playbook_id}
+        playbookName={(book?.name as string | null) ?? null}
+        playbookColor={(book?.color as string | null) ?? null}
+      />
+      <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}
       playbookName={(book?.name as string | null) ?? null}
@@ -147,5 +154,6 @@ export default async function PlayEditPage({ params }: Props) {
       initialCustomOpponentPlayId={res.customOpponentPlayId}
       initialOpponentHidden={res.opponentHidden}
     />
+    </>
   );
 }

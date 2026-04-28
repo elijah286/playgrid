@@ -75,6 +75,15 @@ export function PlaybookCalendarTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbookId]);
 
+  useEffect(() => {
+    function onMutated() {
+      load();
+    }
+    window.addEventListener("coach-ai-mutated", onMutated);
+    return () => window.removeEventListener("coach-ai-mutated", onMutated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbookId]);
+
   const now = Date.now();
   const partitioned = useMemo(() => {
     const upcoming: CalendarEventRow[] = [];

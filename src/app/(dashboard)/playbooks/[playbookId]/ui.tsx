@@ -151,6 +151,7 @@ import {
 import { PlaybookHeader, InviteTeamMemberDialog, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { CoachAiChat } from "@/features/coach-ai/CoachAiChat";
+import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
@@ -241,6 +242,11 @@ export function PlaybookDetailClient(props: PlaybookDetailClientProps) {
       playbookId={props.playbookId}
       canUnarchive={props.headerProps.canManage}
     >
+      <PlaybookAnchorPublisher
+        playbookId={props.playbookId}
+        playbookName={props.headerProps.name}
+        playbookColor={props.headerProps.accentColor}
+      />
       <PlaybookDetailClientInner {...props} />
     </ExamplePreviewProvider>
   );

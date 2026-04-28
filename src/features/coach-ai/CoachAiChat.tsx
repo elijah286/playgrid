@@ -263,8 +263,15 @@ export function CoachAiChat({
           // KB writes, etc.), refresh the surrounding page so newly created
           // rows appear without a manual reload. router.refresh re-runs the
           // server components for the current route — cheap, no full reload,
-          // and leaves the chat panel mounted.
-          if (mutated) router.refresh();
+          // and leaves the chat panel mounted. We also broadcast a window
+          // event so client-only views that fetch their own data (e.g. the
+          // calendar tab) can reload without waiting for a manual refresh.
+          if (mutated) {
+            router.refresh();
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
+            }
+          }
           break;
         }
       }

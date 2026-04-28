@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
+import { usePlaybookAnchor } from "./playbook-anchor";
 import { cn } from "@/lib/utils";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
@@ -84,15 +85,25 @@ export function CoachAiLauncher({
   const [windowPos, setWindowPos] = useState<WindowPos | null>(null);
 
   const pathname   = usePathname();
+  // Anchor published by the current page (playbook detail page, play
+  // editor, etc). Lets us keep the playbook scope stable when the URL
+  // doesn't include the playbook id — e.g. on /plays/<playId>.
+  const anchor = usePlaybookAnchor();
   const playbookId = useMemo<string | null>(() => {
     if (playbookIdProp) return playbookIdProp;
     const m = pathname?.match(PLAYBOOK_ROUTE_RE);
-    return m?.[1] ?? null;
-  }, [playbookIdProp, pathname]);
+    if (m?.[1]) return m[1];
+    return anchor?.id ?? null;
+  }, [playbookIdProp, pathname, anchor?.id]);
   const playId = useMemo<string | null>(() => {
     const m = pathname?.match(PLAY_ROUTE_RE);
     return m?.[1] ?? null;
   }, [pathname]);
+  // Display values for the chat header. Only show when we have an anchor
+  // for the same playbook the chat is currently scoped to.
+  const anchorMatchesScope = !!anchor && !!playbookId && anchor.id === playbookId;
+  const anchoredName = anchorMatchesScope ? anchor!.name ?? null : null;
+  const anchoredColor = anchorMatchesScope ? anchor!.color ?? null : null;
 
   // Clamp a (w, h) pair to the current viewport, leaving an EDGE margin on
   // both sides. Stays within [MIN, viewport - 2*EDGE]. Caller passes the
@@ -434,7 +445,17 @@ export function CoachAiLauncher({
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold leading-tight text-foreground">
+                <div
+                  className={cn(
+                    "inline-block text-sm font-semibold leading-tight text-foreground",
+                    anchoredName && "border-b-[2px] pb-0.5",
+                  )}
+                  style={
+                    anchoredName && anchoredColor
+                      ? { borderBottomColor: anchoredColor }
+                      : undefined
+                  }
+                >
                   Coach Cal
                   {adminTrainingActive && (
                     <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
@@ -447,12 +468,14 @@ export function CoachAiLauncher({
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] leading-tight text-muted">
+                <div className="truncate text-[11px] leading-tight text-muted">
                   {adminTrainingActive
                     ? "Curating the global knowledge base — confirms before each write."
                     : playbookTrainingActive
                       ? "Curating this playbook's notes — confirms before each write."
-                      : "Your AI coaching partner"}
+                      : anchoredName
+                        ? `Anchored to ${anchoredName}`
+                        : "Your AI coaching partner"}
                 </div>
               </div>
 
