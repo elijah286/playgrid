@@ -131,7 +131,35 @@ function PlayEditorClientInner({
   const router = useRouter();
   const { toast } = useToast();
   const { blockIfPreview } = useExamplePreview();
-  const { doc, dispatch, undo, redo, canUndo, canRedo } = usePlayEditor(initialDocument);
+  const { doc, dispatch, undo, redo, replaceDocument, canUndo, canRedo } = usePlayEditor(initialDocument);
+
+  // When Coach Cal mutates this play (update_play, update_play_notes, etc.),
+  // the chat triggers `router.refresh()` and the parent server component
+  // re-runs and passes a fresh `initialDocument` prop. usePlayEditor's local
+  // state is initialized once and ignores subsequent prop changes by default,
+  // so without this effect the editor would keep showing the stale doc until
+  // a manual page reload.
+  //
+  // Reconciliation: serialize incoming vs local doc. If they're equal, the
+  // server has caught up to our local state (typical autosave roundtrip) —
+  // record it as the latest synced snapshot and do nothing. If they differ,
+  // an external mutation came in (Cal's edit) — replace local state with the
+  // new server doc, which also clears the undo stack (the previous edits
+  // were superseded).
+  const lastSyncedDocRef = useRef<PlayDocument>(initialDocument);
+  useEffect(() => {
+    if (initialDocument === lastSyncedDocRef.current) return;
+    const incomingStr = JSON.stringify(initialDocument);
+    const localStr = JSON.stringify(doc);
+    if (incomingStr === localStr) {
+      lastSyncedDocRef.current = initialDocument;
+      return;
+    }
+    replaceDocument(initialDocument);
+    lastSyncedDocRef.current = initialDocument;
+    isFirstDocRender.current = true; // skip the upcoming autosave from this replace
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDocument]);
 
   // Bump a localStorage counter of distinct plays this user has opened. The
   // feedback widget gates itself on this to avoid showing for brand-new users.
