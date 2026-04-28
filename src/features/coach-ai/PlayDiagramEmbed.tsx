@@ -331,8 +331,9 @@ function DiagramCanvas({ doc, animPositions }: {
                   fontWeight={700}
                   fill="rgba(255,255,255,0.92)"
                   stroke="rgba(0,0,0,0.55)"
-                  strokeWidth={0.4}
+                  strokeWidth={1.2}
                   paintOrder="stroke"
+                  vectorEffect="non-scaling-stroke"
                   style={{ fontFamily: "Inter, system-ui, sans-serif" }}
                 >
                   {z.label}
