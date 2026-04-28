@@ -84,7 +84,16 @@ const STYLE_Y:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
 const STYLE_S:    PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
 const STYLE_H:    PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
-const STYLE_DEF:  PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" };
+const STYLE_DEF:         PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" }; // generic — fallback when label doesn't match a role
+// Defender role palette. Triangles already mark "defender"; the hue makes
+// the role legible (corners vs safeties vs hooks vs flats) so a coach can
+// scan a Cover 3 shell and see the structure at a glance.
+const STYLE_DEF_CB:      PlayerStyle = { fill: "#DC2626", stroke: "#7f1d1d", labelColor: "#FFFFFF" }; // corners — primary red
+const STYLE_DEF_SAFETY:  PlayerStyle = { fill: "#F97316", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // safeties — deep coral
+const STYLE_DEF_HOOK:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" }; // hook defenders — purple
+const STYLE_DEF_FLAT:    PlayerStyle = { fill: "#0EA5E9", stroke: "#075985", labelColor: "#FFFFFF" }; // flat defenders — teal
+const STYLE_DEF_LB:      PlayerStyle = { fill: "#EC4899", stroke: "#831843", labelColor: "#FFFFFF" }; // LBs / Mike — magenta
+const STYLE_DEF_NICKEL:  PlayerStyle = { fill: "#F472B6", stroke: "#9d174d", labelColor: "#FFFFFF" }; // nickel / slot DB — rose
 // Interior offensive linemen are ineligible — they should be visually muted so
 // skill-position routes pop. Gray, neutral.
 const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelColor: "#0f172a" };
@@ -94,6 +103,27 @@ const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelCo
 const STYLE_NON_FOCUS: PlayerStyle = { fill: "#CBD5E1", stroke: "#94A3B8", labelColor: "#475569" };
 
 const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_S, STYLE_H];
+
+// Map a defender's id (as returned by place_defense or hand-authored by Cal)
+// to a role-coded style. Matches the catalog labels used in
+// src/domain/play/defensiveAlignments.ts plus common synonyms. Falls back to
+// the generic red STYLE_DEF when nothing matches.
+function defenderStyleFor(rawLabel: string): PlayerStyle {
+  const u = rawLabel.toUpperCase();
+  // Corners — outermost, deep edges. Includes split-cloud variants.
+  if (u === "CB" || u === "LC" || u === "RC" || u === "LCB" || u === "RCB") return STYLE_DEF_CB;
+  // Safeties — deep middle / split halves.
+  if (u === "FS" || u === "SS" || u === "SAFETY" || u === "FSL" || u === "FSR" || u === "SAF" || u === "SA" || u === "SA2") return STYLE_DEF_SAFETY;
+  // Hook / curl defenders — interior underneath.
+  if (u === "HL" || u === "HR" || u === "HM" || u === "HOOK" || u === "M" || u === "MIKE" || u === "MI") return STYLE_DEF_HOOK;
+  // Flat defenders — outside underneath.
+  if (u === "FL" || u === "FR" || u === "FLAT" || u === "WA" || u === "WI") return STYLE_DEF_FLAT;
+  // LBs (Will/Sam variants, generic LB).
+  if (u === "LB" || u === "WLB" || u === "SLB" || u === "MLB" || u === "WILL" || u === "SAM" || u === "WI" || u === "ILB" || u === "OLB") return STYLE_DEF_LB;
+  // Nickel / slot DB.
+  if (u === "NB" || u === "NICKEL" || u === "STAR" || u === "DIME") return STYLE_DEF_NICKEL;
+  return STYLE_DEF;
+}
 
 // Labels for interior O-line — gets the muted-gray treatment regardless of
 // position-rotation order.
@@ -238,7 +268,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     if (team === "D") {
       // Defenders are always triangles. The triangle's apex points toward
       // the offense (south on the SVG) — handled in PlayDiagramEmbed.
-      style = isFocus ? STYLE_DEF : STYLE_NON_FOCUS;
+      style = isFocus ? defenderStyleFor(rawLabel) : STYLE_NON_FOCUS;
       // Hard 2-char limit — matches the play editor's label length cap.
       label = rawLabel.slice(0, 2);
       shape = "triangle";
