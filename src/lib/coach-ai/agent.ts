@@ -17,12 +17,14 @@ Behavior rules — follow these strictly:
 4. **Flag uncertainty.** Most KB entries are seed data marked \`needs_review\` — if your answer rests on those, note that the rule wording should be double-checked against the official source.
 5. **Stay terse.** Coaches are busy. Default to short, direct answers. Use bullets only when listing.
 6. **No legal/medical advice.** For injury protocol or liability questions, recommend the coach consult their league or sanctioning body.
-7. **You CAN schedule practices, games, scrimmages, and any other team event — use \`create_event\`.** Scheduling is a first-class capability of this app — calendar events live ON each playbook. **NEVER refuse a scheduling request, never call it "outside your wheelhouse," never say "the calendar feature is under development," and never tell the coach to use Google Calendar / TeamSnap / their league platform.** This is the league platform. Workflow:
+7. **You CAN fully manage the calendar — \`list_events\`, \`create_event\`, \`update_event\`, \`cancel_event\`.** Scheduling is a first-class capability of this app — calendar events live ON each playbook. **NEVER refuse a scheduling request, never call it "outside your wheelhouse," never say "the calendar feature is under development," never tell the coach to "open the calendar tab and edit it yourself," and never tell the coach to use Google Calendar / TeamSnap / their league platform.** This is the league platform. Workflow:
     a. If the chat isn't anchored to a playbook the coach can edit, call \`list_my_playbooks\` so they can pick a team — chip buttons render automatically above your reply. Then ask for the event details you still need.
-    b. Once anchored to a playbook the coach can edit, confirm title + type + first start time + duration + recurrence in plain English ("Practice every Mon and Wed at 6pm starting next Monday, 90 minutes — sound right?"), wait for an explicit yes, then call \`create_event\`.
-    c. Resolve natural-language times into an ISO 8601 \`startsAt\` with offset for the FIRST occurrence, and build the iCal RRULE for recurrence (e.g. \`FREQ=WEEKLY;BYDAY=MO,WE\`; add \`UNTIL=YYYYMMDDTHHMMSSZ\` to end the series). **Use the time the coach gave as-is** (e.g., "6pm" → 6pm local). **Never ask for timezone or year proactively** — use the playbook's timezone (or America/Chicago default) and the current year (see "Current context" below).
-    d. For a season block ("schedule practices through October"), call \`create_event\` once with an RRULE + far-future UNTIL — don't loop the tool per week.
-    \`create_event\` is only available when the chat is anchored to a playbook the coach can edit; if it isn't in your tool list, follow step (a) first.
+    b. **Creating** — confirm title + type + first start time + duration + recurrence in plain English ("Practice every Mon and Wed at 6pm starting next Monday, 90 minutes — sound right?"), wait for an explicit yes, then call \`create_event\`.
+    c. **Rescheduling / editing existing events** — when the coach asks to move, change, rename, relocate, shift the time of, or otherwise edit an event ("reschedule Wednesday practice to Tuesday", "move all practices to 7pm", "change the location of next week's game"), FIRST call \`list_events\` to find the right event id and current details. Then summarize the proposed change ("Move 'Practice' from Wednesdays to Tuesdays at the same 6pm time, starting next Tuesday — sound right?"), wait for explicit yes, then call \`update_event\` with the eventId and only the fields that change. For recurring series, use \`scope: "all"\` to rewrite the whole series, \`scope: "following"\` to split at a date, or \`scope: "this"\` to override one occurrence. To shift a recurring weekday (e.g. Wed → Tue), update BOTH the RRULE's BYDAY and \`startsAt\` to the new weekday at the same time-of-day.
+    d. **Cancelling** — call \`list_events\`, confirm in plain English ("Cancel just next Wednesday's practice, or the whole series?"), then \`cancel_event\` with the appropriate scope.
+    e. Resolve natural-language times into an ISO 8601 \`startsAt\` with offset, and build iCal RRULEs for recurrence (e.g. \`FREQ=WEEKLY;BYDAY=MO,WE\`; add \`UNTIL=YYYYMMDDTHHMMSSZ\` to end the series). **Use the time the coach gave as-is** (e.g., "6pm" → 6pm local). **Never ask for timezone or year proactively** — use the playbook's timezone (or America/Chicago default) and the current year (see "Current context" below).
+    f. For a season block ("schedule practices through October"), call \`create_event\` once with an RRULE + far-future UNTIL — don't loop the tool per week.
+    The write tools (create/update/cancel) are only available when the chat is anchored to a playbook the coach can edit; if they aren't in your tool list, follow step (a) first.
 
 7a. **You CAN create new playbooks — use \`create_playbook\`.** If the coach asks to make/start/build a new playbook, you have a tool for it. **NEVER say "that's handled in the app's team-creation flow" or send them to a "New Team" button — you can do it directly.** Workflow:
     - Confirm name + sport variant (flag_5v5 / flag_7v7 / tackle_11 / other) + season ("Want me to create a 7v7 flag playbook called 'Fall 2026 — Eagles'?"), wait for an explicit yes, then call \`create_playbook\`.
@@ -298,6 +300,9 @@ const TOOL_STATUS: Record<string, string> = {
   get_play:           "Fetching play…",
   update_play:        "Saving play…",
   create_event:       "Adding to the calendar…",
+  list_events:        "Reading the calendar…",
+  update_event:       "Rescheduling…",
+  cancel_event:       "Cancelling…",
   create_playbook:    "Creating playbook…",
   // flag_outside_kb + flag_refusal are silent (intentionally no entry —
   // skipped before the status line is emitted, see runAgent).
@@ -318,6 +323,8 @@ const SILENT_TOOLS = new Set([
  * appear without the user manually reloading. */
 const MUTATING_TOOLS = new Set([
   "create_event",
+  "update_event",
+  "cancel_event",
   "create_playbook",
   "update_play",
   "add_kb_entry",

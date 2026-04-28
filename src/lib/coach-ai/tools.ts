@@ -576,6 +576,425 @@ const create_event: CoachAiTool = {
   },
 };
 
+const list_events: CoachAiTool = {
+  def: {
+    name: "list_events",
+    description:
+      "List the events (practices, games, scrimmages, other) on the current playbook's calendar. " +
+      "Call this whenever the coach asks about existing events — e.g. \"when's our next practice\", " +
+      "\"reschedule Wednesday's practice\", \"cancel the game on the 15th\", \"move all practices to Tuesdays\". " +
+      "Returns parent rows (one per series — recurring events are NOT expanded), each with the iCal RRULE so " +
+      "you can reason about which weekdays a series lands on (e.g. RRULE containing BYDAY=WE means Wednesdays). " +
+      "Requires the chat to be anchored to a playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        includePast: {
+          type: "boolean",
+          description: "Include events whose first occurrence is already in the past. Default false (upcoming only).",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) {
+      return { ok: false, error: "Open a playbook first — events live on a specific playbook." };
+    }
+    const includePast = input.includePast === true;
+    try {
+      const supabase = await createClient();
+      let q = supabase
+        .from("playbook_events")
+        .select(
+          "id, type, title, starts_at, duration_minutes, timezone, recurrence_rule, location_name, location_address, opponent, home_away, notes",
+        )
+        .eq("playbook_id", ctx.playbookId)
+        .is("deleted_at", null)
+        .order("starts_at", { ascending: true });
+      if (!includePast) {
+        // Cheap upper bound: hide series whose first occurrence is more than
+        // 30 days behind us AND that don't recur. Recurring series may still
+        // have upcoming occurrences even if starts_at is old.
+        const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        q = q.or(`starts_at.gte.${cutoff},recurrence_rule.not.is.null`);
+      }
+      const { data, error } = await q;
+      if (error) return { ok: false, error: error.message };
+      if (!data || data.length === 0) {
+        return { ok: true, result: "No events on this playbook's calendar yet." };
+      }
+      type Row = {
+        id: string;
+        type: string;
+        title: string;
+        starts_at: string;
+        duration_minutes: number;
+        timezone: string;
+        recurrence_rule: string | null;
+        location_name: string | null;
+        location_address: string | null;
+        opponent: string | null;
+        home_away: string | null;
+        notes: string | null;
+      };
+      const rows = data as Row[];
+      const lines = rows.map((r) => {
+        let starts = r.starts_at;
+        try {
+          const d = new Date(r.starts_at);
+          if (!Number.isNaN(d.getTime())) {
+            starts = d.toLocaleString("en-US", {
+              timeZone: r.timezone || "America/Chicago",
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              timeZoneName: "short",
+            });
+          }
+        } catch { /* keep raw */ }
+        const parts: string[] = [];
+        parts.push(`id: ${r.id}`);
+        parts.push(`type: ${r.type}`);
+        parts.push(`title: ${r.title}`);
+        parts.push(`first occurrence: ${starts} (raw: ${r.starts_at})`);
+        parts.push(`duration: ${r.duration_minutes} min`);
+        parts.push(`timezone: ${r.timezone}`);
+        if (r.recurrence_rule) parts.push(`recurrence: ${r.recurrence_rule}`);
+        if (r.location_name) {
+          parts.push(`location: ${r.location_name}${r.location_address ? ` — ${r.location_address}` : ""}`);
+        }
+        if (r.opponent) parts.push(`opponent: ${r.opponent}${r.home_away ? ` (${r.home_away})` : ""}`);
+        if (r.notes) parts.push(`notes: ${r.notes}`);
+        return `- ${parts.join(" | ")}`;
+      });
+      return { ok: true, result: `${rows.length} event(s):\n\n${lines.join("\n")}` };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "list_events failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
+// Common shape: optional patch fields used by both update_event and the
+// merge step. All fields optional — anything omitted is left as-is.
+type EventPatch = {
+  type?: string;
+  title?: string;
+  startsAt?: string;
+  durationMinutes?: number;
+  arriveMinutesBefore?: number;
+  timezone?: string;
+  recurrenceRule?: string | null;
+  notes?: string | null;
+  opponent?: string | null;
+  homeAway?: string | null;
+  reminderOffsetsMinutes?: number[];
+  location?: { name: string; address?: string | null; lat?: number | null; lng?: number | null } | null;
+};
+
+function readPatch(input: Record<string, unknown>): EventPatch {
+  const patch: EventPatch = {};
+  if (typeof input.type === "string") patch.type = input.type;
+  if (typeof input.title === "string") patch.title = input.title;
+  if (typeof input.startsAt === "string") patch.startsAt = input.startsAt;
+  if (typeof input.durationMinutes === "number") patch.durationMinutes = Math.round(input.durationMinutes);
+  if (typeof input.arriveMinutesBefore === "number") patch.arriveMinutesBefore = Math.round(input.arriveMinutesBefore);
+  if (typeof input.timezone === "string") patch.timezone = input.timezone;
+  if (typeof input.recurrenceRule === "string" || input.recurrenceRule === null) {
+    patch.recurrenceRule = input.recurrenceRule as string | null;
+  }
+  if (typeof input.notes === "string" || input.notes === null) patch.notes = input.notes as string | null;
+  if (typeof input.opponent === "string" || input.opponent === null) patch.opponent = input.opponent as string | null;
+  if (typeof input.homeAway === "string" || input.homeAway === null) patch.homeAway = input.homeAway as string | null;
+  if (Array.isArray(input.reminderOffsetsMinutes)) {
+    patch.reminderOffsetsMinutes = (input.reminderOffsetsMinutes as unknown[])
+      .filter((n): n is number => typeof n === "number")
+      .map(Math.round);
+  }
+  if (input.location !== undefined) {
+    const raw = input.location as { name?: unknown; address?: unknown } | null;
+    patch.location = raw && typeof raw.name === "string"
+      ? {
+          name: raw.name,
+          address: typeof raw.address === "string" ? raw.address : null,
+          lat: null,
+          lng: null,
+        }
+      : null;
+  }
+  return patch;
+}
+
+const PATCH_SCHEMA_PROPERTIES = {
+  type: { type: "string", enum: ["practice", "game", "scrimmage", "other"] },
+  title: { type: "string" },
+  startsAt: {
+    type: "string",
+    description: "ISO 8601 datetime WITH offset for the FIRST occurrence (e.g. \"2026-05-04T17:00:00-05:00\"). For recurring series this rewrites the series anchor.",
+  },
+  durationMinutes: { type: "integer", minimum: 1, maximum: 1440 },
+  arriveMinutesBefore: { type: "integer", minimum: 0, maximum: 480 },
+  timezone: { type: "string", description: "IANA tz name." },
+  recurrenceRule: {
+    type: ["string", "null"],
+    description: "iCal RRULE for recurring events (e.g. \"FREQ=WEEKLY;BYDAY=TU\"). Pass null to convert a recurring event to a one-off.",
+  },
+  location: {
+    type: ["object", "null"],
+    properties: {
+      name: { type: "string" },
+      address: { type: "string" },
+    },
+    required: ["name"],
+    additionalProperties: false,
+  },
+  notes: { type: ["string", "null"] },
+  opponent: { type: ["string", "null"] },
+  homeAway: { type: ["string", "null"], enum: ["home", "away", "neutral", null] },
+  reminderOffsetsMinutes: {
+    type: "array",
+    items: { type: "integer", minimum: 0, maximum: 20160 },
+    maxItems: 8,
+  },
+} as const;
+
+const update_event: CoachAiTool = {
+  def: {
+    name: "update_event",
+    description:
+      "Reschedule or edit an existing calendar event. Pass `eventId` (from list_events) plus only the fields " +
+      "you want to change — anything you omit is preserved. " +
+      "RECURRING SERIES: pick `scope` to control which occurrences change: " +
+      "  - \"all\" (default): rewrite the whole series. Use this when the coach says \"move all practices to Tuesdays\". " +
+      "  - \"following\": split the series at `occurrenceDate`. Past occurrences stay on the old schedule, this one and future ones move. " +
+      "  - \"this\": change only the single occurrence on `occurrenceDate` (creates a one-off override). " +
+      "When `scope` is \"this\" or \"following\", `occurrenceDate` is REQUIRED in YYYY-MM-DD form. " +
+      "ALWAYS summarize the proposed change back to the coach in plain English (\"move 'Practice' from Wednesdays to Tuesdays at 6pm — sound right?\") and wait for explicit yes before calling. " +
+      "To shift Wednesday → Tuesday, change the BYDAY in `recurrenceRule` (e.g. BYDAY=WE → BYDAY=TU) AND advance `startsAt` to the matching Tuesday at the same time. " +
+      "Requires that the chat is anchored to a playbook the coach can edit.",
+    input_schema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", description: "The event id from list_events." },
+        scope: {
+          type: "string",
+          enum: ["this", "following", "all"],
+          description: "Recurrence scope. Default \"all\". For non-recurring events, any value is treated as \"all\".",
+        },
+        occurrenceDate: {
+          type: "string",
+          description: "YYYY-MM-DD of the specific occurrence being edited. Required when scope is \"this\" or \"following\".",
+        },
+        notifyAttendees: {
+          type: "boolean",
+          description: "Send an \"event edited\" email/notification to playbook members. Default true.",
+        },
+        ...PATCH_SCHEMA_PROPERTIES,
+      },
+      required: ["eventId"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) {
+      return { ok: false, error: "Open a playbook first — events live on a specific playbook." };
+    }
+    if (!ctx.canEditPlaybook) {
+      return { ok: false, error: "Only coaches who can edit this playbook can reschedule events." };
+    }
+    const eventId = typeof input.eventId === "string" ? input.eventId : "";
+    if (!eventId) return { ok: false, error: "eventId is required (call list_events first)." };
+    const scope = (typeof input.scope === "string" && ["this", "following", "all"].includes(input.scope))
+      ? (input.scope as "this" | "following" | "all")
+      : "all";
+    const occurrenceDate = typeof input.occurrenceDate === "string" ? input.occurrenceDate : null;
+    if ((scope === "this" || scope === "following") && !occurrenceDate) {
+      return { ok: false, error: "occurrenceDate (YYYY-MM-DD) is required when scope is \"this\" or \"following\"." };
+    }
+    const notifyAttendees = input.notifyAttendees !== false; // default true
+
+    try {
+      const supabase = await createClient();
+      const { data: existing, error: readErr } = await supabase
+        .from("playbook_events")
+        .select(
+          "playbook_id, type, title, starts_at, duration_minutes, arrive_minutes_before, timezone, recurrence_rule, location_name, location_address, location_lat, location_lng, notes, opponent, home_away, reminder_offsets_minutes",
+        )
+        .eq("id", eventId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (readErr) return { ok: false, error: readErr.message };
+      if (!existing) return { ok: false, error: "Event not found (already deleted, or wrong id)." };
+      if (existing.playbook_id !== ctx.playbookId) {
+        return { ok: false, error: "That event belongs to a different playbook." };
+      }
+
+      const patch = readPatch(input);
+      const merged = {
+        type: patch.type ?? (existing.type as string),
+        title: patch.title ?? (existing.title as string),
+        startsAt: patch.startsAt ?? (existing.starts_at as string),
+        durationMinutes: patch.durationMinutes ?? (existing.duration_minutes as number),
+        arriveMinutesBefore: patch.arriveMinutesBefore ?? (existing.arrive_minutes_before as number),
+        timezone: patch.timezone ?? (existing.timezone as string),
+        recurrenceRule: patch.recurrenceRule !== undefined ? patch.recurrenceRule : (existing.recurrence_rule as string | null),
+        notes: patch.notes !== undefined ? patch.notes : (existing.notes as string | null),
+        opponent: patch.opponent !== undefined ? patch.opponent : (existing.opponent as string | null),
+        homeAway: patch.homeAway !== undefined ? patch.homeAway as "home" | "away" | "neutral" | null : (existing.home_away as "home" | "away" | "neutral" | null),
+        reminderOffsetsMinutes: patch.reminderOffsetsMinutes ?? ((existing.reminder_offsets_minutes as number[] | null) ?? []),
+        location: patch.location !== undefined
+          ? patch.location
+          : existing.location_name
+            ? {
+                name: existing.location_name as string,
+                address: (existing.location_address as string | null) ?? null,
+                lat: (existing.location_lat as number | null) ?? null,
+                lng: (existing.location_lng as number | null) ?? null,
+              }
+            : null,
+        notifyAttendees,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { updateEventAction, updateEventOccurrenceAction } =
+        require("@/app/actions/calendar") as typeof import("@/app/actions/calendar");
+
+      let res: { ok: true } | { ok: false; error: string };
+      if (scope === "all" || !existing.recurrence_rule) {
+        res = await updateEventAction(eventId, merged);
+      } else {
+        res = await updateEventOccurrenceAction(eventId, { ...merged, scope, occurrenceDate });
+      }
+      if (!res.ok) return { ok: false, error: res.error };
+
+      // Resolve the final start string for verbatim echo.
+      let resolved = merged.startsAt;
+      try {
+        const d = new Date(merged.startsAt);
+        if (!Number.isNaN(d.getTime())) {
+          resolved = d.toLocaleString("en-US", {
+            timeZone: merged.timezone,
+            weekday: "long", year: "numeric", month: "long", day: "numeric",
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+          });
+        }
+      } catch { /* keep raw */ }
+      const url = `/playbooks/${ctx.playbookId}?tab=calendar`;
+      const recurNote = merged.recurrenceRule ? ` (recurring: ${merged.recurrenceRule})` : "";
+      const scopeNote = scope === "all" ? "" : ` — scope: ${scope} occurrence ${occurrenceDate ?? ""}`;
+      return {
+        ok: true,
+        result:
+          `Updated "${merged.title}" — now ${resolved}${recurNote}${scopeNote}. ` +
+          `Use this exact date+weekday verbatim when telling the coach (do NOT recompute). ` +
+          `Link them to the calendar: [Open calendar](${url}).`,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "update_event failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
+const cancel_event: CoachAiTool = {
+  def: {
+    name: "cancel_event",
+    description:
+      "Cancel/delete a calendar event. Pass `eventId` (from list_events). " +
+      "RECURRING SERIES: pick `scope`: " +
+      "  - \"all\": cancel the whole series. " +
+      "  - \"following\": end the series just before `occurrenceDate` (this occurrence and all future ones go away). " +
+      "  - \"this\": cancel only the single occurrence on `occurrenceDate`. " +
+      "When scope is \"this\" or \"following\", `occurrenceDate` (YYYY-MM-DD) is REQUIRED. " +
+      "ALWAYS confirm with the coach in plain English before calling. " +
+      "Requires that the chat is anchored to a playbook the coach can edit.",
+    input_schema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", description: "The event id from list_events." },
+        scope: {
+          type: "string",
+          enum: ["this", "following", "all"],
+          description: "Recurrence scope. Default \"all\".",
+        },
+        occurrenceDate: {
+          type: "string",
+          description: "YYYY-MM-DD of the specific occurrence being cancelled. Required when scope is \"this\" or \"following\".",
+        },
+        notifyAttendees: {
+          type: "boolean",
+          description: "Send a \"cancelled\" email/notification to playbook members. Default true.",
+        },
+      },
+      required: ["eventId"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) {
+      return { ok: false, error: "Open a playbook first — events live on a specific playbook." };
+    }
+    if (!ctx.canEditPlaybook) {
+      return { ok: false, error: "Only coaches who can edit this playbook can cancel events." };
+    }
+    const eventId = typeof input.eventId === "string" ? input.eventId : "";
+    if (!eventId) return { ok: false, error: "eventId is required (call list_events first)." };
+    const scope = (typeof input.scope === "string" && ["this", "following", "all"].includes(input.scope))
+      ? (input.scope as "this" | "following" | "all")
+      : "all";
+    const occurrenceDate = typeof input.occurrenceDate === "string" ? input.occurrenceDate : null;
+    if ((scope === "this" || scope === "following") && !occurrenceDate) {
+      return { ok: false, error: "occurrenceDate (YYYY-MM-DD) is required when scope is \"this\" or \"following\"." };
+    }
+    const notifyAttendees = input.notifyAttendees !== false;
+
+    try {
+      const supabase = await createClient();
+      const { data: existing, error: readErr } = await supabase
+        .from("playbook_events")
+        .select("playbook_id, title, recurrence_rule")
+        .eq("id", eventId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (readErr) return { ok: false, error: readErr.message };
+      if (!existing) return { ok: false, error: "Event not found (already deleted, or wrong id)." };
+      if (existing.playbook_id !== ctx.playbookId) {
+        return { ok: false, error: "That event belongs to a different playbook." };
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { deleteEventAction, deleteEventOccurrenceAction } =
+        require("@/app/actions/calendar") as typeof import("@/app/actions/calendar");
+
+      let res: { ok: true } | { ok: false; error: string };
+      if (scope === "all" || !existing.recurrence_rule) {
+        res = await deleteEventAction(eventId, notifyAttendees);
+      } else {
+        res = await deleteEventOccurrenceAction(eventId, { scope, occurrenceDate, notifyAttendees });
+      }
+      if (!res.ok) return { ok: false, error: res.error };
+
+      const url = `/playbooks/${ctx.playbookId}?tab=calendar`;
+      const scopeNote =
+        scope === "all" ? "the whole series"
+        : scope === "following" ? `this occurrence and all future ones (from ${occurrenceDate})`
+        : `the occurrence on ${occurrenceDate}`;
+      return {
+        ok: true,
+        result: `Cancelled "${existing.title}" — ${scopeNote}. [Open calendar](${url}).`,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "cancel_event failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
 const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
@@ -597,11 +1016,13 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
     const { PLAY_TOOLS } = require("./play-tools") as typeof import("./play-tools");
     const readTools = PLAY_TOOLS.filter((t) => t.def.name !== "update_play");
     tools.push(...readTools);
+    // Reading the calendar is available to anyone with the playbook anchored.
+    tools.push(list_events);
     if (ctx.canEditPlaybook) {
       const writeTools = PLAY_TOOLS.filter((t) => t.def.name === "update_play");
       tools.push(...writeTools);
       // Scheduling: only available to coaches who can edit the playbook.
-      tools.push(create_event);
+      tools.push(create_event, update_event, cancel_event);
     }
   }
   return tools;
