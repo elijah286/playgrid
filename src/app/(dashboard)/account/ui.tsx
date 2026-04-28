@@ -113,7 +113,7 @@ export function AccountClient({
 
       <Section
         title="Privacy"
-        description="Control what Coach AI is allowed to log about your questions."
+        description="Control what Coach Cal is allowed to log about your questions."
       >
         <CoachAiFeedbackCard initialStatus={aiFeedbackStatus} />
       </Section>
@@ -804,17 +804,17 @@ function CoachAiFeedbackCard({
   return (
     <Card
       icon={MessageSquareQuote}
-      title="Help improve Coach AI"
-      description="When Coach AI answers from general football knowledge instead of our seeded playbook, log the topic so we know what to add next. We never log the rest of your chat."
+      title="Help improve Coach Cal"
+      description="When Coach Cal answers from general football knowledge instead of our seeded playbook, log the topic so we know what to add next. We never log the rest of your chat."
     >
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">Feedback logging</p>
           <p className="mt-0.5 text-xs text-muted">
             {isOn
-              ? "On — we'll log the topic and your question whenever Coach AI falls back to general knowledge."
+              ? "On — we'll log the topic and your question whenever Coach Cal falls back to general knowledge."
               : status === "declined"
-                ? "Off — Coach AI won't log anything about your questions."
+                ? "Off — Coach Cal won't log anything about your questions."
                 : "Off by default."}
             {" "}
             <Link href="/privacy" className="text-primary hover:underline">
@@ -827,7 +827,7 @@ function CoachAiFeedbackCard({
           type="button"
           role="switch"
           aria-checked={isOn}
-          aria-label="Help improve Coach AI"
+          aria-label="Help improve Coach Cal"
           disabled={pending}
           onClick={() => setOptIn(!isOn)}
           className={cn(

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { BookOpen, GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
+import { BookOpen, GraduationCap, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { usePlaybookAnchor } from "./playbook-anchor";
@@ -49,13 +49,49 @@ function writeStorage(key: string, value: unknown) {
  *                      resizable by bottom-right handle (top-left stays fixed),
  *                      font size A−/A+ in header toolbar
  */
-const COACH_CAL_CAPABILITIES = [
-  "Generate plays and full playbooks instantly",
-  "Strategy feedback vs. specific defenses",
-  "Bulk formation edits across your playbook",
-  "Adjust plays to your team's skill level",
-  "Practice and game scheduling help",
+type CoachCalDemo = { user: string; cal: string };
+
+const COACH_CAL_DEMOS: CoachCalDemo[] = [
+  {
+    user: "Draw me a curl-flat against Cover-3.",
+    cal: "Done — here's the diagram with reads. Want me to add it to your playbook?",
+  },
+  {
+    user: "What plays beat a 5-2 defense?",
+    cal: "Try Stick, Curl-Flat, and Slants — your QB has the most time on those fronts.",
+  },
+  {
+    user: "Build a 60-min practice for Tuesday.",
+    cal: "10 warm-up · 20 individual · 20 team install · 10 conditioning. Saved to Practice Plans.",
+  },
+  {
+    user: "Schedule our game vs Riverside, Sat 2 PM.",
+    cal: "Added to Calendar with a 24-hr reminder. RSVP link sent to roster.",
+  },
+  {
+    user: "Adjust this play for a younger team.",
+    cal: "Simplified routes and added a hot read. Want me to apply across the playbook?",
+  },
 ];
+
+/** Path-aware lead — what Coach Cal can most usefully help with given where
+ *  the user is right now. Returns a fragment that follows "Coach Cal can". */
+function leadForPath(pathname: string | null): string {
+  if (!pathname) return "help you build your playbook, plan practices, and more.";
+  if (/^\/plays\/[^/]+\/edit/.test(pathname)) {
+    return "draw this play, suggest counters, or tune it for your team.";
+  }
+  if (/^\/playbooks\/[^/]+\/print/.test(pathname)) {
+    return "design call sheets and wristbands you can print today.";
+  }
+  if (/^\/playbooks\/[^/]+/.test(pathname)) {
+    return "build out this playbook, plan practices, and schedule games.";
+  }
+  if (pathname === "/home" || pathname.startsWith("/home")) {
+    return "build playbooks, plan practices, and run your season.";
+  }
+  return "help you build your playbook, plan practices, and schedule games.";
+}
 
 export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
@@ -321,44 +357,47 @@ export function CoachAiLauncher({
             }}
             aria-label="Try Coach Cal — your AI coaching partner"
             title="Try Coach Cal free for 7 days"
-            className="relative inline-flex h-9 items-center justify-center rounded-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            style={{ background: GRADIENT }}
           >
             {!pulseSeen && (
               <span
-                className="absolute inset-0 rounded-full animate-ping opacity-40"
+                className="absolute inset-0 rounded-xl animate-ping opacity-40"
                 style={{ background: GRADIENT }}
                 aria-hidden="true"
               />
             )}
-            <CoachAiIcon className="relative h-9 w-auto" />
-            <span className="sr-only">Try Coach Cal</span>
+            <CoachAiIcon className="relative h-6 w-auto" />
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
+            >
+              <Sparkles className="size-2.5" />
+            </span>
+            <span className="sr-only">Try Coach Cal AI</span>
           </button>
 
           {promoOpen && (
             <div
               ref={promoRef}
-              className="absolute top-full right-0 z-50 mt-2 w-72 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
+              className="absolute top-full right-0 z-50 mt-2 w-80 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
             >
               <div className="flex items-center gap-2.5">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-xl" style={{ background: GRADIENT }}>
                   <CoachAiIcon className="size-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-bold text-foreground">Meet Coach Cal</p>
                   <p className="text-[11px] text-muted">Your AI coaching partner</p>
                 </div>
               </div>
-              <ul className="mt-3 space-y-1.5">
-                {COACH_CAL_CAPABILITIES.map((c) => (
-                  <li key={c} className="flex items-start gap-2 text-[12px] text-foreground">
-                    <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">✓</span>
-                    {c}
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-3 text-[12px] leading-relaxed text-foreground">
+                Coach Cal can {leadForPath(pathname)}
+              </p>
+              <CoachCalDemoStrip />
               <a
                 href="/pricing"
-                className="mt-4 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
+                className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
                 style={{ background: GRADIENT }}
                 onClick={() => setPromoOpen(false)}
               >
@@ -373,14 +412,21 @@ export function CoachAiLauncher({
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open Coach Cal"
-          title="Coach Cal"
+          title="Coach Cal — your AI coaching partner"
           className={cn(
-            "inline-flex h-9 items-center justify-center rounded-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            "relative inline-flex h-9 w-9 items-center justify-center rounded-xl transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
             open && "hidden",
           )}
+          style={{ background: GRADIENT }}
         >
-          <CoachAiIcon className="h-9 w-auto" />
-          <span className="sr-only">Coach Cal</span>
+          <CoachAiIcon className="h-6 w-auto" />
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
+          >
+            <Sparkles className="size-2.5" />
+          </span>
+          <span className="sr-only">Coach Cal AI</span>
         </button>
       )}
 
@@ -605,5 +651,60 @@ export function CoachAiLauncher({
         document.body,
       )}
     </>
+  );
+}
+
+/**
+ * Animated chat preview shown to non-entitled users in the promo popover.
+ * Cycles through scripted user/assistant pairs every ~3.5s, fading between
+ * them so the popover feels alive without being demanding. Pure decoration —
+ * doesn't talk to the API.
+ */
+function CoachCalDemoStrip() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % COACH_CAL_DEMOS.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, []);
+  const demo = COACH_CAL_DEMOS[idx];
+  return (
+    <div
+      key={idx}
+      className="mt-3 space-y-1.5 rounded-xl bg-surface-inset/60 p-2.5 [animation:fadein_400ms_ease-out]"
+      style={{
+        // inline keyframe via style tag below — keep this self-contained
+      }}
+    >
+      <style>{`@keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }`}</style>
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-2.5 py-1.5 text-[11px] leading-snug text-white">
+          {demo.user}
+        </div>
+      </div>
+      <div className="flex items-end gap-1.5">
+        <div
+          className="flex size-5 shrink-0 items-center justify-center rounded-lg"
+          style={{ background: GRADIENT }}
+        >
+          <CoachAiIcon className="size-3" />
+        </div>
+        <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-foreground ring-1 ring-border">
+          {demo.cal}
+        </div>
+      </div>
+      <div className="flex justify-center gap-1 pt-0.5">
+        {COACH_CAL_DEMOS.map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "size-1 rounded-full transition-colors",
+              i === idx ? "bg-primary" : "bg-muted/30",
+            )}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

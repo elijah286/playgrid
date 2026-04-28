@@ -228,6 +228,33 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-cal-launcher-polish",
+    name: "Coach Cal launcher polish",
+    description:
+      "The Coach Cal launcher button now reads as AI at a glance: gradient-filled icon container with a small ✨ sparkle badge in the corner instead of the bare chat-bubble that looked like a generic message icon — especially noticeable on mobile.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
+    id: "coach-cal-promo-contextual-demo",
+    name: "Coach Cal promo demo (context-aware)",
+    description:
+      "When a non-entitled user clicks the Coach Cal launcher, the marketing popover now leads with a path-aware sentence (\"Coach Cal can draw this play…\" on the play editor; \"…build out this playbook\" on a playbook; etc.) and shows an animated mini chat that cycles through real prompt/response examples — drawing plays, beating defenses, planning practices, scheduling games, adjusting for skill level. Replaces the previous static capability bullet list.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
+    id: "coach-cal-feedback-rename",
+    name: "Coach Cal feedback prompt rename",
+    description:
+      "The first-use feedback opt-in modal and the Account-page setting now refer to the assistant as \"Coach Cal\" (its product name) instead of the technical \"Coach AI.\" The modal still only fires inside the chat window — a surface that's only reachable by entitled users — so non-entitled marketing visitors never see it.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "coach-cal-cta-play-editor",
     name: "Coach Cal teaser inside the play editor",
     description:

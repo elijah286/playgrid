@@ -128,8 +128,10 @@ export function CoachAiChat({
   const router = useRouter();
 
   // Load the user's AI-feedback opt-in status once. NULL → show modal on
-  // first chat use; true/false → never show again. The modal only blocks
-  // the first message — subsequent sends never see it.
+  // first chat use; true/false → never show again. Only entitled users
+  // ever reach this surface (the launcher routes free users to a marketing
+  // popover instead of opening the chat), so this consent prompt never
+  // interrupts someone who hasn't actually started using Coach Cal.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -320,7 +322,7 @@ export function CoachAiChat({
       }
     } catch (e) {
       if ((e as { name?: string }).name !== "AbortError") {
-        setError(e instanceof Error ? e.message : "Coach AI request failed.");
+        setError(e instanceof Error ? e.message : "Coach Cal request failed.");
       }
     } finally {
       setStreaming(false);
@@ -351,15 +353,15 @@ export function CoachAiChat({
       {feedbackOptIn === "unanswered" && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 px-4">
           <div className="max-w-sm rounded-2xl bg-surface-raised p-5 shadow-xl ring-1 ring-black/10">
-            <h3 className="text-base font-semibold text-foreground">Help improve Coach AI?</h3>
+            <h3 className="text-base font-semibold text-foreground">Help improve Coach Cal?</h3>
             <p className="mt-2 text-sm text-muted">
-              When Coach AI answers from general football knowledge instead of our seeded playbook,
+              When Coach Cal answers from general football knowledge instead of our seeded playbook,
               we&apos;d like to log the topic of your question so we can fill that gap. We never log
               your full chat — just the topic + your question + a few details about your playbook
               context.
             </p>
             <p className="mt-2 text-sm text-muted">
-              You can change your mind anytime — just ask Coach AI to update your feedback
+              You can change your mind anytime — just ask Coach Cal to update your feedback
               preference. Details in our{" "}
               <a href="/privacy" target="_blank" rel="noreferrer" className="text-primary hover:underline">
                 privacy policy
@@ -535,7 +537,7 @@ export function CoachAiChat({
         <div className="mt-2 flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <p className="truncate text-[11px] leading-snug text-muted">
-              Coach AI may be wrong — double-check rules against the official source.
+              Coach Cal may be wrong — double-check rules against the official source.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
