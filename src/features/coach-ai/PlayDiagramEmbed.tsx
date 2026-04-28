@@ -303,8 +303,11 @@ function DiagramCanvas({ doc, animPositions }: {
           const w = z.size.w * 2;
           const h = z.size.h * 2;
           const labelY = cy - z.size.h + 0.028;
+          // Hardcode fill="none" — coverage diagrams stack 6+ overlapping
+          // zones, so any fill (even translucent) compounds into a dark
+          // blob over the field. Outline-only is the only safe choice.
           const common = {
-            fill: z.style.fill,
+            fill: "none" as const,
             stroke: z.style.stroke,
             strokeWidth: 1.4,
             strokeDasharray: "6 4",
