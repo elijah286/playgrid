@@ -769,6 +769,32 @@ function currentSeasonLabel(): string {
 }
 
 /**
+ * Shown when a coach is collaborating on others' playbooks but hasn't built
+ * their own yet. Frames creation positively — collaborating and owning are
+ * independent on the free tier (a free coach can do both).
+ */
+function CollaboratorOnlyBanner({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/[0.04] p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-foreground">
+            Like what you&rsquo;re seeing? Build your own playbook — free.
+          </h2>
+          <p className="mt-0.5 text-xs text-muted">
+            You can create your own playbook with up to 16 plays at no cost,
+            and keep collaborating on the ones above.
+          </p>
+        </div>
+        <Button variant="primary" size="sm" leftIcon={Plus} onClick={onCreate}>
+          Build my playbook
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Marketing tile shown when a coach has no playbooks yet. Looks like a real
  * PlaybookBookTile (opens on hover), but it's fake — samples preview plays,
  * a generic lion logo, and clicking opens the Create Playbook dialog.
@@ -1419,6 +1445,10 @@ export function DashboardClient({
           </div>
         )}
       </div>
+
+      {!isEmpty && owned.length === 0 && shared.length > 0 && (
+        <CollaboratorOnlyBanner onCreate={() => setShowCreate(true)} />
+      )}
 
       {isEmpty ? (
         <div className="mx-auto w-60 pt-4 sm:w-64">

@@ -219,6 +219,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-10-01",
   },
   {
+    id: "collaborator-build-your-own-banner",
+    name: "Collaborator → owner nudge",
+    description:
+      "Coaches who collaborate on others' playbooks but haven't built their own see a banner on /home inviting them to start a free playbook of their own. Frames creation positively — collaborating and owning are independent on the free tier.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "playbook-send-copy",
     name: "Send a copy",
     description:
