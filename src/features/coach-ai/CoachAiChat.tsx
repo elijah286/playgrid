@@ -100,6 +100,7 @@ export function CoachAiChat({
   const [optInPending, setOptInPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const prevStorageKeyRef = useRef<string | null>(null);
   const router = useRouter();
 
   // Load the user's AI-feedback opt-in status once. NULL → show modal on
@@ -152,11 +153,30 @@ export function CoachAiChat({
         setTurns(merged);
         saveTurns(storageKey, merged);
         setError(null);
+        prevStorageKeyRef.current = storageKey;
         return;
       }
     }
-    setTurns(loadTurns(storageKey));
+    const loaded = loadTurns(storageKey);
+    // Anchor switched mid-session (e.g. tackle playbook → flag playbook). Insert
+    // a visible bridge turn so both the user and the model see the switch — the
+    // model otherwise carries over assumptions from the previous scope's turns.
+    const prev = prevStorageKeyRef.current;
+    if (prev && prev !== storageKey && loaded.length > 0) {
+      const bridgeTurn: CoachAiTurn = {
+        role: "assistant",
+        text:
+          "_[Context switch] You've moved to a different playbook. Earlier turns in this thread may have been about another team — verify rules and personnel against the current playbook before applying prior advice._",
+        toolCalls: [],
+      };
+      const merged = [...loaded, bridgeTurn];
+      setTurns(merged);
+      saveTurns(storageKey, merged);
+    } else {
+      setTurns(loaded);
+    }
     setError(null);
+    prevStorageKeyRef.current = storageKey;
   }, [storageKey]);
 
   useEffect(() => {
