@@ -359,6 +359,94 @@ const get_route_template: CoachAiTool = {
   },
 };
 
+const place_defense: CoachAiTool = {
+  def: {
+    name: "place_defense",
+    description:
+      "Get canonical defender positions for a named (front, coverage) combination. " +
+      "ALWAYS call this BEFORE drawing defense in any play diagram — freehanding " +
+      "defense produces broken looks (two CBs same side, LBs stacked on D-line, " +
+      "safeties at QB depth). Pick a real scheme and let this tool place the players. " +
+      "Returns a `players` array in the same {id, x, y} format as the diagram's " +
+      "players list — drop them straight in with team:\"D\". " +
+      "If the (front, coverage) combo isn't in the catalog, the tool returns the " +
+      "list of available combos for the variant; pick the closest match and call again.",
+    input_schema: {
+      type: "object",
+      properties: {
+        front: {
+          type: "string",
+          description:
+            "Defensive front name as a coach would say it. " +
+            "Examples: \"4-3 Over\", \"3-4\", \"46 Bear\", \"Nickel (4-2-5)\", \"7v7 Zone\", \"5v5 Man\".",
+        },
+        coverage: {
+          type: "string",
+          description:
+            "Coverage name. Examples: \"Cover 1\", \"Cover 2\", \"Cover 3\", \"Cover 4 (Quarters)\".",
+        },
+        strength: {
+          type: "string",
+          enum: ["left", "right"],
+          description:
+            "Which side the offensive strength (TE, trips, etc.) is on. The defense rotates toward strength. Default \"right\".",
+        },
+      },
+      required: ["front", "coverage"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const front = typeof input.front === "string" ? input.front.trim() : "";
+    const coverage = typeof input.coverage === "string" ? input.coverage.trim() : "";
+    if (!front || !coverage) return { ok: false, error: "front and coverage are required." };
+    const strength: "left" | "right" =
+      input.strength === "left" ? "left" : "right";
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const {
+      findDefensiveAlignment,
+      listDefensiveAlignments,
+      alignmentForStrength,
+    } = require("@/domain/play/defensiveAlignments") as typeof import("@/domain/play/defensiveAlignments");
+
+    const variant = ctx.sportVariant ?? "flag_7v7";
+    const alignment = findDefensiveAlignment(variant, front, coverage);
+    if (!alignment) {
+      const available = listDefensiveAlignments(variant);
+      if (available.length === 0) {
+        return {
+          ok: false,
+          error:
+            `No canonical alignments seeded for variant "${variant}". ` +
+            `Place defense by hand using the prompt's defender placement rules.`,
+        };
+      }
+      const list = available
+        .map((a) => `  - front: "${a.front}", coverage: "${a.coverage}"`)
+        .join("\n");
+      return {
+        ok: false,
+        error:
+          `No alignment for front="${front}", coverage="${coverage}" on ${variant}. ` +
+          `Available combos:\n${list}\nCall again with one of these.`,
+      };
+    }
+
+    const players = alignmentForStrength(alignment, strength);
+    const playersJson = JSON.stringify(
+      players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" })),
+    );
+    return {
+      ok: true,
+      result:
+        `Canonical "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):\n` +
+        `${alignment.description}\n\n` +
+        `Drop these players into your diagram (team:"D"):\n${playersJson}`,
+    };
+  },
+};
+
 const create_playbook: CoachAiTool = {
   def: {
     name: "create_playbook",
@@ -995,7 +1083,7 @@ const cancel_event: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, flag_outside_kb, flag_refusal];
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, place_defense, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {

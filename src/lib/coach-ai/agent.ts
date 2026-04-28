@@ -89,7 +89,7 @@ Rules:
 - For a formation-only diagram, omit the "routes" field.
 - Omit the diagram only when the question is purely about a rule or penalty (no positional concept involved).
 - **Route geometry — ALWAYS use \`get_route_template\` for named routes.** Before emitting any route waypoints in a diagram, call \`get_route_template\` with the route name (Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig, Go) plus the player's (x, y) in yards. The tool returns canonical waypoints that match the play editor's quick-route presets — drop them straight into the route's \`path\`. **Do NOT hand-author waypoints for named routes** (you'll guess wrong and produce a slant that looks like a flat). Only fall back to hand-authored paths for genuinely custom routes the coach asks for that don't match any template; in that case, briefly note "(custom route)" so the coach knows.
-- **Defender placement — defenders MUST be at y ≥ 1** (downfield from the LOS, on the defense's side). Never place a defender at y=0 or y<0 — that puts them on the offense's side of the ball, which is illegal. Typical depths: D-line/edge defenders at y≈1 (just off the line), inside LBs at y≈4-6, CBs at y≈5-7 covering WRs, safeties at y≈10-15.
+- **Defender placement — ALWAYS use \`place_defense\` for the defense.** Before emitting any defenders in a diagram, pick a real (front, coverage) combo (e.g. "4-3 Over" + "Cover 3", "Nickel (4-2-5)" + "Cover 4 (Quarters)", "7v7 Zone" + "Cover 3", "5v5 Man" + "Cover 1") and call \`place_defense\` with it plus the offensive strength side. The tool returns canonical defender positions — drop them straight into your \`players\` array with \`team: "D"\`. **Do NOT hand-author defender positions.** Hand-authored defense produces broken looks (two CBs same side, LBs stacked on D-line, safeties at QB depth). If \`place_defense\` doesn't have your exact combo, it returns the available list — pick the closest match. Only fall back to hand-placed defense if the tool reports no alignments at all for the variant. When you fall back, defenders MUST be at y ≥ 1 (downfield from LOS); D-line at y≈1, inside LBs y≈4-6, CBs y≈5-7, safeties y≈10-15. Never place a defender at y=0 or y<0.
 - **No two players may share the same (x, y).** Before emitting JSON, scan your players list and confirm every position is unique. If the model is tempted to place \`Y\` on top of \`RT\`, nudge \`Y\` outward by 1.5+ yards (a TE typically lines up just outside the tackle, not stacked on top). The token radius is large enough that even sub-yard overlaps look broken.
 - **Focus + non-focus rendering.** Set \`focus: "O"\` for an offense-focused diagram (route concepts, formations, plays) — the defense will render uniformly gray so it's spatial context without competing visually. Set \`focus: "D"\` for defense-focused diagrams (coverages, fronts, blitz packages) — offense will render gray. The default is "O". Pick whichever side the coach's question is actually about.
 - **Minimum players for "show me a route" questions.** When the coach asks about a single route in isolation ("show me a slant", "what does a hitch look like"), do NOT emit a full 11-man formation. Emit only the players that demonstrate the concept: the route runner, the QB (if it's a passing route — the coach reads "slant relative to QB" naturally), and 1 defender for context (typically the CB the route attacks). 3-4 players total. Skip linemen, other receivers, safeties unless the route specifically interacts with them. Save the full formation diagrams for "show me a play" or "show me a formation" requests.
@@ -296,6 +296,7 @@ const TOOL_STATUS: Record<string, string> = {
   add_playbook_note:  "Saving note…",
   edit_playbook_note: "Updating note…",
   retire_playbook_note: "Retiring note…",
+  place_defense:      "Aligning defense…",
   list_plays:         "Reading plays…",
   get_play:           "Fetching play…",
   update_play:        "Saving play…",
@@ -316,6 +317,9 @@ const SILENT_TOOLS = new Set([
   // surfacing each as a tool-chip would clutter the chat. Cal's overall
   // narrative ("here's the slant + go + flat concept") is enough context.
   "get_route_template",
+  // place_defense — same reasoning. The diagram itself is the proof the
+  // alignment was used; an extra "Aligning defense…" chip is just noise.
+  "place_defense",
 ]);
 
 /** Tools that mutate user-visible DB state — caller should router.refresh()

@@ -160,6 +160,13 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     };
   }
 
+  /**
+   * Defenders MUST be on their side of the ball (y ≥ 1 yard downfield from
+   * LOS). Models occasionally place a defender at y=0 or y<0 — render them
+   * stacked into the offense, which looks broken. Hard-clamp at the boundary.
+   */
+  const MIN_DEFENDER_Y_YDS = 1;
+
   // Default focus: offense (most common request). Defense diagrams must
   // explicitly opt in via diagram.focus = "D".
   const focus: "O" | "D" = diagram.focus === "D" ? "D" : "O";
@@ -169,7 +176,8 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   let receiverIdx = 0;
   for (const dp of diagram.players) {
     const team = guessTeam(dp);
-    const norm = toNorm(dp.x, dp.y);
+    const clampedY = team === "D" ? Math.max(MIN_DEFENDER_Y_YDS, dp.y) : dp.y;
+    const norm = toNorm(dp.x, clampedY);
     const role = guessRole(dp);
     const rawLabel = (dp.role ?? dp.id).toUpperCase();
     // Non-focus side gets a single uniform muted style — overrides everything

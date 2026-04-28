@@ -90,17 +90,25 @@ function PlayerToken({ player, cx, cy, r, sxCorr }: {
   const shape  = player.shape ?? "circle";
   const common = { fill, stroke, strokeWidth: 1, vectorEffect: "non-scaling-stroke" as const };
 
+  // Triangles need a larger bounding box than circles to fit a 2-char label.
+  // The visual "weight" of an upright triangle is concentrated at the top,
+  // so we grow it ~30% and shift the label up into the wide part of the shape.
+  const isTriangle = shape === "triangle";
+  const tr = isTriangle ? r * 1.3 : r;
+  const labelY = isTriangle ? -tr * 0.25 : 0;
+  const labelFont = isTriangle ? 0.026 : 0.035;
+
   let shapeEl: React.ReactNode;
   if (shape === "square") {
     shapeEl = <rect x={-r} y={-r} width={r * 2} height={r * 2} {...common} />;
   } else if (shape === "diamond") {
     shapeEl = <polygon points={`0,${-r} ${r},0 0,${r} ${-r},0`} {...common} />;
-  } else if (shape === "triangle") {
+  } else if (isTriangle) {
     // Defender triangle. The play diagram puts offense at the BOTTOM of the
     // SVG and defense at the TOP, so we point the apex DOWN (toward the
     // offense / play) — base across the top, tip aimed at the line of
     // scrimmage.
-    shapeEl = <polygon points={`${-r},${-r} ${r},${-r} 0,${r}`} {...common} />;
+    shapeEl = <polygon points={`${-tr},${-tr} ${tr},${-tr} 0,${tr}`} {...common} />;
   } else {
     shapeEl = <circle cx={0} cy={0} r={r} {...common} />;
   }
@@ -108,8 +116,11 @@ function PlayerToken({ player, cx, cy, r, sxCorr }: {
   return (
     <g transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
       {shapeEl}
-      <text x={0} y={0} textAnchor="middle" dominantBaseline="central"
-        fontSize={0.035} fontWeight={700} fill={player.style.labelColor}
+      <text x={0} y={labelY} textAnchor="middle" dominantBaseline="central"
+        fontSize={labelFont} fontWeight={700} fill={player.style.labelColor}
+        stroke={isTriangle ? "rgba(0,0,0,0.55)" : undefined}
+        strokeWidth={isTriangle ? 0.4 : undefined}
+        paintOrder={isTriangle ? "stroke" : undefined}
         style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
         {player.label}
       </text>
