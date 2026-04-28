@@ -1287,9 +1287,16 @@ const rsvp_event: CoachAiTool = {
 
 const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, place_defense, flag_outside_kb, flag_refusal];
 
+// Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
+function userPreferenceTools(): CoachAiTool[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { USER_PREFERENCE_TOOLS } = require("./user-preferences") as typeof import("./user-preferences");
+  return USER_PREFERENCE_TOOLS;
+}
+
 /** Tools exposed for a given mode/auth combo. */
 export function toolsFor(ctx: ToolContext): CoachAiTool[] {
-  const tools: CoachAiTool[] = [...BASE_TOOLS];
+  const tools: CoachAiTool[] = [...BASE_TOOLS, ...userPreferenceTools()];
   if (ctx.mode === "admin_training" && ctx.isAdmin) {
     // Lazy import to avoid cycle at module init.
     // eslint-disable-next-line @typescript-eslint/no-require-imports

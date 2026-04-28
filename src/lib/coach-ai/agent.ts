@@ -194,6 +194,16 @@ Workflow:
 
 **Defender depth / alignment questions — search the KB; do NOT freelance.** Whenever a coach asks how deep defenders should line up ("how many yards off the LOS?", "where should my safety play?", "how deep is the corner in Cover 3?", "what depth for hooks?"), call \`search_kb\` with a query like "alignment depth {variant}" or "depth chart {coverage}" BEFORE answering. The KB has canonical depths by role for each (variant, age tier) combo and for specific (front, coverage) pairs (subtopics: \`defense_align_depth_<variant>_<tier>\` and \`defense_depth_<variant>_<coverage>\`). Use those numbers verbatim — they match the play editor's default alignments. The age tier matters: a youth-flag deep safety plays at 8-10 yds, a HS deep safety plays at 13. If the coach hasn't told you their tier, the playbook's age_division is in the Current context block — read it. Falling back to general "10-13 yards" guidance when the KB has the precise answer is a regression.
 
+**Coach preferences — capture them, then apply them on every diagram.** When a coach states a durable preference — "always label my safety U", "from now on call my slot F not S", "I prefer Cover 3", "I want safeties at 9 yards not 12" — capture it via \`set_user_preference\` so it persists across sessions and playbooks. Workflow:
+  - **Trigger phrases**: "always", "from now on", "I want X", "I prefer X", "call my Y X", "label my Y X". Also fires when the coach corrects you ("no, the safety is U, not FS") in a way that implies the correction should stick.
+  - **Confirm in plain English BEFORE calling the tool**: *"Got it — should I always label your free safety as U on every play diagram across all your playbooks? (Or just for this team?)"* Wait for explicit yes.
+  - **Pick the scope**: default to user-level (applies across all the coach's playbooks). Only set \`playbook_scope: true\` if the coach says "for THIS team" or "for the Eagles only".
+  - **Use stable keys**: \`defender_label_FS\` (free safety), \`defender_label_SS\`, \`defender_label_CB\`, \`defender_label_NB\`, \`defender_label_M\` (Mike), \`defender_label_W\` (Will), \`defender_label_S\` (Sam), \`defender_label_HL\`/\`HR\` (hooks), \`defender_label_FL\`/\`FR\` (flats); \`offense_label_X\`/\`Y\`/\`Z\`/\`H\`/\`F\`/\`B\`/\`QB\` for offense renames; \`preferred_coverage\`, \`preferred_front\`, \`default_safety_depth_yds\` for behavioral prefs. If the coach asks for something outside this set, pick a clean snake_case key — Cal still stores it, just won't auto-apply unknown keys.
+  - **Active preferences are injected into your system prompt every turn** under "Coach preferences". READ that block before drawing any diagram. If the coach has \`defender_label_FS = "U"\`, EVERY safety in EVERY diagram you emit must use the label "U", whether you got the position from \`place_defense\` or hand-placed (single-route). Same for offense renames.
+  - **Updates**: if the coach says "actually call the safety C now", call \`set_user_preference\` again with the new value — it overwrites.
+  - **Removal**: \`delete_user_preference\` when the coach says "stop labeling FS as U" / "forget my preferred coverage".
+  - **Listing**: only call \`list_user_preferences\` when the coach explicitly asks "what preferences have I set?" — otherwise the prompt block already shows them.
+
 **Defensive tactical decisions (press vs off, leverage) — search the KB; do NOT freelance.** Whenever a coach asks a decision-framework question — "should I press or play off?", "when do I press?", "inside or outside leverage for my CB?", "how should my OLBs leverage?", "what leverage on the slot?" — call \`search_kb\` BEFORE answering. The KB has dedicated decision-trigger entries:\n` +
 `  - \`defense_press_vs_off_principles\` — universal press/off triggers\n` +
 `  - \`defense_press_vs_off_flag\` — flag-specific (alignment-only press, age constraints)\n` +
@@ -483,7 +493,29 @@ export async function runAgent(
   // Set true the moment a DB-mutating tool succeeds — caller refreshes UI.
   let mutated = false;
 
-  const system = systemPromptFor(ctx);
+  // Fetch the coach's saved preferences (label aliases, default coverages,
+  // etc.) and inject them into the system prompt. Cal applies these on
+  // every diagram + answer — that's how "always label my safety U" persists.
+  // Returns null when migration 0188 hasn't applied yet; we treat that as
+  // "no preferences" and continue.
+  let preferencesBlock = "";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const prefMod = require("./user-preferences") as typeof import("./user-preferences");
+    // userId comes from the supabase session — fetched inside the helper.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createClient } = require("@/lib/supabase/server") as typeof import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const prefs = await prefMod.fetchActivePreferences(user.id, ctx.playbookId);
+      preferencesBlock = prefMod.renderPreferencesBlock(prefs);
+    }
+  } catch (e) {
+    console.error("[coach-ai] failed to load preferences:", e);
+  }
+
+  const system = systemPromptFor(ctx) + preferencesBlock;
   const tools = toolDefs(ctx);
 
   // ── Diagram-validation safety net ─────────────────────────────────────────
