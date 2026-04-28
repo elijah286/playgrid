@@ -108,7 +108,7 @@ insert into public.rag_documents (
 -- ── Short / quick routes ─────────────────────────────────────────
 ('global', null, 'scheme', 'route_slant',
  'Route: Slant',
- '3-step quick break inside at a 45-degree angle. Route tree #2. Catches the ball at 4-6 yards. Beats press man (receiver wins inside leverage) and Cover 2 (slant fits between underneath defenders). Most common quick-game call in football.',
+ '3-yard vertical stem then a 25-degree lean inside over the middle (25° measured from vertical — the receiver stays mostly downfield with a steady inside angle, NOT a flat 45° cut). Route tree #2. Catches the ball at 5-7 yards. Beats press man (receiver wins inside leverage) and Cover 2 (slant fits between underneath defenders). Most common quick-game call in football.',
  null, null, 'seed', null, true, false),
 
 ('global', null, 'scheme', 'route_hitch',

@@ -28,14 +28,16 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Slant",
     directional: true,
-    // 1-yard stem then sharp inside cut at ~45°, continuing to gain depth as
-    // it crosses. End point is ~10 yds inside / 8 yds downfield in tackle
-    // (steeper relative angle in flag because the field is narrower — same
-    // template, intentionally — slants in flag are typically shorter laterally).
+    // Canonical slant: 3-yard vertical stem then a ~25° lean inside over
+    // the middle (25° measured from vertical — route stays mostly forward
+    // with a steady inside angle). Matches the KB "route_slant" entry.
+    // In flag_7v7 (30yd width, 25yd window): stem to (0,3), then continue
+    // ~5 yds at 25°-from-vertical → break point (-2.1, 7.5) yds.
+    // x: -2.1/30 = -0.07, y: 7.5/25 = 0.30.
     points: [
       { x: 0, y: 0 },
-      { x: 0, y: 0.04 },
-      { x: -0.19, y: 0.32 },
+      { x: 0, y: 0.12 },
+      { x: -0.07, y: 0.30 },
     ],
   },
   {
