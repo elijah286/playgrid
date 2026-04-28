@@ -494,8 +494,8 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
   if (!doc && looksIncomplete(trimmed)) {
     return (
       <div
-        className="my-3 aspect-[16/10] w-full animate-pulse rounded-xl border border-border"
-        style={{ backgroundColor: "#2D8B4E", opacity: 0.55 }}
+        className="my-3 aspect-[16/10] w-full max-w-[640px] animate-pulse overflow-hidden rounded-xl border border-border"
+        style={{ backgroundColor: "#2D8B4E" }}
         aria-label="Loading play diagram"
       />
     );
