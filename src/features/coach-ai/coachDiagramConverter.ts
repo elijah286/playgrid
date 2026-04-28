@@ -102,15 +102,17 @@ const LINEMAN_LABELS = new Set([
   "LT1", "LG1", "RG1", "RT1",
 ]);
 
-// Translucent zone palette — readable on the green field, distinct per zone.
-// Matches feel of EditorCanvas zones: dashed stroke, low-opacity fill.
+// Outlined zone palette — fill is `none` because coverage diagrams (Cover 3,
+// Tampa 2, etc.) stack 6+ zones and any translucent fill compounds into a
+// near-opaque dark blob over the field. Keep the dashed stroke distinct per
+// zone so adjacent zones still read as separate.
 const ZONE_PALETTE: { fill: string; stroke: string }[] = [
-  { fill: "rgba(250, 204, 21, 0.22)",  stroke: "rgba(250, 204, 21, 0.85)"  }, // amber
-  { fill: "rgba(96, 165, 250, 0.22)",  stroke: "rgba(96, 165, 250, 0.85)"  }, // blue
-  { fill: "rgba(244, 114, 182, 0.22)", stroke: "rgba(244, 114, 182, 0.85)" }, // pink
-  { fill: "rgba(167, 139, 250, 0.22)", stroke: "rgba(167, 139, 250, 0.85)" }, // violet
-  { fill: "rgba(45, 212, 191, 0.22)",  stroke: "rgba(45, 212, 191, 0.85)"  }, // teal
-  { fill: "rgba(251, 146, 60, 0.22)",  stroke: "rgba(251, 146, 60, 0.85)"  }, // orange
+  { fill: "none", stroke: "rgba(250, 204, 21, 0.95)"  }, // amber
+  { fill: "none", stroke: "rgba(96, 165, 250, 0.95)"  }, // blue
+  { fill: "none", stroke: "rgba(244, 114, 182, 0.95)" }, // pink
+  { fill: "none", stroke: "rgba(167, 139, 250, 0.95)" }, // violet
+  { fill: "none", stroke: "rgba(45, 212, 191, 0.95)"  }, // teal
+  { fill: "none", stroke: "rgba(251, 146, 60, 0.95)"  }, // orange
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
