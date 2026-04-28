@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -103,6 +103,7 @@ export function PlaybookHeader({
   outstandingInviteCount,
   versionHistoryAvailable,
   onOpenTrash,
+  onOpenAiChat,
 }: {
   playbookId: string;
   name: string;
@@ -128,6 +129,7 @@ export function PlaybookHeader({
   outstandingInviteCount?: number;
   versionHistoryAvailable?: boolean;
   onOpenTrash?: (() => void) | null;
+  onOpenAiChat?: (() => void) | null;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -404,6 +406,16 @@ export function PlaybookHeader({
               >
                 Create your own
               </Link>
+            )}
+            {onOpenAiChat && (
+              <button
+                type="button"
+                onClick={onOpenAiChat}
+                className={`sm:hidden inline-flex items-center justify-center size-9 rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
+                aria-label="Open AI chat"
+              >
+                <MessageSquare className="size-5" />
+              </button>
             )}
             {(canShare || canManage || playActions || exampleAdmin) && (
               <HeaderMenu
