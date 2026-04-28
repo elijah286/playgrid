@@ -309,6 +309,13 @@ export function PlaybookHeader({
             Home
           </Link>
           <div className={`hidden sm:block ${isLightBg ? "h-6 w-px bg-black/20" : "h-6 w-px bg-white/25"}`} />
+          <Link
+            href={homeHref}
+            className={`sm:hidden inline-flex items-center justify-center -ml-1 size-9 shrink-0 rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
+            aria-label={isExamplePreview ? "Back to examples" : "Back to lobby"}
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
           <div
             className={`relative size-9 sm:size-11 shrink-0 overflow-hidden rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg font-extrabold ring-1 ${
               isLightBg ? "bg-white/80 ring-black/10" : "bg-white/20 ring-white/30"
