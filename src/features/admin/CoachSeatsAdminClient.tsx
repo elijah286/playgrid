@@ -6,9 +6,11 @@ import {
   setSeatDefaultsAction,
   setCoachBonusSeatsByEmailAction,
   setCoachBonusMessagesByEmailAction,
+  setCoachCalPackConfigAction,
   type CoachBonusRow,
 } from "@/app/actions/admin-seat-config";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
+import type { CoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
 
 function sortRows(rows: CoachBonusRow[]): CoachBonusRow[] {
   return rows.slice().sort((a, b) => {
@@ -22,9 +24,11 @@ function sortRows(rows: CoachBonusRow[]): CoachBonusRow[] {
 export function CoachSeatsAdminClient({
   initialDefaults,
   initialBonusRows,
+  initialPack,
 }: {
   initialDefaults: SeatDefaults;
   initialBonusRows: CoachBonusRow[];
+  initialPack: CoachCalPackConfig;
 }) {
   const { toast } = useToast();
 
@@ -45,6 +49,13 @@ export function CoachSeatsAdminClient({
   const [msgBonus, setMsgBonus] = useState("100");
   const [msgGrantPending, startMsgGrantTransition] = useTransition();
   const [updatingMsgId, setUpdatingMsgId] = useState<string | null>(null);
+
+  const [savedPack, setSavedPack] = useState(initialPack);
+  const [packSizeInput, setPackSizeInput] = useState(String(initialPack.messageCount));
+  const [packPriceInput, setPackPriceInput] = useState(
+    (initialPack.priceUsdCents / 100).toFixed(2),
+  );
+  const [packPending, startPackTransition] = useTransition();
 
   function saveCoachDefault() {
     const next = Number(coachInput);
@@ -178,6 +189,41 @@ export function CoachSeatsAdminClient({
       });
   }
 
+  function savePack() {
+    const sizeNum = Number(packSizeInput);
+    const priceDollars = Number(packPriceInput);
+    if (!Number.isFinite(sizeNum) || sizeNum < 1 || sizeNum > 100000) {
+      toast("Pack size must be between 1 and 100000.", "error");
+      return;
+    }
+    if (!Number.isFinite(priceDollars) || priceDollars <= 0 || priceDollars > 10000) {
+      toast("Pack price must be between $0.01 and $10000.", "error");
+      return;
+    }
+    const nextSize = Math.floor(sizeNum);
+    const nextCents = Math.round(priceDollars * 100);
+    if (nextSize === savedPack.messageCount && nextCents === savedPack.priceUsdCents) return;
+    startPackTransition(async () => {
+      const res = await setCoachCalPackConfigAction({
+        messageCount: nextSize,
+        priceUsdCents: nextCents,
+      });
+      if (!res.ok) {
+        toast(res.error, "error");
+        setPackSizeInput(String(savedPack.messageCount));
+        setPackPriceInput((savedPack.priceUsdCents / 100).toFixed(2));
+        return;
+      }
+      setSavedPack(res.pack);
+      setPackSizeInput(String(res.pack.messageCount));
+      setPackPriceInput((res.pack.priceUsdCents / 100).toFixed(2));
+      toast(
+        `Pack: ${res.pack.messageCount} messages for $${(res.pack.priceUsdCents / 100).toFixed(2)}.`,
+        "success",
+      );
+    });
+  }
+
   function clearRowMessages(row: CoachBonusRow) {
     if (!row.email) return;
     setUpdatingMsgId(row.ownerId);
@@ -279,6 +325,69 @@ export function CoachSeatsAdminClient({
               </Button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface-raised p-4">
+        <p className="text-sm font-semibold text-foreground">Coach Cal message pack</p>
+        <p className="mt-0.5 text-xs text-muted">
+          What Coach Pro users see when they hit the monthly message cap.
+          Stripe is the source of truth for the actual charge — paste the
+          one-time price ID under Integrations → Stripe configuration.
+          Keep these numbers in sync with that price so the in-app copy
+          matches what gets billed. Packs expire at month rollover.
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="rounded-xl border border-border bg-surface p-3">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
+              Pack size (messages)
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              step={1}
+              className="mt-1 block w-full rounded-md bg-surface-raised px-3 py-1.5 text-sm ring-1 ring-border"
+              value={packSizeInput}
+              disabled={packPending}
+              onChange={(e) => setPackSizeInput(e.target.value)}
+            />
+          </label>
+
+          <label className="rounded-xl border border-border bg-surface p-3">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
+              Display price (USD)
+            </span>
+            <input
+              type="number"
+              min={0.01}
+              max={10000}
+              step={0.01}
+              className="mt-1 block w-full rounded-md bg-surface-raised px-3 py-1.5 text-sm ring-1 ring-border"
+              value={packPriceInput}
+              disabled={packPending}
+              onChange={(e) => setPackPriceInput(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={packPending}
+            disabled={
+              packPending ||
+              packSizeInput.trim() === "" ||
+              packPriceInput.trim() === "" ||
+              (Math.floor(Number(packSizeInput)) === savedPack.messageCount &&
+                Math.round(Number(packPriceInput) * 100) === savedPack.priceUsdCents)
+            }
+            onClick={savePack}
+          >
+            Save pack
+          </Button>
         </div>
       </div>
 

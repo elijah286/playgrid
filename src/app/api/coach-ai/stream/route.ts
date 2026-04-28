@@ -7,6 +7,7 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { getCoachCalCapState } from "@/lib/billing/coach-cal-cap";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 
 type StreamRequest = {
@@ -162,6 +163,26 @@ export async function POST(req: Request): Promise<Response> {
   if (!text) {
     return new Response(
       sseChunk("error", { message: "Empty message." }),
+      { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
+    );
+  }
+
+  // Hard cap on Coach Cal usage. The meter is purely informational —
+  // this is the only enforcement point. Returns a structured payload
+  // so the chat client can render the buy/wait CTAs without parsing
+  // the message text.
+  const cap = await getCoachCalCapState(gate.userId);
+  if (cap.exceeded) {
+    return new Response(
+      sseChunk("error", {
+        message: `You've used all ${cap.limit} Coach Cal messages this month. Buy a pack for more, or wait until the period resets.`,
+        code: "out_of_messages",
+        count: cap.count,
+        limit: cap.limit,
+        resetDate: cap.resetDate,
+        pack: cap.pack,
+      }) +
+        sseChunk("done", { toolCalls: [], text: "" }),
       { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
     );
   }

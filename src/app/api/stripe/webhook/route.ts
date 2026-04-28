@@ -100,6 +100,55 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
   }
 }
 
+/** Add a Coach Cal message pack to the buyer's owner_seat_grants row.
+ *  Stamps purchased_messages_month with the current UTC first-of-month
+ *  so getCoachCalCapState ignores the credit once the month rolls over.
+ *  If the buyer purchases a second pack in the same month, the counts
+ *  add. If their last pack was last month, we reset to this month's
+ *  count. */
+async function applyCoachCalPackPurchase(session: Stripe.Checkout.Session): Promise<void> {
+  const userId =
+    (session.metadata?.user_id as string | undefined) ??
+    (typeof session.client_reference_id === "string" ? session.client_reference_id : undefined);
+  if (!userId) {
+    console.error("[stripe webhook] coach_cal_messages: no user_id on session", session.id);
+    return;
+  }
+  const messageCount = Number(session.metadata?.message_count ?? 0);
+  if (!Number.isFinite(messageCount) || messageCount <= 0) {
+    console.error("[stripe webhook] coach_cal_messages: invalid message_count", session.id);
+    return;
+  }
+
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthStr = monthStart.toISOString().slice(0, 10);
+
+  const admin = createServiceRoleClient();
+  const { data: existing } = await admin
+    .from("owner_seat_grants")
+    .select("purchased_messages, purchased_messages_month")
+    .eq("owner_id", userId)
+    .maybeSingle();
+  const current =
+    existing?.purchased_messages_month === monthStr
+      ? ((existing.purchased_messages as number | null) ?? 0)
+      : 0;
+  const nextTotal = current + Math.floor(messageCount);
+
+  const { error } = await admin
+    .from("owner_seat_grants")
+    .upsert(
+      {
+        owner_id: userId,
+        purchased_messages: nextTotal,
+        purchased_messages_month: monthStr,
+      },
+      { onConflict: "owner_id" },
+    );
+  if (error) throw new Error(`coach_cal_messages upsert failed: ${error.message}`);
+}
+
 export async function POST(req: Request): Promise<NextResponse> {
   const config = await getStripeConfig();
   if (!config.webhookSecret) {
@@ -137,6 +186,11 @@ export async function POST(req: Request): Promise<NextResponse> {
             typeof session.subscription === "string" ? session.subscription : session.subscription.id;
           const sub = await stripe.subscriptions.retrieve(subId);
           await upsertSubscriptionFromStripe(sub);
+        } else if (
+          session.mode === "payment" &&
+          session.metadata?.pack_kind === "coach_cal_messages"
+        ) {
+          await applyCoachCalPackPurchase(session);
         }
         break;
       }

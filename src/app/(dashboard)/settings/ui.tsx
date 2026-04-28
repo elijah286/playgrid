@@ -9,7 +9,6 @@ import {
   DollarSign,
   FlaskConical,
   KeyRound,
-  ListChecks,
   Menu as MenuIcon,
   MessageCircle,
   Settings as SettingsIcon,
@@ -34,11 +33,11 @@ import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
+import type { CoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
 import type { CoachBonusRow } from "@/app/actions/admin-seat-config";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
 import { OpexAdminClient } from "@/features/admin/OpexAdminClient";
-import { FeatureListAdminClient } from "@/features/admin/FeatureListAdminClient";
 import type { OpexService, OpexEntry } from "@/app/actions/admin-opex";
 import type { BetaFeatures } from "@/lib/site/beta-features-config";
 import type { SavedFormation } from "@/app/actions/formations";
@@ -92,7 +91,6 @@ type Tab =
   | "seeds"
   | "beta"
   | "opex"
-  | "features"
   | "site";
 
 export function SettingsClient({
@@ -132,6 +130,7 @@ export function SettingsClient({
   openaiAdminKey,
   initialSeatDefaults,
   initialCoachBonusRows,
+  initialCoachCalPack,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -169,6 +168,7 @@ export function SettingsClient({
   openaiAdminKey: AdminKeyProps;
   initialSeatDefaults: SeatDefaults;
   initialCoachBonusRows: CoachBonusRow[];
+  initialCoachCalPack: CoachCalPackConfig;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -185,7 +185,6 @@ export function SettingsClient({
     { value: "seeds" as const, label: "Playbook seeds", icon: Sparkles },
     { value: "beta" as const, label: "Beta features", icon: FlaskConical },
     { value: "opex" as const, label: "Opex", icon: DollarSign },
-    { value: "features" as const, label: "Feature list", icon: ListChecks },
     { value: "site" as const, label: "Site", icon: SettingsIcon },
   ];
   const activeOption = tabOptions.find((o) => o.value === tab) ?? tabOptions[0];
@@ -415,13 +414,12 @@ export function SettingsClient({
         />
       )}
 
-      {tab === "features" && <FeatureListAdminClient />}
-
       {tab === "site" && (
         <div className="space-y-4">
           <CoachSeatsAdminClient
             initialDefaults={initialSeatDefaults}
             initialBonusRows={initialCoachBonusRows}
+            initialPack={initialCoachCalPack}
           />
           <SiteSettingsAdminClient
             initialHideLobbyAnimation={initialHideLobbyAnimation}

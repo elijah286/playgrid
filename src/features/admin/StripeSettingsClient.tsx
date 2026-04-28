@@ -39,6 +39,7 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
   const [pAiY, setPAiY] = useState(initial.priceIds.coach_ai_year ?? "");
   const [pSeatM, setPSeatM] = useState(initial.priceIds.seat_month ?? "");
   const [pSeatY, setPSeatY] = useState(initial.priceIds.seat_year ?? "");
+  const [pCalPack, setPCalPack] = useState(initial.priceIds.coach_cal_pack ?? "");
 
   const [showSecret, setShowSecret] = useState(false);
   const [showHook, setShowHook] = useState(false);
@@ -62,6 +63,7 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
         priceCoachAiYear: pAiY,
         priceSeatMonth: pSeatM,
         priceSeatYear: pSeatY,
+        priceCoachCalPack: pCalPack,
       });
       if (!res.ok) {
         setMsg({ kind: "error", text: res.error });
@@ -103,6 +105,7 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
         setPAiY("");
         setPSeatM("");
         setPSeatY("");
+        setPCalPack("");
       }
       setMsg({ kind: "success", text: "Cleared." });
     });
@@ -269,6 +272,22 @@ export function StripeSettingsClient({ initial }: { initial: StripeConfigStatus 
               placeholder="price_..."
               className="mt-1 block w-full rounded-md bg-surface px-3 py-1.5 font-mono text-xs ring-1 ring-border"
             />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-xs uppercase tracking-wide text-muted">
+              Coach Cal message pack — one-time
+            </span>
+            <input
+              type="text"
+              value={pCalPack}
+              onChange={(e) => setPCalPack(e.target.value)}
+              placeholder="price_..."
+              className="mt-1 block w-full rounded-md bg-surface px-3 py-1.5 font-mono text-xs ring-1 ring-border"
+            />
+            <span className="mt-1 block text-[11px] text-muted">
+              Stripe one-time price. Pack size and display price are
+              configured under Site → Coach Cal message pack.
+            </span>
           </label>
         </div>
       </div>

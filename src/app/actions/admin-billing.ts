@@ -16,7 +16,8 @@ type PriceKey =
   | "stripe_price_coach_ai_month"
   | "stripe_price_coach_ai_year"
   | "stripe_price_seat_month"
-  | "stripe_price_seat_year";
+  | "stripe_price_seat_year"
+  | "stripe_price_coach_cal_pack";
 
 async function assertAdmin() {
   if (!hasSupabaseEnv()) {
@@ -229,6 +230,7 @@ export async function saveStripeConfigAction(input: {
   priceCoachAiYear?: string;
   priceSeatMonth?: string;
   priceSeatYear?: string;
+  priceCoachCalPack?: string;
 }) {
   const gate = await assertAdmin();
   if (!gate.ok) return gate;
@@ -272,6 +274,7 @@ export async function saveStripeConfigAction(input: {
     ["priceCoachAiYear", "stripe_price_coach_ai_year"],
     ["priceSeatMonth", "stripe_price_seat_month"],
     ["priceSeatYear", "stripe_price_seat_year"],
+    ["priceCoachCalPack", "stripe_price_coach_cal_pack"],
   ];
   for (const [inKey, dbKey] of priceFields) {
     const v = normalize(input[inKey]);
@@ -306,6 +309,7 @@ export async function clearStripeConfigAction() {
       stripe_price_coach_ai_year: null,
       stripe_price_seat_month: null,
       stripe_price_seat_year: null,
+      stripe_price_coach_cal_pack: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", SITE_ROW_ID);

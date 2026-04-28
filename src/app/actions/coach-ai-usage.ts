@@ -2,12 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { COACH_AI_MONTHLY_LIMIT } from "@/lib/billing/coach-cal-cap";
 import type { CoachAiUsageInfo } from "@/features/coach-ai/types";
-
-/** Tier-default monthly Coach Cal cap. Admins can grant additive
- *  per-user bonuses via owner_seat_grants.bonus_messages, which stack
- *  on top of this. */
-const COACH_AI_MONTHLY_LIMIT = 200;
 
 export async function getCoachAiUsageAction(): Promise<CoachAiUsageInfo> {
   const supabase = await createClient();
@@ -44,16 +40,21 @@ export async function getCoachAiUsageAction(): Promise<CoachAiUsageInfo> {
       .maybeSingle(),
     admin
       .from("owner_seat_grants")
-      .select("bonus_messages")
+      .select("bonus_messages, purchased_messages, purchased_messages_month")
       .eq("owner_id", user.id)
       .maybeSingle(),
   ]);
 
   const bonus = (grantRes.data?.bonus_messages as number | null) ?? 0;
+  const purchasedMonth = (grantRes.data?.purchased_messages_month as string | null) ?? null;
+  const purchased =
+    purchasedMonth === monthStr
+      ? ((grantRes.data?.purchased_messages as number | null) ?? 0)
+      : 0;
 
   return {
     count: (usageRes.data?.message_count as number | null) ?? 0,
-    limit: COACH_AI_MONTHLY_LIMIT + bonus,
+    limit: COACH_AI_MONTHLY_LIMIT + bonus + purchased,
     resetDate,
     periodEnd: (subRes.data?.current_period_end as string | null) ?? null,
   };

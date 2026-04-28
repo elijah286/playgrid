@@ -16,6 +16,28 @@ import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { AssistantMessage } from "./AssistantMessage";
 import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
+import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
+
+type OutOfMessagesPayload = {
+  count: number;
+  limit: number;
+  resetDate: string;
+  pack: { messageCount: number; priceUsdCents: number; priceConfigured: boolean };
+};
+
+function formatPackPriceCents(cents: number): string {
+  if (cents % 100 === 0) return `$${cents / 100}`;
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatResetDate(iso: string): string {
+  // resetDate is YYYY-MM-DD UTC (first of next month). We want a short
+  // human form like "May 1".
+  const [y, m, d] = iso.split("-").map((s) => Number(s));
+  if (!y || !m || !d) return iso;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+}
 
 // Bumped if the persisted shape changes — older blobs are then ignored.
 const STORAGE_VERSION = 1;
@@ -95,6 +117,8 @@ export function CoachAiChat({
   const [partialText, setPartialText] = useState("");
   const [toolCallsDuringStream, setToolCallsDuringStream] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [outOfMessages, setOutOfMessages] = useState<OutOfMessagesPayload | null>(null);
+  const [packCheckoutPending, setPackCheckoutPending] = useState(false);
   const [usageTick, setUsageTick] = useState(0);
   const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
   const [optInPending, setOptInPending] = useState(false);
@@ -195,6 +219,7 @@ export function CoachAiChat({
     const text = draft.trim();
     if (!text || streaming) return;
     setError(null);
+    setOutOfMessages(null);
     setStatusText(null);
     setPartialText("");
     setToolCallsDuringStream([]);
@@ -228,6 +253,7 @@ export function CoachAiChat({
       }
 
       let accumulated = "";
+      let blocked = false;
       const seenToolCalls: string[] = [];
 
       for await (const { event, data } of parseSse(res.body)) {
@@ -247,9 +273,26 @@ export function CoachAiChat({
           setStatusText(null); // clear "Searching…" once text starts
         }
         if (event === "error") {
-          setError((payload.message as string | undefined) ?? "An error occurred.");
+          if (payload.code === "out_of_messages") {
+            blocked = true;
+            setOutOfMessages({
+              count: Number(payload.count) || 0,
+              limit: Number(payload.limit) || 0,
+              resetDate: String(payload.resetDate ?? ""),
+              pack: payload.pack as OutOfMessagesPayload["pack"],
+            });
+            // Roll back the optimistically-appended user turn so it
+            // doesn't sit there as if it was sent.
+            setTurns((cur) => (cur.at(-1)?.role === "user" ? cur.slice(0, -1) : cur));
+            setDraft(text);
+          } else {
+            setError((payload.message as string | undefined) ?? "An error occurred.");
+          }
         }
         if (event === "done") {
+          if (blocked) {
+            break;
+          }
           const finalText = (payload.text as string | undefined) || accumulated;
           const finalToolCalls = (payload.toolCalls as string[] | undefined) ?? seenToolCalls;
           const chips = (payload.playbookChips as PlaybookChip[] | null | undefined) ?? null;
@@ -287,6 +330,21 @@ export function CoachAiChat({
       abortRef.current = null;
     }
   }, [draft, streaming, turns, playbookId, playId, mode, router]);
+
+  const buyMessagePack = useCallback(async () => {
+    setPackCheckoutPending(true);
+    try {
+      const res = await createMessagePackCheckoutAction();
+      if (!res.ok) {
+        setError(res.error);
+        setOutOfMessages(null);
+        return;
+      }
+      window.location.href = res.url;
+    } finally {
+      setPackCheckoutPending(false);
+    }
+  }, []);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -406,6 +464,40 @@ export function CoachAiChat({
         )}
       </div>
 
+      {outOfMessages && (
+        <div className="mx-3 mb-2 rounded-lg bg-amber-50 px-3 py-2.5 text-xs text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-900">
+          <p className="font-semibold">
+            You&rsquo;ve used all {outOfMessages.limit} Coach Cal messages this month.
+          </p>
+          <p className="mt-1 text-amber-800/90 dark:text-amber-100/90">
+            Resets {formatResetDate(outOfMessages.resetDate)}.
+            {outOfMessages.pack.priceConfigured
+              ? ` Or buy ${outOfMessages.pack.messageCount} more for ${formatPackPriceCents(outOfMessages.pack.priceUsdCents)} — they expire at month-end.`
+              : " Need more before then? Contact support."}
+          </p>
+          {outOfMessages.pack.priceConfigured && (
+            <div className="mt-2 flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                loading={packCheckoutPending}
+                disabled={packCheckoutPending}
+                onClick={() => void buyMessagePack()}
+              >
+                Buy {outOfMessages.pack.messageCount} more for {formatPackPriceCents(outOfMessages.pack.priceUsdCents)}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setOutOfMessages(null)}
+                className="text-xs font-medium text-amber-900/70 hover:underline dark:text-amber-100/70"
+              >
+                I&rsquo;ll wait
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="mx-3 mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-200">
           {error}
@@ -432,7 +524,7 @@ export function CoachAiChat({
           <Button
             variant="primary"
             size="sm"
-            disabled={streaming || !draft.trim()}
+            disabled={streaming || !draft.trim() || outOfMessages !== null}
             onClick={() => void send()}
             aria-label="Send"
           >

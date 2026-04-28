@@ -9,6 +9,11 @@ import {
   setSeatDefaults,
   type SeatDefaults,
 } from "@/lib/site/seat-defaults-config";
+import {
+  getCoachCalPackConfig,
+  setCoachCalPackConfig,
+  type CoachCalPackConfig,
+} from "@/lib/site/coach-cal-pack-config";
 
 async function requireAdmin(): Promise<
   | { ok: true }
@@ -47,6 +52,29 @@ export async function setSeatDefaultsAction(
     const defaults = await setSeatDefaults(next);
     revalidatePath("/", "layout");
     return { ok: true, defaults };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Save failed." };
+  }
+}
+
+export async function getCoachCalPackConfigAction(): Promise<
+  { ok: true; pack: CoachCalPackConfig } | { ok: false; error: string }
+> {
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard;
+  const pack = await getCoachCalPackConfig();
+  return { ok: true, pack };
+}
+
+export async function setCoachCalPackConfigAction(
+  next: Partial<CoachCalPackConfig>,
+): Promise<{ ok: true; pack: CoachCalPackConfig } | { ok: false; error: string }> {
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard;
+  try {
+    const pack = await setCoachCalPackConfig(next);
+    revalidatePath("/", "layout");
+    return { ok: true, pack };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Save failed." };
   }

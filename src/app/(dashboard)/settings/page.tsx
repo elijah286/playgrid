@@ -20,6 +20,7 @@ import {
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
+import { getCoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
 import { listCoachBonusGrantsAction } from "@/app/actions/admin-seat-config";
 import { getHideLobbyAnimation } from "@/lib/site/lobby-config";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
@@ -78,6 +79,7 @@ export default async function SettingsPage() {
     openaiAdminKeyRes,
     seatDefaults,
     coachBonusRes,
+    coachCalPack,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -105,6 +107,7 @@ export default async function SettingsPage() {
     getOpenAIAdminKeyStatusAction(),
     getSeatDefaults(),
     listCoachBonusGrantsAction(),
+    getCoachCalPackConfig(),
   ]);
 
   return (
@@ -192,6 +195,7 @@ export default async function SettingsPage() {
                   coach_ai_year: null,
                   seat_month: null,
                   seat_year: null,
+                  coach_cal_pack: null,
                 },
               }
         }
@@ -250,6 +254,7 @@ export default async function SettingsPage() {
         }
         initialSeatDefaults={seatDefaults}
         initialCoachBonusRows={coachBonusRes.ok ? coachBonusRes.rows : []}
+        initialCoachCalPack={coachCalPack}
       />
     </div>
   );
