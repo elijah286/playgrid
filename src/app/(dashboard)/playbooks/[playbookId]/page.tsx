@@ -222,6 +222,16 @@ export default async function PlaybookDetailPage({ params }: Props) {
     (viewerEntitlement?.tier ?? "free") !== "coach_ai" &&
     user !== null &&
     !isAdmin;
+  // Mirror SiteHeader's logic so the in-playbook (mobile) launcher uses the
+  // same entitlement gate as the global one — non-entitled users get the
+  // marketing popover, entitled users get the chat.
+  const coachAiEntitled = isAdmin || (viewerEntitlement?.tier ?? "free") === "coach_ai";
+  const coachAiAvailable = isBetaFeatureAvailable(betaFeatures.coach_ai, {
+    isAdmin,
+    isEntitled: coachAiEntitled,
+  });
+  const showCoachCalPromoInPlaybook =
+    betaFeatures.coach_ai === "all" && !coachAiAvailable && user !== null;
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
   // Examples always expose Game Mode so visitors can experience the full
@@ -375,6 +385,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
               ? { isPublished: isPublicExample }
               : null,
           isExamplePreview,
+          coachAiAvailable,
+          showCoachCalPromo: showCoachCalPromoInPlaybook,
         }}
       />
     </>

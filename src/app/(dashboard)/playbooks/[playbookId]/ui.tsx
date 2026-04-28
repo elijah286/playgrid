@@ -151,7 +151,6 @@ import {
 } from "@/components/ui";
 import { PlaybookHeader, InviteTeamMemberDialog, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
-import { CoachAiChat } from "@/features/coach-ai/CoachAiChat";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
@@ -335,6 +334,12 @@ function PlaybookDetailClientInner({
     } | null;
     exampleStatus: { isPublished: boolean } | null;
     isExamplePreview?: boolean;
+    /** True iff this user can actually use Coach Cal (mirrors SiteHeader's
+     *  coachAiAvailable). Drives the in-playbook mobile launcher. */
+    coachAiAvailable: boolean;
+    /** True when Coach Cal is launched globally and this user lacks it —
+     *  mobile launcher button shows the marketing flow instead of the chat. */
+    showCoachCalPromo: boolean;
   };
 }) {
   const searchParams = useSearchParams();
@@ -390,7 +395,6 @@ function PlaybookDetailClientInner({
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
-  const [aiChatOpen, setAiChatOpen] = useState(false);
 
   function showPlayCapUpgrade() {
     setUpgradeNotice({
@@ -1074,7 +1078,9 @@ function PlaybookDetailClientInner({
           onOpenTrash={
             headerProps.canManage ? () => setTrashOpen(true) : null
           }
-          onOpenAiChat={() => setAiChatOpen(true)}
+          coachAiAvailable={headerProps.coachAiAvailable}
+          showCoachCalPromo={headerProps.showCoachCalPromo}
+          isAdmin={isAdmin}
         />
 
         <PendingApprovalsBanner
@@ -2245,28 +2251,6 @@ function PlaybookDetailClientInner({
         />
       )}
 
-      {/* AI Chat modal — mobile only, lower half of screen */}
-      {aiChatOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col sm:hidden">
-          <div className="flex-1" onClick={() => setAiChatOpen(false)} />
-          <div className="h-1/2 flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-surface ring-1 ring-black/5">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-base font-semibold text-foreground">Coach AI</h2>
-              <button
-                type="button"
-                onClick={() => setAiChatOpen(false)}
-                className="rounded-lg p-1 text-muted hover:bg-surface-inset hover:text-foreground"
-                aria-label="Close"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <CoachAiChat playbookId={playbookId} mode="normal" />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

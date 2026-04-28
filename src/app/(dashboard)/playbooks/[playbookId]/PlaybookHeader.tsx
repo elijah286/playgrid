@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -14,6 +14,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import {
   archivePlaybookAction,
   deletePlaybookAction,
@@ -104,7 +105,9 @@ export function PlaybookHeader({
   outstandingInviteCount,
   versionHistoryAvailable,
   onOpenTrash,
-  onOpenAiChat,
+  coachAiAvailable,
+  showCoachCalPromo,
+  isAdmin,
 }: {
   playbookId: string;
   name: string;
@@ -130,7 +133,13 @@ export function PlaybookHeader({
   outstandingInviteCount?: number;
   versionHistoryAvailable?: boolean;
   onOpenTrash?: (() => void) | null;
-  onOpenAiChat?: (() => void) | null;
+  /** Drives the in-banner mobile Coach Cal launcher. When false, the launcher
+   *  shows the marketing popover; the chat itself is unreachable. */
+  coachAiAvailable?: boolean;
+  /** When true, render the launcher even though the user isn't entitled —
+   *  it'll show the marketing popover. Mirrors SiteHeader's logic. */
+  showCoachCalPromo?: boolean;
+  isAdmin?: boolean;
 }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -428,15 +437,14 @@ export function PlaybookHeader({
                 Create your own
               </Link>
             )}
-            {onOpenAiChat && (
-              <button
-                type="button"
-                onClick={onOpenAiChat}
-                className={`sm:hidden inline-flex items-center justify-center size-9 rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
-                aria-label="Open AI chat"
-              >
-                <MessageSquare className="size-5" />
-              </button>
+            {(coachAiAvailable || showCoachCalPromo) && (
+              <div className="sm:hidden">
+                <CoachAiLauncher
+                  isAdmin={isAdmin ?? false}
+                  entitled={coachAiAvailable ?? false}
+                  playbookId={playbookId}
+                />
+              </div>
             )}
             {(canShare || canManage || playActions || exampleAdmin) && (
               <HeaderMenu

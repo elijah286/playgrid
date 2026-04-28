@@ -228,6 +228,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-cal-mobile-playbook-launcher-fix",
+    name: "Coach Cal launcher consistent on mobile inside a playbook",
+    description:
+      "Inside a playbook on mobile (where the global header collapses), the AI button used to be a plain chat-bubble icon that opened the chat directly — bypassing the entitlement gate, so non-Coach-Pro users hit the consent disclaimer before they even saw the marketing pitch. Replaced with the same CoachAiLauncher used everywhere else, so mobile-in-playbook now matches landing-page UX: gradient/sparkle icon, marketing popover for non-entitled users, chat for entitled users.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "coach-cal-launcher-polish",
     name: "Coach Cal launcher polish",
     description:
