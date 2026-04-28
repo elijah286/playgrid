@@ -26,6 +26,7 @@ export type CopyLinkPreview = {
   color: string | null;
   play_count: number;
   head_coach_name: string | null;
+  sender_name: string | null;
   expires_at: string;
   exhausted: boolean;
   revoked: boolean;

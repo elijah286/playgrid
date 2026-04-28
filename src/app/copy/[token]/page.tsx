@@ -1,27 +1,25 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { previewCopyLinkAction } from "@/app/actions/copy-links";
 import { AuthFlow } from "@/features/auth/AuthFlow";
-import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
-import type { SportVariant } from "@/domain/play/types";
+import { getUserEntitlement } from "@/lib/billing/entitlement";
+import {
+  FREE_MAX_PLAYBOOKS_OWNED,
+  tierAtLeast,
+} from "@/lib/billing/features";
 import { ClaimCopyButton } from "./ui";
 
 type Props = { params: Promise<{ token: string }> };
 
 function buildTitle(preview: {
   playbook_name: string;
-  sport_variant: string | null;
-  season: string | null;
+  sender_name: string | null;
 }): string {
-  const parts: string[] = [preview.playbook_name];
-  const variantLabel = preview.sport_variant
-    ? SPORT_VARIANT_LABELS[preview.sport_variant as SportVariant]
-    : null;
-  if (variantLabel) parts.push(variantLabel);
-  if (preview.season) parts.push(preview.season);
-  return `Get your own copy of ${parts.join(" ")}`;
+  const who = preview.sender_name?.trim() || "A coach";
+  return `${who} sent you a copy of ${preview.playbook_name}`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -37,15 +35,43 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: "Copy a playbook · xogridmaker" };
   }
   const title = buildTitle(res.preview);
-  const description = res.preview.head_coach_name
-    ? `${res.preview.head_coach_name} shared a playbook with you. Claim your own editable copy on xogridmaker.`
-    : "Claim your own editable copy of this playbook on xogridmaker.";
+  const description = "Claim your own editable copy on xogridmaker.";
   return {
     title,
     description,
     openGraph: { title, description, type: "website" },
     twitter: { card: "summary_large_image", title, description },
   };
+}
+
+type QuotaState =
+  | { kind: "anon" }
+  | { kind: "paid" }
+  | { kind: "free_room" }
+  | { kind: "free_full" };
+
+/** Compute the recipient's free-quota state so we can show the right
+ *  disclosure before they claim. Better to over-communicate the "this
+ *  counts as your free playbook" implication up front than surprise
+ *  them with a paywall after they've already invested in signing up. */
+async function getQuotaState(): Promise<QuotaState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { kind: "anon" };
+
+  const entitlement = await getUserEntitlement(user.id);
+  if (tierAtLeast(entitlement, "coach")) return { kind: "paid" };
+
+  const { count } = await supabase
+    .from("playbook_members")
+    .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("role", "owner")
+    .eq("playbooks.is_default", false);
+  if ((count ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) return { kind: "free_full" };
+  return { kind: "free_room" };
 }
 
 export default async function CopyPage({ params }: Props) {
@@ -100,12 +126,15 @@ export default async function CopyPage({ params }: Props) {
     );
   }
 
+  const quota = await getQuotaState();
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const next = `/copy/${token}`;
   const accent = preview.color || "#2563eb";
+  const senderName =
+    preview.sender_name?.trim() || preview.head_coach_name?.trim() || null;
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5 px-6 pb-16 pt-10 sm:pt-16">
@@ -115,30 +144,81 @@ export default async function CopyPage({ params }: Props) {
         logoUrl={preview.logo_url}
         color={accent}
         playCount={preview.play_count}
-        headCoachName={preview.head_coach_name}
+        senderName={senderName}
       />
 
       {user ? (
-        <div className="rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
-          <p className="text-sm text-foreground">
-            Signed in as <span className="font-semibold">{user.email}</span>
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            Claiming creates your own editable playbook with these plays. The
-            sender keeps theirs — you can edit yours freely without affecting
-            theirs.
-          </p>
-          <div className="mt-4">
-            <ClaimCopyButton token={token} />
+        <div className="space-y-3 rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              This becomes yours.
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              Rename it, swap the logo, change colors, edit any play. Your edits
+              stay yours — the sender keeps their original.
+            </p>
           </div>
+
+          <QuotaDisclosure quota={quota} />
+
+          <ClaimCopyButton
+            token={token}
+            blockedByQuota={quota.kind === "free_full"}
+          />
+
+          <p className="text-[11px] text-muted">
+            Signed in as <span className="font-medium">{user.email}</span>
+          </p>
         </div>
       ) : (
-        <AuthFlow
-          next={next}
-          heading="Sign in or create an account"
-          subheading="Sign up to claim your own copy of this playbook. We'll send a code if you're new."
-        />
+        <div className="space-y-4 rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Sign up to claim it — it&rsquo;s free.
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              Once you claim, the playbook is yours to rename, edit, and share.
+              Free accounts get one playbook; you can upgrade later for more.
+            </p>
+          </div>
+          <AuthFlow next={next} heading="" subheading="" />
+        </div>
       )}
+    </div>
+  );
+}
+
+function QuotaDisclosure({ quota }: { quota: QuotaState }) {
+  if (quota.kind === "paid" || quota.kind === "anon") return null;
+  if (quota.kind === "free_room") {
+    return (
+      <div className="rounded-md bg-surface-inset px-3 py-2 text-[11px] text-muted">
+        This will use your free playbook slot. Coach plan unlocks more —{" "}
+        <Link
+          href="/pricing"
+          className="font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          see pricing
+        </Link>
+        .
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
+      <p className="font-semibold">
+        Free accounts get 1 playbook, and you already have one.
+      </p>
+      <p className="mt-0.5 text-warning/90">
+        Upgrade to Coach to claim this copy alongside it, or delete your
+        existing playbook first.
+      </p>
+      <Link
+        href="/pricing"
+        className="mt-1.5 inline-block font-medium underline-offset-2 hover:underline"
+      >
+        See pricing →
+      </Link>
     </div>
   );
 }
@@ -149,16 +229,19 @@ function PreviewCard({
   logoUrl,
   color,
   playCount,
-  headCoachName,
+  senderName,
 }: {
   playbookName: string;
   season: string | null;
   logoUrl: string | null;
   color: string;
   playCount: number;
-  headCoachName: string | null;
+  senderName: string | null;
 }) {
   const subline = season ?? "";
+  const lede = senderName
+    ? `${senderName} sent you a copy of`
+    : "You've been sent a copy of";
   return (
     <div
       className="overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated"
@@ -189,7 +272,7 @@ function PreviewCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-            Get your own copy of
+            {lede}
           </p>
           <h1 className="mt-0.5 truncate text-xl font-extrabold tracking-tight text-foreground">
             {playbookName}
@@ -199,39 +282,21 @@ function PreviewCard({
           )}
         </div>
       </div>
-      <dl className="grid grid-cols-3 divide-x divide-border border-t border-border bg-surface text-xs">
+      <dl className="grid grid-cols-2 divide-x divide-border border-t border-border bg-surface text-xs">
         <Stat label="Plays" value={String(playCount)} />
-        <Stat
-          label="From"
-          value={headCoachName ?? "—"}
-          mutedWhenDash={!headCoachName}
-        />
         <Stat label="You become" value="Owner" />
       </dl>
     </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  mutedWhenDash = false,
-}: {
-  label: string;
-  value: string;
-  mutedWhenDash?: boolean;
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-0.5 px-3 py-3 text-center">
       <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted">
         {label}
       </dt>
-      <dd
-        className={`truncate text-sm font-semibold ${
-          mutedWhenDash ? "text-muted" : "text-foreground"
-        }`}
-        title={value}
-      >
+      <dd className="truncate text-sm font-semibold text-foreground" title={value}>
         {value}
       </dd>
     </div>
