@@ -242,7 +242,10 @@ export function CoachAiLauncher({
 
   function onHeaderPointerDown(e: React.PointerEvent<HTMLElement>) {
     if (fullscreen || window.innerWidth < 640 || !windowPos) return;
-    if ((e.target as HTMLElement).closest("button")) return;
+    // Skip drag when the pointer lands on something interactive or inside the
+    // scrollable chat content; those areas need their own pointer behaviour.
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, [role='button'], [data-no-drag]")) return;
     e.preventDefault();
     dragRef.current = { startX: e.clientX, startY: e.clientY, origPos: windowPos };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -398,8 +401,12 @@ export function CoachAiLauncher({
             role="dialog"
             aria-label="Coach Cal chat"
             style={windowPosStyle}
+            onPointerDown={onHeaderPointerDown}
+            onPointerMove={onHeaderPointerMove}
+            onPointerUp={onHeaderPointerUp}
+            onPointerCancel={onHeaderPointerUp}
             className={cn(
-              "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10",
+              "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10 select-none",
               adminTrainingActive    && "ring-2 ring-amber-400",
               playbookTrainingActive && "ring-2 ring-sky-400",
               fullscreen
@@ -414,13 +421,12 @@ export function CoachAiLauncher({
             )}
           >
             {/* ── Header ─────────────────────────────────────────────────── */}
+            {/* Drag handlers live on the dialog wrapper so the whole window
+                acts as a drag handle (excluding interactive controls and the
+                scrollable chat area, which carry data-no-drag). */}
             <header
-              onPointerDown={onHeaderPointerDown}
-              onPointerMove={onHeaderPointerMove}
-              onPointerUp={onHeaderPointerUp}
-              onPointerCancel={onHeaderPointerUp}
               className={cn(
-                "flex items-center gap-2 border-b px-3 py-2 select-none",
+                "flex items-center gap-2 border-b px-3 py-2",
                 !fullscreen && "sm:cursor-grab sm:active:cursor-grabbing",
                 adminTrainingActive
                   ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
@@ -567,13 +573,18 @@ export function CoachAiLauncher({
             </header>
 
             {/* ── Chat content ─────────────────────────────────────────── */}
-            <div className="flex-1 min-h-0" style={{ fontSize: `${fontSize}px` }}>
+            <div
+              data-no-drag
+              className="flex-1 min-h-0"
+              style={{ fontSize: `${fontSize}px` }}
+            >
               <CoachAiChat playbookId={playbookId} playId={playId} mode={mode} />
             </div>
 
             {/* ── Resize handle (desktop, non-fullscreen) ──────────────── */}
             {!fullscreen && (
               <div
+                data-no-drag
                 onPointerDown={onResizePointerDown}
                 onPointerMove={onResizePointerMove}
                 onPointerUp={onResizePointerUp}
