@@ -44,6 +44,13 @@ export type FlatRoute = {
   postMotionD: string;
   /** Arc-length of the post-motion portion (== length - motionBoundary). */
   postMotionLength: number;
+  /**
+   * Optional delay (seconds) before this route starts moving in the play
+   * phase. Mirrors `Route.startDelaySec`. The animation engine holds the
+   * carrier at the start node until phase elapsed time exceeds this.
+   * Defaults to 0 (no delay) for legacy routes.
+   */
+  startDelaySec: number;
 };
 
 const CURVE_SAMPLES = 32;
@@ -259,6 +266,9 @@ export function flattenRoute(route: Route): FlatRoute | null {
     fullD: walkToSvgD(walked, nodeMap, { skipMotion: false }),
     postMotionD: walkToSvgD(walked, nodeMap, { skipMotion: true }),
     postMotionLength: Math.max(0, length - motionBoundary),
+    startDelaySec: typeof route.startDelaySec === "number" && route.startDelaySec > 0
+      ? route.startDelaySec
+      : 0,
   };
 }
 

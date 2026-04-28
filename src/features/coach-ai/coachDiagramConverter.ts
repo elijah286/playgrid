@@ -41,6 +41,13 @@ export type CoachDiagramRoute = {
   path: [number, number][];         // waypoints as [x_yards, y_yards] (same coord system)
   curve?: boolean;
   tip?: "arrow" | "t" | "none";
+  /**
+   * Optional playback delay in seconds before this route starts moving.
+   * Useful for defender reaction routes — e.g. a hook defender that
+   * doesn't break on the seam until the inside receiver crosses the
+   * 8-yard mark (~0.6s with default pacing).
+   */
+  startDelaySec?: number;
 };
 
 export type CoachDiagramZone = {
@@ -359,6 +366,9 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         strokeWidth: 1.8,
       },
       endDecoration: dr.tip ?? "arrow",
+      ...(typeof dr.startDelaySec === "number" && dr.startDelaySec > 0
+        ? { startDelaySec: dr.startDelaySec }
+        : {}),
     });
   }
 

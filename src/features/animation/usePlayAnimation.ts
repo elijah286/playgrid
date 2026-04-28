@@ -66,6 +66,10 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
   const progressRef = useRef<Map<string, number>>(new Map());
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
+  // Elapsed seconds since the current phase started, used to honor each
+  // route's startDelaySec (e.g. defender reaction routes that wait for a
+  // receiver to cross a yard marker before breaking).
+  const phaseElapsedRef = useRef(0);
 
   const stopRaf = useCallback(() => {
     if (rafRef.current != null) {
@@ -74,6 +78,13 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
     }
     lastTsRef.current = null;
   }, []);
+
+  // Reset the elapsed-time counter on every phase transition so each
+  // route's startDelaySec is measured from the start of the *play* phase
+  // (not from when the user pressed play several pauses ago).
+  useEffect(() => {
+    phaseElapsedRef.current = 0;
+  }, [phase]);
 
   useEffect(() => {
     if ((phase !== "motion" && phase !== "play") || paused) {
@@ -85,7 +96,9 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
       const last = lastTsRef.current ?? ts;
       const dt = Math.min(0.1, (ts - last) / 1000);
       lastTsRef.current = ts;
-      const advance = dt * UNITS_PER_SEC * speedRef.current;
+      const scaledDt = dt * speedRef.current;
+      const advance = scaledDt * UNITS_PER_SEC;
+      phaseElapsedRef.current += scaledDt;
 
       const next = new Map(progressRef.current);
       let allDone = true;
@@ -97,7 +110,11 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
               : 0
             : f.length;
         const current = next.get(f.routeId) ?? 0;
-        const newVal = Math.min(target, current + advance);
+        // Per-route startDelay only applies in the play phase. During motion
+        // we use the legacy uniform pacing — motion is always synchronous.
+        const delay = phase === "play" ? f.startDelaySec : 0;
+        const stepAdvance = phaseElapsedRef.current >= delay ? advance : 0;
+        const newVal = Math.min(target, current + stepAdvance);
         next.set(f.routeId, newVal);
         if (newVal < target) allDone = false;
       }

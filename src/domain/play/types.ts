@@ -119,6 +119,17 @@ export type Route = {
   motion?: boolean;
   /** End-of-route decoration (arrow/T/none). Defaults to "arrow" when unset. */
   endDecoration?: EndDecoration;
+  /**
+   * Optional playback delay before this route starts moving, in seconds.
+   * Used for defender reaction routes: the LB doesn't break on the seam
+   * until the inside receiver crosses y≈8, so its route waits ~0.6s
+   * before advancing. Player still renders at the start node during the
+   * delay; only the carrier's progress along the path is paused.
+   *
+   * Authored exclusively by Coach Cal; the play editor UI does not expose
+   * this field (intentionally — keeps editor UX simple).
+   */
+  startDelaySec?: number;
 };
 
 export type PlayerStyle = {
