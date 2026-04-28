@@ -438,7 +438,13 @@ export function PlaybookHeader({
                     : null
                 }
                 outstandingInviteCount={outstandingInviteCount ?? 0}
-                onDuplicate={canManage ? openDuplicate : null}
+                onDuplicate={
+                  canManage ||
+                  (canShare && (allowCoachDuplication ?? true)) ||
+                  (!canShare && (allowPlayerDuplication ?? true))
+                    ? openDuplicate
+                    : null
+                }
                 historyHref={
                   versionHistoryAvailable ? `/playbooks/${playbookId}/history` : null
                 }
