@@ -55,6 +55,22 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
   return provider === "claude" ? chatClaude(opts) : chatOpenAI(opts);
 }
 
+// Retry on 429 (rate limit) and 529 (overloaded) with exponential backoff.
+// Anthropic's per-minute token bucket is bursty; a short wait usually clears it.
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  const delaysMs = [1000, 2000, 4000];
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 && res.status !== 529) return res;
+    if (attempt >= delaysMs.length) return res;
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter * 1000, 10_000)
+      : delaysMs[attempt];
+    await new Promise((r) => setTimeout(r, wait));
+  }
+}
+
 // ─── Claude ──────────────────────────────────────────────────────────────────
 
 async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
@@ -62,17 +78,27 @@ async function chatClaude(opts: ChatOptions): Promise<ChatResult> {
   if (!apiKey) {
     throw new Error("Coach AI is set to Claude but no Anthropic API key is saved.");
   }
+  // Prompt caching: mark the system prompt and the tool list as cacheable so
+  // multi-turn conversations don't re-bill the same prefix every turn. The
+  // cache breakpoint goes on the LAST tool — that caches everything before it
+  // (system + tools). 5-minute TTL is plenty for an interactive chat.
+  const tools = opts.tools && opts.tools.length > 0
+    ? opts.tools.map((t, i) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.input_schema,
+        ...(i === opts.tools!.length - 1 ? { cache_control: { type: "ephemeral" as const } } : {}),
+      }))
+    : undefined;
   const body = {
     model: CLAUDE_MODEL,
     max_tokens: opts.maxTokens ?? 1024,
-    system: opts.system,
+    system: [{ type: "text" as const, text: opts.system, cache_control: { type: "ephemeral" as const } }],
     messages: opts.messages.map(toClaudeMessage),
     stream: opts.onTextDelta ? true : undefined,
-    ...(opts.tools && opts.tools.length > 0
-      ? { tools: opts.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })) }
-      : {}),
+    ...(tools ? { tools } : {}),
   };
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "content-type": "application/json",
