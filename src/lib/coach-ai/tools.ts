@@ -1102,6 +1102,145 @@ const cancel_event: CoachAiTool = {
   },
 };
 
+const rsvp_event: CoachAiTool = {
+  def: {
+    name: "rsvp_event",
+    description:
+      "RSVP the CURRENT COACH (the user you're chatting with) to one or more events on the anchored playbook. " +
+      "You CANNOT RSVP on behalf of other team members — they manage their own status. " +
+      "Common patterns: " +
+      "  - Single one-off event: pass `eventId` only (occurrenceDate defaults to the event's date). " +
+      "  - Single recurring occurrence: pass `eventId` + `occurrenceDate` (YYYY-MM-DD). " +
+      "  - Bulk: pass `allUpcoming: true` to RSVP every upcoming occurrence in this playbook (skips already-started events). " +
+      "Status \"clear\" removes the RSVP. " +
+      "Past/started occurrences are locked and will be skipped.",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: {
+          type: "string",
+          enum: ["yes", "no", "maybe", "clear"],
+          description: "RSVP status to set. \"clear\" removes the RSVP.",
+        },
+        eventId: { type: "string", description: "Event id from list_events. Required unless allUpcoming is true." },
+        occurrenceDate: {
+          type: "string",
+          description:
+            "YYYY-MM-DD of the specific occurrence. For recurring series this is required. " +
+            "For one-off events, defaults to the event's start date.",
+        },
+        allUpcoming: {
+          type: "boolean",
+          description: "RSVP all upcoming occurrences across every event in the playbook. Default false.",
+        },
+      },
+      required: ["status"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) {
+      return { ok: false, error: "Open a playbook first — RSVPs live on a specific playbook's events." };
+    }
+    const status = typeof input.status === "string" ? input.status : "";
+    if (!["yes", "no", "maybe", "clear"].includes(status)) {
+      return { ok: false, error: "status must be \"yes\", \"no\", \"maybe\", or \"clear\"." };
+    }
+    const allUpcoming = input.allUpcoming === true;
+    const eventIdInput = typeof input.eventId === "string" ? input.eventId : "";
+    const occurrenceDateInput = typeof input.occurrenceDate === "string" ? input.occurrenceDate : null;
+    if (!allUpcoming && !eventIdInput) {
+      return { ok: false, error: "Pass `eventId` (call list_events first) or set `allUpcoming: true`." };
+    }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { setRsvpAction, clearRsvpAction, listEventsForPlaybookAction } =
+        require("@/app/actions/calendar") as typeof import("@/app/actions/calendar");
+
+      type Target = { eventId: string; occurrenceDate: string; title: string; startsAt: string };
+      const targets: Target[] = [];
+
+      if (allUpcoming) {
+        const listed = await listEventsForPlaybookAction(ctx.playbookId);
+        if (!listed.ok) return { ok: false, error: listed.error };
+        const now = Date.now();
+        for (const ev of listed.events) {
+          const startMs = new Date(ev.startsAt).getTime();
+          if (Number.isNaN(startMs) || startMs <= now) continue;
+          targets.push({
+            eventId: ev.id,
+            occurrenceDate: ev.occurrenceDate,
+            title: ev.title,
+            startsAt: ev.startsAt,
+          });
+        }
+        if (targets.length === 0) {
+          return { ok: true, result: "No upcoming events to RSVP to on this playbook." };
+        }
+      } else {
+        // Resolve occurrenceDate for a single event. For one-offs, derive from
+        // starts_at (UTC date). For recurring series, require it explicitly.
+        const listed = await listEventsForPlaybookAction(ctx.playbookId);
+        if (!listed.ok) return { ok: false, error: listed.error };
+        const matches = listed.events.filter((ev) => ev.id === eventIdInput);
+        if (matches.length === 0) {
+          return { ok: false, error: "Event not found on this playbook (call list_events to get current ids)." };
+        }
+        let target: Target | null = null;
+        if (occurrenceDateInput) {
+          const exact = matches.find((m) => m.occurrenceDate === occurrenceDateInput);
+          if (!exact) {
+            return { ok: false, error: `No occurrence on ${occurrenceDateInput} for that event.` };
+          }
+          target = { eventId: exact.id, occurrenceDate: exact.occurrenceDate, title: exact.title, startsAt: exact.startsAt };
+        } else if (matches.length === 1) {
+          target = { eventId: matches[0]!.id, occurrenceDate: matches[0]!.occurrenceDate, title: matches[0]!.title, startsAt: matches[0]!.startsAt };
+        } else {
+          return {
+            ok: false,
+            error: "This is a recurring series — pass `occurrenceDate` (YYYY-MM-DD) for the specific occurrence.",
+          };
+        }
+        targets.push(target);
+      }
+
+      let succeeded = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      for (const t of targets) {
+        const res = status === "clear"
+          ? await clearRsvpAction(t.eventId, t.occurrenceDate)
+          : await setRsvpAction({
+              eventId: t.eventId,
+              occurrenceDate: t.occurrenceDate,
+              status: status as "yes" | "no" | "maybe",
+              note: null,
+            });
+        if (res.ok) {
+          succeeded += 1;
+        } else if (/locked/i.test(res.error)) {
+          skipped += 1;
+        } else {
+          errors.push(`${t.title} (${t.occurrenceDate}): ${res.error}`);
+        }
+      }
+
+      const url = `/playbooks/${ctx.playbookId}?tab=calendar`;
+      const verb = status === "clear" ? "Cleared RSVP for" : `RSVPed "${status}" to`;
+      const parts: string[] = [];
+      if (succeeded > 0) parts.push(`${verb} ${succeeded} event${succeeded === 1 ? "" : "s"}`);
+      if (skipped > 0) parts.push(`skipped ${skipped} that already started`);
+      if (errors.length > 0) parts.push(`failed: ${errors.join("; ")}`);
+      const summary = parts.length > 0 ? parts.join("; ") : "No changes.";
+      return { ok: true, result: `${summary}. [Open calendar](${url}).` };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "rsvp_event failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
 const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, place_defense, flag_outside_kb, flag_refusal];
 
 /** Tools exposed for a given mode/auth combo. */
@@ -1121,7 +1260,7 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
   if (ctx.playbookId) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PLAY_TOOLS } = require("./play-tools") as typeof import("./play-tools");
-    const writeNames = new Set(["update_play", "create_play"]);
+    const writeNames = new Set(["update_play", "create_play", "rename_play", "update_play_notes"]);
     const readTools = PLAY_TOOLS.filter((t) => !writeNames.has(t.def.name));
     tools.push(...readTools);
     // Reading the calendar is available to anyone with the playbook anchored.
@@ -1132,6 +1271,9 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
       // Scheduling: only available to coaches who can edit the playbook.
       tools.push(create_event, update_event, cancel_event);
     }
+    // RSVP is per-user (the calling coach RSVPs themselves) — available to
+    // anyone who can see the playbook, edit permission not required.
+    tools.push(rsvp_event);
   }
   return tools;
 }

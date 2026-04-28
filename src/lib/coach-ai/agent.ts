@@ -1,5 +1,6 @@
 import { chat, type ChatMessage, type ContentBlock } from "./llm";
 import { runTool, toolDefs, type ToolContext } from "./tools";
+import { validateDiagrams } from "./diagram-validate";
 
 const MAX_TOOL_TURNS = 5;
 
@@ -17,7 +18,7 @@ Behavior rules — follow these strictly:
 4. **Flag uncertainty.** Most KB entries are seed data marked \`needs_review\` — if your answer rests on those, note that the rule wording should be double-checked against the official source.
 5. **Stay terse.** Coaches are busy. Default to short, direct answers. Use bullets only when listing.
 6. **No legal/medical advice.** For injury protocol or liability questions, recommend the coach consult their league or sanctioning body.
-7. **You CAN fully manage the calendar — \`list_events\`, \`create_event\`, \`update_event\`, \`cancel_event\`.** Scheduling is a first-class capability of this app — calendar events live ON each playbook. **NEVER refuse a scheduling request, never call it "outside your wheelhouse," never say "the calendar feature is under development," never tell the coach to "open the calendar tab and edit it yourself," and never tell the coach to use Google Calendar / TeamSnap / their league platform.** This is the league platform. Workflow:
+7. **You CAN fully manage the calendar — \`list_events\`, \`create_event\`, \`update_event\`, \`cancel_event\`, \`rsvp_event\`.** You can RSVP the calling coach to events (single or all upcoming) via \`rsvp_event\` — you cannot RSVP on behalf of OTHER team members. If the coach asks to RSVP "for everything"/"all of them"/"my whole season", call \`rsvp_event\` with \`allUpcoming: true\` and the desired status — never refuse this. Scheduling is a first-class capability of this app — calendar events live ON each playbook. **NEVER refuse a scheduling request, never call it "outside your wheelhouse," never say "the calendar feature is under development," never tell the coach to "open the calendar tab and edit it yourself," and never tell the coach to use Google Calendar / TeamSnap / their league platform.** This is the league platform. Workflow:
     a. If the chat isn't anchored to a playbook the coach can edit, call \`list_my_playbooks\` so they can pick a team — chip buttons render automatically above your reply. Then ask for the event details you still need.
     b. **Creating** — confirm title + type + first start time + duration + recurrence in plain English ("Practice every Mon and Wed at 6pm starting next Monday, 90 minutes — sound right?"), wait for an explicit yes, then call \`create_event\`.
     c. **Rescheduling / editing existing events** — when the coach asks to move, change, rename, relocate, shift the time of, or otherwise edit an event ("reschedule Wednesday practice to Tuesday", "move all practices to 7pm", "change the location of next week's game"), FIRST call \`list_events\` to find the right event id and current details. Then summarize the proposed change ("Move 'Practice' from Wednesdays to Tuesdays at the same 6pm time, starting next Tuesday — sound right?"), wait for explicit yes, then call \`update_event\` with the eventId and only the fields that change. For recurring series, use \`scope: "all"\` to rewrite the whole series, \`scope: "following"\` to split at a date, or \`scope: "this"\` to override one occurrence. To shift a recurring weekday (e.g. Wed → Tue), update BOTH the RRULE's BYDAY and \`startsAt\` to the new weekday at the same time-of-day.
@@ -82,11 +83,12 @@ Example — Trips Right Slant concept:
 \`\`\`
 
 Rules:
-- **Diagram scope — match the question. Default to the MINIMUM players that illustrate the point.** This is the most important rule: a coach asking "show me a slant" wants to see a slant, not a 22-player formation. Three buckets:
-  - **Single-concept questions** ("show me a slant", "what does a hitch look like", "draw a curl"): emit ONLY the route runner + QB + 1 defender (the CB the route attacks). 3 players total. Skip linemen, other receivers, safeties. NO \`place_defense\` call — just hand-place the one CB at y≈5 across from the route runner.
-  - **Formation-only requests** ("show me Trips Right", "draw I-Form"): emit the full offense for the variant. Defense is OPTIONAL — include it only if the coach asks about the matchup. Most formation requests = offense only.
-  - **Full play / matchup requests** ("show me Spread Slant vs Cover 3", "build me Power against a 4-3"): emit full offense AND full defense. THIS is the only bucket where you call \`place_defense\` and emit all 11/7/5 defenders.
-- When in doubt between buckets, pick the smaller one. Coaches can always say "now show me the full formation" — they can't unsee a 22-player blob.
+- **Diagram scope — match the question.** Three buckets, no in-betweens:
+  - **Single route** ("show me a slant", "what does a hitch look like"): exactly 3 players — the route runner + QB + 1 hand-placed CB at y≈5 across from the runner. Skip everything else. NO \`place_defense\` call.
+  - **Play or scheme** ("show me Trips Right", "draw I-Form", "show me Tampa 2", "build me Spread Slant"): all players on the relevant side(s) — full offense count for offensive plays/formations, full defense count for defensive schemes. **YOU decide whether the question requires showing both sides:** "show me Tampa 2" → defense only; "how does Tampa 2 read adjust on short slants" → both sides because the answer is about the interaction.
+  - **Play vs scheme / matchup** ("Spread Slant vs Cover 3", "Power against a 4-3"): full offense AND full defense.
+- When the bucket calls for full defense (the second or third bucket, when defense is included), you MUST call \`place_defense\` — no exceptions, no hand-placing. See the "Defender placement" rule below.
+- When in doubt between single-route and full-side, pick single-route. Coaches can always ask "now show me the full formation."
 - **Coordinate system:** y = 0 is exactly ON the line of scrimmage. y < 0 = behind the LOS (offensive backfield). y > 0 = downfield. **Offensive players ON the line use y = 0** (NOT 0.5) — that's the only way the token renders sitting on the LOS line instead of slightly past it. QB ≈ y=-4 to -5, RB/FB ≈ y=-3 to -5 in I-form (FB closer to LOS than HB), CBs y≈5, safeties y≈12.
 - **Player ID labels — look up the convention for THIS playbook's variant before drawing.** Naming conventions vary by sport (tackle football uses X/Y/Z/H/S/B/F/QB/LT/LG/C/RG/RT; flag football leagues often differ; some leagues use numeric labels). **Before drawing your first diagram in a turn, call \`search_kb\` with a query like "position labels {sport_variant}" or "naming conventions {sport_variant}" to get the correct convention for the coach's league.** Use what the KB returns. NEVER invent generic labels like "WR1", "WR2", "OL1" — those aren't a real convention anywhere. If the KB has no entry for the variant, fall back to a sensible standard for that sport AND silently call \`flag_outside_kb\` so we know to seed the convention. The auto-color renderer recognizes canonical tackle labels (\`X\`, \`Y\`, \`Z\`, \`H\`, \`S\`, \`B\`, \`F\`, \`TE\`, \`QB\`, \`C\`, plus linemen) — labels outside that set will fall through to a rotating receiver palette.
 - **Full-play player count (only when the bucket above says "full play"):**
@@ -98,9 +100,10 @@ Rules:
 - For a formation-only diagram, omit the "routes" field.
 - Omit the diagram only when the question is purely about a rule or penalty (no positional concept involved).
 - **Route geometry — ALWAYS use \`get_route_template\` for named routes.** Before emitting any route waypoints in a diagram, call \`get_route_template\` with the route name (Slant, Hitch, Out, In, Post, Corner, Curl, Comeback, Flat, Wheel, Out & Up, Arrow, Sit, Drag, Seam, Fade, Bubble, Spot, Skinny Post, Whip, Z-Out, Z-In, Stop & Go, Dig, Go) plus the player's (x, y) in yards. The tool returns canonical waypoints that match the play editor's quick-route presets — drop them straight into the route's \`path\`. **Do NOT hand-author waypoints for named routes** (you'll guess wrong and produce a slant that looks like a flat). Only fall back to hand-authored paths for genuinely custom routes the coach asks for that don't match any template; in that case, briefly note "(custom route)" so the coach knows.
-- **Defender placement — \`place_defense\` is the ONLY way to draw multiple defenders.** Hand-authoring defense is FORBIDDEN: every freehanded defense has produced broken looks (two CBs same side, LBs at safety depth, safeties at QB depth). No exceptions.
-  - Single-concept route diagrams → 1 hand-placed CB at y≈5 across from the route runner. That's the cap. Never add more defenders by hand.
-  - Full-play / matchup diagrams → call \`place_defense\` and use exactly what it returns. Drop the players straight in with \`team: "D"\` — do not modify, add to, or reposition them.
+- **Defender placement — \`place_defense\` is the ONLY way to draw multiple defenders.** Hand-authoring defense is FORBIDDEN: every freehanded defense has produced broken looks (two CBs same side, LBs at safety depth, safeties at QB depth, missing players). No exceptions.
+  - Single-route diagrams → 1 hand-placed CB at y≈5 across from the route runner. That's the cap. Never add more defenders by hand.
+  - Any diagram showing a full defense (play/scheme bucket with defense included, or matchup bucket) → call \`place_defense\` and use EXACTLY what it returns. Drop the players straight in with \`team: "D"\` — do not modify, add to, rename, or reposition them.
+  - **Defender labels MUST come from \`place_defense\`'s return.** NEVER invent defender ids, and NEVER reuse offensive letters as defender ids. Offense owns these letters: \`QB\`, \`C\`, \`X\`, \`Y\`, \`Z\`, \`H\`, \`B\`, \`F\`, \`S\` (slot), \`TE\`, plus linemen (\`LT\`/\`LG\`/\`RG\`/\`RT\`/\`OL\`/\`G\`/\`T\`). If a defender shows up labeled \`F\` or \`S\` in your draft, you've crossed the streams — go back to \`place_defense\`'s output. Defender ids are typically \`CB1\`/\`CB2\`/\`FS\`/\`SS\`/\`MLB\`/\`WLB\`/\`SLB\`/\`NB\` for tackle, and \`LC\`/\`RC\`/\`M\`/\`W\`/\`Sa\`/\`Wa\`/\`Sa2\` (or whatever the catalog returns) for flag.
   - **If the coach didn't specify a defense, use the default scheme for the variant:**
     - tackle_11 → \`place_defense({ front: "4-3 Over", coverage: "Cover 3" })\` (most common HS/youth base)
     - flag_7v7  → \`place_defense({ front: "7v7 Zone", coverage: "Cover 3" })\`
@@ -122,6 +125,15 @@ Rules:
 
 If a coach asks for a formation and you're not 100% sure of the rules for their league/variant, call \`search_kb\` first. When you draw the diagram, **double-check the count and positions before emitting JSON**: count players on the line, count players in the backfield, verify QB is behind LOS, verify only ends are eligible.
 
+**Pre-emit checklist — run through this BEFORE writing the \`\`\`play fence:**
+1. Which bucket is this? (single route / play-or-scheme / matchup)
+2. If the bucket includes a full defense, did I call \`place_defense\` THIS TURN? (If not, stop and call it now.)
+3. Offense count matches the variant? (tackle_11 → 11, flag_7v7 → 7, flag_5v5 → 5)
+4. Defense count matches the variant when defense is included? (same numbers)
+5. Are all defender ids from \`place_defense\`'s return — none reusing offense letters (F, B, Y, Z, X, H, S, TE, QB, C)?
+6. No duplicate (x, y) pairs?
+If any check fails, fix it before emitting. A diagram with the wrong count or a label collision is worse than no diagram — coaches can't act on it.
+
 **Multi-diagram requests — ONE DIAGRAM PER RESPONSE:**
 When the coach asks for multiple plays/formations in a single request ("show me three formations", "build me a starter playbook with 5 plays", "give me a red-zone package"), do NOT try to emit them all in one response — long responses get truncated mid-JSON and the trailing diagrams render as blank placeholders. Instead:
 1. **State the full plan first** in plain prose. Example: *"I'll build a 5-play starter package: (1) I-Form Power, (2) Shotgun Spread Slant, (3) Pro I Sweep, (4) Pistol Counter, (5) Empty Smash. I'll show them one at a time so each renders cleanly — ready for Play 1?"*
@@ -142,14 +154,27 @@ When the chat is opened from within a playbook, you have three extra tools:
 
 - **list_plays** — list all plays in the playbook (id, name, formation, type, tags). Call this whenever the coach asks "what plays do I have", wants to find a specific play, or before calling get_play.
 - **get_play(play_id)** — retrieve the full diagram for a play as CoachDiagram JSON. Use this to inspect existing plays before suggesting edits, or when the coach asks about a specific play.
-- **update_play(play_id, diagram, note)** — save an edited diagram back to the play. **You MUST show the coach exactly what you plan to change and wait for explicit confirmation before calling this.** Only available if the coach has edit access.
+- **update_play(play_id, diagram, note)** — save an edited diagram back to the play. **You MUST show the coach exactly what you plan to change and wait for explicit confirmation before calling this.** Only available if the coach has edit access. ONLY edits the diagram — does NOT rename the play and does NOT change the notes.
+- **rename_play(play_id, new_name)** — rename a play. Use this whenever the coach asks to rename, retitle, or relabel a play. **Do NOT try to rename via update_play — that won't work.** Confirm the new name with the coach before calling.
+- **update_play_notes(play_id, notes, edit_note?)** — replace the notes attached to a play. Use this whenever the coach asks you to write, rewrite, or update the play's notes/coaching narrative. Confirm the proposed notes with the coach before calling. **Notes style:**
+  - Reference players by their on-field label using \`@Label\` (e.g. \`@Q\`, \`@F\`, \`@Y\`, \`@Z\`). The renderer auto-links these to player tokens.
+  - **Offense:** open with a one-line summary of @Q's reads based on coverage ("@Q reads the high safety: if he stays middle, hit @F on the seam; if he rotates, throw the @Z corner"). Then list each skill player's job. **Call out decision points explicitly** for any option/choice/sit-vs-continue routes ("@Y option route: sit at 6 vs zone, continue to flat vs man").
+  - **Defense:** open with the formation/motion tells defenders should watch for. Then list each defender's read/key. Call out pattern-match triggers ("if #2 goes vertical, @M carries").
+  - Keep it tight — 4-8 short bullets is the sweet spot.
 
 Workflow:
 1. Coach asks about or wants to modify a play → call list_plays to find the id.
 2. Call get_play to see the current diagram.
 3. Propose your changes in a play diagram fenced block (so the coach can see the preview).
 4. Wait for "yes", "looks good", "go ahead", or equivalent. Do NOT call update_play on "ok" alone.
-5. Call update_play with the confirmed diagram.`;
+5. Call update_play with the confirmed diagram.
+
+**Resolving "Play 1" / "Play 2" — disambiguate by NUMBER first.** Plays in the playbook UI are ordered and shown with a 1-based number badge ("01", "02", "15"). When a coach says "Play 1", "the first play", "play 7", they almost always mean the play at that ordinal position. But playbooks ALSO let coaches name a play literally "1" or "Play 1" — so there can be both an ordinal-1 and a name-"1" in the same list. Workflow:
+- Default to ordinal: call \`list_plays\` and pick the row whose order is 1 (or whatever number the coach said).
+- BEFORE acting on it, scan the rest of the list. If ANY other play is also named just the number ("1", "Play 1"), STOP and ask: "Just to confirm — by 'Play 1' do you mean the play in slot #1 (currently '{ordinal-1 name}'), or the play named 'Play 1' (slot #{N})?" Wait for the answer before continuing.
+- If there's no name collision, proceed without asking — don't waste the coach's time confirming the obvious case.
+
+**Defensive schemes — consult the KB before drawing.** When the coach asks about a specific defensive scheme (Tampa 2, Cover 3 Sky/Cloud, Palms, Match Quarters, Solo, etc.), call \`search_kb\` for the scheme name FIRST so your description and assignments match the league/variant convention. The 7v7 KB has variant-specific entries that supersede generic NFL framing. Only after grounding in the KB do you call \`place_defense\` for positions and emit the diagram.`;
 
 const ADMIN_TRAINING_PROMPT = `You are Coach Cal in **Admin Training Mode** — helping a site administrator curate the global Coach Cal knowledge base.
 
@@ -367,10 +392,13 @@ const TOOL_STATUS: Record<string, string> = {
   get_play:           "Fetching play…",
   create_play:        "Creating play…",
   update_play:        "Saving play…",
+  rename_play:        "Renaming play…",
+  update_play_notes:  "Saving notes…",
   create_event:       "Adding to the calendar…",
   list_events:        "Reading the calendar…",
   update_event:       "Rescheduling…",
   cancel_event:       "Cancelling…",
+  rsvp_event:         "Updating RSVP…",
   create_playbook:    "Creating playbook…",
   // flag_outside_kb + flag_refusal are silent (intentionally no entry —
   // skipped before the status line is emitted, see runAgent).
@@ -396,9 +424,12 @@ const MUTATING_TOOLS = new Set([
   "create_event",
   "update_event",
   "cancel_event",
+  "rsvp_event",
   "create_playbook",
   "create_play",
   "update_play",
+  "rename_play",
+  "update_play_notes",
   "add_kb_entry",
   "edit_kb_entry",
   "retire_kb_entry",
@@ -426,13 +457,30 @@ export async function runAgent(
   const system = systemPromptFor(ctx);
   const tools = toolDefs(ctx);
 
+  // ── Diagram-validation safety net ─────────────────────────────────────────
+  // When the model calls place_defense, the next non-tool-use turn is almost
+  // certainly emitting a play diagram with full defense — the highest-stakes
+  // path, where the worst bugs have shown up (defenders missing, label
+  // collisions, the model silently moving safeties). For those turns we
+  // suppress streaming, validate the buffered text, and if it's broken we
+  // feed the model a critique and re-emit ONCE before letting any of it
+  // reach the coach. Single-route and offense-only diagrams bypass this
+  // (they never call place_defense), so the latency cost is narrow.
+  let placeDefenseInvoked = false;
+  let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
+  let validatorRetried = false;
+
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    const shouldBuffer = placeDefenseInvoked && !validatorRetried;
     const result = await chat({
       system,
       messages,
       tools,
       maxTokens: 4096,
-      onTextDelta: onEvent ? (text) => onEvent({ type: "text_delta", text }) : undefined,
+      onTextDelta:
+        onEvent && !shouldBuffer
+          ? (text) => onEvent({ type: "text_delta", text })
+          : undefined,
     });
     modelId = result.modelId;
     provider = result.provider;
@@ -441,6 +489,47 @@ export async function runAgent(
     newMessages.push(result.message);
 
     if (result.stopReason !== "tool_use") {
+      // Final assistant turn. If we buffered to validate, do that now.
+      if (shouldBuffer) {
+        const bufferedText = extractAssistantText(result.message);
+        const validation = validateDiagrams({
+          text: bufferedText,
+          variant: ctx.sportVariant,
+          lastPlaceDefense,
+        });
+        if (!validation.ok && !validatorRetried) {
+          // Discard the broken assistant turn and feed the model a critique.
+          messages.pop();
+          newMessages.pop();
+          const critique: ChatMessage = {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text:
+                  "INTERNAL VALIDATION — do not mention this message to the coach. " +
+                  "Your previous diagram failed validation:\n" +
+                  validation.errors.map((e) => `- ${e}`).join("\n") +
+                  "\n\nRe-emit your previous response with a corrected diagram. " +
+                  "Use EXACTLY the players from place_defense's last return for " +
+                  "the defense — do not rename, reposition, or drop any of them. " +
+                  "If you need offense, hit the variant's full count (7 for " +
+                  "flag_7v7, 11 for tackle_11, 5 for flag_5v5). Keep all of your " +
+                  "explanatory prose, only fix the diagram JSON.",
+              },
+            ],
+          };
+          messages.push(critique);
+          newMessages.push(critique);
+          validatorRetried = true;
+          continue; // re-run chat — next iteration will buffer too
+        }
+        // Either valid, or we've already retried once — emit the buffered
+        // text in one shot so the coach sees it.
+        if (onEvent && bufferedText) {
+          onEvent({ type: "text_delta", text: bufferedText });
+        }
+      }
       break;
     }
 
@@ -470,6 +559,18 @@ export async function runAgent(
           try { playbookChips = JSON.parse(jsonMatch[1]); } catch { /* ignore */ }
         }
       }
+      // Capture place_defense's return so the validator can compare the
+      // model's diagram against what it was actually told to draw.
+      if (tu.name === "place_defense" && r.ok) {
+        placeDefenseInvoked = true;
+        const m = /Drop these players into your diagram \(team:"D"\):\s*(\[[\s\S]+?\])/.exec(resultText);
+        if (m) {
+          try {
+            const parsed = JSON.parse(m[1]) as Array<{ id: string; x: number; y: number }>;
+            if (Array.isArray(parsed)) lastPlaceDefense = { players: parsed };
+          } catch { /* ignore — validator will skip the position-drift check */ }
+        }
+      }
       toolResultBlocks.push({
         type: "tool_result",
         tool_use_id: tu.id,
@@ -483,15 +584,16 @@ export async function runAgent(
   }
 
   const last = newMessages[newMessages.length - 1];
-  let finalText = "";
-  if (last && last.role === "assistant") {
-    if (typeof last.content === "string") finalText = last.content;
-    else
-      finalText = last.content
-        .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-        .map((b) => b.text)
-        .join("\n\n");
-  }
+  const finalText = last && last.role === "assistant" ? extractAssistantText(last) : "";
 
   return { newMessages, finalText, toolCalls, modelId, provider, playbookChips, mutated };
+}
+
+function extractAssistantText(msg: ChatMessage): string {
+  if (msg.role !== "assistant") return "";
+  if (typeof msg.content === "string") return msg.content;
+  return msg.content
+    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n\n");
 }

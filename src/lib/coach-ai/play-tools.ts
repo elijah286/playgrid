@@ -425,4 +425,179 @@ const create_play: CoachAiTool = {
   },
 };
 
-export const PLAY_TOOLS: CoachAiTool[] = [list_plays, get_play, create_play, update_play];
+const rename_play: CoachAiTool = {
+  def: {
+    name: "rename_play",
+    description:
+      "Rename an existing play in the current playbook. Use this when the coach " +
+      "asks you to rename, retitle, or relabel a play — do NOT try to do it via " +
+      "update_play (that one only edits the diagram). " +
+      "ALWAYS confirm the new name with the coach before calling. " +
+      "Requires edit access to the playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: { type: "string", description: "The UUID of the play to rename." },
+        new_name: { type: "string", description: "The new play name. 1-80 chars, trimmed." },
+      },
+      required: ["play_id", "new_name"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const playId = typeof input.play_id === "string" ? input.play_id : "";
+    const newName = typeof input.new_name === "string" ? input.new_name.trim() : "";
+    if (!playId) return { ok: false, error: "play_id is required." };
+    if (!newName) return { ok: false, error: "new_name can't be empty." };
+    if (newName.length > 80) return { ok: false, error: "new_name must be 80 characters or fewer." };
+
+    try {
+      // Confirm the play belongs to the anchored playbook before delegating.
+      const admin = createServiceRoleClient();
+      const { data: play, error: readErr } = await admin
+        .from("plays")
+        .select("id, name, playbook_id")
+        .eq("id", playId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (readErr) return { ok: false, error: readErr.message };
+      if (!play) return { ok: false, error: "Play not found." };
+      if (play.playbook_id !== ctx.playbookId) {
+        return { ok: false, error: "That play belongs to a different playbook." };
+      }
+      const oldName = play.name as string;
+      if (oldName === newName) {
+        return { ok: true, result: `Play is already named "${newName}" — no change.` };
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { renamePlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+      const res = await renamePlayAction(playId, newName);
+      if (!res.ok) return { ok: false, error: res.error };
+      return { ok: true, result: `Renamed "${oldName}" → "${newName}".` };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "rename_play failed" };
+    }
+  },
+};
+
+const update_play_notes: CoachAiTool = {
+  def: {
+    name: "update_play_notes",
+    description:
+      "Replace the notes field on an existing play. Use this for the coaching " +
+      "narrative attached to a play — what the QB reads, what each skill player " +
+      "should look for, and any decision points on option/choice routes. " +
+      "DOES NOT touch the diagram. " +
+      "ALWAYS show the coach the proposed notes and wait for explicit confirmation " +
+      "before calling. Requires edit access to the playbook.\n\n" +
+      "Style rules:\n" +
+      "- Reference players by their on-field label using @Label (e.g. @Q, @F, @Y, @Z). " +
+      "  The renderer auto-links these to the player tokens in the diagram.\n" +
+      "- For OFFENSIVE plays: open with a one-line summary of the QB's reads " +
+      "  based on what the defense shows. Then list each skill player's job in " +
+      "  order. If any skill player has a decision (option route, choice route, " +
+      "  read on leverage, sit vs. continue), call it out explicitly.\n" +
+      "- For DEFENSIVE plays: open with what defenders should be watching for " +
+      "  from the offense (formation tells, motion, route distributions). Then " +
+      "  list each defender's read/key. Call out any pattern-match triggers.\n" +
+      "- Keep it tight — 4-8 short bullets typically. Coaches will scan, not read.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: { type: "string", description: "The UUID of the play to update." },
+        notes: {
+          type: "string",
+          description:
+            "The new notes content. Use @Label to reference players. " +
+            "Pass empty string to clear notes.",
+        },
+        edit_note: {
+          type: "string",
+          description: "Short one-line note for the version history. Default: 'Updated notes via Coach Cal'.",
+        },
+      },
+      required: ["play_id", "notes"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const playId = typeof input.play_id === "string" ? input.play_id : "";
+    const notes = typeof input.notes === "string" ? input.notes : "";
+    if (!playId) return { ok: false, error: "play_id is required." };
+    if (notes.length > 4000) return { ok: false, error: "notes must be 4000 characters or fewer." };
+
+    try {
+      const admin = createServiceRoleClient();
+      const { data: play, error } = await admin
+        .from("plays")
+        .select("id, name, playbook_id, current_version_id")
+        .eq("id", playId)
+        .eq("playbook_id", ctx.playbookId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) return { ok: false, error: error.message };
+      if (!play) return { ok: false, error: "Play not found or not in this playbook." };
+
+      const parentId = play.current_version_id as string | null;
+      if (!parentId) {
+        return { ok: false, error: "Play has no current version to update." };
+      }
+      const { data: parent, error: parentErr } = await admin
+        .from("play_versions")
+        .select("document")
+        .eq("id", parentId)
+        .maybeSingle();
+      if (parentErr) return { ok: false, error: parentErr.message };
+      const parentDoc = parent?.document as PlayDocument | null;
+      if (!parentDoc) return { ok: false, error: "Could not read current play document." };
+
+      const newDoc: PlayDocument = {
+        ...parentDoc,
+        metadata: {
+          ...parentDoc.metadata,
+          notes,
+        },
+      };
+
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { ok: false, error: "Not signed in." };
+
+      const editNote = typeof input.edit_note === "string" && input.edit_note.trim()
+        ? input.edit_note.trim()
+        : "Updated notes via Coach Cal";
+
+      const versionResult = await recordPlayVersion({
+        supabase: admin,
+        playId,
+        document: newDoc,
+        parentVersionId: parentId,
+        userId: user.id,
+        kind: "edit",
+        note: editNote,
+      });
+      if (!versionResult.ok) return { ok: false, error: versionResult.error };
+      if (versionResult.deduped) {
+        return { ok: true, result: "Notes are already up to date — no change." };
+      }
+      const { error: upErr } = await admin
+        .from("plays")
+        .update({ current_version_id: versionResult.versionId, updated_at: new Date().toISOString() })
+        .eq("id", playId);
+      if (upErr) return { ok: false, error: upErr.message };
+      return {
+        ok: true,
+        result: `Notes updated on "${play.name}" (version ${versionResult.versionId.slice(0, 8)}).`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "update_play_notes failed" };
+    }
+  },
+};
+
+export const PLAY_TOOLS: CoachAiTool[] = [list_plays, get_play, create_play, update_play, rename_play, update_play_notes];
