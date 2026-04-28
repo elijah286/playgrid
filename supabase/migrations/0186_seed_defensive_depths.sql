@@ -21,6 +21,15 @@
 --   tier4_hs    — high school+ / varsity
 --   null        — universal across tiers
 
+-- Idempotency note: this migration was first applied by hand via
+-- PostgREST because the operator's network blocked Postgres TCP at the
+-- time. The rows below are already in the live DB. If `supabase db push`
+-- later picks this migration up as "needs to run," it will fail on
+-- duplicate inserts — drop those rows first or skip the migration in
+-- supabase_migrations.schema_migrations. Future hand-applies should
+-- prefer adding ON CONFLICT DO NOTHING (requires a unique constraint
+-- we don't currently have on rag_documents).
+
 insert into public.rag_documents (
   scope, scope_id,
   topic, subtopic, title, content,
