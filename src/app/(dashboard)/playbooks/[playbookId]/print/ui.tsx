@@ -601,7 +601,7 @@ export function PrintPlaybookClient({
 
   function exportPdf() {
     if (wristbandLocked) {
-      toast("Wristbands are a Team Team Coach feature. See /pricing to upgrade.", "error");
+      toast("Wristbands are a Team Coach feature. See /pricing to upgrade.", "error");
       return;
     }
     startTransition(async () => {
@@ -616,7 +616,7 @@ export function PrintPlaybookClient({
 
   function printNow() {
     if (wristbandLocked) {
-      toast("Wristbands are a Team Team Coach feature. See /pricing to upgrade.", "error");
+      toast("Wristbands are a Team Coach feature. See /pricing to upgrade.", "error");
       return;
     }
     startPrint(async () => {
@@ -854,7 +854,12 @@ export function PrintPlaybookClient({
         )}
 
         {tab === "layout" && (
-          <PlaybookPrintRunControls config={config} onChange={setConfig} section="layout" />
+          <PlaybookPrintRunControls
+            config={config}
+            onChange={setConfig}
+            section="layout"
+            canUseWristbands={canUseWristbands}
+          />
         )}
 
         {tab === "visuals" && (

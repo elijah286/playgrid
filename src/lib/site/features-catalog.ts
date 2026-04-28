@@ -219,6 +219,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-10-01",
   },
   {
+    id: "play-cap-soft-warn",
+    name: "Play-cap soft warning",
+    description:
+      "Free owners see a banner inside the Plays tab as they approach the per-playbook play cap (within 3 of the limit) and a stronger lock-flavored banner at the cap, both linking to /pricing?upgrade=play-cap. Replaces the previous silent failure when adding a 17th play.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
+    id: "wristbands-locked-segment",
+    name: "Wristbands lock affordance",
+    description:
+      "Free users browsing the playbook print tool see the Wristband output-type segment with a lock icon and \"(Team Coach)\" label, making the gated feature visible without trial-and-error. Pairs with the existing locked-preview screen they hit on click.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "collaborator-build-your-own-banner",
     name: "Collaborator → owner nudge",
     description:

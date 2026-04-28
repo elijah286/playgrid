@@ -94,7 +94,7 @@ export async function createInviteAction(input: {
     if (!tierAtLeast(entitlement, "coach")) {
       return {
         ok: false,
-        error: "Sharing a playbook is a Team Team Coach feature. Upgrade to unlock.",
+        error: "Sharing a playbook is a Team Coach feature. Upgrade to unlock.",
       };
     }
   }

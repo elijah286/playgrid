@@ -1464,6 +1464,12 @@ function PlaybookDetailClientInner({
 
       {tab === "plays" && (
       <div>
+        {!headerProps.viewerIsCoach && headerProps.canManage && (
+          <PlayCapBanner
+            count={initialPlays.filter((p) => !p.is_archived).length}
+            limit={freeMaxPlays}
+          />
+        )}
         {truncated && (
           <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
             Showing the 2000 most-recent plays. Archive or delete older plays to see more.
@@ -4271,6 +4277,34 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
       <div className="h-px flex-1 bg-border" />
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
       <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
+  const remaining = limit - count;
+  const atCap = count >= limit;
+  const approaching = !atCap && remaining <= 3;
+  if (!atCap && !approaching) return null;
+  return (
+    <div
+      className={`mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+        atCap
+          ? "border-amber-300 bg-amber-50 text-amber-950"
+          : "border-primary/30 bg-primary/[0.04] text-foreground"
+      }`}
+    >
+      <p className="min-w-0 flex-1 text-sm">
+        {atCap
+          ? `You've hit the ${limit}-play limit on Solo Coach. Upgrade to Team Coach for unlimited plays.`
+          : `${count} of ${limit} plays used on Solo Coach — ${remaining} left. Upgrade to Team Coach for unlimited.`}
+      </p>
+      <Link
+        href="/pricing?upgrade=play-cap"
+        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+      >
+        See Team Coach
+      </Link>
     </div>
   );
 }

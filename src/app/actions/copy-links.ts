@@ -77,7 +77,7 @@ export async function createCopyLinkAction(input: {
     if (!tierAtLeast(entitlement, "coach")) {
       return {
         ok: false,
-        error: "Sending a copy is a Team Team Coach feature. Upgrade to unlock.",
+        error: "Sending a copy is a Team Coach feature. Upgrade to unlock.",
       };
     }
   }

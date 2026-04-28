@@ -1,5 +1,6 @@
 "use client";
 
+import { Lock } from "lucide-react";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -36,6 +37,8 @@ type Props = {
    * weight, labels, colors, LOS/yard markers). "all" (default) = everything.
    */
   section?: "layout" | "visuals" | "text" | "all";
+  /** When false, render the Wristband segment with a lock indicator. */
+  canUseWristbands?: boolean;
 };
 
 function LabelToggles({
@@ -159,7 +162,7 @@ function LabelSettings({
   );
 }
 
-export function PlaybookPrintRunControls({ config, onChange, section = "all" }: Props) {
+export function PlaybookPrintRunControls({ config, onChange, section = "all", canUseWristbands = true }: Props) {
   function patch(partial: Partial<PlaybookPrintRunConfig>) {
     onChange({ ...config, ...partial });
   }
@@ -178,7 +181,11 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all" }: 
           <SegmentedControl
             options={[
               { value: "playsheet" as const, label: "Playsheet" },
-              { value: "wristband" as const, label: "Wristband" },
+              {
+                value: "wristband" as const,
+                label: canUseWristbands ? "Wristband" : "Wristband (Team Coach)",
+                icon: canUseWristbands ? undefined : Lock,
+              },
             ]}
             value={config.product}
             onChange={(product) => patch({ product })}

@@ -104,7 +104,7 @@ export default async function GameModePage({ params, searchParams }: Props) {
   });
   if (!allowed) redirect(`/playbooks/${playbookId}`);
 
-  // Tier gate: Game Mode is a Team Team Coach feature. Admins bypass so they can
+  // Tier gate: Game Mode is a Team Coach feature. Admins bypass so they can
   // QA without a paid seat. Non-entitled users hitting the URL directly land
   // on /pricing with an upgrade hint instead of silently back on the playbook.
   const entitlement = await getCurrentEntitlement();

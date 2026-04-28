@@ -415,7 +415,7 @@ export async function duplicatePlaybookAction(
   if (!tierAtLeast(entitlement, "coach")) {
     return {
       ok: false as const,
-      error: "Duplicating playbooks is a Team Team Coach feature. Upgrade to unlock.",
+      error: "Duplicating playbooks is a Team Coach feature. Upgrade to unlock.",
     };
   }
 
