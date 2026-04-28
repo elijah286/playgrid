@@ -28,16 +28,17 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Slant",
     directional: true,
-    // Canonical slant: 3-yard vertical stem then a ~25° lean inside over
-    // the middle (25° measured from vertical — route stays mostly forward
-    // with a steady inside angle). Matches the KB "route_slant" entry.
-    // In flag_7v7 (30yd width, 25yd window): stem to (0,3), then continue
-    // ~5 yds at 25°-from-vertical → break point (-2.1, 7.5) yds.
-    // x: -2.1/30 = -0.07, y: 7.5/25 = 0.30.
+    // Canonical slant: 3-yard vertical stem then a 25°-above-horizontal
+    // cut across the middle (angle measured from horizontal — route is
+    // mostly lateral with a shallow upfield component). Matches KB
+    // "route_slant".
+    // In flag_7v7 (30yd width, 25yd window): stem to (0,3), then cut
+    // ~6 yds inside × 6·tan(25°)≈2.8 yds upfield → break point (-6, 5.8) yds.
+    // x: -6/30 = -0.20, y: 5.8/25 = 0.232.
     points: [
       { x: 0, y: 0 },
       { x: 0, y: 0.12 },
-      { x: -0.07, y: 0.30 },
+      { x: -0.20, y: 0.232 },
     ],
   },
   {
