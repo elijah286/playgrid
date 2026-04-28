@@ -175,7 +175,16 @@ export function OpenAISettingsClient({
           <div>
             <h4 className="text-sm font-semibold text-foreground">Admin API key (cost reports)</h4>
             <p className="mt-0.5 text-xs text-muted">
-              Used by the Opex tab to fetch monthly cost. Separate from the API key above. {adminStatusLabel}
+              Used by the Opex tab to fetch monthly cost. Separate from the API key above. Create one at{" "}
+              <a
+                href="https://platform.openai.com/settings/organization/admin-keys"
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                platform.openai.com → Organization → Admin keys
+              </a>
+              . {adminStatusLabel}
             </p>
           </div>
           <StatusDot configured={adminConfigured} />

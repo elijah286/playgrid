@@ -175,7 +175,16 @@ export function ClaudeSettingsClient({
               <div>
                 <h4 className="text-sm font-semibold text-foreground">Admin API key (cost reports)</h4>
                 <p className="mt-0.5 text-xs text-muted">
-                  Used by the Opex tab to fetch monthly cost. Separate from the chat API key above. {adminStatusLabel}
+                  Used by the Opex tab to fetch monthly cost. Separate from the chat API key above. Create one at{" "}
+                  <a
+                    href="https://console.anthropic.com/settings/admin-keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    console.anthropic.com → Settings → Admin Keys
+                  </a>
+                  . {adminStatusLabel}
                 </p>
               </div>
               <StatusDot configured={adminConfigured} />
