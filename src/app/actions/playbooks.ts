@@ -11,15 +11,11 @@ import {
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SportVariant } from "@/domain/play/types";
 import {
-  defaultSettingsForVariant,
   normalizePlaybookSettings,
   type PlaybookSettings,
 } from "@/domain/playbook/settings";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
-import {
-  FREE_MAX_PLAYBOOKS_OWNED,
-  tierAtLeast,
-} from "@/lib/billing/features";
+import { tierAtLeast } from "@/lib/billing/features";
 import { assertNotLocked } from "@/lib/billing/downgrade-locks";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
@@ -194,115 +190,21 @@ export async function createPlaybookAction(
     return { ok: false as const, error: "Supabase is not configured." };
   }
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in." };
-
-  const entitlement = await getUserEntitlement(user.id);
-  if (!tierAtLeast(entitlement, "coach")) {
-    // Count all real playbooks the user owns — archived books still count
-    // so users can't sidestep the cap by archiving. Only the hidden
-    // default Inbox playbook is excluded.
-    const { count: ownedCount } = await supabase
-      .from("playbook_members")
-      .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("role", "owner")
-      .eq("playbooks.is_default", false);
-    if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
-      return {
-        ok: false as const,
-        error: `Free tier is limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Coach to create more.`,
-      };
-    }
-  }
-
-  const color = appearance?.color?.trim() || null;
-  const logo = appearance?.logo_url?.trim() || null;
-  if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
-    return { ok: false as const, error: "Color must be a hex like #RRGGBB." };
-  }
-  if (logo && !/^https?:\/\//i.test(logo)) {
-    return { ok: false as const, error: "Logo must be an http(s) URL." };
-  }
-
-  // Only the "Other" (six_man) variant carries a custom player count. Clamp
-  // to 4–11 and ignore the value for fixed variants.
-  let offenseCount: number | null = null;
-  if (sportVariant === "other" && typeof customOffenseCount === "number") {
-    const n = Math.round(customOffenseCount);
-    if (!Number.isFinite(n) || n < 4 || n > 11) {
-      return { ok: false as const, error: "Player count must be between 4 and 11." };
-    }
-    offenseCount = n;
-  }
-
-  let teamId: string;
-  try {
-    const ws = await ensureDefaultWorkspace(supabase, user.id);
-    teamId = ws.teamId;
-  } catch (e) {
-    return {
-      ok: false as const,
-      error: e instanceof Error ? e.message : "Could not resolve workspace.",
-    };
-  }
-
-  const seasonClean = season?.trim().slice(0, 60) || null;
-
-  const resolvedSettings =
-    settings ?? defaultSettingsForVariant(sportVariant, offenseCount);
-
-  const { data, error } = await supabase
-    .from("playbooks")
-    .insert({
-      team_id: teamId,
-      name: name || "New playbook",
-      sport_variant: sportVariant,
-      color,
-      logo_url: logo,
-      custom_offense_count: offenseCount,
-      season: seasonClean,
-      settings: resolvedSettings,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { ok: false as const, error: error.message };
-
-  await supabase
-    .from("playbook_members")
-    .insert({ playbook_id: data.id, user_id: user.id, role: "owner" });
-
-  // Clone every seed formation into the new playbook. Seeds are templates
-  // frozen at creation time — edits to the seed later only affect future
-  // playbooks. Filter seeds by sport_variant (stored in params) so a
-  // flag-football playbook doesn't inherit tackle formations.
-  const { data: seeds } = await supabase
-    .from("formations")
-    .select("params, kind")
-    .eq("is_seed", true);
-  if (seeds && seeds.length > 0) {
-    const rows = seeds
-      .filter((s) => {
-        const p = s.params as { sportProfile?: { variant?: string } } | null;
-        const v = p?.sportProfile?.variant ?? "flag_7v7";
-        return v === sportVariant;
-      })
-      .map((s) => ({
-        playbook_id: data.id,
-        is_seed: false,
-        semantic_key: `seeded_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        params: s.params,
-        kind: (s.kind as string | null) ?? "offense",
-      }));
-    if (rows.length > 0) {
-      await supabase.from("formations").insert(rows);
-    }
-  }
-
-  return { ok: true as const, id: data.id };
+  // Delegate to the shared helper so the Coach AI tool can take the same
+  // path without being subject to 'use server' import quirks.
+  const { createPlaybookForUser } = await import("@/lib/data/playbook-create");
+  const res = await createPlaybookForUser(supabase, {
+    name: name || "New playbook",
+    sportVariant,
+    color: appearance?.color ?? null,
+    logoUrl: appearance?.logo_url ?? null,
+    customOffenseCount: customOffenseCount ?? null,
+    season: season ?? null,
+    settings: settings ?? null,
+  });
+  return res.ok
+    ? ({ ok: true as const, id: res.id })
+    : ({ ok: false as const, error: res.error });
 }
 
 export async function updatePlaybookAppearanceAction(
