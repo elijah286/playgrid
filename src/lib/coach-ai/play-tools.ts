@@ -16,6 +16,85 @@ import type { CoachAiTool } from "./tools";
 
 const LOS_Y = 0.4;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a play_id input to a canonical UUID.
+ *
+ * Cal often calls play tools with the slot number ("4") or the name the
+ * coach used ("Spread Slant"), not the UUID. Postgres rejects non-UUID
+ * strings with `invalid input syntax for type uuid`, which used to surface
+ * to the coach as a useless "UUID error". This helper accepts:
+ *   - a real UUID — returned as-is after confirming it's in the playbook
+ *   - a 1-based slot number ("4", "Play 4") — resolved by sort_order
+ *   - an exact play name match — resolved by name
+ *   - a fuzzy substring match if the name input matches exactly one play
+ *
+ * Returns the canonical UUID, or an error string explaining what didn't
+ * match.
+ */
+export async function resolvePlayId(
+  rawInput: string,
+  playbookId: string,
+): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+  const input = rawInput.trim();
+  if (!input) return { ok: false, error: "play_id is required." };
+
+  const admin = createServiceRoleClient();
+  const { data: rows, error } = await admin
+    .from("plays")
+    .select("id, name, sort_order, group_id")
+    .eq("playbook_id", playbookId)
+    .eq("is_archived", false)
+    .is("deleted_at", null)
+    .is("attached_to_play_id", null)
+    .order("sort_order", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+  const plays = (rows ?? []) as Array<{ id: string; name: string; sort_order: number; group_id: string | null }>;
+  if (plays.length === 0) return { ok: false, error: "No plays in this playbook." };
+
+  // 1) Direct UUID match.
+  if (UUID_RE.test(input)) {
+    const hit = plays.find((p) => p.id === input);
+    if (hit) return { ok: true, id: hit.id, name: hit.name };
+    return { ok: false, error: `No play with id ${input} in this playbook.` };
+  }
+
+  // 2) Slot number — "4", "Play 4", "play #4", "#4".
+  const numMatch = input.match(/^(?:play\s*)?#?\s*(\d+)$/i);
+  if (numMatch) {
+    const slot = parseInt(numMatch[1], 10);
+    if (slot >= 1 && slot <= plays.length) {
+      const hit = plays[slot - 1];
+      return { ok: true, id: hit.id, name: hit.name };
+    }
+    return { ok: false, error: `Slot ${slot} is out of range (playbook has ${plays.length} plays).` };
+  }
+
+  // 3) Exact name match (case-insensitive).
+  const lower = input.toLowerCase();
+  const exact = plays.filter((p) => p.name.toLowerCase() === lower);
+  if (exact.length === 1) return { ok: true, id: exact[0].id, name: exact[0].name };
+  if (exact.length > 1) {
+    return {
+      ok: false,
+      error: `Multiple plays named "${input}". Use the play's slot number or UUID to disambiguate. Candidates: ${exact.map((p, i) => `slot ${plays.indexOf(p) + 1}`).join(", ")}.`,
+    };
+  }
+
+  // 4) Fuzzy substring match — accept only if exactly one hit.
+  const fuzzy = plays.filter((p) => p.name.toLowerCase().includes(lower));
+  if (fuzzy.length === 1) return { ok: true, id: fuzzy[0].id, name: fuzzy[0].name };
+  if (fuzzy.length > 1) {
+    return {
+      ok: false,
+      error: `"${input}" matched multiple plays. Use the slot number or full name. Matches: ${fuzzy.map((p) => `"${p.name}" (slot ${plays.indexOf(p) + 1})`).slice(0, 5).join(", ")}.`,
+    };
+  }
+
+  return { ok: false, error: `No play matched "${input}" — try the slot number (e.g. 4) or exact name.` };
+}
+
 /** Convert a saved PlayDocument back into the CoachDiagram yard-based format. */
 export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): CoachDiagram {
   const { fieldWidthYds, fieldLengthYds, variant } = doc.sportProfile;
@@ -78,43 +157,58 @@ const list_plays: CoachAiTool = {
 
     try {
       const admin = createServiceRoleClient();
+      // Ordered by sort_order so the slot number Cal sees matches the order
+      // the coach sees in the playbook UI. (Previously sorted by name, which
+      // misaligned "Play 4" between Cal and the coach.)
       const { data, error } = await admin
         .from("plays")
-        .select("id, name, formation_name, play_type, group_id, tags, is_archived")
+        .select("id, name, formation_name, play_type, group_id, sort_order, tags, is_archived")
         .eq("playbook_id", ctx.playbookId)
         .eq("is_archived", false)
         .is("deleted_at", null)
         .is("attached_to_play_id", null)
-        .order("name", { ascending: true });
+        .order("sort_order", { ascending: true });
 
       if (error) return { ok: false, error: error.message };
       if (!data || data.length === 0) return { ok: true, result: "No plays found in this playbook." };
 
-      let rows = data as Array<{
+      const allRows = data as Array<{
         id: string;
         name: string;
         formation_name: string | null;
         play_type: string | null;
         group_id: string | null;
+        sort_order: number;
         tags: string[] | null;
         is_archived: boolean;
       }>;
 
-      if (filter) {
-        rows = rows.filter((r) => r.name.toLowerCase().includes(filter));
-      }
+      // Tag every row with its 1-based slot in the FULL ordered list. We do
+      // this BEFORE filtering so the slot number reflects what the coach sees.
+      const slotById = new Map<string, number>();
+      allRows.forEach((r, i) => slotById.set(r.id, i + 1));
+
+      const rows = filter
+        ? allRows.filter((r) => r.name.toLowerCase().includes(filter))
+        : allRows;
 
       if (rows.length === 0) return { ok: true, result: `No plays match "${input.filter_name}".` };
 
       const lines = rows.map((r) => {
+        const slot = slotById.get(r.id);
+        const slotLabel = slot != null ? `Play ${slot}` : "Play ?";
         const meta = [
           r.play_type ?? "offense",
           r.formation_name ? `formation: ${r.formation_name}` : null,
           r.tags && r.tags.length > 0 ? `tags: ${r.tags.join(", ")}` : null,
         ].filter(Boolean).join(" | ");
-        return `• [${r.id}] ${r.name} — ${meta}`;
+        return `• ${slotLabel} — "${r.name}" [${r.id}] (${meta})`;
       });
-      return { ok: true, result: `${rows.length} play(s):\n${lines.join("\n")}` };
+      return {
+        ok: true,
+        result:
+          `${rows.length} play(s) in playbook display order. Slot numbers match what the coach sees in the UI — when calling other play tools (get_play, rename_play, etc.), you can pass the slot number ("4"), the exact name, or the UUID:\n${lines.join("\n")}`,
+      };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "list_plays failed" };
     }
@@ -127,13 +221,15 @@ const get_play: CoachAiTool = {
     description:
       "Get the full diagram for a specific play in the current playbook. " +
       "Returns a CoachDiagram JSON with players (positions, colors) and routes. " +
-      "Use list_plays first to find the play id.",
+      "Accepts UUID, slot number (\"4\" or \"Play 4\"), or exact play name.",
     input_schema: {
       type: "object",
       properties: {
         play_id: {
           type: "string",
-          description: "The UUID of the play to retrieve.",
+          description:
+            "UUID, slot number (\"4\"), or exact name of the play to retrieve. " +
+            "Slot numbers are 1-based and match the playbook display order.",
         },
       },
       required: ["play_id"],
@@ -142,8 +238,10 @@ const get_play: CoachAiTool = {
   },
   async handler(input, ctx) {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
-    const playId = typeof input.play_id === "string" ? input.play_id : "";
-    if (!playId) return { ok: false, error: "play_id is required." };
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
 
     try {
       const admin = createServiceRoleClient();
@@ -201,7 +299,7 @@ const update_play: CoachAiTool = {
       properties: {
         play_id: {
           type: "string",
-          description: "The UUID of the play to update.",
+          description: "UUID, slot number (\"4\"), or exact name of the play to update.",
         },
         diagram: {
           type: "object",
@@ -222,8 +320,10 @@ const update_play: CoachAiTool = {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
     if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
 
-    const playId = typeof input.play_id === "string" ? input.play_id : "";
-    if (!playId) return { ok: false, error: "play_id is required." };
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
 
     let diagram: CoachDiagram;
     try {
@@ -437,7 +537,10 @@ const rename_play: CoachAiTool = {
     input_schema: {
       type: "object",
       properties: {
-        play_id: { type: "string", description: "The UUID of the play to rename." },
+        play_id: {
+          type: "string",
+          description: "UUID, slot number (\"4\"), or exact name of the play to rename.",
+        },
         new_name: { type: "string", description: "The new play name. 1-80 chars, trimmed." },
       },
       required: ["play_id", "new_name"],
@@ -447,31 +550,20 @@ const rename_play: CoachAiTool = {
   async handler(input, ctx) {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
     if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
-    const playId = typeof input.play_id === "string" ? input.play_id : "";
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
     const newName = typeof input.new_name === "string" ? input.new_name.trim() : "";
-    if (!playId) return { ok: false, error: "play_id is required." };
     if (!newName) return { ok: false, error: "new_name can't be empty." };
     if (newName.length > 80) return { ok: false, error: "new_name must be 80 characters or fewer." };
 
-    try {
-      // Confirm the play belongs to the anchored playbook before delegating.
-      const admin = createServiceRoleClient();
-      const { data: play, error: readErr } = await admin
-        .from("plays")
-        .select("id, name, playbook_id")
-        .eq("id", playId)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (readErr) return { ok: false, error: readErr.message };
-      if (!play) return { ok: false, error: "Play not found." };
-      if (play.playbook_id !== ctx.playbookId) {
-        return { ok: false, error: "That play belongs to a different playbook." };
-      }
-      const oldName = play.name as string;
-      if (oldName === newName) {
-        return { ok: true, result: `Play is already named "${newName}" — no change.` };
-      }
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
+    const oldName = resolved.name;
+    if (oldName === newName) {
+      return { ok: true, result: `Play is already named "${newName}" — no change.` };
+    }
 
+    try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { renamePlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
       const res = await renamePlayAction(playId, newName);
@@ -507,7 +599,10 @@ const update_play_notes: CoachAiTool = {
     input_schema: {
       type: "object",
       properties: {
-        play_id: { type: "string", description: "The UUID of the play to update." },
+        play_id: {
+          type: "string",
+          description: "UUID, slot number (\"4\"), or exact name of the play to update.",
+        },
         notes: {
           type: "string",
           description:
@@ -526,10 +621,12 @@ const update_play_notes: CoachAiTool = {
   async handler(input, ctx) {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
     if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
-    const playId = typeof input.play_id === "string" ? input.play_id : "";
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
     const notes = typeof input.notes === "string" ? input.notes : "";
-    if (!playId) return { ok: false, error: "play_id is required." };
     if (notes.length > 4000) return { ok: false, error: "notes must be 4000 characters or fewer." };
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
 
     try {
       const admin = createServiceRoleClient();
