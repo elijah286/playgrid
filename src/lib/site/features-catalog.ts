@@ -222,7 +222,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "collaborator-build-your-own-banner",
     name: "Collaborator → owner nudge",
     description:
-      "Coaches who collaborate on others' playbooks but haven't built their own see a banner on /home inviting them to start a free playbook of their own. Frames creation positively — collaborating and owning are independent on the free tier.",
+      "Coaches who collaborate on others' playbooks but haven't built their own see a banner on /home and inside each shared playbook inviting them to start a free playbook of their own (deep-links to /home?create=1). Frames creation positively — collaborating and owning are independent on the free tier. The in-playbook banner is dismissible per-playbook.",
     category: "Roster & sharing",
     status: "ga",
     addedDate: "2026-04-28",

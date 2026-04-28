@@ -1083,6 +1083,13 @@ function PlaybookDetailClientInner({
           onGoTo={(t) => setTab(t)}
         />
 
+        {!headerProps.canManage && !isPreview && (
+          <BuildYourOwnBanner
+            playbookId={playbookId}
+            ownerName={headerProps.ownerDisplayName}
+          />
+        )}
+
         {/* Tabs: on mobile, scroll horizontally so all tabs stay reachable
             at narrow widths. Edge-to-edge via -mx-6 + px-6 so the first
             tab aligns with the banner content. */}
@@ -4264,6 +4271,59 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
       <div className="h-px flex-1 bg-border" />
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
       <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+function BuildYourOwnBanner({
+  playbookId,
+  ownerName,
+}: {
+  playbookId: string;
+  ownerName: string | null;
+}) {
+  const dismissKey = `pb-${playbookId}-build-own-dismissed`;
+  const [hidden, setHidden] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(dismissKey)) return;
+    } catch {
+      // localStorage unavailable — show the banner
+    }
+    setHidden(false);
+  }, [dismissKey]);
+  if (hidden) return null;
+  function dismiss() {
+    try {
+      window.localStorage.setItem(dismissKey, "1");
+    } catch {
+      // ignore
+    }
+    setHidden(true);
+  }
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2">
+      <p className="min-w-0 flex-1 text-sm text-foreground">
+        Like what {ownerName ?? "this coach"} built? You can build your own
+        playbook for free — keep collaborating here too.
+      </p>
+      <div className="flex items-center gap-1">
+        <Link
+          href="/home?create=1"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+        >
+          <Plus className="size-3.5" />
+          Build my playbook
+        </Link>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Dismiss"
+          className="rounded-md p-1 text-muted hover:bg-surface hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }

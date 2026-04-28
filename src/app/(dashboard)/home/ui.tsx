@@ -1050,6 +1050,15 @@ export function DashboardClient({
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      setShowCreate(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("create");
+      const qs = params.toString();
+      window.history.replaceState({}, "", qs ? `/home?${qs}` : "/home");
+    }
+  }, [searchParams]);
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
   const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
