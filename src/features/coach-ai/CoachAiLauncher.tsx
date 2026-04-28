@@ -307,17 +307,16 @@ export function CoachAiLauncher({
             }}
             aria-label="Try Coach Cal — your AI coaching partner"
             title="Try Coach Cal free for 7 days"
-            className="relative inline-flex size-9 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            style={{ background: GRADIENT }}
+            className="relative inline-flex h-9 items-center justify-center rounded-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {!pulseSeen && (
               <span
-                className="absolute inset-0 rounded-full animate-ping opacity-60"
+                className="absolute inset-0 rounded-full animate-ping opacity-40"
                 style={{ background: GRADIENT }}
                 aria-hidden="true"
               />
             )}
-            <CoachAiIcon className="size-5 relative" />
+            <CoachAiIcon className="relative h-9 w-auto" />
             <span className="sr-only">Try Coach Cal</span>
           </button>
 
@@ -362,12 +361,11 @@ export function CoachAiLauncher({
           aria-label="Open Coach Cal"
           title="Coach Cal"
           className={cn(
-            "inline-flex size-9 items-center justify-center rounded-full shadow-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            "inline-flex h-9 items-center justify-center rounded-md transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
             open && "hidden",
           )}
-          style={{ background: GRADIENT }}
         >
-          <CoachAiIcon className="size-5" />
+          <CoachAiIcon className="h-9 w-auto" />
           <span className="sr-only">Coach Cal</span>
         </button>
       )}
