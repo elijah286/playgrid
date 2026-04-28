@@ -601,7 +601,7 @@ export function PrintPlaybookClient({
 
   function exportPdf() {
     if (wristbandLocked) {
-      toast("Wristbands are a Coach feature. See /pricing to upgrade.", "error");
+      toast("Wristbands are a Team Team Coach feature. See /pricing to upgrade.", "error");
       return;
     }
     startTransition(async () => {
@@ -616,7 +616,7 @@ export function PrintPlaybookClient({
 
   function printNow() {
     if (wristbandLocked) {
-      toast("Wristbands are a Coach feature. See /pricing to upgrade.", "error");
+      toast("Wristbands are a Team Team Coach feature. See /pricing to upgrade.", "error");
       return;
     }
     startPrint(async () => {
@@ -1047,10 +1047,10 @@ export function PrintPlaybookClient({
                 <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3 rounded-xl bg-surface-raised/95 p-5 text-center shadow-lg ring-1 ring-border backdrop-blur">
                   <Lock className="size-6 text-muted" />
                   <p className="text-sm font-semibold text-foreground">
-                    Wristbands are a Coach feature
+                    Wristbands are a Team Coach feature
                   </p>
                   <p className="text-xs text-muted">
-                    Upgrade to Coach ($9/mo or $99/yr) to print wrist coaches. Playsheets stay
+                    Upgrade to Team Coach ($9/mo or $99/yr) to print wrist coaches. Playsheets stay
                     free.
                   </p>
                   <Link

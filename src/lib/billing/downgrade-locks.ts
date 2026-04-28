@@ -113,7 +113,7 @@ export async function assertNotLocked(input: {
     return {
       ok: false,
       error:
-        "This playbook is locked because your plan was downgraded. Upgrade to Coach to unlock it.",
+        "This playbook is locked because your plan was downgraded. Upgrade to Team Coach to unlock it.",
     };
   }
   if (input.playId && input.playbookId) {
@@ -122,7 +122,7 @@ export async function assertNotLocked(input: {
       return {
         ok: false,
         error:
-          "This play is locked because your plan was downgraded. Upgrade to Coach to unlock it.",
+          "This play is locked because your plan was downgraded. Upgrade to Team Coach to unlock it.",
       };
     }
   }

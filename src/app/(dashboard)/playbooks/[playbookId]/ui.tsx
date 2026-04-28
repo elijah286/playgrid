@@ -396,7 +396,7 @@ function PlaybookDetailClientInner({
     setUpgradeNotice({
       title: `Free tier is capped at ${freeMaxPlays} plays per playbook`,
       message:
-        "Upgrade to Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
+        "Upgrade to Team Coach ($9/mo or $99/yr) for unlimited plays per playbook.",
     });
   }
   // Per-playbook persisted view prefs. Server preloads the row in page.tsx
@@ -2293,8 +2293,8 @@ function RosterPanel({
   function openInvite() {
     if (!viewerIsCoach) {
       setUpgradeNotice({
-        title: "Sharing a playbook is a Coach feature",
-        message: "Upgrade to Coach ($9/mo or $99/yr) to invite players and share playbooks.",
+        title: "Sharing a playbook is a Team Coach feature",
+        message: "Upgrade to Team Coach ($9/mo or $99/yr) to invite players and share playbooks.",
       });
       return;
     }
@@ -2303,8 +2303,8 @@ function RosterPanel({
   function openAddPlayer() {
     if (!viewerIsCoach) {
       setUpgradeNotice({
-        title: "Managing the roster is a Coach feature",
-        message: "Upgrade to Coach ($9/mo or $99/yr) to add players to the roster.",
+        title: "Managing the roster is a Team Coach feature",
+        message: "Upgrade to Team Coach ($9/mo or $99/yr) to add players to the roster.",
       });
       return;
     }

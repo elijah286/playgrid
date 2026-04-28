@@ -138,7 +138,7 @@ function WhyDifferent({ freeMaxPlays }: { freeMaxPlays: number }) {
       icon: Wallet,
       color: BRAND_GREEN,
       title: "Free to start, affordable for the whole team",
-      body: `A simple ${freeMaxPlays}-play playbook is free, forever. Coach plans cover your full staff without per-seat surprises.`,
+      body: `A simple ${freeMaxPlays}-play playbook is free, forever. Team Coach plans cover your full staff without per-seat surprises.`,
     },
     {
       icon: Smartphone,
@@ -244,7 +244,7 @@ function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
                 </h2>
                 <p className="mt-3 max-w-xl text-muted">
                   One playbook with up to {freeMaxPlays} plays is free, forever.
-                  Call sheets print free. Upgrade to Coach when you want
+                  Call sheets print free. Upgrade to Team Coach when you want
                   wristbands, bigger playbooks, and staff collaboration.
                 </p>
               </div>

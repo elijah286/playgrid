@@ -141,8 +141,8 @@ export function PlaybookHeader({
   function openInvite() {
     if (!viewerIsCoach) {
       setUpgradeNotice({
-        title: "Sharing a playbook is a Coach feature",
-        message: "Upgrade to Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
+        title: "Sharing a playbook is a Team Coach feature",
+        message: "Upgrade to Team Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
       });
       return;
     }
@@ -152,8 +152,8 @@ export function PlaybookHeader({
   function openDuplicate() {
     if (!viewerIsCoach) {
       setUpgradeNotice({
-        title: "Duplicating playbooks is a Coach feature",
-        message: "Upgrade to Coach ($9/mo or $99/yr) to duplicate playbooks.",
+        title: "Duplicating playbooks is a Team Coach feature",
+        message: "Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.",
       });
       return;
     }
@@ -163,8 +163,8 @@ export function PlaybookHeader({
   function openSendCopy() {
     if (!viewerIsCoach) {
       setUpgradeNotice({
-        title: "Sending a copy is a Coach feature",
-        message: "Upgrade to Coach ($9/mo or $99/yr) to share copies of your playbook.",
+        title: "Sending a copy is a Team Coach feature",
+        message: "Upgrade to Team Coach ($9/mo or $99/yr) to share copies of your playbook.",
       });
       return;
     }
@@ -185,8 +185,8 @@ export function PlaybookHeader({
         setInviteOpen(true);
       } else {
         setUpgradeNotice({
-          title: "Sharing a playbook is a Coach feature",
-          message: "Upgrade to Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
+          title: "Sharing a playbook is a Team Coach feature",
+          message: "Upgrade to Team Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
         });
       }
       params.delete("share");

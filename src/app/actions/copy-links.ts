@@ -77,7 +77,7 @@ export async function createCopyLinkAction(input: {
     if (!tierAtLeast(entitlement, "coach")) {
       return {
         ok: false,
-        error: "Sending a copy is a Coach feature. Upgrade to unlock.",
+        error: "Sending a copy is a Team Team Coach feature. Upgrade to unlock.",
       };
     }
   }
@@ -154,7 +154,7 @@ export async function acceptCopyLinkAction(
     if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
       return {
         ok: false,
-        error: `Free accounts are limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Coach to claim this copy.`,
+        error: `Free accounts are limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Team Coach to claim this copy.`,
         needsUpgrade: true,
       };
     }

@@ -1109,7 +1109,7 @@ export function DashboardClient({
           if (!r.ok) {
             if (r.error && /Coach feature|Upgrade to unlock|Free tier/i.test(r.error)) {
               setUpgradeNotice({
-                title: "Upgrade to Coach",
+                title: "Upgrade to Team Coach",
                 message: r.error,
               });
             } else {
@@ -1150,7 +1150,7 @@ export function DashboardClient({
           setUpgradeNotice({
             title: "Free tier is limited to 1 playbook",
             message:
-              "Upgrade to Coach ($9/mo or $99/yr) to create unlimited playbooks. Your existing content stays where it is.",
+              "Upgrade to Team Coach ($9/mo or $99/yr) to create unlimited playbooks. Your existing content stays where it is.",
           });
         } else {
           toast(res.error, "error");

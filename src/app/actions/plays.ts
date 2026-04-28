@@ -40,7 +40,7 @@ async function assertPlayCap(
   if ((count ?? 0) >= limit) {
     return {
       ok: false,
-      error: `Free tier is capped at ${limit} plays per playbook. Upgrade to Coach for unlimited plays.`,
+      error: `Free tier is capped at ${limit} plays per playbook. Upgrade to Team Coach for unlimited plays.`,
     };
   }
   return { ok: true };

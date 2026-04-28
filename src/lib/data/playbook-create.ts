@@ -64,7 +64,7 @@ export async function createPlaybookForUser(
     if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
       return {
         ok: false,
-        error: `Free tier is limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Coach to create more.`,
+        error: `Free tier is limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Team Coach to create more.`,
       };
     }
   }

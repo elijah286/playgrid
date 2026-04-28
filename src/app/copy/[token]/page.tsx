@@ -193,7 +193,7 @@ function QuotaDisclosure({ quota }: { quota: QuotaState }) {
   if (quota.kind === "free_room") {
     return (
       <div className="rounded-md bg-surface-inset px-3 py-2 text-[11px] text-muted">
-        This will use your free playbook slot. Coach plan unlocks more —{" "}
+        This will use your free playbook slot. Team Coach plan unlocks more —{" "}
         <Link
           href="/pricing"
           className="font-medium text-foreground underline-offset-2 hover:underline"
@@ -210,7 +210,7 @@ function QuotaDisclosure({ quota }: { quota: QuotaState }) {
         Free accounts get 1 playbook, and you already have one.
       </p>
       <p className="mt-0.5 text-warning/90">
-        Upgrade to Coach to claim this copy alongside it, or delete your
+        Upgrade to Team Coach to claim this copy alongside it, or delete your
         existing playbook first.
       </p>
       <Link
