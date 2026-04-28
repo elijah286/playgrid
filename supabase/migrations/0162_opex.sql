@@ -67,16 +67,16 @@ create policy "opex_entries admin all"
 
 -- 4) Seed catalog (idempotent)
 insert into public.opex_services (slug, name, category, website, auto_fetch, sort_order) values
-  ('claude',                'Anthropic (Claude)',     'ai',           'https://console.anthropic.com',     true,  10),
-  ('openai',                'OpenAI',                 'ai',           'https://platform.openai.com',       true,  20),
-  ('supabase',              'Supabase',               'infra',        'https://supabase.com/dashboard',    false, 30),
-  ('railway',               'Railway',                'infra',        'https://railway.app',               false, 40),
-  ('cloudflare',            'Cloudflare',             'infra',        'https://dash.cloudflare.com',       false, 50),
-  ('google_maps',           'Google Maps API',        'infra',        'https://console.cloud.google.com',  false, 60),
-  ('stripe',                'Stripe (fees)',          'payments',     'https://dashboard.stripe.com',      false, 70),
-  ('resend',                'Resend',                 'email',        'https://resend.com',                false, 80),
-  ('zoho',                  'Zoho Mail',              'email',        'https://mail.zoho.com',             false, 90),
-  ('godaddy',               'GoDaddy',                'domain',       'https://godaddy.com',               false, 100),
-  ('apple_developer',       'Apple Developer',        'dev_accounts', 'https://developer.apple.com',       false, 110),
-  ('google_play_developer', 'Google Play Developer',  'dev_accounts', 'https://play.google.com/console',   false, 120)
+  ('claude',                'Anthropic (Claude)',     'ai',           'https://console.anthropic.com/settings/billing',                          true,  10),
+  ('openai',                'OpenAI',                 'ai',           'https://platform.openai.com/settings/organization/billing/overview',      true,  20),
+  ('supabase',              'Supabase',               'infra',        'https://supabase.com/dashboard/project/_/settings/billing',               false, 30),
+  ('railway',               'Railway',                'infra',        'https://railway.com/account/billing',                                     false, 40),
+  ('cloudflare',            'Cloudflare',             'infra',        'https://dash.cloudflare.com/?to=/:account/billing',                       false, 50),
+  ('google_maps',           'Google Maps API',        'infra',        'https://console.cloud.google.com/billing',                                false, 60),
+  ('stripe',                'Stripe (fees)',          'payments',     'https://dashboard.stripe.com/balance/overview',                           false, 70),
+  ('resend',                'Resend',                 'email',        'https://resend.com/settings/billing',                                     false, 80),
+  ('zoho',                  'Zoho Mail',              'email',        'https://mailadmin.zoho.com',                                              false, 90),
+  ('godaddy',               'GoDaddy',                'domain',       'https://account.godaddy.com/billing',                                     false, 100),
+  ('apple_developer',       'Apple Developer',        'dev_accounts', 'https://developer.apple.com/account',                                     false, 110),
+  ('google_play_developer', 'Google Play Developer',  'dev_accounts', 'https://play.google.com/console',                                         false, 120)
 on conflict (slug) do nothing;

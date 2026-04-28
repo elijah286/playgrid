@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button, Card, Input, Select, useToast } from "@/components/ui";
 import {
   deleteOpexServiceAction,
@@ -314,13 +314,25 @@ function ServiceRow({
   return (
     <tr className="border-b border-black/5">
       <td className="py-2 pr-3">
-        <div className="font-medium text-foreground">{svc.name}</div>
+        {svc.website ? (
+          <a
+            href={svc.website}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-foreground hover:underline"
+          >
+            {svc.name}
+            <ExternalLink className="ml-1 inline size-3 align-baseline text-muted" />
+          </a>
+        ) : (
+          <div className="font-medium text-foreground">{svc.name}</div>
+        )}
         {svc.website && (
           <a
             href={svc.website}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-muted hover:underline"
+            className="block text-xs text-muted hover:underline"
           >
             {svc.website.replace(/^https?:\/\//, "")}
           </a>
