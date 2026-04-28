@@ -261,14 +261,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
     ? await (async () => {
         try {
           const res = await getCalendarRsvpPendingCountAction(playbookId);
-          return res.ok
-            ? { pending: res.pending, upcomingTotal: res.upcomingTotal }
-            : { pending: 0, upcomingTotal: 0 };
+          return res.ok ? { upcomingTotal: res.upcomingTotal } : { upcomingTotal: 0 };
         } catch {
-          return { pending: 0, upcomingTotal: 0 };
+          return { upcomingTotal: 0 };
         }
       })()
-    : { pending: 0, upcomingTotal: 0 };
+    : { upcomingTotal: 0 };
 
   const publicExampleJsonLd = isPublicExample
     ? [
@@ -337,7 +335,6 @@ export default async function PlaybookDetailPage({ params }: Props) {
         gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}
-        initialCalendarRsvpPending={calendarCounts.pending}
         initialCalendarUpcomingTotal={calendarCounts.upcomingTotal}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{

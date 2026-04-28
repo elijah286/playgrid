@@ -270,7 +270,6 @@ function PlaybookDetailClientInner({
   canUseGameMode = false,
   gameResultsAvailable = false,
   teamCalendarAvailable = false,
-  initialCalendarRsvpPending = 0,
   initialCalendarUpcomingTotal = 0,
   versionHistoryAvailable = false,
 }: {
@@ -295,9 +294,7 @@ function PlaybookDetailClientInner({
   teamCalendarAvailable?: boolean;
   /** When true, expose the Trash + History coach-only UIs (version_history beta). */
   versionHistoryAvailable?: boolean;
-  /** Upcoming events the viewer hasn't RSVP'd to — drives the red badge. */
-  initialCalendarRsvpPending?: number;
-  /** Total upcoming events — gray badge fallback when nothing's pending. */
+  /** Total upcoming events — drives the neutral Calendar tab count. */
   initialCalendarUpcomingTotal?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
@@ -363,9 +360,6 @@ function PlaybookDetailClientInner({
       setTab("roster");
     }
   }, [searchParams]);
-  const [calendarPending, setCalendarPending] = useState(
-    initialCalendarRsvpPending,
-  );
   const [calendarUpcomingTotal, setCalendarUpcomingTotal] = useState(
     initialCalendarUpcomingTotal,
   );
@@ -1097,27 +1091,19 @@ function PlaybookDetailClientInner({
                   ? [{
                       key: "calendar" as const,
                       label: "Calendar",
-                      // Red badge with pending count when the viewer owes
-                      // an RSVP. Otherwise fall back to a plain count of
-                      // upcoming events so the badge is still informative.
-                      count:
-                        calendarPending > 0
-                          ? calendarPending
-                          : calendarUpcomingTotal > 0
-                            ? calendarUpcomingTotal
-                            : null,
-                      variant: (calendarPending > 0 ? "alert" : "default") as
-                        | "default"
-                        | "alert",
+                      // Neutral count of upcoming events. RSVP urgency lives
+                      // in the cross-playbook Inbox; per-playbook badges stay
+                      // informational so coaches don't see two red dots.
+                      count: calendarUpcomingTotal > 0 ? calendarUpcomingTotal : null,
+                      variant: "default" as const,
                     }]
                   : []),
                 ...(gameResultsAvailable
                   ? [{ key: "games" as const, label: "Results", count: null as number | null, variant: "default" as const }]
                   : []),
-              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null; variant: "default" | "alert" }>
+              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null; variant: "default" }>
             ).map((t) => {
               const active = tab === t.key;
-              const isAlert = t.variant === "alert";
               return (
                 <button
                   key={t.key}
@@ -1134,11 +1120,9 @@ function PlaybookDetailClientInner({
                   {t.count != null && (
                   <span
                     className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
-                      isAlert
-                        ? "bg-red-600 text-white"
-                        : active
-                          ? "bg-primary/10 text-primary"
-                          : "bg-surface-inset text-muted"
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "bg-surface-inset text-muted"
                     }`}
                   >
                     {t.count}
@@ -1447,7 +1431,6 @@ function PlaybookDetailClientInner({
           playbookId={playbookId}
           viewerIsCoach={headerProps.viewerIsCoach}
           onCountsChange={(counts) => {
-            setCalendarPending(counts.pending);
             setCalendarUpcomingTotal(counts.upcomingTotal);
           }}
         />

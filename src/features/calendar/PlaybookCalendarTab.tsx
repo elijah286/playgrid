@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
-  AlertCircle,
   CalendarPlus,
   ChevronDown,
   Clock,
@@ -41,14 +40,13 @@ export function PlaybookCalendarTab({
 }: {
   playbookId: string;
   viewerIsCoach: boolean;
-  onCountsChange?: (counts: { pending: number; upcomingTotal: number }) => void;
+  onCountsChange?: (counts: { upcomingTotal: number }) => void;
 }) {
   const { toast } = useToast();
   const [events, setEvents] = useState<CalendarEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("upcoming");
-  const [needsRsvpExpanded, setNeedsRsvpExpanded] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EventSheetInitial | null>(null);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
@@ -81,32 +79,21 @@ export function PlaybookCalendarTab({
   const partitioned = useMemo(() => {
     const upcoming: CalendarEventRow[] = [];
     const past: CalendarEventRow[] = [];
-    const needsRsvp: CalendarEventRow[] = [];
     for (const e of events) {
       const end = new Date(e.startsAt).getTime() + e.durationMinutes * 60_000;
       if (end >= now) {
         upcoming.push(e);
-        if (!e.myRsvp) needsRsvp.push(e);
       } else {
         past.push(e);
       }
     }
     past.reverse();
-    return { upcoming, past, needsRsvp };
+    return { upcoming, past };
   }, [events, now]);
 
-  // Notify the parent of both counts so the tab badge stays accurate as the
-  // user RSVPs from inside this view (red → gray once the queue is clear).
   useEffect(() => {
-    onCountsChange?.({
-      pending: partitioned.needsRsvp.length,
-      upcomingTotal: partitioned.upcoming.length,
-    });
-  }, [
-    partitioned.needsRsvp.length,
-    partitioned.upcoming.length,
-    onCountsChange,
-  ]);
+    onCountsChange?.({ upcomingTotal: partitioned.upcoming.length });
+  }, [partitioned.upcoming.length, onCountsChange]);
 
   const baseList =
     mode === "upcoming" ? partitioned.upcoming : partitioned.past;
@@ -156,16 +143,6 @@ export function PlaybookCalendarTab({
 
   return (
     <div className="space-y-4">
-      {!loading && !error && partitioned.needsRsvp.length > 0 && (
-        <NeedsRsvpCard
-          events={partitioned.needsRsvp}
-          expanded={needsRsvpExpanded}
-          onToggle={() => setNeedsRsvpExpanded((v) => !v)}
-          viewerIsCoach={viewerIsCoach}
-          onEdit={openEdit}
-          onChanged={load}
-        />
-      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-border">
@@ -309,60 +286,6 @@ export function PlaybookCalendarTab({
           viewerIsCoach={viewerIsCoach}
           onClose={() => setSubscribeOpen(false)}
         />
-      )}
-    </div>
-  );
-}
-
-function NeedsRsvpCard({
-  events,
-  expanded,
-  onToggle,
-  viewerIsCoach,
-  onEdit,
-  onChanged,
-}: {
-  events: CalendarEventRow[];
-  expanded: boolean;
-  onToggle: () => void;
-  viewerIsCoach: boolean;
-  onEdit: (event: CalendarEventRow) => void;
-  onChanged: () => void;
-}) {
-  return (
-    <div className="rounded-2xl bg-amber-50 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:ring-amber-900">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-      >
-        <div className="flex items-center gap-2">
-          <AlertCircle className="size-4 text-amber-700 dark:text-amber-300" />
-          <span className="text-sm font-semibold text-amber-950 dark:text-amber-100">
-            {events.length} event{events.length === 1 ? "" : "s"} need your RSVP
-          </span>
-        </div>
-        <ChevronDown
-          className={
-            "size-4 text-amber-700 transition-transform dark:text-amber-300 " +
-            (expanded ? "rotate-180" : "")
-          }
-        />
-      </button>
-      {expanded && (
-        <ul className="space-y-2 px-3 pb-3">
-          {events.map((e) => (
-            <EventCard
-              key={`needs:${e.id}:${e.occurrenceDate}`}
-              event={e}
-              viewerIsCoach={viewerIsCoach}
-              isPast={false}
-              onEdit={() => onEdit(e)}
-              onChanged={onChanged}
-            />
-          ))}
-        </ul>
       )}
     </div>
   );
