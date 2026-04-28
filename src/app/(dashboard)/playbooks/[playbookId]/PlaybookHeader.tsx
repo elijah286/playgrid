@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -949,16 +949,18 @@ function HeaderMenu({
           className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
         >
           {/* Mobile-only navigation */}
+          {/* Home intentionally omitted — the back arrow in the header
+              already navigates to the lobby/examples view. */}
           <div className="sm:hidden">
             <SectionLabel>Navigate</SectionLabel>
             <Link
-              href={homeHref}
+              href="/account"
               role="menuitem"
               onClick={() => setOpen(false)}
               className={menuItemCls}
             >
-              <Home className="size-4 shrink-0" />
-              <span>Home</span>
+              <CreditCard className="size-4 shrink-0" />
+              <span>Account</span>
             </Link>
             {onInvite && (
               <button
