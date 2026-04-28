@@ -48,7 +48,8 @@ export async function listPlaybookActivityAction(
   const { data: plays, error: pErr } = await supabase
     .from("plays")
     .select("id, name, current_version_id")
-    .eq("playbook_id", playbookId);
+    .eq("playbook_id", playbookId)
+    .is("attached_to_play_id", null);
   if (pErr) return { ok: false, error: pErr.message };
 
   const playIds = (plays ?? []).map((p) => p.id as string);

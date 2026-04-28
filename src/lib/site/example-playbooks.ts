@@ -41,6 +41,7 @@ export async function loadExamplePlaybooks(): Promise<ExampleBookTileData[]> {
     .select("id, playbook_id, current_version_id, updated_at")
     .in("playbook_id", ids)
     .eq("is_archived", false)
+    .is("attached_to_play_id", null)
     .eq("play_type", "offense")
     .order("updated_at", { ascending: false });
 

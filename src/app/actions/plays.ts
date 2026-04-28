@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { ensureDefaultWorkspace, getOrCreateInboxPlaybook } from "@/lib/data/workspace";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { createEmptyPlayDocument, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
+import { createEmptyPlayDocument, defaultDefendersForVariant, defaultPlayersForVariant, generateOtherVariantPlayers, normalizePlayDocument, sportProfileForVariant } from "@/domain/play/factory";
 import type { PlayDocument, Player, PlayType, Route, SpecialTeamsUnit, SportVariant, VsPlaySnapshot, Zone } from "@/domain/play/types";
 import { normalizePlaybookSettings, type PlaybookSettings } from "@/domain/playbook/settings";
 import {
@@ -35,7 +35,8 @@ async function assertPlayCap(
     .from("plays")
     .select("id", { count: "exact", head: true })
     .eq("playbook_id", playbookId)
-    .eq("is_archived", false);
+    .eq("is_archived", false)
+    .is("attached_to_play_id", null);
   if ((count ?? 0) >= limit) {
     return {
       ok: false,
@@ -77,6 +78,7 @@ export async function userHasCreatedPlayAction(): Promise<boolean> {
     .select("id", { count: "exact", head: true })
     .in("playbook_id", ownedIds)
     .eq("is_archived", false)
+    .is("attached_to_play_id", null)
     .limit(1);
   return (count ?? 0) > 0;
 }
@@ -133,6 +135,7 @@ export async function listPlaysAction(
     )
     .eq("playbook_id", playbookId)
     .is("deleted_at", null)
+    .is("attached_to_play_id", null)
     .order("updated_at", { ascending: false })
     .limit(PLAYS_LIST_CAP + 1);
 
@@ -345,7 +348,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden",
     )
     .eq("id", playId)
     .single();
@@ -1180,11 +1183,18 @@ export async function deletePlayAction(playId: string) {
 
   // Soft-delete: row stays for 30 days in trash, then a nightly job hard-deletes.
   // Restore is just clearing deleted_at, which the trash UI handles.
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from("plays")
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: now })
     .eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
+  // Cascade to hidden custom-opponent children attached to this play.
+  await supabase
+    .from("plays")
+    .update({ deleted_at: now })
+    .eq("attached_to_play_id", playId)
+    .is("deleted_at", null);
   return { ok: true as const };
 }
 
@@ -1265,6 +1275,7 @@ const getCachedPlaybookPreviews = unstable_cache(
       .select("current_version_id, updated_at")
       .eq("playbook_id", bookId)
       .eq("is_archived", false)
+      .is("attached_to_play_id", null)
       .eq("play_type", "offense")
       .order("updated_at", { ascending: false })
       .limit(PREVIEWS_PER_BOOK);
@@ -1484,6 +1495,7 @@ export async function listPlaybookPlaysForNavigationAction(playbookId: string) {
       )
       .eq("playbook_id", playbookId)
       .is("deleted_at", null)
+      .is("attached_to_play_id", null)
       .eq("is_archived", false),
   ]);
 
@@ -1839,6 +1851,354 @@ export async function setPlayGroupAction(playId: string, groupId: string | null)
 }
 
 /** Ensure workspace for actions that need team context */
+/* ---------- Custom opponent (hidden play attached to a parent) ---------- */
+
+/**
+ * Build a default opposing-side document for the parent play. Offense parents
+ * get a default defense; defense parents get a default offense. The resulting
+ * play is "hidden" (attached_to_play_id set) — never listed in pickers/RAG —
+ * and exists only to back the parent's `vs_play_snapshot`.
+ */
+async function loadParentForCustomOpponent(parentPlayId: string) {
+  const supabase = await createClient();
+  const { data: parent, error } = await supabase
+    .from("plays")
+    .select(
+      "id, playbook_id, group_id, play_type, vs_play_id, attached_to_play_id, playbooks!inner(sport_variant)",
+    )
+    .eq("id", parentPlayId)
+    .single();
+  if (error || !parent) return { ok: false as const, error: error?.message ?? "Parent not found" };
+  if (parent.attached_to_play_id) {
+    return { ok: false as const, error: "Cannot attach a custom opponent to a hidden play." };
+  }
+  const pb = Array.isArray(parent.playbooks) ? parent.playbooks[0] : parent.playbooks;
+  const variant = (pb?.sport_variant as SportVariant | null) ?? "flag_7v7";
+  return { ok: true as const, supabase, parent, variant };
+}
+
+export async function createCustomOpponentAction(parentPlayId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const ctx = await loadParentForCustomOpponent(parentPlayId);
+  if (!ctx.ok) return ctx;
+  const { supabase, parent, variant } = ctx;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const ownerId = await getPlaybookOwnerId(parent.playbook_id as string);
+  if (ownerId) {
+    const lock = await assertNotLocked({
+      ownerId,
+      playbookId: parent.playbook_id as string,
+      playId: parent.id as string,
+    });
+    if (!lock.ok) return { ok: false as const, error: lock.error };
+  }
+  const gameLock = await assertNoActiveGameSession(supabase, parent.playbook_id as string);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  // Replacing any prior custom opponent: soft-delete the existing hidden child.
+  await supabase
+    .from("plays")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("attached_to_play_id", parentPlayId)
+    .is("deleted_at", null);
+
+  const parentType = (parent.play_type as PlayType | null) ?? "offense";
+  const sportProfile = sportProfileForVariant(variant);
+  const players: Player[] =
+    parentType === "offense"
+      ? defaultDefendersForVariant(variant)
+      : defaultPlayersForVariant(variant);
+
+  const doc = createEmptyPlayDocument({
+    sportProfile,
+    layers: { players, routes: [], annotations: [] },
+  });
+  doc.metadata.coachName = "Custom opponent";
+  doc.metadata.playType = parentType === "offense" ? "defense" : "offense";
+
+  const { data: hidden, error: insErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: parent.playbook_id,
+      name: doc.metadata.coachName,
+      shorthand: "",
+      wristband_code: null,
+      formation_name: "",
+      concept: "",
+      tags: [],
+      tag: "",
+      group_id: null,
+      sort_order: 0,
+      formation_id: null,
+      formation_tag: null,
+      play_type: doc.metadata.playType,
+      special_teams_unit: null,
+      attached_to_play_id: parentPlayId,
+    })
+    .select("id")
+    .single();
+  if (insErr || !hidden) return { ok: false as const, error: insErr?.message ?? "Insert failed" };
+
+  const { data: ver, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: hidden.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "custom opponent created",
+      created_by: user.id,
+      kind: "create",
+    })
+    .select("id")
+    .single();
+  if (verErr || !ver) return { ok: false as const, error: verErr?.message ?? "Version insert failed" };
+
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", hidden.id);
+
+  // Update parent: link vs_play_id + snapshot, ensure visible.
+  const snapshot: VsPlaySnapshot = {
+    players: doc.layers.players,
+    routes: doc.layers.routes,
+    lineOfScrimmageY:
+      typeof doc.lineOfScrimmageY === "number" ? doc.lineOfScrimmageY : 0.4,
+    sourceVersionId: ver.id as string,
+    snapshotAt: new Date().toISOString(),
+    sourceName: doc.metadata.coachName,
+    sourceFormationName: "",
+  };
+  await supabase
+    .from("plays")
+    .update({
+      vs_play_id: hidden.id,
+      vs_play_snapshot: snapshot as unknown as Record<string, unknown>,
+      opponent_hidden: false,
+    })
+    .eq("id", parentPlayId);
+
+  return { ok: true as const, hiddenPlayId: hidden.id, players: doc.layers.players };
+}
+
+/**
+ * In-place mutate the hidden custom opponent's document (no version row), and
+ * refresh the parent's vs_play_snapshot. Skips versioning by design — these
+ * hidden plays would otherwise spam `play_versions` on every drag.
+ */
+export async function updateCustomOpponentPlayersAction(
+  parentPlayId: string,
+  players: Player[],
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: parent } = await supabase
+    .from("plays")
+    .select("id, playbook_id, vs_play_id")
+    .eq("id", parentPlayId)
+    .single();
+  if (!parent?.vs_play_id) return { ok: false as const, error: "No custom opponent attached." };
+
+  const gameLock = await assertNoActiveGameSession(supabase, parent.playbook_id as string);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  const { data: hidden } = await supabase
+    .from("plays")
+    .select("id, attached_to_play_id, current_version_id")
+    .eq("id", parent.vs_play_id)
+    .single();
+  if (!hidden || hidden.attached_to_play_id !== parentPlayId) {
+    return { ok: false as const, error: "Linked opponent is not a custom hidden play." };
+  }
+  if (!hidden.current_version_id) return { ok: false as const, error: "Hidden play has no version." };
+
+  const { data: ver } = await supabase
+    .from("play_versions")
+    .select("id, document")
+    .eq("id", hidden.current_version_id)
+    .single();
+  if (!ver) return { ok: false as const, error: "Version row missing." };
+
+  const doc = normalizePlayDocument(ver.document as PlayDocument);
+  const nextDoc: PlayDocument = {
+    ...doc,
+    layers: { ...doc.layers, players },
+  };
+
+  const { error: updVerErr } = await supabase
+    .from("play_versions")
+    .update({ document: nextDoc as unknown as Record<string, unknown> })
+    .eq("id", ver.id);
+  if (updVerErr) return { ok: false as const, error: updVerErr.message };
+
+  const snapshot: VsPlaySnapshot = {
+    players: nextDoc.layers.players,
+    routes: nextDoc.layers.routes,
+    lineOfScrimmageY:
+      typeof nextDoc.lineOfScrimmageY === "number" ? nextDoc.lineOfScrimmageY : 0.4,
+    sourceVersionId: ver.id as string,
+    snapshotAt: new Date().toISOString(),
+    sourceName: nextDoc.metadata.coachName ?? "Custom opponent",
+    sourceFormationName: "",
+  };
+  await supabase
+    .from("plays")
+    .update({ vs_play_snapshot: snapshot as unknown as Record<string, unknown> })
+    .eq("id", parentPlayId);
+
+  return { ok: true as const, snapshot };
+}
+
+export async function setOpponentHiddenAction(parentPlayId: string, hidden: boolean) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: parent } = await supabase
+    .from("plays")
+    .select("id, playbook_id")
+    .eq("id", parentPlayId)
+    .single();
+  if (!parent) return { ok: false as const, error: "Not found" };
+
+  const gameLock = await assertNoActiveGameSession(supabase, parent.playbook_id as string);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  const { error } = await supabase
+    .from("plays")
+    .update({ opponent_hidden: hidden })
+    .eq("id", parentPlayId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+/**
+ * Promote the hidden custom opponent into a standalone play in the same
+ * playbook. The original hidden play stays attached so the parent's snapshot
+ * doesn't change; the user is taken to the new standalone copy to edit.
+ */
+export async function promoteCustomOpponentAction(
+  parentPlayId: string,
+  name: string,
+  groupId?: string | null,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false as const, error: "Name is required." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: parent } = await supabase
+    .from("plays")
+    .select("id, playbook_id, vs_play_id")
+    .eq("id", parentPlayId)
+    .single();
+  if (!parent?.vs_play_id) return { ok: false as const, error: "No custom opponent to promote." };
+
+  const cap = await assertPlayCap(supabase, parent.playbook_id as string);
+  if (!cap.ok) return { ok: false as const, error: cap.error };
+
+  const gameLock = await assertNoActiveGameSession(supabase, parent.playbook_id as string);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  const { data: hidden } = await supabase
+    .from("plays")
+    .select("id, attached_to_play_id, current_version_id, play_type")
+    .eq("id", parent.vs_play_id)
+    .single();
+  if (!hidden || hidden.attached_to_play_id !== parentPlayId) {
+    return { ok: false as const, error: "Linked opponent is not a custom hidden play." };
+  }
+  if (!hidden.current_version_id) return { ok: false as const, error: "Hidden play has no version." };
+
+  const { data: ver } = await supabase
+    .from("play_versions")
+    .select("id, document")
+    .eq("id", hidden.current_version_id)
+    .single();
+  if (!ver) return { ok: false as const, error: "Version row missing." };
+
+  const doc = normalizePlayDocument(ver.document as PlayDocument);
+  doc.metadata.coachName = trimmed;
+
+  const { data: sortRow } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", parent.playbook_id)
+    .eq("is_archived", false)
+    .is("attached_to_play_id", null)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
+  const { data: codeRows } = await supabase
+    .from("plays")
+    .select("wristband_code")
+    .eq("playbook_id", parent.playbook_id);
+  const maxCode = (codeRows ?? [])
+    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
+    .filter((n): n is number => Number.isFinite(n))
+    .reduce((m, n) => Math.max(m, n), 0);
+  const wristband = String(maxCode + 1).padStart(2, "0");
+  doc.metadata.wristbandCode = wristband;
+
+  const { data: newPlay, error: insErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: parent.playbook_id,
+      name: trimmed,
+      shorthand: doc.metadata.shorthand ?? "",
+      wristband_code: wristband,
+      formation_name: doc.metadata.formation ?? "",
+      concept: "",
+      tags: doc.metadata.tags ?? [],
+      tag: (doc.metadata.tags ?? [])[0] ?? "",
+      display_abbrev: doc.metadata.sheetAbbrev,
+      group_id: groupId ?? null,
+      sort_order: nextSort,
+      formation_id: doc.metadata.formationId ?? null,
+      formation_tag: null,
+      play_type: (hidden.play_type as PlayType | null) ?? doc.metadata.playType ?? "defense",
+      special_teams_unit: null,
+    })
+    .select("id")
+    .single();
+  if (insErr || !newPlay) return { ok: false as const, error: insErr?.message ?? "Insert failed" };
+
+  const { data: newVer, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: newPlay.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "promoted from custom opponent",
+      created_by: user.id,
+      kind: "create",
+    })
+    .select("id")
+    .single();
+  if (verErr || !newVer) return { ok: false as const, error: verErr?.message ?? "Version insert failed" };
+
+  await supabase.from("plays").update({ current_version_id: newVer.id }).eq("id", newPlay.id);
+
+  return { ok: true as const, playId: newPlay.id };
+}
+
 export async function ensureUserWorkspaceAction() {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };

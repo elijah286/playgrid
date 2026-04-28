@@ -67,6 +67,7 @@ export async function copyPlaybookContents(
     )
     .eq("playbook_id", sourcePlaybookId)
     .eq("is_archived", false)
+    .is("attached_to_play_id", null)
     .order("sort_order", { ascending: true });
 
   // Clone every formation owned by the source playbook into the target.

@@ -42,6 +42,7 @@ export async function listTrashAction(playbookId: string): Promise<
       .select("id, name, deleted_at, group_id")
       .eq("playbook_id", playbookId)
       .not("deleted_at", "is", null)
+      .is("attached_to_play_id", null)
       .gte("deleted_at", cutoff)
       .order("deleted_at", { ascending: false }),
     supabase
@@ -117,6 +118,14 @@ export async function restorePlayAction(playId: string) {
     .update({ deleted_at: null })
     .eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
+
+  // Cascade-restore any hidden custom-opponent children that were soft-deleted
+  // alongside this parent.
+  await supabase
+    .from("plays")
+    .update({ deleted_at: null })
+    .eq("attached_to_play_id", playId)
+    .not("deleted_at", "is", null);
 
   if (row.playbook_id) {
     await recordPlaybookVersion({

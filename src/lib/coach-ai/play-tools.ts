@@ -84,6 +84,7 @@ const list_plays: CoachAiTool = {
         .eq("playbook_id", ctx.playbookId)
         .eq("is_archived", false)
         .is("deleted_at", null)
+        .is("attached_to_play_id", null)
         .order("name", { ascending: true });
 
       if (error) return { ok: false, error: error.message };
@@ -152,6 +153,7 @@ const get_play: CoachAiTool = {
         .eq("id", playId)
         .eq("playbook_id", ctx.playbookId)
         .is("deleted_at", null)
+        .is("attached_to_play_id", null)
         .maybeSingle();
 
       if (error) return { ok: false, error: error.message };
@@ -239,6 +241,7 @@ const update_play: CoachAiTool = {
         .eq("id", playId)
         .eq("playbook_id", ctx.playbookId)
         .is("deleted_at", null)
+        .is("attached_to_play_id", null)
         .maybeSingle();
 
       if (error) return { ok: false, error: error.message };

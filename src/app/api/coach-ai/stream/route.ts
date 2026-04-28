@@ -69,6 +69,7 @@ async function loadToolContext(
       .from("plays")
       .select("id, name, formation_name, playbook_id, current_version_id")
       .eq("id", playId)
+      .is("attached_to_play_id", null)
       .maybeSingle();
     if (playRow) {
       resolvedPlay = {
