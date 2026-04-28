@@ -168,18 +168,55 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
    * stacked into the offense, which looks broken. Hard-clamp at the boundary.
    */
   const MIN_DEFENDER_Y_YDS = 1;
+  /**
+   * Offense at the snap can never be downfield (y > 0 = past the LOS = illegal
+   * formation / illegal man downfield). If the model slips, clamp to 0.
+   */
+  const MAX_OFFENSE_Y_YDS = 0;
 
   // Default focus: offense (most common request). Defense diagrams must
   // explicitly opt in via diagram.focus = "D".
   const focus: "O" | "D" = diagram.focus === "D" ? "D" : "O";
 
+  // First pass: bucket players by team and clamp y. We resolve overlaps in a
+  // second pass once everyone's clamped position is known.
+  type StagedPlayer = { dp: CoachDiagramPlayer; team: "O" | "D"; x: number; y: number };
+  const staged: StagedPlayer[] = diagram.players.map((dp) => {
+    const team = guessTeam(dp);
+    const y = team === "D"
+      ? Math.max(MIN_DEFENDER_Y_YDS, dp.y)
+      : Math.min(MAX_OFFENSE_Y_YDS, dp.y);
+    return { dp, team, x: dp.x, y };
+  });
+
+  // Resolve overlaps within each team. If two players share (x, y) within
+  // ~1.2 yards, fan them apart along x. This prevents the "Y on top of RT"
+  // failure we keep seeing — token radius is large enough that ≤1yd offsets
+  // visually overlap.
+  const OVERLAP_THRESHOLD = 1.2;
+  const NUDGE_STEP = 1.6;
+  for (let i = 0; i < staged.length; i++) {
+    for (let j = 0; j < i; j++) {
+      const a = staged[i];
+      const b = staged[j];
+      if (a.team !== b.team) continue;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      if (Math.hypot(dx, dy) < OVERLAP_THRESHOLD) {
+        // Push `i` outward — direction = sign of (a.x - b.x), defaulting to +.
+        const dir = dx === 0 ? (a.x >= 0 ? 1 : -1) : Math.sign(dx);
+        a.x = b.x + dir * NUDGE_STEP;
+      }
+    }
+  }
+
   // Build Player objects
   const playerMap = new Map<string, Player>();
   let receiverIdx = 0;
-  for (const dp of diagram.players) {
-    const team = guessTeam(dp);
-    const clampedY = team === "D" ? Math.max(MIN_DEFENDER_Y_YDS, dp.y) : dp.y;
-    const norm = toNorm(dp.x, clampedY);
+  for (const sp of staged) {
+    const dp = sp.dp;
+    const team = sp.team;
+    const norm = toNorm(sp.x, sp.y);
     const role = guessRole(dp);
     const rawLabel = (dp.role ?? dp.id).toUpperCase();
     // Non-focus side gets a single uniform muted style — overrides everything
