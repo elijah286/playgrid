@@ -218,6 +218,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2025-10-01",
   },
+  {
+    id: "playbook-send-copy",
+    name: "Send a copy",
+    description:
+      "Coaches generate a copy link that gives the recipient their own standalone, editable copy of the playbook on claim. Distinct from collaboration invites — recipients become the owner of their copy and don't see the sender's future edits. Built for viral onboarding: peer coaches and prospects can claim a starter playbook and try the product before they pay.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
 
   // ── Coach AI ───────────────────────────────────────────────────
   {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, FlaskConical, Globe, History, Home, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -25,6 +25,7 @@ import {
   updatePlaybookSeasonAction,
   updatePlaybookSettingsAction,
 } from "@/app/actions/playbooks";
+import { createCopyLinkAction } from "@/app/actions/copy-links";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import {
@@ -134,6 +135,7 @@ export function PlaybookHeader({
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [sendCopyOpen, setSendCopyOpen] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
   function openInvite() {
@@ -157,6 +159,18 @@ export function PlaybookHeader({
     }
     setDuplicateOpen(true);
   }
+
+  function openSendCopy() {
+    if (!viewerIsCoach) {
+      setUpgradeNotice({
+        title: "Sending a copy is a Coach feature",
+        message: "Upgrade to Coach ($9/mo or $99/yr) to share copies of your playbook.",
+      });
+      return;
+    }
+    setSendCopyOpen(true);
+  }
+
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -438,6 +452,7 @@ export function PlaybookHeader({
                     : null
                 }
                 outstandingInviteCount={outstandingInviteCount ?? 0}
+                onSendCopy={canShare ? openSendCopy : null}
                 onDuplicate={
                   canManage ||
                   (canShare && (allowCoachDuplication ?? true)) ||
@@ -504,6 +519,14 @@ export function PlaybookHeader({
           allowCoachDuplication={allowCoachDuplication ?? true}
           onToggleCoachDuplication={canManage ? handleToggleCoachDup : null}
           onClose={() => setInviteOpen(false)}
+        />
+      )}
+
+      {sendCopyOpen && (
+        <SendCopyDialog
+          playbookId={playbookId}
+          playbookName={name}
+          onClose={() => setSendCopyOpen(false)}
         />
       )}
 
@@ -611,6 +634,169 @@ function DuplicatePlaybookDialog({
   );
 }
 
+function SendCopyDialog({
+  playbookId,
+  playbookName,
+  onClose,
+}: {
+  playbookId: string;
+  playbookName: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [creating, setCreating] = useState(false);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [tab, setTab] = useState<"link" | "qr">("link");
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCreating(true);
+      const res = await createCopyLinkAction({ playbookId, expiresInDays: 30 });
+      if (cancelled) return;
+      setCreating(false);
+      if (!res.ok) {
+        toast(`Could not create copy link: ${res.error}`, "error");
+        onClose();
+        return;
+      }
+      setLinkUrl(`${SITE_URL}/copy/${res.token}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // playbookId is stable for the dialog's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbookId]);
+
+  useEffect(() => {
+    if (!linkUrl) return;
+    let cancelled = false;
+    QRCode.toDataURL(linkUrl, {
+      width: 320,
+      margin: 1,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    })
+      .then((d) => {
+        if (!cancelled) setQrDataUrl(d);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [linkUrl]);
+
+  async function copy() {
+    if (!linkUrl) return;
+    if (isNativeApp()) {
+      const result = await nativeShare({
+        title: "Copy of my playbook",
+        text: `Here's a copy of ${playbookName} on XO Gridmaker — claim your own editable version.`,
+        url: linkUrl,
+        dialogTitle: "Send copy link",
+      });
+      if (result === "shared") return;
+      if (result === "copied") {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+        return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(linkUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast("Copy failed — select and copy the link manually.", "error");
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Send a copy</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Recipient gets their own editable copy. Yours stays untouched.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="rounded-lg border border-border bg-surface-inset px-3 py-2 text-xs text-muted">
+            Anyone with this link can claim a standalone copy of{" "}
+            <span className="font-semibold text-foreground">{playbookName}</span>{" "}
+            into their own account. They become the owner of their copy — your
+            future edits won&apos;t reach them, and theirs won&apos;t reach you.
+            Link expires in 30 days.
+          </div>
+
+          {linkUrl && (
+            <SegmentedControl
+              value={tab}
+              onChange={(v) => setTab(v as "link" | "qr")}
+              options={[
+                { value: "link", label: "Link" },
+                { value: "qr", label: "QR code" },
+              ]}
+            />
+          )}
+
+          {creating && (
+            <div className="rounded-lg border border-border bg-surface px-3 py-6 text-center text-xs text-muted">
+              Generating link…
+            </div>
+          )}
+
+          {linkUrl && tab === "link" && (
+            <div className="space-y-2">
+              <Input value={linkUrl} readOnly onFocus={(e) => e.currentTarget.select()} />
+              <Button onClick={copy} className="w-full" leftIcon={copied ? Check : Copy}>
+                {copied ? "Copied!" : isNativeApp() ? "Share link" : "Copy link"}
+              </Button>
+            </div>
+          )}
+
+          {linkUrl && tab === "qr" && (
+            <div className="flex flex-col items-center gap-2">
+              {qrDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- data URL
+                <img
+                  src={qrDataUrl}
+                  alt="QR code for copy link"
+                  className="size-56 rounded-md border border-border bg-white"
+                />
+              ) : (
+                <div className="flex size-56 items-center justify-center rounded-md border border-border bg-surface text-xs text-muted">
+                  Generating QR…
+                </div>
+              )}
+              <p className="text-center text-xs text-muted">
+                Scan to claim a copy on another device.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DupToggleRow({
   label,
   on,
@@ -666,6 +852,7 @@ function HeaderMenu({
   onInvite,
   onRevokeAllInvites,
   outstandingInviteCount,
+  onSendCopy,
   onCustomize,
   onDuplicate,
   historyHref,
@@ -686,6 +873,7 @@ function HeaderMenu({
   onInvite: (() => void) | null;
   onRevokeAllInvites: (() => void) | null;
   outstandingInviteCount: number;
+  onSendCopy: (() => void) | null;
   onCustomize: (() => void) | null;
   onDuplicate: (() => void) | null;
   historyHref: string | null;
@@ -815,6 +1003,26 @@ function HeaderMenu({
                 <span>Print playbook</span>
               </Link>
             </div>
+          )}
+
+          {/* Share */}
+          {onSendCopy && (
+            <>
+              <SectionDivider />
+              <SectionLabel>Share</SectionLabel>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onSendCopy();
+                }}
+                className={menuItemCls}
+              >
+                <Send className="size-4 shrink-0" />
+                <span>Send a copy</span>
+              </button>
+            </>
           )}
 
           {/* Manage */}
