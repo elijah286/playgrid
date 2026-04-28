@@ -9,7 +9,7 @@ export type SportVariant =
   | "other";
 
 /** Which side of the ball / phase of play this is. */
-export type PlayType = "offense" | "defense" | "special_teams";
+export type PlayType = "offense" | "defense" | "special_teams" | "practice_plan";
 
 /** Special-teams unit (only meaningful when playType === "special_teams"). */
 export type SpecialTeamsUnit =
@@ -269,12 +269,42 @@ export type VsPlaySnapshot = {
   sourceFormationName: string;
 };
 
+/**
+ * Practice-plan equipment props (cones, ladders, hurdles, etc.). Rendered as
+ * small, neutral SVG icons for drill illustration. Available only when
+ * metadata.playType === "practice_plan".
+ */
+export type EquipmentKind =
+  | "cone"
+  | "tall_cone"
+  | "agility_ladder"
+  | "hurdle"
+  | "agility_bag"
+  | "tackling_dummy"
+  | "hoop"
+  | "marker_disc";
+
+export type EquipmentItem = {
+  id: string;
+  kind: EquipmentKind;
+  /** Center point in normalized field coords (0..1). */
+  position: Point2;
+  /** Rotation in degrees clockwise. Defaults to 0. */
+  rotation?: number;
+  /** Scale multiplier (1 = default). Each kind has its own base size. */
+  scale?: number;
+  /** Optional label rendered below the icon. */
+  label?: string;
+};
+
 export type PlayLayers = {
   players: Player[];
   routes: Route[];
   annotations: Annotation[];
   /** Defensive coverage zones. Empty for offensive plays. */
   zones?: Zone[];
+  /** Practice-plan equipment props. Empty/undefined for offense/defense. */
+  equipment?: EquipmentItem[];
 };
 
 export type PlayTimeline = {

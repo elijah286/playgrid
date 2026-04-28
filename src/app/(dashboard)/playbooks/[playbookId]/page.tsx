@@ -254,6 +254,14 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
+  // Practice Plans tab is coach-only and behind a beta gate. Currently
+  // scoped "me" so only site admins see it while the UX is iterated.
+  const practicePlansAvailable =
+    !isExamplePreview &&
+    isBetaFeatureAvailable(betaFeatures.practice_plans, {
+      isAdmin,
+      isEntitled: isCoachInPlaybook,
+    });
   // Wrapped in try/catch because the count expands every event's recurrence
   // rule — a single bad rule (or a transient Supabase blip) shouldn't crash
   // the entire playbook page render.
@@ -335,6 +343,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         gameResultsAvailable={gameResultsAvailable}
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}
+        practicePlansAvailable={practicePlansAvailable}
         initialCalendarUpcomingTotal={calendarCounts.upcomingTotal}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         headerProps={{

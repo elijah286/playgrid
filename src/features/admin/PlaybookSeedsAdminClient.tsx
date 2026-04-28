@@ -15,6 +15,7 @@ const KIND_LABEL: Record<PlayType, string> = {
   offense: "Offense",
   defense: "Defense",
   special_teams: "Special teams",
+  practice_plan: "Practice plan",
 };
 
 export function PlaybookSeedsAdminClient({

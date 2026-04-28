@@ -94,6 +94,7 @@ import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
+import { PlaybookPracticePlansTab } from "@/features/practice-plans/PlaybookPracticePlansTab";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
@@ -278,6 +279,7 @@ function PlaybookDetailClientInner({
   teamCalendarAvailable = false,
   initialCalendarUpcomingTotal = 0,
   versionHistoryAvailable = false,
+  practicePlansAvailable = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -300,6 +302,8 @@ function PlaybookDetailClientInner({
   teamCalendarAvailable?: boolean;
   /** When true, expose the Trash + History coach-only UIs (version_history beta). */
   versionHistoryAvailable?: boolean;
+  /** When true, show the "Practice Plans" tab (practice_plans beta). */
+  practicePlansAvailable?: boolean;
   /** Total upcoming events — drives the neutral Calendar tab count. */
   initialCalendarUpcomingTotal?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
@@ -352,7 +356,7 @@ function PlaybookDetailClientInner({
     return "plays";
   })();
   const [tab, setTab] = useState<
-    "plays" | "formations" | "roster" | "games" | "calendar"
+    "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans"
   >(initialTab);
 
   // Re-sync tab when ?tab= changes mid-mount — e.g. clicking an "Open calendar"
@@ -360,7 +364,7 @@ function PlaybookDetailClientInner({
   // Without this, useState's initial value sticks and the tab doesn't move.
   useEffect(() => {
     const t = searchParams?.get("tab");
-    if (t === "plays" || t === "formations" || t === "roster" || t === "games" || t === "calendar") {
+    if (t === "plays" || t === "formations" || t === "roster" || t === "games" || t === "calendar" || t === "practice_plans") {
       setTab(t);
     } else if (t === "staff") {
       setTab("roster");
@@ -537,11 +541,13 @@ function PlaybookDetailClientInner({
       offense: 0,
       defense: 1,
       special_teams: 2,
+      practice_plan: 3,
     };
     const typeLabel: Record<PlayType, string> = {
       offense: "Offense",
       defense: "Defense",
       special_teams: "Special Teams",
+      practice_plan: "Practice Plan",
     };
     for (const p of filtered) {
       if (groupBy === "type") {
@@ -1107,7 +1113,10 @@ function PlaybookDetailClientInner({
                 ...(gameResultsAvailable
                   ? [{ key: "games" as const, label: "Results", count: null as number | null, variant: "default" as const }]
                   : []),
-              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar"; label: string; count: number | null; variant: "default" }>
+                ...(practicePlansAvailable
+                  ? [{ key: "practice_plans" as const, label: "Practice Plans", count: null as number | null, variant: "default" as const }]
+                  : []),
+              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans"; label: string; count: number | null; variant: "default" }>
             ).map((t) => {
               const active = tab === t.key;
               return (
@@ -1440,6 +1449,10 @@ function PlaybookDetailClientInner({
             setCalendarUpcomingTotal(counts.upcomingTotal);
           }}
         />
+      )}
+
+      {tab === "practice_plans" && practicePlansAvailable && (
+        <PlaybookPracticePlansTab playbookId={playbookId} />
       )}
 
       {tab === "plays" && (
@@ -3976,6 +3989,7 @@ function PlayTypeBadge({ type }: { type: PlayType }) {
     offense: { label: "OFF", className: "bg-primary/10 text-primary" },
     defense: { label: "DEF", className: "bg-red-500/10 text-red-700 dark:text-red-400" },
     special_teams: { label: "ST", className: "bg-sky-500/10 text-sky-700 dark:text-sky-400" },
+    practice_plan: { label: "DRILL", className: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
   };
   const { label, className } = cfg[type];
   return (

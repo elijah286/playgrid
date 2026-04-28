@@ -85,15 +85,20 @@ export function OpponentOverlayCard({
       ? ["defense"]
       : playType === "defense"
         ? ["offense"]
-        : ["offense", "defense", "special_teams"];
+        : playType === "special_teams"
+          ? ["offense", "defense", "special_teams"]
+          : []; // practice_plan: no opponent overlay applicable
 
   const eligibleFormations = useMemo(
     () =>
-      allFormations.filter(
-        (f) =>
+      allFormations.filter((f) => {
+        const k = f.kind ?? "offense";
+        if (k === "practice_plan") return false;
+        return (
           f.playbookId === currentPlaybookId &&
-          wantKinds.includes(f.kind ?? "offense"),
-      ),
+          wantKinds.includes(k as "offense" | "defense" | "special_teams")
+        );
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allFormations, playType, currentPlaybookId],
   );
@@ -504,10 +509,12 @@ function RowButton({
   );
 }
 
-function labelForKind(kind: "offense" | "defense" | "special_teams") {
+function labelForKind(kind: "offense" | "defense" | "special_teams" | "practice_plan") {
   return kind === "offense"
     ? "Offense"
     : kind === "defense"
       ? "Defense"
-      : "Special teams";
+      : kind === "special_teams"
+        ? "Special teams"
+        : "Practice plan";
 }

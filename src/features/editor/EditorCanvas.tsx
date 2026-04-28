@@ -86,6 +86,7 @@ function snapOutsidePlayer(p: Point2, carrier: Point2): Point2 {
 // thumbnail, Coach AI chat) renders identical chrome. Don't add color tables
 // here — extend src/domain/play/fieldTheme.ts and they propagate automatically.
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
+import { EquipmentIconShape } from "@/features/practice-plans/EquipmentIcon";
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -1713,6 +1714,37 @@ function EditorCanvasImpl({
             </g>
           );
         })}
+
+      {/* Practice-plan equipment props (cones, ladders, hurdles, etc.).
+          Rendered as small static icons. Non-interactive in cycle 1 — drag/edit
+          UI lands when the practice-plan inline canvas editor is wired. */}
+      {(doc.layers.equipment ?? []).map((item) => {
+        const cx = item.position.x * fieldAspect;
+        const cy = 1 - item.position.y;
+        const scale = item.scale ?? 1;
+        const rot = item.rotation ?? 0;
+        return (
+          <g
+            key={item.id}
+            transform={`translate(${cx} ${cy}) rotate(${rot}) scale(${scale})`}
+            pointerEvents="none"
+          >
+            <EquipmentIconShape kind={item.kind} />
+            {item.label && (
+              <text
+                x={0}
+                y={0.030}
+                textAnchor="middle"
+                fontSize="0.014"
+                fill="#1f2937"
+                fontWeight="600"
+              >
+                {item.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
 
       {/* Opponent play ghost overlay (gray players only, no interaction). */}
       {opponentPlayers && opponentPlayers.length > 0 && (

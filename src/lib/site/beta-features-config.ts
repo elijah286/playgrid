@@ -11,7 +11,8 @@ export type BetaFeatureKey =
   | "marketing_content"
   | "team_calendar"
   | "play_comments"
-  | "version_history";
+  | "version_history"
+  | "practice_plans";
 export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
@@ -24,6 +25,7 @@ const DEFAULTS: BetaFeatures = {
   team_calendar: "off",
   play_comments: "off",
   version_history: "off",
+  practice_plans: "off",
 };
 
 function normalize(input: unknown): BetaFeatures {
