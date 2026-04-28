@@ -274,7 +274,7 @@ function DiagramCanvas({ doc, animPositions }: {
   const animatingIds = new Set(animPositions?.keys() ?? []);
 
   return (
-    <div className="aspect-[16/10] w-full overflow-hidden rounded-xl border border-border">
+    <div className="aspect-[16/10] w-full max-w-[640px] overflow-hidden rounded-xl border border-border">
       <svg
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         width="100%" height="100%"
