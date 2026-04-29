@@ -27,16 +27,125 @@ import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 
+// SEO: target "youth football playbook app", "flag football playbook",
+// "football play designer", "football call sheet app". Title is the
+// strongest ranking signal — keep it under ~60 chars; description
+// shows in SERP snippet and aim for 150–160 chars.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.xogridmaker.com";
+const PAGE_URL = `${SITE_URL}/learn-more`;
+const OG_IMAGE = `${SITE_URL}/marketing/screens/hero-poster.png`;
+
+const PAGE_TITLE =
+  "Youth Football Playbook App — Design Plays, Print Wristbands";
+const PAGE_DESCRIPTION =
+  "Design plays on phone, tablet, or desktop, run a free Game Mode call sheet from the sideline, and print wristbands. Built by a coach for youth football, flag football, and 7v7.";
+
 export const metadata: Metadata = {
-  title: "Learn more · xogridmaker",
-  description:
-    "The modern football playbook: design plays, run game mode, and carry your call sheet to the field.",
+  metadataBase: new URL(SITE_URL),
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
+  keywords: [
+    "youth football playbook",
+    "football playbook app",
+    "flag football playbook",
+    "7v7 playbook",
+    "football play designer",
+    "football call sheet",
+    "football wristband",
+    "youth football coach app",
+    "football game mode",
+    "play calling app",
+  ],
+  alternates: {
+    canonical: PAGE_URL,
+  },
+  openGraph: {
+    type: "website",
+    url: PAGE_URL,
+    siteName: "xogridmaker",
+    title: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    images: [
+      {
+        url: OG_IMAGE,
+        width: 1440,
+        height: 900,
+        alt: "xogridmaker editor with a flag-football play being drawn",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    images: [OG_IMAGE],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 const BRAND_BLUE = "#1769FF";
 const BRAND_GREEN = "#95CC1F";
 const BRAND_NAVY = "#0F1E3D";
 const BRAND_ORANGE = "#F26522";
+
+// JSON-LD structured data — gives Google a clean "this is a software
+// app" entity for the page so it can render rich-result snippets and
+// associate the URL with the brand. Schema.org SoftwareApplication is
+// the right fit for a SaaS tool; we also emit BreadcrumbList so SERP
+// breadcrumbs show "xogridmaker › Tour".
+const STRUCTURED_DATA = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "xogridmaker",
+    alternateName: "xogridmaker — youth football playbook",
+    applicationCategory: "SportsApplication",
+    operatingSystem: "Web (any modern browser), iOS, Android",
+    url: SITE_URL,
+    description: PAGE_DESCRIPTION,
+    image: OG_IMAGE,
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "xogridmaker",
+      url: SITE_URL,
+      logo: `${SITE_URL}/brand/xogridmaker_icon.svg`,
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "xogridmaker",
+        item: SITE_URL,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Tour",
+        item: PAGE_URL,
+      },
+    ],
+  },
+];
 
 export default async function LearnMorePage() {
   const [examples, freeMaxPlays] = await Promise.all([
@@ -46,6 +155,11 @@ export default async function LearnMorePage() {
 
   return (
     <div className="bg-surface text-foreground">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger -- JSON.stringify is safe here
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+      />
       <Hero />
       <PrintoutsAndWristbands />
       <WhyDifferent freeMaxPlays={freeMaxPlays} />

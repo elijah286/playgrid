@@ -9,6 +9,9 @@ export function SiteFooter() {
           © {year} xogridmaker · Cedar Park, TX
         </p>
         <nav className="flex items-center gap-5">
+          <Link href="/learn-more" className="hover:text-foreground transition-colors">
+            Tour
+          </Link>
           <Link href="/about" className="hover:text-foreground transition-colors">
             About
           </Link>

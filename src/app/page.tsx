@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getBetaFeatures } from "@/lib/site/beta-features-config";
 
 const BRAND_BLUE = "#1769FF";
 const BRAND_GREEN = "#95CC1F";
@@ -19,8 +18,8 @@ export default async function HomePage() {
     if (user) redirect("/home");
   }
 
-  const betaFeatures = await getBetaFeatures();
-  const showLearnMore = betaFeatures.marketing_content === "all";
+  // The /learn-more tour is now public — link rendered unconditionally
+  // so search crawlers and unauthenticated visitors can always reach it.
 
   return (
     <div className="relative overflow-hidden">
@@ -63,18 +62,16 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          {showLearnMore && (
-            <div className="mt-4">
-              <Link
-                href="/learn-more"
-                className="inline-flex items-center gap-1 text-base font-semibold hover:underline"
-                style={{ color: BRAND_BLUE }}
-              >
-                Learn More Here
-                <ArrowRight className="size-4" />
-              </Link>
-            </div>
-          )}
+          <div className="mt-4">
+            <Link
+              href="/learn-more"
+              className="inline-flex items-center gap-1 text-base font-semibold hover:underline"
+              style={{ color: BRAND_BLUE }}
+            >
+              Take the tour
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
         </div>
 
         {/* Right: the logo as a hero visual — smaller than viewport so it sits

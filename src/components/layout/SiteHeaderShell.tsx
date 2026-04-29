@@ -63,6 +63,12 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           </div>
         ) : (
           <div className="flex items-center gap-4">
+            <Link
+              href="/learn-more"
+              className="text-sm text-muted hover:text-foreground transition-colors"
+            >
+              Tour
+            </Link>
             {showPricingLink && (
               <Link
                 href="/pricing"
