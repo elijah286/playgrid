@@ -357,23 +357,28 @@ export function CoachAiLauncher({
             }}
             aria-label="Try Coach Cal — your AI coaching partner"
             title="Try Coach Cal free for 7 days"
-            className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="relative inline-flex size-9 items-center justify-center rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             style={{ background: GRADIENT }}
           >
             {!pulseSeen && (
               <span
-                className="absolute inset-0 rounded-xl animate-ping opacity-40"
+                className="absolute inset-0 rounded-lg animate-ping opacity-40"
                 style={{ background: GRADIENT }}
                 aria-hidden="true"
               />
             )}
-            <CoachAiIcon className="relative h-6 w-auto" />
-            <span
-              aria-hidden="true"
-              className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
-            >
-              <Sparkles className="size-2.5" />
-            </span>
+            <CoachAiIcon className="relative size-6" />
+            {/* The "+1" sparkle is a true notification cue — only show it
+                until the user has acknowledged the promo, then let the
+                button settle into the cluster like a normal action. */}
+            {!pulseSeen && (
+              <span
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
+              >
+                <Sparkles className="size-2.5" />
+              </span>
+            )}
             <span className="sr-only">Try Coach Cal AI</span>
           </button>
 
@@ -413,18 +418,16 @@ export function CoachAiLauncher({
           aria-label="Open Coach Cal"
           title="Coach Cal — your AI coaching partner"
           className={cn(
-            "relative inline-flex h-9 w-9 items-center justify-center rounded-xl transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            "relative inline-flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
             open && "hidden",
           )}
-          style={{ background: GRADIENT }}
         >
-          <CoachAiIcon className="h-6 w-auto" />
-          <span
-            aria-hidden="true"
-            className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
-          >
-            <Sparkles className="size-2.5" />
-          </span>
+          {/* `bare` drops the colorful gradient tile — inside a header
+              cluster, the sparkle on a faint primary tint reads as
+              "AI button" without overpowering the rest of the row.
+              The full brand-gradient mark stays for the floating
+              non-subscriber promo state above. */}
+          <CoachAiIcon bare className="size-5" />
           <span className="sr-only">Coach Cal AI</span>
         </button>
       )}

@@ -56,6 +56,10 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
               <CoachAiLauncher isAdmin={isAdmin} entitled={coachAiAvailable ?? false} />
             )}
             <ShareButton userId={user.id} />
+            {/* Thin divider separates "things I can do" (Coach Cal,
+                Share) from "me" (avatar) — same trick Linear and
+                Stripe Dashboard use to group action vs. account. */}
+            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
             <UserMenu
               email={user.email ?? ""}
               displayName={displayName}

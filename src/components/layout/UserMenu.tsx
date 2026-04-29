@@ -54,7 +54,12 @@ export function UserMenu({ email, displayName, avatarUrl, isAdmin, compact }: Pr
         aria-label="Account menu"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "relative inline-flex items-center justify-center overflow-hidden rounded-full bg-primary font-bold text-white shadow-sm transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          // Avatar stays circular by UX convention but matches the
+          // rest of the header cluster on size, ring, and hover
+          // language: hairline ring instead of solid bg edge, quiet
+          // hover (no scale) so it doesn't feel out of step with the
+          // adjacent action buttons.
+          "relative inline-flex items-center justify-center overflow-hidden rounded-full bg-primary font-bold text-white shadow-sm ring-1 ring-border transition-colors hover:ring-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           size,
         )}
       >
