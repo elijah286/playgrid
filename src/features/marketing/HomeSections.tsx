@@ -32,27 +32,31 @@ export function EveryScreen() {
   return (
     <section id="tour" className="relative scroll-mt-24 py-20 md:py-24">
       <div className="mx-auto max-w-6xl px-6">
-        <Reveal>
-          <div className="max-w-3xl">
-            <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
-            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Make plays on your desktop{" "}
-              <span className="text-muted">or on the field.</span>
-            </h2>
-          </div>
-        </Reveal>
-
-        <div className="mt-12 grid gap-10 md:grid-cols-[1fr_1.2fr] md:items-center md:gap-16">
+        <div className="grid gap-10 md:grid-cols-[1.15fr_1fr] md:items-end md:gap-10 lg:gap-14">
+          {/* Left column: eyebrow + heading + paragraph. Sits in the
+              upper-left, naturally clearing the iPad below it and stopping
+              before the (taller) iPhone on the right. */}
           <Reveal>
-            <p className="max-w-lg text-lg text-muted">
-              An easy, fun play editor designed for desktop, tablet, and
-              mobile. Draw it up at the kitchen table, review it on the
-              sideline, pull up the call on your phone between series.
-            </p>
+            <div>
+              <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
+              <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-[2.75rem] md:leading-[1.05] lg:text-5xl">
+                Make plays on your desktop
+                <br />
+                <span className="text-muted">or on the field.</span>
+              </h2>
+              <p className="mt-5 max-w-md text-lg text-muted">
+                An easy, fun play editor designed for desktop, tablet, and
+                mobile. Draw it up at the kitchen table, review it on the
+                sideline, pull up the call on your phone between series.
+              </p>
+            </div>
           </Reveal>
 
+          {/* Right column: tablet + phone, bottom-aligned. The phone is
+              taller, so its top extends up alongside the heading; the
+              tablet sits below, clearing space for the heading above it. */}
           <Reveal delay={100}>
-            <div className="relative flex items-end justify-center gap-6 md:justify-end">
+            <div className="relative flex items-end justify-center gap-4 md:justify-end">
               <TabletFrame>
                 <Image
                   src="/marketing/screens/tablet-playbook.png"
