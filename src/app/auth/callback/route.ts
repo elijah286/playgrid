@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { snapshotFirstTouchToProfile } from "@/lib/attribution/snapshot";
 
 // OAuth + PKCE callback. Supabase redirects here with `?code=...` after the
 // provider (Apple, Google, etc.) authenticates the user. We exchange the code
@@ -16,11 +17,15 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     return NextResponse.redirect(
       `${origin}/login?error=${encodeURIComponent(error.message)}`,
     );
+  }
+
+  if (data?.user?.id) {
+    await snapshotFirstTouchToProfile(data.user.id, data.user.created_at);
   }
 
   return NextResponse.redirect(`${origin}${safeNext}`);
