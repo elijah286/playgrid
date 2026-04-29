@@ -6,7 +6,7 @@ import { Check, ChevronDown, LayoutGrid, List, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button, Input, SegmentedControl } from "@/components/ui";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
-import { compareNavPlays, formatPlayNavSubtitle } from "@/domain/print/playbookPrint";
+import { formatPlayNavSubtitle } from "@/domain/print/playbookPrint";
 import { PlayThumbnail } from "./PlayThumbnail";
 
 type Section = {
@@ -16,14 +16,18 @@ type Section = {
 };
 
 function buildSections(nav: PlaybookPlayNavItem[], groups: PlaybookGroupRow[]): Section[] {
-  const sorted = [...nav].sort(compareNavPlays);
+  // Preserve the parent's nav order — that order IS the play-number sequence
+  // (it's what the editor's playNumber badge counts against). Re-sorting
+  // here let compareNavPlays' name fallback scramble plays that share a
+  // sort_order, so users saw the dropdown in alphabetical order instead of
+  // play-number order. Just split by group while keeping relative position.
   const sections: Section[] = [];
-  const ung = sorted.filter((p) => p.group_id == null);
+  const ung = nav.filter((p) => p.group_id == null);
   if (ung.length > 0) sections.push({ title: null, groupId: null, plays: ung });
 
   const orderedGroups = [...groups].sort((a, b) => a.sort_order - b.sort_order);
   for (const g of orderedGroups) {
-    const gp = sorted.filter((p) => p.group_id === g.id);
+    const gp = nav.filter((p) => p.group_id === g.id);
     if (gp.length > 0) sections.push({ title: g.name, groupId: g.id, plays: gp });
   }
   return sections;
@@ -186,6 +190,15 @@ export function PlaybookPlaySearchMenu({
     [filteredPlays, groups],
   );
 
+  // Map each play to its 1-based play number (its position in the unfiltered
+  // nav). Stays stable when the user types a search query so the badge keeps
+  // showing the play's "true" number, not a rank within filtered results.
+  const playNumberById = useMemo(() => {
+    const m = new Map<string, number>();
+    plays.forEach((p, i) => m.set(p.id, i + 1));
+    return m;
+  }, [plays]);
+
   const allFilteredSelected =
     printMode &&
     printSelectedIds &&
@@ -315,6 +328,7 @@ export function PlaybookPlaySearchMenu({
                       <PlayTile
                         key={p.id}
                         p={p}
+                        playNumber={playNumberById.get(p.id) ?? null}
                         currentPlayId={currentPlayId}
                         printMode={printMode}
                         printSelectedIds={printSelectedIds}
@@ -331,6 +345,7 @@ export function PlaybookPlaySearchMenu({
                       <PlayRow
                         key={p.id}
                         p={p}
+                        playNumber={playNumberById.get(p.id) ?? null}
                         currentPlayId={currentPlayId}
                         printMode={printMode}
                         printSelectedIds={printSelectedIds}
@@ -356,6 +371,7 @@ export function PlaybookPlaySearchMenu({
 
 function PlayTile({
   p,
+  playNumber,
   currentPlayId,
   printMode,
   printSelectedIds,
@@ -365,6 +381,7 @@ function PlayTile({
   activeRef,
 }: {
   p: PlaybookPlayNavItem;
+  playNumber: number | null;
   currentPlayId: string;
   printMode?: boolean;
   printSelectedIds?: Set<string>;
@@ -397,13 +414,20 @@ function PlayTile({
           </span>
         )}
         {active && (
-          <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+          <span className="absolute right-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
             Current
           </span>
         )}
       </div>
       <div className="min-w-0 px-1 pb-1 pt-1.5">
-        <span className="block truncate text-xs font-semibold text-foreground">{p.name}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-foreground">
+          {playNumber != null && (
+            <span className="shrink-0 rounded bg-surface-inset px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+              {String(playNumber).padStart(2, "0")}
+            </span>
+          )}
+          <span className="truncate">{p.name}</span>
+        </span>
         <span className="block truncate text-[10px] text-muted">{formatPlayNavSubtitle(p)}</span>
       </div>
     </>
@@ -457,6 +481,7 @@ function PlayTile({
 
 function PlayRow({
   p,
+  playNumber,
   currentPlayId,
   printMode,
   printSelectedIds,
@@ -466,6 +491,7 @@ function PlayRow({
   activeRef,
 }: {
   p: PlaybookPlayNavItem;
+  playNumber: number | null;
   currentPlayId: string;
   printMode?: boolean;
   printSelectedIds?: Set<string>;
@@ -487,6 +513,11 @@ function PlayRow({
           )}
         >
           {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+        </span>
+      )}
+      {playNumber != null && (
+        <span className="shrink-0 rounded bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-muted">
+          {String(playNumber).padStart(2, "0")}
         </span>
       )}
       <div className="min-w-0 flex-1">
