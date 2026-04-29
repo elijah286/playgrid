@@ -351,151 +351,231 @@ async function runScene(page, scene, opts = {}) {
 
   const newPlayId = page.url().match(/plays\/([0-9a-f-]+)\/edit/)?.[1];
 
-  // ---- Draw routes that mirror Play 1's routes ----
-  // For each route in Play 1, find the closest player (by normalized
-  // position) in the new play, tap-to-select, then drag through the
-  // route's node positions converted to screen coords.
-  const doc = scene.play1.document;
-  // Cap visible work at 4 routes. The LAST route is applied via the
-  // "Dig" template button in the Quick Routes panel rather than drawn
-  // freehand — that gives a clean, recognizable shape and demos the
-  // template feature in the same pass.
-  const routes = (doc?.layers?.routes ?? []).slice(0, 4);
-  for (let ri = 0; ri < routes.length; ri++) {
-    const route = routes[ri];
-    const isLast = ri === routes.length - 1;
-    const player1 = (doc.layers.players ?? []).find(
-      (p) => p.id === route.carrierPlayerId,
+  // ---- Plan and draw routes ----
+  // Coach-Cal-style invariants enforced inline:
+  //   - Skip non-eligibles (QB, snapper). The QB never has a downfield
+  //     route in flag/7v7; mirroring Play 1's QB motion was producing
+  //     "run routes for the Q" bugs.
+  //   - At most one route per receiver.
+  //   - Every route progresses forward (toward the offense's end zone).
+  //     For freehand we hand-code a strictly forward path; templates
+  //     are forward by construction.
+  //
+  // Most routes use Quick Route templates so they're clean and never
+  // smear across multiple players. ONE route per scene is freehand,
+  // to demo the route-drawing capability — that's the user's ask.
+  const players = await page.evaluate(() => {
+    const svgs = Array.from(document.querySelectorAll("svg"));
+    const svg = svgs
+      .filter((s) => s.getBoundingClientRect().width > 400)
+      .sort(
+        (a, b) =>
+          b.getBoundingClientRect().width -
+          a.getBoundingClientRect().width,
+      )[0];
+    if (!svg) return [];
+    const rect = svg.getBoundingClientRect();
+    const groups = Array.from(svg.querySelectorAll("g")).filter((g) =>
+      g.querySelector(":scope > circle"),
     );
-    if (!player1) continue;
+    const out = [];
+    for (const g of groups) {
+      const bb = g.getBoundingClientRect();
+      // Skip selection rings / dots / decoration groups.
+      if (bb.width < 14 || bb.width > 80) continue;
+      const text = g.querySelector("text")?.textContent?.trim() ?? "";
+      out.push({
+        label: text,
+        cx: bb.left + bb.width / 2,
+        cy: bb.top + bb.height / 2,
+        fieldRectLeft: rect.left,
+        fieldRectRight: rect.left + rect.width,
+        fieldRectTop: rect.top,
+        fieldRectBottom: rect.top + rect.height,
+      });
+    }
+    return out;
+  });
 
-    // Compute source player's screen position in the NEW play's editor.
-    const drag = await page.evaluate(
-      ({ sourceX, sourceY, nodes }) => {
-        const svgs = Array.from(document.querySelectorAll("svg"));
-        const svg = svgs
-          .filter((s) => s.getBoundingClientRect().width > 400)
-          .sort(
-            (a, b) =>
-              b.getBoundingClientRect().width -
-              a.getBoundingClientRect().width,
-          )[0];
-        if (!svg) return null;
-        const rect = svg.getBoundingClientRect();
-        // Normalized -> screen (viewBox is "0 0 fieldAspect 1", default
-        // fieldAspect=1 — y is flipped: SVG_y = 1 - field_y).
-        const toScreen = (x, y) => ({
-          x: rect.left + x * rect.width,
-          y: rect.top + (1 - y) * rect.height,
-        });
-        // Find the closest player marker in the new play's DOM.
-        const groups = Array.from(svg.querySelectorAll("g")).filter((g) =>
-          g.querySelector(":scope > circle"),
-        );
-        const targetPx = toScreen(sourceX, sourceY);
-        let bestPlayer = null;
-        let bestDist = Infinity;
-        for (const g of groups) {
-          const r = g.getBoundingClientRect();
-          const cx = r.left + r.width / 2;
-          const cy = r.top + r.height / 2;
-          const d = Math.hypot(cx - targetPx.x, cy - targetPx.y);
-          if (d < bestDist) {
-            bestDist = d;
-            bestPlayer = { x: cx, y: cy };
-          }
-        }
-        if (!bestPlayer) return null;
-        const screenNodes = nodes.map((n) =>
-          toScreen(n.position.x, n.position.y),
-        );
-        return { player: bestPlayer, nodes: screenNodes };
-      },
-      {
-        sourceX: player1.position.x,
-        sourceY: player1.position.y,
-        nodes: route.nodes ?? [],
-      },
-    );
-    if (!drag || !drag.nodes.length) continue;
+  // Filter to non-QB receivers, sort left-to-right (so the "first"
+  // route is on the leftmost receiver, etc.).
+  const isReceiver = (p) =>
+    p.label && !/^Q$/i.test(p.label) && !/^C$/i.test(p.label);
+  const receivers = players.filter(isReceiver).sort((a, b) => a.cx - b.cx);
+  if (receivers.length === 0) {
+    console.warn("No receivers identified; skipping routes for this scene.");
+  }
 
-    // (1) Tap to select the player.
-    await glideTo(page, drag.player.x, drag.player.y);
-    await sleep(140);
+  // Per-scene template plan. `null` = freehand. Plays better visually
+  // for marketing if templates are varied (no two adjacent receivers
+  // get the same shape).
+  const TEMPLATES_BY_KIND = {
+    flag: ["Slant", null, "Corner", "Dig"], // 4 receivers
+    sevenSeven: ["Slant", null, "Post", "Corner", "Dig"], // 5 receivers
+  };
+  const isSeven = receivers.length >= 5;
+  const planRaw = TEMPLATES_BY_KIND[isSeven ? "sevenSeven" : "flag"];
+  const plan = planRaw.slice(0, receivers.length);
+  const fieldCenterX =
+    receivers[0]
+      ? (receivers[0].fieldRectLeft + receivers[0].fieldRectRight) / 2
+      : VIEWPORT.width / 2;
+
+  for (let i = 0; i < plan.length; i++) {
+    const player = receivers[i];
+    const tpl = plan[i];
+
+    // Glide and tap exactly on the player marker. Subtle: we glide to
+    // the player center, then start the tap with a tiny extra dwell so
+    // the editor's pointer-capture latches onto the player <g> rather
+    // than slipping to canvas (which would create a click-route from
+    // any previously-selected player).
+    await glideTo(page, player.cx, player.cy);
+    await sleep(180);
     await pressDown(page);
-    await sleep(80);
+    await sleep(90);
     await releaseUp(page);
-    await sleep(220);
+    await sleep(280);
 
-    if (isLast) {
-      // For the last route, demo the Quick Routes template panel —
-      // click "Dig" so the route shape is clean and recognizable
-      // rather than a freehand approximation of Play 1's last route
-      // (which is often a pre-snap-motion squiggle).
-      // The QuickRoutes panel renders only after a player is selected;
-      // wait for the panel + scroll the Dig tile into view before
-      // clicking it.
-      const digBtn = page
-        .locator('button:has(span:text-is("Dig"))')
+    if (tpl) {
+      // Apply Quick Route template — guaranteed clean shape, no drag,
+      // no chance of "moving the player by accident."
+      // The Quick Routes panel is rendered twice (mobile + desktop)
+      // so we use the role+name lookup — only the visible button has
+      // the matching accessible name.
+      const btn = page
+        .getByRole("button", { name: tpl, exact: true })
         .first();
+      let applied = false;
       try {
-        await digBtn.waitFor({ state: "visible", timeout: 4000 });
-        await digBtn.scrollIntoViewIfNeeded();
-        await sleep(BEAT_SHORT);
-        await clickLocator(page, digBtn);
-        await sleep(BEAT_SHORT);
-      } catch {
-        // Panel not where we expected — try the search input as a
-        // fallback so the Dig tile bubbles up to the top of the grid.
+        await btn.waitFor({ state: "visible", timeout: 6000 });
+        await btn.scrollIntoViewIfNeeded().catch(() => {});
+        // Glide the cursor to the button so the recorded path looks
+        // intentional, then dispatch via locator.click() which
+        // guarantees a real "click" event (mouse.down + mouse.up at
+        // the same point isn't always enough — React listens for
+        // click, not mousedown).
+        const box = await btn.boundingBox();
+        if (box) {
+          await glideTo(page, box.x + box.width / 2, box.y + box.height / 2);
+          await sleep(140);
+          // Cursor visual feedback for the captured path.
+          curDown = true;
+          logCursor();
+          await sleep(90);
+          curDown = false;
+          logCursor();
+        }
+        await btn.click({ force: true, timeout: 6000 });
+        await sleep(220);
+        applied = true;
+      } catch (e) {
+        console.log(`  [tpl ${tpl}] primary click failed: ${e.message?.split("\n")[0]}`);
+        // Fallback: type the template name into the routes search.
         const search = page
           .locator('input[type="search"][placeholder^="Search routes"]')
           .first();
         if (await search.count()) {
           await glideToLocator(page, search);
-          await pressDown(page);
-          await sleep(60);
-          await releaseUp(page);
-          await page.keyboard.type("Dig", { delay: 60 });
+          await search.click({ force: true }).catch(() => {});
+          await sleep(120);
+          await page.keyboard.type(tpl, { delay: 50 });
           await sleep(BEAT_SHORT);
-          const digBtn2 = page
-            .locator('button:has(span:text-is("Dig"))')
+          const btn2 = page
+            .getByRole("button", { name: tpl, exact: true })
             .first();
-          if (await digBtn2.count()) {
-            await clickLocator(page, digBtn2);
-            await sleep(BEAT_SHORT);
+          if ((await btn2.count()) > 0) {
+            await btn2.scrollIntoViewIfNeeded().catch(() => {});
+            const box2 = await btn2.boundingBox();
+            if (box2) {
+              await glideTo(page, box2.x + box2.width / 2, box2.y + box2.height / 2);
+              await sleep(140);
+              curDown = true;
+              logCursor();
+              await sleep(90);
+              curDown = false;
+              logCursor();
+              await btn2
+                .click({ force: true, timeout: 4000 })
+                .catch(() => {});
+              applied = true;
+            }
+          }
+          // Clear the search box so subsequent template searches start fresh.
+          if (applied) {
+            await search.fill("").catch(() => {});
+            await sleep(120);
           }
         }
       }
-      continue;
-    }
-
-    // (2) Begin drag from a few px off the player so the editor doesn't
-    // re-resolve the hit-target as the marker.
-    const start = drag.nodes[0];
-    const startX = drag.player.x + (start.x - drag.player.x) * 0.4 + 6;
-    const startY = drag.player.y + (start.y - drag.player.y) * 0.4 - 6;
-    await moveTo(page, startX, startY);
-    await sleep(120);
-    await pressDown(page);
-    await sleep(120);
-
-    // Drag through every node, with intermediate samples so the freehand
-    // sample reads as a deliberate stroke (and so the post cursor moves
-    // continuously).
-    let prev = { x: startX, y: startY };
-    for (const node of drag.nodes) {
-      const STEPS = 14;
-      for (let i = 1; i <= STEPS; i++) {
-        const t = i / STEPS;
-        const x = prev.x + (node.x - prev.x) * t;
-        const y = prev.y + (node.y - prev.y) * t;
-        await moveTo(page, x, y);
-        await sleep(22);
+      if (!applied) {
+        console.warn(`Couldn't apply template "${tpl}" — skipping route.`);
       }
-      prev = node;
+    } else {
+      // ---- Freehand "Post" — strictly forward (-y on screen). ----
+      // Start far enough off the player marker that the editor
+      // resolves the pointerdown as a CANVAS click (drawing route),
+      // not a player click (which would either re-select or, with a
+      // stray drag, move the player). 35px clearance > the marker's
+      // hit radius.
+      const upfield = player.fieldRectTop; // smaller y = forward
+      const dxToCenter = fieldCenterX - player.cx; // post breaks inside
+
+      // Path waypoints — ALL strictly forward (y < player.cy).
+      const stem = { x: player.cx, y: player.cy - 130 }; // 12 yds vertical
+      const breakPt = { x: player.cx + dxToCenter * 0.55, y: player.cy - 250 };
+      const finishPt = {
+        x: player.cx + dxToCenter * 0.85,
+        y: Math.max(upfield + 30, player.cy - 320),
+      };
+
+      // Validate forward-only invariant before issuing any pointer events.
+      const ys = [player.cy, stem.y, breakPt.y, finishPt.y];
+      for (let k = 1; k < ys.length; k++) {
+        if (ys[k] >= ys[k - 1]) {
+          throw new Error(
+            `Freehand path violates forward-only invariant at step ${k}`,
+          );
+        }
+      }
+
+      // Begin drag well off the player marker. We start the press at
+      // ~110px in front of the player and ~25px to the side. That's
+      // unambiguously canvas (player marker is ~32px diameter, label
+      // adds ~12px below it). Drawing a route from this anchor is
+      // visually equivalent to drawing it from the player itself
+      // because the editor connects the route to the player via
+      // carrierPlayerId derived from the current selection.
+      const startX = player.cx + Math.sign(dxToCenter || 1) * 25;
+      const startY = player.cy - 110;
+      await moveTo(page, startX, startY);
+      await sleep(220);
+      await pressDown(page);
+      await sleep(180);
+      // Nudge the cursor a few px right at the start so the editor's
+      // 5px DRAG_THRESHOLD_PX is exceeded immediately and the state
+      // transitions from "pending(canvas)" to "drawing_route" before
+      // any committed movement.
+      await moveTo(page, startX + 8, startY - 4);
+      await sleep(40);
+
+      let prev = { x: startX + 8, y: startY - 4 };
+      for (const node of [stem, breakPt, finishPt]) {
+        const STEPS = 16;
+        for (let s = 1; s <= STEPS; s++) {
+          const t = s / STEPS;
+          await moveTo(
+            page,
+            prev.x + (node.x - prev.x) * t,
+            prev.y + (node.y - prev.y) * t,
+          );
+          await sleep(22);
+        }
+        prev = node;
+      }
+      await sleep(160);
+      await releaseUp(page);
     }
-    await sleep(160);
-    await releaseUp(page);
     await sleep(BEAT_SHORT);
   }
 
