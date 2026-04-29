@@ -1640,13 +1640,14 @@ export function InviteTeamMemberDialog({
       autoApprove && autoApproveLimit.trim() !== ""
         ? Math.max(1, Math.floor(Number(autoApproveLimit)))
         : null;
-    // Coach links are seat-bound, so force single-use. Player links
-    // stay unlimited per existing behavior.
+    // Both player and coach links are reusable. Coach redemptions are
+    // gated per-attempt by accept_invite's seat check so a shared link
+    // can't blow past the owner's seat cap.
     const res = await createInviteAction({
       playbookId,
       role,
       expiresInDays: 14,
-      maxUses: role === "editor" ? 1 : null,
+      maxUses: null,
       email: null,
       note: null,
       autoApprove,

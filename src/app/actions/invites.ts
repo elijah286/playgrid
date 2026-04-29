@@ -103,14 +103,13 @@ export async function createInviteAction(input: {
     }
   }
 
-  // Coach invites are seat-bound: force single-use, owner-only, and
-  // refuse creation if the owner is already at cap. Player invites are
-  // unlimited and editors may issue them too.
-  let effectiveMaxUses = input.maxUses;
-  let effectiveAutoApproveLimit = input.autoApproveLimit ?? null;
+  // Coach invites are owner-only and seat-bound at creation, but the
+  // link itself is reusable — the seat check inside accept_invite gates
+  // each redemption so an over-shared link can't exceed the owner's cap.
+  // Player invites are unlimited and editors may issue them too.
+  const effectiveMaxUses = input.maxUses;
+  const effectiveAutoApproveLimit = input.autoApproveLimit ?? null;
   if (input.role === "editor") {
-    effectiveMaxUses = 1;
-    effectiveAutoApproveLimit = null;
     if (!isOwner) {
       return {
         ok: false,
@@ -699,9 +698,43 @@ export async function acceptInviteAction(
   // works even before the accept RPC completes.
   const { data: inviteRow } = await supabase
     .from("playbook_invites")
-    .select("playbook_id, filters_snapshot")
+    .select("playbook_id, filters_snapshot, role")
     .eq("token", token)
     .maybeSingle();
+
+  // Per-redemption seat check for editor (coach) invites. Coach links are
+  // reusable, so the create-time check isn't enough on its own — without
+  // this, an over-shared link could grant more coach seats than the owner
+  // has paid for. Skip when the user is already an editor on this playbook
+  // (re-accepting their own link doesn't consume a new seat).
+  if (inviteRow?.role === "editor") {
+    const admin = createServiceRoleClient();
+    const { data: ownerRow } = await admin
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", inviteRow.playbook_id as string)
+      .eq("role", "owner")
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    const ownerId = (ownerRow?.user_id as string | null) ?? null;
+    const { data: existingMember } = await admin
+      .from("playbook_members")
+      .select("role")
+      .eq("playbook_id", inviteRow.playbook_id as string)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const alreadyCoach = existingMember?.role === "editor" || existingMember?.role === "owner";
+    if (ownerId && !alreadyCoach) {
+      const seatCheck = await ensureSeatsAvailable(ownerId, 1);
+      if (!seatCheck.ok) {
+        return {
+          ok: false,
+          error: "No coach seats available on this playbook. Ask the owner to free up a seat or upgrade their plan.",
+        };
+      }
+    }
+  }
 
   const { data, error } = await supabase.rpc("accept_invite", { p_token: token });
   if (error) {

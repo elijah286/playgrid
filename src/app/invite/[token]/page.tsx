@@ -67,32 +67,63 @@ export default async function InvitePage({ params }: Props) {
   }
   const preview = previewRes.preview;
 
-  if (preview.revoked) {
-    return (
-      <Frame title="Invite revoked">
-        <p className="text-sm text-muted">This invite was revoked by the coach.</p>
-      </Frame>
-    );
-  }
-  if (preview.expired) {
-    return (
-      <Frame title="Invite expired">
-        <p className="text-sm text-muted">Ask the coach for a new link.</p>
-      </Frame>
-    );
-  }
-  if (preview.exhausted) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // If the link is dead (revoked / expired / fully used) but the signed-in
+  // user is already a member of the target playbook, route them in instead
+  // of dead-ending. Common case: someone who used their own single-use
+  // link and later clicks it again.
+  const isDead = preview.revoked || preview.expired || preview.exhausted;
+  if (isDead) {
+    let alreadyMember = false;
+    if (user) {
+      const { data: m } = await supabase
+        .from("playbook_members")
+        .select("status")
+        .eq("playbook_id", preview.playbook_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      alreadyMember = m?.status === "active";
+    }
+    if (alreadyMember) {
+      return (
+        <Frame title="You're already on this playbook">
+          <p className="text-sm text-muted">
+            This invite link has already been used, but you have access to
+            <span className="font-semibold text-foreground"> {preview.playbook_name}</span>.
+          </p>
+          <a
+            href={`/playbooks/${preview.playbook_id}`}
+            className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90"
+          >
+            Open playbook
+          </a>
+        </Frame>
+      );
+    }
+    if (preview.revoked) {
+      return (
+        <Frame title="Invite revoked">
+          <p className="text-sm text-muted">This invite was revoked by the coach.</p>
+        </Frame>
+      );
+    }
+    if (preview.expired) {
+      return (
+        <Frame title="Invite expired">
+          <p className="text-sm text-muted">Ask the coach for a new link.</p>
+        </Frame>
+      );
+    }
     return (
       <Frame title="Invite fully used">
         <p className="text-sm text-muted">This invite has reached its maximum uses.</p>
       </Frame>
     );
   }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const isCoachInvite = preview.role === "editor";
   const roleLabel = isCoachInvite ? "Coach" : "Player";
