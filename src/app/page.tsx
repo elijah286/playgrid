@@ -43,7 +43,11 @@ export default async function HomePage() {
           The illustration owns LCP via `priority` — every other image on the
           page is `loading="lazy"` so the browser doesn't fight for bandwidth. */}
       <section className="relative overflow-hidden">
-        <div className="relative mx-auto flex min-h-[calc(100dvh-8rem)] max-w-6xl flex-col items-center gap-10 px-6 py-16 md:flex-row md:items-center md:gap-12 lg:gap-16">
+        {/* Hero is content-sized, not viewport-locked. Letting the next
+            section's top edge crest the fold is the single most reliable
+            "scroll for more" cue — a 100vh hero teaches visitors there's
+            nothing below. */}
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-10 px-6 py-16 md:flex-row md:items-center md:gap-12 md:py-20 lg:gap-16">
           <div className="flex-1">
             <h1
               className="text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl"
@@ -82,7 +86,7 @@ export default async function HomePage() {
             </div>
 
             <p className="mt-4 text-sm text-muted">
-              Free for solo coaches · No credit card · Live in five minutes
+              Free for solo coaches · Build your first play in minutes
             </p>
           </div>
 
