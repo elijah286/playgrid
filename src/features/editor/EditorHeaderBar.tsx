@@ -26,6 +26,7 @@ import { Button, Input, SegmentedControl } from "@/components/ui";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
 import { EditablePlayNumberBadge } from "./PlayNumberBadge";
 import { NotifyTeamButton } from "./NotifyTeamButton";
+import { PlayHistoryButton } from "./PlayHistoryButton";
 
 type Props = {
   playId: string;
@@ -181,6 +182,7 @@ export function EditorHeaderBar({
         {canEdit && (
           <div className={`ml-auto flex items-center gap-1 ${hideMobileNav ? "hidden sm:flex" : ""}`}>
             <NotifyTeamButton playId={playId} hideMobileLabel />
+            <PlayHistoryButton playId={playId} hideMobileLabel />
             <Button
               type="button"
               size="sm"
