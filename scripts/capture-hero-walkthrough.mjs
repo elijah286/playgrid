@@ -67,9 +67,24 @@ function ffmpeg(args) {
 
 let recordStartTs = 0;
 const cursorPath = []; // [{t, x, y, down}]
+const deadSegments = []; // [{start, end}] in ms since recordStartTs — trimmed in post
 let curX = -100;
 let curY = -100;
 let curDown = false;
+
+/** Wrap async work that doesn't move the cursor (page-load waits, modal
+ *  prep). Recorded video frames during this window are trimmed in post,
+ *  and cursor-path samples in this window are dropped, so the final
+ *  video reads as a fast cut from "click" → "result". */
+async function dead(fn) {
+  const start = Date.now() - recordStartTs;
+  try {
+    return await fn();
+  } finally {
+    const end = Date.now() - recordStartTs;
+    deadSegments.push({ start, end });
+  }
+}
 
 function logCursor() {
   cursorPath.push({
@@ -259,15 +274,18 @@ async function runScene(page, scene, opts = {}) {
   console.log(`\n== Scene: ${scene.playbookName} (mirror "${scene.play1.name}") ==`);
 
   if (!opts.alreadyOnPage) {
-    // Goto playbook detail.
-    await page.goto(`${BASE_URL}/playbooks/${scene.playbookId}`, {
-      waitUntil: "domcontentloaded",
+    // Goto playbook detail (mark as dead so the inter-scene transition
+    // collapses to a near-instant cut in post).
+    await dead(async () => {
+      await page.goto(`${BASE_URL}/playbooks/${scene.playbookId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await page.waitForLoadState("networkidle");
+      await page
+        .locator('a[href*="/plays/"]')
+        .first()
+        .waitFor({ state: "visible", timeout: 20000 });
     });
-    await page.waitForLoadState("networkidle");
-    await page
-      .locator('a[href*="/plays/"]')
-      .first()
-      .waitFor({ state: "visible", timeout: 20000 });
   }
   await sleep(BEAT_SHORT);
 
@@ -311,22 +329,25 @@ async function runScene(page, scene, opts = {}) {
   await sleep(80);
   await releaseUp(page);
 
-  // Wait for editor URL.
-  await page.waitForURL(/\/plays\/[^/]+\/edit/, { timeout: 20000 });
-  await page.waitForLoadState("networkidle");
-  await page
-    .waitForFunction(
-      () =>
-        Array.from(document.querySelectorAll("svg")).some(
-          (s) =>
-            s.getBoundingClientRect().width > 400 &&
-            s.querySelectorAll("g > circle").length >= 1,
-        ),
-      null,
-      { timeout: 25000 },
-    )
-    .catch(() => {});
-  await sleep(BEAT_MED);
+  // The "Preparing play editor…" spinner appears here. Mark this
+  // window as dead so it gets trimmed out in post.
+  await dead(async () => {
+    await page.waitForURL(/\/plays\/[^/]+\/edit/, { timeout: 20000 });
+    await page.waitForLoadState("networkidle");
+    await page
+      .waitForFunction(
+        () =>
+          Array.from(document.querySelectorAll("svg")).some(
+            (s) =>
+              s.getBoundingClientRect().width > 400 &&
+              s.querySelectorAll("g > circle").length >= 1,
+          ),
+        null,
+        { timeout: 25000 },
+      )
+      .catch(() => {});
+  });
+  await sleep(BEAT_SHORT);
 
   const newPlayId = page.url().match(/plays\/([0-9a-f-]+)\/edit/)?.[1];
 
@@ -335,8 +356,14 @@ async function runScene(page, scene, opts = {}) {
   // position) in the new play, tap-to-select, then drag through the
   // route's node positions converted to screen coords.
   const doc = scene.play1.document;
-  const routes = (doc?.layers?.routes ?? []).slice(0, 4); // cap visible work
-  for (const route of routes) {
+  // Cap visible work at 4 routes. The LAST route is applied via the
+  // "Dig" template button in the Quick Routes panel rather than drawn
+  // freehand — that gives a clean, recognizable shape and demos the
+  // template feature in the same pass.
+  const routes = (doc?.layers?.routes ?? []).slice(0, 4);
+  for (let ri = 0; ri < routes.length; ri++) {
+    const route = routes[ri];
+    const isLast = ri === routes.length - 1;
     const player1 = (doc.layers.players ?? []).find(
       (p) => p.id === route.carrierPlayerId,
     );
@@ -399,6 +426,48 @@ async function runScene(page, scene, opts = {}) {
     await sleep(80);
     await releaseUp(page);
     await sleep(220);
+
+    if (isLast) {
+      // For the last route, demo the Quick Routes template panel —
+      // click "Dig" so the route shape is clean and recognizable
+      // rather than a freehand approximation of Play 1's last route
+      // (which is often a pre-snap-motion squiggle).
+      // The QuickRoutes panel renders only after a player is selected;
+      // wait for the panel + scroll the Dig tile into view before
+      // clicking it.
+      const digBtn = page
+        .locator('button:has(span:text-is("Dig"))')
+        .first();
+      try {
+        await digBtn.waitFor({ state: "visible", timeout: 4000 });
+        await digBtn.scrollIntoViewIfNeeded();
+        await sleep(BEAT_SHORT);
+        await clickLocator(page, digBtn);
+        await sleep(BEAT_SHORT);
+      } catch {
+        // Panel not where we expected — try the search input as a
+        // fallback so the Dig tile bubbles up to the top of the grid.
+        const search = page
+          .locator('input[type="search"][placeholder^="Search routes"]')
+          .first();
+        if (await search.count()) {
+          await glideToLocator(page, search);
+          await pressDown(page);
+          await sleep(60);
+          await releaseUp(page);
+          await page.keyboard.type("Dig", { delay: 60 });
+          await sleep(BEAT_SHORT);
+          const digBtn2 = page
+            .locator('button:has(span:text-is("Dig"))')
+            .first();
+          if (await digBtn2.count()) {
+            await clickLocator(page, digBtn2);
+            await sleep(BEAT_SHORT);
+          }
+        }
+      }
+      continue;
+    }
 
     // (2) Begin drag from a few px off the player so the editor doesn't
     // re-resolve the hit-target as the marker.
@@ -506,9 +575,59 @@ async function runScene(page, scene, opts = {}) {
 }
 
 /* -----------------------------------------------------------------------
+   Dead-segment compression: build the list of "alive" [start, end]
+   segments from deadSegments[], plus helpers to remap original-timeline
+   timestamps to the compressed (post-trim) timeline.
+   ----------------------------------------------------------------------- */
+
+function buildAliveSegments(totalRecMs) {
+  const MIN_ALIVE_MS = 250; // anything shorter is a transition glitch — drop it
+  // Merge overlapping dead segments first.
+  const sorted = deadSegments
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const d of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && d.start <= last.end) {
+      last.end = Math.max(last.end, d.end);
+    } else {
+      merged.push({ ...d });
+    }
+  }
+  // Complement: alive = [0..d0.start, d0.end..d1.start, ..., dN.end..total].
+  let alive = [];
+  let cursor = 0;
+  for (const d of merged) {
+    if (d.start > cursor) alive.push({ start: cursor, end: d.start });
+    cursor = Math.max(cursor, d.end);
+  }
+  if (cursor < totalRecMs) alive.push({ start: cursor, end: totalRecMs });
+
+  // Drop tiny alive slivers (the few-ms gap between recordStartTs and
+  // the first `dead()` block, for instance) so the trim doesn't leak a
+  // single frame of about:blank into the final video.
+  alive = alive.filter((a) => a.end - a.start >= MIN_ALIVE_MS);
+  return { alive, dead: merged };
+}
+
+function remapToCompressed(tOrig, alive) {
+  // Returns the compressed-timeline ms for an event at tOrig, or null
+  // if tOrig falls inside a dead segment (in which case the event
+  // should be dropped from the cursor path).
+  let offset = 0;
+  for (const seg of alive) {
+    if (tOrig < seg.start) return null; // event was inside a dead gap
+    if (tOrig <= seg.end) return offset + (tOrig - seg.start);
+    offset += seg.end - seg.start;
+  }
+  return offset; // past end — pin to total
+}
+
+/* -----------------------------------------------------------------------
    Cursor PNG sequence — composite a soft round cursor on top of a
    transparent canvas at every frame, interpolating between recorded
-   path samples.
+   path samples (already remapped to the compressed timeline).
    ----------------------------------------------------------------------- */
 
 function sampleCursor(t) {
@@ -643,7 +762,7 @@ async function run() {
     (u) => (u.email ?? "").toLowerCase() === env.SEED_ADMIN_EMAIL.toLowerCase(),
   );
   if (!adminUser) throw new Error("seed admin user not found");
-  const sceneA = await findScene(supa, adminUser.id, "Chiefs Girls", false);
+  const sceneA = await findScene(supa, adminUser.id, "Flag Football", false);
   const sceneB = await findScene(supa, adminUser.id, "7v7", true);
   console.log("Scene A:", sceneA.playbookName, "→", sceneA.play1.name);
   console.log("Scene B:", sceneB.playbookName, "→", sceneB.play1.name);
@@ -686,27 +805,26 @@ async function run() {
     document.head.appendChild(style);
   });
 
-  // Pre-load the first scene's playbook page in the recording context
-  // BEFORE we start the cursor timer. This skips the about:blank →
-  // /playbooks/<id> dead-loading prelude. We trim the source video by
-  // (recordStartTs - contextStartTs) in ffmpeg post.
-  const contextStartTs = Date.now();
-  await page.goto(`${BASE_URL}/playbooks/${sceneA.playbookId}`, {
-    waitUntil: "domcontentloaded",
-  });
-  await page.waitForLoadState("networkidle");
-  await page
-    .locator('a[href*="/plays/"]')
-    .first()
-    .waitFor({ state: "visible", timeout: 20000 });
-  await sleep(200);
-
+  // The recording starts when the context is created. Anchor the
+  // cursor timeline (recordStartTs) to that exact moment, then mark
+  // the about:blank → /playbooks/<id> prelude as a dead segment so it
+  // gets trimmed in post.
   recordStartTs = Date.now();
-  const trimSeconds = (recordStartTs - contextStartTs) / 1000;
   curX = 80;
   curY = 780;
   await page.mouse.move(curX, curY); // initial position
   logCursor();
+
+  await dead(async () => {
+    await page.goto(`${BASE_URL}/playbooks/${sceneA.playbookId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle");
+    await page
+      .locator('a[href*="/plays/"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 20000 });
+  });
 
   const created = [];
   const rA = await runScene(page, sceneA, { alreadyOnPage: true });
@@ -746,19 +864,44 @@ async function run() {
   );
 
   // -----------------------------------------------------------------
-  // Generate cursor PNG sequence and overlay onto the source video.
+  // Compress: drop dead segments (page-load lulls, modal-spinner
+  // windows) from both the source video and the cursor path, so the
+  // final tour reads as a fast cut "click → result" everywhere.
   // -----------------------------------------------------------------
-  await generateCursorFrames(totalRecMs + 400);
+  const { alive, dead: deadMerged } = buildAliveSegments(totalRecMs);
+  const aliveDurMs = alive.reduce((s, a) => s + (a.end - a.start), 0);
+  console.log(
+    `Trimming: ${(totalRecMs / 1000).toFixed(1)}s → ${(
+      aliveDurMs / 1000
+    ).toFixed(1)}s (dropped ${deadMerged.length} dead segment(s))`,
+  );
+
+  // Remap cursor path to the compressed timeline.
+  const compressedPath = [];
+  for (const ev of cursorPath) {
+    const tNew = remapToCompressed(ev.t, alive);
+    if (tNew == null) continue;
+    compressedPath.push({ ...ev, t: tNew });
+  }
+  cursorPath.length = 0;
+  for (const ev of compressedPath) cursorPath.push(ev);
+
+  await generateCursorFrames(aliveDurMs + 200);
 
   const webmOut = path.join(OUT_DIR, "hero-walkthrough.webm");
   const mp4Out = path.join(OUT_DIR, "hero-walkthrough.mp4");
 
-  // Filter graph: trim the source by `trimSeconds` so its t=0 aligns
-  // with cursor t=0, then overlay the cursor PNG sequence on top.
+  // Build trim+concat filter for the source video.
+  const trimParts = alive
+    .map(
+      (seg, i) =>
+        `[0:v]trim=start=${(seg.start / 1000).toFixed(3)}:end=${(seg.end / 1000).toFixed(3)},setpts=PTS-STARTPTS[s${i}]`,
+    )
+    .join(";");
+  const concatInputs = alive.map((_, i) => `[s${i}]`).join("");
   const VF =
-    "[0:v]trim=start=" +
-    trimSeconds.toFixed(3) +
-    ",setpts=PTS-STARTPTS,format=yuv420p[bg];[1:v]format=rgba[fg];[bg][fg]overlay=0:0:shortest=1";
+    `${trimParts};${concatInputs}concat=n=${alive.length}:v=1:a=0[bg0];` +
+    `[bg0]format=yuv420p[bg];[1:v]format=rgba[fg];[bg][fg]overlay=0:0:shortest=1`;
 
   await ffmpeg([
     "-y",
