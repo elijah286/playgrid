@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { recordPageViewAction } from "@/app/actions/page-views";
 import { isNativeApp } from "@/lib/native/isNativeApp";
+import { CLICK_ID_PARAMS, type ClickIds } from "@/lib/attribution/click-ids";
 
 const SESSION_KEY = "playgrid:session-id";
 const FIRST_EVENT_KEY = "playgrid:session-first-sent";
@@ -59,6 +60,10 @@ export default function PageViewTracker() {
     let utmSource: string | null = null;
     let utmMedium: string | null = null;
     let utmCampaign: string | null = null;
+    let utmContent: string | null = null;
+    let utmTerm: string | null = null;
+    let landingPath: string | null = null;
+    let clickIds: ClickIds | null = null;
     if (isFirst) {
       try {
         referrer = document.referrer || null;
@@ -70,9 +75,18 @@ export default function PageViewTracker() {
         utmSource = q.get("utm_source");
         utmMedium = q.get("utm_medium");
         utmCampaign = q.get("utm_campaign");
+        utmContent = q.get("utm_content");
+        utmTerm = q.get("utm_term");
+        const ids: ClickIds = {};
+        for (const k of CLICK_ID_PARAMS) {
+          const v = q.get(k);
+          if (v) ids[k] = v;
+        }
+        clickIds = Object.keys(ids).length > 0 ? ids : null;
       } catch {
         // ignore
       }
+      landingPath = pathname;
     }
 
     const device = detectDevice();
@@ -85,8 +99,13 @@ export default function PageViewTracker() {
       utmSource,
       utmMedium,
       utmCampaign,
+      utmContent,
+      utmTerm,
+      landingPath,
+      clickIds,
       device,
       userAgent,
+      isFirstSessionEvent: isFirst,
     });
   }, [pathname]);
 
