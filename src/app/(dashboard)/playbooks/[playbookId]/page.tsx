@@ -25,6 +25,10 @@ import {
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { PlaybookDetailClient } from "./ui";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
+import {
+  BuildYourOwnPlaybookCta,
+  MadeWithBadge,
+} from "@/features/marketing/SharedViewerCta";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -392,6 +396,12 @@ export default async function PlaybookDetailPage({ params }: Props) {
           referralConfig,
         }}
       />
+      {isExamplePreview && (
+        <>
+          <BuildYourOwnPlaybookCta />
+          <MadeWithBadge />
+        </>
+      )}
     </>
   );
 }

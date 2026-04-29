@@ -14,6 +14,10 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { PlayEditorClient } from "@/features/editor/PlayEditorClient";
+import {
+  BuildYourOwnPlaybookCta,
+  MadeWithBadge,
+} from "@/features/marketing/SharedViewerCta";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 import type { SavedFormation } from "@/app/actions/formations";
@@ -161,6 +165,12 @@ export default async function PlayEditPage({ params }: Props) {
       initialCustomOpponentPlayId={res.customOpponentPlayId}
       initialOpponentHidden={res.opponentHidden}
     />
+    {isExamplePreview && (
+      <>
+        <BuildYourOwnPlaybookCta />
+        <MadeWithBadge />
+      </>
+    )}
     </>
   );
 }
