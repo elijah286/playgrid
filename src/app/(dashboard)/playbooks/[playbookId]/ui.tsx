@@ -149,7 +149,7 @@ import {
   useToast,
   type ActionMenuItem,
 } from "@/components/ui";
-import { PlaybookHeader, InviteTeamMemberDialog, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
+import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
@@ -2274,22 +2274,11 @@ function RosterPanel({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
   const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
   const [positionEditing, setPositionEditing] = useState<PlaybookRosterMember | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
-  function openInvite() {
-    if (!viewerIsCoach) {
-      setUpgradeNotice({
-        title: "Sharing a playbook is a Team Coach feature",
-        message: "Upgrade to Team Coach ($9/mo or $99/yr) to invite players and share playbooks.",
-      });
-      return;
-    }
-    setShowInviteModal(true);
-  }
   function openAddPlayer() {
     if (!viewerIsCoach) {
       setUpgradeNotice({
@@ -2497,9 +2486,8 @@ function RosterPanel({
               Add player
             </Button>
           )}
-          <Button variant="primary" leftIcon={Plus} onClick={openInvite}>
-            Invite
-          </Button>
+          {/* Invite affordance lives in the playbook header so it's reachable
+              from every tab. Don't duplicate it here. */}
         </div>
       </div>
 
@@ -2949,19 +2937,6 @@ function RosterPanel({
           </div>
         </div>
         </section>
-      )}
-
-      {showInviteModal && (
-        <InviteTeamMemberDialog
-          playbookId={playbookId}
-          teamName={teamName}
-          senderName={senderName}
-          canManage={canManage}
-          onClose={() => {
-            setShowInviteModal(false);
-            router.refresh();
-          }}
-        />
       )}
 
       <AddPlayerDialog
