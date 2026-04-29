@@ -72,6 +72,24 @@ export default async function InvitePage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Smart deep-link: if the recipient is already an active member of this
+  // playbook, the invite landing page is just a speed bump. Redirect
+  // straight to the playbook so a forwarded link "just works" as a
+  // shortcut for people who already have access.
+  if (user && !preview.revoked && !preview.expired && !preview.exhausted) {
+    const { data: existingMembership } = await supabase
+      .from("playbook_members")
+      .select("playbook_id")
+      .eq("playbook_id", preview.playbook_id)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (existingMembership) {
+      const { redirect } = await import("next/navigation");
+      redirect(`/playbooks/${preview.playbook_id}`);
+    }
+  }
+
   // If the link is dead (revoked / expired / fully used) but the signed-in
   // user is already a member of the target playbook, route them in instead
   // of dead-ending. Common case: someone who used their own single-use

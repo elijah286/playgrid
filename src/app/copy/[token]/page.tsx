@@ -131,6 +131,25 @@ export default async function CopyPage({ params }: Props) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Smart deep-link: if the recipient is already an active member of the
+  // source playbook, claiming a copy would just create a duplicate they
+  // didn't ask for. Skip the whole flow and route them to the existing
+  // playbook so the share link "just works" as a navigation shortcut.
+  if (user) {
+    const { data: existingMembership } = await supabase
+      .from("playbook_members")
+      .select("playbook_id")
+      .eq("playbook_id", preview.playbook_id)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (existingMembership) {
+      const { redirect } = await import("next/navigation");
+      redirect(`/playbooks/${preview.playbook_id}`);
+    }
+  }
+
   const next = `/copy/${token}`;
   const accent = preview.color || "#2563eb";
   const senderName =

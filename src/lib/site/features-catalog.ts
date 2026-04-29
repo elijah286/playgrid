@@ -219,6 +219,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-10-01",
   },
   {
+    id: "global-share-button",
+    name: "Global share button",
+    description:
+      "A persistent Share button lives in the global nav across landing pages, the dashboard, formation editor, and (mobile) the play editor. Opens a dialog that copies a tracked link (xogridmaker.com/?ref=<userId> for signed-in users), offers native iOS share sheet inside the app, and shows a QR for in-person passes. When the give-and-get program is on (Site Admin → Site Settings), the dialog surfaces the current days-per-award offer in a primary banner so the incentive is visible at the moment the coach decides to share.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
+    id: "share-link-smart-deep-link",
+    name: "Share-link smart deep-link",
+    description:
+      "When a recipient clicks a /copy or /invite link for a playbook they're already an active member of, they're routed straight to the playbook with no dialog or duplicate copy created. Eliminates the \"wait, why is it asking me to claim again?\" moment when forwarded links land with people who already have access.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "playbook-header-team-coach-locks",
     name: "Locked menu items show \"Team Coach\" badge",
     description:

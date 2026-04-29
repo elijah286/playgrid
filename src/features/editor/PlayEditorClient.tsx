@@ -27,6 +27,7 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorHeaderBar } from "./EditorHeaderBar";
+import { ShareButton } from "@/components/share/ShareButton";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import { TagsCard } from "./TagsCard";
 import { useToast } from "@/components/ui";
@@ -644,13 +645,22 @@ function PlayEditorClientInner({
           Done editing button moves to the very top so the field has as much
           vertical room as possible. Desktop always keeps the header. */}
       <div className={mode === "edit" ? "hidden sm:block" : ""}>
-      <Link
-        href={`/playbooks/${playbookId}`}
-        className="mb-1 inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors"
-      >
-        <ChevronLeft className="size-3.5" />
-        <span className="truncate">{playbookName || "Back to playbook"}</span>
-      </Link>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <Link
+          href={`/playbooks/${playbookId}`}
+          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors"
+        >
+          <ChevronLeft className="size-3.5" />
+          <span className="truncate">{playbookName || "Back to playbook"}</span>
+        </Link>
+        {/* Mobile-only: SiteHeaderShell is hidden by editor-hide-site-header
+            on mobile play edit, so the global Share button isn't reachable
+            from here. Surface it inline. Desktop already has it in the
+            global nav above. */}
+        <span className="sm:hidden">
+          <ShareButton userId={null} variant="inline" />
+        </span>
+      </div>
       <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
+import { ShareButton } from "@/components/share/ShareButton";
 
 type Props = {
   user: { id: string; email: string | null } | null;
@@ -54,6 +55,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             {(coachAiAvailable || showCoachCalPromo) && (
               <CoachAiLauncher isAdmin={isAdmin} entitled={coachAiAvailable ?? false} />
             )}
+            <ShareButton userId={user.id} />
             <UserMenu
               email={user.email ?? ""}
               displayName={displayName}
@@ -84,6 +86,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 Pricing
               </Link>
             )}
+            <ShareButton userId={null} />
             <Link
               href="/login"
               className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
