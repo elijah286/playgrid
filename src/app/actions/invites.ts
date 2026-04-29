@@ -47,6 +47,10 @@ export type InvitePreview = {
   exhausted: boolean;
   revoked: boolean;
   expired: boolean;
+  // True when accepting this invite grants active access immediately,
+  // bypassing the owner-approval queue. Sourced from playbook_invites
+  // since the invite_preview RPC predates this flag.
+  auto_approve: boolean;
 };
 
 const MAX_EXPIRY_DAYS = 30;
@@ -270,7 +274,17 @@ export async function previewInviteAction(
   if (error) return { ok: false, error: error.message };
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return { ok: false, error: "Invite not found." };
-  return { ok: true, preview: row as InvitePreview };
+  // The invite_preview RPC pre-dates the auto_approve column, so look it up
+  // separately. Service role bypasses RLS, which is what we want here — the
+  // token already gates access.
+  const admin = createServiceRoleClient();
+  const { data: flagRow } = await admin
+    .from("playbook_invites")
+    .select("auto_approve")
+    .eq("token", token)
+    .maybeSingle();
+  const autoApprove = flagRow?.auto_approve ?? false;
+  return { ok: true, preview: { ...(row as Omit<InvitePreview, "auto_approve">), auto_approve: autoApprove } };
 }
 
 export async function sendPlaybookInviteEmailAction(input: {

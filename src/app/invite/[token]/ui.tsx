@@ -45,9 +45,14 @@ type Phase =
 export function AcceptInviteButton({
   token,
   askPositions = false,
+  isCoachInvite = false,
 }: {
   token: string;
   askPositions?: boolean;
+  /** When true, the link itself grants coach access — hide the
+   *  "request coach upgrade" affordance, which only makes sense for
+   *  player invites where someone wants to be promoted. */
+  isCoachInvite?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -259,14 +264,16 @@ export function AcceptInviteButton({
       <Button variant="primary" loading={pending} onClick={submit} className="w-full">
         Accept invite
       </Button>
-      <button
-        type="button"
-        className="block w-full text-center text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
-        onClick={() => setMode("coach")}
-        disabled={pending}
-      >
-        Click here if you are a coach
-      </button>
+      {!isCoachInvite && (
+        <button
+          type="button"
+          className="block w-full text-center text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
+          onClick={() => setMode("coach")}
+          disabled={pending}
+        >
+          Click here if you are a coach
+        </button>
+      )}
     </div>
   );
 }

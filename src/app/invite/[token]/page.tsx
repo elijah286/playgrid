@@ -94,9 +94,20 @@ export default async function InvitePage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const roleLabel = preview.role === "viewer" ? "Player" : "Coach";
+  const isCoachInvite = preview.role === "editor";
+  const roleLabel = isCoachInvite ? "Coach" : "Player";
   const next = `/invite/${token}`;
   const accent = preview.color || "#2563eb";
+
+  // Pick the right "what happens next" line. Coach invites are usually
+  // auto-approved; player invites usually need owner approval.
+  const accessLine = preview.auto_approve
+    ? isCoachInvite
+      ? "Tap accept and you're in — full coach access immediately, no approval needed."
+      : "Tap accept and you're in — you'll see plays right away."
+    : isCoachInvite
+      ? "After you accept, the playbook owner will approve your coach access."
+      : "After you accept, the coach will approve your access before you can see plays.";
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5 px-6 pb-16 pt-10 sm:pt-16">
@@ -109,6 +120,7 @@ export default async function InvitePage({ params }: Props) {
         playCount={preview.play_count}
         roleLabel={roleLabel}
         headCoachName={preview.head_coach_name}
+        isCoachInvite={isCoachInvite}
       />
 
       {user ? (
@@ -116,13 +128,12 @@ export default async function InvitePage({ params }: Props) {
           <p className="text-sm text-foreground">
             Signed in as <span className="font-semibold">{user.email}</span>
           </p>
-          <p className="mt-1 text-xs text-muted">
-            After you accept, the coach will approve your access before you can see plays.
-          </p>
+          <p className="mt-1 text-xs text-muted">{accessLine}</p>
           <div className="mt-4">
             <AcceptInviteButton
               token={token}
               askPositions={preview.role === "viewer"}
+              isCoachInvite={isCoachInvite}
             />
           </div>
         </div>
@@ -147,6 +158,7 @@ function PreviewCard({
   playCount,
   roleLabel,
   headCoachName,
+  isCoachInvite,
 }: {
   playbookName: string;
   teamName: string | null;
@@ -156,6 +168,7 @@ function PreviewCard({
   playCount: number;
   roleLabel: string;
   headCoachName: string | null;
+  isCoachInvite: boolean;
 }) {
   // teamName comes from teams.name, which the user can't edit from the
   // playbook UI and is often stale ("Varsity" default). Only show season.
@@ -210,6 +223,35 @@ function PreviewCard({
         />
         <Stat label="Your role" value={roleLabel} />
       </dl>
+      <PermissionsList isCoachInvite={isCoachInvite} />
+    </div>
+  );
+}
+
+function PermissionsList({ isCoachInvite }: { isCoachInvite: boolean }) {
+  const items = isCoachInvite
+    ? [
+        "Add, edit, and delete plays",
+        "Duplicate the playbook into your own copy",
+        "Copy plays out to your other playbooks",
+        "Share the playbook with players and other coaches",
+        "Customize team settings (name, colors, logo)",
+        "Print and export playbook PDFs",
+      ]
+    : ["View plays the coach shares with you"];
+  return (
+    <div className="border-t border-border bg-surface px-5 py-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+        {isCoachInvite ? "As a coach you'll be able to" : "What you'll see"}
+      </p>
+      <ul className="mt-2 space-y-1 text-xs text-foreground">
+        {items.map((item) => (
+          <li key={item} className="flex items-start gap-2">
+            <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-foreground/40" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
