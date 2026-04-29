@@ -200,11 +200,9 @@ function Hero() {
             className="mt-5 text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl"
             style={{ color: BRAND_NAVY }}
           >
-            Everything a youth football coach
+            Design plays.
             <br />
-            <span style={{ color: BRAND_GREEN }}>
-              needs for a playbook.
-            </span>
+            <span style={{ color: BRAND_GREEN }}>Win games.</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
             Design plays, build formations, run game mode from the sideline,
