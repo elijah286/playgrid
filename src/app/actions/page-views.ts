@@ -8,6 +8,7 @@ import { CLICK_ID_PARAMS, type ClickIds } from "@/lib/attribution/click-ids";
 import { setFirstTouchCookieIfMissing } from "@/lib/attribution/first-touch";
 import { lookupGeo } from "@/lib/geo/maxmind";
 import { clientIpFromHeaders } from "@/lib/geo/request-ip";
+import { readConsentCookie, shouldSuppressTracking } from "@/lib/attribution/consent";
 
 const BOT_RE = /bot|crawl|spider|slurp|bingpreview|headlesschrome/i;
 
@@ -53,13 +54,17 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
     let country = h.get("x-vercel-ip-country");
     let region = h.get("x-vercel-ip-country-region");
     let city = h.get("x-vercel-ip-city");
+    let isEu = false;
     if (!country && !region && !city) {
       const ip = clientIpFromHeaders(h);
       const geo = await lookupGeo(ip);
       country = geo.country;
       region = geo.region;
       city = geo.city;
+      isEu = geo.isEu;
     }
+    const consent = await readConsentCookie();
+    const suppress = shouldSuppressTracking({ isEu, consent });
 
     let userId: string | null = null;
     try {
@@ -94,28 +99,30 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
       }
     }
 
+    // EU/UK visitors who haven't consented: drop everything that could be
+    // considered identifying. Country stays (less precise than region/city).
     const admin = createServiceRoleClient();
     await admin.from("page_views").insert({
       session_id: input.sessionId,
       path: input.path.slice(0, 2048),
-      referrer,
-      utm_source: utmSource,
-      utm_medium: utmMedium,
-      utm_campaign: utmCampaign,
-      utm_content: utmContent,
-      utm_term: utmTerm,
-      landing_path: landingPath,
+      referrer: suppress ? null : referrer,
+      utm_source: suppress ? null : utmSource,
+      utm_medium: suppress ? null : utmMedium,
+      utm_campaign: suppress ? null : utmCampaign,
+      utm_content: suppress ? null : utmContent,
+      utm_term: suppress ? null : utmTerm,
+      landing_path: suppress ? null : landingPath,
       country: decodedCountry,
-      region: decodedRegion,
-      city: decodedCity,
+      region: suppress ? null : decodedRegion,
+      city: suppress ? null : decodedCity,
       user_agent: ua,
       device: input.device ?? null,
       user_id: userId,
       is_bot: isBot,
-      ...clickIds,
+      ...(suppress ? {} : clickIds),
     });
 
-    if (input.isFirstSessionEvent && !isBot) {
+    if (input.isFirstSessionEvent && !isBot && !suppress) {
       await setFirstTouchCookieIfMissing({
         utm_source: utmSource,
         utm_medium: utmMedium,
