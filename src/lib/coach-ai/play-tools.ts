@@ -98,8 +98,24 @@ export async function resolvePlayId(
 /** Convert a saved PlayDocument back into the CoachDiagram yard-based format. */
 export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): CoachDiagram {
   const { fieldWidthYds, fieldLengthYds, variant } = doc.sportProfile;
+
+  // Build a stable id per player that's unique within the diagram. Letter
+  // labels collide regularly (twins formation, two Zs in 4-wide, etc.) and
+  // collapsing both into the same diagram id makes Coach Cal conflate the
+  // players — every route attaches to the first one. Suffix duplicates
+  // (Z, Z2, Z3) so each player has a distinct handle while the display
+  // letter (`role`) stays the original. Single-player cases are unchanged.
+  const seen = new Map<string, number>();
+  const idByPlayerUuid = new Map<string, string>();
+  for (const p of doc.layers.players) {
+    const base = p.label || p.id;
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    idByPlayerUuid.set(p.id, count === 1 ? base : `${base}${count}`);
+  }
+
   const players = doc.layers.players.map((p) => ({
-    id: p.label || p.id,
+    id: idByPlayerUuid.get(p.id)!,
     role: p.label || p.role,
     x: Math.round(((p.position.x - 0.5) * fieldWidthYds) * 10) / 10,
     y: Math.round(((p.position.y - LOS_Y) * fieldLengthYds) * 10) / 10,
@@ -108,13 +124,12 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
   }));
 
   const routes = doc.layers.routes.map((r) => {
-    const carrier = doc.layers.players.find((p) => p.id === r.carrierPlayerId);
     const nodes = r.nodes.slice(1); // skip start node (= player position)
     const path: [number, number][] = nodes.map((n) => [
       Math.round(((n.position.x - 0.5) * fieldWidthYds) * 10) / 10,
       Math.round(((n.position.y - LOS_Y) * fieldLengthYds) * 10) / 10,
     ]);
-    const fromLabel = carrier ? (carrier.label || carrier.id) : r.carrierPlayerId;
+    const fromLabel = idByPlayerUuid.get(r.carrierPlayerId) ?? r.carrierPlayerId;
     const hasCurve = r.segments.some((s) => s.shape === "curve");
     return {
       from: fromLabel,

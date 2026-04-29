@@ -136,6 +136,24 @@ export function validateDiagrams(opts: {
       }
     }
 
+    // Player ids must be unique within the diagram. Reusing the same id
+    // (e.g. two players both labeled "Z" in 4-wide) silently collapses
+    // their routes onto the first carrier, producing the "common anchor"
+    // bug. Force a suffix (Z, Z2) so each player has its own handle.
+    const idCounts = new Map<string, number>();
+    for (const p of players) {
+      if (typeof p.id !== "string") continue;
+      idCounts.set(p.id, (idCounts.get(p.id) ?? 0) + 1);
+    }
+    for (const [id, n] of idCounts) {
+      if (n > 1) {
+        errors.push(
+          `${tag}player id "${id}" appears ${n} times — every player needs a unique id. ` +
+          `When two share a position letter (twins, two Zs in 4-wide, etc.), suffix the second one (e.g. "Z" and "Z2") and reference that exact id in routes.`,
+        );
+      }
+    }
+
     // ── Named-route compliance ────────────────────────────────────
     //
     // If get_route_template was called THIS TURN, every route in the

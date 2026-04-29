@@ -324,7 +324,18 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       shape,
     };
     allPlayers.push(player);
-    if (!routeLookup.has(dp.id)) routeLookup.set(dp.id, player);
+    // Player ids must be unique within a diagram. Without this guard the
+    // second player at the same id silently loses its routes (they all
+    // attach to the first), producing the "two Z receivers, one anchor"
+    // bug. Throw so the agent sees the error and re-emits with suffixed
+    // ids (Z, Z2) on the next turn.
+    if (routeLookup.has(dp.id)) {
+      throw new Error(
+        `Duplicate player id "${dp.id}" — every player in a diagram needs a unique id. ` +
+        `When two players share a position letter (twins, two Zs in 4-wide, etc.), suffix the second one (e.g. "Z" and "Z2") and reference that exact id in routes.`,
+      );
+    }
+    routeLookup.set(dp.id, player);
   }
 
   // Build Route objects
