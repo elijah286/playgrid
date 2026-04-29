@@ -50,12 +50,14 @@ export default async function HomePage() {
         <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-10 px-6 py-16 md:flex-row md:items-center md:gap-12 md:py-20 lg:gap-16">
           <div className="flex-1">
             <h1
-              className="text-5xl font-extrabold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl"
+              className="text-4xl font-extrabold leading-[1.02] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
               style={{ color: BRAND_NAVY }}
             >
-              Design plays.
+              <span className="whitespace-nowrap">Design plays.</span>
               <br />
-              <span style={{ color: BRAND_GREEN }}>Win games.</span>
+              <span className="whitespace-nowrap" style={{ color: BRAND_GREEN }}>
+                Win games.
+              </span>
             </h1>
 
             <p
