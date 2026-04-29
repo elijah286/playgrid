@@ -383,9 +383,8 @@ export function CoachAiLauncher({
               className="absolute top-full right-0 z-50 mt-2 w-80 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
             >
               <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl" style={{ background: GRADIENT }}>
-                  <CoachAiIcon className="size-5" />
-                </div>
+                {/* The icon now ships its own gradient tile — no wrapper. */}
+                <CoachAiIcon className="size-8 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-foreground">Meet Coach Cal</p>
                   <p className="text-[11px] text-muted">Your AI coaching partner</p>
@@ -493,7 +492,8 @@ export function CoachAiLauncher({
                 )}
                 style={!adminTrainingActive && !playbookTrainingActive ? { background: GRADIENT } : undefined}
               >
-                <CoachAiIcon className="size-5" />
+                {/* Bare sparkle — wrapper provides the colored tile. */}
+                <CoachAiIcon className="size-5 text-primary" bare />
               </div>
 
               <div className="min-w-0 flex-1">
@@ -688,7 +688,7 @@ function CoachCalDemoStrip() {
           className="flex size-5 shrink-0 items-center justify-center rounded-lg"
           style={{ background: GRADIENT }}
         >
-          <CoachAiIcon className="size-3" />
+          <CoachAiIcon className="size-3 text-primary" bare />
         </div>
         <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-foreground ring-1 ring-border">
           {demo.cal}

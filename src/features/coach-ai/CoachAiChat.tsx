@@ -389,7 +389,7 @@ export function CoachAiChat({
                 <li key={i} className={t.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
                   {t.role === "assistant" && (
                     <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <CoachAiIcon className="size-4" />
+                      <CoachAiIcon className="size-4 text-primary" bare />
                     </div>
                   )}
                   {t.role === "user" ? (
@@ -567,9 +567,8 @@ function Empty() {
   ];
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-        <CoachAiIcon className="size-7" />
-      </div>
+      {/* Standalone mark — icon ships its own gradient tile. */}
+      <CoachAiIcon className="size-12" />
       <h3 className="mt-3 text-base font-semibold text-foreground">Coach Cal</h3>
       <p className="mt-1 max-w-sm text-sm text-muted">
         Ask about rules, formations, or play concepts. Coach Cal grounds answers
