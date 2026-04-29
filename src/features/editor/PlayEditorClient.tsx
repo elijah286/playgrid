@@ -256,9 +256,17 @@ function PlayEditorClientInner({
   const [mode, setMode] = useState<"view" | "edit">("view");
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(min-width: 640px)").matches) {
-      setMode("edit");
-    }
+    const mql = window.matchMedia("(min-width: 640px)");
+    // On desktop (or as soon as the viewport grows past the breakpoint),
+    // force edit mode — desktop should never be locked behind the mobile
+    // "Edit play" button. We don't force back to view on shrink: a coach
+    // who explicitly tapped Edit on mobile keeps their chosen state.
+    const apply = () => {
+      if (mql.matches) setMode("edit");
+    };
+    apply();
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
   }, []);
 
   /* ---------- Auto-save ---------- */
