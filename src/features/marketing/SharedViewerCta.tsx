@@ -64,7 +64,7 @@ export function BuildYourOwnPlaybookCta() {
               <ArrowRight className="size-4" aria-hidden />
             </Link>
             <Link
-              href="/learn-more"
+              href="/#tour"
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-5 py-3 text-base font-semibold text-foreground hover:bg-surface-inset"
             >
               Take the tour
@@ -83,7 +83,7 @@ export function MadeWithBadge() {
       className="mx-auto mt-10 flex max-w-5xl items-center justify-center px-6"
     >
       <Link
-        href="/learn-more"
+        href="/#tour"
         className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-foreground"
       >
         <span

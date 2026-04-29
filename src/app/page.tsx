@@ -102,13 +102,14 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Scroll affordance — bouncing chevron at the bottom of the hero
-            on md+ viewports. Phones get natural scroll cues from the
-            stacked layout, so we hide it there. */}
+        {/* Scroll affordance — bouncing chevron only on md+ viewports
+            that are tall enough that the next section likely *isn't*
+            already peeking above the fold. Phones (stacked layout) and
+            short windows hide it because peek does the work. */}
         <Link
           href="#tour"
           aria-label="Scroll to product tour"
-          className="absolute bottom-4 left-1/2 hidden -translate-x-1/2 animate-bounce rounded-full p-2 text-muted transition-colors hover:text-foreground md:block"
+          className="absolute bottom-4 left-1/2 hidden -translate-x-1/2 animate-bounce rounded-full p-2 text-muted transition-colors hover:text-foreground md:[@media(min-height:850px)]:block"
         >
           <ChevronDown className="size-7" />
         </Link>

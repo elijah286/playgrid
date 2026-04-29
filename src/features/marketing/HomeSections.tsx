@@ -20,9 +20,9 @@ const BRAND_NAVY = "#0F1E3D";
 const BRAND_ORANGE = "#F26522";
 
 /* ========================================================================
-   Sections shared by `/` (consolidated landing) and `/learn-more` (deep-dive
-   tour). Anything specific to one page (e.g. FormationsAndTags, GameMode,
-   Sharing) stays in that page's file.
+   Sections rendered on the consolidated home page (`/`). These were once
+   shared with a separate `/learn-more` deep-dive page; that route is now
+   redirected to `/#tour` and the home page is the single marketing surface.
    ======================================================================== */
 
 /* ---------- Tour: Every screen ---------- */
@@ -32,41 +32,46 @@ export function EveryScreen() {
   return (
     <section id="tour" className="relative scroll-mt-24 py-20 md:py-24">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="grid gap-10 md:grid-cols-[1.15fr_1fr] md:items-end md:gap-10 lg:gap-14">
-          {/* Left column: eyebrow + heading + paragraph. Sits in the
-              upper-left, naturally clearing the iPad below it and stopping
-              before the (taller) iPhone on the right. */}
-          <Reveal>
-            <div>
+        <div className="grid gap-10 md:grid-cols-[1fr_auto] md:items-end md:gap-12">
+          {/* Left column: heading + paragraph on top, tablet underneath.
+              The heading owns the full left-col width so it can render in
+              two lines as designed instead of word-wrapping. The tablet
+              sits beneath the text, bottom-aligned with the phone. */}
+          <div>
+            <Reveal>
               <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
-              <h2 className="mt-3 text-3xl font-extrabold leading-[1.1] tracking-tight text-balance lg:text-5xl">
+              <h2 className="mt-3 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
                 Make plays on your desktop
                 <br />
                 <span className="text-muted">or on the field.</span>
               </h2>
-              <p className="mt-5 max-w-md text-lg text-muted">
+              <p className="mt-5 max-w-lg text-lg text-muted">
                 An easy, fun play editor designed for desktop, tablet, and
                 mobile. Draw it up at the kitchen table, review it on the
                 sideline, pull up the call on your phone between series.
               </p>
-            </div>
-          </Reveal>
+            </Reveal>
 
-          {/* Right column: tablet + phone, bottom-aligned. The phone is
-              taller, so its top extends up alongside the heading; the
-              tablet sits below, clearing space for the heading above it. */}
-          <Reveal delay={100}>
-            <div className="relative flex items-end justify-center gap-4 md:justify-end">
-              <TabletFrame>
-                <Image
-                  src="/marketing/screens/tablet-playbook.png"
-                  alt="Playbook on a tablet"
-                  width={1024}
-                  height={768}
-                  loading="lazy"
-                  className="h-full w-full object-cover object-top"
-                />
-              </TabletFrame>
+            <Reveal delay={100}>
+              <div className="mt-10">
+                <TabletFrame>
+                  <Image
+                    src="/marketing/screens/tablet-playbook.png"
+                    alt="Playbook on a tablet"
+                    width={1024}
+                    height={768}
+                    loading="lazy"
+                    className="h-full w-full object-cover object-top"
+                  />
+                </TabletFrame>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* Right column: phone alone, bottom-aligned. Its taller frame
+              extends up alongside the heading on the left. */}
+          <Reveal delay={150}>
+            <div className="flex justify-center md:justify-end">
               <PhoneFrame>
                 <Image
                   src="/marketing/screens/phone-play.png"
@@ -478,8 +483,7 @@ export function FinalCta() {
 }
 
 /* ========================================================================
-   Building blocks — exported so /learn-more can reuse them in its
-   page-specific sections (FormationsAndTags, etc).
+   Building blocks.
    ======================================================================== */
 
 export function SectionEyebrow({

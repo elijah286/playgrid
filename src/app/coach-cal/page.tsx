@@ -28,7 +28,7 @@ import {
      - "youth football AI"
      - "Coach Cal" (brand term)
    The page is a dedicated landing surface so we can rank for those
-   queries; /faq still has the answers, /learn-more still has the tour.
+   queries; /faq still has the answers, /#tour has the product walkthrough.
    ------------------------------------------------------------------------- */
 
 const SITE_URL =
@@ -218,7 +218,7 @@ function Hero() {
               <ArrowRight className="size-4" />
             </Link>
             <Link
-              href="/learn-more"
+              href="/#tour"
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-5 py-3 text-base font-semibold text-foreground hover:bg-surface-inset"
             >
               Take the tour
@@ -682,7 +682,7 @@ function FinalCta() {
             Start free trial <ArrowRight className="size-5" />
           </Link>
           <Link
-            href="/learn-more"
+            href="/#tour"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-6 py-3.5 text-base font-semibold text-foreground hover:bg-surface-inset"
           >
             Take the tour

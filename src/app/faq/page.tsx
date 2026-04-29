@@ -270,7 +270,7 @@ export default async function FaqPage() {
           </Link>{" "}
           — or{" "}
           <Link
-            href="/learn-more"
+            href="/#tour"
             className="font-medium text-foreground hover:underline"
           >
             take the tour

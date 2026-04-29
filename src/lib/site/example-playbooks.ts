@@ -7,7 +7,7 @@ const PREVIEWS_PER_BOOK = 12;
 
 /**
  * Shared loader for public example playbooks — used by /examples and
- * /learn-more so both surfaces show the same tiles.
+ * the home page so both surfaces show the same tiles.
  */
 export async function loadExamplePlaybooks(): Promise<ExampleBookTileData[]> {
   if (!hasSupabaseEnv()) return [];

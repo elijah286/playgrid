@@ -32,6 +32,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      // /learn-more was the deep-dive tour page before the home page was
+      // consolidated. Its content lives on the home page now (#tour
+      // section), so 301 the URL to preserve any external links and SEO.
+      { source: "/learn-more", destination: "/#tour", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

@@ -71,7 +71,7 @@ const FEATURES: FeatureMeta[] = [
     description:
       "Pre-auth landing page addition. When on, shows a \"Learn More Here\" link under the main CTAs. \"Only me\" doesn't apply here — the link is either public or hidden.",
     disabledScopes: ["me"],
-    previewHref: "/learn-more",
+    previewHref: "/#tour",
   },
 ];
 
