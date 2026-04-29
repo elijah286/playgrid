@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowDownUp, CalendarPlus, Link2, Link2Off, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowDownUp, Trash2 } from "lucide-react";
 import {
   deleteGameSessionAction,
   deleteScheduledEventAction,
   listGamesAction,
   listLinkableSessionsAction,
-  listSchedulableEventsAction,
   setSessionCalendarEventAction,
   updateGameOutcomeAction,
   updateScheduledEventAction,
@@ -19,21 +18,12 @@ import { useToast } from "@/components/ui";
 type KindFilter = "all" | "game" | "scrimmage";
 type SortOrder = "newest" | "oldest";
 
-type ScheduledOption = {
-  id: string;
-  startsAt: string;
-  opponent: string | null;
-  homeAway: "home" | "away" | "neutral" | null;
-  locationName: string | null;
-};
-
 export function GameResultsPanel({ playbookId }: { playbookId: string }) {
   const [games, setGames] = useState<GameRowData[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [pendingDelete, setPendingDelete] = useState<GameRowData | null>(null);
-  const [linkTarget, setLinkTarget] = useState<GameRowData | null>(null);
   const [editTarget, setEditTarget] = useState<GameRowData | null>(null);
   const [deleting, startDelete] = useTransition();
   const { toast } = useToast();
@@ -78,21 +68,6 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
       refresh();
     });
   };
-
-  async function handleUnlink(row: GameRowData) {
-    if (!row.sessionId) return;
-    const res = await setSessionCalendarEventAction(
-      playbookId,
-      row.sessionId,
-      null,
-    );
-    if (!res.ok) {
-      toast(res.error, "error");
-      return;
-    }
-    toast("Unlinked from schedule.", "success");
-    refresh();
-  }
 
   const filtered = useMemo(() => {
     if (!games) return null;
@@ -196,9 +171,6 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
                     playbookId={playbookId}
                     game={g}
                     onEdit={() => setEditTarget(g)}
-                    onDelete={() => setPendingDelete(g)}
-                    onLink={() => setLinkTarget(g)}
-                    onUnlink={() => handleUnlink(g)}
                   />
                 ))}
               </ul>
@@ -222,16 +194,10 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
             setEditTarget(null);
             if (saved) refresh();
           }}
-        />
-      )}
-      {linkTarget && linkTarget.sessionId && (
-        <LinkScheduledDialog
-          playbookId={playbookId}
-          sessionId={linkTarget.sessionId}
-          kind={linkTarget.kind}
-          onClose={(linked) => {
-            setLinkTarget(null);
-            if (linked) refresh();
+          onDelete={() => {
+            const target = editTarget;
+            setEditTarget(null);
+            setPendingDelete(target);
           }}
         />
       )}
@@ -293,137 +259,6 @@ function ConfirmDeleteDialog({
   );
 }
 
-function LinkScheduledDialog({
-  playbookId,
-  sessionId,
-  kind,
-  onClose,
-}: {
-  playbookId: string;
-  sessionId: string;
-  kind: "game" | "scrimmage";
-  onClose: (linked: boolean) => void;
-}) {
-  const [options, setOptions] = useState<ScheduledOption[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    listSchedulableEventsAction(playbookId, kind).then((res) => {
-      if (res.ok) setOptions(res.events);
-      else setError(res.error);
-    });
-  }, [playbookId, kind]);
-
-  function pick(eventId: string) {
-    startTransition(async () => {
-      const res = await setSessionCalendarEventAction(
-        playbookId,
-        sessionId,
-        eventId,
-      );
-      if (!res.ok) {
-        toast(res.error, "error");
-        return;
-      }
-      toast("Linked to schedule.", "success");
-      onClose(true);
-    });
-  }
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
-      onClick={() => onClose(false)}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-base font-semibold text-foreground">
-          Link to scheduled {kind}
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          Pick an event from the calendar to attach this session to.
-        </p>
-        {error && (
-          <p className="mt-3 rounded-lg bg-rose-500/10 p-2 text-sm text-rose-700">
-            {error}
-          </p>
-        )}
-        {options == null && !error && (
-          <p className="mt-4 text-sm text-muted">Loading…</p>
-        )}
-        {options && options.length === 0 && (
-          <p className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted">
-            No unlinked {kind === "scrimmage" ? "scrimmages" : "games"} on the
-            schedule.
-          </p>
-        )}
-        {options && options.length > 0 && (
-          <ul className="mt-4 max-h-80 space-y-2 overflow-y-auto">
-            {options.map((o) => {
-              const date = new Date(o.startsAt);
-              const dateLabel = date.toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              });
-              const timeLabel = date.toLocaleTimeString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              });
-              return (
-                <li key={o.id}>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => pick(o.id)}
-                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3 text-left hover:bg-surface-hover disabled:opacity-60"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">
-                        {dateLabel} · {timeLabel}
-                      </p>
-                      <p className="truncate text-xs text-muted">
-                        {[
-                          o.opponent ? `vs ${o.opponent}` : null,
-                          o.homeAway ? capitalize(o.homeAway) : null,
-                          o.locationName,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "No details"}
-                      </p>
-                    </div>
-                    <Link2 className="size-4 shrink-0 text-muted" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={() => onClose(false)}
-            disabled={pending}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
 
 function KindToggle({
   value,
@@ -491,16 +326,10 @@ function GameListItem({
   playbookId,
   game,
   onEdit,
-  onDelete,
-  onLink,
-  onUnlink,
 }: {
   playbookId: string;
   game: GameRowData;
   onEdit: () => void;
-  onDelete: () => void;
-  onLink: () => void;
-  onUnlink: () => void;
 }) {
   const date = new Date(game.when);
   const timeLabel = date.toLocaleTimeString(undefined, {
@@ -517,14 +346,11 @@ function GameListItem({
   // back to "vs" when the side isn't recorded.
   const oppPrefix = game.homeAway === "away" ? "@" : "vs";
   const opponent = game.opponent ?? "TBD";
-  const locationSuffix = game.locationName
-    ? ` · ${game.locationName}`
-    : "";
 
   const rowCls =
     "flex items-stretch gap-3 px-3 py-2.5 transition-colors " +
     (isFuture ? "opacity-75 " : "") +
-    (detailHref ? "hover:bg-surface-hover" : "");
+    "hover:bg-surface-hover";
 
   const inner = (
     <div className={rowCls}>
@@ -547,8 +373,6 @@ function GameListItem({
         {game.locationName && (
           <p className="truncate text-[11px] text-muted">{game.locationName}</p>
         )}
-        {/* locationSuffix is unused now — kept above for screen-reader fallback */}
-        <span className="sr-only">{locationSuffix}</span>
       </div>
 
       {/* Right column: result or status */}
@@ -566,24 +390,25 @@ function GameListItem({
     </div>
   );
 
+  // Sessions get a rich detail page; event-only rows (no session yet)
+  // open the inline edit dialog instead — that's the only "more info"
+  // surface we have for them, and it carries the delete affordance too.
   return (
-    <li className="relative">
+    <li>
       {detailHref ? (
         <Link href={detailHref} className="block">
           {inner}
         </Link>
       ) : (
-        inner
+        <button
+          type="button"
+          onClick={onEdit}
+          className="block w-full text-left"
+          aria-label={`Edit ${game.kind} vs ${opponent}`}
+        >
+          {inner}
+        </button>
       )}
-      <div className="absolute right-1 top-1/2 -translate-y-1/2">
-        <RowActionMenu
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onLink={game.sessionId && !game.eventId ? onLink : null}
-          onUnlink={game.sessionId && game.eventId ? onUnlink : null}
-          kindLabel={game.kind}
-        />
-      </div>
     </li>
   );
 }
@@ -605,94 +430,6 @@ function ScoreChip({ us, them }: { us: number; them: number }) {
     </span>
   );
 }
-
-function RowActionMenu({
-  onEdit,
-  onDelete,
-  onLink,
-  onUnlink,
-  kindLabel,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-  onLink: (() => void) | null;
-  onUnlink: (() => void) | null;
-  kindLabel: "game" | "scrimmage";
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`More actions for this ${kindLabel}`}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-surface-hover hover:text-foreground"
-      >
-        <MoreHorizontal className="size-4" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-lg border border-border bg-surface-raised py-1 text-sm shadow-elevated"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(e) => { e.preventDefault(); setOpen(false); onEdit(); }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
-          >
-            <Pencil className="size-4" /> Edit
-          </button>
-          {onLink && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={(e) => { e.preventDefault(); setOpen(false); onLink(); }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
-            >
-              <CalendarPlus className="size-4" /> Link to schedule
-            </button>
-          )}
-          {onUnlink && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={(e) => { e.preventDefault(); setOpen(false); onUnlink(); }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
-            >
-              <Link2Off className="size-4" /> Unlink from schedule
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(e) => { e.preventDefault(); setOpen(false); onDelete(); }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-rose-600 hover:bg-rose-500/10 dark:text-rose-300"
-          >
-            <Trash2 className="size-4" /> Delete
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 function StatusBadge({
   status,
@@ -780,10 +517,12 @@ function EditGameDialog({
   playbookId,
   game,
   onClose,
+  onDelete,
 }: {
   playbookId: string;
   game: GameRowData;
   onClose: (saved: boolean) => void;
+  onDelete: () => void;
 }) {
   const [opponent, setOpponent] = useState(game.opponent ?? "");
   const [scoreUs, setScoreUs] = useState<string>(
@@ -970,23 +709,34 @@ function EditGameDialog({
             </label>
           )}
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex items-center justify-between gap-2">
           <button
             type="button"
-            onClick={() => onClose(false)}
+            onClick={onDelete}
             disabled={pending}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-300"
           >
-            Cancel
+            <Trash2 className="size-4" />
+            Delete
           </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={pending}
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-          >
-            {pending ? "Saving…" : "Save"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onClose(false)}
+              disabled={pending}
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:bg-surface-hover"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={pending}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              {pending ? "Saving…" : "Save"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
