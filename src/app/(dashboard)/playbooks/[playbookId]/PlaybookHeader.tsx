@@ -1637,8 +1637,11 @@ export function InviteTeamMemberDialog({
     canManageSeats: boolean;
   } | null>(null);
   const [permsOpen, setPermsOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [autoStarted, setAutoStarted] = useState(false);
+  // Set when the user clicks one of the role cards (Co-coach / Player).
+  // Tells the auto-generate effect below "the user already chose — skip
+  // the config form and produce the QR straight away." Reset by Back so
+  // the user can return to the cards or tweak settings.
+  const [skipConfig, setSkipConfig] = useState(false);
   const outOfCoachSeats =
     role === "editor" && seatStatus?.isCoachPlus === true && seatStatus.available <= 0;
   const needsCoachPlan =
@@ -1652,37 +1655,23 @@ export function InviteTeamMemberDialog({
     seatStatus?.isCoachPlus === true &&
     parsedEmailCount > seatStatus.available;
 
+  // After the user picks a role card, auto-create the invite so they land
+  // on the QR straight away. Defaults match what almost every owner picks
+  // anyway (auto-approve true, limit 25, 14-day expiry); coaches who need
+  // different settings can revoke from the Roster tab. Same flow on
+  // desktop and mobile — simpler than the previous mobile-only auto-jump
+  // that raced the user's click.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 639px)");
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  // On mobile, jump straight to a player-invite QR. Coaches still need
-  // the role picker and seat math, so we don't auto-start when canManage.
-  useEffect(() => {
-    if (autoStarted) return;
-    if (!isMobile) return;
-    if (mode !== "choose") return;
-    setAutoStarted(true);
-    setRole("viewer");
-    setMode("link");
-    setLinkTab("qr");
-  }, [isMobile, mode, autoStarted]);
-
-  useEffect(() => {
+    if (!skipConfig) return;
     if (mode !== "link") return;
-    if (role !== "viewer") return;
     if (inviteUrl) return;
     if (creating) return;
-    if (!autoStarted) return;
     void generate();
-    // generate is stable enough for this single-shot autofill
+    // generate reads role + autoApprove + autoApproveLimit from state,
+    // which are stable by the time this fires (they were set or defaulted
+    // before skipConfig flipped on).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, role, inviteUrl, creating, autoStarted]);
+  }, [skipConfig, mode, inviteUrl, creating]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1878,17 +1867,25 @@ export function InviteTeamMemberDialog({
                     title="Add a co-coach"
                     description="They edit this playbook with you. Changes are shared in real time."
                     accent="default"
-                    selected={role === "editor"}
-                    onClick={() => setRole("editor")}
+                    onClick={() => {
+                      setRole("editor");
+                      setMode("link");
+                      setLinkTab("qr");
+                      setSkipConfig(true);
+                    }}
                   />
                 )}
                 <ShareOptionCard
-                  icon={<Mail className="size-4" />}
+                  icon={<UserPlus className="size-4" />}
                   title="Add a player"
                   description="View-only access to plays and notes."
                   accent="default"
-                  selected={role === "viewer"}
-                  onClick={() => setRole("viewer")}
+                  onClick={() => {
+                    setRole("viewer");
+                    setMode("link");
+                    setLinkTab("qr");
+                    setSkipConfig(true);
+                  }}
                 />
                 {!canManage && (
                   <p className="text-xs text-muted">
@@ -1987,40 +1984,12 @@ export function InviteTeamMemberDialog({
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => setMode("email")}
-                className="flex w-full items-start gap-3 rounded-lg border border-border bg-surface-inset p-4 text-left hover:border-primary hover:bg-primary/5"
-              >
-                <Mail className="mt-0.5 size-5 shrink-0 text-primary" />
-                <div>
-                  <div className="text-sm font-semibold text-foreground">
-                    {role === "editor" ? "Add as co-coach by email" : "Share by email"}
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {role === "editor"
-                      ? "They join this playbook as a coach. Existing users get instant access; new users receive a sign-up link."
-                      : "Add one or more people by email. Existing users get instant access; new users receive a sign-up link."}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("link")}
-                className="flex w-full items-start gap-3 rounded-lg border border-border bg-surface-inset p-4 text-left hover:border-primary hover:bg-primary/5"
-              >
-                <Copy className="mt-0.5 size-5 shrink-0 text-primary" />
-                <div>
-                  <div className="text-sm font-semibold text-foreground">
-                    {role === "editor" ? "Add as co-coach by link or QR" : "Create share link"}
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {role === "editor"
-                      ? "Single-use link or QR — perfect for handing co-coach access in person."
-                      : "Generate a link (or QR code) anyone can use to request access. You still approve each person."}
-                  </p>
-                </div>
-              </button>
+              {/* The old "by email" / "by link or QR" method-picker cards
+                  used to render here for whichever role was toggled. After
+                  the IA reframe, role-card clicks jump straight to QR; the
+                  email path is reachable from the QR screen via "Send by
+                  email instead", so these vestigial cards have been
+                  removed. */}
             </div>
           )}
 
@@ -2121,94 +2090,93 @@ export function InviteTeamMemberDialog({
             </div>
           )}
 
+          {/* The previous "configure your invite" form has been retired —
+              defaults (auto-approve up to 25, valid 14 days) match what
+              every owner picked anyway, and links don't have finite uses.
+              When skipConfig is set, we auto-generate and show a small
+              loading state in its place. The (outOfCoachSeats /
+              needsCoachPlan) blocking error still surfaces here so a
+              co-coach pick on a maxed-out seat pool doesn't silently
+              spin. */}
           {mode === "link" && !inviteUrl && (
             <>
-              <button
-                type="button"
-                onClick={() => setMode("choose")}
-                className="-mt-1 flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
-              >
-                <ArrowLeft className="size-3" /> Back
-              </button>
-              {role === "editor" && (
-                <div className="flex items-start gap-2 rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
+              {role === "editor" && (outOfCoachSeats || needsCoachPlan) ? (
+                <div className="flex items-start gap-2 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  <span>
-                    <strong>Edit-access link.</strong> Anyone who opens this
-                    link joins as a coach with full edit, delete, and invite
-                    rights. Share carefully — and remember you can revoke the
-                    link or demote individuals later.
-                  </span>
-                </div>
-              )}
-              {role === "editor" ? (
-                <div className="rounded-lg border border-border bg-surface-inset/50 p-3 text-xs text-muted">
-                  Single-use coach link — works for one person, then expires.
-                  Hand off the link or QR in person; the next coach gets a
-                  fresh one.
+                  <div className="flex-1">
+                    {needsCoachPlan ? (
+                      <>
+                        <strong>Coaches need a Team Coach plan.</strong>{" "}
+                        <Link
+                          href="/pricing"
+                          className="font-medium underline hover:no-underline"
+                        >
+                          See pricing
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <strong>Out of coach seats.</strong>{" "}
+                        {seatStatus?.canManageSeats ? (
+                          <Link
+                            href="/account"
+                            className="font-medium underline hover:no-underline"
+                          >
+                            Add a seat or remove a coach
+                          </Link>
+                        ) : (
+                          <span>Ask the playbook owner to add a seat.</span>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               ) : (
-                <div className="rounded-lg border border-border bg-surface-inset/50 p-3">
-                  <label className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={autoApprove}
-                      onChange={(e) => setAutoApprove(e.target.checked)}
-                      className="mt-0.5 size-4 shrink-0 rounded border-border"
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-foreground">
-                        Anyone with this link can join immediately
-                      </div>
-                      {autoApprove ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                          <span>Up to</span>
-                          <Input
-                            value={autoApproveLimit}
-                            onChange={(e) => setAutoApproveLimit(e.target.value)}
-                            placeholder="unlimited"
-                            className="h-7 w-20 text-xs"
-                          />
-                          <span>user{autoApproveLimit.trim() === "1" ? "" : "s"} — after that, you&apos;ll approve each new person.</span>
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-xs text-muted">
-                          You&apos;ll approve every joiner from the Roster tab.
-                        </p>
-                      )}
-                    </div>
-                  </label>
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
+                  <svg
+                    className="size-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden
+                  >
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                    <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                  <span>Generating QR…</span>
                 </div>
               )}
-              <p className="text-xs text-muted">Link is valid for 14 days.</p>
-              <Button
-                variant="primary"
-                onClick={generate}
-                loading={creating}
-                disabled={role === "editor" && (outOfCoachSeats || needsCoachPlan)}
-                className="w-full"
-              >
-                Create invite link
-              </Button>
             </>
           )}
 
           {mode === "link" && inviteUrl && (
             <>
-              {autoStarted && role === "viewer" && (
+              <div className="-mt-1 flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setMode("choose");
                     setInviteUrl(null);
                     setQrDataUrl(null);
-                    setAutoStarted(false);
+                    setSkipConfig(false);
                   }}
-                  className="-mt-1 text-xs font-medium text-muted underline hover:text-foreground"
+                  className="flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
                 >
-                  More options (email, coach invite)
+                  <ArrowLeft className="size-3" /> Back
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInviteUrl(null);
+                    setQrDataUrl(null);
+                    setSkipConfig(false);
+                    setMode("email");
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  <Mail className="size-3" />
+                  Send by email instead
+                </button>
+              </div>
               {role === "editor" && (
                 <div className="flex items-start gap-2 rounded-md bg-warning-light px-3 py-2 text-xs text-warning ring-1 ring-warning/30">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />

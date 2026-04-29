@@ -237,6 +237,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "playbook-share-flow-unified",
+    name: "Unified share flow on mobile and desktop",
+    description:
+      "Picking a role card in the Share dialog (Add a co-coach / Add a player) now jumps directly to a QR code on both mobile and desktop. Defaults (auto-approve up to 25 joiners, link valid 14 days) match what every owner picked anyway, so the configuration form between role-pick and QR has been retired. The mobile-only auto-jump effect that used to race the user's click on the cards is gone, fixing the flicker where Add-a-co-coach briefly showed before bouncing to a player QR. The redundant \"More options\" escape-hatch is replaced with a clear Back button plus a \"Send by email instead\" affordance on the QR screen.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "playbook-share-mobile-button",
     name: "Mobile Share button on the playbook header",
     description:
