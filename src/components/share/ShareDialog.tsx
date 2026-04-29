@@ -88,12 +88,23 @@ export function ShareDialog({ userId, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      // The outer wrapper handles overflow: when the dialog is taller than
+      // the viewport (small browser height + promo strip), it scrolls
+      // instead of clipping the header off-screen. min-h-full + items-center
+      // on the inner flex keeps the dialog vertically centered when it fits
+      // and pins it to the top with natural scroll when it doesn't.
+      className="fixed inset-0 z-[60] overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated">
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
@@ -201,6 +212,7 @@ export function ShareDialog({ userId, onClose }: Props) {
               </p>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>

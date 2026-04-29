@@ -34,12 +34,18 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      // Outer wrapper scrolls when the dialog is taller than the viewport
+      // so the header / footer never get clipped above or below the screen.
+      // Inner flex with min-h-full + items-center keeps the dialog vertically
+      // centered when it fits and pins it to the top with natural scroll
+      // when it doesn't.
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/50"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
+      <div className="flex min-h-full items-center justify-center p-4">
       <div
         className="w-full max-w-md rounded-2xl bg-surface-raised shadow-2xl ring-1 ring-border"
         onClick={(e) => e.stopPropagation()}
@@ -59,6 +65,7 @@ export function Modal({
         {footer && (
           <div className="flex justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>
         )}
+      </div>
       </div>
     </div>
   );
