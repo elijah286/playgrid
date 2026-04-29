@@ -21,6 +21,7 @@ export type FeatureCategory =
   | "Game mode"
   | "Print & export"
   | "Billing & accounts"
+  | "Marketing site"
   | "Admin tools";
 
 export type FeatureStatus = "ga" | "beta" | "internal";
@@ -560,6 +561,16 @@ export const FEATURES: FeatureEntry[] = [
     category: "Admin tools",
     status: "internal",
     addedDate: "2026-04-10",
+  },
+  // ── Marketing site ──────────────────────────────────────────────
+  {
+    id: "marketing-consolidated-landing",
+    name: "Consolidated landing page",
+    description:
+      "The home page now tells the full story in a single scroll: hero with a free-led CTA, the product tour (#tour anchor), Coach Cal teaser, free-for-solo callout, print-to-wristband proof, real example playbooks, and a final CTA. The dedicated /learn-more and /coach-cal pages still exist as deep-dives for ad landing and SEO, but first-time visitors see the wedge value props (free + tour + AI coach) without having to click through tabs.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-04-29",
   },
   {
     id: "admin-feature-list",

@@ -4,7 +4,6 @@ import Image from "next/image";
 import {
   ArrowRight,
   CalendarDays,
-  Check,
   Gamepad2,
   LayoutGrid,
   Printer,
@@ -12,18 +11,21 @@ import {
   Smartphone,
   Sparkles,
   Tag,
-  Users,
   Wallet,
 } from "lucide-react";
-import {
-  LaptopFrame,
-  PhoneFrame,
-  TabletFrame,
-  WristBand,
-} from "@/features/marketing/DeviceFrames";
+import { LaptopFrame, PhoneFrame } from "@/features/marketing/DeviceFrames";
 import { Reveal } from "@/features/marketing/Reveal";
 import { HeroWalkthroughVideo } from "@/features/marketing/HeroWalkthroughVideo";
-import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
+import {
+  BuiltByACoach,
+  EveryScreen,
+  FeatureBullet,
+  FinalCta,
+  FreeForSolo,
+  PrintoutsAndWristbands,
+  RealPlaybooks,
+  SectionEyebrow,
+} from "@/features/marketing/HomeSections";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 
@@ -325,177 +327,6 @@ function WhyDifferent({ freeMaxPlays }: { freeMaxPlays: number }) {
   );
 }
 
-/* ---------- Free for solo coaches ---------- */
-
-function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
-  const perks = [
-    `Up to ${freeMaxPlays} plays in your own playbook`,
-    "Full editor — routes, formations, tags",
-    "Mobile & tablet views included",
-    "Print call sheets to PDF (wristbands on Coach)",
-  ];
-  return (
-    <section
-      className="relative py-20"
-      style={{
-        background:
-          "linear-gradient(180deg, rgba(149,204,31,0.08) 0%, transparent 100%)",
-      }}
-    >
-      <div className="mx-auto max-w-5xl px-6">
-        <Reveal>
-          <div className="rounded-3xl border border-border bg-surface-raised p-8 shadow-[var(--shadow-elevated)] md:p-12">
-            <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p
-                  className="text-xs font-semibold uppercase tracking-wider"
-                  style={{ color: BRAND_GREEN }}
-                >
-                  Free, forever
-                </p>
-                <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
-                  Solo coach? You pay <span style={{ color: BRAND_GREEN }}>$0</span>.
-                </h2>
-                <p className="mt-3 max-w-xl text-muted">
-                  One playbook with up to {freeMaxPlays} plays is free, forever.
-                  Call sheets print free. Upgrade to Team Coach when you want
-                  wristbands, bigger playbooks, and staff collaboration.
-                </p>
-              </div>
-              <Link
-                href="/pricing"
-                data-web-only
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-foreground px-5 py-3 text-sm font-semibold text-surface-raised hover:opacity-90"
-              >
-                See pricing
-                <ArrowRight className="size-4" />
-              </Link>
-            </div>
-            <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-              {perks.map((perk) => (
-                <li key={perk} className="flex items-start gap-2 text-sm">
-                  <Check
-                    className="mt-0.5 size-4 shrink-0"
-                    style={{ color: BRAND_GREEN }}
-                  />
-                  <span className="text-foreground">{perk}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Real playbooks — point to /examples ---------- */
-
-function RealPlaybooks({
-  examples,
-}: {
-  examples: Awaited<ReturnType<typeof loadExamplePlaybooks>>;
-}) {
-  return (
-    <section className="relative py-24">
-      <div className="mx-auto max-w-6xl px-6">
-        <Reveal>
-          <div className="max-w-2xl">
-            <SectionEyebrow icon={LayoutGrid}>See it live</SectionEyebrow>
-            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Real playbooks.
-              <br />
-              <span className="text-muted">Open one, poke around.</span>
-            </h2>
-            <p className="mt-5 text-lg text-muted">
-              These are actual xogridmaker playbooks built by coaches. Every
-              play opens in the real editor, every formation is live, every
-              wristband is printable. Click in and tinker — nothing you do
-              here is saved.
-            </p>
-          </div>
-        </Reveal>
-
-        {examples.length > 0 && (
-          <Reveal delay={100}>
-            <div className="mt-12 flex flex-wrap justify-center gap-6">
-              {examples.map((pb) => (
-                <div key={pb.id} className="w-40 sm:w-48 lg:w-56">
-                  <ExampleBookTile tile={pb} />
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        )}
-
-        <Reveal delay={200}>
-          <div className="mt-10 flex justify-center">
-            <Link
-              href="/examples"
-              className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
-              style={{ background: BRAND_BLUE }}
-            >
-              Browse all examples
-              <ArrowRight className="size-5" />
-            </Link>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Every screen (real tablet + phone shots) ---------- */
-
-function EveryScreen() {
-  return (
-    <section className="relative py-24">
-      <div className="mx-auto max-w-6xl px-6">
-        <Reveal>
-          <div className="max-w-2xl">
-            <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
-            <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Make plays on your desktop
-              <br />
-              <span className="text-muted">or on the field.</span>
-            </h2>
-            <p className="mt-5 text-lg text-muted">
-              An easy, fun play editor designed for desktop, tablet, and
-              mobile. Draw it up at the kitchen table, review it on the
-              sideline, pull up the call on your phone between series.
-            </p>
-          </div>
-        </Reveal>
-
-        <div className="mt-14 flex flex-wrap items-end justify-center gap-10">
-          <Reveal delay={0}>
-            <TabletFrame>
-              <Image
-                src="/marketing/screens/tablet-playbook.png"
-                alt="Playbook on a tablet"
-                width={1024}
-                height={768}
-                className="h-full w-full object-cover object-top"
-              />
-            </TabletFrame>
-          </Reveal>
-          <Reveal delay={150}>
-            <PhoneFrame>
-              <Image
-                src="/marketing/screens/phone-play.png"
-                alt="A play open on a phone"
-                width={390}
-                height={844}
-                className="h-full w-full object-cover object-top"
-              />
-            </PhoneFrame>
-          </Reveal>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ---------- Formations + tagging ---------- */
 
 function FormationsAndTags() {
@@ -576,78 +407,6 @@ function FormationsAndTags() {
             </ul>
           </div>
         </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Printouts + wristbands ---------- */
-
-function PrintoutsAndWristbands() {
-  return (
-    <section
-      className="relative overflow-hidden py-28"
-      style={{
-        background:
-          "linear-gradient(180deg, rgba(242,101,34,0.06) 0%, transparent 60%)",
-      }}
-    >
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="grid gap-12 md:grid-cols-2 md:items-center">
-          <Reveal>
-            <div className="overflow-hidden rounded-3xl shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
-              <Image
-                src="/marketing/photos/wristbands-callsheet.jpg"
-                alt="Printed call sheet and four wristbands on the field — generated from a real xogridmaker playbook"
-                width={1400}
-                height={1050}
-                className="block h-auto w-full"
-                sizes="(min-width: 768px) 600px, 100vw"
-              />
-            </div>
-          </Reveal>
-
-          <Reveal delay={100}>
-            <div>
-              <SectionEyebrow icon={Printer} color={BRAND_ORANGE}>
-                Print-ready
-              </SectionEyebrow>
-              <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-                From screen
-                <br />
-                <span style={{ color: BRAND_ORANGE }}>to wristband.</span>
-              </h2>
-              <p className="mt-5 max-w-lg text-lg text-muted">
-                One-click PDFs sized for wristbands, call sheets, and the
-                bench-side binder. Numbering, formations, and tags all carry
-                through so the printout reads just like the app.
-              </p>
-              <p className="mt-3 text-sm text-muted">
-                Every example playbook has a live print preview — try one.
-              </p>
-            </div>
-          </Reveal>
-        </div>
-
-        <div className="mt-20 grid gap-10 md:grid-cols-2 md:items-center">
-          <Reveal>
-            <WristBand>
-              <MockWristSheet />
-            </WristBand>
-            <p className="mt-6 text-center text-sm text-muted">
-              4-across wristband layout — generated from your call sheet.
-            </p>
-          </Reveal>
-
-          <Reveal delay={100}>
-            <div className="mx-auto max-w-md rotate-[-2deg] rounded-lg bg-white p-4 shadow-[var(--shadow-elevated)] ring-1 ring-black/10">
-              <MockCallSheet />
-            </div>
-            <p className="mt-6 text-center text-sm text-muted">
-              Full call sheet — group by situation or personnel.
-            </p>
-          </Reveal>
-        </div>
       </div>
     </section>
   );
@@ -820,179 +579,6 @@ function SharingSection() {
         </Reveal>
       </div>
     </section>
-  );
-}
-
-/* ---------- Built by a coach ---------- */
-
-function BuiltByACoach() {
-  return (
-    <section className="relative py-24">
-      <div className="mx-auto max-w-3xl px-6 text-center">
-        <Reveal>
-          <SectionEyebrow icon={Users} center>
-            Built by a coach
-          </SectionEyebrow>
-          <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-            Built by a youth football coach
-            <br />
-            <span className="text-muted">for youth football coaches.</span>
-          </h2>
-          <p className="mt-6 text-lg text-muted">
-            xogridmaker is built by an active flag, youth tackle, and 7v7
-            coach. Every feature exists because a real practice, a real game,
-            or a real drive home from the field demanded it.
-          </p>
-          <Link
-            href="/about"
-            className="mt-8 inline-flex items-center gap-2 text-base font-semibold"
-            style={{ color: BRAND_BLUE }}
-          >
-            Read the story
-            <ArrowRight className="size-4" />
-          </Link>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ---------- Final CTA ---------- */
-
-function FinalCta() {
-  return (
-    <section
-      className="relative py-28"
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(23,105,255,0.10) 0%, rgba(149,204,31,0.10) 100%)",
-      }}
-    >
-      <div className="mx-auto max-w-3xl px-6 text-center">
-        <Reveal>
-          <div className="mx-auto mb-8 flex items-center justify-center">
-            <Image
-              src="/brand/xogridmaker_icon.svg"
-              alt="xogridmaker"
-              width={120}
-              height={90}
-              className="h-auto w-[120px]"
-            />
-          </div>
-          <h2
-            className="text-4xl font-extrabold tracking-tight md:text-5xl"
-            style={{ color: BRAND_NAVY }}
-          >
-            Design plays. <span style={{ color: BRAND_GREEN }}>Win games.</span>
-          </h2>
-          <p className="mt-5 text-lg text-muted">
-            Free for solo coaches. Live in five minutes. Wristbands tonight.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/login?mode=signup"
-              className="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
-              style={{ background: BRAND_BLUE }}
-            >
-              Get started — free
-              <ArrowRight className="size-5" />
-            </Link>
-            <Link
-              href="/faq"
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-6 py-3.5 text-base font-semibold hover:bg-surface-inset"
-            >
-              Read the FAQ
-            </Link>
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ========================================================================
-   Small building blocks
-   ======================================================================== */
-
-function SectionEyebrow({
-  icon: Icon,
-  children,
-  light = false,
-  center = false,
-  color,
-}: {
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  children: React.ReactNode;
-  light?: boolean;
-  center?: boolean;
-  color?: string;
-}) {
-  const tone = color ?? (light ? "#95CC1F" : BRAND_BLUE);
-  return (
-    <div
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
-        center ? "mx-auto" : ""
-      }`}
-      style={{
-        background: light ? "rgba(255,255,255,0.08)" : `${tone}18`,
-        color: tone,
-      }}
-    >
-      <Icon className="size-3.5" style={{ color: tone }} />
-      {children}
-    </div>
-  );
-}
-
-function FeatureBullet({
-  children,
-  light = false,
-}: {
-  children: React.ReactNode;
-  light?: boolean;
-}) {
-  return (
-    <li className="flex items-start gap-2">
-      <Check
-        className="mt-0.5 size-4 shrink-0"
-        style={{ color: light ? BRAND_GREEN : BRAND_BLUE }}
-      />
-      <span className={light ? "text-white/80" : "text-foreground"}>
-        {children}
-      </span>
-    </li>
-  );
-}
-
-/* ========================================================================
-   Mocks — only for features not covered by /examples (wristband print,
-   game mode, game data). Everything editor/playbook/play-related points
-   to real example playbooks instead.
-   ======================================================================== */
-
-function MockWristSheet() {
-  return (
-    <Image
-      src="/marketing/screens/print-wristband-v2.png"
-      alt="Single wristband card generated from a real example playbook"
-      width={1338}
-      height={754}
-      className="block h-auto w-full"
-      priority={false}
-    />
-  );
-}
-
-function MockCallSheet() {
-  return (
-    <Image
-      src="/marketing/screens/print-callsheet-v2.png"
-      alt="Call sheet generated from a real example playbook"
-      width={1338}
-      height={1732}
-      className="block h-auto w-full"
-      priority={false}
-    />
   );
 }
 

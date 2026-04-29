@@ -70,7 +70,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
         ) : (
           <div className="flex items-center gap-4">
             <Link
-              href="/learn-more"
+              href="/#tour"
               className="text-sm text-muted hover:text-foreground transition-colors"
             >
               Tour
