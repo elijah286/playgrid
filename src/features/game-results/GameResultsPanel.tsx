@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { CalendarPlus, Link2, Link2Off, Pencil, Trash2 } from "lucide-react";
+import { ArrowDownUp, CalendarPlus, Link2, Link2Off, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   deleteGameSessionAction,
   deleteScheduledEventAction,
@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/components/ui";
 
 type KindFilter = "all" | "game" | "scrimmage";
+type SortOrder = "newest" | "oldest";
 
 type ScheduledOption = {
   id: string;
@@ -30,6 +31,7 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
   const [games, setGames] = useState<GameRowData[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [pendingDelete, setPendingDelete] = useState<GameRowData | null>(null);
   const [linkTarget, setLinkTarget] = useState<GameRowData | null>(null);
   const [editTarget, setEditTarget] = useState<GameRowData | null>(null);
@@ -98,6 +100,44 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
     return games.filter((g) => g.kind === kindFilter);
   }, [games, kindFilter]);
 
+  // Group filtered rows by date (local timezone) so the date appears once
+  // per day instead of being repeated on every card. Within a day, games
+  // are sorted by time in the user's chosen order. Day order matches the
+  // overall sort: "newest" puts most-recent days first.
+  const groups = useMemo<{ key: string; label: string; rows: GameRowData[] }[] | null>(() => {
+    if (!filtered) return null;
+    const buckets = new Map<string, GameRowData[]>();
+    for (const g of filtered) {
+      const d = new Date(g.when);
+      const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      const arr = buckets.get(key) ?? [];
+      arr.push(g);
+      buckets.set(key, arr);
+    }
+    const dir = sortOrder === "newest" ? -1 : 1;
+    const out: { key: string; label: string; rows: GameRowData[] }[] = [];
+    for (const [key, rows] of buckets) {
+      rows.sort((a, b) => dir * (new Date(a.when).getTime() - new Date(b.when).getTime()));
+      const sample = new Date(rows[0]!.when);
+      out.push({
+        key,
+        label: sample.toLocaleDateString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+        rows,
+      });
+    }
+    out.sort((a, b) => {
+      const ta = new Date(a.rows[0]!.when).getTime();
+      const tb = new Date(b.rows[0]!.when).getTime();
+      return dir * (ta - tb);
+    });
+    return out;
+  }, [filtered, sortOrder]);
+
   if (error) {
     return (
       <p className="rounded-2xl border border-border bg-surface-raised p-4 text-sm text-muted">
@@ -134,25 +174,37 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
 
   return (
     <div className="space-y-4">
-      <KindToggle value={kindFilter} onChange={setKindFilter} />
+      <div className="flex flex-wrap items-center gap-2">
+        <KindToggle value={kindFilter} onChange={setKindFilter} />
+        <SortToggle value={sortOrder} onChange={setSortOrder} />
+      </div>
       {filtered && filtered.length === 0 ? (
         <p className="rounded-2xl border border-border bg-surface-raised p-4 text-sm text-muted">
           No {kindFilter === "game" ? "games" : "scrimmages"} yet.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {(filtered ?? []).map((g) => (
-            <GameListItem
-              key={g.rowId}
-              playbookId={playbookId}
-              game={g}
-              onEdit={() => setEditTarget(g)}
-              onDelete={() => setPendingDelete(g)}
-              onLink={() => setLinkTarget(g)}
-              onUnlink={() => handleUnlink(g)}
-            />
+        <div className="space-y-5">
+          {(groups ?? []).map((group) => (
+            <section key={group.key}>
+              <h3 className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                {group.label}
+              </h3>
+              <ul className="overflow-hidden rounded-xl border border-border bg-surface-raised divide-y divide-border">
+                {group.rows.map((g) => (
+                  <GameListItem
+                    key={g.rowId}
+                    playbookId={playbookId}
+                    game={g}
+                    onEdit={() => setEditTarget(g)}
+                    onDelete={() => setPendingDelete(g)}
+                    onLink={() => setLinkTarget(g)}
+                    onUnlink={() => handleUnlink(g)}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
       {pendingDelete && (
         <ConfirmDeleteDialog
@@ -415,6 +467,26 @@ function KindToggle({
   );
 }
 
+function SortToggle({
+  value,
+  onChange,
+}: {
+  value: SortOrder;
+  onChange: (v: SortOrder) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(value === "newest" ? "oldest" : "newest")}
+      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-border hover:bg-surface-hover"
+      title={`Sort: ${value === "newest" ? "Newest first" : "Oldest first"} — tap to flip`}
+    >
+      <ArrowDownUp className="size-3.5" aria-hidden="true" />
+      {value === "newest" ? "Newest first" : "Oldest first"}
+    </button>
+  );
+}
+
 function GameListItem({
   playbookId,
   game,
@@ -431,82 +503,64 @@ function GameListItem({
   onUnlink: () => void;
 }) {
   const date = new Date(game.when);
-  const dateLabel = date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
   const timeLabel = date.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
   const isFuture = game.status === "scheduled" && date.getTime() > Date.now();
-  const successPct =
-    game.callCount > 0 ? Math.round((game.upCount / game.callCount) * 100) : null;
-  const score =
-    game.scoreUs != null && game.scoreThem != null
-      ? `${game.scoreUs}–${game.scoreThem}`
-      : null;
+  const hasScore = game.scoreUs != null && game.scoreThem != null;
   const detailHref = game.sessionId
     ? `/playbooks/${playbookId}/games/${game.sessionId}`
     : null;
-  const subtitleParts: string[] = [];
-  if (game.opponent) subtitleParts.push(`vs ${game.opponent}`);
-  if (game.homeAway) subtitleParts.push(capitalize(game.homeAway));
-  if (game.locationName) subtitleParts.push(game.locationName);
-  const subtitle = subtitleParts.join(" · ") || "No opponent recorded";
 
-  const card = (
-    <div
-      className={
-        "flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 pr-40 transition-colors " +
-        (isFuture
-          ? "border-dashed border-border bg-surface-raised/60 opacity-70"
-          : detailHref
-            ? "border-border bg-surface-raised hover:bg-surface-hover"
-            : "border-border bg-surface-raised")
-      }
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">
-            {dateLabel} · {timeLabel}
+  // vs / @ — universal sports schedule shorthand for home / away. Falls
+  // back to "vs" when the side isn't recorded.
+  const oppPrefix = game.homeAway === "away" ? "@" : "vs";
+  const opponent = game.opponent ?? "TBD";
+  const locationSuffix = game.locationName
+    ? ` · ${game.locationName}`
+    : "";
+
+  const rowCls =
+    "flex items-stretch gap-3 px-3 py-2.5 transition-colors " +
+    (isFuture ? "opacity-75 " : "") +
+    (detailHref ? "hover:bg-surface-hover" : "");
+
+  const inner = (
+    <div className={rowCls}>
+      {/* Time */}
+      <div className="flex w-16 shrink-0 flex-col items-end justify-center text-right tabular-nums">
+        <span className="text-xs font-semibold text-foreground">{timeLabel}</span>
+        {game.kind === "scrimmage" && (
+          <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+            Scrim
           </span>
-          <KindBadge kind={game.kind} />
+        )}
+      </div>
+
+      {/* Opponent + meta */}
+      <div className="min-w-0 flex-1 self-center">
+        <p className="truncate text-sm font-semibold text-foreground">
+          <span className="text-muted">{oppPrefix} </span>
+          {opponent}
+        </p>
+        {game.locationName && (
+          <p className="truncate text-[11px] text-muted">{game.locationName}</p>
+        )}
+        {/* locationSuffix is unused now — kept above for screen-reader fallback */}
+        <span className="sr-only">{locationSuffix}</span>
+      </div>
+
+      {/* Right column: result or status */}
+      <div className="flex shrink-0 items-center self-center">
+        {hasScore ? (
+          <ScoreChip us={game.scoreUs!} them={game.scoreThem!} />
+        ) : (
           <StatusBadge
             status={game.status}
             isPast={date.getTime() <= Date.now()}
-            hasScore={game.scoreUs != null && game.scoreThem != null}
+            hasScore={hasScore}
           />
-        </div>
-        <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-6 text-sm">
-        {score && (
-          <div>
-            <p className="text-xs text-muted">Score</p>
-            <p className="flex items-center gap-1.5 font-semibold tabular-nums text-foreground">
-              <ResultBadge us={game.scoreUs!} them={game.scoreThem!} />
-              {score}
-            </p>
-          </div>
-        )}
-        {game.sessionId && (
-          <>
-            <div>
-              <p className="text-xs text-muted">Plays</p>
-              <p className="font-semibold tabular-nums text-foreground">
-                {game.callCount}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted">Success</p>
-              <p className="font-semibold tabular-nums text-foreground">
-                {successPct != null ? `${successPct}%` : "—"}
-              </p>
-            </div>
-          </>
         )}
       </div>
     </div>
@@ -516,103 +570,129 @@ function GameListItem({
     <li className="relative">
       {detailHref ? (
         <Link href={detailHref} className="block">
-          {card}
+          {inner}
         </Link>
       ) : (
-        card
+        inner
       )}
-      <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1">
-        {game.sessionId && game.eventId && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onUnlink();
-            }}
-            aria-label="Unlink from schedule"
-            title="Unlink from schedule"
-            className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-foreground"
-          >
-            <Link2Off className="size-4" />
-          </button>
-        )}
-        {game.sessionId && !game.eventId && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onLink();
-            }}
-            aria-label="Link to scheduled game"
-            title="Link to scheduled game"
-            className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-foreground"
-          >
-            <CalendarPlus className="size-4" />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onEdit();
-          }}
-          aria-label={`Edit ${game.kind}`}
-          title="Edit opponent and score"
-          className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-foreground"
-        >
-          <Pencil className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDelete();
-          }}
-          aria-label={`Delete ${game.kind}`}
-          className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:border-rose-500/50 hover:text-rose-600"
-        >
-          <Trash2 className="size-4" />
-        </button>
+      <div className="absolute right-1 top-1/2 -translate-y-1/2">
+        <RowActionMenu
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onLink={game.sessionId && !game.eventId ? onLink : null}
+          onUnlink={game.sessionId && game.eventId ? onUnlink : null}
+          kindLabel={game.kind}
+        />
       </div>
     </li>
   );
 }
 
-function KindBadge({ kind }: { kind: "game" | "scrimmage" }) {
-  const label = kind === "scrimmage" ? "Scrimmage" : "Game";
-  const cls =
-    kind === "scrimmage"
-      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-      : "bg-primary/10 text-primary";
+function ScoreChip({ us, them }: { us: number; them: number }) {
+  const { letter, cls } =
+    us > them
+      ? { letter: "W", cls: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/15" }
+      : us < them
+        ? { letter: "L", cls: "text-rose-700 dark:text-rose-300 bg-rose-500/15" }
+        : { letter: "T", cls: "text-amber-700 dark:text-amber-300 bg-amber-500/15" };
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-bold tabular-nums ${cls}`}
+      aria-label={`${us > them ? "Win" : us < them ? "Loss" : "Tie"} ${us}–${them}`}
     >
-      {label}
+      <span>{letter}</span>
+      <span>{us}–{them}</span>
     </span>
   );
 }
 
-function ResultBadge({ us, them }: { us: number; them: number }) {
-  const { letter, cls } =
-    us > them
-      ? { letter: "W", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" }
-      : us < them
-        ? { letter: "L", cls: "bg-rose-500/15 text-rose-700 dark:text-rose-300" }
-        : { letter: "T", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" };
+function RowActionMenu({
+  onEdit,
+  onDelete,
+  onLink,
+  onUnlink,
+  kindLabel,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+  onLink: (() => void) | null;
+  onUnlink: (() => void) | null;
+  kindLabel: "game" | "scrimmage";
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
   return (
-    <span
-      className={`inline-flex size-5 items-center justify-center rounded-full text-[10px] font-bold ${cls}`}
-      aria-label={us > them ? "Win" : us < them ? "Loss" : "Tie"}
-    >
-      {letter}
-    </span>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`More actions for this ${kindLabel}`}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="inline-flex size-8 items-center justify-center rounded-md text-muted hover:bg-surface-hover hover:text-foreground"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-10 mt-1 w-48 overflow-hidden rounded-lg border border-border bg-surface-raised py-1 text-sm shadow-elevated"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => { e.preventDefault(); setOpen(false); onEdit(); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
+          >
+            <Pencil className="size-4" /> Edit
+          </button>
+          {onLink && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => { e.preventDefault(); setOpen(false); onLink(); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
+            >
+              <CalendarPlus className="size-4" /> Link to schedule
+            </button>
+          )}
+          {onUnlink && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => { e.preventDefault(); setOpen(false); onUnlink(); }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-foreground hover:bg-surface-inset"
+            >
+              <Link2Off className="size-4" /> Unlink from schedule
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => { e.preventDefault(); setOpen(false); onDelete(); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-rose-600 hover:bg-rose-500/10 dark:text-rose-300"
+          >
+            <Trash2 className="size-4" /> Delete
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
+
 
 function StatusBadge({
   status,
