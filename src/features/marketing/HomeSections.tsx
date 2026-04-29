@@ -30,17 +30,17 @@ const BRAND_ORANGE = "#F26522";
 // can deep-link to the tour section via /#tour.
 export function EveryScreen() {
   return (
-    <section id="tour" className="relative scroll-mt-24 py-24">
-      <div className="mx-auto max-w-6xl px-6">
+    <section id="tour" className="relative scroll-mt-24 py-20 md:py-24">
+      <div className="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-[1fr_1.1fr] md:items-center md:gap-16">
         <Reveal>
-          <div className="max-w-2xl">
+          <div>
             <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
               Make plays on your desktop
               <br />
               <span className="text-muted">or on the field.</span>
             </h2>
-            <p className="mt-5 text-lg text-muted">
+            <p className="mt-5 max-w-lg text-lg text-muted">
               An easy, fun play editor designed for desktop, tablet, and
               mobile. Draw it up at the kitchen table, review it on the
               sideline, pull up the call on your phone between series.
@@ -48,8 +48,8 @@ export function EveryScreen() {
           </div>
         </Reveal>
 
-        <div className="mt-14 flex flex-wrap items-end justify-center gap-10">
-          <Reveal delay={0}>
+        <Reveal delay={100}>
+          <div className="relative flex items-end justify-center gap-6 md:justify-end">
             <TabletFrame>
               <Image
                 src="/marketing/screens/tablet-playbook.png"
@@ -60,8 +60,6 @@ export function EveryScreen() {
                 className="h-full w-full object-cover object-top"
               />
             </TabletFrame>
-          </Reveal>
-          <Reveal delay={150}>
             <PhoneFrame>
               <Image
                 src="/marketing/screens/phone-play.png"
@@ -72,8 +70,8 @@ export function EveryScreen() {
                 className="h-full w-full object-cover object-top"
               />
             </PhoneFrame>
-          </Reveal>
-        </div>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
