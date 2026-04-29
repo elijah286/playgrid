@@ -15,6 +15,12 @@ export function SiteFooter() {
           <Link href="/coach-cal" className="hover:text-foreground transition-colors">
             Coach Cal
           </Link>
+          <Link href="/examples" className="hover:text-foreground transition-colors">
+            Examples
+          </Link>
+          <Link href="/pricing" className="hover:text-foreground transition-colors">
+            Pricing
+          </Link>
           <Link href="/about" className="hover:text-foreground transition-colors">
             About
           </Link>

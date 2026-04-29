@@ -5,6 +5,22 @@ import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 export const metadata: Metadata = {
   title: "About · XO Gridmaker",
   description: "Why XO Gridmaker exists — built by coaches, for coaches.",
+  alternates: { canonical: "/about" },
+  openGraph: {
+    title: "About · XO Gridmaker",
+    description: "Why XO Gridmaker exists — built by coaches, for coaches.",
+    url: "/about",
+    type: "website",
+  },
+};
+
+const breadcrumbLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+    { "@type": "ListItem", position: 2, name: "About", item: "/about" },
+  ],
 };
 
 export default async function AboutPage() {
@@ -12,6 +28,10 @@ export default async function AboutPage() {
 
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       <h1 className="text-3xl font-extrabold tracking-tight">About XO Gridmaker</h1>
       <div className="mt-6 space-y-5 text-base leading-relaxed text-muted">
         <p>

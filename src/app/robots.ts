@@ -8,7 +8,11 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/invite/", "/home", "/playbooks/", "/account"],
+        // /playbooks/ is intentionally crawlable: public example playbooks
+        // are emitted in the sitemap. Non-public playbook pages return
+        // `noindex` from generateMetadata, so Googlebot sees them but
+        // declines to index them.
+        disallow: ["/api/", "/invite/", "/home", "/account"],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

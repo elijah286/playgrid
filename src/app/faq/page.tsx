@@ -184,15 +184,25 @@ export default async function FaqPage() {
   // Single FAQPage entity covering every Q&A in the page — Google
   // shows rich-result snippets from this regardless of how the visible
   // markup is grouped on screen.
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: allFaqs.map(({ q, a }) => ({
-      "@type": "Question",
-      name: q,
-      acceptedAnswer: { "@type": "Answer", text: a },
-    })),
-  };
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: allFaqs.map(({ q, a }) => ({
+        "@type": "Question",
+        name: q,
+        acceptedAnswer: { "@type": "Answer", text: a },
+      })),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+        { "@type": "ListItem", position: 2, name: "FAQ", item: "/faq" },
+      ],
+    },
+  ];
 
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">

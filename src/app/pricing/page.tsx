@@ -52,8 +52,21 @@ export default async function PricingPage() {
   ]);
   const isAuthed = user !== null;
 
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+      { "@type": "ListItem", position: 2, name: "Pricing", item: "/pricing" },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       <div>
         {isAuthed && (
           <Link

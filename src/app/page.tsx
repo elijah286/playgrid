@@ -1,7 +1,22 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, ChevronDown } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "XO Gridmaker — Football play designer & playbook builder for coaches",
+  description:
+    "Design football plays, organize them into playbooks, share with your team, and print game-ready wristbands. Free for solo coaches — built for flag, 7v7, and tackle football.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "XO Gridmaker — Football play designer & playbook builder",
+    description:
+      "Design plays. Win games. Free for solo coaches — built for flag, 7v7, and tackle football.",
+    url: "/",
+    type: "website",
+  },
+};
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";

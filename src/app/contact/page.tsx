@@ -4,11 +4,31 @@ import { ContactForm } from "./ui";
 export const metadata: Metadata = {
   title: "Contact · XO Gridmaker",
   description: "Send feedback, bug reports, or feature requests.",
+  alternates: { canonical: "/contact" },
+  openGraph: {
+    title: "Contact · XO Gridmaker",
+    description: "Send feedback, bug reports, or feature requests.",
+    url: "/contact",
+    type: "website",
+  },
+};
+
+const breadcrumbLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+    { "@type": "ListItem", position: 2, name: "Contact", item: "/contact" },
+  ],
 };
 
 export default function ContactPage() {
   return (
     <div className="mx-auto max-w-xl px-6 py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Contact</h1>
       <p className="mt-3 text-base leading-relaxed text-muted">
         Found a bug? Have an idea? Want to say hi? Drop a note below and it
