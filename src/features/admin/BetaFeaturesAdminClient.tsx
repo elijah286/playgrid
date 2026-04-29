@@ -60,6 +60,12 @@ const FEATURES: FeatureMeta[] = [
       "Team coaches can view edit history for plays and playbooks, restore prior versions, and recover deleted plays from a 30-day trash. Snapshots are written for everyone regardless of this flag.",
   },
   {
+    key: "practice_plans",
+    label: "Practice Plans",
+    description:
+      "Practice Plans tab inside a playbook. Coaches build reusable practice templates with timed blocks, parallel activities (Skill / Line / Specialists), and drill diagrams using equipment props (cones, ladders, hurdles).",
+  },
+  {
     key: "marketing_content",
     label: "Enhanced marketing content",
     description:
