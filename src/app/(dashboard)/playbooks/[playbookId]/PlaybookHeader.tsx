@@ -422,7 +422,7 @@ export function PlaybookHeader({
                     : "!bg-white !text-slate-900 hover:!bg-white/90"
                 }`}
               >
-                Invite Team Member
+                Share
               </Button>
             )}
             {isExamplePreview && (
@@ -436,6 +436,17 @@ export function PlaybookHeader({
               >
                 Create your own
               </Link>
+            )}
+            {canShare && (
+              <button
+                type="button"
+                onClick={openInvite}
+                className={`sm:hidden inline-flex items-center justify-center size-9 rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
+                aria-label="Share playbook"
+                title="Share"
+              >
+                <UserPlus className="size-5" />
+              </button>
             )}
             {(coachAiAvailable || showCoachCalPromo) && (
               <div className="sm:hidden">
@@ -857,6 +868,54 @@ function SectionDivider() {
   return <div className="my-1 h-px bg-border" />;
 }
 
+/**
+ * One of the three peer-level share options (send a copy / co-coach / player)
+ * shown at the top of the Share dialog. Visually equal so the IA reads as
+ * "pick what kind of share" rather than "invite, with send-a-copy as a
+ * footnote." Send-a-copy uses the primary accent because it's the most
+ * viral primitive.
+ */
+function ShareOptionCard({
+  icon,
+  title,
+  description,
+  accent,
+  selected,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  accent: "primary" | "default";
+  selected?: boolean;
+  onClick: () => void;
+}) {
+  const base = "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors";
+  const variants =
+    accent === "primary"
+      ? "border-primary/40 bg-primary/5 hover:border-primary hover:bg-primary/10"
+      : selected
+        ? "border-primary bg-primary/5"
+        : "border-border bg-surface-inset hover:border-primary/40 hover:bg-primary/5";
+  return (
+    <button type="button" onClick={onClick} className={`${base} ${variants}`}>
+      <span
+        className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md ${
+          accent === "primary" || selected
+            ? "bg-primary/15 text-primary"
+            : "bg-surface-raised text-muted"
+        }`}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        <span className="mt-0.5 block text-xs text-muted">{description}</span>
+      </span>
+    </button>
+  );
+}
+
 function TeamCoachLockBadge() {
   return (
     <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -973,7 +1032,7 @@ function HeaderMenu({
                 className={menuItemCls}
               >
                 <UserPlus className="size-4 shrink-0" />
-                <span>Invite team member</span>
+                <span>Share</span>
                 {lockTeamCoachItems && <TeamCoachLockBadge />}
               </button>
             )}
@@ -1753,12 +1812,16 @@ export function InviteTeamMemberDialog({
           <div>
             <h2 className="text-base font-bold text-foreground">
               {mode === "choose"
-                ? "Invite team member"
+                ? "Share this playbook"
                 : role === "editor"
-                  ? "Invite coach"
-                  : "Invite player"}
+                  ? "Add a co-coach"
+                  : "Add a player"}
             </h2>
-            <p className="mt-0.5 text-xs text-muted">Share a link, QR code, or email.</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {mode === "choose"
+                ? "Pick how you want to share."
+                : "Send a link, QR code, or email."}
+            </p>
           </div>
           <button
             type="button"
@@ -1787,28 +1850,39 @@ export function InviteTeamMemberDialog({
         <div className="space-y-4 p-5">
           {mode === "choose" && (
             <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-muted">Role</label>
-                {canManage ? (
-                  <SegmentedControl
-                    value={role}
-                    onChange={(v) => setRole(v as "viewer" | "editor")}
-                    options={[
-                      { value: "viewer", label: "Player" },
-                      { value: "editor", label: "Coach" },
-                    ]}
+              <div className="space-y-2">
+                {onSwitchToSendCopy && (
+                  <ShareOptionCard
+                    icon={<Send className="size-4" />}
+                    title="Send a copy"
+                    description="Give another coach a starter playbook of their own. They become the owner — your playbook stays yours."
+                    accent="primary"
+                    onClick={onSwitchToSendCopy}
                   />
-                ) : (
-                  <div className="rounded-lg border border-border bg-surface-inset px-3 py-2 text-xs text-muted">
-                    You can invite players. Only the playbook owner can
-                    grant coach (edit) access.
-                  </div>
                 )}
-                <p className="mt-1.5 text-xs text-muted">
-                  Players can view plays and notes. Coaches can edit and
-                  delete plays, manage your roster, and invite others — same
-                  as you.
-                </p>
+                {canManage && (
+                  <ShareOptionCard
+                    icon={<UserPlus className="size-4" />}
+                    title="Add a co-coach"
+                    description="They edit this playbook with you. Changes are shared in real time."
+                    accent="default"
+                    selected={role === "editor"}
+                    onClick={() => setRole("editor")}
+                  />
+                )}
+                <ShareOptionCard
+                  icon={<Mail className="size-4" />}
+                  title="Add a player"
+                  description="View-only access to plays and notes."
+                  accent="default"
+                  selected={role === "viewer"}
+                  onClick={() => setRole("viewer")}
+                />
+                {!canManage && (
+                  <p className="text-xs text-muted">
+                    Only the playbook owner can grant co-coach (edit) access.
+                  </p>
+                )}
                 {role === "editor" && (outOfCoachSeats || needsCoachPlan) && (
                   <div className="mt-2 flex items-start gap-2 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -1901,26 +1975,6 @@ export function InviteTeamMemberDialog({
                   </div>
                 )}
               </div>
-              {role === "editor" && onSwitchToSendCopy && (
-                <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                    Two kinds of coach invite
-                  </p>
-                  <p className="mt-1 text-xs text-foreground">
-                    Adding them as a <strong>co-coach</strong> (below) lets them
-                    edit <em>this</em> playbook with you — changes are shared in
-                    real time. If instead you want to give them their own
-                    independent playbook based on this one, use Send a copy.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onSwitchToSendCopy}
-                    className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-surface-raised px-2.5 py-1 text-xs font-semibold text-primary ring-1 ring-primary/30 hover:bg-primary/10"
-                  >
-                    <Send className="size-3.5" /> Send a copy instead
-                  </button>
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => setMode("email")}

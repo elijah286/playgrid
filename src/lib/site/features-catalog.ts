@@ -228,6 +228,33 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "playbook-share-mobile-button",
+    name: "Mobile Share button on the playbook header",
+    description:
+      "On mobile inside a playbook, the Share / Invite action used to live only in the overflow menu — buried for a high-leverage growth flow. Promoted to a visible icon button next to the Coach Cal launcher on the playbook header banner. Mirrors the desktop \"Share\" button.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
+    id: "playbook-share-dialog-ia",
+    name: "Share dialog reframe",
+    description:
+      "What used to be \"Invite team member\" is now \"Share this playbook\" with three peer-level options at the top: Send a copy (give a coach a starter playbook of their own), Add a co-coach (collaborate on this playbook), and Add a player (view-only). Replaces the old Player/Coach role toggle and the apologetic \"Two kinds of coach invite\" panel — Send a copy is now elevated as the most viral primitive instead of buried under coach-invite.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
+    id: "playbook-share-first-banner",
+    name: "First-share nudge banner",
+    description:
+      "Owners with no co-coaches and no outstanding invites see a slim banner at the top of the playbook reminding them they can share it. Disappears as soon as someone is added or invited. Drives the first share — typically the most consequential one for the network effect.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "coach-cal-mobile-playbook-launcher-fix",
     name: "Coach Cal launcher consistent on mobile inside a playbook",
     description:

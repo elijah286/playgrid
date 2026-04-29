@@ -1096,6 +1096,15 @@ function PlaybookDetailClientInner({
           />
         )}
 
+        {headerProps.canManage &&
+          !isPreview &&
+          initialRoster.filter(
+            (m) => (m.role === "editor" || m.role === "owner") && !!m.user_id,
+          ).length <= 1 &&
+          initialInvites.filter(
+            (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
+          ).length === 0 && <ShareFirstBanner />}
+
         {/* Tabs: on mobile, scroll horizontally so all tabs stay reachable
             at narrow widths. Edge-to-edge via -mx-6 + px-6 so the first
             tab aligns with the banner content. */}
@@ -4263,6 +4272,33 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
         className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
       >
         See Team Coach
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * One-time prompt shown to playbook owners who haven't shared with anyone
+ * yet — no co-coaches on the roster, no outstanding invites. Routes to the
+ * existing share dialog via the ?share=1 query param that PlaybookHeader
+ * watches. Disappears as soon as a coach is added or an invite is sent.
+ */
+function ShareFirstBanner() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2">
+      <p className="min-w-0 flex-1 text-sm text-foreground">
+        <span className="font-semibold">Share this playbook.</span>{" "}
+        <span className="text-muted">
+          Add a co-coach, send a copy to a peer, or invite players.
+        </span>
+      </p>
+      <Link
+        href="?share=1"
+        scroll={false}
+        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+      >
+        <UserPlus className="size-3.5" />
+        Share
       </Link>
     </div>
   );
