@@ -1,54 +1,54 @@
 #!/usr/bin/env node
 /**
- * Capture a desktop walkthrough video for the marketing page hero.
+ * Hero walkthrough video for the marketing page.
  *
- * Flow (authed as the seed admin so the editor renders fully — no
- * "example playbook" lobby, no demo banner):
- *   1. Sign in
- *   2. /playbooks shelf → glide cursor to first real playbook
- *   3. Click into the playbook
- *   4. Click into a play → opens the editor
- *   5. Drag from a player marker to draw a route
- *   6. Click Motion to animate routes
- *   7. Navigate back to the playbook so the loop reads as a tour
+ * Two scenes, each on a *real* playbook the seed admin owns:
+ *   1. Chiefs Girls (flag football)  → "+ New play" → mirror Play 1's
+ *      routes → type @-mention notes → animate.
+ *   2. 7v7 Example                    → same flow, mirroring its Play 1.
  *
- * Pacing/cursor mirror scripts/capture-game-mode.mjs. Page-load dead
- * frames are removed in post via ffmpeg's mpdecimate filter, so the
- * tour reads fast even though Playwright records latency in real time.
+ * Conventions:
+ *   - The cursor is NOT injected into the page during recording. Instead,
+ *     we log every page.mouse.* call's timestamp+position and composite a
+ *     large soft cursor on top of the recorded video in post — standard
+ *     promotional/tutorial-video convention. That keeps the cursor smooth
+ *     and easy to see, and it survives mpdecimate/transcoding losslessly.
+ *   - Created plays are deleted after recording so the admin's playbooks
+ *     don't accumulate "Tesla copy 17" noise.
  *
  * Writes:
  *   - public/marketing/screens/hero-walkthrough.{webm,mp4}
- *   - public/marketing/screens/hero-1..7-*.png
+ *   - public/marketing/screens/hero-poster.png
  *
  * Usage:
  *   BASE_URL=http://localhost:3456 node scripts/capture-hero-walkthrough.mjs
  */
 
 import { chromium } from "playwright";
-import { mkdir, readFile, rm, readdir } from "node:fs/promises";
+import { mkdir, readFile, rm, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3456";
 const OUT_DIR = path.resolve("public/marketing/screens");
 const VIDEO_TMP = path.resolve(".capture-video-hero");
+const FRAMES_DIR = path.resolve(".capture-cursor-frames");
 
-// Pacing — kept tight; mpdecimate removes any remaining dead frames.
-const BEAT_SHORT = 500;
-const BEAT_MED = 900;
-const BEAT_LONG = 1600;
-const GLIDE_MS = 750;
+const VIEWPORT = { width: 1440, height: 900 };
+const FPS = 30;
+
+// Pacing — tight throughout. The cursor still reads as deliberate
+// because every glide/click animates over ~600ms.
+const BEAT_SHORT = 220;
+const BEAT_MED = 450;
+const BEAT_LONG = 800;
+const GLIDE_MS = 600;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-async function shot(page, name) {
-  const file = path.join(OUT_DIR, `${name}.png`);
-  await page.screenshot({ path: file, fullPage: false });
-  console.log("  ✓", file);
 }
 
 function ffmpeg(args) {
@@ -60,89 +60,62 @@ function ffmpeg(args) {
   });
 }
 
-/** Soft translucent orange cursor dot — same as capture-game-mode.mjs. */
-const CURSOR_INIT = () => {
-  const id = "__capture_cursor__";
-  if (document.getElementById(id)) return;
-  const wrap = document.createElement("div");
-  wrap.id = id;
-  Object.assign(wrap.style, {
-    position: "fixed",
-    left: "0px",
-    top: "0px",
-    width: "0px",
-    height: "0px",
-    pointerEvents: "none",
-    zIndex: "2147483647",
-    transform: "translate(-200px,-200px)",
-    transition: "transform 800ms cubic-bezier(0.22, 1, 0.36, 1)",
+/* -----------------------------------------------------------------------
+   Mouse tracking — every call goes through these helpers so we know the
+   exact (t_ms_since_record_start, x, y, isDown) of every cursor event.
+   ----------------------------------------------------------------------- */
+
+let recordStartTs = 0;
+const cursorPath = []; // [{t, x, y, down}]
+let curX = -100;
+let curY = -100;
+let curDown = false;
+
+function logCursor() {
+  cursorPath.push({
+    t: Date.now() - recordStartTs,
+    x: curX,
+    y: curY,
+    down: curDown,
   });
-  const dot = document.createElement("div");
-  Object.assign(dot.style, {
-    position: "absolute",
-    left: "0px",
-    top: "0px",
-    width: "30px",
-    height: "30px",
-    marginLeft: "-15px",
-    marginTop: "-15px",
-    borderRadius: "9999px",
-    background: "rgba(242,101,34,0.55)",
-    boxShadow:
-      "0 0 0 1px rgba(242,101,34,0.35), 0 6px 18px rgba(242,101,34,0.35), 0 2px 6px rgba(0,0,0,0.15)",
-    transformOrigin: "center center",
-    transition: "transform 180ms ease-out, opacity 240ms ease-out",
-    opacity: "0.95",
-  });
-  wrap.appendChild(dot);
-  document.body.appendChild(wrap);
-
-  window.addEventListener(
-    "mousemove",
-    (ev) => {
-      wrap.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px)`;
-    },
-    { passive: true, capture: true },
-  );
-  window.addEventListener(
-    "mousedown",
-    () => {
-      dot.style.transform = "scale(0.66)";
-      dot.style.opacity = "1";
-    },
-    { passive: true, capture: true },
-  );
-  window.addEventListener(
-    "mouseup",
-    () => {
-      dot.style.transform = "scale(1)";
-      dot.style.opacity = "0.95";
-    },
-    { passive: true, capture: true },
-  );
-};
-
-/** Hide demo / preview banners just in case. */
-const HIDE_BANNERS = () => {
-  const css =
-    "[data-demo-banner],[data-preview-banner]{display:none!important;}";
-  const style = document.createElement("style");
-  style.textContent = css;
-  document.head.appendChild(style);
-};
-
-async function installCursor(page) {
-  await page.addInitScript(CURSOR_INIT);
-  await page.addInitScript(HIDE_BANNERS);
-  await page.evaluate(CURSOR_INIT);
-  await page.evaluate(HIDE_BANNERS);
 }
-
-async function glideTo(page, x, y) {
+async function moveTo(page, x, y) {
+  curX = x;
+  curY = y;
+  logCursor();
   await page.mouse.move(x, y);
-  await sleep(GLIDE_MS);
 }
-
+async function pressDown(page) {
+  curDown = true;
+  logCursor();
+  await page.mouse.down();
+}
+async function releaseUp(page) {
+  curDown = false;
+  logCursor();
+  await page.mouse.up();
+}
+async function tapAt(page, x, y) {
+  await moveTo(page, x, y);
+  await sleep(120);
+  await pressDown(page);
+  await sleep(80);
+  await releaseUp(page);
+  await sleep(140);
+}
+async function glideTo(page, x, y) {
+  // Generate intermediate samples so the post-process cursor follows a
+  // smooth curve rather than teleporting. Easing: cubic ease-out.
+  const N = 18;
+  const fromX = curX;
+  const fromY = curY;
+  for (let i = 1; i <= N; i++) {
+    const t = i / N;
+    const eased = 1 - Math.pow(1 - t, 3);
+    await moveTo(page, fromX + (x - fromX) * eased, fromY + (y - fromY) * eased);
+    await sleep(GLIDE_MS / N);
+  }
+}
 async function glideToLocator(page, locator) {
   const box = await locator.boundingBox();
   if (!box) return null;
@@ -151,6 +124,23 @@ async function glideToLocator(page, locator) {
   await glideTo(page, x, y);
   return { x, y };
 }
+async function clickLocator(page, locator) {
+  const pt = await glideToLocator(page, locator);
+  if (!pt) {
+    await locator.click({ force: true }).catch(() => {});
+    return null;
+  }
+  await sleep(120);
+  await pressDown(page);
+  await sleep(80);
+  await releaseUp(page);
+  await sleep(160);
+  return pt;
+}
+
+/* -----------------------------------------------------------------------
+   Env + Supabase
+   ----------------------------------------------------------------------- */
 
 async function loadEnv() {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -183,71 +173,61 @@ async function loadEnv() {
   return {};
 }
 
-/**
- * Pick a real playbook the seed admin owns: not archived, not an
- * example, with at least one play. Returns { playbookId, playId } or
- * throws if nothing usable exists.
- */
-async function pickRealPlaybook(env) {
-  const supa = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { persistSession: false } },
-  );
-  const { data: adminList } = await supa.auth.admin.listUsers({ perPage: 200 });
-  const adminUser = (adminList?.users ?? []).find(
-    (u) => (u.email ?? "").toLowerCase() === env.SEED_ADMIN_EMAIL.toLowerCase(),
-  );
-  if (!adminUser) throw new Error("Seed admin user not found");
-
+async function findScene(supa, adminId, namePrefix, preferPublicExample) {
   const { data: ownedRows } = await supa
     .from("playbook_members")
     .select("playbook_id")
-    .eq("user_id", adminUser.id)
+    .eq("user_id", adminId)
     .eq("role", "owner");
   const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id);
-  if (ownedIds.length === 0) throw new Error("Admin owns no playbooks");
-
-  // Prefer real team playbooks: not archived, not flagged as a public
-  // example, and whose name doesn't shout "Example". Allow override via
-  // PLAYBOOK_ID for ad-hoc captures.
   const { data: pbs } = await supa
     .from("playbooks")
-    .select("id, name, is_public_example, is_archived, updated_at")
+    .select("id, name, is_public_example, is_archived")
     .in("id", ownedIds)
     .eq("is_archived", false)
-    .order("updated_at", { ascending: false });
-  let real = null;
-  if (process.env.PLAYBOOK_ID) {
-    real = (pbs ?? []).find((p) => p.id === process.env.PLAYBOOK_ID) ?? null;
+    .ilike("name", `${namePrefix}%`);
+  // Prefer playbooks that actually have plays.
+  const candidates = (pbs ?? [])
+    .slice()
+    .sort((a, b) => Number(b.is_public_example === preferPublicExample) - Number(a.is_public_example === preferPublicExample));
+  for (const pb of candidates) {
+    const { count } = await supa
+      .from("plays")
+      .select("id", { count: "exact", head: true })
+      .eq("playbook_id", pb.id)
+      .eq("play_type", "offense");
+    if ((count ?? 0) === 0) continue;
+    const { data: play1 } = await supa
+      .from("plays")
+      .select("id, name, formation_id, formation_name, current_version_id")
+      .eq("playbook_id", pb.id)
+      .eq("play_type", "offense")
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .single();
+    const { data: pv } = await supa
+      .from("play_versions")
+      .select("document")
+      .eq("id", play1.current_version_id)
+      .single();
+    return {
+      playbookId: pb.id,
+      playbookName: pb.name,
+      play1: { ...play1, document: pv?.document },
+    };
   }
-  if (!real) {
-    real =
-      (pbs ?? []).find(
-        (p) => !p.is_public_example && !/example/i.test(p.name ?? ""),
-      ) ?? (pbs ?? []).find((p) => !p.is_public_example) ?? (pbs ?? [])[0];
-  }
-  if (!real) throw new Error("No usable playbook");
-
-  const { data: play } = await supa
-    .from("plays")
-    .select("id, name, sort_order")
-    .eq("playbook_id", real.id)
-    .order("sort_order", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!play) throw new Error(`Playbook "${real.name}" has no plays`);
-
-  console.log(`Target: ${real.name} → ${play.name}`);
-  return { playbookId: real.id, playId: play.id, playbookName: real.name };
+  throw new Error(`No usable playbook matching ${namePrefix}`);
 }
+
+/* -----------------------------------------------------------------------
+   Sign-in
+   ----------------------------------------------------------------------- */
 
 async function signIn(page, email, password) {
   await page.goto(`${BASE_URL}/login`, { waitUntil: "networkidle" });
   const emailInput = page.locator('input[type="email"]');
   await emailInput.waitFor({ timeout: 20000 });
   await emailInput.fill(email);
-  // Wait for the form to actually hydrate (React-controlled value present).
   await page.waitForFunction(
     (v) =>
       document.querySelector('input[type="email"]')?.value?.toLowerCase() ===
@@ -262,7 +242,7 @@ async function signIn(page, email, password) {
   await page.locator('input[type="password"]').waitFor({ timeout: 30000 });
   await page.locator('input[type="password"]').fill(password);
   await page
-    .getByRole("button", { name: /^(continue|sign in|log in)$/i })
+    .getByRole("button", { name: /^(sign in|log in|continue)$/i })
     .first()
     .click();
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), {
@@ -270,109 +250,70 @@ async function signIn(page, email, password) {
   });
 }
 
-async function run() {
-  await mkdir(OUT_DIR, { recursive: true });
-  await rm(VIDEO_TMP, { recursive: true, force: true });
-  await mkdir(VIDEO_TMP, { recursive: true });
+/* -----------------------------------------------------------------------
+   Per-scene flow: open playbook → +New play → editor → mirror routes →
+   notes → animate. Returns { newPlayId } so we can clean up.
+   ----------------------------------------------------------------------- */
 
-  const env = await loadEnv();
-  if (!env.SEED_ADMIN_EMAIL || !env.SEED_ADMIN_PASSWORD) {
-    throw new Error(
-      "SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD missing from .env.local",
-    );
+async function runScene(page, scene, opts = {}) {
+  console.log(`\n== Scene: ${scene.playbookName} (mirror "${scene.play1.name}") ==`);
+
+  if (!opts.alreadyOnPage) {
+    // Goto playbook detail.
+    await page.goto(`${BASE_URL}/playbooks/${scene.playbookId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle");
+    await page
+      .locator('a[href*="/plays/"]')
+      .first()
+      .waitFor({ state: "visible", timeout: 20000 });
   }
+  await sleep(BEAT_SHORT);
 
-  // Resolve a real playbook + first play before starting the recording.
-  const target = await pickRealPlaybook(env);
+  // Click "+ New play" (desktop button).
+  const newPlayBtn = page.getByRole("button", { name: /new play/i }).first();
+  await newPlayBtn.waitFor({ timeout: 10000 });
+  await glideToLocator(page, newPlayBtn);
+  await sleep(120);
+  await pressDown(page);
+  await sleep(80);
+  await releaseUp(page);
+  await sleep(BEAT_SHORT);
 
-  // -----------------------------------------------------------------
-  // Pre-warm: sign in and visit each page once in a throwaway context
-  // so Next has the routes compiled / Supabase data cached. This is
-  // the single biggest factor in making the recorded tour feel snappy.
-  // -----------------------------------------------------------------
-  const warmBrowser = await chromium.launch();
-  const warmCtx = await warmBrowser.newContext({
-    viewport: { width: 1440, height: 900 },
-  });
-  const warmPage = await warmCtx.newPage();
-  console.log("Pre-warming routes…");
-  await signIn(warmPage, env.SEED_ADMIN_EMAIL, env.SEED_ADMIN_PASSWORD);
-  for (const p of [
-    "/playbooks",
-    `/playbooks/${target.playbookId}`,
-    `/plays/${target.playId}/edit`,
-  ]) {
-    await warmPage.goto(`${BASE_URL}${p}`, { waitUntil: "networkidle" });
+  // Formation picker dialog opens. Try to click the formation tile
+  // matching Play 1's formation_name. Fall back to "No specific
+  // formation" (which uses default players for the playbook's player
+  // count).
+  await page
+    .getByText("Start a new play", { exact: true })
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => {});
+  // Tiles are <button> elements containing a <p> with the formation name.
+  const targetFormationName = scene.play1.formation_name ?? "";
+  let formationTile = null;
+  if (targetFormationName) {
+    const escaped = targetFormationName.replace(/"/g, '\\"');
+    const cand = page.locator(`button:has(p:text-is("${escaped}"))`);
+    if (await cand.count()) formationTile = cand.first();
   }
-  const storageState = await warmCtx.storageState();
-  await warmCtx.close();
-  await warmBrowser.close();
-
-  // -----------------------------------------------------------------
-  // Real recording — reuses the warmed-up auth state, so no login
-  // screen appears on tape.
-  // -----------------------------------------------------------------
-  const browser = await chromium.launch();
-  const ctx = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 2,
-    storageState,
-    recordVideo: { dir: VIDEO_TMP, size: { width: 1440, height: 900 } },
-  });
-  const page = await ctx.newPage();
-  await installCursor(page);
-
-  // ---- Step 1: real /playbooks shelf.
-  await page.goto(`${BASE_URL}/playbooks`, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle");
-  await page.mouse.move(80, 780);
-  await sleep(BEAT_SHORT);
-  await shot(page, "hero-1-shelf");
-
-  // ---- Step 2: hover the target playbook tile.
-  const tile = page
-    .locator(`a[href="/playbooks/${target.playbookId}"]`)
-    .first();
-  await tile.waitFor({ timeout: 10000 });
-  await tile.scrollIntoViewIfNeeded();
-  await glideToLocator(page, tile);
-  await sleep(BEAT_MED);
-  await shot(page, "hero-2-hover");
-
-  // ---- Step 3: click into the playbook.
-  await page.mouse.down();
+  if (!formationTile) {
+    formationTile = page
+      .locator('button:has(p:text-is("No specific formation"))')
+      .first();
+  }
+  await formationTile.waitFor({ state: "visible", timeout: 8000 });
+  await formationTile.scrollIntoViewIfNeeded();
+  await glideToLocator(page, formationTile);
+  await sleep(140);
+  await pressDown(page);
   await sleep(80);
-  await page.mouse.up();
-  await page.waitForURL(new RegExp(`/playbooks/${target.playbookId}`), {
-    timeout: 15000,
-  });
-  await page.waitForLoadState("networkidle");
-  // Wait for actual play tiles to render (not just the skeleton).
-  await page
-    .locator('a[href*="/plays/"]')
-    .first()
-    .waitFor({ state: "visible", timeout: 20000 });
-  await sleep(BEAT_SHORT);
-  await shot(page, "hero-3-playbook");
+  await releaseUp(page);
 
-  // ---- Step 4: glide to the first VISIBLE play tile and click in.
-  // Default tab is Offense; pick whatever the coach would see first.
-  const playTile = page.locator('a[href*="/plays/"]:visible').first();
-  await playTile.waitFor({ state: "visible", timeout: 15000 });
-  await playTile.scrollIntoViewIfNeeded();
-  await glideToLocator(page, playTile);
-  await sleep(BEAT_SHORT);
-  await page.mouse.down();
-  await sleep(80);
-  await page.mouse.up();
-  await page.waitForURL(/\/plays\/[^/]+(\/edit)?$/, { timeout: 15000 });
+  // Wait for editor URL.
+  await page.waitForURL(/\/plays\/[^/]+\/edit/, { timeout: 20000 });
   await page.waitForLoadState("networkidle");
-  // Wait for the editor SVG (the field) to actually render.
-  await page
-    .locator("svg")
-    .first()
-    .waitFor({ state: "visible", timeout: 20000 });
-  // Wait until the editor SVG has any player markers rendered.
   await page
     .waitForFunction(
       () =>
@@ -382,104 +323,160 @@ async function run() {
             s.querySelectorAll("g > circle").length >= 1,
         ),
       null,
-      { timeout: 20000 },
+      { timeout: 25000 },
     )
     .catch(() => {});
   await sleep(BEAT_MED);
-  await shot(page, "hero-4-editor");
 
-  // ---- Step 5: draw a route on a player marker.
-  // Find the editor SVG, locate a player <g> wrapper near the
-  // offensive slot, and drag from there upfield with a slight bend.
-  const drag = await page.evaluate(() => {
-    const svgs = Array.from(document.querySelectorAll("svg"));
-    const svg = svgs
-      .filter((s) => s.getBoundingClientRect().width > 400)
-      .sort(
-        (a, b) =>
-          b.getBoundingClientRect().width - a.getBoundingClientRect().width,
-      )[0];
-    if (!svg) return null;
-    const groups = Array.from(svg.querySelectorAll("g")).filter((g) =>
-      g.querySelector(":scope > circle"),
+  const newPlayId = page.url().match(/plays\/([0-9a-f-]+)\/edit/)?.[1];
+
+  // ---- Draw routes that mirror Play 1's routes ----
+  // For each route in Play 1, find the closest player (by normalized
+  // position) in the new play, tap-to-select, then drag through the
+  // route's node positions converted to screen coords.
+  const doc = scene.play1.document;
+  const routes = (doc?.layers?.routes ?? []).slice(0, 4); // cap visible work
+  for (const route of routes) {
+    const player1 = (doc.layers.players ?? []).find(
+      (p) => p.id === route.carrierPlayerId,
     );
-    if (groups.length === 0) return null;
-    const svgRect = svg.getBoundingClientRect();
-    // Aim near (62%, 62%) — typically a slot/WR on the offensive side.
-    const targetX = svgRect.left + svgRect.width * 0.62;
-    const targetY = svgRect.top + svgRect.height * 0.62;
-    let best = null;
-    let bestDist = Infinity;
-    for (const g of groups) {
-      const r = g.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const d = Math.hypot(cx - targetX, cy - targetY);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { cx, cy };
-      }
-    }
-    if (!best) return null;
-    return {
-      from: { x: best.cx, y: best.cy },
-      to: { x: best.cx + 110, y: best.cy - 220 },
-    };
-  });
+    if (!player1) continue;
 
-  if (drag) {
-    // Editor state machine: pointer-down on a player + drag = MOVE the
-    // player. To draw a route we have to (1) tap the player to select
-    // it, then (2) on a fresh pointer-down on canvas, drag from there.
-    // Start the drag a few px off the player so the editor doesn't
-    // resolve the hit-target as the player marker again.
-    await glideTo(page, drag.from.x, drag.from.y);
-    await sleep(BEAT_SHORT);
-    // (1) tap to select
-    await page.mouse.down();
-    await sleep(80);
-    await page.mouse.up();
-    await sleep(BEAT_SHORT);
-    // (2) drag from canvas just-off-the-player to draw the route
-    const startX = drag.from.x + 14;
-    const startY = drag.from.y - 14;
-    await page.mouse.move(startX, startY);
-    await sleep(120);
-    await page.mouse.down();
-    await sleep(120);
-    const steps = 28;
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const x = startX + (drag.to.x - startX) * t;
-      const bend = Math.sin(t * Math.PI) * 36;
-      const y = startY + (drag.to.y - startY) * t - bend;
-      await page.mouse.move(x, y);
-      await sleep(28);
-    }
+    // Compute source player's screen position in the NEW play's editor.
+    const drag = await page.evaluate(
+      ({ sourceX, sourceY, nodes }) => {
+        const svgs = Array.from(document.querySelectorAll("svg"));
+        const svg = svgs
+          .filter((s) => s.getBoundingClientRect().width > 400)
+          .sort(
+            (a, b) =>
+              b.getBoundingClientRect().width -
+              a.getBoundingClientRect().width,
+          )[0];
+        if (!svg) return null;
+        const rect = svg.getBoundingClientRect();
+        // Normalized -> screen (viewBox is "0 0 fieldAspect 1", default
+        // fieldAspect=1 — y is flipped: SVG_y = 1 - field_y).
+        const toScreen = (x, y) => ({
+          x: rect.left + x * rect.width,
+          y: rect.top + (1 - y) * rect.height,
+        });
+        // Find the closest player marker in the new play's DOM.
+        const groups = Array.from(svg.querySelectorAll("g")).filter((g) =>
+          g.querySelector(":scope > circle"),
+        );
+        const targetPx = toScreen(sourceX, sourceY);
+        let bestPlayer = null;
+        let bestDist = Infinity;
+        for (const g of groups) {
+          const r = g.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          const d = Math.hypot(cx - targetPx.x, cy - targetPx.y);
+          if (d < bestDist) {
+            bestDist = d;
+            bestPlayer = { x: cx, y: cy };
+          }
+        }
+        if (!bestPlayer) return null;
+        const screenNodes = nodes.map((n) =>
+          toScreen(n.position.x, n.position.y),
+        );
+        return { player: bestPlayer, nodes: screenNodes };
+      },
+      {
+        sourceX: player1.position.x,
+        sourceY: player1.position.y,
+        nodes: route.nodes ?? [],
+      },
+    );
+    if (!drag || !drag.nodes.length) continue;
+
+    // (1) Tap to select the player.
+    await glideTo(page, drag.player.x, drag.player.y);
     await sleep(140);
-    await page.mouse.up();
-    await sleep(BEAT_MED);
-    await shot(page, "hero-5-route");
-  } else {
-    await sleep(BEAT_MED);
-    await shot(page, "hero-5-route");
+    await pressDown(page);
+    await sleep(80);
+    await releaseUp(page);
+    await sleep(220);
+
+    // (2) Begin drag from a few px off the player so the editor doesn't
+    // re-resolve the hit-target as the marker.
+    const start = drag.nodes[0];
+    const startX = drag.player.x + (start.x - drag.player.x) * 0.4 + 6;
+    const startY = drag.player.y + (start.y - drag.player.y) * 0.4 - 6;
+    await moveTo(page, startX, startY);
+    await sleep(120);
+    await pressDown(page);
+    await sleep(120);
+
+    // Drag through every node, with intermediate samples so the freehand
+    // sample reads as a deliberate stroke (and so the post cursor moves
+    // continuously).
+    let prev = { x: startX, y: startY };
+    for (const node of drag.nodes) {
+      const STEPS = 14;
+      for (let i = 1; i <= STEPS; i++) {
+        const t = i / STEPS;
+        const x = prev.x + (node.x - prev.x) * t;
+        const y = prev.y + (node.y - prev.y) * t;
+        await moveTo(page, x, y);
+        await sleep(22);
+      }
+      prev = node;
+    }
+    await sleep(160);
+    await releaseUp(page);
+    await sleep(BEAT_SHORT);
   }
 
-  // ---- Step 6: deselect (so the Playback panel appears in place of
-  // the route-style toolbar), then click the primary button ("Motion"
-  // if the play has motion, otherwise "Play") to animate.
-  // PlayEditorClient gates: PlayControlsPanel only renders when
-  // !showToolbar — i.e. nothing selected.
+  // Click empty area to deselect so Notes panel + Playback panel are
+  // accessible without the route-style toolbar.
   await page.keyboard.press("Escape");
-  await sleep(200);
-  // Belt-and-suspenders: also click an empty canvas area outside the field.
-  await page.mouse.move(40, 800);
+  await sleep(160);
+
+  // ---- Type notes with @-mention chips ----
+  // The notes card is below the field on desktop — scroll to it first
+  // so it's actually in view (and gets recorded).
+  const notes = page
+    .locator('div[role="textbox"][contenteditable="true"]')
+    .first();
+  if (await notes.count()) {
+    await notes.scrollIntoViewIfNeeded();
+    await sleep(BEAT_SHORT);
+    await glideToLocator(page, notes);
+    await sleep(120);
+    await pressDown(page);
+    await sleep(80);
+    await releaseUp(page);
+    await sleep(180);
+    // Each @-token followed by a letter autoresolves to a colored chip
+    // for the matching player. Splitting on commas/words gives a more
+    // human-paced rhythm than a single .type() call.
+    const tokens = [
+      "@Q",
+      " fakes the handoff, then hits ",
+      "@yellow",
+      " on the corner.",
+    ];
+    for (const tok of tokens) {
+      await page.keyboard.type(tok, { delay: 28 });
+      await sleep(80);
+    }
+    await sleep(BEAT_SHORT);
+  }
+
+  // Deselect any text selection / panel so the Playback panel renders.
+  await page.keyboard.press("Escape");
+  await sleep(140);
+  await moveTo(page, 40, 800);
   await sleep(120);
-  await page.mouse.down();
+  await pressDown(page);
   await sleep(60);
-  await page.mouse.up();
+  await releaseUp(page);
   await sleep(BEAT_SHORT);
 
+  // ---- Click the primary Playback button (Motion / Play). ----
   const playbackPanel = page
     .locator('div:has(> p:text-is("Playback"))')
     .first();
@@ -487,92 +484,294 @@ async function run() {
     .getByRole("button", { name: /^(motion|play|replay|snap)$/i })
     .first();
   if (await motion.count()) {
-    await glideToLocator(page, motion);
-    await sleep(BEAT_SHORT);
-    await page.mouse.down();
-    await sleep(80);
-    await page.mouse.up();
-    // Let the routes animate end-to-end. If there's a motion phase,
-    // the button retitles to "Play" — click again to run the play.
-    await sleep(BEAT_LONG);
-    const playAgain = playbackPanel
+    await clickLocator(page, motion);
+    await sleep(BEAT_MED);
+    // If a motion phase fired, the button retitles to "Play" — click again.
+    const play2 = playbackPanel
       .getByRole("button", { name: /^(play|snap)$/i })
       .first();
-    if (await playAgain.count()) {
-      await page.mouse.down();
+    if (await play2.count()) {
+      await pressDown(page);
       await sleep(80);
-      await page.mouse.up();
-      await sleep(BEAT_LONG * 2);
-    } else {
+      await releaseUp(page);
       await sleep(BEAT_LONG);
+    } else {
+      await sleep(BEAT_MED);
     }
-    await shot(page, "hero-6-motion");
   } else {
-    await sleep(BEAT_LONG);
-    await shot(page, "hero-6-motion");
+    await sleep(BEAT_SHORT);
   }
 
-  // ---- Step 7: pop back to the playbook so the loop wraps cleanly.
-  await page.goto(`${BASE_URL}/playbooks/${target.playbookId}`, {
+  return { newPlayId };
+}
+
+/* -----------------------------------------------------------------------
+   Cursor PNG sequence — composite a soft round cursor on top of a
+   transparent canvas at every frame, interpolating between recorded
+   path samples.
+   ----------------------------------------------------------------------- */
+
+function sampleCursor(t) {
+  // Find the bracketing samples in cursorPath for time t (ms).
+  if (cursorPath.length === 0) return { x: -100, y: -100, down: false };
+  if (t <= cursorPath[0].t) return cursorPath[0];
+  if (t >= cursorPath[cursorPath.length - 1].t)
+    return cursorPath[cursorPath.length - 1];
+  let lo = 0;
+  let hi = cursorPath.length - 1;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (cursorPath[mid].t <= t) lo = mid;
+    else hi = mid;
+  }
+  const a = cursorPath[lo];
+  const b = cursorPath[hi];
+  const span = Math.max(1, b.t - a.t);
+  const u = (t - a.t) / span;
+  return {
+    x: a.x + (b.x - a.x) * u,
+    y: a.y + (b.y - a.y) * u,
+    down: a.down,
+  };
+}
+
+async function makeCursorImg() {
+  // 80px circle with halo + soft shadow. Standard tutorial-video cursor.
+  const idle = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+    <defs>
+      <radialGradient id="g" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="rgba(242,101,34,0.95)"/>
+        <stop offset="55%" stop-color="rgba(242,101,34,0.55)"/>
+        <stop offset="100%" stop-color="rgba(242,101,34,0)"/>
+      </radialGradient>
+      <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="2"/>
+      </filter>
+    </defs>
+    <circle cx="48" cy="48" r="40" fill="url(#g)" filter="url(#s)"/>
+    <circle cx="48" cy="48" r="22" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.85)" stroke-width="2.5"/>
+  </svg>`;
+  const down = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+    <defs>
+      <radialGradient id="g" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="rgba(242,101,34,1)"/>
+        <stop offset="60%" stop-color="rgba(242,101,34,0.7)"/>
+        <stop offset="100%" stop-color="rgba(242,101,34,0)"/>
+      </radialGradient>
+    </defs>
+    <circle cx="48" cy="48" r="42" fill="rgba(242,101,34,0.18)"/>
+    <circle cx="48" cy="48" r="34" fill="url(#g)"/>
+    <circle cx="48" cy="48" r="18" fill="rgba(255,255,255,0.35)" stroke="rgba(255,255,255,1)" stroke-width="3"/>
+  </svg>`;
+  const idleBuf = await sharp(Buffer.from(idle)).png().toBuffer();
+  const downBuf = await sharp(Buffer.from(down)).png().toBuffer();
+  return { idleBuf, downBuf, size: 96 };
+}
+
+async function generateCursorFrames(durationMs) {
+  await rm(FRAMES_DIR, { recursive: true, force: true });
+  await mkdir(FRAMES_DIR, { recursive: true });
+  const { idleBuf, downBuf, size } = await makeCursorImg();
+  const totalFrames = Math.ceil((durationMs / 1000) * FPS);
+  console.log(`Compositing ${totalFrames} cursor frames…`);
+
+  // Build empty transparent base once, then composite per frame.
+  const baseSpec = {
+    create: {
+      width: VIEWPORT.width,
+      height: VIEWPORT.height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  };
+
+  // Process in parallel chunks for throughput.
+  const CHUNK = 16;
+  for (let i = 0; i < totalFrames; i += CHUNK) {
+    const ops = [];
+    for (let j = 0; j < CHUNK && i + j < totalFrames; j++) {
+      const idx = i + j;
+      const tMs = (idx / FPS) * 1000;
+      const c = sampleCursor(tMs);
+      // For "click ripple" pulse: keep down-frame variant briefly after a
+      // pointerup as well so the ripple lingers.
+      const recentDown = cursorPath.find(
+        (p, k, arr) =>
+          k > 0 &&
+          arr[k - 1].down &&
+          !p.down &&
+          tMs >= arr[k - 1].t &&
+          tMs <= arr[k - 1].t + 220,
+      );
+      const useDown = c.down || !!recentDown;
+      const buf = useDown ? downBuf : idleBuf;
+      const left = Math.round(c.x - size / 2);
+      const top = Math.round(c.y - size / 2);
+      ops.push(
+        sharp(baseSpec)
+          .composite([{ input: buf, left, top }])
+          .png()
+          .toFile(path.join(FRAMES_DIR, `f_${idx.toString().padStart(5, "0")}.png`)),
+      );
+    }
+    await Promise.all(ops);
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Main
+   ----------------------------------------------------------------------- */
+
+async function run() {
+  await mkdir(OUT_DIR, { recursive: true });
+  await rm(VIDEO_TMP, { recursive: true, force: true });
+  await mkdir(VIDEO_TMP, { recursive: true });
+
+  const env = await loadEnv();
+  if (!env.SEED_ADMIN_EMAIL || !env.SEED_ADMIN_PASSWORD) {
+    throw new Error("SEED_ADMIN_EMAIL/PASSWORD missing");
+  }
+
+  // Resolve scene targets.
+  const supa = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } },
+  );
+  const { data: adminList } = await supa.auth.admin.listUsers({ perPage: 200 });
+  const adminUser = (adminList?.users ?? []).find(
+    (u) => (u.email ?? "").toLowerCase() === env.SEED_ADMIN_EMAIL.toLowerCase(),
+  );
+  if (!adminUser) throw new Error("seed admin user not found");
+  const sceneA = await findScene(supa, adminUser.id, "Chiefs Girls", false);
+  const sceneB = await findScene(supa, adminUser.id, "7v7", true);
+  console.log("Scene A:", sceneA.playbookName, "→", sceneA.play1.name);
+  console.log("Scene B:", sceneB.playbookName, "→", sceneB.play1.name);
+
+  // Pre-warm in a throwaway context so the recording context starts hot.
+  console.log("Pre-warming…");
+  const warmBrowser = await chromium.launch();
+  const warmCtx = await warmBrowser.newContext({ viewport: VIEWPORT });
+  const warmPage = await warmCtx.newPage();
+  await signIn(warmPage, env.SEED_ADMIN_EMAIL, env.SEED_ADMIN_PASSWORD);
+  for (const id of [sceneA.playbookId, sceneB.playbookId]) {
+    await warmPage.goto(`${BASE_URL}/playbooks/${id}`, {
+      waitUntil: "networkidle",
+    });
+  }
+  await warmPage.goto(`${BASE_URL}/plays/new-preview?playbookId=${sceneA.playbookId}`, {
+    waitUntil: "networkidle",
+  });
+  const storageState = await warmCtx.storageState();
+  await warmCtx.close();
+  await warmBrowser.close();
+
+  // -----------------------------------------------------------------
+  // Real recording.
+  // -----------------------------------------------------------------
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({
+    viewport: VIEWPORT,
+    deviceScaleFactor: 1, // recordVideo is at viewport size; keep 1:1
+    storageState,
+    recordVideo: { dir: VIDEO_TMP, size: VIEWPORT },
+  });
+  const page = await ctx.newPage();
+  // Hide demo / preview banners just in case (admin-owned playbooks
+  // shouldn't show them, but defensive).
+  await page.addInitScript(() => {
+    const css = "[data-demo-banner],[data-preview-banner]{display:none!important;}";
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+  });
+
+  // Pre-load the first scene's playbook page in the recording context
+  // BEFORE we start the cursor timer. This skips the about:blank →
+  // /playbooks/<id> dead-loading prelude. We trim the source video by
+  // (recordStartTs - contextStartTs) in ffmpeg post.
+  const contextStartTs = Date.now();
+  await page.goto(`${BASE_URL}/playbooks/${sceneA.playbookId}`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForLoadState("networkidle");
-  await sleep(BEAT_SHORT);
-  await glideTo(page, 720, 500);
-  await sleep(BEAT_SHORT);
-  await shot(page, "hero-7-back");
+  await page
+    .locator('a[href*="/plays/"]')
+    .first()
+    .waitFor({ state: "visible", timeout: 20000 });
+  await sleep(200);
 
-  // Hold final frame so the loop doesn't snap.
-  await sleep(BEAT_SHORT);
+  recordStartTs = Date.now();
+  const trimSeconds = (recordStartTs - contextStartTs) / 1000;
+  curX = 80;
+  curY = 780;
+  await page.mouse.move(curX, curY); // initial position
+  logCursor();
 
+  const created = [];
+  const rA = await runScene(page, sceneA, { alreadyOnPage: true });
+  if (rA.newPlayId) created.push(rA.newPlayId);
+  const rB = await runScene(page, sceneB);
+  if (rB.newPlayId) created.push(rB.newPlayId);
+
+  // Don't screenshot a poster here — we'll extract the very first frame
+  // of the final mp4 below so the browser sees zero pixel-jump between
+  // poster and playback.
+
+  const totalRecMs = Date.now() - recordStartTs;
+  await sleep(400);
   await page.close();
   await ctx.close();
   await browser.close();
 
   // -----------------------------------------------------------------
-  // Post-process: drop near-duplicate frames (page-load dead time)
-  // and re-encode. mpdecimate compares consecutive frames and skips
-  // ones that are visually identical, so navigation latency collapses
-  // to a near-instant cut while cursor motion / animations stay smooth.
+  // Cleanup created plays so the admin's playbooks stay tidy.
+  // -----------------------------------------------------------------
+  if (created.length) {
+    console.log(`Cleaning up ${created.length} created play(s)…`);
+    await supa.from("plays").delete().in("id", created);
+  }
+
+  // -----------------------------------------------------------------
+  // Save the recorded webm with a stable name.
   // -----------------------------------------------------------------
   const vids = (await readdir(VIDEO_TMP)).filter((f) => f.endsWith(".webm"));
   if (vids.length === 0) throw new Error("No video captured");
-  const webmSrc = path.join(VIDEO_TMP, vids[0]);
+  const rawWebm = path.join(VIDEO_TMP, vids[0]);
+
+  // Persist the cursor path for debugging / re-encode without re-capture.
+  await writeFile(
+    path.join(VIDEO_TMP, "cursor-path.json"),
+    JSON.stringify({ totalRecMs, cursorPath }),
+  );
+
+  // -----------------------------------------------------------------
+  // Generate cursor PNG sequence and overlay onto the source video.
+  // -----------------------------------------------------------------
+  await generateCursorFrames(totalRecMs + 400);
+
   const webmOut = path.join(OUT_DIR, "hero-walkthrough.webm");
   const mp4Out = path.join(OUT_DIR, "hero-walkthrough.mp4");
-  // Conservative mpdecimate: only drops frames that are essentially
-  // identical to their predecessor (page-load dead time, hold-on-final
-  // pauses) while preserving cursor motion + route animation. Defaults
-  // (hi=64*12, lo=64*5) are too eager and chop real motion.
-  const VF = "mpdecimate=hi=64*4:lo=64*2:frac=0.5,setpts=N/FRAME_RATE/TB";
+
+  // Filter graph: trim the source by `trimSeconds` so its t=0 aligns
+  // with cursor t=0, then overlay the cursor PNG sequence on top.
+  const VF =
+    "[0:v]trim=start=" +
+    trimSeconds.toFixed(3) +
+    ",setpts=PTS-STARTPTS,format=yuv420p[bg];[1:v]format=rgba[fg];[bg][fg]overlay=0:0:shortest=1";
 
   await ffmpeg([
     "-y",
     "-i",
-    webmSrc,
-    "-vf",
-    VF,
-    "-r",
-    "30",
-    "-c:v",
-    "libvpx-vp9",
-    "-b:v",
-    "0",
-    "-crf",
-    "32",
-    "-an",
-    webmOut,
-  ]);
-  console.log("  ✓", webmOut);
-
-  await ffmpeg([
-    "-y",
+    rawWebm,
+    "-framerate",
+    String(FPS),
     "-i",
-    webmSrc,
-    "-vf",
+    path.join(FRAMES_DIR, "f_%05d.png"),
+    "-filter_complex",
     VF,
     "-r",
-    "30",
+    String(FPS),
     "-c:v",
     "libx264",
     "-pix_fmt",
@@ -586,7 +785,49 @@ async function run() {
   ]);
   console.log("  ✓", mp4Out);
 
+  await ffmpeg([
+    "-y",
+    "-i",
+    rawWebm,
+    "-framerate",
+    String(FPS),
+    "-i",
+    path.join(FRAMES_DIR, "f_%05d.png"),
+    "-filter_complex",
+    VF,
+    "-r",
+    String(FPS),
+    "-c:v",
+    "libvpx-vp9",
+    "-b:v",
+    "0",
+    "-crf",
+    "32",
+    "-an",
+    webmOut,
+  ]);
+  console.log("  ✓", webmOut);
+
+  // Extract the very first frame (which is now the playbook shelf
+  // post-trim) as the poster — guarantees zero pixel-jump between the
+  // browser's poster paint and the start of playback.
+  const posterPath = path.join(OUT_DIR, "hero-poster.png");
+  await ffmpeg([
+    "-y",
+    "-i",
+    mp4Out,
+    "-frames:v",
+    "1",
+    "-q:v",
+    "3",
+    "-update",
+    "1",
+    posterPath,
+  ]);
+  console.log("  ✓", posterPath);
+
   await rm(VIDEO_TMP, { recursive: true, force: true });
+  await rm(FRAMES_DIR, { recursive: true, force: true });
   console.log("\nDone.");
 }
 

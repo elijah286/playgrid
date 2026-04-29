@@ -119,7 +119,7 @@ function Hero() {
           <div className="absolute -inset-8 -z-10 rounded-[36px] bg-gradient-to-br from-white/40 to-white/0 blur-2xl" />
           <LaptopFrame>
             <HeroWalkthroughVideo
-              poster="/marketing/screens/hero-1-shelf.png"
+              poster="/marketing/screens/hero-poster.png"
               mp4="/marketing/screens/hero-walkthrough.mp4"
               webm="/marketing/screens/hero-walkthrough.webm"
             />

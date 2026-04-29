@@ -29,12 +29,36 @@ export function HeroWalkthroughVideo({ poster, mp4, webm }: Props) {
     const el = ref.current;
     if (!el) return;
 
+    // Belt-and-suspenders: re-assert muted via the property (not just the
+    // attribute), since some browsers ignore the attribute if the
+    // element was created via JS / hydrated. Without this, autoplay can
+    // be silently blocked.
+    el.muted = true;
+    el.defaultMuted = true;
+    el.setAttribute("muted", "");
+    el.playsInline = true;
+
     const tryPlay = () => {
       const p = el.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      if (p && typeof p.catch === "function")
+        p.catch(() => {
+          // If a user gesture is required, wire one up so the next click
+          // anywhere kicks playback off.
+          const onGesture = () => {
+            el.play().catch(() => {});
+            window.removeEventListener("pointerdown", onGesture);
+            window.removeEventListener("keydown", onGesture);
+            window.removeEventListener("touchstart", onGesture);
+          };
+          window.addEventListener("pointerdown", onGesture, { once: true });
+          window.addEventListener("keydown", onGesture, { once: true });
+          window.addEventListener("touchstart", onGesture, { once: true });
+        });
     };
 
-    tryPlay();
+    // If metadata isn't loaded yet, play() can fail silently.
+    if (el.readyState >= 2) tryPlay();
+    else el.addEventListener("loadeddata", tryPlay, { once: true });
 
     const io = new IntersectionObserver(
       (entries) => {
