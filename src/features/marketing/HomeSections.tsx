@@ -31,47 +31,51 @@ const BRAND_ORANGE = "#F26522";
 export function EveryScreen() {
   return (
     <section id="tour" className="relative scroll-mt-24 py-20 md:py-24">
-      <div className="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-[1fr_1.1fr] md:items-center md:gap-16">
+      <div className="mx-auto max-w-6xl px-6">
         <Reveal>
-          <div>
+          <div className="max-w-3xl">
             <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
-              Make plays on your desktop
-              <br />
+              Make plays on your desktop{" "}
               <span className="text-muted">or on the field.</span>
             </h2>
-            <p className="mt-5 max-w-lg text-lg text-muted">
+          </div>
+        </Reveal>
+
+        <div className="mt-12 grid gap-10 md:grid-cols-[1fr_1.2fr] md:items-center md:gap-16">
+          <Reveal>
+            <p className="max-w-lg text-lg text-muted">
               An easy, fun play editor designed for desktop, tablet, and
               mobile. Draw it up at the kitchen table, review it on the
               sideline, pull up the call on your phone between series.
             </p>
-          </div>
-        </Reveal>
+          </Reveal>
 
-        <Reveal delay={100}>
-          <div className="relative flex items-end justify-center gap-6 md:justify-end">
-            <TabletFrame>
-              <Image
-                src="/marketing/screens/tablet-playbook.png"
-                alt="Playbook on a tablet"
-                width={1024}
-                height={768}
-                loading="lazy"
-                className="h-full w-full object-cover object-top"
-              />
-            </TabletFrame>
-            <PhoneFrame>
-              <Image
-                src="/marketing/screens/phone-play.png"
-                alt="A play open on a phone"
-                width={390}
-                height={844}
-                loading="lazy"
-                className="h-full w-full object-cover object-top"
-              />
-            </PhoneFrame>
-          </div>
-        </Reveal>
+          <Reveal delay={100}>
+            <div className="relative flex items-end justify-center gap-6 md:justify-end">
+              <TabletFrame>
+                <Image
+                  src="/marketing/screens/tablet-playbook.png"
+                  alt="Playbook on a tablet"
+                  width={1024}
+                  height={768}
+                  loading="lazy"
+                  className="h-full w-full object-cover object-top"
+                />
+              </TabletFrame>
+              <PhoneFrame>
+                <Image
+                  src="/marketing/screens/phone-play.png"
+                  alt="A play open on a phone"
+                  width={390}
+                  height={844}
+                  loading="lazy"
+                  className="h-full w-full object-cover object-top"
+                />
+              </PhoneFrame>
+            </div>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
