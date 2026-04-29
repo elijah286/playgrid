@@ -39,7 +39,7 @@ export function EveryScreen() {
           <Reveal>
             <div>
               <SectionEyebrow icon={LayoutGrid}>Every screen</SectionEyebrow>
-              <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-[2.75rem] md:leading-[1.05] lg:text-5xl">
+              <h2 className="mt-3 text-3xl font-extrabold leading-[1.1] tracking-tight text-balance lg:text-5xl">
                 Make plays on your desktop
                 <br />
                 <span className="text-muted">or on the field.</span>

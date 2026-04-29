@@ -102,14 +102,13 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* Scroll affordance — only renders on viewports tall enough that
-            the next section *isn't* already peeking above the fold. Phones
-            (vertical stack), small laptops, and any height < 800px get
-            natural peek instead. CSS-only so no client JS. */}
+        {/* Scroll affordance — bouncing chevron at the bottom of the hero
+            on md+ viewports. Phones get natural scroll cues from the
+            stacked layout, so we hide it there. */}
         <Link
           href="#tour"
           aria-label="Scroll to product tour"
-          className="pointer-events-auto absolute bottom-4 left-1/2 hidden -translate-x-1/2 animate-bounce rounded-full p-2 text-muted transition-colors hover:text-foreground [@media(min-width:768px)_and_(min-height:800px)]:block"
+          className="absolute bottom-4 left-1/2 hidden -translate-x-1/2 animate-bounce rounded-full p-2 text-muted transition-colors hover:text-foreground md:block"
         >
           <ChevronDown className="size-7" />
         </Link>
