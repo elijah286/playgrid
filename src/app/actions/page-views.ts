@@ -6,6 +6,8 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { CLICK_ID_PARAMS, type ClickIds } from "@/lib/attribution/click-ids";
 import { setFirstTouchCookieIfMissing } from "@/lib/attribution/first-touch";
+import { lookupGeo } from "@/lib/geo/maxmind";
+import { clientIpFromHeaders } from "@/lib/geo/request-ip";
 
 const BOT_RE = /bot|crawl|spider|slurp|bingpreview|headlesschrome/i;
 
@@ -25,6 +27,15 @@ export type RecordPageViewInput = {
   isFirstSessionEvent?: boolean;
 };
 
+function safeDecode(v: string | null | undefined): string | null {
+  if (!v) return null;
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
 function trim(v: string | null | undefined, max = 512): string | null {
   if (!v) return null;
   const s = String(v).trim();
@@ -37,11 +48,18 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
     if (!input?.sessionId || !input?.path) return { ok: true as const };
 
     const h = await headers();
-    // x-vercel-* headers don't fire on Railway; left in for parity if we ever
-    // sit behind Vercel. MaxMind lookup will fill these in a follow-up commit.
-    const country = h.get("x-vercel-ip-country");
-    const region = h.get("x-vercel-ip-country-region");
-    const city = h.get("x-vercel-ip-city");
+    // Try Vercel-style geo headers first (free if we ever move under Vercel),
+    // then fall back to a MaxMind GeoLite2 lookup using the client IP.
+    let country = h.get("x-vercel-ip-country");
+    let region = h.get("x-vercel-ip-country-region");
+    let city = h.get("x-vercel-ip-city");
+    if (!country && !region && !city) {
+      const ip = clientIpFromHeaders(h);
+      const geo = await lookupGeo(ip);
+      country = geo.country;
+      region = geo.region;
+      city = geo.city;
+    }
 
     let userId: string | null = null;
     try {
@@ -64,9 +82,9 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
     const utmTerm = trim(input.utmTerm);
     const referrer = trim(input.referrer, 2048);
     const landingPath = trim(input.landingPath, 2048);
-    const decodedCountry = country ? decodeURIComponent(country) : null;
-    const decodedRegion = region ? decodeURIComponent(region) : null;
-    const decodedCity = city ? decodeURIComponent(city) : null;
+    const decodedCountry = safeDecode(country);
+    const decodedRegion = safeDecode(region);
+    const decodedCity = safeDecode(city);
 
     const clickIds: ClickIds = {};
     if (input.clickIds) {

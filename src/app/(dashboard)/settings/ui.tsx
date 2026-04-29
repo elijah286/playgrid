@@ -24,6 +24,7 @@ import { RagEmbeddingsAdminClient } from "@/features/admin/RagEmbeddingsAdminCli
 import type { LlmProvider } from "@/lib/site/llm-provider";
 import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
+import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
 import { CoachAiFeedbackAdminClient } from "@/features/admin/CoachAiFeedbackAdminClient";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
@@ -79,6 +80,10 @@ type GoogleMapsProps =
   | { ok: true; configured: boolean; statusLabel: string; updatedAt: string | null }
   | { ok: false; error: string };
 
+type MaxMindProps =
+  | { ok: true; configured: boolean; statusLabel: string; downloadedAt: string | null }
+  | { ok: false; error: string };
+
 type AdminKeyProps = { configured: boolean; statusLabel: string };
 
 type Tab =
@@ -102,6 +107,7 @@ export function SettingsClient({
   claude,
   resend,
   googleMaps,
+  maxmind,
   initialFeedback,
   feedbackError,
   initialFeedbackWidgetEnabled,
@@ -141,6 +147,7 @@ export function SettingsClient({
   claude: ClaudeProps;
   resend: ResendProps;
   googleMaps: GoogleMapsProps;
+  maxmind: MaxMindProps;
   initialFeedback: FeedbackRow[];
   feedbackError: string | null;
   initialFeedbackWidgetEnabled: boolean;
@@ -389,6 +396,18 @@ export function SettingsClient({
             />
           ) : (
             <p className="text-sm text-red-700 dark:text-red-300">{googleMaps.error}</p>
+          )}
+
+          {maxmind.ok ? (
+            <MaxMindSettingsClient
+              initial={{
+                configured: maxmind.configured,
+                statusLabel: maxmind.statusLabel,
+                downloadedAt: maxmind.downloadedAt,
+              }}
+            />
+          ) : (
+            <p className="text-sm text-red-700 dark:text-red-300">{maxmind.error}</p>
           )}
         </div>
       )}

@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/admin-integrations";
 import { getResendStatusAction } from "@/app/actions/admin-resend";
 import { getGoogleMapsStatusAction } from "@/app/actions/admin-google-maps";
+import { getMaxMindStatusAction } from "@/app/actions/admin-maxmind";
 import {
   getFeedbackWidgetEnabledAction,
   listFeedbackForAdminAction,
@@ -59,6 +60,7 @@ export default async function SettingsPage() {
     claudeRes,
     resendRes,
     googleMapsRes,
+    maxmindRes,
     feedbackRes,
     invitesRes,
     feedbackWidgetRes,
@@ -88,6 +90,7 @@ export default async function SettingsPage() {
     getClaudeIntegrationStatusAction(),
     getResendStatusAction(),
     getGoogleMapsStatusAction(),
+    getMaxMindStatusAction(),
     listFeedbackForAdminAction(),
     listCoachInvitationsAction(),
     getFeedbackWidgetEnabledAction(),
@@ -172,6 +175,16 @@ export default async function SettingsPage() {
                 updatedAt: googleMapsRes.updatedAt,
               }
             : { ok: false, error: googleMapsRes.error }
+        }
+        maxmind={
+          maxmindRes.ok
+            ? {
+                ok: true,
+                configured: maxmindRes.configured,
+                statusLabel: maxmindRes.statusLabel,
+                downloadedAt: maxmindRes.downloadedAt,
+              }
+            : { ok: false, error: maxmindRes.error }
         }
         initialFeedback={feedbackRes.ok ? feedbackRes.items : []}
         feedbackError={feedbackRes.ok ? null : feedbackRes.error}
