@@ -340,7 +340,7 @@ function Capabilities() {
           What Coach Cal does
         </p>
         <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
-          Real coaching work — not a chatbot wrapper.
+          Real coaching work.
         </h2>
         <p className="mt-3 max-w-2xl text-base text-muted">
           Coach Cal speaks the same structured-play format the editor uses, so
