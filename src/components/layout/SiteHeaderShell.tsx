@@ -69,6 +69,12 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             >
               Tour
             </Link>
+            <Link
+              href="/coach-cal"
+              className="text-sm text-muted hover:text-foreground transition-colors"
+            >
+              Coach Cal
+            </Link>
             {showPricingLink && (
               <Link
                 href="/pricing"
