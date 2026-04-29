@@ -318,7 +318,7 @@ function CrossPlaybookCompact({ event }: { event: CrossPlaybookEventRow }) {
         <p className="truncate font-medium text-foreground">{event.title}</p>
         <p className="flex items-center gap-1 truncate text-[10px] text-muted">
           <span
-            className="inline-block size-1.5 shrink-0 rounded-full"
+            className="inline-block size-1.5 shrink-0 rounded-full ring-1 ring-border"
             style={{ backgroundColor: color }}
           />
           <span className="truncate">{event.playbookName}</span>
@@ -399,12 +399,16 @@ function EventRow({
                 {headline}
               </h3>
               <span
-                className="inline-flex shrink-0 items-center gap-1 truncate text-xs font-medium"
-                style={{ color }}
+                className="inline-flex shrink-0 items-center gap-1 truncate text-xs font-medium text-muted"
                 title={event.playbookName}
               >
+                {/* Dot is tinted with the playbook color; it gets a ring so
+                    it stays visible even when the color matches the surface
+                    background (e.g. an almost-black playbook on dark mode).
+                    The label text uses the muted foreground color so it's
+                    always readable regardless of the playbook color. */}
                 <span
-                  className="inline-block size-1.5 shrink-0 rounded-full"
+                  className="inline-block size-2 shrink-0 rounded-full ring-1 ring-border"
                   style={{ backgroundColor: color }}
                 />
                 <span className="max-w-[10rem] truncate">{event.playbookName}</span>
