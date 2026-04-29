@@ -6,7 +6,7 @@ import {
 import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
 import type { SportVariant } from "@/domain/play/types";
 
-export const metadata = { title: "Edit Formation — xogridmaker" };
+export const metadata = { title: "Edit Formation — XO Gridmaker" };
 
 export default async function EditFormationPage({
   params,

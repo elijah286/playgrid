@@ -9,20 +9,20 @@ import {
 import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
 
 export const metadata: Metadata = {
-  title: "FAQ — xogridmaker & Coach Cal",
+  title: "FAQ — XO Gridmaker & Coach Cal",
   description:
-    "Answers about xogridmaker — what it costs, who it's for, how sharing works — plus a dedicated section on Coach Cal, the AI coaching partner that helps you build plays, plan practices, and review your playbook.",
+    "Answers about XO Gridmaker — what it costs, who it's for, how sharing works — plus a dedicated section on Coach Cal, the AI coaching partner that helps you build plays, plan practices, and review your playbook.",
   alternates: { canonical: "/faq" },
   openGraph: {
-    title: "xogridmaker FAQ — including Coach Cal AI",
+    title: "XO Gridmaker FAQ — including Coach Cal AI",
     description:
-      "What xogridmaker is, who it's for, how sharing works, and what Coach Cal can do for you.",
+      "What XO Gridmaker is, who it's for, how sharing works, and what Coach Cal can do for you.",
     url: "/faq",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "xogridmaker FAQ",
+    title: "XO Gridmaker FAQ",
     description:
       "Answers from coaches — about the playbook tool and about Coach Cal AI.",
   },
@@ -38,11 +38,11 @@ function buildSections(
   return [
     {
       id: "general",
-      title: "About xogridmaker",
+      title: "About XO Gridmaker",
       faqs: [
         {
-          q: "What is xogridmaker?",
-          a: "xogridmaker is a football play designer for coaches. You draw plays on a field, organize them into playbooks, and share them with your team — on phones, tablets, or printed wristband cards.",
+          q: "What is XO Gridmaker?",
+          a: "XO Gridmaker is a football play designer for coaches. You draw plays on a field, organize them into playbooks, and share them with your team — on phones, tablets, or printed wristband cards.",
         },
         {
           q: "Who is it for?",
@@ -50,7 +50,7 @@ function buildSections(
         },
         {
           q: "How is this different from drawing plays in PowerPoint or Keynote?",
-          a: "xogridmaker understands football. Players have positions, routes are route trees, formations are formations — not just shapes. That means the app can animate plays, keep them legible at any size, share them as live pages instead of static images, and feed structured data to Coach Cal so its suggestions are grounded in real X's and O's.",
+          a: "XO Gridmaker understands football. Players have positions, routes are route trees, formations are formations — not just shapes. That means the app can animate plays, keep them legible at any size, share them as live pages instead of static images, and feed structured data to Coach Cal so its suggestions are grounded in real X's and O's.",
         },
       ],
     },
@@ -59,7 +59,7 @@ function buildSections(
       title: "Pricing & plans",
       faqs: [
         {
-          q: "Is xogridmaker free?",
+          q: "Is XO Gridmaker free?",
           a: `Yes, there's a free tier that gives you one playbook with up to ${freeMaxPlays} plays — enough to design a small playbook without paying. Paid plans scale with how much you use it: unlimited plays, more playbooks, team invites, wristbands, and Coach Cal AI on Coach Pro. See the pricing page for current plan details.`,
         },
         {
@@ -156,7 +156,7 @@ function buildSections(
         },
         {
           q: "Which AI model is Coach Cal built on?",
-          a: "Coach Cal runs on top of large language models from OpenAI and Anthropic (Claude). The active provider is selected by xogridmaker — we choose whichever model we've found to give the best football answers at any given time. The football-specific knowledge base (KB chunks for fundamentals, formations, drills, game management, practice templates) is xogridmaker's own, layered on top of the underlying LLM.",
+          a: "Coach Cal runs on top of large language models from OpenAI and Anthropic (Claude). The active provider is selected by XO Gridmaker — we choose whichever model we've found to give the best football answers at any given time. The football-specific knowledge base (KB chunks for fundamentals, formations, drills, game management, practice templates) is XO Gridmaker's own, layered on top of the underlying LLM.",
         },
       ],
     },
@@ -204,7 +204,7 @@ export default async function FaqPage() {
         Frequently asked questions
       </h1>
       <p className="mt-3 text-base text-muted">
-        Quick answers for coaches kicking the tires on xogridmaker — plus
+        Quick answers for coaches kicking the tires on XO Gridmaker — plus
         a dedicated section on{" "}
         <a href="#coach-cal" className="font-medium text-foreground hover:underline">
           Coach Cal
@@ -275,7 +275,7 @@ export default async function FaqPage() {
           >
             take the tour
           </Link>{" "}
-          to see xogridmaker in action.
+          to see XO Gridmaker in action.
         </p>
       </div>
     </article>

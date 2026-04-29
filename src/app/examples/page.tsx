@@ -9,20 +9,20 @@ import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 export const metadata: Metadata = {
   title: "Example playbooks",
   description:
-    "Browse real football playbooks built in xogridmaker — plays, formations, and wristband cards for flag, youth tackle, and 7v7 coaches. Create your own free in minutes.",
+    "Browse real football playbooks built in XO Gridmaker — plays, formations, and wristband cards for flag, youth tackle, and 7v7 coaches. Create your own free in minutes.",
   alternates: { canonical: "/examples" },
   openGraph: {
-    title: "Example football playbooks — built in xogridmaker",
+    title: "Example football playbooks — built in XO Gridmaker",
     description:
-      "Real plays and playbooks coaches have designed with xogridmaker. Browse the examples, then create your own free.",
+      "Real plays and playbooks coaches have designed with XO Gridmaker. Browse the examples, then create your own free.",
     url: "/examples",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Example football playbooks — built in xogridmaker",
+    title: "Example football playbooks — built in XO Gridmaker",
     description:
-      "Real plays and playbooks coaches have designed with xogridmaker.",
+      "Real plays and playbooks coaches have designed with XO Gridmaker.",
   },
 };
 
@@ -51,7 +51,7 @@ export default async function ExamplesPage() {
           Example playbooks
         </h1>
         <p className="mt-3 text-base leading-relaxed text-muted">
-          Real xogridmaker playbooks built by coaches — open one to explore the
+          Real XO Gridmaker playbooks built by coaches — open one to explore the
           plays, formations, and wristband cards. Nothing you do inside
           will be saved; the &quot;Create your playbook&quot; button is
           always one click away.

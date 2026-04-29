@@ -63,10 +63,10 @@ export function ShareDialog({ userId, onClose }: Props) {
   async function copy() {
     if (isNativeApp()) {
       const result = await nativeShare({
-        title: "Try xogridmaker",
+        title: "Try XO Gridmaker",
         text: "I'm using this for my playbook — thought you might like it.",
         url: shareUrl,
-        dialogTitle: "Share xogridmaker",
+        dialogTitle: "Share XO Gridmaker",
       });
       if (result === "shared") return;
       if (result === "copied") {
@@ -109,7 +109,7 @@ export function ShareDialog({ userId, onClose }: Props) {
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
               <Share2 className="size-4" />
-              Share xogridmaker
+              Share XO Gridmaker
             </h2>
             <p className="mt-0.5 text-xs text-muted">
               Send this to a coach who&rsquo;d find it useful.
@@ -199,7 +199,7 @@ export function ShareDialog({ userId, onClose }: Props) {
                 // eslint-disable-next-line @next/next/no-img-element -- data URL
                 <img
                   src={qrDataUrl}
-                  alt="QR code for xogridmaker"
+                  alt="QR code for XO Gridmaker"
                   className="size-56 rounded-md border border-border bg-white"
                 />
               ) : (
@@ -208,7 +208,7 @@ export function ShareDialog({ userId, onClose }: Props) {
                 </div>
               )}
               <p className="text-center text-xs text-muted">
-                Scan to open xogridmaker on another device.
+                Scan to open XO Gridmaker on another device.
               </p>
             </div>
           )}

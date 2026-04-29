@@ -29,15 +29,15 @@ function buildInviteTitle(preview: {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { token } = await params;
-  if (!hasSupabaseEnv()) return { title: "Invite · xogridmaker" };
+  if (!hasSupabaseEnv()) return { title: "Invite · XO Gridmaker" };
   const res = await previewInviteAction(token);
   if (!res.ok || res.preview.revoked || res.preview.expired) {
-    return { title: "Invite · xogridmaker" };
+    return { title: "Invite · XO Gridmaker" };
   }
   const title = buildInviteTitle(res.preview);
   const description = res.preview.head_coach_name
-    ? `Join ${res.preview.head_coach_name}'s playbook on xogridmaker.`
-    : "Join this team's playbook on xogridmaker.";
+    ? `Join ${res.preview.head_coach_name}'s playbook on XO Gridmaker.`
+    : "Join this team's playbook on XO Gridmaker.";
   return {
     title,
     description,

@@ -38,12 +38,12 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
         <Link
           href={user ? "/home" : "/"}
-          aria-label="xogridmaker home"
+          aria-label="XO Gridmaker home"
           className="flex cursor-pointer items-center"
         >
           <Image
             src="/brand/xogridmaker_wordmark.svg"
-            alt="xogridmaker"
+            alt="XO Gridmaker"
             width={200}
             height={36}
             priority

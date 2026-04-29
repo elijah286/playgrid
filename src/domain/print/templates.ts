@@ -879,7 +879,7 @@ export type Watermark = {
 };
 
 /**
- * Tiled orange xogridmaker watermark for free-tier playsheets. Draws diagonally
+ * Tiled orange XO Gridmaker watermark for free-tier playsheets. Draws diagonally
  * across the page behind the play cells. Not configurable — always same look.
  */
 function freeTierWatermarkSvg(w: number, h: number): string {
@@ -896,14 +896,14 @@ function freeTierWatermarkSvg(w: number, h: number): string {
     for (let c = 0; c < cols; c++) {
       const x = startX + c * tileX + (r % 2 === 0 ? 0 : tileX / 2);
       const y = startY + r * tileY;
-      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.5">xogridmaker</text>`;
+      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.5">XO Gridmaker</text>`;
     }
   }
   return `<g transform="translate(${(w / 2).toFixed(2)} ${(h / 2).toFixed(2)}) rotate(-45)" style="pointer-events:none">${cells}</g>`;
 }
 
 /**
- * Tiled xogridmaker watermark for a single play's field area on free-tier
+ * Tiled XO Gridmaker watermark for a single play's field area on free-tier
  * playsheets. Clipped to the field rect so letters don't bleed into the header
  * or notes. Rendered behind the routes/players.
  */
@@ -927,7 +927,7 @@ function renderFieldFreeTierWatermark(
     for (let c = 0; c < cols; c++) {
       const x = startX + c * tileX + (r % 2 === 0 ? 0 : tileX / 2);
       const y = startY + r * tileY;
-      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="${fontSize.toFixed(2)}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.3">xogridmaker</text>`;
+      cells += `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="${fontSize.toFixed(2)}" font-weight="800" fill="#f97316" fill-opacity="0.18" letter-spacing="0.3">XO Gridmaker</text>`;
     }
   }
   return `<defs><clipPath id="${clipId}"><rect x="${fx}" y="${fy}" width="${fw}" height="${fh}"/></clipPath></defs><g clip-path="url(#${clipId})" style="pointer-events:none"><g transform="translate(${(fx + fw / 2).toFixed(2)} ${(fy + fh / 2).toFixed(2)}) rotate(-45)">${cells}</g></g>`;
@@ -947,7 +947,7 @@ function playsheetFooterSvg(w: number, h: number): string {
   const y = h - bandH;
   return `<g>
     <rect x="0" y="${y}" width="${w}" height="${bandH}" fill="#f97316" opacity="0.95"/>
-    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="bold" letter-spacing="0.2">Powered by xogridmaker · xogridmaker.com · © 2026</text>
+    <text x="${w / 2}" y="${y + bandH / 2 + 1}" text-anchor="middle" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-size="2.2" fill="#ffffff" font-weight="bold" letter-spacing="0.2">Powered by XO Gridmaker · xogridmaker.com · © 2026</text>
   </g>`;
 }
 

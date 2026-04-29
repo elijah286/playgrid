@@ -103,7 +103,7 @@ export function ResendSettingsClient({ initial }: { initial: Initial }) {
             autoComplete="off"
             value={fromEmail}
             onChange={(e) => setFromEmail(e.target.value)}
-            placeholder="xogridmaker <onboarding@resend.dev>"
+            placeholder="XO Gridmaker <onboarding@resend.dev>"
           />
         </Field>
 

@@ -24,7 +24,7 @@ function buildTitle(preview: {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { token } = await params;
-  if (!hasSupabaseEnv()) return { title: "Copy a playbook · xogridmaker" };
+  if (!hasSupabaseEnv()) return { title: "Copy a playbook · XO Gridmaker" };
   const res = await previewCopyLinkAction(token);
   if (
     !res.ok ||
@@ -32,10 +32,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     res.preview.expired ||
     res.preview.disabled
   ) {
-    return { title: "Copy a playbook · xogridmaker" };
+    return { title: "Copy a playbook · XO Gridmaker" };
   }
   const title = buildTitle(res.preview);
-  const description = "Claim your own editable copy on xogridmaker.";
+  const description = "Claim your own editable copy on XO Gridmaker.";
   return {
     title,
     description,

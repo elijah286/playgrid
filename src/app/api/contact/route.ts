@@ -5,7 +5,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
-const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 
 export async function POST(req: Request) {
   const ip = await clientIp();

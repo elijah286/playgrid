@@ -13,20 +13,20 @@ import { PricingClient } from "./ui";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Simple xogridmaker plans for coaches and teams. Free to start, with paid tiers that scale as you design more plays, share more playbooks, and coach more athletes.",
+    "Simple XO Gridmaker plans for coaches and teams. Free to start, with paid tiers that scale as you design more plays, share more playbooks, and coach more athletes.",
   alternates: { canonical: "/pricing" },
   openGraph: {
-    title: "xogridmaker pricing — plans for coaches and teams",
+    title: "XO Gridmaker pricing — plans for coaches and teams",
     description:
-      "Free to start. Paid plans scale with how you use xogridmaker — more plays, more playbooks, more athletes.",
+      "Free to start. Paid plans scale with how you use XO Gridmaker — more plays, more playbooks, more athletes.",
     url: "/pricing",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "xogridmaker pricing — plans for coaches and teams",
+    title: "XO Gridmaker pricing — plans for coaches and teams",
     description:
-      "Free to start. Paid plans scale with how you use xogridmaker.",
+      "Free to start. Paid plans scale with how you use XO Gridmaker.",
   },
 };
 
@@ -68,7 +68,7 @@ export default async function PricingPage() {
           Pricing
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Simple plans that scale with how you use xogridmaker. Cancel anytime.
+          Simple plans that scale with how you use XO Gridmaker. Cancel anytime.
         </p>
       </div>
       {/* In-app (Capacitor): show a static notice instead of the Stripe-driven
@@ -79,7 +79,7 @@ export default async function PricingPage() {
         <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-foreground">
           <p className="font-semibold">Manage your plan on the web</p>
           <p className="mt-2 text-muted">
-            To upgrade, change, or cancel your xogridmaker subscription, sign in at
+            To upgrade, change, or cancel your XO Gridmaker subscription, sign in at
             xogridmaker.com on a desktop or mobile browser. The free Solo Coach plan
             is always available — no upgrade required.
           </p>

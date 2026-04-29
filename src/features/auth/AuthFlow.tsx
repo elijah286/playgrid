@@ -304,7 +304,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
         data: { display_name: trimmedName },
       });
       if (error && !isSamePasswordErr(error)) throw error;
-      toast("Welcome to xogridmaker!", "success");
+      toast("Welcome to XO Gridmaker!", "success");
       hardNavigate(safeNext);
       return; // keep pending=true through navigation to block double-clicks
     } catch (e: unknown) {

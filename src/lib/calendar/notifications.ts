@@ -4,7 +4,7 @@ import type { createServiceRoleClient } from "@/lib/supabase/admin";
 
 type Admin = ReturnType<typeof createServiceRoleClient>;
 
-const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -136,7 +136,7 @@ function buildEmail(
   </table>
   ${ev.notes ? `<p style="white-space:pre-wrap;border-left:3px solid #e2e8f0;padding-left:10px;color:#334155;">${esc(ev.notes)}</p>` : ""}
   <p><a href="${url}" style="display:inline-block;background:#0f172a;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;">Open calendar</a></p>
-  <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Sent from ${esc(playbookName)} on xogridmaker.</p>
+  <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Sent from ${esc(playbookName)} on XO Gridmaker.</p>
 </body></html>`;
 
   return { subject, text, html };

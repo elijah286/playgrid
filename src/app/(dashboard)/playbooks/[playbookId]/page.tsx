@@ -60,7 +60,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const descParts = [
       author ? `Playbook by ${author}` : null,
       playCount > 0 ? `${playCount} plays` : null,
-      "built in xogridmaker",
+      "built in XO Gridmaker",
     ].filter(Boolean);
     const description = `${descParts.join(" · ")}. Explore formations, plays, and wristband cards.`;
     const canonical = `/playbooks/${playbookId}`;
@@ -300,7 +300,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
           name: book.name as string,
           description: `${
             exampleAuthorLabel ? `Playbook by ${exampleAuthorLabel}. ` : ""
-          }Example football playbook built in xogridmaker.`,
+          }Example football playbook built in XO Gridmaker.`,
           inLanguage: "en",
           genre: "Football playbook",
           isAccessibleForFree: true,

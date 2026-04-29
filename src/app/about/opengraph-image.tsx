@@ -1,7 +1,7 @@
 import { marketingOgImage, OG_SIZE } from "@/lib/og/marketing";
 
 export const runtime = "nodejs";
-export const alt = "About xogridmaker — built by a coach, for coaches";
+export const alt = "About XO Gridmaker — built by a coach, for coaches";
 export const size = OG_SIZE;
 export const contentType = "image/png";
 

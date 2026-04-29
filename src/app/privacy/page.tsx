@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy · xogridmaker",
-  description: "How xogridmaker handles your data.",
+  title: "Privacy Policy · XO Gridmaker",
+  description: "How XO Gridmaker handles your data.",
 };
 
 export default function PrivacyPage() {
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>
           <p>
-            xogridmaker LLC (&quot;xogridmaker,&quot; &quot;we,&quot; &quot;us&quot;) cares about your privacy. This
+            XO Gridmaker LLC (&quot;XO Gridmaker,&quot; &quot;we,&quot; &quot;us&quot;) cares about your privacy. This
             policy explains what we collect, why, and how it&apos;s protected.
           </p>
         </section>
@@ -181,7 +181,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">EU/UK visitors</h2>
           <p className="mt-2">
-            xogridmaker is offered to coaches in the United States. If you visit
+            XO Gridmaker is offered to coaches in the United States. If you visit
             from the European Union, the European Economic Area, or the United
             Kingdom, we ask for your consent before collecting any of the
             campaign-attribution data above (UTM parameters, referrer, ad
@@ -215,7 +215,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">Children&apos;s privacy</h2>
           <p className="mt-2">
-            xogridmaker is intended for coaches and adults. We don&apos;t knowingly
+            XO Gridmaker is intended for coaches and adults. We don&apos;t knowingly
             collect personal information from children under 13. Players
             viewing shared playbooks don&apos;t need to create an account.
           </p>

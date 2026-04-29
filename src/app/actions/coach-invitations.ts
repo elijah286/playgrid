@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 
-const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function assertAdmin() {
@@ -220,7 +220,7 @@ function buildInviteEmailHtml(args: {
         .replace(/>/g, "&gt;")}</p>`
     : "";
   const text = [
-    "You've been invited to join xogridmaker as a coach.",
+    "You've been invited to join XO Gridmaker as a coach.",
     "",
     `Your one-time invitation code: ${safeCode}`,
     "",
@@ -235,7 +235,7 @@ function buildInviteEmailHtml(args: {
 <html><body style="font-family:ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px">
   <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
     <tr><td style="padding:24px">
-      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">You're invited to xogridmaker</h1>
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a">You're invited to XO Gridmaker</h1>
       <p style="margin:0;color:#475569;font-size:14px;line-height:1.5">
         You've been invited to create a free <strong>coach</strong> account. Use the code below when signing up:
       </p>
@@ -321,7 +321,7 @@ export async function emailCoachInvitationAction(input: {
     const { error } = await resend.emails.send({
       from: fromEmail,
       to: recipient,
-      subject: "Your xogridmaker coach invitation",
+      subject: "Your XO Gridmaker coach invitation",
       text,
       html,
     });

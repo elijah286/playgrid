@@ -3,7 +3,7 @@ import { getSharedPlayByTokenAction } from "@/app/actions/share";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 export const runtime = "nodejs";
-export const alt = "Shared football play on xogridmaker";
+export const alt = "Shared football play on XO Gridmaker";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -27,7 +27,7 @@ function fallback() {
           letterSpacing: "-0.02em",
         }}
       >
-        xogridmaker
+        XO Gridmaker
       </div>
     ),
     { ...size },
@@ -81,7 +81,7 @@ export default async function SharedPlayOgImage({ params }: Props) {
             letterSpacing: "0.02em",
           }}
         >
-          xogridmaker
+          XO Gridmaker
         </div>
         <div
           style={{

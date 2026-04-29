@@ -3,8 +3,8 @@ import Image from "next/image";
 import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 
 export const metadata: Metadata = {
-  title: "About · xogridmaker",
-  description: "Why xogridmaker exists — built by coaches, for coaches.",
+  title: "About · XO Gridmaker",
+  description: "Why XO Gridmaker exists — built by coaches, for coaches.",
 };
 
 export default async function AboutPage() {
@@ -12,17 +12,17 @@ export default async function AboutPage() {
 
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
-      <h1 className="text-3xl font-extrabold tracking-tight">About xogridmaker</h1>
+      <h1 className="text-3xl font-extrabold tracking-tight">About XO Gridmaker</h1>
       <div className="mt-6 space-y-5 text-base leading-relaxed text-muted">
         <p>
-          xogridmaker is a football play designer built for coaches who want to
+          XO Gridmaker is a football play designer built for coaches who want to
           spend more time coaching and less time fighting with PowerPoint,
           whiteboards, or napkin sketches.
         </p>
         {hideOwnerInfo ? (
           <p>
             It&apos;s built by people who have spent years on sidelines across
-            flag football, youth tackle, and middle school 7v7. xogridmaker grew
+            flag football, youth tackle, and middle school 7v7. XO Gridmaker grew
             out of wanting a better tool for that work: something fast enough to
             sketch on the sideline, clean enough to print on a wristband, and
             easy to share with the entire team.
@@ -33,7 +33,7 @@ export default async function AboutPage() {
               I&apos;ve been coaching for years across flag football, youth tackle
               and middle school 7v7. All three of my kids are quarterbacks, so we
               spend a lot of time studying plays together — at the kitchen table,
-              in the backyard, and on the drive home from practice. xogridmaker grew
+              in the backyard, and on the drive home from practice. XO Gridmaker grew
               out of wanting a better tool for that: something fast enough to
               sketch on the sideline, clean enough to print on a wristband, and
               easy to share with the entire team.

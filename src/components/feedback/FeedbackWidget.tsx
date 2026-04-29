@@ -202,7 +202,7 @@ export function FeedbackWidget({
             <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-foreground">
-                Help shape xogridmaker
+                Help shape XO Gridmaker
               </p>
               <p className="mt-0.5 text-xs text-muted">
                 This site is brand new — we&apos;d love your ideas, bug reports,

@@ -24,15 +24,15 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.co
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "xogridmaker — Football play designer & playbook builder",
-    template: "%s · xogridmaker",
+    default: "XO Gridmaker — Football play designer & playbook builder",
+    template: "%s · XO Gridmaker",
   },
   description:
     "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets. Designed for flag, 7v7, and tackle football coaches.",
-  applicationName: "xogridmaker",
-  authors: [{ name: "xogridmaker" }],
-  creator: "xogridmaker",
-  publisher: "xogridmaker",
+  applicationName: "XO Gridmaker",
+  authors: [{ name: "XO Gridmaker" }],
+  creator: "XO Gridmaker",
+  publisher: "XO Gridmaker",
   keywords: [
     "football playbook",
     "play designer",
@@ -47,15 +47,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: SITE_URL,
-    siteName: "xogridmaker",
-    title: "xogridmaker — Football play designer & playbook builder",
+    siteName: "XO Gridmaker",
+    title: "XO Gridmaker — Football play designer & playbook builder",
     description:
       "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets. Designed for flag, 7v7, and tackle football coaches.",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "xogridmaker — Football play designer & playbook builder",
+    title: "XO Gridmaker — Football play designer & playbook builder",
     description:
       "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets.",
   },
@@ -71,16 +71,16 @@ const structuredData = [
   {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "xogridmaker",
-    legalName: "xogridmaker",
+    name: "XO Gridmaker",
+    legalName: "XO Gridmaker",
     url: SITE_URL,
     description:
-      "xogridmaker is a football play designer for coaches and athletes — build plays, organize playbooks, and preview wristbands.",
+      "XO Gridmaker is a football play designer for coaches and athletes — build plays, organize playbooks, and preview wristbands.",
   },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "xogridmaker",
+    name: "XO Gridmaker",
     url: SITE_URL,
     potentialAction: {
       "@type": "SearchAction",
@@ -91,7 +91,7 @@ const structuredData = [
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "xogridmaker",
+    name: "XO Gridmaker",
     applicationCategory: "SportsApplication",
     operatingSystem: "Web",
     url: SITE_URL,

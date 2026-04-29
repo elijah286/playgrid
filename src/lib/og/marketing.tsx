@@ -47,7 +47,7 @@ export function marketingOgImage({
             color: "rgba(255,255,255,0.85)",
           }}
         >
-          xogridmaker
+          XO Gridmaker
         </div>
         <div
           style={{

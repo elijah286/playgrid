@@ -5,7 +5,7 @@ import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 
 export const runtime = "nodejs";
-export const alt = "Example football playbook on xogridmaker";
+export const alt = "Example football playbook on XO Gridmaker";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -29,7 +29,7 @@ function fallback() {
           letterSpacing: "-0.02em",
         }}
       >
-        xogridmaker
+        XO Gridmaker
       </div>
     ),
     { ...size },
@@ -116,7 +116,7 @@ export default async function PlaybookOgImage({ params }: Props) {
             color: "rgba(255,255,255,0.85)",
           }}
         >
-          xogridmaker · Example playbook
+          XO Gridmaker · Example playbook
         </div>
         <div
           style={{

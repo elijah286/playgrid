@@ -18,7 +18,7 @@
  * playbook's cache without scanning the whole store.
  */
 
-const DB_NAME = "xogridmaker-offline";
+const DB_NAME = "XO Gridmaker-offline";
 const DB_VERSION = 1;
 const STORE_PLAYBOOKS = "playbooks";
 const STORE_PLAYS = "plays";

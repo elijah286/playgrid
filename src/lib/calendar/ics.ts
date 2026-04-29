@@ -92,7 +92,7 @@ function eventBlock(ev: IcsEvent): string {
 
   const lines: string[] = [
     "BEGIN:VEVENT",
-    `UID:${ev.id}@xogridmaker`,
+    `UID:${ev.id}@xogridmaker.com`,
     `DTSTAMP:${stamp}`,
     `DTSTART:${start}`,
     `DTEND:${end}`,
@@ -115,7 +115,7 @@ export function buildIcsFeed(opts: {
   const header = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//xogridmaker//Team Calendar//EN",
+    "PRODID:-//XO Gridmaker//Team Calendar//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${escapeText(opts.calendarName)}`,

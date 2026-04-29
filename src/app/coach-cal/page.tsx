@@ -61,7 +61,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: PAGE_URL,
-    siteName: "xogridmaker",
+    siteName: "XO Gridmaker",
     title: PAGE_TITLE,
     description: PAGE_DESCRIPTION,
     images: [
@@ -69,7 +69,7 @@ export const metadata: Metadata = {
         url: OG_IMAGE,
         width: 1440,
         height: 900,
-        alt: "Coach Cal — AI football coaching partner inside xogridmaker",
+        alt: "Coach Cal — AI football coaching partner inside XO Gridmaker",
       },
     ],
   },
@@ -108,7 +108,7 @@ const STRUCTURED_DATA = [
     image: OG_IMAGE,
     isPartOf: {
       "@type": "SoftwareApplication",
-      name: "xogridmaker",
+      name: "XO Gridmaker",
       url: SITE_URL,
     },
     offers: {
@@ -135,7 +135,7 @@ const STRUCTURED_DATA = [
     ],
     publisher: {
       "@type": "Organization",
-      name: "xogridmaker",
+      name: "XO Gridmaker",
       url: SITE_URL,
       logo: `${SITE_URL}/brand/xogridmaker_icon.svg`,
     },
@@ -144,7 +144,7 @@ const STRUCTURED_DATA = [
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "xogridmaker", item: SITE_URL },
+      { "@type": "ListItem", position: 1, name: "XO Gridmaker", item: SITE_URL },
       { "@type": "ListItem", position: 2, name: "Coach Cal", item: PAGE_URL },
     ],
   },

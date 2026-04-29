@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "xogridmaker — Football play designer for coaches";
+export const alt = "XO Gridmaker — Football play designer for coaches";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -37,7 +37,7 @@ export default async function OpengraphImage() {
             <line stroke="#1769FF" strokeLinecap="square" strokeWidth="52" x1="380" x2="250" y1="100" y2="240" />
             <rect fill="none" height="130" rx="42" ry="42" stroke="#95CC1F" strokeWidth="38" width="170" x="480" y="105" />
           </svg>
-          xogridmaker
+          XO Gridmaker
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div

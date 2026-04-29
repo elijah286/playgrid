@@ -50,7 +50,7 @@ export function BuildYourOwnPlaybookCta() {
             Like what you see? Build your own playbook.
           </h2>
           <p className="mt-3 text-base leading-relaxed text-muted">
-            xogridmaker is free to start — design plays on phone, tablet,
+            XO Gridmaker is free to start — design plays on phone, tablet,
             or desktop, run a sideline call sheet from Game Mode, and print
             wristbands when you&apos;re ready. Your team can view shared
             plays without an account.
@@ -93,7 +93,7 @@ export function MadeWithBadge() {
         />
         <span>
           Made with{" "}
-          <span className="font-bold text-foreground">xogridmaker</span> —
+          <span className="font-bold text-foreground">XO Gridmaker</span> —
           make your own free
         </span>
       </Link>

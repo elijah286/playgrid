@@ -11,7 +11,7 @@ type Props = {
   /** Visual treatment. "header" matches existing header icon buttons;
    *  "inline" sizes for placement inside content surfaces. */
   variant?: "header" | "inline";
-  /** Override aria/tooltip label per surface (e.g. "Share xogridmaker"
+  /** Override aria/tooltip label per surface (e.g. "Share XO Gridmaker"
    *  in nav, "Share this page" elsewhere). */
   label?: string;
   className?: string;
@@ -20,7 +20,7 @@ type Props = {
 export function ShareButton({
   userId,
   variant = "header",
-  label = "Share xogridmaker",
+  label = "Share XO Gridmaker",
   className = "",
 }: Props) {
   const [open, setOpen] = useState(false);

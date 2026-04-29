@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
-const DEFAULT_FROM_EMAIL = "xogridmaker <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 

@@ -107,7 +107,7 @@ export function AccountClient({
         </div>
       </Section>
 
-      <Section title="Preferences" description="Customize how xogridmaker looks.">
+      <Section title="Preferences" description="Customize how XO Gridmaker looks.">
         <AppearanceCard />
       </Section>
 
@@ -184,7 +184,7 @@ function DeleteAccountCard({ hasPaidPlan }: { hasPaidPlan: boolean }) {
         <h2 className="text-sm font-semibold text-foreground">Delete account</h2>
       </div>
       <p className="mt-1 text-xs text-muted">
-        Permanently delete your xogridmaker account and everything in it —
+        Permanently delete your XO Gridmaker account and everything in it —
         playbooks, plays, formations, and settings. This cannot be undone.
       </p>
       {hasPaidPlan && (
@@ -280,7 +280,7 @@ function NameCard({ initialDisplayName }: { initialDisplayName: string | null })
     <Card
       icon={IdCard}
       title="Display name"
-      description="Shown on invites, playsheets, and throughout xogridmaker."
+      description="Shown on invites, playsheets, and throughout XO Gridmaker."
     >
       <div className="space-y-3">
         <label className="block text-sm">

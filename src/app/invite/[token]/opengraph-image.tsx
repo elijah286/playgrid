@@ -5,7 +5,7 @@ import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 
 export const runtime = "nodejs";
-export const alt = "xogridmaker playbook invite";
+export const alt = "XO Gridmaker playbook invite";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -30,7 +30,7 @@ export default async function InviteOgImage({ params }: Props) {
             fontFamily: "system-ui, sans-serif",
           }}
         >
-          xogridmaker
+          XO Gridmaker
         </div>
       ),
       { ...size },
@@ -85,7 +85,7 @@ export default async function InviteOgImage({ params }: Props) {
             color: "rgba(255,255,255,0.85)",
           }}
         >
-          xogridmaker
+          XO Gridmaker
         </div>
         <div
           style={{

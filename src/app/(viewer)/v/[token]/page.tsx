@@ -23,8 +23,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const parts = [m.formationTag || m.formation, m.concept].filter(Boolean);
   const subtitle = parts.join(" · ");
   const description = subtitle
-    ? `${subtitle} — shared from xogridmaker.`
-    : "A football play shared from xogridmaker.";
+    ? `${subtitle} — shared from XO Gridmaker.`
+    : "A football play shared from XO Gridmaker.";
   const canonical = `/v/${token}`;
 
   return {
