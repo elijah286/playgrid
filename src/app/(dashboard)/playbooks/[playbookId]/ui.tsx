@@ -5,6 +5,7 @@ import {
   ExamplePreviewProvider,
   useExamplePreview,
 } from "@/features/admin/ExamplePreviewContext";
+import type { ReferralConfig } from "@/lib/site/referral-config";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -340,6 +341,8 @@ function PlaybookDetailClientInner({
     /** True when Coach Cal is launched globally and this user lacks it —
      *  mobile launcher button shows the marketing flow instead of the chat. */
     showCoachCalPromo: boolean;
+    /** Surfaces the referral promo on the Share dialog when enabled. */
+    referralConfig: ReferralConfig;
   };
 }) {
   const searchParams = useSearchParams();
@@ -1081,6 +1084,7 @@ function PlaybookDetailClientInner({
           coachAiAvailable={headerProps.coachAiAvailable}
           showCoachCalPromo={headerProps.showCoachCalPromo}
           isAdmin={isAdmin}
+          referralConfig={headerProps.referralConfig}
         />
 
         <PendingApprovalsBanner

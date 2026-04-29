@@ -34,6 +34,7 @@ import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClien
 import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
 import type { CoachCalPackConfig } from "@/lib/site/coach-cal-pack-config";
+import type { ReferralConfig } from "@/lib/site/referral-config";
 import type { CoachBonusRow } from "@/app/actions/admin-seat-config";
 import { PlaybookSeedsAdminClient } from "@/features/admin/PlaybookSeedsAdminClient";
 import { BetaFeaturesAdminClient } from "@/features/admin/BetaFeaturesAdminClient";
@@ -131,6 +132,7 @@ export function SettingsClient({
   initialSeatDefaults,
   initialCoachBonusRows,
   initialCoachCalPack,
+  initialReferralConfig,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -169,6 +171,7 @@ export function SettingsClient({
   initialSeatDefaults: SeatDefaults;
   initialCoachBonusRows: CoachBonusRow[];
   initialCoachCalPack: CoachCalPackConfig;
+  initialReferralConfig: ReferralConfig;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -427,6 +430,7 @@ export function SettingsClient({
             initialFreeMaxPlays={initialFreeMaxPlays}
             initialMobileEditingEnabled={initialMobileEditingEnabled}
             initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
+            initialReferralConfig={initialReferralConfig}
           />
         </div>
       )}

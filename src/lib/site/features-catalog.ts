@@ -228,6 +228,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "referral-rewards",
+    name: "Referral rewards (admin-controlled)",
+    description:
+      "Optional growth lever: when a coach sends a copy of their playbook and a brand-new user (zero owned playbooks) claims it, the sender earns Team Coach days as a thank-you. Off by default. Site Admin → Site Settings exposes a toggle, days-per-award input, lifetime cap input, and a No-cap checkbox. Idempotent (each recipient can only mint one award) and self-referral-proof. Awards stack by extending the sender's active referral comp_grant. Surfaced to coaches via a small \"earn N days of Team Coach\" line on the Send-a-copy card in the Share dialog when enabled.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-04-28",
+  },
+  {
     id: "playbook-share-mobile-button",
     name: "Mobile Share button on the playbook header",
     description:

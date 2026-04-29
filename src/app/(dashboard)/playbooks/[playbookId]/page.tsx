@@ -22,6 +22,7 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { getReferralConfig } from "@/lib/site/referral-config";
 import { PlaybookDetailClient } from "./ui";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 
@@ -232,6 +233,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   });
   const showCoachCalPromoInPlaybook =
     betaFeatures.coach_ai === "all" && !coachAiAvailable && user !== null;
+  const referralConfig = await getReferralConfig();
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
   // Examples always expose Game Mode so visitors can experience the full
@@ -387,6 +389,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
           isExamplePreview,
           coachAiAvailable,
           showCoachCalPromo: showCoachCalPromoInPlaybook,
+          referralConfig,
         }}
       />
     </>

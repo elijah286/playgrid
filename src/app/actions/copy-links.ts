@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import {
@@ -14,6 +15,7 @@ import {
   copyPlaybookContents,
   copyPlaybookGameSessions,
 } from "@/lib/data/playbook-copy";
+import { awardReferralIfApplicable } from "@/lib/data/referral-award";
 
 export type CopyLinkPreview = {
   link_id: string;
@@ -140,18 +142,20 @@ export async function acceptCopyLinkAction(
     return { ok: false, error: "The owner has disabled copies of this playbook." };
   }
 
-  // Free-tier quota check up front so we can flag needsUpgrade in the
-  // response (the UI can route them to the upgrade modal instead of just
-  // showing a flat error).
+  // Snapshot the recipient's owned-playbook count BEFORE the claim so the
+  // referral-credit check can use it. Same query gates the free-tier
+  // quota; reuse the value for both purposes.
+  const { count: ownedCountRaw } = await supabase
+    .from("playbook_members")
+    .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("role", "owner")
+    .eq("playbooks.is_default", false);
+  const recipientOwnedBeforeClaim = ownedCountRaw ?? 0;
+
   const entitlement = await getUserEntitlement(user.id);
   if (!tierAtLeast(entitlement, "coach")) {
-    const { count: ownedCount } = await supabase
-      .from("playbook_members")
-      .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("role", "owner")
-      .eq("playbooks.is_default", false);
-    if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
+    if (recipientOwnedBeforeClaim >= FREE_MAX_PLAYBOOKS_OWNED) {
       return {
         ok: false,
         error: `Free accounts are limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Team Coach to claim this copy.`,
@@ -221,11 +225,27 @@ export async function acceptCopyLinkAction(
   // Two-sided consent prevents accidental data leakage.
   const { data: linkRow } = await supabase
     .from("playbook_copy_links")
-    .select("copy_game_results")
+    .select("copy_game_results, created_by")
     .eq("token", token)
     .maybeSingle();
   if (linkRow?.copy_game_results && src.allow_game_results_duplication === true) {
     await copyPlaybookGameSessions(supabase, preview.playbook_id, newBook.id, user.id);
+  }
+
+  // Referral credit. Best-effort — never block the claim if this fails.
+  // Helper internally checks site config, idempotency, sender cap, and
+  // recipient-newness; safe to call unconditionally.
+  if (linkRow?.created_by && typeof linkRow.created_by === "string") {
+    try {
+      const admin = createServiceRoleClient();
+      await awardReferralIfApplicable(admin, {
+        senderId: linkRow.created_by,
+        recipientId: user.id,
+        recipientOwnedBeforeClaim,
+      });
+    } catch {
+      /* never fail the claim on referral side-effects */
+    }
   }
 
   revalidatePath("/home");

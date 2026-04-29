@@ -7,6 +7,8 @@ import { setExamplesPageEnabledAction } from "@/app/actions/admin-examples";
 import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays";
 import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editing";
 import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
+import { setReferralConfigAction } from "@/app/actions/admin-referral";
+import type { ReferralConfig } from "@/lib/site/referral-config";
 
 export function SiteSettingsAdminClient({
   initialHideLobbyAnimation,
@@ -14,12 +16,14 @@ export function SiteSettingsAdminClient({
   initialFreeMaxPlays,
   initialMobileEditingEnabled,
   initialHideOwnerInfoAbout,
+  initialReferralConfig,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
   initialFreeMaxPlays: number;
   initialMobileEditingEnabled: boolean;
   initialHideOwnerInfoAbout: boolean;
+  initialReferralConfig: ReferralConfig;
 }) {
   const { toast } = useToast();
 
@@ -38,6 +42,63 @@ export function SiteSettingsAdminClient({
   const [savedFreeMaxPlays, setSavedFreeMaxPlays] = useState(initialFreeMaxPlays);
   const [freeMaxPlaysInput, setFreeMaxPlaysInput] = useState(String(initialFreeMaxPlays));
   const [freeMaxPlaysPending, startFreeMaxPlaysTransition] = useTransition();
+
+  // Referral rewards.
+  const [referralEnabled, setReferralEnabled] = useState(initialReferralConfig.enabled);
+  const [referralDaysInput, setReferralDaysInput] = useState(
+    String(initialReferralConfig.daysPerAward),
+  );
+  const [referralCapNoCap, setReferralCapNoCap] = useState(
+    initialReferralConfig.capDays === null,
+  );
+  const [referralCapInput, setReferralCapInput] = useState(
+    initialReferralConfig.capDays === null
+      ? "180"
+      : String(initialReferralConfig.capDays),
+  );
+  const [savedReferral, setSavedReferral] = useState<ReferralConfig>(
+    initialReferralConfig,
+  );
+  const [referralPending, startReferralTransition] = useTransition();
+  const referralDirty =
+    referralEnabled !== savedReferral.enabled ||
+    Number(referralDaysInput) !== savedReferral.daysPerAward ||
+    (referralCapNoCap ? null : Number(referralCapInput)) !== savedReferral.capDays;
+
+  function saveReferral() {
+    const days = Number(referralDaysInput);
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      toast("Days per award must be between 1 and 3650.", "error");
+      return;
+    }
+    let cap: number | null = null;
+    if (!referralCapNoCap) {
+      const c = Number(referralCapInput);
+      if (!Number.isFinite(c) || c < 1 || c > 3650) {
+        toast("Cap must be between 1 and 3650, or check 'No cap'.", "error");
+        return;
+      }
+      cap = Math.floor(c);
+    }
+    const next: ReferralConfig = {
+      enabled: referralEnabled,
+      daysPerAward: Math.floor(days),
+      capDays: cap,
+    };
+    startReferralTransition(async () => {
+      const res = await setReferralConfigAction(next);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      setSavedReferral(res.config);
+      setReferralDaysInput(String(res.config.daysPerAward));
+      if (res.config.capDays !== null) {
+        setReferralCapInput(String(res.config.capDays));
+      }
+      toast("Referral rewards updated.", "success");
+    });
+  }
 
   function saveFreeMaxPlays() {
     const next = Number(freeMaxPlaysInput);
@@ -261,6 +322,89 @@ export function SiteSettingsAdminClient({
           />
           <span>{hideOwnerInfoAbout ? "On" : "Off"}</span>
         </label>
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">
+              Referral rewards
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              When a coach sends a copy of their playbook and a brand-new
+              user (zero owned playbooks) claims it, the sender earns Team
+              Coach days as a thank-you. Off by default. Same recipient
+              can only mint one reward; awards stack by extending the
+              sender&rsquo;s active referral grant.
+            </p>
+          </div>
+          <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={referralEnabled}
+              disabled={referralPending}
+              onChange={(e) => setReferralEnabled(e.target.checked)}
+            />
+            <span>{referralEnabled ? "On" : "Off"}</span>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-4 border-t border-border pt-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">
+              Days per award
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={3650}
+              step={1}
+              className="w-24 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border disabled:opacity-50"
+              value={referralDaysInput}
+              disabled={referralPending || !referralEnabled}
+              onChange={(e) => setReferralDaysInput(e.target.value)}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted">
+              Lifetime cap (days per sender)
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={3650}
+              step={1}
+              className="w-24 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border disabled:opacity-50"
+              value={referralCapInput}
+              disabled={referralPending || !referralEnabled || referralCapNoCap}
+              onChange={(e) => setReferralCapInput(e.target.value)}
+            />
+          </label>
+
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={referralCapNoCap}
+              disabled={referralPending || !referralEnabled}
+              onChange={(e) => setReferralCapNoCap(e.target.checked)}
+            />
+            <span>No cap</span>
+          </label>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={referralPending}
+            disabled={referralPending || !referralDirty}
+            onClick={saveReferral}
+            className="ml-auto"
+          >
+            Save
+          </Button>
+        </div>
       </div>
     </div>
   );
