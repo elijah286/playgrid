@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { History } from "lucide-react";
 import {
   listPlayVersionsAction,
@@ -8,6 +9,7 @@ import {
 } from "@/app/actions/versions";
 import type { PlayDocument } from "@/domain/play/types";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
+import { PlayVersionCompare } from "@/features/versions/PlayVersionCompare";
 import { Button } from "@/components/ui";
 
 type Props = {
@@ -21,7 +23,21 @@ export function PlayHistoryButton({ playId, hideMobileLabel = false }: Props) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<PlayVersionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [compareIndex, setCompareIndex] = useState<number | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  // Compare dialog walks `historic` (everything except the current version
+  // row) — clicking the current row's "Current" pill shouldn't open compare
+  // since there's nothing to compare against.
+  const historic = useMemo(
+    () => (rows ?? []).filter((r) => !r.isCurrent),
+    [rows],
+  );
+  const currentVersionId = useMemo(
+    () => rows?.find((r) => r.isCurrent)?.id ?? null,
+    [rows],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -93,44 +109,88 @@ export function PlayHistoryButton({ playId, hideMobileLabel = false }: Props) {
             )}
             {!error && rows && rows.length > 0 && (
               <ul className="divide-y divide-border">
-                {rows.map((row) => (
-                  <li key={row.id} className="flex items-start gap-3 px-3 py-2.5">
-                    <div className="h-14 w-11 shrink-0 overflow-hidden rounded-md border border-border bg-surface-inset">
-                      {row.document ? (
-                        <PlayThumbnail preview={toPreview(row.document)} thin />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted">
-                          —
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <KindBadge kind={row.kind} />
-                        {row.isCurrent && (
-                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                            Current
-                          </span>
+                {rows.map((row) => {
+                  const historicIdx = historic.findIndex((r) => r.id === row.id);
+                  const clickable = !row.isCurrent && historicIdx >= 0;
+                  const inner = (
+                    <>
+                      <div className="h-14 w-11 shrink-0 overflow-hidden rounded-md border border-border bg-surface-inset">
+                        {row.document ? (
+                          <PlayThumbnail preview={toPreview(row.document)} thin />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted">
+                            —
+                          </div>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-foreground">
-                        {row.diffSummary || describeFallback(row.kind)}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-muted">
-                        {row.editorName ?? "Unknown editor"} · {fmt(row.createdAt)}
-                      </p>
-                      {row.note && (
-                        <p className="mt-1 text-[11px] italic text-muted">
-                          “{row.note}”
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <KindBadge kind={row.kind} />
+                          {row.isCurrent && (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-foreground">
+                          {row.diffSummary || describeFallback(row.kind)}
                         </p>
+                        <p className="mt-0.5 text-[11px] text-muted">
+                          {row.editorName ?? "Unknown editor"} · {fmt(row.createdAt)}
+                        </p>
+                        {row.note && (
+                          <p className="mt-1 text-[11px] italic text-muted">
+                            “{row.note}”
+                          </p>
+                        )}
+                      </div>
+                      {clickable && (
+                        <span className="self-center rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted">
+                          Compare
+                        </span>
                       )}
-                    </div>
-                  </li>
-                ))}
+                    </>
+                  );
+                  return (
+                    <li key={row.id}>
+                      {clickable ? (
+                        <button
+                          type="button"
+                          onClick={() => setCompareIndex(historicIdx)}
+                          className="flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-surface-inset"
+                          aria-label={`Compare ${describeFallback(row.kind)} from ${fmt(row.createdAt)}`}
+                        >
+                          {inner}
+                        </button>
+                      ) : (
+                        <div className="flex items-start gap-3 px-3 py-2.5">{inner}</div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
         </div>
+      )}
+      {compareIndex !== null && rows && (
+        <PlayVersionCompare
+          open
+          onClose={() => setCompareIndex(null)}
+          playId={playId}
+          rows={historic}
+          initialIndex={compareIndex}
+          currentVersionId={currentVersionId}
+          onRestored={() => {
+            // Refresh the list so the dropdown reflects the new "current"
+            // entry, and refresh the route so the editor canvas picks up
+            // the restored document via its initialDocument prop.
+            void listPlayVersionsAction(playId).then((res) => {
+              if (res.ok) setRows(res.rows);
+            });
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );
