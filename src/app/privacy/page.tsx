@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: April 27, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: April 29, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -40,11 +40,28 @@ export default function PrivacyPage() {
             <li>
               <strong>Product usage (first-party):</strong> the pages you visit,
               your session ID, device class (mobile/tablet/desktop), referring
-              URL, and UTM parameters on first visit, plus aggregate
-              time-on-site. We use this to understand which features get used
-              and to size the product to actual usage. It is collected by us,
-              stored in our own database, and never shared with an analytics
-              vendor.
+              URL, the landing page you arrived on, and the standard UTM
+              parameters (source, medium, campaign, content, term) on first
+              visit, plus aggregate time-on-site. We use this to understand
+              which features get used, to size the product to actual usage,
+              and to measure which marketing campaigns brought you here. It
+              is collected by us, stored in our own database, and never shared
+              with an analytics vendor.
+            </li>
+            <li>
+              <strong>Ad-platform click IDs:</strong> if you arrive from an
+              advertisement, the click identifier the platform attaches to the
+              link (Meta&apos;s <code>fbclid</code>, Google&apos;s <code>gclid</code>,
+              TikTok&apos;s <code>ttclid</code>, and the equivalents for Bing,
+              LinkedIn, and X). We use these to attribute signups back to the
+              specific ad and market that drove them.
+            </li>
+            <li>
+              <strong>Approximate location:</strong> we look up your IP address
+              against a local copy of the MaxMind GeoLite2 database to derive
+              country, region (state/province), and city. The IP itself is not
+              stored. We use approximate location to understand which markets
+              respond to which campaigns.
             </li>
             <li>
               <strong>Error reports:</strong> when something goes wrong in your
@@ -153,7 +170,27 @@ export default function PrivacyPage() {
               which case your Coach AI chat messages are sent to Anthropic to
               generate responses
             </li>
+            <li>
+              MaxMind — we download a copy of their free GeoLite2 IP-to-city
+              database to our server and look up your IP locally. Your IP is
+              never sent to MaxMind.
+            </li>
           </ul>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground">EU/UK visitors</h2>
+          <p className="mt-2">
+            xogridmaker is offered to coaches in the United States. If you visit
+            from the European Union, the European Economic Area, or the United
+            Kingdom, we ask for your consent before collecting any of the
+            campaign-attribution data above (UTM parameters, referrer, ad
+            click IDs, region, city, and landing page). Until you choose
+            &ldquo;Accept all,&rdquo; we record only what is strictly necessary
+            to operate the Service: your session ID, the page path, device
+            class, and country. Your choice is remembered for one year and
+            can be changed by clearing your cookies for our domain.
+          </p>
         </section>
 
         <section>
