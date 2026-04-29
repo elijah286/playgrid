@@ -683,11 +683,17 @@ function AvatarCropperDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving) onCancel();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !saving) onCancel();
+        }}
+      >
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated">
         <h2 className="text-base font-bold text-foreground">Crop avatar</h2>
         <p className="mt-1 text-xs text-muted">Drag to reposition. Use the slider to zoom.</p>
@@ -741,6 +747,7 @@ function AvatarCropperDialog({
             {saving ? "Uploading…" : "Upload"}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

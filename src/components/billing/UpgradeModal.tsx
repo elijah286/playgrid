@@ -23,13 +23,19 @@ export function UpgradeModal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[60] overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
       role="dialog"
       aria-modal="true"
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="relative flex w-full max-w-sm flex-col items-center gap-3 rounded-xl bg-surface-raised p-6 text-center shadow-lg ring-1 ring-border">
         <button
           type="button"
@@ -49,6 +55,7 @@ export function UpgradeModal({
         >
           {ctaLabel}
         </Link>
+      </div>
       </div>
     </div>
   );

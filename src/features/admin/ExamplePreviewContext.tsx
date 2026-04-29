@@ -114,11 +114,17 @@ function ExamplePreviewModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[100] overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3">
           <div className="inline-flex items-center gap-2">
@@ -158,6 +164,7 @@ function ExamplePreviewModal({
           </Link>
         </div>
       </div>
+      </div>
     </div>
   );
 }
@@ -193,11 +200,17 @@ function ArchivedPlaybookModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[100] overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3">
           <div className="inline-flex items-center gap-2">
@@ -248,6 +261,7 @@ function ArchivedPlaybookModal({
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

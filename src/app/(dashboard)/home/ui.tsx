@@ -1720,11 +1720,17 @@ function CreatePlaybookDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated sm:max-w-3xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">New Playbook</h2>
@@ -1880,6 +1886,7 @@ function CreatePlaybookDialog({
           </Button>
         </div>
       </div>
+      </div>
     </div>
   );
 }
@@ -1911,12 +1918,19 @@ function DuplicatePlaybookDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (pending) return;
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (pending) return;
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">Duplicate playbook</h2>
@@ -1961,6 +1975,7 @@ function DuplicatePlaybookDialog({
             {pending ? "Copying plays…" : "Create copy"}
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

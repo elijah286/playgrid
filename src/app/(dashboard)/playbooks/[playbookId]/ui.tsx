@@ -2011,12 +2011,19 @@ function PlaybookDetailClientInner({
       {/* Formation picker overlay */}
       {showFormationPicker && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
           onClick={(e) => {
             if (creating) return;
             if (e.target === e.currentTarget) setShowFormationPicker(false);
           }}
         >
+          <div
+            className="flex min-h-full items-center justify-center p-4"
+            onClick={(e) => {
+              if (creating) return;
+              if (e.target === e.currentTarget) setShowFormationPicker(false);
+            }}
+          >
           <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
             <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
               <div>
@@ -2228,6 +2235,7 @@ function PlaybookDetailClientInner({
                 <p className="text-sm font-medium text-foreground">Preparing play editor…</p>
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
@@ -3784,9 +3792,13 @@ function ManageGroupsDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
       <div className="w-full max-w-lg rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">Manage groups</h2>
@@ -3887,6 +3899,7 @@ function ManageGroupsDialog({
             Add
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

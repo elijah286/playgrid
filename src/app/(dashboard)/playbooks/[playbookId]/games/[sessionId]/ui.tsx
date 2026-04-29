@@ -204,9 +204,10 @@ export function GameDetailClient({ data }: { data: GameDetailData }) {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-[80] overflow-y-auto bg-black/60"
           onClick={() => !deleting && setDeleteOpen(false)}
         >
+          <div className="flex min-h-full items-center justify-center p-4">
           <div
             className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
             onClick={(e) => e.stopPropagation()}
@@ -248,6 +249,7 @@ export function GameDetailClient({ data }: { data: GameDetailData }) {
                 {deleting ? "Deleting…" : "Delete"}
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}
@@ -318,9 +320,10 @@ function EditFinalsDialog({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[80] overflow-y-auto bg-black/60"
       onClick={onClose}
     >
+      <div className="flex min-h-full items-center justify-center p-4">
       <div
         className="w-full max-w-sm rounded-2xl border border-border bg-surface-raised p-5 shadow-elevated"
         onClick={(e) => e.stopPropagation()}
@@ -405,6 +408,7 @@ function EditFinalsDialog({
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

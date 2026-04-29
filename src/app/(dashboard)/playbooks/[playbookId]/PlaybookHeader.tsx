@@ -599,11 +599,17 @@ function DuplicatePlaybookDialog({
   }
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">Duplicate playbook</h2>
@@ -657,6 +663,7 @@ function DuplicatePlaybookDialog({
             Create copy
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -743,11 +750,17 @@ function SendCopyDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
@@ -820,6 +833,7 @@ function SendCopyDialog({
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1436,11 +1450,17 @@ export function CustomizeTeamDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !saving) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">Customize playbook</h2>
@@ -1582,6 +1602,7 @@ export function CustomizeTeamDialog({
             Save
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1799,11 +1820,17 @@ export function InviteTeamMemberDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
@@ -2248,6 +2275,7 @@ export function InviteTeamMemberDialog({
             </>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

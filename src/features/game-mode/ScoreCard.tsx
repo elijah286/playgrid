@@ -285,8 +285,9 @@ function ExactScoreDialog({
       role="dialog"
       aria-modal="true"
       aria-label={`Set ${label} score`}
-      className="fixed inset-0 z-[76] flex items-center justify-center bg-black/70 p-3"
+      className="fixed inset-0 z-[76] overflow-y-auto bg-black/70"
     >
+      <div className="flex min-h-full items-center justify-center p-3">
       <div className="w-full max-w-xs rounded-2xl border border-border bg-surface-raised p-4 shadow-elevated">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
@@ -342,6 +343,7 @@ function ExactScoreDialog({
             Set
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
