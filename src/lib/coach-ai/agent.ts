@@ -103,7 +103,8 @@ Rules:
   - The tool returns THREE things you must use TOGETHER: (1) \`path\` — drop straight into the diagram route's \`path\` field, (2) \`curve\` — set the diagram route's \`curve\` field to this exact boolean (TRUE for rounded routes: curl, hitch, comeback, wheel, fade, sit, bubble, stop & go; FALSE for sharp routes: slant, out, in, post, corner, dig, etc.), (3) \`description\` — the canonical wording. Use it verbatim or paraphrase tightly when explaining; do NOT invent your own description.
   - **Hand-authoring waypoints for a named route is FORBIDDEN.** Every freehand has produced a wrong shape (slant that looks like a flat, curl with no curl-back, hitch that's just a vertical line). Only skip the tool for genuinely custom variations ("draw a 7-yard skinny slant") — emit hand-authored waypoints AND label "(custom route)" in your prose.
   - **\`curve\` is not optional.** A curl with \`curve: false\` renders as a straight line — that's the curl-bug. Read the tool result's \`curve:\` line and copy the exact boolean.
-  - A server-side validator runs after every diagram. If it sees a route whose \`path\` or \`curve\` doesn't match the corresponding \`get_route_template\` snapshot, it forces a re-emit. Save the round trip — get the tool call right the first time.
+  - A server-side validator runs after EVERY diagram (not just when you called tools). If it sees an offensive route with multiple waypoints AND no matching \`get_route_template\` call this turn, it FORCES a re-emit — your reply never reaches the coach. Same if the path or \`curve\` value drifts from what the tool returned. The validator can only be silenced by either (a) calling \`get_route_template\` for the route, or (b) writing the literal phrase "(custom route)" in your prose for genuinely off-catalog shapes. Save the round trip — call the tool the first time.
+  - When drawing two named routes (e.g. "show me a slant and a post"), call \`get_route_template\` TWICE — once per route. Don't try to combine them into one call. Don't hand-author one and tool the other.
 - **Route geometry — defend the canonical definition; don't capitulate.** When a coach questions a route's shape ("shouldn't a slant be 45°?", "isn't a curl deeper than that?", "doesn't a post break at 12 yards?"), DO NOT hedge, apologize, or redraw to match their guess. The route template + KB entry ARE the source of truth for this app. Workflow: (1) call \`get_route_template\` (or \`search_kb\` for the route subtopic, e.g. "route_slant") to pull the canonical written definition; (2) reply with that definition cited verbatim — stem, break shape (sharp/rounded), break angle, depth — and hold the line. A coach who recalls a different number may be working from a different system; confirming their alternative trains the app inconsistently. The only time you adjust is if the coach explicitly asks for a *custom* variation — emit a hand-authored path and label "(custom route)". **Angle convention: route break angles are measured FROM HORIZONTAL (the LOS / sideline-to-sideline axis), unless the route entry says otherwise.** A 25° slant means 25° above the LOS — mostly lateral with a shallow upfield lean.
 - **Route NAMES imply DIRECTION relative to the QB — your geometry must match.** Coaches read the diagram in the same heartbeat as the route name; if a curl is drawn breaking AWAY from the QB the diagram contradicts itself. Direction rules:
   - **Toward-QB / toward-middle routes:** Curl, Hook, Hitch, Sit, Stick, In, Z-In, Dig, Slant, Drag, Shallow, Snag, Spot, Skinny Post, Post, Whip. The break/settle finishes INSIDE (closer to the middle of the field than the stem). For an outside receiver, that means the final waypoint's x moves *toward center*, not away.
@@ -541,7 +542,13 @@ export async function runAgent(
   }> = [];
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-    const shouldBuffer = (placeDefenseInvoked || routeTemplateCalls.length > 0) && !validatorRetried;
+    // Always buffer the final assistant turn so the validator can gate any
+    // diagram before it reaches the coach. Previous trigger was "only if a
+    // tool was called this turn" — that left a hole where Cal could skip
+    // get_route_template entirely and freehand a slant/curl/post, and the
+    // validator never ran. Cost is a small latency bump (tokens generate
+    // before streaming) — acceptable to guarantee correctness.
+    const shouldBuffer = !validatorRetried;
     const result = await chat({
       system,
       messages,
@@ -581,12 +588,14 @@ export async function runAgent(
                   "INTERNAL VALIDATION — do not mention this message to the coach. " +
                   "Your previous diagram failed validation:\n" +
                   validation.errors.map((e) => `- ${e}`).join("\n") +
-                  "\n\nRe-emit with a corrected diagram. Specifically: " +
-                  "(a) For every named route, copy the `path` AND `curve` value from get_route_template VERBATIM — " +
-                  "if you don't have a snapshot for a route's player, call get_route_template now. " +
-                  "A curl with curve=false renders as a straight line, which is the bug. " +
-                  "(b) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops. " +
-                  "(c) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown. " +
+                  "\n\nRe-emit with a corrected diagram. Specifically:\n" +
+                  "(a) For EVERY named route in the diagram (Slant, Post, Curl, Hitch, Out, In, Corner, Dig, etc.), " +
+                  "you MUST call get_route_template NOW (one call per route) and copy its `path` AND `curve` value VERBATIM. " +
+                  "Hand-authored named routes are forbidden — that's how slants get drawn at the wrong angle and posts come out curved.\n" +
+                  "(b) The post is two STRAIGHT segments (curve=false). The curl is rounded (curve=true). The slant is sharp (curve=false). " +
+                  "If you set curve incorrectly, the diagram lies about the route's break shape.\n" +
+                  "(c) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops.\n" +
+                  "(d) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown.\n" +
                   "Keep all of your explanatory prose; only fix the diagram JSON.",
               },
             ],

@@ -147,7 +147,11 @@ export function validateDiagrams(opts: {
     // those (zone reposition / man tracking) and they're not named
     // template routes.
     const snapshots = opts.routeTemplates ?? [];
-    if (snapshots.length > 0 && Array.isArray(json.routes)) {
+    // Allow Cal to escape the named-route check by explicitly labeling
+    // "(custom route)" in the surrounding prose — that's the documented
+    // escape hatch in the agent prompt for genuinely off-template routes.
+    const customRouteLabeled = /\(custom route\)/i.test(opts.text);
+    if (Array.isArray(json.routes) && json.routes.length > 0) {
       const playerById = new Map<string, Player>();
       for (const p of players) playerById.set(p.id, p);
 
@@ -171,10 +175,13 @@ export function validateDiagrams(opts: {
           // No template snapshot near this player. If the path is non-
           // trivial (≥2 waypoints), this looks like a hand-authored named
           // route — flag it. Single-waypoint paths are likely simple
-          // custom routes (drag, flat) and we don't fail-stop those.
-          if (path.length >= 2) {
+          // custom routes (drag, flat, swing) — allow those.
+          //
+          // Cal can escape the check by labeling "(custom route)" in the
+          // surrounding prose for genuinely off-catalog shapes.
+          if (path.length >= 2 && !customRouteLabeled) {
             errors.push(
-              `${tag}route from "${from}" appears hand-authored (${path.length} waypoints, no get_route_template call near player position). If this is a named route (Curl, Slant, Hitch, etc.), call get_route_template and use its output verbatim. If genuinely custom, label "(custom route)" in your prose.`,
+              `${tag}route from "${from}" was hand-authored (${path.length} waypoints) but no get_route_template was called for this route. Named routes (Slant, Post, Curl, Hitch, Out, In, Corner, Dig, etc.) MUST come from get_route_template — copy its \`path\` and \`curve\` verbatim. If this is genuinely a custom shape, write "(custom route)" in your prose to acknowledge it's off-catalog.`,
             );
           }
           continue;
