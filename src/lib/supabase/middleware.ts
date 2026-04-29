@@ -22,6 +22,12 @@ const PUBLIC_EXACT = new Set<string>([
   "/contact",
   "/pricing",
   "/examples",
+  // Marketing surfaces — must be reachable by anonymous visitors and
+  // crawlers. These are pre-auth landing pages; gating them on a session
+  // would silently bounce every Google referral to /login.
+  "/learn-more",
+  "/coach-cal",
+  "/faq",
   // SEO + PWA metadata routes: must be fetchable by crawlers (Googlebot,
   // Bingbot) and the browser's PWA install flow without a session.
   "/robots.txt",

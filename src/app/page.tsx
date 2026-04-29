@@ -44,6 +44,10 @@ export default async function HomePage() {
             7v7, and tackle football coaches.
           </p>
 
+          {/* Homepage CTAs are deliberately just two: "Get started" for
+              the action-ready visitor, "Learn more" for everyone else.
+              "Learn more" goes to /learn-more (the public marketing
+              tour, no login required). */}
           <div className="mt-10 flex flex-wrap gap-3">
             <Link
               href="/login?mode=signup"
@@ -54,22 +58,11 @@ export default async function HomePage() {
               <ArrowRight className="size-5" />
             </Link>
             <Link
-              href="/examples"
+              href="/learn-more"
               className="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
               style={{ background: BRAND_NAVY }}
             >
-              See example playbooks
-            </Link>
-          </div>
-
-          <div className="mt-4">
-            <Link
-              href="/learn-more"
-              className="inline-flex items-center gap-1 text-base font-semibold hover:underline"
-              style={{ color: BRAND_BLUE }}
-            >
-              Take the tour
-              <ArrowRight className="size-4" />
+              Learn more
             </Link>
           </div>
         </div>
