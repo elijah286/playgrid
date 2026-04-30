@@ -126,7 +126,15 @@ function defenderStyleFor(rawLabel: string): PlayerStyle {
   // Flat defenders — outside underneath.
   if (u === "FL" || u === "FR" || u === "FLAT" || u === "WA" || u === "WI") return STYLE_DEF_FLAT;
   // LBs (Will/Sam variants, generic LB).
-  if (u === "LB" || u === "WLB" || u === "SLB" || u === "MLB" || u === "WILL" || u === "SAM" || u === "WI" || u === "ILB" || u === "OLB") return STYLE_DEF_LB;
+  if (
+    u === "LB" || u === "WLB" || u === "SLB" || u === "MLB" ||
+    u === "WILL" || u === "SAM" || u === "WI" ||
+    u === "ILB" || u === "OLB" ||
+    // 4-4 stack labels (WL = Will, ML = Mike, BK = Buck/Mac, SL = Sam) +
+    // 3-4 inside/outside labels.
+    u === "WL" || u === "ML" || u === "SL" || u === "BK" ||
+    u === "IL" || u === "OL" || u === "BUCK" || u === "MAC"
+  ) return STYLE_DEF_LB;
   // Nickel / slot DB.
   if (u === "NB" || u === "NICKEL" || u === "STAR" || u === "DIME") return STYLE_DEF_NICKEL;
   return STYLE_DEF;

@@ -154,6 +154,67 @@ const T11_NICKEL_425_COVER_4: DefensiveAlignment = {
   ],
 };
 
+const T11_44_STACK_COVER_3: DefensiveAlignment = {
+  front: "4-4 Stack",
+  coverage: "Cover 3",
+  variant: "tackle_11",
+  description:
+    "Classic 8-in-the-box youth/HS run defense — 4 down linemen + 4 linebackers (Will, " +
+    "Mike, Buck, Sam) + 3 DBs (2 corners, 1 deep safety in Cover 3). Two ILBs stack " +
+    "directly behind the DTs; two OLBs play just outside the DEs. Heavy run support; " +
+    "vulnerable to spread passing because there are only 3 DBs to cover 4-5 receivers.",
+  players: [
+    // D-line — 4 down at y≈1
+    { id: "DE", x: -8,  y: 1 },
+    { id: "DT", x: -3,  y: 1 },
+    { id: "DT", x:  3,  y: 1 },
+    { id: "DE", x:  8,  y: 1 },
+    // 4 linebackers at y≈4 — two ILBs stacked, two OLBs outside
+    { id: "WL", x: -8,  y: 4 },   // Will (weak OLB, over weak DE)
+    { id: "ML", x: -3,  y: 4 },   // Mike (weak ILB, stacked over weak DT)
+    { id: "BK", x:  3,  y: 4 },   // Buck/Mac (strong ILB, stacked over strong DT)
+    { id: "SL", x:  8,  y: 4 },   // Sam (strong OLB, over strong DE)
+    // 3 DBs — corners outside, single-high FS
+    { id: "CB", x: -16, y: 6 },
+    { id: "CB", x:  16, y: 6 },
+    { id: "FS", x:  0,  y: 13 },
+  ],
+  zones: [
+    // Cover 3 shell — 3 deep, 4 underneath. The 4 LBs share underneath duty.
+    { kind: "rectangle", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
+    { kind: "rectangle", center: [ 0,  17], size: [10, 16], label: "Deep 1/3 M" },
+    { kind: "rectangle", center: [10,  17], size: [10, 16], label: "Deep 1/3 R" },
+    { kind: "rectangle", center: [-11, 5],  size: [8,  8], label: "Flat L" },
+    { kind: "rectangle", center: [-4,  5],  size: [6,  8], label: "Hook L" },
+    { kind: "rectangle", center: [ 4,  5],  size: [6,  8], label: "Hook R" },
+    { kind: "rectangle", center: [11,  5],  size: [8,  8], label: "Flat R" },
+  ],
+};
+
+const T11_44_STACK_COVER_1: DefensiveAlignment = {
+  front: "4-4 Stack",
+  coverage: "Cover 1",
+  variant: "tackle_11",
+  description:
+    "8-in-the-box 4-4 with man-free behind it — corners and the 4 LBs in man on the " +
+    "5 eligible receivers (slot/TE/RB), single-high FS over the top. Aggressive run-" +
+    "support look that asks the LBs to cover backs/TEs man-up.",
+  manCoverage: true,
+  players: [
+    { id: "DE", x: -8,  y: 1 },
+    { id: "DT", x: -3,  y: 1 },
+    { id: "DT", x:  3,  y: 1 },
+    { id: "DE", x:  8,  y: 1 },
+    { id: "WL", x: -8,  y: 4 },
+    { id: "ML", x: -3,  y: 4 },
+    { id: "BK", x:  3,  y: 4 },
+    { id: "SL", x:  8,  y: 4 },
+    { id: "CB", x: -16, y: 6 },
+    { id: "CB", x:  16, y: 6 },
+    { id: "FS", x:  0,  y: 13 },
+  ],
+};
+
 const T11_46_BEAR_COVER_1: DefensiveAlignment = {
   front: "46 Bear",
   coverage: "Cover 1",
@@ -377,6 +438,8 @@ export const DEFENSIVE_ALIGNMENTS: DefensiveAlignment[] = [
   T11_34_COVER_1,
   T11_NICKEL_425_COVER_4,
   T11_46_BEAR_COVER_1,
+  T11_44_STACK_COVER_3,
+  T11_44_STACK_COVER_1,
   F7_COVER_3,
   F7_COVER_2,
   F7_TAMPA_2,

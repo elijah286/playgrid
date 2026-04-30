@@ -22,10 +22,55 @@ type DiagramRoute = {
   curve?: boolean;
 };
 type Diagram = {
+  title?: string;
   variant?: string;
   players?: Player[];
   routes?: DiagramRoute[];
 };
+
+/**
+ * Formation-name → required backfield-count constraint. When the diagram's
+ * `title` (or the surrounding markdown's "## title" header) contains one
+ * of the keywords for a constraint, the offensive layout MUST satisfy the
+ * predicate. Catches "spread requested → Pro I drawn" failures.
+ *
+ * Backfield = non-QB offensive players placed at y < 0 (behind the LOS).
+ */
+type FormationConstraint = {
+  keywords: string[];
+  requireBackfield: { min: number; max: number };
+  describe: string;
+};
+
+const FORMATION_CONSTRAINTS: FormationConstraint[] = [
+  {
+    keywords: ["spread", "5-wide", "five-wide", "empty"],
+    requireBackfield: { min: 0, max: 1 },
+    describe:
+      "Spread / Empty formations have 0-1 non-QB backs in the backfield. " +
+      "QB in shotgun, 4-5 receivers spread wide. 2+ backs in the backfield " +
+      "means you drew Pro I / I-form / Singleback-with-FB, not Spread.",
+  },
+  {
+    keywords: ["pro i", "pro-i", "i-form", "i form", "iform"],
+    requireBackfield: { min: 2, max: 2 },
+    describe:
+      "Pro I / I-form has exactly 2 backs stacked behind a QB-under-center.",
+  },
+  {
+    keywords: ["wishbone", "full house", "t-form"],
+    requireBackfield: { min: 3, max: 3 },
+    describe: "Wishbone / T-formation has 3 backs in the backfield (FB + 2 HBs).",
+  },
+  {
+    keywords: ["singleback", "single-back", "single back", " ace "],
+    requireBackfield: { min: 1, max: 1 },
+    describe: "Singleback (Ace) has exactly 1 RB, QB under center.",
+  },
+];
+
+const normalizeTitle = (s: string) =>
+  ` ${s.toLowerCase().replace(/[^a-z0-9 \-]/g, " ").replace(/\s+/g, " ").trim()} `;
 
 type PlaceDefenseSnapshot = {
   players: Array<{ id: string; x: number; y: number }>;
@@ -157,6 +202,48 @@ export function validateDiagrams(opts: {
     const players = Array.isArray(json.players) ? json.players : [];
     const offense = players.filter((p) => p.team !== "D");
     const defense = players.filter((p) => p.team === "D");
+
+    // Formation-name vs layout consistency. If the diagram's title (or any
+    // ## heading in the surrounding text) contains a formation keyword,
+    // the offensive layout must satisfy that formation's structural rules.
+    // Catches the "spread" → Pro I bug where Cal labeled the play correctly
+    // but drew the wrong personnel grouping.
+    const titleParts: string[] = [];
+    if (typeof json.title === "string") titleParts.push(json.title);
+    // Also scan H2 / H3 headings near the fence for the formation name.
+    // Cal often emits "## Spread Slant vs 4-4" as the section header.
+    const headingMatches = opts.text.match(/^#{1,3}\s+.+$/gm);
+    if (headingMatches) titleParts.push(...headingMatches);
+    const titleHaystack = normalizeTitle(titleParts.join(" "));
+
+    if (titleHaystack.trim()) {
+      // Count non-QB offensive backs (y < 0, team=O, id != QB/Q/Center).
+      const isLineman = (id: string): boolean =>
+        ["LT", "LG", "C", "RG", "RT", "T", "G", "OL"].includes(id.toUpperCase());
+      const isQB = (id: string): boolean => {
+        const u = id.toUpperCase();
+        return u === "QB" || u === "Q";
+      };
+      const backfieldCount = offense.filter(
+        (p) => p.y < 0 && !isQB(p.id) && !isLineman(p.id),
+      ).length;
+
+      for (const c of FORMATION_CONSTRAINTS) {
+        const matched = c.keywords.find((kw) => titleHaystack.includes(` ${kw.toLowerCase()} `));
+        if (!matched) continue;
+        if (
+          backfieldCount < c.requireBackfield.min ||
+          backfieldCount > c.requireBackfield.max
+        ) {
+          const range = c.requireBackfield.min === c.requireBackfield.max
+            ? String(c.requireBackfield.min)
+            : `${c.requireBackfield.min}-${c.requireBackfield.max}`;
+          errors.push(
+            `${tag}title says "${matched}" but the diagram has ${backfieldCount} non-QB back(s) in the backfield (need ${range}). ${c.describe}`,
+          );
+        }
+      }
+    }
 
     // Defense-included diagrams must hit the variant's full count.
     if (defense.length > 0 && defense.length !== expected) {
