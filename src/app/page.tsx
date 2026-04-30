@@ -45,9 +45,10 @@ export default async function HomePage() {
   }
 
   // Pull marketing data in parallel — both feed below-fold sections, neither
-  // blocks the hero from rendering.
+  // blocks the hero from rendering. Pass every example to the strip so the
+  // home page is sufficient discovery (no separate "browse all" page link).
   const [examples, freeMaxPlays] = await Promise.all([
-    loadExamplePlaybooks().then((r) => r.slice(0, 3)),
+    loadExamplePlaybooks(),
     getFreeMaxPlaysPerPlaybook(),
   ]);
 

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { PhoneFrame, TabletFrame, WristBand } from "./DeviceFrames";
 import { Reveal } from "./Reveal";
-import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
+import { ExamplesStrip } from "./ExamplesStrip";
 import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
 import type { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 
@@ -369,28 +369,11 @@ export function RealPlaybooks({
 
         {examples.length > 0 && (
           <Reveal delay={100}>
-            <div className="mt-12 flex flex-wrap justify-center gap-6">
-              {examples.map((pb) => (
-                <div key={pb.id} className="w-40 sm:w-48 lg:w-56">
-                  <ExampleBookTile tile={pb} />
-                </div>
-              ))}
+            <div className="mt-12">
+              <ExamplesStrip examples={examples} />
             </div>
           </Reveal>
         )}
-
-        <Reveal delay={200}>
-          <div className="mt-10 flex justify-center">
-            <Link
-              href="/examples"
-              className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
-              style={{ background: BRAND_BLUE }}
-            >
-              Browse all examples
-              <ArrowRight className="size-5" />
-            </Link>
-          </div>
-        </Reveal>
       </div>
     </section>
   );
