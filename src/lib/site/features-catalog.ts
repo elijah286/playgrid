@@ -626,6 +626,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-12-01",
   },
   {
+    id: "admin-traffic-coach-cal-panel",
+    name: "Coach Cal CTA performance panel",
+    description:
+      "New per-surface table on Site Admin → Traffic → Engagement showing impressions / clicks / click rate / dismisses / dismiss rate / walk-aways for each Coach Cal CTA (playbook floating card and site-header promo popover). Self-serve answer to 'are people seeing the proposals and showing interest, or just dismissing?'.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "coach-cal-cta-instrumentation",
     name: "Coach Cal CTA telemetry",
     description:

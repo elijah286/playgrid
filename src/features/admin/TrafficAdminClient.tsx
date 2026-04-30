@@ -10,6 +10,7 @@ import {
 import {
   getEngagementSummaryAction,
   getViralitySummaryAction,
+  type CoachCalCtaRow,
   type EngagementSummary,
   type ViralitySummary,
 } from "@/app/actions/admin-traffic-insights";
@@ -248,6 +249,32 @@ export function TrafficAdminClient({
   const [virality, setVirality] = useState<ViralitySummary | null>(null);
   const [viralityLoading, setViralityLoading] = useState(false);
 
+  function fetchEngagement(nextWindow: number) {
+    setEngagementLoading(true);
+    getEngagementSummaryAction(nextWindow)
+      .then((r) => {
+        if (r.ok) setEngagement(r.summary);
+        else toast(r.error, "error");
+      })
+      .finally(() => setEngagementLoading(false));
+  }
+
+  function fetchVirality(nextWindow: number) {
+    setViralityLoading(true);
+    getViralitySummaryAction(nextWindow)
+      .then((r) => {
+        if (r.ok) setVirality(r.summary);
+        else toast(r.error, "error");
+      })
+      .finally(() => setViralityLoading(false));
+  }
+
+  // Refresh + window-change re-fetch the Overview/Acquisition data and
+  // null out the lazy-loaded panels — but if the user is currently
+  // viewing Engagement or Virality, we ALSO re-fetch that immediately
+  // instead of waiting for them to switch tabs and back. Without this,
+  // the Engagement panel would just hang on "Loading…" forever after a
+  // refresh because selectTab is the only thing that triggers a fetch.
   function reload(nextWindow: number) {
     startTransition(async () => {
       const res = await getTrafficSummaryAction(nextWindow);
@@ -260,28 +287,18 @@ export function TrafficAdminClient({
       setSummary(res.summary);
       setEngagement(null);
       setVirality(null);
+      if (tab === "engagement") fetchEngagement(nextWindow);
+      else if (tab === "virality") fetchVirality(nextWindow);
     });
   }
 
   function selectTab(next: SubTab) {
     setTab(next);
     if (next === "engagement" && !engagement && !engagementLoading) {
-      setEngagementLoading(true);
-      getEngagementSummaryAction(windowDays)
-        .then((r) => {
-          if (r.ok) setEngagement(r.summary);
-          else toast(r.error, "error");
-        })
-        .finally(() => setEngagementLoading(false));
+      fetchEngagement(windowDays);
     }
     if (next === "virality" && !virality && !viralityLoading) {
-      setViralityLoading(true);
-      getViralitySummaryAction(windowDays)
-        .then((r) => {
-          if (r.ok) setVirality(r.summary);
-          else toast(r.error, "error");
-        })
-        .finally(() => setViralityLoading(false));
+      fetchVirality(windowDays);
     }
   }
 
@@ -518,6 +535,8 @@ function EngagementPanel({
         />
       </div>
 
+      <CoachCalCtaPanel rows={data.coachCalCtas} />
+
       {noData ? (
         <p className="rounded-lg border border-border/50 bg-surface-raised/50 px-3 py-2 text-xs text-muted">
           No engagement data yet — instrument <code>track()</code> calls and dwell beacons will
@@ -525,6 +544,86 @@ function EngagementPanel({
         </p>
       ) : null}
     </>
+  );
+}
+
+const COACH_CAL_SURFACE_LABELS: Record<string, string> = {
+  playbook_floating_card: "Playbook page · floating card",
+  header_promo_popover: "Site header · promo popover",
+};
+
+function CoachCalCtaPanel({ rows }: { rows: CoachCalCtaRow[] }) {
+  return (
+    <div className="rounded-2xl border border-border bg-surface-raised p-4">
+      <div>
+        <p className="text-sm font-semibold text-foreground">Coach Cal CTA performance</p>
+        <p className="mt-0.5 text-[11px] italic text-muted/80">
+          Per-surface impressions and how many of those tap through, dismiss, or walk away
+          without acting.
+        </p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-xs text-muted">
+          No Coach Cal CTA events recorded in this window. The
+          impression / click / dismiss instrumentation is wired — once
+          a free user opens a playbook page (floating card) or taps the
+          pulsing icon in the site header (promo popover), rows will
+          appear here.
+        </p>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left text-xs">
+            <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <tr>
+                <th className="pb-2 pr-3">Surface</th>
+                <th className="pb-2 pr-3 text-right">Impressions</th>
+                <th className="pb-2 pr-3 text-right">Clicks</th>
+                <th className="pb-2 pr-3 text-right">Click rate</th>
+                <th className="pb-2 pr-3 text-right">Dismisses</th>
+                <th className="pb-2 pr-3 text-right">Dismiss rate</th>
+                <th className="pb-2 text-right">Walk-aways</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {rows.map((r) => (
+                <tr key={r.surface}>
+                  <td className="py-2 pr-3 text-foreground">
+                    <div className="font-medium">
+                      {COACH_CAL_SURFACE_LABELS[r.surface] ?? r.surface}
+                    </div>
+                    <div className="text-[10px] text-muted">
+                      {formatInt(r.uniqueImpressionUsers)} unique
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                    {formatInt(r.impressions)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                    {formatInt(r.clicks)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-emerald-400/90">
+                    {pct(r.clickRate)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+                    {formatInt(r.dismisses)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums text-amber-300/90">
+                    {pct(r.dismissRate)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-muted">
+                    {formatInt(r.walkAways)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[10px] text-muted">
+            Walk-away = saw the CTA, didn&rsquo;t click, didn&rsquo;t explicitly dismiss
+            (closed the tab, navigated away, etc.). The three actions sum to impressions.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

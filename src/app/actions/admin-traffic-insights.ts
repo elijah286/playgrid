@@ -12,6 +12,24 @@ export type FunnelStep = {
   dropoff: number;
 };
 
+export type CoachCalCtaRow = {
+  /** Stable surface id matching the `target` field on the underlying
+   *  ui_events rows (e.g. "playbook_floating_card",
+   *  "header_promo_popover"). */
+  surface: string;
+  impressions: number;
+  clicks: number;
+  dismisses: number;
+  /** Impressions that produced neither a click nor an explicit dismiss
+   *  in the same window. People who saw it and walked away. */
+  walkAways: number;
+  uniqueImpressionUsers: number;
+  /** clicks / impressions, 0..1. */
+  clickRate: number;
+  /** dismisses / impressions, 0..1. */
+  dismissRate: number;
+};
+
 export type EngagementSummary = {
   windowDays: number;
   funnel: FunnelStep[];
@@ -20,6 +38,7 @@ export type EngagementSummary = {
   shortestDwell: Array<{ path: string; avgDwellMs: number; samples: number }>;
   topEvents: Array<{ event: string; count: number; uniqueUsers: number }>;
   totalEvents: number;
+  coachCalCtas: CoachCalCtaRow[];
 };
 
 export type ViralitySummary = {
@@ -79,6 +98,7 @@ function emptyEngagement(windowDays: number): EngagementSummary {
     shortestDwell: [],
     topEvents: [],
     totalEvents: 0,
+    coachCalCtas: [],
   };
 }
 
@@ -155,15 +175,19 @@ export async function getEngagementSummaryAction(
     );
     const newSignupIds = new Set(newSignups.map((p) => p.id as string));
 
-    // First-play signal: any play created in window by a new signup.
-    const { data: playsRaw } = await admin
-      .from("plays")
+    // First-play signal: any play_version saved in window whose creator
+    // is a new signup. plays itself doesn't carry created_by — version
+    // rows are the authoritative authorship record (one is written for
+    // every save, including the initial create).
+    const { data: playVersionsRaw, error: playVersionsErr } = await admin
+      .from("play_versions")
       .select("created_by")
       .gte("created_at", windowStart)
-      .limit(100000);
+      .limit(200000);
+    if (playVersionsErr) throw new Error(playVersionsErr.message);
     const firstPlayUsers = new Set<string>();
-    for (const p of playsRaw ?? []) {
-      const uid = p.created_by as string | null;
+    for (const v of playVersionsRaw ?? []) {
+      const uid = v.created_by as string | null;
       if (uid && newSignupIds.has(uid)) firstPlayUsers.add(uid);
     }
 
@@ -254,10 +278,11 @@ export async function getEngagementSummaryAction(
       .sort((a, b) => a.avgDwellMs - b.avgDwellMs)
       .slice(0, 10);
 
-    // UI events.
+    // UI events. Pulled with `target` so the Coach Cal aggregator below
+    // can split by surface without a second round-trip.
     const { data: evRaw } = await admin
       .from("ui_events")
-      .select("event_name, user_id, session_id")
+      .select("event_name, user_id, session_id, target")
       .gte("created_at", windowStart)
       .limit(100000);
     const evRows = (evRaw ?? []).filter((e) => {
@@ -278,6 +303,63 @@ export async function getEngagementSummaryAction(
       .sort((a, b) => b.count - a.count)
       .slice(0, 12);
 
+    // Coach Cal CTA aggregation, split by surface (target). Counts
+    // impressions / clicks / dismisses and computes walk-aways =
+    // impressions - clicks - dismisses (capped at 0). The same session
+    // can fire multiple impressions if the user opens/closes the
+    // header popover repeatedly; we count each shown view, not each
+    // unique user, so the click/dismiss rates compare against the same
+    // denominator the user actually saw.
+    type CoachSlot = {
+      impressions: number;
+      clicks: number;
+      dismisses: number;
+      impressionUsers: Set<string>;
+    };
+    const COACH_EVENTS = new Set([
+      "coach_cal_cta_impression",
+      "coach_cal_cta_click",
+      "coach_cal_cta_dismiss",
+    ]);
+    const coachMap = new Map<string, CoachSlot>();
+    for (const e of evRows) {
+      const name = e.event_name as string;
+      if (!COACH_EVENTS.has(name)) continue;
+      const surface = ((e.target as string | null) ?? "unknown") || "unknown";
+      const slot = coachMap.get(surface) ?? {
+        impressions: 0,
+        clicks: 0,
+        dismisses: 0,
+        impressionUsers: new Set<string>(),
+      };
+      if (name === "coach_cal_cta_impression") {
+        slot.impressions += 1;
+        slot.impressionUsers.add(
+          (e.user_id as string | null) ?? `anon:${e.session_id}`,
+        );
+      } else if (name === "coach_cal_cta_click") {
+        slot.clicks += 1;
+      } else if (name === "coach_cal_cta_dismiss") {
+        slot.dismisses += 1;
+      }
+      coachMap.set(surface, slot);
+    }
+    const coachCalCtas: CoachCalCtaRow[] = Array.from(coachMap.entries())
+      .map(([surface, s]) => {
+        const walkAways = Math.max(0, s.impressions - s.clicks - s.dismisses);
+        return {
+          surface,
+          impressions: s.impressions,
+          clicks: s.clicks,
+          dismisses: s.dismisses,
+          walkAways,
+          uniqueImpressionUsers: s.impressionUsers.size,
+          clickRate: s.impressions > 0 ? s.clicks / s.impressions : 0,
+          dismissRate: s.impressions > 0 ? s.dismisses / s.impressions : 0,
+        };
+      })
+      .sort((a, b) => b.impressions - a.impressions);
+
     // Suppress unused-var warning while still surfacing the count for parity.
     void usersWithView;
 
@@ -291,6 +373,7 @@ export async function getEngagementSummaryAction(
         shortestDwell,
         topEvents,
         totalEvents: evRows.length,
+        coachCalCtas,
       },
     };
   } catch (e) {
