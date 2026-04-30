@@ -712,4 +712,163 @@ const update_play_notes: CoachAiTool = {
   },
 };
 
-export const PLAY_TOOLS: CoachAiTool[] = [list_plays, get_play, create_play, update_play, rename_play, update_play_notes];
+// ─────────────────────────────────────────────────────────────────────
+//  Practice plans
+// ─────────────────────────────────────────────────────────────────────
+
+const create_practice_plan: CoachAiTool = {
+  def: {
+    name: "create_practice_plan",
+    description:
+      "Create a new practice plan in the current playbook, optionally seeded " +
+      "with a list of time blocks (warm-up / individual / team install / etc). " +
+      "Use this when the coach asks you to save / build / make a practice plan " +
+      "in their playbook (NOT just describe one in chat). " +
+      "ALWAYS confirm the plan title and the block breakdown with the coach " +
+      "before calling — show the proposed timeline in plain English (e.g. " +
+      "'15 min warm-up → 20 min individual → 25 min team install → 10 min " +
+      "conditioning, 70 min total — sound right?') and wait for an explicit " +
+      "yes. Requires edit access to the playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description:
+            "Practice plan title, e.g. \"Tuesday — Install + Special Teams\" " +
+            "or \"Week 3 Practice 1\". 1-200 chars.",
+        },
+        notes: {
+          type: "string",
+          description:
+            "Optional plan-level notes shown above the timeline. Use this " +
+            "for the practice's overall focus / theme (e.g. 'Install Trips " +
+            "Right concept; refine Cover 3 reads; prep for Saturday game').",
+        },
+        age_tier: {
+          type: "string",
+          enum: ["tier1_5_8", "tier2_9_11", "tier3_12_14", "tier4_hs"],
+          description:
+            "Optional age tier for content guidance. Pull from the playbook " +
+            "context if the coach hasn't said.",
+        },
+        blocks: {
+          type: "array",
+          description:
+            "Optional ordered list of time blocks. If omitted, the plan is " +
+            "created empty and the coach fills it in via the editor. If " +
+            "provided, each block must include a title + durationMinutes; " +
+            "startOffsetMinutes is auto-computed sequentially when omitted. " +
+            "Each block can have 1-3 parallel lanes (Skill / Line / etc.) " +
+            "for stations.",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Block label, e.g. \"Warm-up\", \"Individual\", \"Team install\"." },
+              duration_minutes: { type: "integer", minimum: 1, maximum: 240 },
+              start_offset_minutes: {
+                type: "integer",
+                minimum: 0,
+                description: "Optional explicit start offset in minutes from the start of practice. Defaults to sequential layout.",
+              },
+              notes: { type: "string", description: "Plain-text coaching notes for this block." },
+              lanes: {
+                type: "array",
+                maxItems: 3,
+                description: "Optional 1-3 parallel lanes (stations). If omitted, a single lane is auto-created from the block title + notes.",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string", description: "Lane label, e.g. \"Skill\", \"Line\", \"Specialists\"." },
+                    notes: { type: "string", description: "Activity description / coaching points for this lane." },
+                  },
+                  required: [],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["title", "duration_minutes"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["title"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+
+    const title = typeof input.title === "string" ? input.title : "";
+    if (!title.trim()) return { ok: false, error: "title is required." };
+    const notes = typeof input.notes === "string" ? input.notes : undefined;
+    const ageTierRaw = typeof input.age_tier === "string" ? input.age_tier : undefined;
+    const allowedTiers = ["tier1_5_8", "tier2_9_11", "tier3_12_14", "tier4_hs"] as const;
+    type Tier = (typeof allowedTiers)[number];
+    const ageTier: Tier | null =
+      ageTierRaw && (allowedTiers as readonly string[]).includes(ageTierRaw)
+        ? (ageTierRaw as Tier)
+        : null;
+
+    type RawBlock = {
+      title?: unknown;
+      duration_minutes?: unknown;
+      start_offset_minutes?: unknown;
+      notes?: unknown;
+      lanes?: unknown;
+    };
+    const rawBlocks = Array.isArray(input.blocks) ? (input.blocks as RawBlock[]) : [];
+    const blocks = rawBlocks
+      .map((b) => ({
+        title: typeof b?.title === "string" ? b.title : "Block",
+        durationMinutes: typeof b?.duration_minutes === "number" ? b.duration_minutes : 0,
+        startOffsetMinutes:
+          typeof b?.start_offset_minutes === "number" ? b.start_offset_minutes : undefined,
+        notes: typeof b?.notes === "string" ? b.notes : "",
+        lanes: Array.isArray(b?.lanes)
+          ? (b.lanes as Array<{ title?: unknown; notes?: unknown }>).map((l) => ({
+              title: typeof l?.title === "string" ? l.title : "",
+              notes: typeof l?.notes === "string" ? l.notes : "",
+            }))
+          : undefined,
+      }))
+      .filter((b) => b.durationMinutes > 0);
+
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const { createPracticePlanForUser } = await import("@/lib/data/practice-plan-create");
+      const supabase = await createClient();
+      const res = await createPracticePlanForUser(supabase, {
+        playbookId: ctx.playbookId,
+        title: title.trim(),
+        notes,
+        ageTier,
+        blocks: blocks.length > 0 ? blocks : undefined,
+      });
+      if (!res.ok) return { ok: false, error: res.error };
+      const url = `/practice-plans/${res.planId}/edit`;
+      const summary = blocks.length > 0
+        ? `${res.blockCount} block(s), ${res.totalDurationMinutes} min total`
+        : "empty (coach will fill in via the editor)";
+      return {
+        ok: true,
+        result:
+          `Created practice plan "${title.trim()}" — ${summary}. Tell the coach it's saved and link them: ` +
+          `[Open practice plan](${url}). It also shows up in the Practice Plans tab of the playbook.`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "create_practice_plan failed" };
+    }
+  },
+};
+
+export const PLAY_TOOLS: CoachAiTool[] = [
+  list_plays,
+  get_play,
+  create_play,
+  update_play,
+  rename_play,
+  update_play_notes,
+  create_practice_plan,
+];

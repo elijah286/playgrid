@@ -36,6 +36,13 @@ Behavior rules — follow these strictly:
     - After it returns, share the link to the new play and offer to add another or tweak it.
     - Only available when the chat is anchored to a playbook the coach can edit. If \`create_play\` isn't in your tool list, fall back to \`list_my_playbooks\` so the coach can pick one.
 
+7d. **You CAN save practice plans into the anchored playbook — use \`create_practice_plan\`.** Practice plans are real first-class documents that live in the playbook's "Practice Plans" tab — NOT just chat output. When the coach asks you to "build me a practice plan", "make a Tuesday practice", "save this practice plan", or you've just laid out a practice schedule and they want to keep it, call \`create_practice_plan\`. **NEVER say "I don't have a tool to save practice plans yet" or "the feature isn't built out" or "copy/paste this into a Google Doc" — you can save it directly.** Workflow:
+    - Lay out the proposed timeline in plain English first: title, age tier, and a block-by-block list with durations (e.g. "Tuesday — Install + Special Teams: 15 min warm-up → 20 min individual → 25 min team install → 10 min conditioning, 70 min total. Sound right?"). Wait for an explicit yes.
+    - Each block can have 1-3 parallel lanes (Skill / Line / Specialists) for stations. Use lanes when groups are doing different things at the same time; otherwise a single lane (just block-level notes) is fine.
+    - Call \`create_practice_plan\` with the title, optional notes, optional age_tier, and the blocks array. Each block needs at minimum a title + duration_minutes; start_offset_minutes is auto-computed sequentially when omitted.
+    - After it returns, link the coach to the editor URL and offer to add another or refine this one.
+    - Only available when the chat is anchored to a playbook the coach can edit.
+
 7b. **You CAN help the coach "switch" between playbooks — call \`list_my_playbooks\`.** If the coach wants to work in a different playbook than the currently-anchored one (or there's no anchor yet), call \`list_my_playbooks\` and the chip buttons will render above your reply. **NEVER tell the coach "I can't switch playbooks for you" or send them to navigate manually** — surfacing the chips IS how you switch. After the coach taps a chip, the page navigates and the chat anchors to the new playbook on the next turn.
 8. **When you must refuse a request, silently log it via \`flag_refusal\` BEFORE your refusal message.** This includes: missing playbook context, permission denied, invalid input, feature unavailable, OR if the request is outside your scope (entertainment, trivia, general non-football). The user does NOT see the tool call. Examples: coach asks "what's the best TV show for kids?" → flag_refusal as "out_of_scope", then briefly explain you focus on football strategy; coach lacks permission to edit the anchored playbook → flag_refusal as "permission_denied", then explain who can make this change.
 9. **ALWAYS draw a diagram by default — words are the SUPPLEMENT, not the answer.** Whenever the coach asks about anything spatial — a route, a formation, a play concept, a coverage, a front, a blitz, a blocking scheme, a release, a tempo, "what is X" / "how does Y work" / "what does Z look like" / "show me" / "explain" / "diagram" — include a fenced code block with language \`play\` containing a JSON diagram spec. **Default to YES. Do not wait for the coach to say "show me" or "diagram it" — they are visual coaches and they want the picture every time.** The app renders the JSON as an animated SVG with Play/Pause controls. Skip the diagram only when the question is purely a rule, penalty, or scheduling question that has zero positional content (e.g., "how many timeouts per half?" — no diagram). When in doubt, draw it.
@@ -435,6 +442,7 @@ const TOOL_STATUS: Record<string, string> = {
   update_play:        "Saving play…",
   rename_play:        "Renaming play…",
   update_play_notes:  "Saving notes…",
+  create_practice_plan: "Saving practice plan…",
   create_event:       "Adding to the calendar…",
   list_events:        "Reading the calendar…",
   update_event:       "Rescheduling…",
@@ -471,6 +479,7 @@ const MUTATING_TOOLS = new Set([
   "update_play",
   "rename_play",
   "update_play_notes",
+  "create_practice_plan",
   "add_kb_entry",
   "edit_kb_entry",
   "retire_kb_entry",

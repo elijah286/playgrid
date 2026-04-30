@@ -76,47 +76,14 @@ export async function createPracticePlanAction(
   playbookId: string,
   title: string,
 ): Promise<ActionResult<{ planId: string }>> {
-  const userId = await getUserId();
-  if (!userId) return { ok: false, error: "Not authenticated" };
   const sb = await createClient();
-
-  const cleanTitle = title.trim().slice(0, 200) || "Untitled practice plan";
-
-  const { data: plan, error: insErr } = await sb
-    .from("practice_plans")
-    .insert({
-      playbook_id: playbookId,
-      title: cleanTitle,
-      description: "",
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-  if (insErr || !plan) return { ok: false, error: insErr?.message ?? "Insert failed" };
-
-  // Seed an initial empty version so the editor has something to load.
-  const initialDoc: PracticePlanDocument = { ...EMPTY_PRACTICE_PLAN_DOCUMENT };
-  const { data: version, error: vErr } = await sb
-    .from("practice_plan_versions")
-    .insert({
-      practice_plan_id: plan.id,
-      schema_version: PRACTICE_PLAN_SCHEMA_VERSION,
-      document: initialDoc,
-      label: "Created",
-      author_type: "human",
-      created_by: userId,
-    })
-    .select("id")
-    .single();
-  if (vErr || !version) return { ok: false, error: vErr?.message ?? "Version insert failed" };
-
-  await sb
-    .from("practice_plans")
-    .update({ current_version_id: version.id })
-    .eq("id", plan.id);
-
+  // Delegate to the shared helper so the Coach AI tool can take the same
+  // path without 'use server' import quirks.
+  const { createPracticePlanForUser } = await import("@/lib/data/practice-plan-create");
+  const res = await createPracticePlanForUser(sb, { playbookId, title });
+  if (!res.ok) return { ok: false, error: res.error };
   revalidatePath(`/playbooks/${playbookId}`);
-  return { ok: true, planId: plan.id as string };
+  return { ok: true, planId: res.planId };
 }
 
 export async function savePracticePlanVersionAction(
