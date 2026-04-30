@@ -188,13 +188,16 @@ function placeTackle11Secondary(
       return { players, zones: [], manCoverage: true };
     }
     case "cover_2": {
-      // Two deep halves, corners squat, hooks/flats fill underneath.
+      // Two deep halves, corners squat, 3 underneath hooks (no overlap).
+      // Traditional Cover 2 has 5 underneath: 2 squat CBs in the flats +
+      // 2 OLBs in the hook/curl zones + 1 MLB in the middle hole. The
+      // zone WIDTHS are tuned so adjacent zones don't overlap (otherwise
+      // labels stack on top of each other and the field looks junky).
       const players: SynthAlignmentPlayer[] = [];
       players.push({ id: "CB", x: -16, y: 5 });
       players.push({ id: "CB", x:  16, y: 5 });
       players.push({ id: "FS", x: -8,  y: 13 });
       players.push({ id: "SS", x:  8,  y: 13 });
-      // Extra DBs (nickel/dime) spread underneath.
       const extras = Math.max(0, dbCount - 4);
       const xs = spreadEvenly(extras, -6, 6);
       for (let i = 0; i < xs.length; i++) {
@@ -206,12 +209,17 @@ function placeTackle11Secondary(
           // Two deep halves
           { kind: "rectangle", center: { x: -10, y: 17 }, size: { x: 14, y: 16 }, label: "Deep 1/2 L" },
           { kind: "rectangle", center: { x:  10, y: 17 }, size: { x: 14, y: 16 }, label: "Deep 1/2 R" },
-          // 5 underneath (corners squat to flats; hooks split the middle)
-          { kind: "rectangle", center: { x: -13, y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
-          { kind: "rectangle", center: { x:  -5, y: 5 }, size: { x: 6, y: 8 }, label: "Hook L" },
-          { kind: "rectangle", center: { x:   0, y: 5 }, size: { x: 6, y: 8 }, label: "Hook M" },
-          { kind: "rectangle", center: { x:   5, y: 5 }, size: { x: 6, y: 8 }, label: "Hook R" },
-          { kind: "rectangle", center: { x:  13, y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
+          // 5 underneath, non-overlapping spans:
+          //   Flat L  : -18 .. -10  (size 8, center -14)
+          //   Hook L  : -10 ..  -3  (size 7, center -6.5)
+          //   Mid Hole:  -3 ..   3  (size 6, center 0)
+          //   Hook R  :   3 ..  10  (size 7, center 6.5)
+          //   Flat R  :  10 ..  18  (size 8, center 14)
+          { kind: "rectangle", center: { x: -14,  y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
+          { kind: "rectangle", center: { x:  -6.5,y: 5 }, size: { x: 7, y: 8 }, label: "Hook L" },
+          { kind: "rectangle", center: { x:   0,  y: 5 }, size: { x: 6, y: 8 }, label: "Mid" },
+          { kind: "rectangle", center: { x:   6.5,y: 5 }, size: { x: 7, y: 8 }, label: "Hook R" },
+          { kind: "rectangle", center: { x:  14,  y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
         ],
         manCoverage: false,
       };
@@ -235,22 +243,27 @@ function placeTackle11Secondary(
       players.push({ id: "CB", x:  16, y: 6 });
       players.push({ id: "FS", x:   0, y: 13 });
       const extras = Math.max(0, dbCount - 3);
-      // SS rolls down to robber/box, then nickel for any remainder.
       if (extras >= 1) players.push({ id: "SS", x: 6, y: 9 });
       const remXs = spreadEvenly(Math.max(0, extras - 1), -6, 6);
       for (let i = 0; i < remXs.length; i++) {
         players.push({ id: "NB", x: Math.round(remXs[i] * 10) / 10, y: 6 });
       }
+      // Underneath spans (4 zones, non-overlapping):
+      //   Flat L  : -18 .. -10  (size 8, center -14)
+      //   Hook L  : -10 ..   0  (size 10, center -5)
+      //   Hook R  :   0 ..  10  (size 10, center  5)
+      //   Flat R  :  10 ..  18  (size 8, center 14)
+      // Deep thirds: width 11 each, centered at -11, 0, 11 — no overlap.
       return {
         players,
         zones: [
-          { kind: "rectangle", center: { x: -10, y: 17 }, size: { x: 10, y: 16 }, label: "Deep 1/3 L" },
-          { kind: "rectangle", center: { x:   0, y: 17 }, size: { x: 10, y: 16 }, label: "Deep 1/3 M" },
-          { kind: "rectangle", center: { x:  10, y: 17 }, size: { x: 10, y: 16 }, label: "Deep 1/3 R" },
-          { kind: "rectangle", center: { x: -11, y: 5 }, size: { x: 8, y: 8 }, label: "Flat L" },
-          { kind: "rectangle", center: { x:  -4, y: 5 }, size: { x: 6, y: 8 }, label: "Hook L" },
-          { kind: "rectangle", center: { x:   4, y: 5 }, size: { x: 6, y: 8 }, label: "Hook R" },
-          { kind: "rectangle", center: { x:  11, y: 5 }, size: { x: 8, y: 8 }, label: "Flat R" },
+          { kind: "rectangle", center: { x: -11, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 L" },
+          { kind: "rectangle", center: { x:   0, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 M" },
+          { kind: "rectangle", center: { x:  11, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 R" },
+          { kind: "rectangle", center: { x: -14, y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
+          { kind: "rectangle", center: { x:  -5, y: 5 }, size: { x: 10, y: 8 }, label: "Hook L" },
+          { kind: "rectangle", center: { x:   5, y: 5 }, size: { x: 10, y: 8 }, label: "Hook R" },
+          { kind: "rectangle", center: { x:  14, y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
         ],
         manCoverage: false,
       };
@@ -266,16 +279,18 @@ function placeTackle11Secondary(
       for (let i = 0; i < xs.length; i++) {
         players.push({ id: "NB", x: Math.round(xs[i] * 10) / 10, y: 6 });
       }
+      // Quarters: width 9 each, centers at -13.5, -4.5, 4.5, 13.5 → no overlap.
+      // Underneath: 3 zones (Flat L / Mid / Flat R), widths sized to not overlap.
       return {
         players,
         zones: [
-          { kind: "rectangle", center: { x: -12, y: 17 }, size: { x: 10, y: 16 }, label: "Deep 1/4 L" },
-          { kind: "rectangle", center: { x:  -4, y: 17 }, size: { x:  8, y: 16 }, label: "Deep 1/4 ML" },
-          { kind: "rectangle", center: { x:   4, y: 17 }, size: { x:  8, y: 16 }, label: "Deep 1/4 MR" },
-          { kind: "rectangle", center: { x:  12, y: 17 }, size: { x: 10, y: 16 }, label: "Deep 1/4 R" },
-          { kind: "rectangle", center: { x: -10, y: 5 }, size: { x: 8, y: 8 }, label: "Flat L" },
-          { kind: "rectangle", center: { x:   0, y: 5 }, size: { x: 8, y: 8 }, label: "Hook M" },
-          { kind: "rectangle", center: { x:  10, y: 5 }, size: { x: 8, y: 8 }, label: "Flat R" },
+          { kind: "rectangle", center: { x: -13.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 L" },
+          { kind: "rectangle", center: { x:  -4.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 ML" },
+          { kind: "rectangle", center: { x:   4.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 MR" },
+          { kind: "rectangle", center: { x:  13.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 R" },
+          { kind: "rectangle", center: { x: -12, y: 4 }, size: { x: 12, y: 8 }, label: "Flat L" },
+          { kind: "rectangle", center: { x:   0, y: 5 }, size: { x: 12, y: 8 }, label: "Mid" },
+          { kind: "rectangle", center: { x:  12, y: 4 }, size: { x: 12, y: 8 }, label: "Flat R" },
         ],
         manCoverage: false,
       };

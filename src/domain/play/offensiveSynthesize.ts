@@ -271,8 +271,9 @@ function placeBacks(arr: BackArrangement): SynthOffensePlayer[] {
   switch (arr) {
     case "none": return [];
     case "single":
-      // 1 back beside the QB (assume strong-side flow handled by RB number).
-      return [{ id: "B", x: -2, y: -5 }];
+      // 1 back beside the QB. 4 yards offset so they're clearly separate
+      // tokens (2 yards rendered as overlap due to circle radius).
+      return [{ id: "B", x: -4, y: -5 }];
     case "i_stack":
       return [
         { id: "F", x: 0, y: -3 },   // FB
@@ -281,19 +282,19 @@ function placeBacks(arr: BackArrangement): SynthOffensePlayer[] {
     case "wishbone":
       return [
         { id: "F", x:  0, y: -3 },  // FB centered
-        { id: "B", x: -3, y: -5 },  // weak HB
-        { id: "H", x:  3, y: -5 },  // strong HB
+        { id: "B", x: -4, y: -5 },  // weak HB
+        { id: "H", x:  4, y: -5 },  // strong HB
       ];
     case "t_row":
       return [
         { id: "F", x:  0, y: -4 },
-        { id: "B", x: -3, y: -4 },
-        { id: "H", x:  3, y: -4 },
+        { id: "B", x: -4, y: -4 },
+        { id: "H", x:  4, y: -4 },
       ];
     case "split":
       return [
-        { id: "F", x: -3, y: -5 },
-        { id: "B", x:  3, y: -5 },
+        { id: "F", x: -4, y: -5 },
+        { id: "B", x:  4, y: -5 },
       ];
   }
 }
@@ -315,10 +316,12 @@ function placeReceivers(
 ): SynthOffensePlayer[] {
   const players: SynthOffensePlayer[] = [];
 
-  // Field-width-aware outer-receiver x-positions. Tackle has the widest
-  // splits; flag fields are narrower.
-  const wideX = variant === "tackle_11" ? 12 : variant === "flag_7v7" ? 11 : 9;
-  const slotX = variant === "tackle_11" ? 7  : variant === "flag_7v7" ? 6  : 5;
+  // Field-width-aware outer-receiver x-positions. Tackle is 53 yds wide
+  // so true Spread WRs split to ~18-22 yds from center. Flag is narrower
+  // (30 yds for 7v7, 25 for 5v5) so splits are correspondingly tighter.
+  // Slots stand ~5-6 yards inside the outer receiver, well off the OL.
+  const wideX = variant === "tackle_11" ? 18 : variant === "flag_7v7" ? 12 : 10;
+  const slotX = variant === "tackle_11" ? 11 : variant === "flag_7v7" ? 7  : 6;
 
   // Helper: pick a label from a fixed pool, with on-the-line vs off-the-
   // line distinction handled by y. The first player on each side is the
@@ -331,34 +334,35 @@ function placeReceivers(
     return index === 0 ? "Z" : index === 1 ? "H" : "S";
   };
 
-  // LEFT side
+  // LEFT side. Outermost is on the line at y=0; subsequent slots step
+  // inward and OFF the line (y=-1). Inside-step is large enough that
+  // adjacent receivers don't visually overlap (~7 yards for tackle, less
+  // for flag).
+  const insideStepLeft = variant === "tackle_11" ? 7 : variant === "flag_7v7" ? 5 : 4;
   for (let i = 0; i < rec.left; i++) {
-    const offsetIn = i * 3;
-    const x = -(wideX - offsetIn) + (i > 0 && rec.bunchSide === "left" ? 2 : 0);
-    // Outermost player on the line; slots a yard off (y = -1).
+    const x = -(wideX - i * insideStepLeft) + (i > 0 && rec.bunchSide === "left" ? 3 : 0);
     const onLine = i === 0;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("left", i, false), x, y });
+    players.push({ id: labelFor("left", i, false), x: Math.round(x * 10) / 10, y });
   }
 
-  // RIGHT side. If te=1 and right is the strong side, the TE goes ON the
-  // line just outside RT; the rest of the right-side receivers split wider.
+  // RIGHT side. If te=1 the TE goes ON the line just outside RT; other
+  // right-side receivers split wider in slots.
   const teRight = rec.te === 1;
   let firstRightSlotIndex = 0;
   if (teRight && rec.right >= 1) {
-    // Y = TE on the line just outside RT (RT is at x=4 for tackle_11, but
-    // for flag the line is shorter — push Y to ~3 for flag).
     const yX = variant === "tackle_11" ? 6 : variant === "flag_7v7" ? 5 : 4;
     players.push({ id: "Y", x: yX, y: 0 });
     firstRightSlotIndex = 1;
   }
+  const insideStepRight = insideStepLeft;
   for (let i = firstRightSlotIndex; i < rec.right; i++) {
     const idx = i - firstRightSlotIndex;
-    const baseX = idx === 0 ? wideX : slotX - (idx - 1) * 3;
-    const x = baseX + (i > firstRightSlotIndex && rec.bunchSide === "right" ? -2 : 0);
+    const baseX = idx === 0 ? wideX : wideX - (idx + (teRight ? 1 : 0)) * insideStepRight;
+    const x = baseX + (i > firstRightSlotIndex && rec.bunchSide === "right" ? -3 : 0);
     const onLine = i === firstRightSlotIndex;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("right", idx, false), x, y });
+    players.push({ id: labelFor("right", idx, teRight), x: Math.round(x * 10) / 10, y });
   }
 
   return players;

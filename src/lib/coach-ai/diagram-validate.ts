@@ -163,6 +163,13 @@ export function validateDiagrams(opts: {
    *  Used to detect phantom success claims — Cal can't say "playbook
    *  created" if create_playbook wasn't actually called. */
   writeToolsCalledOk?: ReadonlyArray<string>;
+  /** True if place_offense ran successfully this turn. When the diagram
+   *  has full offense (≥ variant count) and this is false, the validator
+   *  flags a freelance and forces re-emit. */
+  placeOffenseCalled?: boolean;
+  /** True if place_defense ran successfully this turn. Same idea for
+   *  full-defense diagrams. */
+  placeDefenseCalled?: boolean;
 }): ValidationResult {
   // ── Phantom-write detection ────────────────────────────────────
   // This runs FIRST and independently of diagram fences — Cal can claim a
@@ -260,6 +267,24 @@ export function validateDiagrams(opts: {
     if (defense.length > 0 && offense.length !== expected) {
       errors.push(
         `${tag}offense has ${offense.length} player(s); expected ${expected} for this variant.`,
+      );
+    }
+
+    // Mandatory-placement gate. If the diagram includes a full side, the
+    // corresponding place_offense / place_defense tool MUST have run this
+    // turn. Catches the freelance-formation failures (Spread requested
+    // and drawn as a tight 2-back set with stacked players, etc.). The
+    // tool is the one piece guaranteed to produce structurally-correct
+    // coordinates from a name; skipping it is the root cause of every
+    // overlap / wrong-look bug we've debugged.
+    if (offense.length >= expected && !opts.placeOffenseCalled) {
+      errors.push(
+        `${tag}offensive layout has ${offense.length} players but place_offense was NOT called this turn. Hand-authoring offense produces stacked players, wrong splits, and formation-name mismatches. Call place_offense({ formation: "<name>" }) and copy its players verbatim.`,
+      );
+    }
+    if (defense.length >= expected && !opts.placeDefenseCalled) {
+      errors.push(
+        `${tag}defensive layout has ${defense.length} players but place_defense was NOT called this turn. Call place_defense({ front: "<name>", coverage: "<name>" }) and copy its players + zones verbatim.`,
       );
     }
 

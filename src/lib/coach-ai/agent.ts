@@ -159,7 +159,7 @@ Rules:
     Mention which scheme you picked in one short line ("vs base 4-3 Cover 3") so the coach can ask for something different if they want.
   - **Pass uncatalogued schemes through anyway — the synthesizer handles them.** \`place_defense\` understands N-M front patterns even when the exact (front, coverage) pair isn't in the catalog. If the coach asks for "6-2", "5-3 Stack", "5-2 Eagle", "8-3 goal line", etc., just call \`place_defense({ front: "6-2", coverage: "Cover 3" })\` — the tool will parse the N-M into N D-line + M LBs + the remaining slots as DBs, place them at proper depths, and return zones for the coverage. The result is labeled "Synthesized" instead of "Canonical" but otherwise behaves identically. Only fall back to the catalog list if the synthesizer also can't make sense of it (e.g., the front isn't an N-M pattern at all). Do NOT freelance defenders by hand — the synthesizer is the safety net so you never have to.
   - If \`place_defense\` reports no catalog seeded for the variant at all AND the synthesizer can't parse the front (rare), OMIT the defense from the diagram entirely and tell the coach "I don't have a canonical defense for this variant yet — drawing offense only." Better to show offense alone than a fabricated defense.
-- **Offensive placement — \`place_offense\` is the canonical way to draw offense.** Just like \`place_defense\`, freehanding the offense is the source of the "Spread requested → Pro I drawn" failures. Call \`place_offense({ formation: "<name>" })\` for ANY play-or-scheme bucket diagram. The tool understands: Spread, Empty / 5-wide, Trips (Right/Left), Doubles / 2x2, Twins, Bunch, Stack, Pro I / I-form, Pro Set / Split-back, Singleback / Ace, Pistol, Wishbone, T-formation / Full House, Shotgun. Strength side parsed from "right"/"left"/"strong"/"weak" if the coach said it. The tool returns players at canonical x/y for the variant — drop them straight in with team:"O", then add routes on top for the play concept. If the formation name is too vague, the tool falls back to Spread Doubles AND tells you to mention that to the coach. The formation-vs-layout validator (rule below) will reject a diagram whose title says "Spread" but whose layout has 2+ backs — \`place_offense\` is the easiest way to never trip that.
+- **Offensive placement — \`place_offense\` is MANDATORY for any full-offense diagram. No exceptions.** Just like \`place_defense\`, hand-authoring the offense is the source of every "Spread requested → Pro I drawn", "WR stacked on a slot", "QB on top of the back" bug we have ever debugged. The validator now REJECTS any full-offense diagram (≥ variant count of offensive players) where \`place_offense\` wasn't called this turn — your diagram will fail validation and you'll be forced to re-emit. Call \`place_offense({ formation: "<name>" })\` BEFORE writing the diagram JSON. The tool understands: Spread, Empty / 5-wide, Trips (Right/Left), Doubles / 2x2, Twins, Bunch, Stack, Pro I / I-form, Pro Set / Split-back, Singleback / Ace, Pistol, Wishbone, T-formation / Full House, Shotgun. Strength side parsed from "right"/"left"/"strong"/"weak". Drop the returned players straight in with team:"O" — modifying their coordinates is FORBIDDEN. Add routes on top for the play concept. If the formation name is vague, the tool falls back to Spread Doubles and tells you to mention that fallback to the coach.
 - **No two players may share the same (x, y).** Before emitting JSON, scan your players list and confirm every position is unique. If the model is tempted to place \`Y\` on top of \`RT\`, nudge \`Y\` outward by 1.5+ yards (a TE typically lines up just outside the tackle, not stacked on top). The token radius is large enough that even sub-yard overlaps look broken.
 - **Player ids must be unique within a diagram.** When two players share a position letter (twins formation, two Zs in a 4-wide set, paired Hs, etc.), suffix the second one with a digit — e.g. \`Z\` and \`Z2\`, or \`H\` and \`H2\`. Routes attach by the EXACT id you assigned: a route from \`Z\` will not anchor to \`Z2\` and vice versa. Reusing the same id for two players collapses both routes onto the first carrier and produces a "common anchor" diagram. The display label (the letter shown on the token) can stay as the original — only the \`id\` field needs to be unique.
 - **Focus + non-focus rendering.** Set \`focus: "O"\` for an offense-focused diagram (route concepts, formations, plays) — the defense will render uniformly gray so it's spatial context without competing visually. Set \`focus: "D"\` for defense-focused diagrams (coverages, fronts, blitz packages) — offense will render gray. The default is "O". Pick whichever side the coach's question is actually about.
@@ -591,6 +591,7 @@ export async function runAgent(
   // reach the coach. Single-route and offense-only diagrams bypass this
   // (they never call place_defense), so the latency cost is narrow.
   let placeDefenseInvoked = false;
+  let placeOffenseInvoked = false;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
   /** Every get_route_template call this turn — lets the validator catch
@@ -641,6 +642,8 @@ export async function runAgent(
           lastPlaceDefense,
           routeTemplates: routeTemplateCalls,
           writeToolsCalledOk,
+          placeOffenseCalled: placeOffenseInvoked,
+          placeDefenseCalled: placeDefenseInvoked,
         });
         if (!validation.ok && !validatorRetried) {
           // Discard the broken assistant turn and feed the model a critique.
@@ -748,6 +751,12 @@ export async function runAgent(
             if (Array.isArray(parsed)) lastPlaceDefense = { players: parsed };
           } catch { /* ignore — validator will skip the position-drift check */ }
         }
+      }
+      // Mark place_offense as invoked. The validator uses this to enforce
+      // that any full-offense diagram had place_offense called this turn,
+      // mirroring the place_defense gate.
+      if (tu.name === "place_offense" && r.ok) {
+        placeOffenseInvoked = true;
       }
       toolResultBlocks.push({
         type: "tool_result",
