@@ -58,6 +58,27 @@ export async function createCheckoutSessionAction(input: {
 
     const customerId = await getCustomerIdForUser(user.id, user.email ?? "");
     const origin = await siteOrigin();
+
+    // Coach Pro gets a 7-day free trial — but only the first time. Pricing
+    // copy promises "no charge today" for new subscribers; we don't want a
+    // user to cancel and re-sub repeatedly to keep the trial. Look up any
+    // historical coach_ai subscription row for this user; if present, no
+    // trial. The subscriptions table includes terminal states
+    // (canceled / incomplete_expired / unpaid), so a single row is
+    // disqualifying regardless of current status.
+    let trialPeriodDays: number | undefined;
+    if (input.tier === "coach_ai") {
+      const admin = createServiceRoleClient();
+      const { data: priorCoachAi } = await admin
+        .from("subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("tier", "coach_ai")
+        .limit(1)
+        .maybeSingle();
+      if (!priorCoachAi) trialPeriodDays = 7;
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -68,7 +89,23 @@ export async function createCheckoutSessionAction(input: {
       client_reference_id: user.id,
       subscription_data: {
         metadata: { user_id: user.id, tier: input.tier, interval: input.interval },
+        ...(trialPeriodDays
+          ? {
+              trial_period_days: trialPeriodDays,
+              // If they finish trial without a card on file, cancel the
+              // subscription instead of creating an unpaid invoice.
+              trial_settings: {
+                end_behavior: { missing_payment_method: "cancel" },
+              },
+            }
+          : {}),
       },
+      // Without a card during trial → still allow checkout to complete.
+      // Stripe requires this when trial_period_days is set without a
+      // payment method up front.
+      ...(trialPeriodDays
+        ? { payment_method_collection: "if_required" as const }
+        : {}),
       metadata: { user_id: user.id, tier: input.tier, interval: input.interval },
     });
     if (!session.url) return { ok: false, error: "Stripe did not return a Checkout URL." };

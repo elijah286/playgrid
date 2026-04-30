@@ -283,6 +283,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-pro-7-day-trial",
+    name: "Coach Pro 7-day free trial actually wired up",
+    description:
+      "Pricing copy and the Coach Cal promo popover both promised \"7-day free trial · no charge today\" but the Stripe Checkout session was charging $25 immediately. Now the checkout adds trial_period_days: 7 for first-time Coach Pro subscribers (looked up via the subscriptions table — any historical coach_ai row disqualifies, so cancel-and-resub doesn't farm fresh trials). Trial subscriptions cancel at trial end if no payment method is on file.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "playbook-share-flow-unified",
     name: "Unified share flow on mobile and desktop",
     description:
