@@ -92,6 +92,10 @@ function buildSections(
           q: "Does it work on the sideline?",
           a: "It runs in the browser on phones and tablets, so you can pull up your playbook during a game without installing anything. Most coaches design on a laptop and reference on a phone at the field.",
         },
+        {
+          q: "Is there a mobile app?",
+          a: "We're actively building native iOS and Android apps and aim to have them in the App Store and Google Play before the summer season. In the meantime, every feature works in any mobile browser — open xogridmaker.com on your phone or tablet and you'll get the full editor, Game Mode, sharing, and printable wristband sheets without installing anything. Coaches who add the site to their home screen get a near-app experience today.",
+        },
       ],
     },
     {
