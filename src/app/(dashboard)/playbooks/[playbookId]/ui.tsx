@@ -7,6 +7,7 @@ import {
 } from "@/features/admin/ExamplePreviewContext";
 import type { ReferralConfig } from "@/lib/site/referral-config";
 import { PlayThumbnail } from "@/features/editor/PlayThumbnail";
+import { track } from "@/lib/analytics/track";
 import { PlayNumberBadge, EditablePlayNumberBadge } from "@/features/editor/PlayNumberBadge";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -236,6 +237,21 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
 };
 
 export function PlaybookDetailClient(props: PlaybookDetailClientProps) {
+  // Fire an example_view impression once per (session, playbook) so the
+  // admin Engagement tab can compute example_view → example_cta_click →
+  // signup conversion. Skipped when the viewer isn't on the example
+  // preview path (members of the playbook etc.).
+  const isPreview = !!props.isExamplePreview;
+  const playbookId = props.playbookId;
+  useEffect(() => {
+    if (!isPreview) return;
+    track({
+      event: "example_view",
+      target: playbookId,
+      metadata: { playbook_id: playbookId },
+    });
+  }, [isPreview, playbookId]);
+
   return (
     <ExamplePreviewProvider
       isPreview={props.isExamplePreview ?? false}

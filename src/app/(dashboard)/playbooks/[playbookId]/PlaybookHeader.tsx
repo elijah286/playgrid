@@ -433,6 +433,16 @@ export function PlaybookHeader({
             {isExamplePreview && (
               <Link
                 href="/home"
+                onClick={() =>
+                  track({
+                    event: "example_cta_click",
+                    target: "create_your_own_header",
+                    metadata: {
+                      surface: "example_playbook_header",
+                      playbook_id: playbookId,
+                    },
+                  })
+                }
                 className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
                   isLightBg
                     ? "bg-slate-900 text-white hover:bg-slate-800"

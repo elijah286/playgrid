@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { track } from "@/lib/analytics/track";
 
 /**
  * Two CTAs for anonymous visitors looking at a public-example playbook
@@ -58,6 +61,13 @@ export function BuildYourOwnPlaybookCta() {
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link
               href="/login?mode=signup"
+              onClick={() =>
+                track({
+                  event: "example_cta_click",
+                  target: "build_your_own_primary",
+                  metadata: { surface: "example_bottom_cta", action: "signup" },
+                })
+              }
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-base font-bold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-primary-hover"
             >
               Get started — free
@@ -65,6 +75,13 @@ export function BuildYourOwnPlaybookCta() {
             </Link>
             <Link
               href="/#tour"
+              onClick={() =>
+                track({
+                  event: "example_cta_click",
+                  target: "take_the_tour",
+                  metadata: { surface: "example_bottom_cta", action: "tour" },
+                })
+              }
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-5 py-3 text-base font-semibold text-foreground hover:bg-surface-inset"
             >
               Take the tour
@@ -84,6 +101,13 @@ export function MadeWithBadge() {
     >
       <Link
         href="/#tour"
+        onClick={() =>
+          track({
+            event: "example_cta_click",
+            target: "made_with_badge",
+            metadata: { surface: "example_made_with_badge" },
+          })
+        }
         className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-raised px-3.5 py-1.5 text-xs font-medium text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-foreground"
       >
         <span

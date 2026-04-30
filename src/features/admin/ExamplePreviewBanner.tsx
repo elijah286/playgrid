@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { FlaskConical } from "lucide-react";
+import { track } from "@/lib/analytics/track";
 
 /**
  * Visitor-facing banner shown at the top of an example playbook when the
@@ -22,6 +25,13 @@ export function ExamplePreviewBanner() {
       </div>
       <Link
         href="/home"
+        onClick={() =>
+          track({
+            event: "example_cta_click",
+            target: "create_your_own_banner",
+            metadata: { surface: "example_top_banner" },
+          })
+        }
         className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
       >
         Create your own playbook
