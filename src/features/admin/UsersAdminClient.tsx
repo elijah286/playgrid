@@ -144,8 +144,7 @@ export function UsersAdminClient({
       : users.filter((u) => {
           return (
             u.email.toLowerCase().includes(q) ||
-            (u.displayName ?? "").toLowerCase().includes(q) ||
-            u.role.toLowerCase().includes(q)
+            (u.displayName ?? "").toLowerCase().includes(q)
           );
         });
     if (!sortKey) return matched;
@@ -218,7 +217,7 @@ export function UsersAdminClient({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, email, role…"
+              placeholder="Search name, email…"
               className="h-9 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm text-foreground placeholder:text-muted-light focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -241,7 +240,6 @@ export function UsersAdminClient({
               <th className="w-8 px-2 py-3" />
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Plan</th>
               <SortableHeader
                 label="Created"
@@ -267,7 +265,7 @@ export function UsersAdminClient({
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -296,7 +294,6 @@ export function UsersAdminClient({
                   <td className="px-4 py-3 align-middle text-foreground">
                     {u.displayName ?? <span className="text-muted-light">—</span>}
                   </td>
-                  <td className="px-4 py-3 align-middle text-muted">{u.role}</td>
                   <td className="px-4 py-3 align-middle">
                     <button
                       type="button"
