@@ -288,6 +288,36 @@ export function validateDiagrams(opts: {
       );
     }
 
+    // Skill-player route coverage. Pass plays MUST give every offensive
+    // skill player (X / Y / Z / H / S / TE / WR-ish) either a route OR
+    // an explicit blocking marker. Forgetting one receiver is a common
+    // failure mode the coach catches mid-review.
+    const titleHay = (typeof json.title === "string" ? json.title : "").toLowerCase();
+    const isPassPlay = /\b(slant|hitch|out|in|post|corner|curl|comeback|fade|flat|mesh|smash|stick|snag|levels|drive|y-?cross|four\s*verts|sail|flood|pass|drop\s*back|rpo)\b/.test(titleHay);
+    const SKILL_LABELS = new Set(["X", "Y", "Z", "H", "S", "F", "B", "TE"]);
+    if (isPassPlay && Array.isArray(json.routes)) {
+      const routedFroms = new Set(
+        json.routes
+          .filter((r): r is DiagramRoute => !!r && typeof r === "object")
+          .map((r) => (typeof r.from === "string" ? r.from : ""))
+          .filter(Boolean),
+      );
+      const missing: string[] = [];
+      for (const p of offense) {
+        const upper = p.id.toUpperCase();
+        // Strip numeric suffix (Z2 → Z) for the skill check.
+        const base = upper.replace(/\d+$/, "");
+        if (!SKILL_LABELS.has(base)) continue;
+        if (upper === "QB" || upper === "Q") continue;
+        if (!routedFroms.has(p.id)) missing.push(p.id);
+      }
+      if (missing.length > 0) {
+        errors.push(
+          `${tag}pass play has skill player(s) without a route: ${missing.join(", ")}. Every offensive skill player in a pass concept must have a route OR be explicitly tagged as a blocker. Either add the missing route(s) (use get_route_template + the RB swing/check or a blocker label) or remove those players from the diagram.`,
+        );
+      }
+    }
+
     // Defender labels must not reuse offensive letters.
     for (const d of defense) {
       if (typeof d.id === "string" && OFFENSE_LETTERS.has(d.id)) {

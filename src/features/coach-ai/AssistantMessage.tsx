@@ -31,7 +31,25 @@ function splitDetails(text: string): { preamble: string; details: string | null 
   // Strip the heading line itself from the details body (it becomes the
   // disclosure summary) but preserve everything below it verbatim.
   const after = text.slice(idx).replace(re, "").trimStart();
-  return { preamble: text.slice(0, idx).trimEnd(), details: after };
+
+  // NEVER hide a play diagram inside the collapsible details section.
+  // Diagrams are the primary content — coaches expect to SEE the play,
+  // not click "Show details" to reveal it. If the model put a ```play
+  // (or ```play-ref) fence under the Details heading, hoist the fence
+  // back into the preamble so it renders inline. Same for ```diagram
+  // (text football diagram) and any other code fence with a custom
+  // language tag — those are visualizations, not deep-dive prose.
+  const fenceRe = /```(play|play-ref|diagram)\s*\n[\s\S]*?\n```/g;
+  const fences = after.match(fenceRe) ?? [];
+  if (fences.length === 0) {
+    return { preamble: text.slice(0, idx).trimEnd(), details: after };
+  }
+  const detailsWithoutFences = after.replace(fenceRe, "").replace(/\n{3,}/g, "\n\n").trim();
+  const preambleWithFences = (text.slice(0, idx).trimEnd() + "\n\n" + fences.join("\n\n")).trim();
+  return {
+    preamble: preambleWithFences,
+    details: detailsWithoutFences || null,
+  };
 }
 
 function DetailsDisclosure({ markdown }: { markdown: string }) {

@@ -448,7 +448,31 @@ const update_play: CoachAiTool = {
 
       // Resolve variant from playbook (authoritative) or diagram hint
       const resolvedVariant = (ctx.sportVariant ?? play.sport_variant ?? diagram.variant ?? "flag_7v7") as SportVariant;
-      const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant };
+
+      // Strip cross-side players before persisting (mirrors create_play —
+      // see comment there). Without this, an update that included
+      // defenders for visualization would save them as offensive players
+      // and trip the editor's variant count check.
+      const playRow = play as { play_type?: string };
+      const playType = (playRow.play_type as "offense" | "defense" | "special_teams" | undefined) ?? "offense";
+      const dropTeam: "O" | "D" | null =
+        playType === "offense" ? "D" : playType === "defense" ? "O" : null;
+      let updateStripped = 0;
+      let cleanDiagram: CoachDiagram = { ...diagram, variant: resolvedVariant };
+      if (dropTeam && Array.isArray(cleanDiagram.players)) {
+        const beforeCount = cleanDiagram.players.length;
+        const keptPlayers = cleanDiagram.players.filter((p) => p.team !== dropTeam);
+        const droppedIds = new Set(
+          cleanDiagram.players.filter((p) => p.team === dropTeam).map((p) => p.id),
+        );
+        const keptRoutes = (cleanDiagram.routes ?? []).filter((r) => !droppedIds.has(r.from));
+        updateStripped = beforeCount - keptPlayers.length;
+        if (updateStripped > 0) {
+          cleanDiagram = { ...cleanDiagram, players: keptPlayers, routes: keptRoutes };
+        }
+      }
+      void updateStripped;
+      const diagramWithVariant: CoachDiagram = cleanDiagram;
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
 
       // Carry over existing metadata (notes, coachName) from the parent version
@@ -584,6 +608,45 @@ const create_play: CoachAiTool = {
 
     const resolvedVariant = (ctx.sportVariant ?? diagram.variant ?? "flag_7v7") as SportVariant;
 
+    // ── Strip cross-side players before persisting ──────────────────
+    // Cal sometimes ships a chat diagram that includes BOTH offense + defense
+    // (visualizing a matchup), then calls create_play to save it. Without
+    // this filter the defenders get saved into the play's main roster as
+    // offensive players — which trips the editor's variant count check
+    // ("22 players on the field — this playbook allows only 11") and turns
+    // the defenders into stuck offensive tokens that move with offense.
+    //
+    // Save policy:
+    //   - offense play  → keep team !== "D" players, drop team === "D"
+    //   - defense play  → keep team === "D" players, drop team !== "D"
+    //   - special teams → keep all (kicking/return units mix sides)
+    //
+    // Routes attached to the dropped side are also pruned so the saved
+    // diagram doesn't have orphaned route carriers. Defenders the coach
+    // wanted alongside the play should be added later via the "custom
+    // opponent" overlay (Coach Cal will gain a tool for that next).
+    const dropTeam: "O" | "D" | null =
+      playType === "offense" ? "D"
+      : playType === "defense" ? "O"
+      : null;
+    let strippedCount = 0;
+    if (dropTeam) {
+      const beforeCount = diagram.players.length;
+      const keptPlayers = diagram.players.filter((p) => p.team !== dropTeam);
+      const droppedIds = new Set(
+        diagram.players
+          .filter((p) => p.team === dropTeam)
+          .map((p) => p.id),
+      );
+      const keptRoutes = (diagram.routes ?? []).filter(
+        (r) => !droppedIds.has(r.from),
+      );
+      strippedCount = beforeCount - keptPlayers.length;
+      if (strippedCount > 0) {
+        diagram = { ...diagram, players: keptPlayers, routes: keptRoutes };
+      }
+    }
+
     try {
       // Create the play (empty, with default players for the variant — we'll
       // overwrite with the diagram in the next step).
@@ -630,11 +693,14 @@ const create_play: CoachAiTool = {
       }
 
       const url = `/plays/${createRes.playId}/edit`;
+      const stripNote = strippedCount > 0
+        ? ` (Dropped ${strippedCount} ${dropTeam === "D" ? "defender" : "offensive"} player(s) from the saved diagram — only ${playType === "offense" ? "offense" : playType === "defense" ? "defense" : "all sides"} is persisted on this play. Tell the coach if they want the opposing side saved as a reusable opponent overlay.)`
+        : "";
       return {
         ok: true,
         result:
           `Created play "${name}" in the current playbook. Tell the coach it's ready and link them: ` +
-          `[Open ${name}](${url}).`,
+          `[Open ${name}](${url}).${stripNote}`,
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };

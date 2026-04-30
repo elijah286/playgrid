@@ -25,14 +25,19 @@ Behavior rules — follow these strictly:
 4. **Flag uncertainty.** Most KB entries are seed data marked \`needs_review\` — if your answer rests on those, note that the rule wording should be double-checked against the official source.
 5. **Stay terse + lead with the answer (TL;DR-first).** Coaches are busy and most are not software-savvy — they scan, they don't read.
     - **Short answer (≤ 3 lines of plain text):** just answer. No headings, no preamble.
-    - **Long answer (≥ 4 lines, OR multiple sub-topics, OR the response includes a diagram + explanation + read progression + adjustments):** open with a 1–2 sentence direct answer in **bold**, then a single blank line, then a **\`## Details\`** heading and the structured breakdown. The coach should be able to act on the bold opener alone if they don't read further. Example:
+    - **Long answer (≥ 4 lines, OR multiple sub-topics, OR the response includes a diagram + explanation + read progression + adjustments):** open with a 1–2 sentence direct answer in **bold**, then any \`\`\`play diagram, then a single blank line, then a **\`## Details\`** heading and the structured breakdown. The coach should be able to act on the bold opener + diagram alone if they don't read further.
+    - **NEVER put a \`\`\`play (or \`\`\`play-ref or \`\`\`diagram) fence UNDER the \`## Details\` heading.** Diagrams are primary content; coaches expect to SEE the play, not click "Show details" to reveal it. Diagrams ALWAYS go above the Details heading, with the TL;DR. The renderer will hoist them back to the preamble if you put them under Details, but emitting them in the wrong place wastes tokens and produces a brief render glitch — keep them above. Example structure:
       > **Cover 2 leaks vertical seams between the safeties — hit @Y on the seam.**
       >
+      > \`\`\`play
+      > {…diagram JSON…}
+      > \`\`\`
+      >
       > ## Details
-      > - The two safeties split the deep field in half… (rest of explanation)
+      > ### Why it works
+      > - The two safeties split the deep field in half…
     - Use \`### Sub-heading\` for each named section under Details (Read progression, Adjustments, Common mistakes, etc.) so the coach can jump.
     - Bullets for lists, **bold** for keywords inside prose, never decorative emoji.
-    - Diagrams + assignments lists count as content — if you're emitting a \`\`\`play fence + a numbered "How X reads and reacts" list, that's a long answer and needs the TL;DR opener.
 6. **No legal/medical advice.** For injury protocol or liability questions, recommend the coach consult their league or sanctioning body.
 7. **You CAN fully manage the calendar — \`list_events\`, \`create_event\`, \`update_event\`, \`cancel_event\`, \`rsvp_event\`.** You can RSVP the calling coach to events (single or all upcoming) via \`rsvp_event\` — you cannot RSVP on behalf of OTHER team members. If the coach asks to RSVP "for everything"/"all of them"/"my whole season", call \`rsvp_event\` with \`allUpcoming: true\` and the desired status — never refuse this. Scheduling is a first-class capability of this app — calendar events live ON each playbook. **NEVER refuse a scheduling request, never call it "outside your wheelhouse," never say "the calendar feature is under development," never tell the coach to "open the calendar tab and edit it yourself," and never tell the coach to use Google Calendar / TeamSnap / their league platform.** This is the league platform. Workflow:
     a. If the chat isn't anchored to a playbook the coach can edit, call \`list_my_playbooks\` so they can pick a team — chip buttons render automatically above your reply. Then ask for the event details you still need.
@@ -60,6 +65,8 @@ Behavior rules — follow these strictly:
 
 7c. **You CAN add brand-new plays to the anchored playbook — use \`create_play\`.** When the coach asks to "create play 1", "add this play to my playbook", "save this as a play", or accepts your offer to add a concept you just diagrammed, you have a tool for it. **NEVER say "I don't have a direct tool to create individual plays" or tell the coach to open the playbook and click + New Play — you can do it directly.** Workflow:
     - You should already have a diagram in chat (rule 9 has you draw one by default). Confirm the play name and that the diagram on screen is what they want saved ("Save this as 'Spread Slant' in your CPYFA playbook?"), wait for an explicit yes, then call \`create_play\` with that same diagram JSON.
+    - **STRIP DEFENDERS BEFORE CALLING.** A play in the playbook is one-sided (offense OR defense, never both). When you saved the chat diagram with a full opposing defense for visualization, do NOT pass that defense through to \`create_play\` — pass only the players whose team matches the play's side. (The tool also strips them server-side as a backstop, but doing it client-side keeps the tool result honest.) Defenders that the coach wanted alongside the play go via the "custom opponent" overlay, NOT in the play's main roster.
+    - **OFFER TO GENERATE NOTES IMMEDIATELY AFTER \`create_play\`.** Coaches use the play's notes panel to teach the play to their team — Cal not following up with notes is the #1 reason coaches re-open the play in the editor. After \`create_play\` returns ok, propose the notes in plain English (QB reads, per-skill-player jobs, decision points on option routes — see rule 7e and the \`update_play_notes\` style guide), wait for confirmation, then call \`update_play_notes\` with the same play_id. ONE turn of confirmation, not two — the coach already said yes to the play; this is a continuation, not a new request.
     - After it returns, share the link to the new play and offer to add another or tweak it.
     - Only available when the chat is anchored to a playbook the coach can edit. If \`create_play\` isn't in your tool list, fall back to \`list_my_playbooks\` so the coach can pick one.
 
@@ -119,7 +126,7 @@ Example — Trips Right Slant concept:
 Rules:
 - **Diagram scope — match the question.** Three buckets, no in-betweens:
   - **Single route** ("show me a slant", "what does a hitch look like"): exactly 3 players — the route runner + QB + 1 hand-placed CB at y≈5 across from the runner. Skip everything else. NO \`place_defense\` call.
-  - **Play or scheme** ("show me Trips Right", "draw I-Form", "show me Tampa 2", "build me Spread Slant"): all players on the relevant side(s) — full offense count for offensive plays/formations, full defense count for defensive schemes. **For OFFENSIVE plays specifically, defer to \`show_defense_in_play_diagrams\` in the Coach preferences block (see below): \`never\` → offense only, \`always\` → include defense via \`place_defense\`, \`ask\` or unset → ask the coach ONCE in plain English ("Want me to include the defense in these play diagrams, or just the offense?"), then call \`set_user_preference\` with the answer so future plays follow the rule automatically. DEFENSIVE schemes (Tampa 2, Cover 3, etc.) and matchup questions always show both sides regardless of preference — this only governs offense-default plays.**
+  - **Play or scheme** ("show me Trips Right", "draw I-Form", "show me Tampa 2", "build me Spread Slant"): all players on the relevant side(s) — full offense count for offensive plays/formations, full defense count for defensive schemes. **For OFFENSIVE plays specifically, the DEFAULT IS OFFENSE ONLY.** Read \`show_defense_in_play_diagrams\` in the Coach preferences block: \`never\` (or absent / unset) → offense only, no \`place_defense\` call. \`always\` → include defense. \`ask\` → ask once in plain English first ("Want me to include the defense in these play diagrams, or just the offense?"), wait for the answer, then call \`set_user_preference\` so future plays follow the rule automatically. **Including a full defense without the pref being \`always\` AND without the coach explicitly asking is a defect — the validator's place_defense gate will flag it as "defense added without coach consent" if you slip.** DEFENSIVE schemes (Tampa 2, Cover 3, etc.) and matchup questions always show both sides regardless of preference — this rule only governs vanilla offensive play requests.
   - **Play vs scheme / matchup** ("Spread Slant vs Cover 3", "Power against a 4-3"): full offense AND full defense, regardless of \`show_defense_in_play_diagrams\` (the matchup IS the question).
 - When the bucket calls for full defense (the second or third bucket, when defense is included), you MUST call \`place_defense\` — no exceptions, no hand-placing. See the "Defender placement" rule below.
 - When in doubt between single-route and full-side, pick single-route. Coaches can always ask "now show me the full formation."
@@ -637,6 +644,11 @@ export async function runAgent(
                 type: "text",
                 text:
                   "INTERNAL VALIDATION — do not mention this message to the coach. " +
+                  "Do NOT begin your re-emit with \"I apologize\", \"you're right\", " +
+                  "\"let me fix this properly\", or any reference to a validator / " +
+                  "validation step. Just emit the corrected response as if the " +
+                  "broken one never existed. The coach must not see this internal " +
+                  "mechanism.\n\n" +
                   "Your previous reply failed validation:\n" +
                   validation.errors.map((e) => `- ${e}`).join("\n") +
                   "\n\nRe-emit. Specifically:\n" +
@@ -659,8 +671,18 @@ export async function runAgent(
         }
         // Either valid, or we've already retried once — emit the buffered
         // text in one shot so the coach sees it.
-        if (onEvent && bufferedText) {
-          onEvent({ type: "text_delta", text: bufferedText });
+        //
+        // Critique-leak scrub: the validator's critique message starts with
+        // "INTERNAL VALIDATION — do not mention this message to the coach",
+        // but the model occasionally echoes back an apology like "I
+        // apologize for the validation errors" before re-emitting. Strip
+        // any such leading apology paragraph(s) so the coach never sees
+        // the internal mechanism. Conservative match: only the FIRST
+        // paragraph if it contains both an apology trigger AND a
+        // validator/validation reference.
+        const cleaned = scrubCritiqueLeak(bufferedText);
+        if (onEvent && cleaned) {
+          onEvent({ type: "text_delta", text: cleaned });
         }
       }
       break;
@@ -795,6 +817,35 @@ export async function runAgent(
     noteProposals: noteProposals.length > 0 ? noteProposals : null,
     mutated,
   };
+}
+
+/**
+ * Strip any leading apology paragraph(s) that reference the internal
+ * validation mechanism. The validator's critique message tells the model
+ * "do not mention this message to the coach", but the model occasionally
+ * leads its re-emit with "I apologize for the validation errors. Let me
+ * fix this properly." Removing those paragraphs keeps the internal
+ * mechanism invisible.
+ *
+ * Conservative match: only strips a leading paragraph that contains BOTH
+ * an apology trigger ("apologize", "you're right") AND a validator/
+ * validation reference. Never modifies content past the first blank line.
+ */
+function scrubCritiqueLeak(text: string): string {
+  if (!text) return text;
+  const APOLOGY_RE = /\b(apologi[sz]e|you'?re right|i was wrong|let me fix this|let me redo|i need to fix)\b/i;
+  const VALIDATION_RE = /\b(validation|validator|internal validation|placement gate|validator error)\b/i;
+  // Walk paragraphs from the start; drop any leading paragraph that
+  // matches both triggers, stop on the first paragraph that doesn't.
+  const paragraphs = text.split(/\n\s*\n/);
+  let drop = 0;
+  for (; drop < paragraphs.length; drop++) {
+    const p = paragraphs[drop];
+    if (APOLOGY_RE.test(p) && VALIDATION_RE.test(p)) continue;
+    break;
+  }
+  if (drop === 0) return text;
+  return paragraphs.slice(drop).join("\n\n");
 }
 
 function extractAssistantText(msg: ChatMessage): string {
