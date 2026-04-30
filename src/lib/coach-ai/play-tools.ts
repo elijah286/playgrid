@@ -145,7 +145,7 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
   // describing positions instead of coverage. PlayDocument stores HALF
   // extents in normalized coords; CoachDiagram uses FULL width/height in
   // yards, so multiply by 2 and by the field dimensions.
-  const zones = doc.layers.zones.map((z) => ({
+  const zones = (doc.layers.zones ?? []).map((z) => ({
     kind: z.kind,
     center: [
       Math.round(((z.center.x - 0.5) * fieldWidthYds) * 10) / 10,
