@@ -69,17 +69,12 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           </div>
         ) : (
           <div className="flex items-center gap-4">
-            {/* Mobile collapses to just logo + Get started — every other
-                affordance here is reachable from the home page scroll
-                (Tour anchors to a section, Coach Cal has its own section,
-                Sign in is one tap away from the auth screen). Desktop
-                keeps the lightweight nav for muscle-memory navigation. */}
-            <Link
-              href="/#tour"
-              className="hidden text-sm text-muted hover:text-foreground transition-colors sm:inline"
-            >
-              Tour
-            </Link>
+            {/* Mobile collapses to just logo + Get started. Desktop shows
+                a lightweight nav: Pricing, Share, Sign in. Tour was removed
+                because it just anchors down to a section on the same page —
+                the page scroll already exposes it, and dropping it lets
+                "Get started" hold more visual weight against secondary
+                items. */}
             {showPricingLink && (
               <Link
                 href="/pricing"
