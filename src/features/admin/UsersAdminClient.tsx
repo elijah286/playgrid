@@ -74,8 +74,19 @@ function formatTimeOnSite(seconds: number | null): string {
   return `${day}d`;
 }
 
-type SortKey = "lastSignIn" | "timeOnSite" | null;
+type SortKey = "lastSignIn" | "timeOnSite" | "createdAt" | null;
 type SortDir = "asc" | "desc";
+
+function formatCreatedAt(iso: string | null): string {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  const diffDay = Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24));
+  if (diffDay === 0) return "today";
+  if (diffDay === 1) return "yesterday";
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
 export type AdminUserRow = {
   id: string;
@@ -150,6 +161,20 @@ export function UsersAdminClient({
         if (bv == null) return -1;
         return (av - bv) * sign;
       }
+      if (sortKey === "createdAt") {
+        // createdAt is non-null for every row (auth.users.created_at is
+        // always set), so we don't need the null-pinning dance — but we
+        // still guard against bad parses so a bogus string can't crash
+        // the sort.
+        const av = Date.parse(a.createdAt);
+        const bv = Date.parse(b.createdAt);
+        const aOk = !Number.isNaN(av);
+        const bOk = !Number.isNaN(bv);
+        if (!aOk && !bOk) return 0;
+        if (!aOk) return 1;
+        if (!bOk) return -1;
+        return (av - bv) * sign;
+      }
       const av = a.totalSecondsOnSite ?? null;
       const bv = b.totalSecondsOnSite ?? null;
       if (av == null && bv == null) return 0;
@@ -219,6 +244,12 @@ export function UsersAdminClient({
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Plan</th>
               <SortableHeader
+                label="Created"
+                active={sortKey === "createdAt"}
+                dir={sortDir}
+                onClick={() => toggleSort("createdAt")}
+              />
+              <SortableHeader
                 label="Last sign in"
                 active={sortKey === "lastSignIn"}
                 dir={sortDir}
@@ -236,7 +267,7 @@ export function UsersAdminClient({
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -304,6 +335,12 @@ export function UsersAdminClient({
                   </td>
                   <td
                     className="px-4 py-3 align-middle text-xs text-muted"
+                    title={u.createdAt ? new Date(u.createdAt).toLocaleString() : ""}
+                  >
+                    {formatCreatedAt(u.createdAt)}
+                  </td>
+                  <td
+                    className="px-4 py-3 align-middle text-xs text-muted"
                     title={u.lastSignIn ?? ""}
                   >
                     {formatLastSignIn(u.lastSignIn)}
@@ -344,7 +381,7 @@ export function UsersAdminClient({
                 </tr>
                 {isOpen && (
                   <tr className="bg-surface-inset/30">
-                    <td colSpan={8} className="px-4 py-4">
+                    <td colSpan={9} className="px-4 py-4">
                       <UserStatsPanel userId={u.id} />
                     </td>
                   </tr>
