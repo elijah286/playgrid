@@ -52,6 +52,14 @@ export const KNOWN_PREFERENCE_KEYS: Record<string, string> = {
   preferred_coverage: "Default coverage when the coach doesn't specify one (e.g. 'Cover 3').",
   preferred_front: "Default defensive front when the coach doesn't specify (e.g. '4-3 Over').",
   default_safety_depth_yds: "Override the variant's default deep-safety depth.",
+  // Diagram-display preferences. Drive what Cal includes by default in
+  // play diagrams when the coach hasn't been explicit. Most coaches just
+  // want to see the offensive concept; defense can be added on demand.
+  show_defense_in_play_diagrams:
+    "Whether to render a defense by default when diagramming an OFFENSIVE play. " +
+    "Values: 'never' (offense only — most common), 'always' (always include defense), " +
+    "'ask' (Cal asks the first time, then sets this preference). Coverage/scheme/matchup " +
+    "questions still always show defense; this only controls offense-default plays.",
 };
 
 export type CoachPreference = {
