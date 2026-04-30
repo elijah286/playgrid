@@ -7,6 +7,8 @@ import { ensureDefaultWorkspace } from "@/lib/data/workspace";
 import {
   copyPlaybookContents,
   copyPlaybookGameSessions,
+  copyPlaybookKb,
+  countPlaybookKbNotes,
 } from "@/lib/data/playbook-copy";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SportVariant } from "@/domain/play/types";
@@ -402,7 +404,7 @@ export async function deletePlaybookAction(playbookId: string) {
 export async function duplicatePlaybookAction(
   playbookId: string,
   newName?: string,
-  opts?: { copyGameResults?: boolean },
+  opts?: { copyGameResults?: boolean; copyKb?: boolean },
 ) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
@@ -493,8 +495,37 @@ export async function duplicatePlaybookAction(
     await copyPlaybookGameSessions(supabase, playbookId, newBook.id, user.id);
   }
 
+  // Playbook KB notes are coach-authored, team-specific knowledge (schemes,
+  // terminology, opponent notes). The duplicating coach explicitly asked
+  // for them via the dialog checkbox; without that opt-in, the new copy
+  // starts with an empty notes set so coaches can't accidentally inherit
+  // private observations from another team.
+  if (opts?.copyKb) {
+    await copyPlaybookKb(playbookId, newBook.id, user.id);
+  }
+
   revalidatePath("/home");
   return { ok: true as const, id: newBook.id };
+}
+
+/**
+ * Count active (non-retired) playbook KB notes on a playbook the caller
+ * can read. Used by the duplicate dialog to decide whether to surface
+ * the "also copy notes?" checkbox.
+ */
+export async function getPlaybookKbCountAction(
+  playbookId: string,
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  try {
+    const count = await countPlaybookKbNotes(supabase, playbookId);
+    return { ok: true, count };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to count notes." };
+  }
 }
 
 /**

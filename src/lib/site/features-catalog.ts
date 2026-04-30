@@ -337,6 +337,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-cal-inline-playbook-note-chips",
+    name: "Coach Cal inline \"Save to playbook notes\" chips",
+    description:
+      "Coach Cal can now propose saving team-specific knowledge (schemes, terminology, opponent notes, personnel observations) to the current playbook's knowledge base directly inside the chat — no separate \"playbook training\" mode to toggle. When the coach says something save-worthy, Cal surfaces a sky-blue chip with a Save / Dismiss action right under its reply. The previous explicit mode toggle, sky header chrome, and \"Playbook\" badge have been removed; the chip itself is the affordance.",
+    category: "Coach AI",
+    status: "beta",
+    addedDate: "2026-04-30",
+  },
+  {
+    id: "playbook-duplicate-copy-coach-cal-notes",
+    name: "Optionally copy Coach Cal notes when duplicating a playbook",
+    description:
+      "The Duplicate dialog (both on the home dashboard and inside a playbook) now offers an \"Also copy Coach Cal notes\" checkbox when the source playbook has any. Brings team-specific schemes, terminology, and opponent notes along with the duplicate so a copy doesn't start with an empty knowledge base. Off by default — coaches must explicitly opt in, the same pattern used for game results.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "coach-cal-mobile-playbook-launcher-fix",
     name: "Coach Cal launcher consistent on mobile inside a playbook",
     description:

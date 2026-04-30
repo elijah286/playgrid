@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logCoachAiRefusal, logCoachAiKbMiss } from "./feedback-log";
 import type { ToolDef } from "./llm";
 
-export type CoachAiMode = "normal" | "admin_training" | "playbook_training";
+export type CoachAiMode = "normal" | "admin_training";
 
 export type ToolContext = {
   /** Current playbook id, when chat is anchored to one. */
@@ -1441,7 +1441,11 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
     const { KB_ADMIN_TOOLS } = require("./kb-tools") as typeof import("./kb-tools");
     tools.push(...KB_ADMIN_TOOLS);
   }
-  if (ctx.mode === "playbook_training" && ctx.canEditPlaybook && ctx.playbookId) {
+  // Playbook KB curation tools — available whenever the chat is anchored to a
+  // playbook the coach can edit. The propose_* tools never write directly;
+  // they emit a chip the coach must confirm via the chat UI. So they're safe
+  // to expose all the time, regardless of mode.
+  if (ctx.canEditPlaybook && ctx.playbookId) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PLAYBOOK_KB_TOOLS } = require("./playbook-tools") as typeof import("./playbook-tools");
     tools.push(...PLAYBOOK_KB_TOOLS);

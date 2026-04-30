@@ -8,12 +8,28 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
+import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 
 export type PlaybookChip = { id: string; name: string; color: string | null; season: string | null };
 
+/** Per-proposal save state, keyed by proposal.proposalId. Persisted in
+ *  the assistant turn so a refresh doesn't re-show "Save" on a chip the
+ *  coach already committed (which would either error or duplicate). */
+export type NoteProposalSavedState =
+  | { status: "saved"; documentId: string; revisionNumber: number }
+  | { status: "dismissed" };
+
 export type CoachAiTurn =
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string; toolCalls: string[]; playbookChips?: PlaybookChip[] | null };
+  | {
+      role: "assistant";
+      text: string;
+      toolCalls: string[];
+      playbookChips?: PlaybookChip[] | null;
+      noteProposals?: NoteProposal[] | null;
+      /** Map from NoteProposal.proposalId → save/dismiss state. */
+      noteProposalState?: Record<string, NoteProposalSavedState> | null;
+    };
 
 type ChatRequest = {
   /** Prior turns from the UI (no tool internals — just user/assistant text). */
@@ -125,24 +141,13 @@ export async function chatCoachAiAction(req: ChatRequest): Promise<ChatResponse>
   if (!text) return { ok: false, error: "Empty message." };
 
   const requestedMode: CoachAiMode =
-    req.mode === "admin_training" ? "admin_training"
-      : req.mode === "playbook_training" ? "playbook_training"
-      : "normal";
+    req.mode === "admin_training" ? "admin_training" : "normal";
 
   try {
-    // Resolve effective mode against actual permissions. Pre-load ctx with
-    // mode='normal' first so we can read canEditPlaybook safely, then upgrade.
     const tz = typeof req.timezone === "string" && req.timezone ? req.timezone : null;
     const probe = await loadToolContext(req.playbookId ?? null, gate.isAdmin, "normal", tz);
-    let mode: CoachAiMode = "normal";
-    if (requestedMode === "admin_training" && gate.isAdmin) mode = "admin_training";
-    else if (
-      requestedMode === "playbook_training" &&
-      probe.playbookId &&
-      probe.canEditPlaybook
-    ) {
-      mode = "playbook_training";
-    }
+    const mode: CoachAiMode =
+      requestedMode === "admin_training" && gate.isAdmin ? "admin_training" : "normal";
     const ctx: ToolContext = { ...probe, mode };
     const history: ChatMessage[] = [
       ...turnsToHistory(req.history),

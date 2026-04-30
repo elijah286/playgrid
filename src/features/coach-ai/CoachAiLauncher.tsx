@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { BookOpen, GraduationCap, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
+import { GraduationCap, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { usePlaybookAnchor } from "./playbook-anchor";
@@ -109,7 +109,6 @@ export function CoachAiLauncher({
   const [open,          setOpen]          = useState(false);
   const [fullscreen,    setFullscreen]    = useState(false);
   const [adminMode,     setAdminMode]     = useState(false);
-  const [playbookMode,  setPlaybookMode]  = useState(false);
   const [promoOpen,     setPromoOpen]     = useState(false);
   // Pulse stops once the user has clicked the button, then re-arms after
   // PROMO_REPULSE_MS so users who dismissed once still get a nudge later.
@@ -177,7 +176,9 @@ export function CoachAiLauncher({
     if (typeof window === "undefined") return;
     try {
       if (window.localStorage.getItem("coach-ai:adminMode")    === "1") setAdminMode(true);
-      if (window.localStorage.getItem("coach-ai:playbookMode") === "1") setPlaybookMode(true);
+      // Legacy playbook-training-mode toggle has been removed; clean up the
+      // stale localStorage key so old browsers don't leave a phantom record.
+      try { window.localStorage.removeItem("coach-ai:playbookMode"); } catch { /* ignore */ }
       const savedSize = readStorage<{ w: number; h: number } | null>("coach-ai:window-size", null);
       // Clamp restored size: a window resized large on a bigger display must
       // not render off-screen on a smaller viewport.
@@ -191,16 +192,12 @@ export function CoachAiLauncher({
   }, []);
 
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",    adminMode ? "1" : "0"); },    [adminMode]);
-  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:playbookMode", playbookMode ? "1" : "0"); }, [playbookMode]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size",  size); },                     [size]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:font-size",    fontSize); },                 [fontSize]);
 
-  useEffect(() => { if (!playbookId && playbookMode) setPlaybookMode(false); }, [playbookId, playbookMode]);
-
-  const adminTrainingActive    = isAdmin && adminMode;
-  const playbookTrainingActive = !adminTrainingActive && !!playbookId && playbookMode;
-  const mode: "normal" | "admin_training" | "playbook_training" =
-    adminTrainingActive ? "admin_training" : playbookTrainingActive ? "playbook_training" : "normal";
+  const adminTrainingActive = isAdmin && adminMode;
+  const mode: "normal" | "admin_training" =
+    adminTrainingActive ? "admin_training" : "normal";
 
   // ── Keyboard / scroll lock ─────────────────────────────────────────────────
   useEffect(() => {
@@ -465,7 +462,6 @@ export function CoachAiLauncher({
             className={cn(
               "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10 select-none",
               adminTrainingActive    && "ring-2 ring-amber-400",
-              playbookTrainingActive && "ring-2 ring-sky-400",
               fullscreen
                 ? "inset-2 sm:inset-4"
                 : [
@@ -487,22 +483,16 @@ export function CoachAiLauncher({
                 !fullscreen && "sm:cursor-grab sm:active:cursor-grabbing",
                 adminTrainingActive
                   ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
-                  : playbookTrainingActive
-                    ? "border-sky-300 bg-sky-50/60 dark:bg-sky-950/30"
-                    : "border-border",
+                  : "border-border",
               )}
             >
               {/* Icon container */}
               <div
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-lg",
-                  adminTrainingActive
-                    ? "bg-amber-200 text-amber-900"
-                    : playbookTrainingActive
-                      ? "bg-sky-200 text-sky-900"
-                      : "",
+                  adminTrainingActive ? "bg-amber-200 text-amber-900" : "",
                 )}
-                style={!adminTrainingActive && !playbookTrainingActive ? { background: GRADIENT } : undefined}
+                style={!adminTrainingActive ? { background: GRADIENT } : undefined}
               >
                 {/* Bare sparkle — wrapper provides the colored tile. */}
                 <CoachAiIcon className="size-5 text-primary" bare />
@@ -526,20 +516,13 @@ export function CoachAiLauncher({
                       <GraduationCap className="size-3" /> Training
                     </span>
                   )}
-                  {playbookTrainingActive && (
-                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-800 ring-1 ring-sky-300 dark:text-sky-200">
-                      <BookOpen className="size-3" /> Playbook
-                    </span>
-                  )}
                 </div>
                 <div className="truncate text-[11px] leading-tight text-muted">
                   {adminTrainingActive
                     ? "Curating the global knowledge base — confirms before each write."
-                    : playbookTrainingActive
-                      ? "Curating this playbook's notes — confirms before each write."
-                      : anchoredName
-                        ? `Anchored to ${anchoredName}`
-                        : "Your AI coaching partner"}
+                    : anchoredName
+                      ? `Anchored to ${anchoredName}`
+                      : "Your AI coaching partner"}
                 </div>
               </div>
 
@@ -575,23 +558,6 @@ export function CoachAiLauncher({
                     A+
                   </button>
                 </div>
-
-                {playbookId && !adminTrainingActive && (
-                  <button
-                    type="button"
-                    onClick={() => setPlaybookMode((v) => !v)}
-                    aria-pressed={playbookTrainingActive}
-                    className={cn(
-                      "rounded-md p-1.5 transition",
-                      playbookTrainingActive
-                        ? "bg-sky-500/20 text-sky-800 hover:bg-sky-500/30 dark:text-sky-200"
-                        : "text-muted hover:bg-surface-inset hover:text-foreground",
-                    )}
-                    title={playbookTrainingActive ? "Exit playbook training" : "Playbook training"}
-                  >
-                    <BookOpen className="size-4" />
-                  </button>
-                )}
 
                 {isAdmin && (
                   <button

@@ -188,9 +188,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const requestedMode: CoachAiMode =
-    body.mode === "admin_training" ? "admin_training"
-      : body.mode === "playbook_training" ? "playbook_training"
-      : "normal";
+    body.mode === "admin_training" ? "admin_training" : "normal";
 
   const tz = typeof body.timezone === "string" && body.timezone ? body.timezone : null;
   const [ctx] = await Promise.all([
@@ -226,6 +224,7 @@ export async function POST(req: Request): Promise<Response> {
           toolCalls: result.toolCalls,
           text: result.finalText,
           playbookChips: result.playbookChips ?? null,
+          noteProposals: result.noteProposals ?? null,
           mutated: result.mutated,
         });
       } catch (e) {

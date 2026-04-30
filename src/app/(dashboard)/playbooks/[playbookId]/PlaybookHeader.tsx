@@ -19,6 +19,7 @@ import {
   archivePlaybookAction,
   deletePlaybookAction,
   duplicatePlaybookAction,
+  getPlaybookKbCountAction,
   leavePlaybookAction,
   renamePlaybookAction,
   setPlaybookAllowDuplicationAction,
@@ -238,10 +239,10 @@ export function PlaybookHeader({
     });
   }
 
-  function handleDuplicate(newName: string, copyGameResults: boolean) {
+  function handleDuplicate(newName: string, copyGameResults: boolean, copyKb: boolean) {
     setDuplicateOpen(false);
     run(
-      () => duplicatePlaybookAction(playbookId, newName, { copyGameResults }),
+      () => duplicatePlaybookAction(playbookId, newName, { copyGameResults, copyKb }),
       (res) => {
         if (res.id) router.push(`/playbooks/${res.id}`);
       },
@@ -590,6 +591,7 @@ export function PlaybookHeader({
 
       {duplicateOpen && (
         <DuplicatePlaybookDialog
+          playbookId={playbookId}
           playbookName={name}
           allowGameResultsCopy={Boolean(
             allowGameResultsDuplication && gameResultsAvailable,
@@ -610,22 +612,37 @@ export function PlaybookHeader({
 }
 
 function DuplicatePlaybookDialog({
+  playbookId,
   playbookName,
   allowGameResultsCopy,
   onClose,
   onDuplicate,
 }: {
+  playbookId: string;
   playbookName: string;
   allowGameResultsCopy: boolean;
   onClose: () => void;
-  onDuplicate: (name: string, copyGameResults: boolean) => void;
+  onDuplicate: (name: string, copyGameResults: boolean, copyKb: boolean) => void;
 }) {
   const [name, setName] = useState(`${playbookName} (copy)`);
   const [copyGameResults, setCopyGameResults] = useState(false);
+  const [copyKb, setCopyKb] = useState(false);
+  const [kbCount, setKbCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await getPlaybookKbCountAction(playbookId);
+      if (cancelled) return;
+      setKbCount(res.ok ? res.count : 0);
+    })();
+    return () => { cancelled = true; };
+  }, [playbookId]);
+
   function submit() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onDuplicate(trimmed, allowGameResultsCopy && copyGameResults);
+    onDuplicate(trimmed, allowGameResultsCopy && copyGameResults, copyKb);
   }
   return (
     <div
@@ -680,6 +697,24 @@ function DuplicatePlaybookDialog({
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
                   Include completed game sessions, play calls, and score events from the source playbook.
+                </p>
+              </div>
+            </label>
+          )}
+          {kbCount !== null && kbCount > 0 && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-surface-inset/50 p-3">
+              <input
+                type="checkbox"
+                checked={copyKb}
+                onChange={(e) => setCopyKb(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 rounded border-border"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">
+                  Also copy Coach Cal notes ({kbCount})
+                </div>
+                <p className="mt-0.5 text-xs text-muted">
+                  Schemes, terminology, opponent notes, and other team-specific knowledge attached to this playbook&apos;s Coach Cal knowledge base.
                 </p>
               </div>
             </label>

@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Send, Trash2, Wrench } from "lucide-react";
+import { BookOpen, Check, Copy, Send, Trash2, Wrench, X } from "lucide-react";
 import { Button } from "@/components/ui";
-import type { CoachAiTurn, PlaybookChip } from "@/app/actions/coach-ai";
+import type { CoachAiTurn, NoteProposalSavedState, PlaybookChip } from "@/app/actions/coach-ai";
 import Link from "next/link";
 import {
   getAiFeedbackOptInAction,
@@ -12,11 +12,13 @@ import {
   logCoachAiPositiveFeedbackAction,
   logCoachAiNegativeFeedbackAction,
 } from "@/app/actions/coach-ai-feedback";
+import { commitPlaybookNoteProposalAction } from "@/app/actions/coach-ai-playbook-notes";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { AssistantMessage } from "./AssistantMessage";
 import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
 import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
+import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 
 type OutOfMessagesPayload = {
   count: number;
@@ -44,7 +46,7 @@ const STORAGE_VERSION = 1;
 const MAX_PERSISTED_TURNS = 50;
 
 function storageKeyFor(mode: string, playbookId: string | null | undefined): string {
-  const scope = mode === "playbook_training" || mode === "normal" ? (playbookId ?? "global") : "global";
+  const scope = mode === "normal" ? (playbookId ?? "global") : "global";
   return `coach-ai:chat:v${STORAGE_VERSION}:${mode}:${scope}`;
 }
 
@@ -107,7 +109,7 @@ export function CoachAiChat({
 }: {
   playbookId?: string | null;
   playId?: string | null;
-  mode?: "normal" | "admin_training" | "playbook_training";
+  mode?: "normal" | "admin_training";
 }) {
   const storageKey = storageKeyFor(mode, playbookId ?? null);
   const [turns, setTurns] = useState<CoachAiTurn[]>([]);
@@ -316,10 +318,18 @@ export function CoachAiChat({
           const finalText = (payload.text as string | undefined) || accumulated;
           const finalToolCalls = (payload.toolCalls as string[] | undefined) ?? seenToolCalls;
           const chips = (payload.playbookChips as PlaybookChip[] | null | undefined) ?? null;
+          const proposals = (payload.noteProposals as NoteProposal[] | null | undefined) ?? null;
           const mutated = payload.mutated === true;
           setTurns((cur) => [
             ...cur,
-            { role: "assistant", text: finalText, toolCalls: finalToolCalls, playbookChips: chips },
+            {
+              role: "assistant",
+              text: finalText,
+              toolCalls: finalToolCalls,
+              playbookChips: chips,
+              noteProposals: proposals,
+              noteProposalState: null,
+            },
           ]);
           setUsageTick((n) => n + 1);
           // If the agent ran any DB-mutating tool (create_event, update_play,
@@ -449,6 +459,33 @@ export function CoachAiChat({
                           void logCoachAiNegativeFeedbackAction(t.text, prevUserMessage)
                         }
                       />
+                      {t.role === "assistant" && t.noteProposals && t.noteProposals.length > 0 && playbookId && (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {t.noteProposals.map((p) => (
+                            <NoteProposalChip
+                              key={p.proposalId}
+                              proposal={p}
+                              playbookId={playbookId}
+                              state={t.noteProposalState?.[p.proposalId] ?? null}
+                              onUpdate={(next) =>
+                                setTurns((cur) =>
+                                  cur.map((tt, j) =>
+                                    j === i && tt.role === "assistant"
+                                      ? {
+                                          ...tt,
+                                          noteProposalState: {
+                                            ...(tt.noteProposalState ?? {}),
+                                            [p.proposalId]: next,
+                                          },
+                                        }
+                                      : tt,
+                                  ),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
                       {t.toolCalls.length > 0 && (
                         <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted">
                           <Wrench className="size-3" />
@@ -651,6 +688,111 @@ function Empty() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function NoteProposalChip({
+  proposal,
+  playbookId,
+  state,
+  onUpdate,
+}: {
+  proposal: NoteProposal;
+  playbookId: string;
+  state: NoteProposalSavedState | null;
+  onUpdate: (next: NoteProposalSavedState) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const headline =
+    proposal.kind === "add"
+      ? proposal.title
+      : proposal.kind === "edit"
+        ? `Edit: ${proposal.after.title}`
+        : `Retire: ${proposal.snapshot.title}`;
+
+  const subline =
+    proposal.kind === "add"
+      ? proposal.content.length > 140
+        ? `${proposal.content.slice(0, 140).trim()}…`
+        : proposal.content
+      : proposal.change_summary;
+
+  const action =
+    proposal.kind === "add"
+      ? "Save to playbook notes"
+      : proposal.kind === "edit"
+        ? "Save edit"
+        : "Retire note";
+
+  async function save() {
+    setPending(true);
+    setError(null);
+    const res = await commitPlaybookNoteProposalAction(playbookId, proposal);
+    setPending(false);
+    if (res.ok) {
+      onUpdate({ status: "saved", documentId: res.documentId, revisionNumber: res.revisionNumber });
+    } else {
+      setError(res.error);
+    }
+  }
+
+  if (state?.status === "saved") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900 ring-1 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-100 dark:ring-sky-900">
+        <Check className="size-3.5 shrink-0" />
+        <span className="truncate">
+          Saved to playbook notes (rev {state.revisionNumber})
+        </span>
+      </div>
+    );
+  }
+
+  if (state?.status === "dismissed") {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-sky-300 bg-sky-50/60 p-2.5 text-xs ring-1 ring-sky-200/60 dark:border-sky-700 dark:bg-sky-950/30">
+      <div className="flex items-start gap-2">
+        <BookOpen className="mt-0.5 size-3.5 shrink-0 text-sky-700 dark:text-sky-300" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-sky-900 dark:text-sky-100">
+            {headline}
+          </div>
+          {subline && (
+            <div className="mt-0.5 line-clamp-2 text-sky-800/80 dark:text-sky-200/70">
+              {subline}
+            </div>
+          )}
+          {error && (
+            <div className="mt-1 text-red-700 dark:text-red-300">{error}</div>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => onUpdate({ status: "dismissed" })}
+          disabled={pending}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-sky-900/70 hover:bg-sky-100/60 disabled:opacity-50 dark:text-sky-200/70 dark:hover:bg-sky-900/40"
+          title="Dismiss this proposal"
+        >
+          <X className="size-3" />
+          Dismiss
+        </button>
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={pending}
+          className="inline-flex items-center gap-1 rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+        >
+          <Check className="size-3" />
+          {pending ? "Saving…" : action}
+        </button>
+      </div>
     </div>
   );
 }

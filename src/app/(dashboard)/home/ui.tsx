@@ -28,6 +28,7 @@ import {
   createPlaybookAction,
   deletePlaybookAction,
   duplicatePlaybookAction,
+  getPlaybookKbCountAction,
   leavePlaybookAction,
   setPlaybookAllowDuplicationAction,
   uploadPlaybookLogoAction,
@@ -1618,10 +1619,10 @@ export function DashboardClient({
             if (pending) return;
             setDuplicating(null);
           }}
-          onDuplicate={(name) => {
+          onDuplicate={(name, dupOpts) => {
             const tileId = duplicating.id;
             handle(
-              () => duplicatePlaybookAction(tileId, name),
+              () => duplicatePlaybookAction(tileId, name, { copyKb: dupOpts.copyKb }),
               (res) => {
                 if (res.ok) {
                   setDuplicating(null);
@@ -1927,15 +1928,29 @@ function DuplicatePlaybookDialog({
   tile: DashboardPlaybookTile;
   pending: boolean;
   onClose: () => void;
-  onDuplicate: (name: string) => void;
+  onDuplicate: (name: string, opts: { copyKb: boolean }) => void;
 }) {
   const [name, setName] = useState(`${tile.name} (copy)`);
+  const [kbCount, setKbCount] = useState<number | null>(null);
+  const [copyKb, setCopyKb] = useState(false);
+
+  // Fetch the source playbook's KB note count once on mount so the
+  // "also copy notes" checkbox only appears when there's something to copy.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await getPlaybookKbCountAction(tile.id);
+      if (cancelled) return;
+      setKbCount(res.ok ? res.count : 0);
+    })();
+    return () => { cancelled = true; };
+  }, [tile.id]);
 
   function submit() {
     if (pending) return;
     const trimmed = name.trim();
     if (!trimmed) return;
-    onDuplicate(trimmed);
+    onDuplicate(trimmed, { copyKb });
   }
 
   return (
@@ -1982,6 +1997,24 @@ function DuplicatePlaybookDialog({
               }}
             />
           </div>
+          {kbCount !== null && kbCount > 0 && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-surface-inset px-3 py-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={copyKb}
+                onChange={(e) => setCopyKb(e.target.checked)}
+                disabled={pending}
+                className="mt-0.5 size-4 cursor-pointer accent-primary"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="font-medium">Also copy Coach Cal notes ({kbCount})</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  Schemes, terminology, opponent notes, and other team-specific knowledge
+                  attached to this playbook&apos;s Coach Cal knowledge base.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">

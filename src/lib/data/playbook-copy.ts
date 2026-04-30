@@ -345,6 +345,128 @@ export async function copyPlaybookGameSessions(
   }
 }
 
+/**
+ * Count active (non-retired) playbook KB notes attached to a playbook.
+ * Used by the duplicate dialog to decide whether to surface the
+ * "also copy notes?" checkbox at all — empty playbooks shouldn't
+ * show an option that can't do anything.
+ */
+export async function countPlaybookKbNotes(
+  client: SupabaseClient,
+  playbookId: string,
+): Promise<number> {
+  const { count } = await client
+    .from("rag_documents")
+    .select("id", { count: "exact", head: true })
+    .eq("scope", "playbook")
+    .eq("scope_id", playbookId)
+    .is("retired_at", null);
+  return count ?? 0;
+}
+
+/**
+ * Copy active playbook KB notes (rag_documents with scope='playbook')
+ * from one playbook into another.
+ *
+ * Uses the service-role client so cross-team duplicates work — RLS
+ * would otherwise block reads from a playbook the duplicating user
+ * doesn't own. The caller is responsible for verifying the user is
+ * authorized to duplicate (the duplicate flow already checks this via
+ * playbooks.allow_coach_duplication / allow_player_duplication).
+ *
+ * Notes are copied with:
+ *   * scope_id rewritten to the target playbook
+ *   * source preserved (e.g. coach_chat) and source_note prefixed with
+ *     "(copied from playbook ${sourcePlaybookId})" so provenance survives
+ *   * sport_variant / game_level / sanctioning_body / age_division
+ *     pulled from the TARGET playbook in case the duplicate sits in a
+ *     different league (otherwise retrieval-time variant filters would
+ *     hide the imported notes)
+ *   * created_by rewritten to the duplicating user (so the new copies
+ *     don't leak the source coach's identity inside the new playbook)
+ *   * retired_at NOT copied (we already excluded retired notes via the
+ *     query) and revisions NOT copied (the duplicate starts a fresh
+ *     change log — historical edits belong to the source playbook)
+ *
+ * Embeddings are reused as-is — they're a function of (title, content),
+ * which we copy verbatim, so re-embedding would be a waste of OpenAI calls.
+ */
+export async function copyPlaybookKb(
+  sourcePlaybookId: string,
+  targetPlaybookId: string,
+  duplicatingUserId: string,
+): Promise<{ copied: number }> {
+  const svc = createServiceRoleClient();
+
+  const [{ data: notes }, { data: targetMeta }] = await Promise.all([
+    svc
+      .from("rag_documents")
+      .select(
+        "topic, subtopic, title, content, source, source_url, source_note, authoritative, needs_review, embedding",
+      )
+      .eq("scope", "playbook")
+      .eq("scope_id", sourcePlaybookId)
+      .is("retired_at", null),
+    svc
+      .from("playbooks")
+      .select("sport_variant, game_level, sanctioning_body, age_division")
+      .eq("id", targetPlaybookId)
+      .maybeSingle(),
+  ]);
+
+  if (!notes || notes.length === 0) return { copied: 0 };
+
+  const provenancePrefix = `(copied from playbook ${sourcePlaybookId}) `;
+  const rows = notes.map((n) => ({
+    scope: "playbook",
+    scope_id: targetPlaybookId,
+    topic: n.topic,
+    subtopic: n.subtopic,
+    title: n.title,
+    content: n.content,
+    sport_variant: targetMeta?.sport_variant ?? null,
+    game_level: targetMeta?.game_level ?? null,
+    sanctioning_body: targetMeta?.sanctioning_body ?? null,
+    age_division: targetMeta?.age_division ?? null,
+    source: n.source,
+    source_url: n.source_url,
+    source_note: n.source_note ? `${provenancePrefix}${n.source_note}` : provenancePrefix.trim(),
+    authoritative: n.authoritative,
+    needs_review: n.needs_review,
+    created_by: duplicatingUserId,
+    embedding: n.embedding,
+  }));
+
+  const { data: inserted, error } = await svc
+    .from("rag_documents")
+    .insert(rows)
+    .select("id, title, content, source, source_url, source_note, authoritative, needs_review");
+  if (error) throw new Error(`copy playbook KB: ${error.message}`);
+
+  // Seed each new doc with revision 1 so the change log has a starting
+  // point and future edits get a clean rev-2 with no gap.
+  if (inserted && inserted.length > 0) {
+    const revRows = inserted.map((d) => ({
+      document_id: d.id,
+      revision_number: 1,
+      title: d.title,
+      content: d.content,
+      source: d.source,
+      source_url: d.source_url,
+      source_note: d.source_note,
+      authoritative: d.authoritative,
+      needs_review: d.needs_review,
+      change_kind: "create",
+      change_summary: "Copied from source playbook on duplication.",
+      changed_by: duplicatingUserId,
+    }));
+    const { error: revErr } = await svc.from("rag_document_revisions").insert(revRows);
+    if (revErr) throw new Error(`copy playbook KB revisions: ${revErr.message}`);
+  }
+
+  return { copied: inserted?.length ?? 0 };
+}
+
 async function buildSourceToTargetPlayMap(
   client: SupabaseClient,
   sourcePlaybookId: string,

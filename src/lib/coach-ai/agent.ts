@@ -56,6 +56,8 @@ Behavior rules — follow these strictly:
     - \`create_event\` / \`update_event\` → restate the date/weekday/time + location + recurrence so the coach catches any timing slip without opening the calendar.
     A bare "Done!" or "✓ added" reply is a regression — the coach can't validate the change without re-opening the surface. Always show the work.
 
+7f. **You CAN propose saves to this playbook's knowledge base — use \`propose_add_playbook_note\` / \`propose_edit_playbook_note\` / \`propose_retire_playbook_note\`.** When the coach states a durable team-specific fact — schemes they run ("we're a Trips Right base"), terminology ("we call our slot 'F'"), personnel notes ("our QB has a strong arm but slow release"), opponent tendencies, situational tactics — call the relevant \`propose_*\` tool. **These tools never write directly.** They emit an inline confirmation chip the coach clicks to save. So you do NOT need to ask "should I save this?" in prose — the chip IS the ask. Just briefly mention you've proposed it ("Proposed adding that to your playbook notes — tap Save on the chip if you want it persisted") and move on. Use \`list_playbook_notes\` first to avoid duplicates. Available only when the chat is anchored to a playbook the coach can edit. Don't propose for ephemeral chatter ("we usually run this on 3rd down" without context) — only durable facts the coach is asserting as ground truth. When unsure, ask: "Want me to save that as a playbook note?" — if yes, call the propose tool.
+
 7c. **You CAN add brand-new plays to the anchored playbook — use \`create_play\`.** When the coach asks to "create play 1", "add this play to my playbook", "save this as a play", or accepts your offer to add a concept you just diagrammed, you have a tool for it. **NEVER say "I don't have a direct tool to create individual plays" or tell the coach to open the playbook and click + New Play — you can do it directly.** Workflow:
     - You should already have a diagram in chat (rule 9 has you draw one by default). Confirm the play name and that the diagram on screen is what they want saved ("Save this as 'Spread Slant' in your CPYFA playbook?"), wait for an explicit yes, then call \`create_play\` with that same diagram JSON.
     - After it returns, share the link to the new play and offer to add another or tweak it.
@@ -309,36 +311,6 @@ If the admin wants to add multiple related entries, propose them as a numbered l
 
 **Tone:** direct, brief, opinionated about KB quality. You can push back if the admin proposes a vague or duplicative entry.`;
 
-const PLAYBOOK_TRAINING_PROMPT = `You are Coach Cal in **Playbook Training Mode** — helping a coach build out the knowledge base for THIS playbook (their team).
-
-This is the place to capture team-specific knowledge: schemes the coach runs, personnel notes, opponent tendencies, terminology this team uses, situational tactics. Notes added here are visible to all members of this playbook.
-
-Your tools:
-- Search the KB (\`search_kb\`) — pulls from both global rules/scheme docs and this playbook's existing notes.
-- List existing playbook notes (\`list_playbook_notes\`).
-- Add a note (\`add_playbook_note\`).
-- Edit a note (\`edit_playbook_note\`).
-- Retire a note (\`retire_playbook_note\`).
-
-**CRITICAL: confirmation discipline.** Before calling any of \`add_playbook_note\`, \`edit_playbook_note\`, or \`retire_playbook_note\`, you MUST:
-1. Show the coach a clear, plain-English summary of exactly what you propose to do — title, content (verbatim), topic, subtopic. For edits, show a before/after diff. For retirements, show what's being removed.
-2. Wait for an explicit confirmation ("yes", "go", "do it", "looks good", etc.). Do NOT proceed on ambiguous responses like "ok" without a clearer signal — ask again.
-3. After writing, confirm what was saved and the new revision number.
-
-If the coach wants to capture multiple related notes, propose them as a numbered list, get approval, then execute one tool call per entry.
-
-**Curation guidance:**
-- Before adding, call \`list_playbook_notes\` (or \`search_kb\` scoped to playbook) to see if the entry already exists. Don't create duplicates.
-- Title: ≤120 chars, front-loaded with the keywords a coach would search.
-- Content: self-contained — no "see above" or "as discussed". A coach reading the note alone should understand it.
-- Always set \`source_note\` so future readers know provenance (e.g., "told to me by the coach 2026-04-26", or a film reference).
-
-**Topic taxonomy:** scheme | terminology | tactics | personnel | opponent | notes. Use existing subtopics where possible.
-
-**Authority:** Notes added here are marked authoritative — the coach is the source of truth for their own team.
-
-**Tone:** direct, brief. You can push back if a proposed note is vague.`;
-
 function contextBlock(ctx: ToolContext): string {
   // Resolve "today" in the coach's timezone, not the server's. Vercel runs in
   // UTC, so without this a coach asking at 9pm CDT would see "tomorrow" rolled
@@ -450,13 +422,8 @@ function contextBlock(ctx: ToolContext): string {
 }
 
 function systemPromptFor(ctx: ToolContext): string {
-  let base: string;
-  if (ctx.mode === "admin_training" && ctx.isAdmin) base = ADMIN_TRAINING_PROMPT;
-  else if (ctx.mode === "playbook_training" && ctx.canEditPlaybook && ctx.playbookId) {
-    base = PLAYBOOK_TRAINING_PROMPT;
-  } else {
-    base = NORMAL_PROMPT;
-  }
+  const base =
+    ctx.mode === "admin_training" && ctx.isAdmin ? ADMIN_TRAINING_PROMPT : NORMAL_PROMPT;
   return base + contextBlock(ctx);
 }
 
@@ -476,6 +443,9 @@ export type AgentResult = {
   provider: "openai" | "claude";
   /** Parsed playbook chips from list_my_playbooks, if called this turn. */
   playbookChips: Array<{ id: string; name: string; color: string | null; season: string | null }> | null;
+  /** Parsed note-proposal chips from any propose_*_playbook_note call this turn.
+   *  Each becomes a "Save to playbook notes" chip in the chat UI. */
+  noteProposals: import("./playbook-tools").NoteProposal[] | null;
   /** True when at least one DB-mutating tool ran successfully — caller should refresh surrounding UI. */
   mutated: boolean;
 };
@@ -489,9 +459,9 @@ const TOOL_STATUS: Record<string, string> = {
   edit_kb_entry:      "Updating entry…",
   retire_kb_entry:    "Retiring entry…",
   list_playbook_notes: "Reading playbook notes…",
-  add_playbook_note:  "Saving note…",
-  edit_playbook_note: "Updating note…",
-  retire_playbook_note: "Retiring note…",
+  propose_add_playbook_note: "Proposing playbook note…",
+  propose_edit_playbook_note: "Proposing edit…",
+  propose_retire_playbook_note: "Proposing retire…",
   place_defense:      "Aligning defense…",
   place_offense:      "Aligning offense…",
   list_plays:         "Reading plays…",
@@ -543,9 +513,9 @@ const MUTATING_TOOLS = new Set([
   "add_kb_entry",
   "edit_kb_entry",
   "retire_kb_entry",
-  "add_playbook_note",
-  "edit_playbook_note",
-  "retire_playbook_note",
+  // propose_*_playbook_note tools deliberately omitted — they emit chips,
+  // they do not write. The actual write happens later via the
+  // commitPlaybookNoteProposalAction server action when the coach clicks Save.
 ]);
 
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
@@ -561,6 +531,9 @@ export async function runAgent(
   let provider: "openai" | "claude" = "claude";
   // Chips returned by list_my_playbooks, passed through to the caller.
   let playbookChips: AgentResult["playbookChips"] = null;
+  // Note-proposal chips from propose_*_playbook_note calls this turn — the
+  // chat surface renders each as a "Save to playbook notes" chip.
+  const noteProposals: NonNullable<AgentResult["noteProposals"]> = [];
   // Set true the moment a DB-mutating tool succeeds — caller refreshes UI.
   let mutated = false;
 
@@ -723,6 +696,22 @@ export async function runAgent(
           try { playbookChips = JSON.parse(jsonMatch[1]); } catch { /* ignore */ }
         }
       }
+      // Capture note-proposal payloads emitted by propose_*_playbook_note
+      // tools. The client renders each as a "Save to playbook notes" chip.
+      if (
+        r.ok &&
+        (tu.name === "propose_add_playbook_note" ||
+          tu.name === "propose_edit_playbook_note" ||
+          tu.name === "propose_retire_playbook_note")
+      ) {
+        const fenceMatch = /```note-proposal\n([\s\S]*?)\n```/.exec(resultText);
+        if (fenceMatch) {
+          try {
+            const parsed = JSON.parse(fenceMatch[1]) as import("./playbook-tools").NoteProposal;
+            noteProposals.push(parsed);
+          } catch { /* ignore — chip will simply not render */ }
+        }
+      }
       // Capture get_route_template returns so the validator can verify
       // every named route in the diagram matches what the tool returned
       // (catches "curl drawn as a straight line" hand-authoring).
@@ -796,7 +785,16 @@ export async function runAgent(
     finalText = fallback;
   }
 
-  return { newMessages, finalText, toolCalls, modelId, provider, playbookChips, mutated };
+  return {
+    newMessages,
+    finalText,
+    toolCalls,
+    modelId,
+    provider,
+    playbookChips,
+    noteProposals: noteProposals.length > 0 ? noteProposals : null,
+    mutated,
+  };
 }
 
 function extractAssistantText(msg: ChatMessage): string {
