@@ -205,6 +205,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
     (book as unknown as { is_public_example?: boolean | null })
       .is_public_example,
   );
+  const isHeroMarketingExample = Boolean(
+    (book as unknown as { is_hero_marketing_example?: boolean | null })
+      .is_hero_marketing_example,
+  );
   const exampleAuthorLabel =
     ((book as unknown as { example_author_label?: string | null })
       .example_author_label as string | null) ?? null;
@@ -384,6 +388,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
             ? {
                 isExample,
                 isPublished: isPublicExample,
+                isHero: isHeroMarketingExample,
                 authorLabel: exampleAuthorLabel,
               }
             : null,

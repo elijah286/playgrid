@@ -10,16 +10,40 @@ const PREVIEWS_PER_BOOK = 12;
  * the home page so both surfaces show the same tiles.
  */
 export async function loadExamplePlaybooks(): Promise<ExampleBookTileData[]> {
+  return loadExamplePlaybooksFiltered({});
+}
+
+/**
+ * Same data shape as loadExamplePlaybooks(), but returns the single
+ * playbook flagged is_hero_marketing_example (or null if no hero is
+ * set or the flagged book is somehow no longer a public example).
+ *
+ * Used by the home-page hero shot to swap the static X/O illustration
+ * for a real example tile when an admin has picked one.
+ */
+export async function loadHeroMarketingExample(): Promise<
+  ExampleBookTileData | null
+> {
+  const tiles = await loadExamplePlaybooksFiltered({ heroOnly: true });
+  return tiles[0] ?? null;
+}
+
+async function loadExamplePlaybooksFiltered({
+  heroOnly = false,
+}: {
+  heroOnly?: boolean;
+}): Promise<ExampleBookTileData[]> {
   if (!hasSupabaseEnv()) return [];
   const svc = createServiceRoleClient();
-  const { data: books } = await svc
+  let q = svc
     .from("playbooks")
     .select(
       "id, name, season, logo_url, color, updated_at, example_author_label, plays(count)",
     )
     .eq("is_public_example", true)
-    .eq("is_archived", false)
-    .order("updated_at", { ascending: false });
+    .eq("is_archived", false);
+  if (heroOnly) q = q.eq("is_hero_marketing_example", true);
+  const { data: books } = await q.order("updated_at", { ascending: false });
 
   if (!books || books.length === 0) return [];
 

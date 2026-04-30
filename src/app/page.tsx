@@ -19,7 +19,11 @@ export const metadata: Metadata = {
 };
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
+import {
+  loadExamplePlaybooks,
+  loadHeroMarketingExample,
+} from "@/lib/site/example-playbooks";
+import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   BuiltByACoach,
@@ -44,11 +48,13 @@ export default async function HomePage() {
     if (user) redirect("/home");
   }
 
-  // Pull marketing data in parallel — both feed below-fold sections, neither
-  // blocks the hero from rendering. Pass every example to the strip so the
-  // home page is sufficient discovery (no separate "browse all" page link).
-  const [examples, freeMaxPlays] = await Promise.all([
+  // Pull marketing data in parallel — neither blocks the hero from rendering.
+  // - examples feeds the below-fold strip (every example, no slice).
+  // - hero is the single playbook the admin promoted to the hero slot, or
+  //   null when no hero is set (page falls back to the X/O illustration).
+  const [examples, heroExample, freeMaxPlays] = await Promise.all([
     loadExamplePlaybooks(),
+    loadHeroMarketingExample(),
     getFreeMaxPlaysPerPlaybook(),
   ]);
 
@@ -108,16 +114,35 @@ export default async function HomePage() {
             </p>
           </div>
 
-          <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">
-            <Image
-              src="/brand/xogridmaker_icon.svg"
-              alt="xogridmaker"
-              width={850}
-              height={620}
-              priority
-              className="h-auto w-full max-w-[220px] sm:max-w-[280px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
-            />
-          </div>
+          {heroExample ? (
+            <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[360px] lg:w-[400px]">
+              {/* centerOnOpen auto-opens the book on mobile (where hover
+                  isn't available) so phone visitors immediately see the
+                  play thumbnails. Desktop keeps the hover-to-open
+                  animation that the rest of the site uses. */}
+              <div className="w-full max-w-[280px] sm:max-w-[320px] md:max-w-none">
+                <ExampleBookTile tile={heroExample} centerOnOpen />
+              </div>
+              <Link
+                href={`/playbooks/${heroExample.id}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-surface-inset"
+              >
+                Try this playbook
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          ) : (
+            <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">
+              <Image
+                src="/brand/xogridmaker_icon.svg"
+                alt="xogridmaker"
+                width={850}
+                height={620}
+                priority
+                className="h-auto w-full max-w-[220px] sm:max-w-[280px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
+              />
+            </div>
+          )}
         </div>
 
         {/* Scroll affordance — bouncing chevron only on md+ viewports

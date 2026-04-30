@@ -347,6 +347,7 @@ function PlaybookDetailClientInner({
     exampleAdmin: {
       isExample: boolean;
       isPublished: boolean;
+      isHero: boolean;
       authorLabel: string | null;
     } | null;
     exampleStatus: { isPublished: boolean } | null;

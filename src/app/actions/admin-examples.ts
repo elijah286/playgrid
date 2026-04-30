@@ -212,6 +212,60 @@ export async function setPlaybookExampleAuthorLabelAction(
   return { ok: true as const, label: clean };
 }
 
+/**
+ * Promote a published example playbook to the home-page hero shot — or
+ * un-set the current hero. Single-selection: setting a new hero atomically
+ * clears any existing hero. The unique partial index on
+ * is_hero_marketing_example enforces this at the DB layer too.
+ *
+ * Caller must already have marked the playbook as a public example. We
+ * don't auto-mark because hero is a downstream choice, not the same
+ * decision.
+ */
+export async function setPlaybookHeroExampleAction(
+  playbookId: string,
+  isHero: boolean,
+) {
+  const gate = await assertAdminEditorOfPlaybook(playbookId);
+  if (!gate.ok) return gate;
+
+  if (isHero) {
+    const { data: book } = await gate.supabase
+      .from("playbooks")
+      .select("is_public_example")
+      .eq("id", playbookId)
+      .maybeSingle();
+    if (!book?.is_public_example) {
+      return {
+        ok: false as const,
+        error: "Publish this example before making it the hero.",
+      };
+    }
+
+    // Clear any existing hero first, then set the new one. The partial
+    // unique index would reject the set otherwise.
+    const { error: clearErr } = await gate.supabase
+      .from("playbooks")
+      .update({ is_hero_marketing_example: false })
+      .eq("is_hero_marketing_example", true);
+    if (clearErr) return { ok: false as const, error: clearErr.message };
+  }
+
+  const { error } = await gate.supabase
+    .from("playbooks")
+    .update({ is_hero_marketing_example: isHero })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+
+  // Home page reads the hero — bust the layout cache so visitors see the
+  // new selection on next render.
+  revalidatePath("/", "layout");
+  revalidatePath("/home");
+  revalidatePath("/examples");
+  revalidatePath(`/playbooks/${playbookId}`);
+  return { ok: true as const, isHero };
+}
+
 export async function getExamplesPageEnabledAction() {
   if (!hasSupabaseEnv()) return { ok: true as const, enabled: false };
   const enabled = await getExamplesPageEnabled();

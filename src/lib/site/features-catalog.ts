@@ -672,6 +672,15 @@ export const FEATURES: FeatureEntry[] = [
   },
   // ── Marketing site ──────────────────────────────────────────────
   {
+    id: "marketing-hero-playbook",
+    name: "Hero playbook (admin-pickable)",
+    description:
+      "Site admin can promote any published example playbook to take over the home-page hero shot — the book tile renders in place of the X/O illustration, with a 'Try this playbook' CTA that opens it in the visitor-preview editor. Single-selection (only one hero across the whole DB, enforced by a unique partial index); promoting a new one auto-clears the old. If no hero is set, the home page falls back to the existing logo with no behavior change.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "marketing-consolidated-landing",
     name: "Consolidated landing page",
     description:

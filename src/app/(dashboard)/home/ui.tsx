@@ -16,6 +16,7 @@ import {
   Lock,
   Plus,
   Settings2,
+  Sparkles,
   Trash2,
   Unlock,
   Upload,
@@ -33,6 +34,7 @@ import {
 } from "@/app/actions/playbooks";
 import {
   duplicateAsExampleAction,
+  setPlaybookHeroExampleAction,
   setPlaybookIsExampleAction,
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
@@ -1202,7 +1204,7 @@ export function DashboardClient({
         },
       ];
     }
-    return [
+    const items: ActionMenuItem[] = [
       {
         label: "Remove as example",
         icon: FlaskConical,
@@ -1218,6 +1220,26 @@ export function DashboardClient({
           ),
       },
     ];
+    // Hero promotion is downstream of "published example" — only offer the
+    // toggle once the playbook is publicly visible. The unique partial index
+    // on is_hero_marketing_example caps total heroes at one site-wide; the
+    // server action clears any existing hero before setting a new one.
+    if (tile.is_public_example || tile.is_hero_marketing_example) {
+      items.push({
+        label: tile.is_hero_marketing_example
+          ? "Remove as hero playbook"
+          : "Make hero playbook",
+        icon: Sparkles,
+        onSelect: () =>
+          handle(() =>
+            setPlaybookHeroExampleAction(
+              tile.id,
+              !tile.is_hero_marketing_example,
+            ),
+          ),
+      });
+    }
+    return items;
   }
 
   function buildOwnerActions(tile: DashboardPlaybookTile): ActionMenuItem[] {

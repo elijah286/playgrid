@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Sparkles, Trash2, Unlock, UserPlus, X } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -39,6 +39,7 @@ import { getInviteSeatStatusAction } from "@/app/actions/billing";
 import {
   duplicateAsExampleAction,
   setPlaybookExampleAuthorLabelAction,
+  setPlaybookHeroExampleAction,
   setPlaybookIsExampleAction,
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
@@ -79,6 +80,7 @@ export type PlaybookHeaderPlayActions = {
 export type ExampleAdminState = {
   isExample: boolean;
   isPublished: boolean;
+  isHero: boolean;
   authorLabel: string | null;
 };
 
@@ -313,6 +315,11 @@ export function PlaybookHeader({
     run(() => setPlaybookPublicExampleAction(playbookId, next));
   }
 
+  function handleToggleHeroExample() {
+    const next = !(exampleAdmin?.isHero ?? false);
+    run(() => setPlaybookHeroExampleAction(playbookId, next));
+  }
+
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
   const onAccentMuted = isLightBg ? "text-slate-700" : "text-white/80";
@@ -509,6 +516,11 @@ export function PlaybookHeader({
                 onToggleExample={exampleAdmin ? handleToggleExample : null}
                 onTogglePublishExample={
                   exampleAdmin?.isExample ? handleTogglePublishExample : null
+                }
+                onToggleHeroExample={
+                  exampleAdmin?.isPublished || exampleAdmin?.isHero
+                    ? handleToggleHeroExample
+                    : null
                 }
               />
             )}
@@ -988,6 +1000,7 @@ function HeaderMenu({
   exampleAdmin,
   onToggleExample,
   onTogglePublishExample,
+  onToggleHeroExample,
 }: {
   playbookId: string;
   homeHref: string;
@@ -1011,6 +1024,7 @@ function HeaderMenu({
   exampleAdmin: ExampleAdminState | null;
   onToggleExample: (() => void) | null;
   onTogglePublishExample: (() => void) | null;
+  onToggleHeroExample: (() => void) | null;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -1312,6 +1326,24 @@ function HeaderMenu({
                   <Globe className="size-4 shrink-0" />
                   <span>
                     {exampleAdmin.isPublished ? "Unpublish example" : "Publish example"}
+                  </span>
+                </button>
+              )}
+              {onToggleHeroExample && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onToggleHeroExample();
+                  }}
+                  className={menuItemCls}
+                >
+                  <Sparkles className="size-4 shrink-0" />
+                  <span>
+                    {exampleAdmin.isHero
+                      ? "Remove as hero playbook"
+                      : "Make hero playbook"}
                   </span>
                 </button>
               )}
