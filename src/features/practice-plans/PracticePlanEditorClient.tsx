@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Save, Trash2, Loader2, GripVertical } from "lucide-react";
+import { ArrowLeft, Plus, Printer, Save, Trash2, Loader2, GripVertical } from "lucide-react";
 import {
   computeTotalDurationMinutes,
   formatOffset,
@@ -224,6 +224,16 @@ export function PracticePlanEditorClient({
               Saved {savedAt.toLocaleTimeString()}
             </span>
           )}
+          <a
+            href={`/practice-plans/${planId}/print?auto=1`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-semibold hover:bg-surface-inset"
+            title="Open print view (save as PDF in print dialog)"
+          >
+            <Printer className="h-4 w-4" />
+            Print
+          </a>
           <button
             type="button"
             onClick={handleSave}

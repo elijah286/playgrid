@@ -9,6 +9,9 @@ import { isNativeApp } from "@/lib/native/isNativeApp";
 import { nativeShare } from "@/lib/native/share";
 import { getReferralPromoAction } from "@/app/actions/share-promo";
 import type { ReferralConfig } from "@/lib/site/referral-config";
+import { tagShareUrl, type ShareChannel } from "@/lib/share/tag-url";
+import { track } from "@/lib/analytics/track";
+import { recordShareEventAction } from "@/app/actions/ui-events";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -19,9 +22,15 @@ type Props = {
 
 /** Build the share URL. Logged-in users get attribution baked into the
  *  URL so any future signup-side referral handling can credit the right
- *  sender. Logged-out share is still valid — just untracked. */
-function buildShareUrl(userId: string | null): string {
-  return userId ? `${SITE_URL}/?ref=${encodeURIComponent(userId)}` : SITE_URL;
+ *  sender. Logged-out share is still valid — just untracked. The UTM tag
+ *  lets the admin Traffic dashboard attribute inbound visits to a share
+ *  even when document.referrer gets stripped. */
+function buildShareUrl(userId: string | null, channel: ShareChannel): string {
+  return tagShareUrl(SITE_URL, {
+    kind: "site_share",
+    channel,
+    senderId: userId,
+  });
 }
 
 export function ShareDialog({ userId, onClose }: Props) {
@@ -31,7 +40,10 @@ export function ShareDialog({ userId, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = buildShareUrl(userId);
+  // The visible URL (and QR) shows the copy_link variant; native share
+  // re-tags with channel="native" at click time.
+  const shareUrl = buildShareUrl(userId, "copy_link");
+  const qrUrl = buildShareUrl(userId, "qr");
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +59,7 @@ export function ShareDialog({ userId, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    QRCode.toDataURL(shareUrl, {
+    QRCode.toDataURL(qrUrl, {
       width: 320,
       margin: 1,
       color: { dark: "#0f172a", light: "#ffffff" },
@@ -59,14 +71,25 @@ export function ShareDialog({ userId, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [shareUrl]);
+  }, [qrUrl]);
 
   async function copy() {
     if (isNativeApp()) {
+      const nativeUrl = buildShareUrl(userId, "native");
+      track({
+        event: "share_button_click",
+        target: "native_share",
+        metadata: { kind: "site_share" },
+      });
+      void recordShareEventAction({
+        shareKind: "native",
+        channel: "native",
+        metadata: { kind: "site_share" },
+      });
       const result = await nativeShare({
         title: "Try XO Gridmaker",
         text: "I'm using this for my playbook — thought you might like it.",
-        url: shareUrl,
+        url: nativeUrl,
         dialogTitle: "Share XO Gridmaker",
       });
       if (result === "shared") return;
@@ -77,6 +100,16 @@ export function ShareDialog({ userId, onClose }: Props) {
       }
     }
     try {
+      track({
+        event: "share_button_click",
+        target: "copy_link",
+        metadata: { kind: "site_share" },
+      });
+      void recordShareEventAction({
+        shareKind: "promo",
+        channel: "copy_link",
+        metadata: { kind: "site_share" },
+      });
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);

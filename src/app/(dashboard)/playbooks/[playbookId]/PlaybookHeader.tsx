@@ -46,6 +46,7 @@ import { DownloadForOfflineButton } from "@/components/offline/DownloadForOfflin
 import { nativeShare } from "@/lib/native/share";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
+import { tagShareUrl } from "@/lib/share/tag-url";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -698,7 +699,12 @@ function SendCopyDialog({
         onClose();
         return;
       }
-      setLinkUrl(`${SITE_URL}/copy/${res.token}`);
+      setLinkUrl(
+        tagShareUrl(`${SITE_URL}/copy/${res.token}`, {
+          kind: "playbook_copy",
+          channel: "copy_link",
+        }),
+      );
     })();
     return () => {
       cancelled = true;
@@ -1741,7 +1747,10 @@ export function InviteTeamMemberDialog({
       toast(`Could not create invite: ${res.error}`, "error");
       return;
     }
-    const url = `${SITE_URL}/invite/${res.invite.token}`;
+    const url = tagShareUrl(`${SITE_URL}/invite/${res.invite.token}`, {
+      kind: "playbook_invite",
+      channel: "copy_link",
+    });
     setInviteUrl(url);
   }
 
