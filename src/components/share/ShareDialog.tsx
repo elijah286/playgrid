@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Check, Copy, Gift, QrCode, Share2, X } from "lucide-react";
 import { Button, Input, useToast } from "@/components/ui";
@@ -86,7 +87,13 @@ export function ShareDialog({ userId, onClose }: Props) {
 
   const promoActive = referral?.enabled === true;
 
-  return (
+  // Portal to <body> so the dialog escapes any ancestor that creates a
+  // containing block for fixed children (the site header uses
+  // backdrop-blur-lg, which sets backdrop-filter — per CSS spec that
+  // anchors fixed descendants to the header strip instead of the
+  // viewport, clipping the dialog).
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       // The outer wrapper handles overflow: when the dialog is taller than
       // the viewport (small browser height + promo strip), it scrolls
@@ -215,6 +222,7 @@ export function ShareDialog({ userId, onClose }: Props) {
         </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
