@@ -138,6 +138,18 @@ type Props = {
    *  Used by the defense editor's "view offense routes" toggle so a coach can
    *  see where the offense runs while drawing the defensive reaction. */
   opponentRoutes?: import("@/domain/play/types").Route[] | null;
+  /** When set, the opponent overlay is editable (drag-to-position). The
+   *  parent persists via `onOpponentPlayerMove` and tracks position state. */
+  opponentEditable?: boolean;
+  /** Called on each opponent drag move with the new normalized position.
+   *  Parent decides whether to debounce + persist. */
+  onOpponentPlayerMove?: (playerId: string, position: Point2) => void;
+  /** Active side of the canvas. The inactive side is dimmed; clicking a
+   *  player on the inactive side flips activeSide. Only meaningful when
+   *  `opponentEditable` is true. */
+  activeSide?: "primary" | "opponent";
+  /** Fired when the user interacts with a side that is currently inactive. */
+  onActivateSide?: (next: "primary" | "opponent") => void;
   /** When true, canvas drags/clicks draw routes. When false, route drawing is
    *  suppressed so taps on empty canvas only deselect — avoids the footgun
    *  where a stray touch-drag silently created a route. Extending an existing
@@ -227,6 +239,62 @@ function ClampedMenu({
   );
 }
 
+/** SVG shape primitive matching how main players render. Used for the
+ *  opponent overlay so defenders show as triangles, special teams as squares,
+ *  etc. — not always circles. */
+function PlayerShape({
+  shape,
+  cx,
+  cy,
+  r,
+  fill,
+  stroke,
+  strokeWidth,
+  pointerHandlers,
+}: {
+  shape: "circle" | "square" | "diamond" | "triangle" | "star" | undefined;
+  cx: number;
+  cy: number;
+  r: number;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  pointerHandlers?: {
+    onPointerDown?: (e: React.PointerEvent) => void;
+    style?: React.CSSProperties;
+  };
+}) {
+  const common = {
+    fill,
+    stroke,
+    strokeWidth,
+    vectorEffect: "non-scaling-stroke" as const,
+    ...pointerHandlers,
+  };
+  if (shape === "square") {
+    return <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} {...common} />;
+  }
+  if (shape === "diamond") {
+    const pts = `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
+    return <polygon points={pts} {...common} />;
+  }
+  if (shape === "star") {
+    const outer = r * 1.15;
+    const inner = outer * 0.45;
+    const pts = Array.from({ length: 10 }, (_, i) => {
+      const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rad = i % 2 === 0 ? outer : inner;
+      return `${cx + rad * Math.cos(angle)},${cy + rad * Math.sin(angle)}`;
+    }).join(" ");
+    return <polygon points={pts} strokeLinejoin="round" {...common} />;
+  }
+  if (shape === "triangle") {
+    const pts = `${cx},${cy + r} ${cx + r},${cy - r} ${cx - r},${cy - r}`;
+    return <polygon points={pts} {...common} />;
+  }
+  return <circle cx={cx} cy={cy} r={r} {...common} />;
+}
+
 function EditorCanvasImpl({
   doc,
   dispatch,
@@ -253,6 +321,10 @@ function EditorCanvasImpl({
   opponentFormation = null,
   opponentPlayers = null,
   opponentRoutes = null,
+  opponentEditable = false,
+  onOpponentPlayerMove,
+  activeSide = "primary",
+  onActivateSide,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -521,6 +593,55 @@ function EditorCanvasImpl({
     [fieldAspect],
   );
 
+  /* ---------- Opponent drag (isolated state machine) ---------- */
+  // Custom-opponent players live outside `doc.layers.players`, so they need a
+  // standalone pointer pipeline. We track only the in-flight pointer + id; the
+  // committed position lives in the parent's editableOpponent state.
+  const opponentDragRef = useRef<{ pointerId: number; playerId: string } | null>(
+    null,
+  );
+  const beginOpponentDrag = useCallback(
+    (e: React.PointerEvent, playerId: string) => {
+      e.stopPropagation();
+      if (e.button !== 0) return;
+      // Switch focus to the opponent side as soon as the user grabs an
+      // opponent player. The parent observes activeSide and dims accordingly.
+      if (activeSide !== "opponent") onActivateSide?.("opponent");
+      if (!opponentEditable || !onOpponentPlayerMove) return;
+      const svg = svgRef.current;
+      try {
+        svg?.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      opponentDragRef.current = { pointerId: e.pointerId, playerId };
+      const moveHandler = (ev: PointerEvent) => {
+        const state = opponentDragRef.current;
+        if (!state || ev.pointerId !== state.pointerId) return;
+        ev.preventDefault();
+        const pos = toNorm(ev);
+        onOpponentPlayerMove(state.playerId, pos);
+      };
+      const endHandler = (ev: PointerEvent) => {
+        const state = opponentDragRef.current;
+        if (!state || ev.pointerId !== state.pointerId) return;
+        try {
+          svg?.releasePointerCapture(state.pointerId);
+        } catch {
+          /* ignore */
+        }
+        window.removeEventListener("pointermove", moveHandler);
+        window.removeEventListener("pointerup", endHandler);
+        window.removeEventListener("pointercancel", endHandler);
+        opponentDragRef.current = null;
+      };
+      window.addEventListener("pointermove", moveHandler, { passive: false });
+      window.addEventListener("pointerup", endHandler);
+      window.addEventListener("pointercancel", endHandler);
+    },
+    [activeSide, onActivateSide, opponentEditable, onOpponentPlayerMove, toNorm],
+  );
+
   /* ---------- Active style builder ---------- */
 
   const buildRouteStyle = useCallback(
@@ -777,6 +898,10 @@ function EditorCanvasImpl({
       interactionRef.current = next;
 
       if (target.kind === "player") {
+        // Touching a primary player flips active side back to primary so the
+        // offense un-dims and any subsequent drag goes through the normal
+        // interaction state machine.
+        if (activeSide !== "primary") onActivateSide?.("primary");
         onSelectPlayer(target.playerId);
         onSelectRoute(null);
         onSelectNode(null);
@@ -847,7 +972,7 @@ function EditorCanvasImpl({
         longPressRef.current = { timer, pointerId: capturedId };
       }
     },
-    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress, detachWindowListeners],
+    [toNorm, onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment, onSelectZone, cancelLongPress, detachWindowListeners, activeSide, onActivateSide],
   );
 
   const handlePointerDown = useCallback(
@@ -1774,23 +1899,50 @@ function EditorCanvasImpl({
         );
       })}
 
-      {/* Opponent play ghost overlay (gray players only, no interaction). */}
+      {/* Opponent overlay. When `opponentEditable` is true, the players are
+       *  draggable (custom-opponent flow) and use their own player styles —
+       *  defenders render as triangles, etc. Otherwise it's a view-only ghost
+       *  in gray. Dimming flips with `activeSide`: when the opponent is
+       *  active, the offense dims; otherwise the opponent dims. */}
       {opponentPlayers && opponentPlayers.length > 0 && (
-        <g pointerEvents="none" opacity={0.55}>
+        <g
+          pointerEvents={opponentEditable ? undefined : "none"}
+          opacity={
+            opponentEditable
+              ? activeSide === "opponent"
+                ? 1
+                : 0.55
+              : 0.55
+          }
+        >
           {opponentPlayers.map((pl) => {
             const cx = pl.position.x * fieldAspect;
             const cy = 1 - pl.position.y;
             const r = 0.028;
+            const useStyled = opponentEditable;
+            const fill = useStyled ? pl.style?.fill ?? "#9ca3af" : "#9ca3af";
+            const stroke = useStyled ? pl.style?.stroke ?? "#4b5563" : "#4b5563";
+            const strokeW = useStyled ? 1.5 : 1.2;
+            const labelColor = useStyled
+              ? readableLabelColor(fill, pl.style?.labelColor)
+              : "#1f2937";
+            const handlers = opponentEditable
+              ? {
+                  style: { cursor: "grab", touchAction: "none" } as React.CSSProperties,
+                  onPointerDown: (e: React.PointerEvent) => beginOpponentDrag(e, pl.id),
+                }
+              : undefined;
             return (
               <g key={`oppplay-${pl.id}`} transform={`translate(${cx} ${cy})`}>
-                <circle
+                <PlayerShape
+                  shape={pl.shape}
                   cx={0}
                   cy={0}
                   r={r}
-                  fill="#9ca3af"
-                  stroke="#4b5563"
-                  strokeWidth={1.2}
-                  vectorEffect="non-scaling-stroke"
+                  fill={fill}
+                  stroke={stroke}
+                  strokeWidth={strokeW}
+                  pointerHandlers={handlers}
                 />
                 <text
                   x={0}
@@ -1799,7 +1951,8 @@ function EditorCanvasImpl({
                   dominantBaseline="central"
                   fontSize={0.028}
                   fontWeight={700}
-                  fill="#1f2937"
+                  fill={labelColor}
+                  pointerEvents="none"
                   style={{ fontFamily: "Inter, system-ui, sans-serif" }}
                 >
                   {pl.label}
@@ -1810,7 +1963,7 @@ function EditorCanvasImpl({
         </g>
       )}
 
-      {/* Opponent formation ghost overlay (gray, no routes, no interaction). */}
+      {/* Opponent formation ghost overlay (always view-only, gray). */}
       {opponentFormation && (
         <g pointerEvents="none" opacity={0.55}>
           {opponentFormation.players.map((pl) => {
@@ -1819,14 +1972,14 @@ function EditorCanvasImpl({
             const r = 0.028;
             return (
               <g key={`opp-${pl.id}`} transform={`translate(${cx} ${cy})`}>
-                <circle
+                <PlayerShape
+                  shape={pl.shape}
                   cx={0}
                   cy={0}
                   r={r}
                   fill="#9ca3af"
                   stroke="#4b5563"
                   strokeWidth={1.2}
-                  vectorEffect="non-scaling-stroke"
                 />
                 <text
                   x={0}
@@ -1969,7 +2122,10 @@ function EditorCanvasImpl({
       )}
 
       {/* Routes — wrap in a group scaled by fieldAspect on x */}
-      <g transform={`scale(${fieldAspect}, 1)`}>
+      <g
+        transform={`scale(${fieldAspect}, 1)`}
+        opacity={opponentEditable && activeSide === "opponent" ? 0.4 : 1}
+      >
         {doc.layers.routes.map((route) => {
           const isActive = route.id === selectedRouteId && mode !== "formation";
           const isHovered = route.id === hoveredRouteId && !isActive && mode !== "formation";
@@ -2261,6 +2417,7 @@ function EditorCanvasImpl({
       })}
 
       {/* Players — suppress tokens that are being animated by the overlay. */}
+      <g opacity={opponentEditable && activeSide === "opponent" ? 0.4 : 1}>
       {doc.layers.players.filter((pl) => !animatingPlayerIds?.has(pl.id)).map((pl) => {
         const sel = pl.id === selectedPlayerId;
         const isDragging =
@@ -2443,6 +2600,7 @@ function EditorCanvasImpl({
           </g>
         );
       })}
+      </g>
 
       {/* Field border — drawn last so it sits on top of the field content. */}
       <rect

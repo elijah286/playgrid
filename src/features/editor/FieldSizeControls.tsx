@@ -17,6 +17,11 @@ import { SegmentedControl } from "@/components/ui";
 type Props = {
   doc: PlayDocument;
   dispatch: (c: PlayCommand) => void;
+  /** Show the "Full field" toggle. Hidden when the variant's natural width
+   *  already fits in the narrow viewport (flag, etc.). */
+  showFullFieldToggle?: boolean;
+  fullFieldWidth?: boolean;
+  onFullFieldWidthChange?: (next: boolean) => void;
 };
 
 /** Small +/- spinner for an integer yard value. */
@@ -61,7 +66,13 @@ function YardSpinner({
   );
 }
 
-export function FieldSizeControls({ doc, dispatch }: Props) {
+export function FieldSizeControls({
+  doc,
+  dispatch,
+  showFullFieldToggle = false,
+  fullFieldWidth = false,
+  onFullFieldWidthChange,
+}: Props) {
   const backfield = resolveBackfieldYards(doc);
   const downfield = resolveDownfieldYards(doc);
   const isDefense = doc.metadata.playType === "defense";
@@ -157,6 +168,18 @@ export function FieldSizeControls({ doc, dispatch }: Props) {
             />
           )}
         </>
+      )}
+
+      {showFullFieldToggle && onFullFieldWidthChange && (
+        <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted">
+          <input
+            type="checkbox"
+            className="size-3.5 cursor-pointer accent-primary"
+            checked={fullFieldWidth}
+            onChange={(e) => onFullFieldWidthChange(e.target.checked)}
+          />
+          <span>Full field</span>
+        </label>
       )}
 
       {/* Field zone */}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, FlaskConical } from "lucide-react";
-import type { EndDecoration, PlayDocument, Player, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
+import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
@@ -204,8 +204,34 @@ function PlayEditorClientInner({
   // expands it. The reducer already rescales player/LOS positions to
   // preserve yards-from-LOS so the LOS stays on the same yard marker.
   const VIEWPORT_LENGTH_YDS = 25;
-  const fieldAspect =
-    doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+  // Per-user preference: when off (default), wide-field variants (tackle 11,
+  // six-man) clamp to roughly the 7v7 aspect so the canvas stays at a usable
+  // size on a typical screen. Toggle on to see the full sideline-to-sideline
+  // field. Persisted in localStorage.
+  const [fullFieldWidth, setFullFieldWidth] = useState<boolean>(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setFullFieldWidth(window.localStorage.getItem("playEditor.fullFieldWidth") === "1");
+    } catch {
+      // ignore storage failures (private mode etc.)
+    }
+  }, []);
+  const setFullFieldWidthPersisted = useCallback((next: boolean) => {
+    setFullFieldWidth(next);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("playEditor.fullFieldWidth", next ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, []);
+  const naturalAspect = doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+  const NARROW_ASPECT_CAP = 30 / (VIEWPORT_LENGTH_YDS * 0.75); // matches flag_7v7
+  const fieldAspect = fullFieldWidth
+    ? naturalAspect
+    : Math.min(naturalAspect, NARROW_ASPECT_CAP);
+  const canExpandFieldWidth = naturalAspect > NARROW_ASPECT_CAP + 1e-3;
 
   // Stable set: changes only on phase transitions (not every RAF frame), so
   // EditorCanvas doesn't receive a new prop reference 60× per second and
@@ -237,6 +263,73 @@ function PlayEditorClientInner({
   // play. Off by default so the canvas stays clean; coaches turn it on while
   // drawing how the defense should react to the offensive routes.
   const [showOpponentRoutes, setShowOpponentRoutes] = useState(false);
+
+  // Editable copy of the custom-opponent's players. When a custom opponent is
+  // attached + visible, these tokens render on top of the canvas as draggable
+  // shapes. Mutations stream into local state for instant feedback and a
+  // debounced server save persists via `updateCustomOpponentPlayersAction`.
+  // We seed the local state from the snapshot only when the custom id /
+  // hidden flag flips — never on every snapshot update — so the server
+  // round-trip after a save doesn't clobber an in-flight drag.
+  const [editableOppPlayers, setEditableOppPlayers] = useState<Player[] | null>(
+    null,
+  );
+  const editableOppRef = useRef<Player[] | null>(null);
+  useEffect(() => {
+    editableOppRef.current = editableOppPlayers;
+  }, [editableOppPlayers]);
+  useEffect(() => {
+    if (customOpponentPlayId == null || opponentHidden) {
+      setEditableOppPlayers(null);
+      return;
+    }
+    setEditableOppPlayers(vsSnapshot?.players ?? null);
+    // Intentionally exclude `vsSnapshot` so save-roundtrips don't reset state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customOpponentPlayId, opponentHidden]);
+
+  // Active "side" of the canvas. When a custom opponent is in play, dragging
+  // an opponent token flips this to "opponent" (offense dims out); touching a
+  // primary player flips it back. Reset to primary whenever the custom is
+  // removed or hidden so the offense never stays dimmed.
+  const [activeSide, setActiveSide] = useState<"primary" | "opponent">("primary");
+  useEffect(() => {
+    if (customOpponentPlayId == null || opponentHidden) setActiveSide("primary");
+  }, [customOpponentPlayId, opponentHidden]);
+
+  const oppSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (oppSaveTimerRef.current) clearTimeout(oppSaveTimerRef.current);
+  }, []);
+  const handleOpponentPlayerMove = useCallback(
+    (playerId: string, position: Point2) => {
+      setEditableOppPlayers((prev) => {
+        if (!prev) return prev;
+        return prev.map((p) =>
+          p.id === playerId ? { ...p, position } : p,
+        );
+      });
+      if (oppSaveTimerRef.current) clearTimeout(oppSaveTimerRef.current);
+      oppSaveTimerRef.current = setTimeout(() => {
+        const latest = editableOppRef.current;
+        if (!latest) return;
+        void (async () => {
+          const res = await updateCustomOpponentPlayersAction(playId, latest);
+          if (!res.ok) {
+            toast(res.error, "error");
+            return;
+          }
+          // Mirror the persisted snapshot into doc.metadata so other consumers
+          // (animation, vs-play card) see the up-to-date positions.
+          dispatch({
+            type: "document.setMetadata",
+            patch: { vsPlaySnapshot: res.snapshot },
+          });
+        })();
+      }, 350);
+    },
+    [playId, dispatch, toast],
+  );
 
   // Active drawing style (defaults for new routes)
   const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
@@ -896,13 +989,27 @@ function PlayEditorClientInner({
                 opponentFormation={opponentFormation ?? null}
                 opponentPlayers={
                   opponentPlayers ??
-                  (opponentHidden ? null : vsSnapshot?.players ?? null)
+                  (customOpponentPlayId != null && !opponentHidden
+                    ? editableOppPlayers
+                    : opponentHidden
+                      ? null
+                      : vsSnapshot?.players ?? null)
                 }
                 opponentRoutes={
                   isDefense && vsSnapshot && showOpponentRoutes
                     ? vsSnapshot.routes
                     : null
                 }
+                opponentEditable={
+                  opponentPlayers == null &&
+                  customOpponentPlayId != null &&
+                  !opponentHidden &&
+                  canEdit &&
+                  !isExamplePreview
+                }
+                onOpponentPlayerMove={handleOpponentPlayerMove}
+                activeSide={activeSide}
+                onActivateSide={setActiveSide}
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
             </div>
@@ -939,7 +1046,7 @@ function PlayEditorClientInner({
                 Desktop renders both stacked. */}
             {canEdit && mode === "edit" && !notesOpen && (
               <div className="flex flex-col gap-2 sm:hidden">
-                <FieldSizeControls doc={doc} dispatch={dispatch} />
+                <FieldSizeControls doc={doc} dispatch={dispatch} showFullFieldToggle={canExpandFieldWidth} fullFieldWidth={fullFieldWidth} onFullFieldWidthChange={setFullFieldWidthPersisted} />
                 <button
                   type="button"
                   onClick={() => setNotesOpen(true)}
@@ -980,7 +1087,7 @@ function PlayEditorClientInner({
                 always visible. Mobile uses the toggle above. */}
             {canEdit && (
               <div className="hidden sm:block">
-                <FieldSizeControls doc={doc} dispatch={dispatch} />
+                <FieldSizeControls doc={doc} dispatch={dispatch} showFullFieldToggle={canExpandFieldWidth} fullFieldWidth={fullFieldWidth} onFullFieldWidthChange={setFullFieldWidthPersisted} />
               </div>
             )}
             <div className="hidden sm:block">
