@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { emailHasAccountAction } from "@/app/actions/auth-lookup";
 import { afterSignupSyncRoleAction } from "@/app/actions/coach-invitations";
+import { updateDisplayNameAction } from "@/app/actions/account";
 import { Button, Input, useToast } from "@/components/ui";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 
@@ -304,6 +305,14 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
         data: { display_name: trimmedName },
       });
       if (error && !isSamePasswordErr(error)) throw error;
+      // Auth metadata isn't synced to profiles.display_name by any
+      // existing trigger — handle_new_user reads at INSERT time, but
+      // this update happens after signup. Persist directly so the new
+      // user shows up by name (not email) in rosters and shares.
+      await updateDisplayNameAction({ displayName: trimmedName }).catch(() => {
+        // Non-fatal: auth signup already succeeded. Worst case the
+        // user appears by email until they edit their account.
+      });
       toast("Welcome to XO Gridmaker!", "success");
       hardNavigate(safeNext);
       return; // keep pending=true through navigation to block double-clicks
