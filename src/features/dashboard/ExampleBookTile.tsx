@@ -223,10 +223,10 @@ export function ExampleBookTile({
                       <img
                         src={tile.logo_url}
                         alt=""
-                        className="h-28 w-28 object-contain drop-shadow"
+                        className="h-36 w-36 object-contain drop-shadow"
                       />
                     ) : (
-                      <span className="text-7xl font-black tracking-tight drop-shadow">
+                      <span className="text-8xl font-black tracking-tight drop-shadow">
                         {initials}
                       </span>
                     )}

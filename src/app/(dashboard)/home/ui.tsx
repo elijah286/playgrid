@@ -607,10 +607,10 @@ function PlaybookBookTile({
                   <img
                     src={tile.logo_url}
                     alt=""
-                    className="h-28 w-28 object-contain drop-shadow"
+                    className="h-36 w-36 object-contain drop-shadow"
                   />
                 ) : (
-                  <span className="text-7xl font-black tracking-tight drop-shadow">
+                  <span className="text-8xl font-black tracking-tight drop-shadow">
                     {initials}
                   </span>
                 )}
@@ -692,10 +692,10 @@ function LockedBookTile({ tile }: { tile: DashboardPlaybookTile }) {
               <img
                 src={tile.logo_url}
                 alt=""
-                className="h-28 w-28 object-contain drop-shadow"
+                className="h-36 w-36 object-contain drop-shadow"
               />
             ) : (
-              <span className="text-7xl font-black tracking-tight drop-shadow">
+              <span className="text-8xl font-black tracking-tight drop-shadow">
                 {initials}
               </span>
             )}
@@ -911,7 +911,7 @@ function MarketingPlaybookTile({ onCreate }: { onCreate: () => void }) {
               >
                 <svg
                   viewBox="0 0 100 120"
-                  className="h-28 w-28 drop-shadow-lg"
+                  className="h-36 w-36 drop-shadow-lg"
                 >
                   <path
                     d="M50 6 L92 22 V58 Q92 94 50 114 Q8 94 8 58 V22 Z"

@@ -115,12 +115,13 @@ export default async function HomePage() {
           </div>
 
           {heroExample ? (
-            <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[360px] lg:w-[400px]">
-              {/* centerOnOpen auto-opens the book on mobile (where hover
-                  isn't available) so phone visitors immediately see the
-                  play thumbnails. Desktop keeps the hover-to-open
-                  animation that the rest of the site uses. */}
-              <div className="w-full max-w-[280px] sm:max-w-[320px] md:max-w-none">
+            <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[280px] lg:w-[320px]">
+              {/* Match the size of example tiles in the strip below — a
+                  giant tile in the hero feels like a billboard, not a
+                  product. centerOnOpen auto-opens the book on mobile so
+                  phone visitors immediately see the play thumbnails;
+                  desktop keeps the hover-to-open animation. */}
+              <div className="w-44 sm:w-52 lg:w-60">
                 <ExampleBookTile tile={heroExample} centerOnOpen />
               </div>
               <Link
