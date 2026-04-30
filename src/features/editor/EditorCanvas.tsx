@@ -134,6 +134,10 @@ type Props = {
   opponentFormation?: import("@/app/actions/formations").SavedFormation | null;
   /** Optional opposing players (from a play or formation) to render as ghosts. */
   opponentPlayers?: import("@/domain/play/types").Player[] | null;
+  /** Optional opposing routes to render as gray ghost arrows behind the play.
+   *  Used by the defense editor's "view offense routes" toggle so a coach can
+   *  see where the offense runs while drawing the defensive reaction. */
+  opponentRoutes?: import("@/domain/play/types").Route[] | null;
   /** When true, canvas drags/clicks draw routes. When false, route drawing is
    *  suppressed so taps on empty canvas only deselect — avoids the footgun
    *  where a stray touch-drag silently created a route. Extending an existing
@@ -248,6 +252,7 @@ function EditorCanvasImpl({
   animatingPlayerIds = null,
   opponentFormation = null,
   opponentPlayers = null,
+  opponentRoutes = null,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1835,6 +1840,128 @@ function EditorCanvasImpl({
                 >
                   {pl.label}
                 </text>
+              </g>
+            );
+          })}
+        </g>
+      )}
+
+      {/* Opponent route ghosts (gray, non-interactive). Rendered when the
+          defense editor's "view offense routes" toggle is on so the coach can
+          see where the offense runs while drawing the defensive reaction. */}
+      {opponentRoutes && opponentRoutes.length > 0 && (
+        <g pointerEvents="none" opacity={0.55}>
+          <g transform={`scale(${fieldAspect}, 1)`}>
+            {opponentRoutes.map((route) => {
+              const rendered = routeToRenderedSegments(route);
+              return (
+                <g key={`opproute-${route.id}`}>
+                  {rendered.map((rs) => (
+                    <path
+                      key={rs.segmentId}
+                      d={rs.d}
+                      fill="none"
+                      stroke="#9ca3af"
+                      strokeWidth={route.style.strokeWidth}
+                      strokeDasharray={rs.dash}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                </g>
+              );
+            })}
+          </g>
+          {opponentRoutes.map((route) => {
+            const decoration = resolveEndDecoration(route);
+            if (decoration === "none") return null;
+            const fromIds = new Set(route.segments.map((s) => s.fromNodeId));
+            const terminals = route.segments.filter(
+              (s) => !fromIds.has(s.toNodeId),
+            );
+            if (terminals.length === 0) return null;
+            return (
+              <g key={`oppdeco-${route.id}`}>
+                {terminals.map((seg) => {
+                  const fromNode = route.nodes.find((n) => n.id === seg.fromNodeId);
+                  const toNode = route.nodes.find((n) => n.id === seg.toNodeId);
+                  if (!fromNode || !toNode) return null;
+                  let dirFromX: number;
+                  let dirFromY: number;
+                  if (seg.shape === "curve" && seg.controlOffset) {
+                    dirFromX = seg.controlOffset.x;
+                    dirFromY = seg.controlOffset.y;
+                  } else {
+                    dirFromX = fromNode.position.x;
+                    dirFromY = fromNode.position.y;
+                  }
+                  const tipX = fx(toNode.position.x);
+                  const tipY = fy(toNode.position.y);
+                  const fromX = fx(dirFromX);
+                  const fromY = fy(dirFromY);
+                  const dxS = tipX - fromX;
+                  const dyS = tipY - fromY;
+                  const len = Math.hypot(dxS, dyS);
+                  if (len < 1e-4) return null;
+                  const ux = dxS / len;
+                  const uy = dyS / len;
+                  const stroke = "#9ca3af";
+                  const strokeW = route.style.strokeWidth;
+                  if (decoration === "arrow") {
+                    const arrowLen = 0.028;
+                    const cosA = Math.cos(Math.PI / 6);
+                    const sinA = Math.sin(Math.PI / 6);
+                    const bx = -ux;
+                    const by = -uy;
+                    const r1x = cosA * bx - sinA * by;
+                    const r1y = sinA * bx + cosA * by;
+                    const r2x = cosA * bx + sinA * by;
+                    const r2y = -sinA * bx + cosA * by;
+                    return (
+                      <g key={seg.id}>
+                        <line
+                          x1={tipX}
+                          y1={tipY}
+                          x2={tipX + arrowLen * r1x}
+                          y2={tipY + arrowLen * r1y}
+                          stroke={stroke}
+                          strokeWidth={strokeW}
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <line
+                          x1={tipX}
+                          y1={tipY}
+                          x2={tipX + arrowLen * r2x}
+                          y2={tipY + arrowLen * r2y}
+                          stroke={stroke}
+                          strokeWidth={strokeW}
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </g>
+                    );
+                  }
+                  if (decoration === "t") {
+                    const halfLen = 0.022;
+                    const perpX = -uy;
+                    const perpY = ux;
+                    return (
+                      <line
+                        key={seg.id}
+                        x1={tipX + perpX * halfLen}
+                        y1={tipY + perpY * halfLen}
+                        x2={tipX - perpX * halfLen}
+                        y2={tipY - perpY * halfLen}
+                        stroke={stroke}
+                        strokeWidth={strokeW}
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    );
+                  }
+                  return null;
+                })}
               </g>
             );
           })}

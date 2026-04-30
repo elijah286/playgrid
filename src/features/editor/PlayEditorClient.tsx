@@ -233,6 +233,11 @@ function PlayEditorClientInner({
   );
   const [opponentHidden, setOpponentHidden] = useState(initialOpponentHidden);
 
+  // Defense-side toggle: show the installed offense's route arrows behind the
+  // play. Off by default so the canvas stays clean; coaches turn it on while
+  // drawing how the defense should react to the offensive routes.
+  const [showOpponentRoutes, setShowOpponentRoutes] = useState(false);
+
   // Active drawing style (defaults for new routes)
   const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
   const [activeStrokePattern, setActiveStrokePattern] = useState<StrokePattern>("solid");
@@ -893,6 +898,11 @@ function PlayEditorClientInner({
                   opponentPlayers ??
                   (opponentHidden ? null : vsSnapshot?.players ?? null)
                 }
+                opponentRoutes={
+                  isDefense && vsSnapshot && showOpponentRoutes
+                    ? vsSnapshot.routes
+                    : null
+                }
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
             </div>
@@ -1001,6 +1011,8 @@ function PlayEditorClientInner({
               <VsPlayCard
                 playId={playId}
                 snapshot={vsSnapshot}
+                showRoutes={showOpponentRoutes}
+                onShowRoutesChange={setShowOpponentRoutes}
                 onSnapshotReplaced={(snap: VsPlaySnapshot) =>
                   dispatch({
                     type: "document.setMetadata",

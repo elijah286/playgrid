@@ -153,6 +153,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-25",
   },
   {
+    id: "defense-view-offense-routes",
+    name: "View offense routes on installed-vs defense plays",
+    description:
+      "When a defense play is installed against a specific offense, a 'View offense routes' toggle on the Installed vs card overlays the offense's route arrows in gray on the field. Off by default — flip it on while drawing the defensive reaction, then off to see the defense alone.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "play-notes",
     name: "Play notes with @Player mentions",
     description:

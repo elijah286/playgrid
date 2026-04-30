@@ -12,6 +12,8 @@ import { useToast } from "@/components/ui";
 type Props = {
   playId: string;
   snapshot: VsPlaySnapshot;
+  showRoutes: boolean;
+  onShowRoutesChange: (next: boolean) => void;
   onSnapshotReplaced: (snap: VsPlaySnapshot) => void;
   onUnlinked: () => void;
 };
@@ -25,6 +27,8 @@ type Props = {
 export function VsPlayCard({
   playId,
   snapshot,
+  showRoutes,
+  onShowRoutesChange,
   onSnapshotReplaced,
   onUnlinked,
 }: Props) {
@@ -105,10 +109,21 @@ export function VsPlayCard({
         </button>
       </div>
 
+      <label className="mt-1 flex cursor-pointer items-center gap-2 text-[11px] text-foreground">
+        <input
+          type="checkbox"
+          checked={showRoutes}
+          onChange={(e) => onShowRoutesChange(e.target.checked)}
+          className="size-3.5 cursor-pointer"
+        />
+        View offense routes
+      </label>
+
       <p className="text-[10px] leading-snug text-muted">
-        The offensive routes render alongside your defense and animate
-        together. Edits to the offense don&apos;t reflect here until you
-        re-sync.
+        The offensive routes animate alongside your defense during playback.
+        Toggle &ldquo;View offense routes&rdquo; to see the arrows while
+        drawing the defensive reaction. Edits to the offense don&apos;t
+        reflect here until you re-sync.
       </p>
     </div>
   );
