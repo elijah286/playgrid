@@ -502,10 +502,12 @@ const update_play: CoachAiTool = {
       const routeCount = Array.isArray(diagram.routes) ? diagram.routes.length : 0;
       const routeSummary = Array.isArray(diagram.routes)
         ? diagram.routes
-            .filter((r): r is { from: string; path: unknown[] } =>
-              !!r && typeof r === "object" && typeof (r as { from?: unknown }).from === "string",
+            .map((r) =>
+              r && typeof r === "object" && typeof (r as { from?: unknown }).from === "string"
+                ? (r as { from: string }).from
+                : null,
             )
-            .map((r) => r.from)
+            .filter((from): from is string => from !== null)
             .slice(0, 12)
             .join(", ")
         : "";
