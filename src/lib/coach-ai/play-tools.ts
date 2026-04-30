@@ -497,9 +497,25 @@ const update_play: CoachAiTool = {
 
       if (upErr) return { ok: false, error: upErr.message };
 
+      // Build a one-line summary of what changed so Cal can recap it.
+      const playerCount = Array.isArray(diagram.players) ? diagram.players.length : 0;
+      const routeCount = Array.isArray(diagram.routes) ? diagram.routes.length : 0;
+      const routeSummary = Array.isArray(diagram.routes)
+        ? diagram.routes
+            .filter((r): r is { from: string; path: unknown[] } =>
+              !!r && typeof r === "object" && typeof (r as { from?: unknown }).from === "string",
+            )
+            .map((r) => r.from)
+            .slice(0, 12)
+            .join(", ")
+        : "";
       return {
         ok: true,
-        result: `Play "${play.name}" updated successfully (version ${versionResult.versionId.slice(0, 8)}).`,
+        result:
+          `Play "${play.name}" updated successfully (version ${versionResult.versionId.slice(0, 8)}).\n\n` +
+          `Saved diagram: ${playerCount} player(s), ${routeCount} route(s)` +
+          (routeSummary ? ` (carriers: ${routeSummary})` : "") +
+          `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.`,
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play failed" };
@@ -667,7 +683,12 @@ const rename_play: CoachAiTool = {
       const { renamePlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
       const res = await renamePlayAction(playId, newName);
       if (!res.ok) return { ok: false, error: res.error };
-      return { ok: true, result: `Renamed "${oldName}" → "${newName}".` };
+      return {
+        ok: true,
+        result:
+          `Renamed "${oldName}" → "${newName}". ` +
+          `Tell the coach the rename is saved and quote both names ("${oldName}" → "${newName}") so they can verify.`,
+      };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "rename_play failed" };
     }
@@ -786,9 +807,16 @@ const update_play_notes: CoachAiTool = {
         .update({ current_version_id: versionResult.versionId, updated_at: new Date().toISOString() })
         .eq("id", playId);
       if (upErr) return { ok: false, error: upErr.message };
+      // Echo the saved notes back so Cal can recap them to the coach in
+      // the confirmation reply (the chat is the only confirmation surface
+      // until the editor is open). Truncate aggressively if huge.
+      const savedNotes = notes.length > 1500 ? `${notes.slice(0, 1500)}…` : notes;
       return {
         ok: true,
-        result: `Notes updated on "${play.name}" (version ${versionResult.versionId.slice(0, 8)}).`,
+        result:
+          `Notes updated on "${play.name}" (version ${versionResult.versionId.slice(0, 8)}).\n\n` +
+          `Saved notes (recap these to the coach in your confirmation, formatted as you presented them):\n` +
+          `${savedNotes || "(empty — notes cleared)"}`,
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play_notes failed" };
