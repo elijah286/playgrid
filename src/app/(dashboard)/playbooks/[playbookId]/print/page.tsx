@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FlaskConical, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { loadPlaybookPrintPackAction } from "@/app/actions/plays";
@@ -10,6 +10,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getPlaybookOwnerEntitlement } from "@/lib/billing/owner-entitlement";
 import { canRemovePlaysheetWatermark, canUseWristbands } from "@/lib/billing/features";
 import { PrintPlaybookClient } from "./ui";
+import { StickyExampleCta } from "@/features/marketing/StickyExampleCta";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -49,10 +50,11 @@ export default async function PlaybookPrintPage({ params }: Props) {
   const isExamplePreview =
     !isMember && Boolean(book.is_example || book.is_public_example);
 
-  if (isExamplePreview) {
-    return <PrintPreviewLockedCard playbookName={book.name as string} playbookId={playbookId} />;
-  }
-
+  // Example viewers get the full print UI to browse layouts and visuals,
+  // but Print + PDF are gated behind an upgrade modal — see
+  // ExamplePrintLockOverlay in ui.tsx. This is the highest-quality
+  // demo moment we have: visitors *see* exactly what they'd export
+  // before being asked to claim a copy.
   const pack = await loadPlaybookPrintPackAction(playbookId);
 
   let coachName: string | null = null;
@@ -100,64 +102,24 @@ export default async function PlaybookPrintPage({ params }: Props) {
         team={team}
         logoUrl={(book.logo_url as string | null) ?? null}
         headCoachName={coachName}
-        canUseWristbands={canUseWristbands(await getCurrentEntitlement())}
-        canRemovePlaysheetWatermark={canRemovePlaysheetWatermark(
-          await getPlaybookOwnerEntitlement(playbookId),
-        )}
+        canUseWristbands={
+          isExamplePreview ? true : canUseWristbands(await getCurrentEntitlement())
+        }
+        canRemovePlaysheetWatermark={
+          isExamplePreview
+            ? false
+            : canRemovePlaysheetWatermark(
+                await getPlaybookOwnerEntitlement(playbookId),
+              )
+        }
+        isExamplePreview={isExamplePreview}
       />
-    </div>
-  );
-}
-
-function PrintPreviewLockedCard({
-  playbookName,
-  playbookId,
-}: {
-  playbookName: string;
-  playbookId: string;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <Link
-          href={`/playbooks/${playbookId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-4" />
-          {playbookName}
-        </Link>
-        <h1 className="text-lg font-extrabold tracking-tight text-foreground">
-          Print playbook
-        </h1>
-      </div>
-      <div className="rounded-2xl border border-border bg-surface-raised p-10 text-center shadow-sm">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Printer className="size-6" />
-        </div>
-        <h2 className="mt-4 text-xl font-extrabold tracking-tight text-foreground">
-          Get started with your first playbook
-        </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-          Printing, wristband cards, and practice packs are part of your own
-          playbook. This is just an example — create your own in under a
-          minute and print from there.
-        </p>
-        <div className="mt-5 flex items-center justify-center gap-2">
-          <Link
-            href="/home"
-            className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
-          >
-            Create your playbook
-          </Link>
-          <Link
-            href={`/playbooks/${playbookId}`}
-            className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-muted hover:bg-surface-inset hover:text-foreground"
-          >
-            <FlaskConical className="size-4" />
-            Keep exploring
-          </Link>
-        </div>
-      </div>
+      {isExamplePreview && (
+        <StickyExampleCta
+          playbookId={playbookId}
+          playbookName={book.name as string}
+        />
+      )}
     </div>
   );
 }

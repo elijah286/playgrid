@@ -29,6 +29,7 @@ import {
   BuildYourOwnPlaybookCta,
   MadeWithBadge,
 } from "@/features/marketing/SharedViewerCta";
+import { StickyExampleCta } from "@/features/marketing/StickyExampleCta";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -398,8 +399,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
       />
       {isExamplePreview && (
         <>
-          <BuildYourOwnPlaybookCta />
+          <BuildYourOwnPlaybookCta examplePlaybookId={playbookId} />
           <MadeWithBadge />
+          <StickyExampleCta playbookId={playbookId} playbookName={book.name as string} />
         </>
       )}
     </>

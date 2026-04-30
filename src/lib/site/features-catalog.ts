@@ -563,6 +563,33 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-12-01",
   },
   {
+    id: "example-claim-as-starting-point",
+    name: "Start with an example",
+    description:
+      "Visitors browsing a published example playbook can claim it as their own starting point — one click clones the example into their workspace as their first owned playbook (free-tier slot rules apply). Beats starting from a blank page when the visitor already saw something they liked.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
+    id: "example-print-preview-demo",
+    name: "Print preview demo on examples",
+    description:
+      "Unauthenticated visitors browsing an example playbook now see the full Print page (Plays/Layout/Visuals/Text/Presets sidebar with live preview) instead of an empty 'create your own' card. Print and PDF buttons are intercepted with a 'make this yours' modal — visitors get to feel the export experience before being asked to convert.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
+    id: "example-sticky-cta-desktop",
+    name: "Sticky desktop CTA on examples",
+    description:
+      "Always-visible footer bar on desktop while browsing an example playbook — playbook name + 'Make this mine' button + dismiss. Mobile already has a thumb-reachable in-header CTA; the sticky bar closes the desktop visibility gap.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "admin-traffic-engagement-virality",
     name: "Engagement + virality analytics",
     description:

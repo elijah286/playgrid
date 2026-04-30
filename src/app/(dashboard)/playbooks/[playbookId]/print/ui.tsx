@@ -48,6 +48,8 @@ import {
 } from "@/app/actions/printPresets";
 import { Badge, Button, Card, Input, SegmentedControl, useToast } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics/track";
+import { ArrowRight, Sparkles } from "lucide-react";
 
 type Props = {
   playbookId: string;
@@ -59,6 +61,10 @@ type Props = {
   headCoachName: string | null;
   canUseWristbands: boolean;
   canRemovePlaysheetWatermark: boolean;
+  /** When true, Print + PDF are intercepted with a "claim this example
+   *  to export" modal so unauthenticated visitors see the full preview
+   *  experience before being asked to convert. */
+  isExamplePreview?: boolean;
 };
 
 type TabKey = "plays" | "layout" | "visuals" | "text" | "presets";
@@ -95,11 +101,27 @@ export function PrintPlaybookClient({
   headCoachName,
   canUseWristbands,
   canRemovePlaysheetWatermark,
+  isExamplePreview = false,
 }: Props) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [printing, startPrint] = useTransition();
+  const [exampleGateOpen, setExampleGateOpen] = useState(false);
+  const [exampleGateAttempt, setExampleGateAttempt] = useState<"print" | "pdf" | null>(
+    null,
+  );
   const searchParams = useSearchParams();
+
+  // Fire a one-shot impression so we can measure how often unauthed
+  // visitors actually browse the print preview.
+  useEffect(() => {
+    if (!isExamplePreview) return;
+    track({
+      event: "example_print_browse",
+      target: playbookId,
+      metadata: { playbook_id: playbookId },
+    });
+  }, [isExamplePreview, playbookId]);
 
   const [selected, setSelected] = useState<Set<string>>(() => {
     const fromUrl = searchParams.get("plays");
@@ -600,6 +622,19 @@ export function PrintPlaybookClient({
   const wristbandLocked = config.product === "wristband" && !canUseWristbands;
 
   function exportPdf() {
+    if (isExamplePreview) {
+      track({
+        event: "example_print_export_attempt",
+        target: "pdf",
+        metadata: {
+          playbook_id: playbookId,
+          product: config.product,
+        },
+      });
+      setExampleGateAttempt("pdf");
+      setExampleGateOpen(true);
+      return;
+    }
     if (wristbandLocked) {
       toast("Wristbands are a Team Coach feature. See /pricing to upgrade.", "error");
       return;
@@ -615,6 +650,19 @@ export function PrintPlaybookClient({
   }
 
   function printNow() {
+    if (isExamplePreview) {
+      track({
+        event: "example_print_export_attempt",
+        target: "print",
+        metadata: {
+          playbook_id: playbookId,
+          product: config.product,
+        },
+      });
+      setExampleGateAttempt("print");
+      setExampleGateOpen(true);
+      return;
+    }
     if (wristbandLocked) {
       toast("Wristbands are a Team Coach feature. See /pricing to upgrade.", "error");
       return;
@@ -641,6 +689,7 @@ export function PrintPlaybookClient({
   }
 
   return (
+    <>
     <div
       className="flex flex-col gap-3"
       style={{ height: "calc(100vh - 180px)", minHeight: "520px" }}
@@ -1110,6 +1159,88 @@ export function PrintPlaybookClient({
           </div>
         </div>
       )}
+    </div>
+    {isExamplePreview && exampleGateOpen && (
+      <ExamplePrintGateModal
+        playbookId={playbookId}
+        attempt={exampleGateAttempt}
+        product={config.product}
+        onClose={() => setExampleGateOpen(false)}
+      />
+    )}
+    </>
+  );
+}
+
+function ExamplePrintGateModal({
+  playbookId,
+  attempt,
+  product,
+  onClose,
+}: {
+  playbookId: string;
+  attempt: "print" | "pdf" | null;
+  product: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="print-gate-title"
+    >
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="bg-gradient-to-br from-primary/15 via-surface-raised to-surface-raised px-6 pb-5 pt-6">
+          <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
+            <Sparkles className="size-3.5" aria-hidden /> One step away
+          </span>
+          <h2
+            id="print-gate-title"
+            className="mt-3 text-xl font-extrabold tracking-tight text-foreground"
+          >
+            {attempt === "pdf"
+              ? "Export your own PDF — free."
+              : "Print your own — free."}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            {product === "wristband"
+              ? "Wrist coach exports come from your own playbook. Make this example yours and you'll have it on your wrist in minutes."
+              : "You've configured the layout, visuals, and text exactly how you want them. Make this example yours and these settings come with it."}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 px-6 pb-6 pt-2">
+          <Link
+            href={`/copy/example/${playbookId}`}
+            onClick={() =>
+              track({
+                event: "example_cta_click",
+                target: "claim_example_print_gate",
+                metadata: {
+                  surface: "example_print_gate_modal",
+                  playbook_id: playbookId,
+                  action: "claim",
+                  attempted: attempt,
+                },
+              })
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-hover"
+          >
+            Make this mine — free
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            Keep exploring
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

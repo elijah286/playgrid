@@ -18,6 +18,7 @@ import {
   BuildYourOwnPlaybookCta,
   MadeWithBadge,
 } from "@/features/marketing/SharedViewerCta";
+import { StickyExampleCta } from "@/features/marketing/StickyExampleCta";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 import type { SavedFormation } from "@/app/actions/formations";
@@ -167,8 +168,12 @@ export default async function PlayEditPage({ params }: Props) {
     />
     {isExamplePreview && (
       <>
-        <BuildYourOwnPlaybookCta />
+        <BuildYourOwnPlaybookCta examplePlaybookId={res.play.playbook_id} />
         <MadeWithBadge />
+        <StickyExampleCta
+          playbookId={res.play.playbook_id}
+          playbookName={(book?.name as string | null) ?? "this example"}
+        />
       </>
     )}
     </>

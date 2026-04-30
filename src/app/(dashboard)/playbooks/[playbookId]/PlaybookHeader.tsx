@@ -432,14 +432,15 @@ export function PlaybookHeader({
             )}
             {isExamplePreview && (
               <Link
-                href="/home"
+                href={`/copy/example/${playbookId}`}
                 onClick={() =>
                   track({
                     event: "example_cta_click",
-                    target: "create_your_own_header",
+                    target: "claim_example_header",
                     metadata: {
                       surface: "example_playbook_header",
                       playbook_id: playbookId,
+                      action: "claim",
                     },
                   })
                 }
@@ -449,7 +450,7 @@ export function PlaybookHeader({
                     : "bg-white text-slate-900 hover:bg-white/90"
                 }`}
               >
-                Create your own
+                Make this mine
               </Link>
             )}
             {canShare && (

@@ -25,7 +25,25 @@ import { track } from "@/lib/analytics/track";
  * Both are server components — no interactivity needed; just links.
  */
 
-export function BuildYourOwnPlaybookCta() {
+/**
+ * When `examplePlaybookId` is provided, the primary CTA routes through the
+ * example-claim flow so the new user lands with that playbook already in
+ * their account. Without it (e.g. on a shared individual play view), the
+ * CTA falls back to a generic signup.
+ */
+export function BuildYourOwnPlaybookCta({
+  examplePlaybookId,
+}: {
+  examplePlaybookId?: string | null;
+} = {}) {
+  const primaryHref = examplePlaybookId
+    ? `/copy/example/${examplePlaybookId}`
+    : "/login?mode=signup";
+  const primaryLabel = examplePlaybookId ? "Make this mine — free" : "Get started — free";
+  const primaryTarget = examplePlaybookId
+    ? "claim_example_bottom"
+    : "build_your_own_primary";
+  const primaryAction = examplePlaybookId ? "claim" : "signup";
   return (
     <section
       aria-labelledby="byo-cta-heading"
@@ -50,27 +68,32 @@ export function BuildYourOwnPlaybookCta() {
             id="byo-cta-heading"
             className="mt-4 text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl"
           >
-            Like what you see? Build your own playbook.
+            {examplePlaybookId
+              ? "Like what you see? Make it yours."
+              : "Like what you see? Build your own playbook."}
           </h2>
           <p className="mt-3 text-base leading-relaxed text-muted">
-            XO Gridmaker is free to start — design plays on phone, tablet,
-            or desktop, run a sideline call sheet from Game Mode, and print
-            wristbands when you&apos;re ready. Your team can view shared
-            plays without an account.
+            {examplePlaybookId
+              ? "Get this whole example as your starting point — rename it, swap the logo, edit any play. The original stays untouched for the next coach."
+              : "XO Gridmaker is free to start — design plays on phone, tablet, or desktop, run a sideline call sheet from Game Mode, and print wristbands when you're ready. Your team can view shared plays without an account."}
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link
-              href="/login?mode=signup"
+              href={primaryHref}
               onClick={() =>
                 track({
                   event: "example_cta_click",
-                  target: "build_your_own_primary",
-                  metadata: { surface: "example_bottom_cta", action: "signup" },
+                  target: primaryTarget,
+                  metadata: {
+                    surface: "example_bottom_cta",
+                    action: primaryAction,
+                    playbook_id: examplePlaybookId ?? null,
+                  },
                 })
               }
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-base font-bold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-primary-hover"
             >
-              Get started — free
+              {primaryLabel}
               <ArrowRight className="size-4" aria-hidden />
             </Link>
             <Link
