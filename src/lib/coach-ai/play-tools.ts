@@ -313,9 +313,21 @@ const get_play: CoachAiTool = {
         Array.isArray(play.tags) && play.tags.length > 0 ? `tags: ${(play.tags as string[]).join(", ")}` : null,
       ].filter(Boolean).join(" | ");
 
+      // Pre-format the result as a ready-to-echo ```play fence. Models
+      // chronically paraphrase / simplify when handed a raw JSON object
+      // and asked "show this to the coach" — they re-author from generic
+      // football knowledge and end up with defenders flat at the LOS and
+      // generic-looking zones. By packaging the fence here and explicitly
+      // telling the agent to ECHO it verbatim, we make copy-paste the
+      // path of least resistance.
+      const fence = `\`\`\`play\n${JSON.stringify(diagram, null, 2)}\n\`\`\``;
+
       return {
         ok: true,
-        result: `Play: "${play.name}" (${meta || "no metadata"})\n\n\`\`\`json\n${JSON.stringify(diagram, null, 2)}\n\`\`\``,
+        result:
+          `Play: "${play.name}" (${meta || "no metadata"}).\n\n` +
+          `**To show this play to the coach, ECHO the fenced \`\`\`play block below into your reply VERBATIM** — do NOT re-author, simplify, or "clean up" the coordinates. The coach is looking at this exact play on screen; any deviation produces a diagram that doesn't match. Add prose around the fence as needed (one-line summary, what coverage it is, etc.) but the fence itself must be an exact copy of:\n\n` +
+          fence,
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "get_play failed" };
