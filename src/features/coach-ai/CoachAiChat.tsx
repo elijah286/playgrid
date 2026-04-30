@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Trash2, Wrench } from "lucide-react";
+import { Check, Copy, Send, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn, PlaybookChip } from "@/app/actions/coach-ai";
 import Link from "next/link";
@@ -393,9 +393,7 @@ export function CoachAiChat({
                     </div>
                   )}
                   {t.role === "user" ? (
-                    <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
-                      {t.text}
-                    </div>
+                    <UserMessageBubble text={t.text} />
                   ) : (
                     <div className="min-w-0 flex-1">
                       {t.role === "assistant" && t.playbookChips && t.playbookChips.length > 0 && (
@@ -555,6 +553,35 @@ export function CoachAiChat({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function UserMessageBubble({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Silently fail — same fallback as the assistant copy button.
+    }
+  }
+  return (
+    <div className="flex max-w-[82%] flex-col items-end gap-1">
+      <div className="rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
+        {text}
+      </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={copied ? "Copied!" : "Copy message"}
+        aria-label={copied ? "Copied" : "Copy message"}
+        className="inline-flex items-center rounded p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
+      >
+        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      </button>
     </div>
   );
 }
