@@ -652,6 +652,14 @@ function PlaybookDetailClientInner({
       setShowViewerCreateHint(true);
       return;
     }
+    // First-play fast path: a brand-new playbook with no plays yet skips the
+    // formation picker and drops the user straight into the editor on the
+    // default formation. The picker is still shown for every play after the
+    // first, where the user has more context for the choice.
+    if (initialPlays.length === 0 && !isPreview) {
+      void createWithFormation();
+      return;
+    }
     setShowFormationPicker(true);
     setLoadingFormations(true);
     listFormationsAction().then((res) => {
