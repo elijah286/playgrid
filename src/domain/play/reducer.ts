@@ -1,6 +1,19 @@
 import type { PlayCommand } from "./commands";
 import type { PlayDocument, PlayerShape, Point2, RouteSegment } from "./types";
 import { uid } from "./factory";
+import { delaySecondsToSteps } from "./animation";
+
+/**
+ * Auto-note line written when a route delay is set/cleared via the editor.
+ * Kept in lockstep with the value: when the coach changes or clears the delay
+ * we look for the *exact* prior line and replace or remove it. If the coach
+ * has hand-edited the line, the match fails and we leave their note alone
+ * (no auto-overwrite of human edits).
+ */
+function delayAutoNoteLine(label: string, steps: number): string {
+  const unit = steps === 1 ? "step" : "steps";
+  return `@${label} waits ${steps} ${unit} before running route`;
+}
 
 /**
  * Formations store player positions in a specific coordinate system defined by
@@ -246,6 +259,59 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return mapRoute(doc, cmd.routeId, (r) => ({ ...r, style: cmd.style }));
     case "route.setEndDecoration":
       return mapRoute(doc, cmd.routeId, (r) => ({ ...r, endDecoration: cmd.endDecoration }));
+
+    case "route.setStartDelaySec": {
+      const prevRoute = doc.layers.routes.find((r) => r.id === cmd.routeId);
+      if (!prevRoute) return doc;
+      const carrier = doc.layers.players.find((p) => p.id === prevRoute.carrierPlayerId);
+      const fieldLen = doc.sportProfile.fieldLengthYds;
+      const oldSec = prevRoute.startDelaySec;
+      const newSec = cmd.startDelaySec;
+      const oldSteps = typeof oldSec === "number" && oldSec > 0
+        ? delaySecondsToSteps(oldSec, fieldLen)
+        : 0;
+      const newSteps = typeof newSec === "number" && newSec > 0
+        ? delaySecondsToSteps(newSec, fieldLen)
+        : 0;
+
+      const routes = doc.layers.routes.map((r) =>
+        r.id === cmd.routeId
+          ? { ...r, startDelaySec: newSteps > 0 ? newSec : undefined }
+          : r,
+      );
+
+      let metadata = doc.metadata;
+      if (carrier) {
+        const oldLine = oldSteps > 0 ? delayAutoNoteLine(carrier.label, oldSteps) : null;
+        const newLine = newSteps > 0 ? delayAutoNoteLine(carrier.label, newSteps) : null;
+        const prevNotes = metadata.notes ?? "";
+        if (oldLine && prevNotes.includes(oldLine)) {
+          // Replace the prior auto-note line. When clearing (newLine null),
+          // also strip a leading/trailing newline so we don't leave a gap.
+          let nextNotes: string;
+          if (newLine) {
+            nextNotes = prevNotes.replace(oldLine, newLine);
+          } else {
+            nextNotes = prevNotes
+              .replace(`\n${oldLine}`, "")
+              .replace(`${oldLine}\n`, "")
+              .replace(oldLine, "")
+              .trim();
+          }
+          if (nextNotes !== prevNotes) {
+            metadata = { ...metadata, notes: nextNotes || undefined };
+          }
+        } else if (newLine && !oldLine) {
+          // Fresh delay — append. Prepend a newline only if there's existing text.
+          const nextNotes = prevNotes ? `${prevNotes}\n${newLine}` : newLine;
+          metadata = { ...metadata, notes: nextNotes };
+        }
+        // If oldLine exists but isn't found verbatim, the coach hand-edited
+        // the line — leave their notes untouched.
+      }
+
+      return { ...doc, layers: { ...doc.layers, routes }, metadata };
+    }
 
     /* ---- Node-level ---- */
     case "route.addNode":

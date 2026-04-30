@@ -8,6 +8,10 @@ import {
   simplifyPolyline,
 } from "@/domain/play/geometry";
 import {
+  delaySecondsToSteps,
+  stepsToDelaySeconds,
+} from "@/domain/play/animation";
+import {
   resolveEndDecoration,
   resolveFieldZone,
   resolveLineOfScrimmage,
@@ -330,6 +334,8 @@ function EditorCanvasImpl({
     playerId: string;
   };
   const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
+  /** Which submenu (if any) is expanded inside the player context menu. */
+  const [playerMenuSub, setPlayerMenuSub] = useState<"delay" | null>(null);
 
   type ZoneMenu = {
     screenX: number;
@@ -427,6 +433,7 @@ function EditorCanvasImpl({
         screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
         playerId: hitPlayer.id,
       });
+      setPlayerMenuSub(null);
       setSegmentMenu(null);
       setAnchorMenu(null);
       osp(hitPlayer.id);
@@ -456,6 +463,7 @@ function EditorCanvasImpl({
       setSegmentMenu(null);
       setAnchorMenu(null);
       setPlayerMenu(null);
+      setPlayerMenuSub(null);
       setZoneMenu(null);
       // Avoid double-handling: if the click was on the SVG we still want
       // our normal pointer logic to run, but we need to stop the menu
@@ -467,6 +475,7 @@ function EditorCanvasImpl({
         setSegmentMenu(null);
         setAnchorMenu(null);
         setPlayerMenu(null);
+      setPlayerMenuSub(null);
         setZoneMenu(null);
       }
     }
@@ -797,6 +806,7 @@ function EditorCanvasImpl({
 
           if (target.kind === "player") {
             setPlayerMenu({ screenX: localX, screenY: localY, playerId: target.playerId });
+            setPlayerMenuSub(null);
           } else if (target.kind === "route_segment") {
             setSegmentMenu({
               screenX: localX,
@@ -1555,6 +1565,7 @@ function EditorCanvasImpl({
                   zoneId: z.id,
                 });
                 setPlayerMenu(null);
+      setPlayerMenuSub(null);
                 setSegmentMenu(null);
                 setAnchorMenu(null);
               }}
@@ -2215,6 +2226,17 @@ function EditorCanvasImpl({
           );
         }
 
+        // Delay badge: rendered when any of this player's routes has a
+        // startDelaySec > 0. Small clock at the top-right of the token.
+        // Naturally hidden during playback since animating players are
+        // excluded from this loop and rendered by AnimationOverlay instead.
+        const hasDelay = doc.layers.routes.some(
+          (rt) => rt.carrierPlayerId === pl.id && (rt.startDelaySec ?? 0) > 0,
+        );
+        const badgeR = 0.011;
+        const badgeCx = px + r * 0.9;
+        const badgeCy = py - r * 0.9;
+
         return (
           <g key={pl.id}>
             {sel && (
@@ -2244,6 +2266,40 @@ function EditorCanvasImpl({
             >
               {pl.label}
             </text>
+            {hasDelay && (
+              <g pointerEvents="none">
+                <circle
+                  cx={badgeCx}
+                  cy={badgeCy}
+                  r={badgeR}
+                  fill="#FFFFFF"
+                  stroke="#1C1C1E"
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {/* Clock hands: 12 o'clock + 3 o'clock */}
+                <line
+                  x1={badgeCx}
+                  y1={badgeCy}
+                  x2={badgeCx}
+                  y2={badgeCy - badgeR * 0.65}
+                  stroke="#1C1C1E"
+                  strokeWidth={1}
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line
+                  x1={badgeCx}
+                  y1={badgeCy}
+                  x2={badgeCx + badgeR * 0.55}
+                  y2={badgeCy}
+                  stroke="#1C1C1E"
+                  strokeWidth={1}
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            )}
           </g>
         );
       })}
@@ -2394,16 +2450,38 @@ function EditorCanvasImpl({
 
       {/* Player context menu */}
       {playerMenu && mode !== "formation" && (() => {
-        const hasRoutes = doc.layers.routes.some(
+        const playerRoutes = doc.layers.routes.filter(
           (r) => r.carrierPlayerId === playerMenu.playerId,
         );
+        const hasRoutes = playerRoutes.length > 0;
+        const fieldLen = doc.sportProfile.fieldLengthYds;
+        // Effective delay: take the max across this player's routes (in
+        // practice each player has one route, but we tolerate branches).
+        const currentDelaySec = playerRoutes.reduce(
+          (acc, r) => Math.max(acc, r.startDelaySec ?? 0),
+          0,
+        );
+        const currentDelaySteps = currentDelaySec > 0
+          ? delaySecondsToSteps(currentDelaySec, fieldLen)
+          : 0;
+        const setDelayForAllRoutes = (steps: number) => {
+          for (const r of playerRoutes) {
+            dispatch({
+              type: "route.setStartDelaySec",
+              routeId: r.id,
+              startDelaySec: steps > 0 ? stepsToDelaySeconds(steps, fieldLen) : undefined,
+            });
+          }
+          setPlayerMenu(null);
+          setPlayerMenuSub(null);
+        };
         return (
           <ClampedMenu
             data-segment-menu
             wrapperRef={wrapperRef}
             x={playerMenu.screenX}
             y={playerMenu.screenY}
-            className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
+            className="absolute z-20 min-w-[200px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button
@@ -2413,6 +2491,7 @@ function EditorCanvasImpl({
               onClick={() => {
                 dispatch({ type: "player.flipRoutes", playerId: playerMenu.playerId });
                 setPlayerMenu(null);
+      setPlayerMenuSub(null);
               }}
             >
               Flip route
@@ -2420,10 +2499,58 @@ function EditorCanvasImpl({
             <button
               type="button"
               disabled={!hasRoutes}
+              aria-expanded={playerMenuSub === "delay"}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => setPlayerMenuSub((s) => (s === "delay" ? null : "delay"))}
+            >
+              <span>
+                Delay
+                {currentDelaySteps > 0 && (
+                  <span className="ml-2 text-muted-foreground">
+                    {currentDelaySteps} {currentDelaySteps === 1 ? "step" : "steps"}
+                  </span>
+                )}
+              </span>
+              <span className="text-muted-foreground">{playerMenuSub === "delay" ? "▾" : "▸"}</span>
+            </button>
+            {playerMenuSub === "delay" && hasRoutes && (
+              <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-t border-border bg-surface-inset/40">
+                {[1, 2, 3, 4, 5].map((steps) => {
+                  const active = currentDelaySteps === steps;
+                  return (
+                    <button
+                      key={steps}
+                      type="button"
+                      className={
+                        "min-w-[28px] rounded px-2 py-1 text-xs font-medium " +
+                        (active
+                          ? "bg-foreground text-background"
+                          : "bg-surface-raised text-foreground hover:bg-surface-inset")
+                      }
+                      onClick={() => setDelayForAllRoutes(steps)}
+                    >
+                      {steps}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  disabled={currentDelaySteps === 0}
+                  className="ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => setDelayForAllRoutes(0)}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={!hasRoutes}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
               onClick={() => {
                 dispatch({ type: "player.clearRoutes", playerId: playerMenu.playerId });
                 setPlayerMenu(null);
+      setPlayerMenuSub(null);
               }}
             >
               Clear all routes

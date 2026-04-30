@@ -53,6 +53,27 @@ export type FlatRoute = {
   startDelaySec: number;
 };
 
+/**
+ * Default playback pacing in normalized field units per second. Exported so
+ * the editor can convert between "steps" (1 step = 1 yard at default speed)
+ * and the seconds stored on `Route.startDelaySec`.
+ */
+export const PLAY_UNITS_PER_SEC = 0.18;
+
+/**
+ * Convert N steps (= N yards at default speed) to seconds, using the field's
+ * current length so the delay corresponds to actual yards-of-travel by other
+ * players regardless of how the editor's yardage window is configured.
+ */
+export function stepsToDelaySeconds(steps: number, fieldLengthYds: number): number {
+  return steps / (PLAY_UNITS_PER_SEC * fieldLengthYds);
+}
+
+/** Inverse of `stepsToDelaySeconds`, rounded to the nearest whole step. */
+export function delaySecondsToSteps(seconds: number, fieldLengthYds: number): number {
+  return Math.round(seconds * PLAY_UNITS_PER_SEC * fieldLengthYds);
+}
+
 const CURVE_SAMPLES = 32;
 
 function toSvgY(y: number) {

@@ -81,6 +81,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "play-route-delay",
+    name: "Per-player route delay",
+    description:
+      "Right-click a player to delay when they start their route by 1–5 steps after the snap, while the rest of the play moves normally. A small clock badge marks delayed players, and a note explaining the delay is added automatically.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "play-editor",
     name: "Play editor",
     description:

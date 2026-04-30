@@ -42,6 +42,16 @@ export type PlayCommand =
   | { type: "route.setSemantic"; routeId: string; semantic: RouteSemantic | null }
   | { type: "route.setStyle"; routeId: string; style: RouteStyle }
   | { type: "route.setEndDecoration"; routeId: string; endDecoration: EndDecoration }
+  | {
+      /**
+       * Set (or clear, when undefined) a route's playback delay. Stored in
+       * seconds on `Route.startDelaySec`; the editor UI exposes this in
+       * "steps" where 1 step = 1 yard at default playback speed.
+       */
+      type: "route.setStartDelaySec";
+      routeId: string;
+      startDelaySec: number | undefined;
+    }
   /* ---- Node-level ---- */
   | {
       type: "route.addNode";
