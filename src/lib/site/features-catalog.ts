@@ -626,6 +626,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-12-01",
   },
   {
+    id: "coach-cal-cta-instrumentation",
+    name: "Coach Cal CTA telemetry",
+    description:
+      "Floating playbook-page card and the header promo popover now emit coach_cal_cta_impression / _click / _dismiss events tagged by surface. Admin Engagement tab can compute interest (click rate) vs rejection (dismiss rate) per surface.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "auth-email-typo-suggestion",
     name: "Did-you-mean email correction at signup",
     description:

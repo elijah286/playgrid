@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
+import { track } from "@/lib/analytics/track";
 
 const STORAGE_KEY = "coach-cal:playbook-cta-dismissed";
 const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
@@ -15,19 +16,44 @@ const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
  */
 export function CoachCalPlaybookCta({ show }: { show: boolean }) {
   const [visible, setVisible] = useState(false);
+  // Ref instead of state — the impression latch doesn't need to drive a
+  // re-render and putting it in state trips
+  // react-hooks/set-state-in-effect.
+  const impressionLoggedRef = useRef(false);
 
   useEffect(() => {
     if (!show) return;
     if (typeof window === "undefined") return;
     if (window.localStorage.getItem(STORAGE_KEY) === "1") return;
     // Small delay so it doesn't fire instantly on page load
-    const id = setTimeout(() => setVisible(true), 1800);
+    const id = setTimeout(() => {
+      setVisible(true);
+      // Fire the impression as the card actually becomes visible —
+      // count people who saw it, not people who would have seen it if
+      // they hadn't already dismissed. Paired with click / dismiss
+      // events so the admin Engagement tab can compute:
+      //   impression → click ratio = "interested"
+      //   impression → dismiss ratio = "rejected"
+      if (!impressionLoggedRef.current) {
+        impressionLoggedRef.current = true;
+        track({
+          event: "coach_cal_cta_impression",
+          target: "playbook_floating_card",
+          metadata: { surface: "playbook_floating_card" },
+        });
+      }
+    }, 1800);
     return () => clearTimeout(id);
   }, [show]);
 
   function dismiss() {
     setVisible(false);
     try { window.localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+    track({
+      event: "coach_cal_cta_dismiss",
+      target: "playbook_floating_card",
+      metadata: { surface: "playbook_floating_card" },
+    });
   }
 
   if (!visible) return null;
@@ -72,7 +98,21 @@ export function CoachCalPlaybookCta({ show }: { show: boolean }) {
 
         <a
           href="/pricing"
-          onClick={dismiss}
+          onClick={() => {
+            track({
+              event: "coach_cal_cta_click",
+              target: "playbook_floating_card",
+              metadata: {
+                surface: "playbook_floating_card",
+                action: "start_trial",
+              },
+            });
+            // Persist the dismissal so they don't see it again, but
+            // skip the dismiss event — clicking through is its own
+            // outcome and shouldn't double-count as a rejection.
+            setVisible(false);
+            try { window.localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+          }}
           className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
           style={{ background: GRADIENT }}
         >

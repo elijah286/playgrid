@@ -8,6 +8,7 @@ import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { usePlaybookAnchor } from "./playbook-anchor";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics/track";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
 const PLAY_ROUTE_RE = /^\/plays\/([0-9a-f-]{8,})(?:\/|$)/i;
@@ -225,7 +226,17 @@ export function CoachAiLauncher({
       if (
         promoRef.current && !promoRef.current.contains(e.target as Node) &&
         promoBtnRef.current && !promoBtnRef.current.contains(e.target as Node)
-      ) setPromoOpen(false);
+      ) {
+        // Outside click counts as a dismissal (the only other ways to
+        // close are toggling the button or clicking the trial CTA, both
+        // of which are tracked separately).
+        track({
+          event: "coach_cal_cta_dismiss",
+          target: "header_promo_popover",
+          metadata: { surface: "header_promo_popover", method: "outside_click" },
+        });
+        setPromoOpen(false);
+      }
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -359,7 +370,20 @@ export function CoachAiLauncher({
             ref={promoBtnRef}
             type="button"
             onClick={() => {
-              setPromoOpen((v) => !v);
+              setPromoOpen((v) => {
+                // Treat "open" as the impression event for the popover
+                // — the pulsing button alone is ambient promo, but
+                // expanding the popover means they actually engaged
+                // enough to see the offer copy.
+                if (!v) {
+                  track({
+                    event: "coach_cal_cta_impression",
+                    target: "header_promo_popover",
+                    metadata: { surface: "header_promo_popover", path: pathname ?? null },
+                  });
+                }
+                return !v;
+              });
               if (!pulseSeen) {
                 setPulseSeen(true);
                 try { window.localStorage.setItem("coach-cal:promo-seen-at", String(Date.now())); } catch { /* ignore */ }
@@ -413,7 +437,18 @@ export function CoachAiLauncher({
                 href="/pricing"
                 className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
                 style={{ background: GRADIENT }}
-                onClick={() => setPromoOpen(false)}
+                onClick={() => {
+                  track({
+                    event: "coach_cal_cta_click",
+                    target: "header_promo_popover",
+                    metadata: {
+                      surface: "header_promo_popover",
+                      action: "start_trial",
+                      path: pathname ?? null,
+                    },
+                  });
+                  setPromoOpen(false);
+                }}
               >
                 Start 7-day free trial
               </a>
