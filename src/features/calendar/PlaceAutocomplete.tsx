@@ -173,7 +173,10 @@ export function PlaceAutocomplete({
           aria-controls={listId}
           aria-expanded={open}
           role="combobox"
-          autoComplete="off"
+          name="event-location"
+          autoComplete="street-address"
+          data-1p-ignore
+          data-lpignore="true"
           className="pl-9 pr-9"
         />
         {(pendingList || pendingDetails) && (
