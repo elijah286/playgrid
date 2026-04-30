@@ -41,16 +41,41 @@ export async function resolvePlayId(
   if (!input) return { ok: false, error: "play_id is required." };
 
   const admin = createServiceRoleClient();
-  const { data: rows, error } = await admin
-    .from("plays")
-    .select("id, name, sort_order, group_id")
-    .eq("playbook_id", playbookId)
-    .eq("is_archived", false)
-    .is("deleted_at", null)
-    .is("attached_to_play_id", null)
-    .order("sort_order", { ascending: true });
-  if (error) return { ok: false, error: error.message };
-  const plays = (rows ?? []) as Array<{ id: string; name: string; sort_order: number; group_id: string | null }>;
+  // Mirror the playbook UI's compareNavPlays ordering so slot numbers
+  // match the orange play badges. See list_plays for the same logic.
+  const [playsRes, groupsRes] = await Promise.all([
+    admin
+      .from("plays")
+      .select("id, name, sort_order, group_id")
+      .eq("playbook_id", playbookId)
+      .eq("is_archived", false)
+      .is("deleted_at", null)
+      .is("attached_to_play_id", null),
+    admin
+      .from("playbook_groups")
+      .select("id, sort_order")
+      .eq("playbook_id", playbookId),
+  ]);
+  if (playsRes.error) return { ok: false, error: playsRes.error.message };
+  const groupSortById = new Map<string, number>();
+  for (const g of groupsRes.data ?? []) {
+    groupSortById.set(g.id as string, (g.sort_order as number) ?? 0);
+  }
+  const plays = ((playsRes.data ?? []) as Array<{
+    id: string;
+    name: string;
+    sort_order: number;
+    group_id: string | null;
+  }>).slice().sort((a, b) => {
+    const ungA = a.group_id == null ? 0 : 1;
+    const ungB = b.group_id == null ? 0 : 1;
+    if (ungA !== ungB) return ungA - ungB;
+    const ga = a.group_id != null ? groupSortById.get(a.group_id) ?? 0 : 0;
+    const gb = b.group_id != null ? groupSortById.get(b.group_id) ?? 0 : 0;
+    if (ga !== gb) return ga - gb;
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  });
   if (plays.length === 0) return { ok: false, error: "No plays in this playbook." };
 
   // 1) Direct UUID match.
@@ -193,22 +218,36 @@ const list_plays: CoachAiTool = {
 
     try {
       const admin = createServiceRoleClient();
-      // Ordered by sort_order so the slot number Cal sees matches the order
-      // the coach sees in the playbook UI. (Previously sorted by name, which
-      // misaligned "Play 4" between Cal and the coach.)
-      const { data, error } = await admin
-        .from("plays")
-        .select("id, name, formation_name, play_type, group_id, sort_order, tags, is_archived")
-        .eq("playbook_id", ctx.playbookId)
-        .eq("is_archived", false)
-        .is("deleted_at", null)
-        .is("attached_to_play_id", null)
-        .order("sort_order", { ascending: true });
+      // Mirror the playbook UI's ordering exactly so Cal's "Play 4" matches
+      // the orange-badge "04" the coach sees. The UI uses compareNavPlays:
+      //   ungrouped first, then by group_sort_order, then by sort_order,
+      //   tiebreak by name.
+      // A naive ORDER BY sort_order misaligns whenever plays span groups
+      // or share a sort_order — both of which happen in practice.
+      const [playsRes, groupsRes] = await Promise.all([
+        admin
+          .from("plays")
+          .select("id, name, formation_name, play_type, group_id, sort_order, tags, is_archived")
+          .eq("playbook_id", ctx.playbookId)
+          .eq("is_archived", false)
+          .is("deleted_at", null)
+          .is("attached_to_play_id", null),
+        admin
+          .from("playbook_groups")
+          .select("id, sort_order")
+          .eq("playbook_id", ctx.playbookId),
+      ]);
 
-      if (error) return { ok: false, error: error.message };
+      if (playsRes.error) return { ok: false, error: playsRes.error.message };
+      const data = playsRes.data;
       if (!data || data.length === 0) return { ok: true, result: "No plays found in this playbook." };
 
-      const allRows = data as Array<{
+      const groupSortById = new Map<string, number>();
+      for (const g of groupsRes.data ?? []) {
+        groupSortById.set(g.id as string, (g.sort_order as number) ?? 0);
+      }
+
+      const allRows = (data as Array<{
         id: string;
         name: string;
         formation_name: string | null;
@@ -217,7 +256,16 @@ const list_plays: CoachAiTool = {
         sort_order: number;
         tags: string[] | null;
         is_archived: boolean;
-      }>;
+      }>).slice().sort((a, b) => {
+        const ungA = a.group_id == null ? 0 : 1;
+        const ungB = b.group_id == null ? 0 : 1;
+        if (ungA !== ungB) return ungA - ungB;
+        const ga = a.group_id != null ? groupSortById.get(a.group_id) ?? 0 : 0;
+        const gb = b.group_id != null ? groupSortById.get(b.group_id) ?? 0 : 0;
+        if (ga !== gb) return ga - gb;
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      });
 
       // Tag every row with its 1-based slot in the FULL ordered list. We do
       // this BEFORE filtering so the slot number reflects what the coach sees.
@@ -313,21 +361,24 @@ const get_play: CoachAiTool = {
         Array.isArray(play.tags) && play.tags.length > 0 ? `tags: ${(play.tags as string[]).join(", ")}` : null,
       ].filter(Boolean).join(" | ");
 
-      // Pre-format the result as a ready-to-echo ```play fence. Models
-      // chronically paraphrase / simplify when handed a raw JSON object
-      // and asked "show this to the coach" — they re-author from generic
-      // football knowledge and end up with defenders flat at the LOS and
-      // generic-looking zones. By packaging the fence here and explicitly
-      // telling the agent to ECHO it verbatim, we make copy-paste the
-      // path of least resistance.
-      const fence = `\`\`\`play\n${JSON.stringify(diagram, null, 2)}\n\`\`\``;
+      // To DISPLAY a saved play, the agent emits a play-ref fence —
+      // the renderer fetches the saved document by id and renders the
+      // exact saved coordinates. The model never transmits coordinates
+      // through, so it cannot paraphrase or "clean up" the diagram.
+      // The full diagram JSON is still returned below for the cases
+      // where the agent needs to read coordinates (e.g. before proposing
+      // an edit — that path uses a regular ```play fence so the model
+      // can actually modify the data).
+      const refFence = `\`\`\`play-ref\n${JSON.stringify({ id: playId })}\n\`\`\``;
 
       return {
         ok: true,
         result:
           `Play: "${play.name}" (${meta || "no metadata"}).\n\n` +
-          `**To show this play to the coach, ECHO the fenced \`\`\`play block below into your reply VERBATIM** — do NOT re-author, simplify, or "clean up" the coordinates. The coach is looking at this exact play on screen; any deviation produces a diagram that doesn't match. Add prose around the fence as needed (one-line summary, what coverage it is, etc.) but the fence itself must be an exact copy of:\n\n` +
-          fence,
+          `**To SHOW this play to the coach, paste the play-ref fence below into your reply VERBATIM:**\n\n${refFence}\n\n` +
+          `The renderer fetches the saved document by id, so the coach sees their exact saved alignment, routes, and zones — no need to copy coordinates through chat.\n\n` +
+          `Only when the coach asks for an EDIT to this play do you need the raw coordinates. They're below for that case — read them, propose changes, then call \`update_play\` after explicit confirmation:\n\n` +
+          `\`\`\`json\n${JSON.stringify(diagram, null, 2)}\n\`\`\``,
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "get_play failed" };

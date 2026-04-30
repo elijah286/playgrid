@@ -5,7 +5,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
-import { PlayDiagramEmbed } from "./PlayDiagramEmbed";
+import { PlayDiagramEmbed, PlayDiagramRef } from "./PlayDiagramEmbed";
 
 function isInternalHref(href: string): boolean {
   if (!href) return false;
@@ -73,6 +73,7 @@ const components: Components = {
     const raw = String(child?.props?.children ?? "").replace(/\n$/, "");
 
     if (lang === "play") return <PlayDiagramEmbed json={raw} />;
+    if (lang === "play-ref") return <PlayDiagramRef json={raw} />;
     if (lang === "diagram") return <FootballDiagram text={raw} />;
 
     // Suppress empty code fences — they render as a thin grey pill artifact,

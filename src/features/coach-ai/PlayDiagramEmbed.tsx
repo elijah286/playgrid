@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getPlayForEditorAction } from "@/app/actions/plays";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
 import {
@@ -14,7 +15,6 @@ import {
 } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
-import { createEmptyPlayDocument } from "@/domain/play/factory";
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 
@@ -485,7 +485,6 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
   }, [trimmed]);
 
   const doc = parsed.doc;
-  const anim = usePlayAnimation(doc ?? FALLBACK_DOC);
 
   // Empty fence (mid-stream / model emitted ```play\n```) — render nothing.
   if (!trimmed) return null;
@@ -494,13 +493,7 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
   // quiet field-shaped placeholder instead of the angry yellow warning — the
   // diagram will replace it the moment the closing brace arrives.
   if (!doc && looksIncomplete(trimmed)) {
-    return (
-      <div
-        className="my-3 aspect-[16/10] w-full max-w-[640px] animate-pulse overflow-hidden rounded-xl border border-border"
-        style={{ backgroundColor: "#2D8B4E" }}
-        aria-label="Loading play diagram"
-      />
-    );
+    return <DiagramSkeleton />;
   }
 
   // Non-empty, looks complete, but failed to parse — that's a real authoring
@@ -515,9 +508,15 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
     );
   }
 
+  return <PlayDocRender doc={doc} />;
+}
+
+/** Render-from-doc primitive shared by PlayDiagramEmbed (model-supplied
+ *  JSON) and PlayDiagramRef (saved play fetched by id). */
+function PlayDocRender({ doc }: { doc: PlayDocument }) {
+  const anim = usePlayAnimation(doc);
   const hasRoutes = doc.layers.routes.length > 0;
   const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;
-
   return (
     <div className="my-3 space-y-1">
       {doc.metadata.formation && (
@@ -531,4 +530,65 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
   );
 }
 
-const FALLBACK_DOC: PlayDocument = createEmptyPlayDocument();
+function DiagramSkeleton() {
+  return (
+    <div
+      className="my-3 aspect-[16/10] w-full max-w-[640px] animate-pulse overflow-hidden rounded-xl border border-border"
+      style={{ backgroundColor: "#2D8B4E" }}
+      aria-label="Loading play diagram"
+    />
+  );
+}
+
+/** Render an existing saved play by id. Fetches the document fresh —
+ *  the model never transmits coordinates, so it can't paraphrase them.
+ *  Used for the ```play-ref fence type. */
+export function PlayDiagramRef({ json }: { json: string }) {
+  const id = useMemo(() => {
+    const trimmed = json.trim();
+    if (!trimmed) return null;
+    try {
+      const obj = JSON.parse(trimmed) as { id?: unknown };
+      return typeof obj.id === "string" && obj.id.length > 0 ? obj.id : null;
+    } catch {
+      return null;
+    }
+  }, [json]);
+
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ok"; doc: PlayDocument }
+    | { kind: "error"; message: string }
+  >({ kind: "loading" });
+
+  useEffect(() => {
+    if (!id) {
+      setState({ kind: "error", message: "play-ref fence is missing an id" });
+      return;
+    }
+    let cancelled = false;
+    setState({ kind: "loading" });
+    getPlayForEditorAction(id).then((res) => {
+      if (cancelled) return;
+      if (!res.ok) {
+        setState({ kind: "error", message: res.error });
+        return;
+      }
+      setState({ kind: "ok", doc: res.document });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (state.kind === "loading") return <DiagramSkeleton />;
+  if (state.kind === "error") {
+    return (
+      <details className="my-2 rounded-lg border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+        <summary className="cursor-pointer font-semibold">Couldn&rsquo;t load play — tap for details</summary>
+        <p className="mt-1 font-mono text-[11px]">{state.message}</p>
+      </details>
+    );
+  }
+  return <PlayDocRender doc={state.doc} />;
+}
