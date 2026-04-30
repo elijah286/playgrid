@@ -492,6 +492,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-ai-scheme-synthesizer",
+    name: "Any-scheme synthesizer (offense + defense)",
+    description:
+      "When a coach asks for a scheme that isn't in the canonical catalog (e.g. 6-2 defense, 5-2 Eagle, Wishbone, Twins Right), Cal still draws it correctly. The synthesizer parses the front or formation name, places the right number of players at the right depths, and generates zones based on the coverage shell. The coach gets a structurally-valid diagram instead of \"no alignment for that combo.\"",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "coach-ai-defender-movement",
     name: "Defender reaction routes",
     description:

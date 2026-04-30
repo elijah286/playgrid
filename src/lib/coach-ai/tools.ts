@@ -563,6 +563,80 @@ const place_defense: CoachAiTool = {
   },
 };
 
+const place_offense: CoachAiTool = {
+  def: {
+    name: "place_offense",
+    description:
+      "Get canonical OFFENSIVE starting alignment for a named formation. " +
+      "ALWAYS call this BEFORE drawing offense in any play diagram — freehanding " +
+      "the formation produces broken looks (Pro I labeled as Spread, players " +
+      "stacked at the same coordinate, missing OL, etc.). The synthesizer " +
+      "handles common formation names and falls back to Spread Doubles when " +
+      "the coach is vague. " +
+      "Returns a `players` array in the same {id, x, y} format as the diagram's " +
+      "players list — drop them straight in with team:\"O\". " +
+      "Recognized formation names (case-insensitive): Spread, Empty / 5-wide, " +
+      "Trips (with optional 'Right'/'Left'), Doubles / 2x2, Twins, Bunch, Stack, " +
+      "Pro I / I-form, Pro Set / Split-back, Singleback / Ace, Pistol, Wishbone, " +
+      "T-formation / Full House, Shotgun. Strength side parsed from " +
+      "'right'/'left'/'strong'/'weak' if present.",
+    input_schema: {
+      type: "object",
+      properties: {
+        formation: {
+          type: "string",
+          description:
+            "Formation name as the coach said it. Examples: \"Spread Doubles\", " +
+            "\"Trips Right\", \"Pro I Strong Left\", \"Empty\", \"Pistol\", " +
+            "\"Wishbone\".",
+        },
+      },
+      required: ["formation"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const formation = typeof input.formation === "string" ? input.formation.trim() : "";
+    if (!formation) return { ok: false, error: "formation is required." };
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { synthesizeOffense, synthesizeOffenseFallback } = require("@/domain/play/offensiveSynthesize") as typeof import("@/domain/play/offensiveSynthesize");
+
+    const variant = ctx.sportVariant ?? "flag_7v7";
+    const synth = synthesizeOffense(variant, formation) ?? synthesizeOffenseFallback(variant);
+    if (!synth) {
+      return {
+        ok: false,
+        error:
+          `No offensive synthesizer available for variant "${variant}". ` +
+          `Place offense by hand using the prompt's formation legality rules.`,
+      };
+    }
+
+    const playersJson = JSON.stringify(
+      synth.players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "O" })),
+    );
+
+    const lines: string[] = [
+      `${synth.exactMatch ? "Synthesized" : "Synthesized (fallback to Spread Doubles)"} "${synth.formation}" (${synth.variant}):`,
+      synth.description,
+      "",
+      `Drop these players into your diagram (team:"O"):`,
+      playersJson,
+    ];
+    if (!synth.exactMatch) {
+      lines.push(
+        "",
+        "NOTE: I couldn't pin down the formation from the name, so I drew a " +
+        "default Spread Doubles. Mention this in your reply so the coach can " +
+        "correct you (\"Drew Spread Doubles by default — let me know if you " +
+        "meant something else.\").",
+      );
+    }
+    return { ok: true, result: lines.join("\n") };
+  },
+};
+
 const create_playbook: CoachAiTool = {
   def: {
     name: "create_playbook",
@@ -1349,7 +1423,7 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, place_defense, flag_outside_kb, flag_refusal];
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, place_defense, place_offense, flag_outside_kb, flag_refusal];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {
