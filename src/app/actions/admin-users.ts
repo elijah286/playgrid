@@ -24,6 +24,11 @@ export type AdminUserRowData = {
   entitlementExpiresAt: string | null;
   compGrantId: string | null;
   subscriptionId: string | null;
+  /** Cumulative active-time across all sessions, in seconds. Pulled from
+   *  profiles.total_seconds_on_site (maintained by the dashboard
+   *  TimeOnSiteTracker). Null when the column has never been written for
+   *  this user (e.g. legacy admin-created accounts). */
+  totalSecondsOnSite: number | null;
 };
 
 async function assertAdmin() {
@@ -58,7 +63,9 @@ export async function listUsersForAdminAction() {
   if (authErr) return { ok: false as const, error: authErr.message, users: [] };
 
   const [{ data: profiles }, { data: entitlements }] = await Promise.all([
-    admin.from("profiles").select("id, display_name, role, created_at"),
+    admin
+      .from("profiles")
+      .select("id, display_name, role, created_at, total_seconds_on_site"),
     admin
       .from("user_entitlements")
       .select("user_id, tier, source, expires_at, comp_grant_id, subscription_id"),
@@ -82,6 +89,10 @@ export async function listUsersForAdminAction() {
       entitlementExpiresAt: (e?.expires_at as string | null) ?? null,
       compGrantId: (e?.comp_grant_id as string | null) ?? null,
       subscriptionId: (e?.subscription_id as string | null) ?? null,
+      totalSecondsOnSite:
+        typeof pr?.total_seconds_on_site === "number"
+          ? (pr.total_seconds_on_site as number)
+          : null,
     };
   });
 

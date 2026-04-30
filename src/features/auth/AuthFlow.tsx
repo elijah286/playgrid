@@ -9,6 +9,7 @@ import { afterSignupSyncRoleAction } from "@/app/actions/coach-invitations";
 import { updateDisplayNameAction } from "@/app/actions/account";
 import { Button, Input, useToast } from "@/components/ui";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
+import { suggestEmailDomainCorrection } from "@/lib/auth/email-typo";
 
 /**
  * A single unified sign-in / sign-up flow. Email first; the form branches
@@ -468,6 +469,26 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
                 disabled={step !== "email"}
                 required
               />
+              {step === "email" && (() => {
+                const suggested = suggestEmailDomainCorrection(email);
+                if (!suggested) return null;
+                return (
+                  <p className="mt-1.5 text-xs text-muted">
+                    Did you mean{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmail(suggested);
+                        clearErrors();
+                      }}
+                      className="font-semibold text-primary underline-offset-2 hover:underline"
+                    >
+                      {suggested}
+                    </button>
+                    ?
+                  </p>
+                );
+              })()}
             </label>
           )}
 

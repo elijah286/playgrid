@@ -599,6 +599,33 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-12-01",
   },
   {
+    id: "auth-email-typo-suggestion",
+    name: "Did-you-mean email correction at signup",
+    description:
+      "The signup form watches the email domain and surfaces a one-tap 'Did you mean foo@gmail.com?' suggestion when it matches a common typo (gmail.con, gnail.com, yaho.com, etc). Catches the most common cause of dead 'Never signed in' accounts before the OTP gets sent into the void.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-04-30",
+  },
+  {
+    id: "auth-purge-unconfirmed",
+    name: "Auto-purge stale unconfirmed signups",
+    description:
+      "Daily admin sweep that hard-deletes auth.users rows that have never been signed into and were created more than 30 days ago — typically typo'd emails and abandoned signups that pollute total-user counts. Runs via /api/auth/purge-unconfirmed with the CRON_SECRET bearer token.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-04-30",
+  },
+  {
+    id: "admin-users-time-on-site-sort",
+    name: "Sortable Time-on-site + Last-sign-in",
+    description:
+      "Site Admin → Users now has a Time on Site column (cumulative active seconds across all sessions) plus sortable headers on Time on Site and Last sign in. Per-row Edit / Reset password / Delete buttons collapsed into a kebab menu to free space for the new column.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-04-30",
+  },
+  {
     id: "first-play-hero-empty-state",
     name: "First-play hero on empty playbooks",
     description:

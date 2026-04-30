@@ -1,7 +1,17 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
-import { ChevronRight, Search, UserPlus } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Edit3,
+  KeyRound,
+  MoreHorizontal,
+  Search,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 import {
   createUserAsAdminAction,
   deleteUserAsAdminAction,
@@ -52,6 +62,21 @@ function formatLastSignIn(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
+function formatTimeOnSite(seconds: number | null): string {
+  if (seconds == null || seconds <= 0) return "—";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const min = Math.floor(seconds / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  const remMin = min - hr * 60;
+  if (hr < 24) return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
+  const day = Math.floor(hr / 24);
+  return `${day}d`;
+}
+
+type SortKey = "lastSignIn" | "timeOnSite" | null;
+type SortDir = "asc" | "desc";
+
 export type AdminUserRow = {
   id: string;
   email: string;
@@ -64,6 +89,7 @@ export type AdminUserRow = {
   entitlementExpiresAt: string | null;
   compGrantId: string | null;
   subscriptionId: string | null;
+  totalSecondsOnSite: number | null;
 };
 
 type Dialog =
@@ -86,18 +112,52 @@ export function UsersAdminClient({
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("lastSignIn");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function toggleSort(k: NonNullable<SortKey>) {
+    setSortKey((cur) => {
+      if (cur !== k) {
+        setSortDir("desc");
+        return k;
+      }
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+      return cur;
+    });
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) => {
-      return (
-        u.email.toLowerCase().includes(q) ||
-        (u.displayName ?? "").toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q)
-      );
+    const matched = !q
+      ? users
+      : users.filter((u) => {
+          return (
+            u.email.toLowerCase().includes(q) ||
+            (u.displayName ?? "").toLowerCase().includes(q) ||
+            u.role.toLowerCase().includes(q)
+          );
+        });
+    if (!sortKey) return matched;
+    const sign = sortDir === "asc" ? 1 : -1;
+    // Null values always sort to the bottom regardless of direction —
+    // "Never" / "—" entries shouldn't pollute the top of either view.
+    return [...matched].sort((a, b) => {
+      if (sortKey === "lastSignIn") {
+        const av = a.lastSignIn ? Date.parse(a.lastSignIn) : null;
+        const bv = b.lastSignIn ? Date.parse(b.lastSignIn) : null;
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return (av - bv) * sign;
+      }
+      const av = a.totalSecondsOnSite ?? null;
+      const bv = b.totalSecondsOnSite ?? null;
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return (av - bv) * sign;
     });
-  }, [users, query]);
+  }, [users, query, sortKey, sortDir]);
 
   function refresh() {
     startTransition(async () => {
@@ -158,14 +218,25 @@ export function UsersAdminClient({
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">Last sign in</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <SortableHeader
+                label="Last sign in"
+                active={sortKey === "lastSignIn"}
+                dir={sortDir}
+                onClick={() => toggleSort("lastSignIn")}
+              />
+              <SortableHeader
+                label="Time on site"
+                active={sortKey === "timeOnSite"}
+                dir={sortDir}
+                onClick={() => toggleSort("timeOnSite")}
+              />
+              <th className="w-12 px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -238,51 +309,42 @@ export function UsersAdminClient({
                     {formatLastSignIn(u.lastSignIn)}
                   </td>
                   <td
+                    className="px-4 py-3 align-middle text-xs text-muted tabular-nums"
+                    title={
+                      u.totalSecondsOnSite != null
+                        ? `${u.totalSecondsOnSite.toLocaleString()} seconds total`
+                        : "No active-time recorded"
+                    }
+                  >
+                    {formatTimeOnSite(u.totalSecondsOnSite)}
+                  </td>
+                  <td
                     className="px-4 py-3 align-middle"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="flex justify-end gap-1.5">
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => setDialog({ kind: "edit", user: u })}
-                        className="rounded-lg border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:bg-surface-inset disabled:opacity-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => setDialog({ kind: "reset", user: u })}
-                        className="rounded-lg border border-border bg-surface px-3 py-1 text-xs font-medium text-foreground hover:bg-surface-inset disabled:opacity-50"
-                      >
-                        Reset password
-                      </button>
-                      <button
-                        type="button"
-                        disabled={pending || u.id === currentUserId}
-                        onClick={() => {
-                          if (!confirm(`Delete ${u.email}? This cannot be undone.`)) return;
-                          setMsg(null);
-                          startTransition(async () => {
-                            const res = await deleteUserAsAdminAction(u.id);
-                            if (!res.ok) setMsg({ kind: "error", text: res.error });
-                            else {
-                              setMsg({ kind: "success", text: `Deleted ${u.email}.` });
-                              refresh();
-                            }
-                          });
-                        }}
-                        className="rounded-lg border border-danger/30 bg-surface px-3 py-1 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-40"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <UserActionMenu
+                      disabled={pending}
+                      isSelf={u.id === currentUserId}
+                      onEdit={() => setDialog({ kind: "edit", user: u })}
+                      onReset={() => setDialog({ kind: "reset", user: u })}
+                      onDelete={() => {
+                        if (!confirm(`Delete ${u.email}? This cannot be undone.`)) return;
+                        setMsg(null);
+                        startTransition(async () => {
+                          const res = await deleteUserAsAdminAction(u.id);
+                          if (!res.ok) setMsg({ kind: "error", text: res.error });
+                          else {
+                            setMsg({ kind: "success", text: `Deleted ${u.email}.` });
+                            refresh();
+                          }
+                        });
+                      }}
+                    />
                   </td>
                 </tr>
                 {isOpen && (
                   <tr className="bg-surface-inset/30">
-                    <td colSpan={7} className="px-4 py-4">
+                    <td colSpan={8} className="px-4 py-4">
                       <UserStatsPanel userId={u.id} />
                     </td>
                   </tr>
@@ -344,6 +406,148 @@ export function UsersAdminClient({
           }}
           onError={(e) => setMsg({ kind: "error", text: e })}
         />
+      )}
+    </div>
+  );
+}
+
+function SortableHeader({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+}) {
+  return (
+    <th
+      className="px-4 py-3"
+      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 transition-colors hover:text-foreground ${
+          active ? "text-foreground" : ""
+        }`}
+      >
+        {label}
+        {active ? (
+          dir === "asc" ? (
+            <ChevronUp className="size-3" aria-hidden />
+          ) : (
+            <ChevronDown className="size-3" aria-hidden />
+          )
+        ) : (
+          <ChevronDown className="size-3 opacity-30" aria-hidden />
+        )}
+      </button>
+    </th>
+  );
+}
+
+/**
+ * Per-user action menu — collapses Edit / Reset password / Delete into a
+ * single popover. Keeps row chrome compact so the main columns (Email,
+ * Name, Plan, Last sign in, Time on site) have room to breathe and the
+ * Plan column doesn't get pushed off-screen on narrower windows.
+ */
+function UserActionMenu({
+  disabled,
+  isSelf,
+  onEdit,
+  onReset,
+  onDelete,
+}: {
+  disabled: boolean;
+  isSelf: boolean;
+  onEdit: () => void;
+  onReset: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClickAway(e: MouseEvent) {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickAway);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onClickAway);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  const itemCls =
+    "flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-inset disabled:opacity-50";
+
+  return (
+    <div ref={rootRef} className="relative flex justify-end">
+      <button
+        type="button"
+        aria-label="User actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-surface text-foreground hover:bg-surface-inset disabled:opacity-50"
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
+            className={`${itemCls} text-foreground`}
+          >
+            <Edit3 className="size-3.5 shrink-0" aria-hidden />
+            Edit
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onReset();
+            }}
+            className={`${itemCls} text-foreground`}
+          >
+            <KeyRound className="size-3.5 shrink-0" aria-hidden />
+            Reset password
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={isSelf}
+            title={isSelf ? "You can't delete your own admin account" : undefined}
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+            className={`${itemCls} text-danger`}
+          >
+            <Trash2 className="size-3.5 shrink-0" aria-hidden />
+            Delete
+          </button>
+        </div>
       )}
     </div>
   );
