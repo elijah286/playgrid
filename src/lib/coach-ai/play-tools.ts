@@ -139,11 +139,32 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
     };
   });
 
+  // Coverage zones (Cover 2 deep halves, hook/curl drops, etc.) live on the
+  // play document and are part of how a defensive diagram reads — without
+  // them Cal sees a defensive play as just a row of red dots and ends up
+  // describing positions instead of coverage. PlayDocument stores HALF
+  // extents in normalized coords; CoachDiagram uses FULL width/height in
+  // yards, so multiply by 2 and by the field dimensions.
+  const zones = doc.layers.zones.map((z) => ({
+    kind: z.kind,
+    center: [
+      Math.round(((z.center.x - 0.5) * fieldWidthYds) * 10) / 10,
+      Math.round(((z.center.y - LOS_Y) * fieldLengthYds) * 10) / 10,
+    ] as [number, number],
+    size: [
+      Math.round((z.size.w * 2 * fieldWidthYds) * 10) / 10,
+      Math.round((z.size.h * 2 * fieldLengthYds) * 10) / 10,
+    ] as [number, number],
+    label: z.label,
+    color: z.style.fill,
+  }));
+
   return {
     title: name,
     variant: variant as string,
     players,
     routes,
+    ...(zones.length > 0 ? { zones } : {}),
   };
 }
 
