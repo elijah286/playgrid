@@ -81,6 +81,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "play-route-speed",
+    name: "Per-route and per-segment speed",
+    description:
+      "Right-click a player to set their entire route to 75%, 100%, or 125% of default playback speed, or right-click a single segment to speed up or slow down just that part of the route.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "play-route-delay",
     name: "Per-player route delay",
     description:

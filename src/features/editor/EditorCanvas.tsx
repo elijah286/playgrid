@@ -335,7 +335,8 @@ function EditorCanvasImpl({
   };
   const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
   /** Which submenu (if any) is expanded inside the player context menu. */
-  const [playerMenuSub, setPlayerMenuSub] = useState<"delay" | null>(null);
+  const [playerMenuSub, setPlayerMenuSub] = useState<"delay" | "speed" | null>(null);
+  const [segmentMenuSub, setSegmentMenuSub] = useState<"speed" | null>(null);
 
   type ZoneMenu = {
     screenX: number;
@@ -435,6 +436,7 @@ function EditorCanvasImpl({
       });
       setPlayerMenuSub(null);
       setSegmentMenu(null);
+      setSegmentMenuSub(null);
       setAnchorMenu(null);
       osp(hitPlayer.id);
       osr(null);
@@ -461,6 +463,7 @@ function EditorCanvasImpl({
       }
       // Any other click closes the menu.
       setSegmentMenu(null);
+      setSegmentMenuSub(null);
       setAnchorMenu(null);
       setPlayerMenu(null);
       setPlayerMenuSub(null);
@@ -473,6 +476,7 @@ function EditorCanvasImpl({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setSegmentMenu(null);
+      setSegmentMenuSub(null);
         setAnchorMenu(null);
         setPlayerMenu(null);
       setPlayerMenuSub(null);
@@ -727,6 +731,7 @@ function EditorCanvasImpl({
 
       // Any interaction cancels the context menu and hover highlight.
       setSegmentMenu(null);
+      setSegmentMenuSub(null);
       setHoveredRouteId(null);
       const svg = svgRef.current;
       if (svg) {
@@ -815,6 +820,7 @@ function EditorCanvasImpl({
               segmentId: target.segmentId,
               position: origin,
             });
+            setSegmentMenuSub(null);
             onSelectRoute(target.routeId);
             onSelectSegment(target.segmentId);
             onSelectNode(null);
@@ -1150,6 +1156,7 @@ function EditorCanvasImpl({
         segmentId,
         position: p,
       });
+      setSegmentMenuSub(null);
       // Select the route so the user knows which one the menu targets.
       onSelectRoute(routeId);
       onSelectSegment(segmentId);
@@ -1180,6 +1187,7 @@ function EditorCanvasImpl({
         strokePattern: pattern,
       });
       setSegmentMenu(null);
+      setSegmentMenuSub(null);
     },
     [segmentMenu, dispatch],
   );
@@ -1199,6 +1207,7 @@ function EditorCanvasImpl({
     onSelectNode(newNode.id);
     onSelectSegment(null);
     setSegmentMenu(null);
+      setSegmentMenuSub(null);
   }, [segmentMenu, dispatch, onSelectRoute, onSelectNode, onSelectSegment]);
 
   const handleMenuCreateBranch = useCallback(() => {
@@ -1208,6 +1217,7 @@ function EditorCanvasImpl({
     const seg = route?.segments.find((s) => s.id === segmentId);
     if (!route || !seg) {
       setSegmentMenu(null);
+      setSegmentMenuSub(null);
       return;
     }
     // Branch from the segment's "from" node so the user sees a fork starting
@@ -1230,6 +1240,7 @@ function EditorCanvasImpl({
     onSelectNode(newNode.id);
     onSelectSegment(null);
     setSegmentMenu(null);
+      setSegmentMenuSub(null);
   }, [
     segmentMenu,
     doc.layers.routes,
@@ -1567,6 +1578,7 @@ function EditorCanvasImpl({
                 setPlayerMenu(null);
       setPlayerMenuSub(null);
                 setSegmentMenu(null);
+      setSegmentMenuSub(null);
                 setAnchorMenu(null);
               }}
               onPointerDown={(e) => {
@@ -1979,6 +1991,7 @@ function EditorCanvasImpl({
                             nodeId: node.id,
                           });
                           setSegmentMenu(null);
+      setSegmentMenuSub(null);
                           onSelectRoute(route.id);
                           onSelectNode(node.id);
                           onSelectSegment(null);
@@ -2384,6 +2397,77 @@ function EditorCanvasImpl({
             </button>
           ))}
           <div className="border-t border-border" />
+          {(() => {
+            const route = doc.layers.routes.find((r) => r.id === segmentMenu.routeId);
+            const seg = route?.segments.find((s) => s.id === segmentMenu.segmentId);
+            if (!route || !seg) return null;
+            const routeDefault = route.speedMultiplier ?? 1;
+            const explicit = seg.speedMultiplier;
+            const effective = explicit ?? routeDefault;
+            const setSegSpeed = (mult: number | undefined) => {
+              dispatch({
+                type: "route.setSegmentSpeed",
+                routeId: segmentMenu.routeId,
+                segmentId: segmentMenu.segmentId,
+                speedMultiplier: mult,
+              });
+              setSegmentMenu(null);
+      setSegmentMenuSub(null);
+            };
+            return (
+              <>
+                <button
+                  type="button"
+                  aria-expanded={segmentMenuSub === "speed"}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+                  onClick={() => setSegmentMenuSub((s) => (s === "speed" ? null : "speed"))}
+                >
+                  <span>
+                    Segment speed
+                    {effective !== 1 && (
+                      <span className="ml-2 text-muted-foreground">
+                        {Math.round(effective * 100)}%
+                        {explicit !== undefined && routeDefault !== 1 && " (override)"}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">{segmentMenuSub === "speed" ? "▾" : "▸"}</span>
+                </button>
+                {segmentMenuSub === "speed" && (
+                  <div className="flex items-center gap-1 px-3 py-2 border-t border-border bg-surface-inset/40">
+                    {[0.75, 1, 1.25].map((mult) => {
+                      const active = explicit === mult || (explicit === undefined && routeDefault === mult);
+                      return (
+                        <button
+                          key={mult}
+                          type="button"
+                          className={
+                            "flex-1 rounded px-2 py-1 text-xs font-medium " +
+                            (active
+                              ? "bg-foreground text-background"
+                              : "bg-surface-raised text-foreground hover:bg-surface-inset")
+                          }
+                          onClick={() => setSegSpeed(mult)}
+                        >
+                          {Math.round(mult * 100)}%
+                        </button>
+                      );
+                    })}
+                    {explicit !== undefined && (
+                      <button
+                        type="button"
+                        className="ml-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-surface-raised"
+                        onClick={() => setSegSpeed(undefined)}
+                      >
+                        Match player
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+          <div className="border-t border-border" />
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-danger hover:bg-surface-inset"
@@ -2409,6 +2493,7 @@ function EditorCanvasImpl({
               onSelectSegment(null);
               onSelectNode(null);
               setSegmentMenu(null);
+      setSegmentMenuSub(null);
             }}
           >
             Delete segment
@@ -2423,6 +2508,7 @@ function EditorCanvasImpl({
               onSelectSegment(null);
               onSelectNode(null);
               setSegmentMenu(null);
+      setSegmentMenuSub(null);
             }}
           >
             Delete route
@@ -2543,6 +2629,73 @@ function EditorCanvasImpl({
                 </button>
               </div>
             )}
+            {(() => {
+              // Effective speed: only show a "selected" value when every
+              // segment across every route on this player runs at the same
+              // multiplier (matches the route default and no overrides differ).
+              const allSegments = playerRoutes.flatMap((r) =>
+                r.segments.map((s) => s.speedMultiplier ?? r.speedMultiplier ?? 1),
+              );
+              const uniform = allSegments.length > 0 && allSegments.every((v) => v === allSegments[0]);
+              const effectiveSpeed = uniform ? allSegments[0] : null;
+              const setSpeedForPlayer = (mult: number) => {
+                for (const r of playerRoutes) {
+                  dispatch({
+                    type: "route.setSpeed",
+                    routeId: r.id,
+                    speedMultiplier: mult === 1 ? undefined : mult,
+                  });
+                }
+                setPlayerMenu(null);
+                setPlayerMenuSub(null);
+              };
+              return (
+                <>
+                  <button
+                    type="button"
+                    disabled={!hasRoutes}
+                    aria-expanded={playerMenuSub === "speed"}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => setPlayerMenuSub((s) => (s === "speed" ? null : "speed"))}
+                  >
+                    <span>
+                      Speed
+                      {effectiveSpeed !== null && effectiveSpeed !== 1 && (
+                        <span className="ml-2 text-muted-foreground">
+                          {Math.round(effectiveSpeed * 100)}%
+                        </span>
+                      )}
+                      {effectiveSpeed === null && (
+                        <span className="ml-2 text-muted-foreground">Mixed</span>
+                      )}
+                    </span>
+                    <span className="text-muted-foreground">{playerMenuSub === "speed" ? "▾" : "▸"}</span>
+                  </button>
+                  {playerMenuSub === "speed" && hasRoutes && (
+                    <div className="flex items-center gap-1 px-3 py-2 border-t border-border bg-surface-inset/40">
+                      {[0.75, 1, 1.25].map((mult) => {
+                        const active = effectiveSpeed === mult;
+                        return (
+                          <button
+                            key={mult}
+                            type="button"
+                            className={
+                              "flex-1 rounded px-2 py-1 text-xs font-medium " +
+                              (active
+                                ? "bg-foreground text-background"
+                                : "bg-surface-raised text-foreground hover:bg-surface-inset")
+                            }
+                            onClick={() => setSpeedForPlayer(mult)}
+                          >
+                            {Math.round(mult * 100)}%
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <button
               type="button"
               disabled={!hasRoutes}

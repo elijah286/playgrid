@@ -52,6 +52,26 @@ export type PlayCommand =
       routeId: string;
       startDelaySec: number | undefined;
     }
+  | {
+      /**
+       * Set (or clear, when undefined) the route-wide speed multiplier.
+       * Also clears any per-segment overrides so the player-level value
+       * applies uniformly across the route.
+       */
+      type: "route.setSpeed";
+      routeId: string;
+      speedMultiplier: number | undefined;
+    }
+  | {
+      /**
+       * Set (or clear, when undefined) a single segment's speed multiplier.
+       * When undefined, the segment falls back to the route-wide value.
+       */
+      type: "route.setSegmentSpeed";
+      routeId: string;
+      segmentId: string;
+      speedMultiplier: number | undefined;
+    }
   /* ---- Node-level ---- */
   | {
       type: "route.addNode";

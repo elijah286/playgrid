@@ -313,6 +313,35 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return { ...doc, layers: { ...doc.layers, routes }, metadata };
     }
 
+    case "route.setSpeed":
+      // The route-level value is the default for every segment, so picking
+      // 100% (1) here is equivalent to "clear" — store as undefined either
+      // way. Always strips per-segment overrides so the chosen value applies
+      // uniformly across the route.
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        speedMultiplier:
+          cmd.speedMultiplier === undefined || cmd.speedMultiplier === 1
+            ? undefined
+            : cmd.speedMultiplier,
+        segments: r.segments.map((s) =>
+          s.speedMultiplier !== undefined ? { ...s, speedMultiplier: undefined } : s,
+        ),
+      }));
+
+    case "route.setSegmentSpeed":
+      // Segment-level: undefined means "match the route default". An explicit
+      // 100% here is preserved (it overrides a non-default route speed for
+      // just this segment).
+      return mapRoute(doc, cmd.routeId, (r) => ({
+        ...r,
+        segments: r.segments.map((s) =>
+          s.id === cmd.segmentId
+            ? { ...s, speedMultiplier: cmd.speedMultiplier }
+            : s,
+        ),
+      }));
+
     /* ---- Node-level ---- */
     case "route.addNode":
       return mapRoute(doc, cmd.routeId, (r) => {

@@ -7,6 +7,7 @@ import {
   hasMotion,
   motionLength,
   sampleAt,
+  speedAtArcLength,
   type FlatRoute,
 } from "@/domain/play/animation";
 
@@ -113,7 +114,10 @@ export function usePlayAnimation(doc: PlayDocument): PlayAnimation {
         // Per-route startDelay only applies in the play phase. During motion
         // we use the legacy uniform pacing — motion is always synchronous.
         const delay = phase === "play" ? f.startDelaySec : 0;
-        const stepAdvance = phaseElapsedRef.current >= delay ? advance : 0;
+        // Per-segment speed multiplier only applies in the play phase. During
+        // motion every player moves in lockstep regardless of route speed.
+        const speed = phase === "play" ? speedAtArcLength(f, current) : 1;
+        const stepAdvance = phaseElapsedRef.current >= delay ? advance * speed : 0;
         const newVal = Math.min(target, current + stepAdvance);
         next.set(f.routeId, newVal);
         if (newVal < target) allDone = false;

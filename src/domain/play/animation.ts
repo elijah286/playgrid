@@ -25,6 +25,13 @@ export type FlatRoute = {
   /** Total length == cumulative[cumulative.length - 1]. */
   length: number;
   /**
+   * Per-polyline-point playback speed multiplier (1 = default). `speeds[i]`
+   * is the speed in effect for the polyline span ending at point i — i.e.
+   * the speed of the route segment that produced that point. Index 0 holds
+   * the route's start-node speed (==speeds[1]) for symmetry.
+   */
+  speeds: number[];
+  /**
    * Arc-length at which post-motion segments begin. 0 means the whole route
    * is post-snap. Equal to `length` when the whole route is motion.
    */
@@ -238,8 +245,13 @@ export function flattenRoute(route: Route): FlatRoute | null {
   if (!startNode) return null;
 
   const points: Point2[] = [startNode.position];
+  const speeds: number[] = [1];
   let motionBoundaryIdx: number | null = null;
   let inMotion = false;
+  const routeSpeed =
+    typeof route.speedMultiplier === "number" && route.speedMultiplier > 0
+      ? route.speedMultiplier
+      : 1;
 
   walked.forEach((seg, i) => {
     const fromNode = nodeMap.get(seg.fromNodeId);
@@ -258,8 +270,19 @@ export function flattenRoute(route: Route): FlatRoute | null {
       ? nodeMap.get(walked[i + 1].toNodeId)?.position ?? null
       : null;
     const added = samplesForSegment(seg, fromNode.position, toNode.position, prevFrom, nextTo);
+    // Effective speed: per-segment override falls back to the route default.
+    // Motion segments always run at default pacing — motion is synchronous.
+    const segSpeed = isMotion
+      ? 1
+      : typeof seg.speedMultiplier === "number" && seg.speedMultiplier > 0
+        ? seg.speedMultiplier
+        : routeSpeed;
+    for (let k = 0; k < added.length; k++) speeds.push(segSpeed);
     points.push(...added);
   });
+  // Mirror the first real-segment speed at index 0 so lookups at length 0
+  // return a sensible value.
+  if (speeds.length > 1) speeds[0] = speeds[1];
 
   if (points.length < 2) return null;
 
@@ -290,7 +313,23 @@ export function flattenRoute(route: Route): FlatRoute | null {
     startDelaySec: typeof route.startDelaySec === "number" && route.startDelaySec > 0
       ? route.startDelaySec
       : 0,
+    speeds,
   };
+}
+
+/**
+ * Look up the playback speed multiplier in effect at arc-length `s` along
+ * the flattened route. Returns 1 when no overrides are present.
+ */
+export function speedAtArcLength(f: FlatRoute, s: number): number {
+  if (s <= 0) return f.speeds[0] ?? 1;
+  if (s >= f.length) return f.speeds[f.speeds.length - 1] ?? 1;
+  // Linear scan is fine — polylines are short and this runs once per RAF tick
+  // per route. Find the polyline span containing s.
+  for (let i = 1; i < f.cumulative.length; i++) {
+    if (f.cumulative[i] >= s) return f.speeds[i] ?? 1;
+  }
+  return 1;
 }
 
 /** Arc-length of the motion portion (0 if no motion). */

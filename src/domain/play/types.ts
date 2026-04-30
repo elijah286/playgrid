@@ -81,6 +81,12 @@ export type RouteSegment = {
   strokePattern: StrokePattern;
   /** Manual curve control offset (null = auto-computed) */
   controlOffset: Point2 | null;
+  /**
+   * Optional per-segment playback speed multiplier (e.g. 0.75 = 75%, 1.25 =
+   * 125%). When set, overrides the route-level `speedMultiplier` for this
+   * segment only. Unset / 1 = inherit from route.
+   */
+  speedMultiplier?: number;
 };
 
 export type RouteSemantic = {
@@ -130,6 +136,12 @@ export type Route = {
    * this field (intentionally — keeps editor UX simple).
    */
   startDelaySec?: number;
+  /**
+   * Optional route-wide playback speed multiplier (e.g. 0.75 = 75%, 1.25 =
+   * 125%). Applies to every segment unless that segment has its own
+   * `speedMultiplier` override. Unset / 1 = default speed.
+   */
+  speedMultiplier?: number;
 };
 
 export type PlayerStyle = {
