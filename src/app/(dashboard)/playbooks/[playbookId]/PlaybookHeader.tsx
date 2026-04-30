@@ -73,7 +73,12 @@ export type PlaybookHeaderPlayActions = {
   selectionMode: boolean;
   creating: boolean;
   printHref: string;
-  newFormationHref: string;
+  /** When null, the "New formation" item in the mobile kebab menu is
+   *  suppressed. We use null for brand-new playbooks (zero plays) so the
+   *  only "create" affordance is "New play" — formations are an advanced
+   *  concept that lured at least two new users (Anton 04/29, Ralph 04/30)
+   *  off the play-creation path. Reappears once a play exists. */
+  newFormationHref: string | null;
   isViewer: boolean;
 };
 
@@ -1112,7 +1117,7 @@ function HeaderMenu({
                 <Plus className="size-4 shrink-0" />
                 <span>New play</span>
               </button>
-              {!playActions.isViewer && (
+              {!playActions.isViewer && playActions.newFormationHref && (
                 <Link
                   href={playActions.newFormationHref}
                   role="menuitem"

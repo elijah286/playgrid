@@ -1099,7 +1099,15 @@ function PlaybookDetailClientInner({
             selectionMode,
             creating,
             printHref: `/playbooks/${playbookId}/print`,
-            newFormationHref: `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}${isPreview ? "&preview=1" : ""}`,
+            // Suppress "New formation" in the mobile kebab when this is a
+            // brand-new empty playbook — same condition that hides the
+            // Formations tab. Two new-coach session replays in two days
+            // (Anton 04/29, Ralph 04/30) tapped this item, ended up on a
+            // blank formation editor, and bounced without creating a play.
+            newFormationHref:
+              initialPlays.length === 0 && !isViewer && !isPreview
+                ? null
+                : `/formations/new?variant=${variant}&returnToPlaybook=${playbookId}${isPreview ? "&preview=1" : ""}`,
             isViewer,
           }}
           versionHistoryAvailable={versionHistoryAvailable}
