@@ -2,7 +2,14 @@ import { chat, type ChatMessage, type ContentBlock } from "./llm";
 import { runTool, toolDefs, type ToolContext } from "./tools";
 import { validateDiagrams } from "./diagram-validate";
 
-const MAX_TOOL_TURNS = 5;
+// Per-request cap on agent loop iterations (each iteration = one model call,
+// either tool_use or final text). Bumped from 5 → 8 because Cal's typical
+// "build a play" path now legitimately uses ~5 tool calls (search_kb +
+// place_defense + multiple get_route_template) before the final emit, and
+// hitting the cap mid-stream truncates the visible reply ("died without
+// doing anything"). 8 leaves headroom for one validator critique-and-retry
+// after the tool calls finish without exceeding the previous floor.
+const MAX_TOOL_TURNS = 8;
 
 const NORMAL_PROMPT = `You are Coach Cal, an AI coaching partner for football coaches using the Playgrid playbook tool.
 
@@ -150,8 +157,8 @@ Rules:
     - flag_7v7  → \`place_defense({ front: "7v7 Zone", coverage: "Cover 3" })\`
     - flag_5v5  → \`place_defense({ front: "5v5 Man", coverage: "Cover 1" })\`
     Mention which scheme you picked in one short line ("vs base 4-3 Cover 3") so the coach can ask for something different if they want.
-  - If \`place_defense\` returns "no alignment for that combo," it gives you the available list — pick the closest from the list and call again. Do NOT freelance.
-  - If \`place_defense\` reports no catalog seeded for the variant at all (rare), OMIT the defense from the diagram entirely and tell the coach "I don't have a canonical defense for this variant yet — drawing offense only." Better to show offense alone than a fabricated defense.
+  - **Pass uncatalogued schemes through anyway — the synthesizer handles them.** \`place_defense\` understands N-M front patterns even when the exact (front, coverage) pair isn't in the catalog. If the coach asks for "6-2", "5-3 Stack", "5-2 Eagle", "8-3 goal line", etc., just call \`place_defense({ front: "6-2", coverage: "Cover 3" })\` — the tool will parse the N-M into N D-line + M LBs + the remaining slots as DBs, place them at proper depths, and return zones for the coverage. The result is labeled "Synthesized" instead of "Canonical" but otherwise behaves identically. Only fall back to the catalog list if the synthesizer also can't make sense of it (e.g., the front isn't an N-M pattern at all). Do NOT freelance defenders by hand — the synthesizer is the safety net so you never have to.
+  - If \`place_defense\` reports no catalog seeded for the variant at all AND the synthesizer can't parse the front (rare), OMIT the defense from the diagram entirely and tell the coach "I don't have a canonical defense for this variant yet — drawing offense only." Better to show offense alone than a fabricated defense.
 - **No two players may share the same (x, y).** Before emitting JSON, scan your players list and confirm every position is unique. If the model is tempted to place \`Y\` on top of \`RT\`, nudge \`Y\` outward by 1.5+ yards (a TE typically lines up just outside the tackle, not stacked on top). The token radius is large enough that even sub-yard overlaps look broken.
 - **Player ids must be unique within a diagram.** When two players share a position letter (twins formation, two Zs in a 4-wide set, paired Hs, etc.), suffix the second one with a digit — e.g. \`Z\` and \`Z2\`, or \`H\` and \`H2\`. Routes attach by the EXACT id you assigned: a route from \`Z\` will not anchor to \`Z2\` and vice versa. Reusing the same id for two players collapses both routes onto the first carrier and produces a "common anchor" diagram. The display label (the letter shown on the token) can stay as the original — only the \`id\` field needs to be unique.
 - **Focus + non-focus rendering.** Set \`focus: "O"\` for an offense-focused diagram (route concepts, formations, plays) — the defense will render uniformly gray so it's spatial context without competing visually. Set \`focus: "D"\` for defense-focused diagrams (coverages, fronts, blitz packages) — offense will render gray. The default is "O". Pick whichever side the coach's question is actually about.
@@ -751,7 +758,22 @@ export async function runAgent(
   }
 
   const last = newMessages[newMessages.length - 1];
-  const finalText = last && last.role === "assistant" ? extractAssistantText(last) : "";
+  let finalText = last && last.role === "assistant" ? extractAssistantText(last) : "";
+
+  // Fallback: if the loop exhausted without producing any user-visible
+  // text (e.g. tool-call cap hit mid-stream, or every retry was rejected
+  // by the validator), make sure the coach sees SOMETHING explaining the
+  // gap rather than a half-finished intro that "died". The streaming UI
+  // appends to whatever text it has buffered, so we just emit a tail.
+  if (!finalText.trim()) {
+    const fallback =
+      "I lost the thread mid-answer there — could you try once more? " +
+      "If it keeps happening on the same request, the simplest workaround " +
+      "is to ask in two passes (e.g., \"draw the formation\" first, then " +
+      "\"now show the play vs <defense>\").";
+    onEvent?.({ type: "text_delta", text: fallback });
+    finalText = fallback;
+  }
 
   return { newMessages, finalText, toolCalls, modelId, provider, playbookChips, mutated };
 }

@@ -438,16 +438,81 @@ const place_defense: CoachAiTool = {
       alignmentForStrength,
       zonesForStrength,
     } = require("@/domain/play/defensiveAlignments") as typeof import("@/domain/play/defensiveAlignments");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { synthesizeAlignment } = require("@/domain/play/defensiveSynthesize") as typeof import("@/domain/play/defensiveSynthesize");
 
     const variant = ctx.sportVariant ?? "flag_7v7";
-    const alignment = findDefensiveAlignment(variant, front, coverage);
+    const catalogMatch = findDefensiveAlignment(variant, front, coverage);
+
+    // If the catalog has no exact match, try to synthesize one from the
+    // front + coverage names (parses "6-2", "5-3 Stack", etc. into a
+    // sensible alignment with the right total count). Only falls back to
+    // the "available combos" error when synthesis can't make sense of the
+    // request either.
+    // Normalize the two zone shapes (catalog uses [number, number] tuples,
+    // synthesizer uses {x, y} objects) into a single tuple shape that the
+    // diagram converter already understands downstream.
+    type ZoneOut = { kind: "rectangle" | "ellipse"; center: [number, number]; size: [number, number]; label: string };
+    type AlignmentLike = {
+      front: string;
+      coverage: string;
+      variant: string;
+      description: string;
+      players: Array<{ id: string; x: number; y: number }>;
+      zones: ZoneOut[];
+      manCoverage: boolean;
+    };
+
+    let alignment: AlignmentLike | null = null;
+    let synthesized = false;
+    if (catalogMatch) {
+      alignment = {
+        front: catalogMatch.front,
+        coverage: catalogMatch.coverage,
+        variant: catalogMatch.variant,
+        description: catalogMatch.description,
+        players: alignmentForStrength(catalogMatch, strength),
+        zones: zonesForStrength(catalogMatch, strength).map((z) => ({
+          kind: z.kind,
+          center: [z.center[0], z.center[1]] as [number, number],
+          size: [z.size[0], z.size[1]] as [number, number],
+          label: z.label,
+        })),
+        manCoverage: catalogMatch.manCoverage === true,
+      };
+    } else {
+      const synth = synthesizeAlignment(variant, front, coverage);
+      if (synth) {
+        const flip = strength === "left";
+        alignment = {
+          front: synth.front,
+          coverage: synth.coverage,
+          variant: synth.variant,
+          description: synth.description,
+          players: synth.players.map((p) => ({
+            id: p.id,
+            x: flip ? -p.x : p.x,
+            y: p.y,
+          })),
+          zones: synth.zones.map((z) => ({
+            kind: z.kind,
+            center: [flip ? -z.center.x : z.center.x, z.center.y] as [number, number],
+            size: [z.size.x, z.size.y] as [number, number],
+            label: z.label,
+          })),
+          manCoverage: synth.manCoverage,
+        };
+        synthesized = true;
+      }
+    }
+
     if (!alignment) {
       const available = listDefensiveAlignments(variant);
       if (available.length === 0) {
         return {
           ok: false,
           error:
-            `No canonical alignments seeded for variant "${variant}". ` +
+            `No canonical alignments seeded for variant "${variant}", and the front "${front}" couldn't be parsed as an N-M pattern (e.g., "6-2", "5-3 Stack"). ` +
             `Place defense by hand using the prompt's defender placement rules.`,
         };
       }
@@ -457,22 +522,21 @@ const place_defense: CoachAiTool = {
       return {
         ok: false,
         error:
-          `No alignment for front="${front}", coverage="${coverage}" on ${variant}. ` +
-          `Available combos:\n${list}\nCall again with one of these.`,
+          `No alignment for front="${front}", coverage="${coverage}" on ${variant}, and the front couldn't be parsed as an N-M pattern. ` +
+          `Available canonical combos:\n${list}\nCall again with one of these — or pass an N-M front (e.g., "6-2", "5-3") and the synthesizer will place players for you.`,
       };
     }
 
-    const players = alignmentForStrength(alignment, strength);
     const playersJson = JSON.stringify(
-      players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" })),
+      alignment.players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" })),
     );
 
-    const isMan = alignment.manCoverage === true;
-    const zones = isMan ? [] : zonesForStrength(alignment, strength);
+    const isMan = alignment.manCoverage;
+    const zones = isMan ? [] : alignment.zones;
     const zonesJson = JSON.stringify(zones);
 
     const lines: string[] = [
-      `Canonical "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):`,
+      `${synthesized ? "Synthesized" : "Canonical"} "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):`,
       alignment.description,
       "",
       `Drop these players into your diagram (team:"D"):`,
