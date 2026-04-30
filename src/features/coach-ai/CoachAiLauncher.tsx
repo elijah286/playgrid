@@ -23,6 +23,10 @@ type FontSize = (typeof FONT_SIZES)[number];
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 
+// Re-pulse the non-subscriber promo button after this long since the last
+// dismissal — keeps Coach Cal discoverable without being naggy.
+const PROMO_REPULSE_MS = 14 * 24 * 60 * 60 * 1000;
+
 type WindowPos = { top: number; left: number };
 
 function readStorage<T>(key: string, fallback: T): T {
@@ -107,10 +111,19 @@ export function CoachAiLauncher({
   const [adminMode,     setAdminMode]     = useState(false);
   const [playbookMode,  setPlaybookMode]  = useState(false);
   const [promoOpen,     setPromoOpen]     = useState(false);
-  // Pulse stops once the user has acknowledged the button
-  const [pulseSeen,     setPulseSeen]     = useState(() =>
-    typeof window !== "undefined" && window.localStorage.getItem("coach-cal:promo-seen") === "1"
-  );
+  // Pulse stops once the user has clicked the button, then re-arms after
+  // PROMO_REPULSE_MS so users who dismissed once still get a nudge later.
+  const [pulseSeen,     setPulseSeen]     = useState(() => {
+    if (typeof window === "undefined") return false;
+    const raw = window.localStorage.getItem("coach-cal:promo-seen-at");
+    if (!raw) {
+      // Legacy "1" sentinel from earlier versions — treat as just-seen.
+      return window.localStorage.getItem("coach-cal:promo-seen") === "1";
+    }
+    const ts = Number(raw);
+    if (!Number.isFinite(ts)) return false;
+    return Date.now() - ts < PROMO_REPULSE_MS;
+  });
   const promoRef = useRef<HTMLDivElement>(null);
   const promoBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -352,7 +365,7 @@ export function CoachAiLauncher({
               setPromoOpen((v) => !v);
               if (!pulseSeen) {
                 setPulseSeen(true);
-                try { window.localStorage.setItem("coach-cal:promo-seen", "1"); } catch { /* ignore */ }
+                try { window.localStorage.setItem("coach-cal:promo-seen-at", String(Date.now())); } catch { /* ignore */ }
               }
             }}
             aria-label="Try Coach Cal — your AI coaching partner"
@@ -418,16 +431,12 @@ export function CoachAiLauncher({
           aria-label="Open Coach Cal"
           title="Coach Cal — your AI coaching partner"
           className={cn(
-            "relative inline-flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            "relative inline-flex size-9 items-center justify-center rounded-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
             open && "hidden",
           )}
+          style={{ background: GRADIENT }}
         >
-          {/* `bare` drops the colorful gradient tile — inside a header
-              cluster, the sparkle on a faint primary tint reads as
-              "AI button" without overpowering the rest of the row.
-              The full brand-gradient mark stays for the floating
-              non-subscriber promo state above. */}
-          <CoachAiIcon bare className="size-5" />
+          <CoachAiIcon className="relative size-6" />
           <span className="sr-only">Coach Cal AI</span>
         </button>
       )}

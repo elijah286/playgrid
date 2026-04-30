@@ -364,6 +364,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-cal-launcher-entitled-gradient",
+    name: "Coach Cal launcher uses brand gradient for subscribers too",
+    description:
+      "The header Coach Cal button for Coach-Pro subscribers used to render a faint primary-tinted sparkle on a primary/10 tile — barely visible in dark mode and indistinguishable from any other action button. It now uses the same brand-gradient icon (blue → indigo → orange with the white 4-point sparkle and green accent dot) that non-subscribers see, so Coach Cal stays visually distinct as the AI surface in every theme.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
+    id: "coach-cal-promo-repulse",
+    name: "Coach Cal promo re-pulses after 14 days idle",
+    description:
+      "The non-subscriber Coach Cal launcher pulses with a halo + ✨ corner badge until first click, then settles. Previously it stayed settled forever — coaches who tapped once and never came back to that path lost the affordance. The pulse now re-arms 14 days after the last dismissal so Coach Cal stays discoverable without nagging.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "play-cap-soft-warn",
     name: "Play-cap soft warning",
     description:
