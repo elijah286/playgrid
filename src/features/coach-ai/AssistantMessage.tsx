@@ -1,11 +1,65 @@
 "use client";
 
-import { Children, isValidElement } from "react";
+import { Children, isValidElement, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { ChevronDown } from "lucide-react";
 import { PlayDiagramEmbed, PlayDiagramRef } from "./PlayDiagramEmbed";
+
+/**
+ * Coach Cal answers follow a TL;DR-first convention (see agent prompt rule
+ * 5): when the response is long, Cal opens with a 1-2 sentence direct
+ * answer, then a `## Details` heading and the structured breakdown.
+ *
+ * We split the rendered message at the FIRST `## Details` heading so the
+ * preamble (the TL;DR + any diagram + adjacent prose) is always visible,
+ * and the deep breakdown can be tapped open by coaches who want it.
+ * Coaches who just need the quick answer never have to scroll past it.
+ *
+ * Header text is matched case-insensitive on the literal string "Details"
+ * so a slightly different phrasing from the model ("## Details" vs "## DETAILS")
+ * still triggers the split. We only split on the FIRST occurrence to keep
+ * nested H2s in long answers from fragmenting the layout.
+ */
+function splitDetails(text: string): { preamble: string; details: string | null } {
+  const re = /^##\s+details\s*$/im;
+  const m = re.exec(text);
+  if (!m) return { preamble: text, details: null };
+  const idx = m.index;
+  // Strip the heading line itself from the details body (it becomes the
+  // disclosure summary) but preserve everything below it verbatim.
+  const after = text.slice(idx).replace(re, "").trimStart();
+  return { preamble: text.slice(0, idx).trimEnd(), details: after };
+}
+
+function DetailsDisclosure({ markdown }: { markdown: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-surface-inset/40">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted hover:bg-surface-inset"
+      >
+        <span>{open ? "Hide details" : "Show details"}</span>
+        <ChevronDown
+          className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div className="border-t border-border px-3 py-2 text-sm text-foreground">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+            {markdown}
+          </ReactMarkdown>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function isInternalHref(href: string): boolean {
   if (!href) return false;
@@ -148,11 +202,13 @@ const components: Components = {
 };
 
 export function AssistantMessage({ text }: { text: string }) {
+  const { preamble, details } = splitDetails(text);
   return (
     <div className="text-sm text-foreground">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {text}
+        {preamble}
       </ReactMarkdown>
+      {details && <DetailsDisclosure markdown={details} />}
     </div>
   );
 }
