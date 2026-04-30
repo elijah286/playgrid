@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   Link2Off,
   List,
   PencilLine,
+  Pencil,
   Plus,
   Search,
 } from "lucide-react";
@@ -44,6 +46,12 @@ type Props = {
    *  the Copy button are hidden on small screens so the limited mobile
    *  width goes to the edit toolbar instead. Desktop always shows them. */
   hideMobileNav?: boolean;
+  /** Current editor mode. Used to render the desktop Done/Edit toggle. */
+  mode?: "view" | "edit";
+  /** Flip mode. Click "Done" while editing → view; click "Edit" while
+   *  viewing → edit. Wired by the parent so the matchMedia auto-flip
+   *  also gets a chance to opt out of clobbering the user's choice. */
+  onToggleMode?: () => void;
 };
 
 export function EditorHeaderBar({
@@ -59,6 +67,8 @@ export function EditorHeaderBar({
   allFormations = [],
   canEdit = true,
   hideMobileNav = false,
+  mode,
+  onToggleMode,
 }: Props) {
   const [nav, setNav] = useState(initialNav);
   const [groups, setGroups] = useState(initialGroups);
@@ -181,6 +191,23 @@ export function EditorHeaderBar({
             that can wrap below on narrow viewports. */}
         {canEdit && (
           <div className={`ml-auto flex items-center gap-1 ${hideMobileNav ? "hidden sm:flex" : ""}`}>
+            {onToggleMode && (
+              // Desktop-only Done/Edit toggle. Mobile gets its own bigger
+              // toggle right above the field (sm:hidden block elsewhere).
+              // Done collapses every edit-only surface — toolbar, route
+              // picker, inspector, tags, quick routes — and brings the
+              // playback controls back, without leaving the play.
+              <Button
+                type="button"
+                size="sm"
+                variant={mode === "edit" ? "primary" : "ghost"}
+                leftIcon={mode === "edit" ? Check : Pencil}
+                onClick={onToggleMode}
+                className="hidden sm:inline-flex"
+              >
+                {mode === "edit" ? "Done" : "Edit"}
+              </Button>
+            )}
             <NotifyTeamButton playId={playId} hideMobileLabel />
             <PlayHistoryButton playId={playId} hideMobileLabel />
             <Button

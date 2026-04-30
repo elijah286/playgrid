@@ -255,6 +255,11 @@ function PlayEditorClientInner({
   // phone without tripping over edit controls. Desktop always renders the
   // full editor regardless of this state (see `editOnlyCls` below).
   const [mode, setMode] = useState<"view" | "edit">("view");
+  // When the user explicitly picks a mode (Done / Edit button), we stop
+  // letting the matchMedia listener auto-flip on subsequent resizes.
+  // Otherwise a Done click on desktop would get clobbered the next time
+  // the user resized or rotated the device.
+  const userPickedModeRef = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia("(min-width: 640px)");
@@ -263,11 +268,31 @@ function PlayEditorClientInner({
     // "Edit play" button. We don't force back to view on shrink: a coach
     // who explicitly tapped Edit on mobile keeps their chosen state.
     const apply = () => {
+      if (userPickedModeRef.current) return;
       if (mql.matches) setMode("edit");
     };
     apply();
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
+  }, []);
+
+  // Toggle wired to both the mobile Edit/Done button and the desktop
+  // Done/Edit button in EditorHeaderBar. Clears any selection when
+  // entering view so the inspector doesn't keep referencing a now-hidden
+  // pick.
+  const toggleMode = useCallback(() => {
+    setMode((prev) => {
+      const next = prev === "edit" ? "view" : "edit";
+      if (next === "view") {
+        setSelectedPlayerId(null);
+        setSelectedRouteId(null);
+        setSelectedNodeId(null);
+        setSelectedSegmentId(null);
+        setSelectedZoneId(null);
+      }
+      userPickedModeRef.current = true;
+      return next;
+    });
   }, []);
 
   /* ---------- Auto-save ---------- */
@@ -674,6 +699,8 @@ function PlayEditorClientInner({
         allFormations={allFormations}
         canEdit={canEdit}
         hideMobileNav={mode === "edit"}
+        mode={mode}
+        onToggleMode={toggleMode}
       />
       </div>
 
@@ -697,17 +724,7 @@ function PlayEditorClientInner({
                 {mobileEditingEnabled && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const next = mode === "edit" ? "view" : "edit";
-                      if (next === "view") {
-                        setSelectedPlayerId(null);
-                        setSelectedRouteId(null);
-                        setSelectedNodeId(null);
-                        setSelectedSegmentId(null);
-                        setSelectedZoneId(null);
-                      }
-                      setMode(next);
-                    }}
+                    onClick={toggleMode}
                     className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border text-sm font-semibold ${
                       mode === "edit"
                         ? "border-border bg-surface-raised text-foreground hover:bg-surface"
