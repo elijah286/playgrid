@@ -473,6 +473,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-04-15",
   },
+  {
+    id: "coach-ai-practice-plans",
+    name: "Cal builds and saves practice plans",
+    description:
+      "Coaches can ask Cal to build a practice plan and save it directly to the Practice Plans tab — title, age tier, notes, and ordered time blocks (with optional 1-3 parallel station lanes). Cal confirms the timeline before writing, and the new plan opens in the structured timeline editor.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
 
   // ── Game mode ──────────────────────────────────────────────────
   {
