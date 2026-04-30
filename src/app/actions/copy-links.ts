@@ -101,6 +101,24 @@ export async function createCopyLinkAction(input: {
   });
   if (error) return { ok: false, error: error.message };
 
+  try {
+    const admin = createServiceRoleClient();
+    await admin.from("share_events").insert({
+      actor_user_id: user.id,
+      share_kind: "playbook_copy",
+      resource_id: input.playbookId,
+      channel: "link",
+      share_token: token,
+      metadata: {
+        max_uses: input.maxUses ?? null,
+        expires_in_days: days,
+        copy_game_results: !!input.copyGameResults,
+      },
+    });
+  } catch {
+    /* best-effort telemetry */
+  }
+
   return { ok: true, token, expiresAt };
 }
 

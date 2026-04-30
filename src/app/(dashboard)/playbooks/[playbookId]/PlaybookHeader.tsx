@@ -45,6 +45,7 @@ import {
 import { DownloadForOfflineButton } from "@/components/offline/DownloadForOfflineButton";
 import { nativeShare } from "@/lib/native/share";
 import { isNativeApp } from "@/lib/native/isNativeApp";
+import { track } from "@/lib/analytics/track";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -725,6 +726,11 @@ function SendCopyDialog({
 
   async function copy() {
     if (!linkUrl) return;
+    track({
+      event: "share_button_click",
+      target: isNativeApp() ? "native_share" : "copy_link",
+      metadata: { kind: "playbook_copy", playbook_id: playbookId },
+    });
     if (isNativeApp()) {
       const result = await nativeShare({
         title: "Copy of my playbook",

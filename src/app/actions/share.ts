@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { PlayDocument } from "@/domain/play/types";
 
@@ -37,6 +38,20 @@ export async function createShareLinkForPlayAction(playId: string) {
     created_by: user.id,
   });
   if (insErr) return { ok: false as const, error: insErr.message };
+
+  try {
+    const admin = createServiceRoleClient();
+    await admin.from("share_events").insert({
+      actor_user_id: user.id,
+      share_kind: "play_link",
+      resource_id: playId,
+      channel: "link",
+      share_token: token,
+    });
+  } catch {
+    /* best-effort telemetry */
+  }
+
   return { ok: true as const, token };
 }
 

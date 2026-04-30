@@ -563,6 +563,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-12-01",
   },
   {
+    id: "admin-traffic-engagement-virality",
+    name: "Engagement + virality analytics",
+    description:
+      "Sub-tabs in the admin Traffic dashboard for in-app behavior (activation funnel, exit pages, dwell time, top events) and sharing virality (K-factor, top sharers, inbound conversion). Powered by ui_events, share_events, and page_view dwell beacons — all first-party.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "admin-feedback",
     name: "User feedback inbox",
     description:

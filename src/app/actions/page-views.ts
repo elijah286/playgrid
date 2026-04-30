@@ -12,6 +12,16 @@ import { readConsentCookie, shouldSuppressTracking } from "@/lib/attribution/con
 
 const BOT_RE = /bot|crawl|spider|slurp|bingpreview|headlesschrome/i;
 
+// Routes that carry a share token in the path. Extracted so the admin
+// virality view can join inbound visits back to the originating share.
+const SHARE_TOKEN_PATH_RE = /^\/(copy|share|invite)\/([A-Za-z0-9_\-]{8,})/;
+
+function extractShareToken(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const m = SHARE_TOKEN_PATH_RE.exec(path);
+  return m ? m[2] : null;
+}
+
 export type RecordPageViewInput = {
   sessionId: string;
   path: string;
@@ -102,9 +112,11 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
     // EU/UK visitors who haven't consented: drop everything that could be
     // considered identifying. Country stays (less precise than region/city).
     const admin = createServiceRoleClient();
+    const shareToken = extractShareToken(input.path);
     await admin.from("page_views").insert({
       session_id: input.sessionId,
       path: input.path.slice(0, 2048),
+      share_token: shareToken,
       referrer: suppress ? null : referrer,
       utm_source: suppress ? null : utmSource,
       utm_medium: suppress ? null : utmMedium,
