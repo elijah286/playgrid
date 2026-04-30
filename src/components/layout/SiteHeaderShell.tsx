@@ -69,31 +69,32 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           </div>
         ) : (
           <div className="flex items-center gap-4">
+            {/* Mobile collapses to just logo + Get started — every other
+                affordance here is reachable from the home page scroll
+                (Tour anchors to a section, Coach Cal has its own section,
+                Sign in is one tap away from the auth screen). Desktop
+                keeps the lightweight nav for muscle-memory navigation. */}
             <Link
               href="/#tour"
-              className="text-sm text-muted hover:text-foreground transition-colors"
+              className="hidden text-sm text-muted hover:text-foreground transition-colors sm:inline"
             >
               Tour
-            </Link>
-            <Link
-              href="/coach-cal"
-              className="text-sm text-muted hover:text-foreground transition-colors"
-            >
-              Coach Cal
             </Link>
             {showPricingLink && (
               <Link
                 href="/pricing"
                 data-web-only
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="hidden text-sm text-muted hover:text-foreground transition-colors sm:inline"
               >
                 Pricing
               </Link>
             )}
-            <ShareButton userId={null} />
+            <div className="hidden sm:block">
+              <ShareButton userId={null} />
+            </div>
             <Link
               href="/login"
-              className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
+              className="hidden text-sm font-semibold text-foreground hover:text-primary transition-colors sm:inline"
             >
               Sign in
             </Link>

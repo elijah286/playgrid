@@ -30,7 +30,7 @@ const BRAND_ORANGE = "#F26522";
 // can deep-link to the tour section via /#tour.
 export function EveryScreen() {
   return (
-    <section id="tour" className="relative scroll-mt-24 py-20 md:py-24">
+    <section id="tour" className="relative scroll-mt-24 py-12 md:py-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="grid gap-10 md:grid-cols-[1fr_auto] md:items-end md:gap-12">
           {/* Left column: heading + paragraph on top, tablet underneath.
@@ -97,7 +97,7 @@ export function EveryScreen() {
 export function CoachCalTeaser() {
   return (
     <section
-      className="relative overflow-hidden py-24"
+      className="relative overflow-hidden py-12 md:py-24"
       style={{
         background:
           "linear-gradient(180deg, rgba(23,105,255,0.05) 0%, transparent 100%)",
@@ -216,7 +216,7 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
   ];
   return (
     <section
-      className="relative py-20"
+      className="relative py-12 md:py-20"
       style={{
         background:
           "linear-gradient(180deg, rgba(149,204,31,0.08) 0%, transparent 100%)",
@@ -273,7 +273,7 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
 export function PrintoutsAndWristbands() {
   return (
     <section
-      className="relative overflow-hidden py-28"
+      className="relative overflow-hidden py-14 md:py-28"
       style={{
         background:
           "linear-gradient(180deg, rgba(242,101,34,0.06) 0%, transparent 60%)",
@@ -348,7 +348,7 @@ export function RealPlaybooks({
   examples: Awaited<ReturnType<typeof loadExamplePlaybooks>>;
 }) {
   return (
-    <section className="relative py-24">
+    <section className="relative py-12 md:py-24">
       <div className="mx-auto max-w-6xl px-6">
         <Reveal>
           <div className="max-w-2xl">
@@ -399,7 +399,7 @@ export function RealPlaybooks({
 /* ---------- Built by a coach ---------- */
 export function BuiltByACoach() {
   return (
-    <section className="relative py-24">
+    <section className="relative py-12 md:py-24">
       <div className="mx-auto max-w-3xl px-6 text-center">
         <Reveal>
           <SectionEyebrow icon={Users} center>
@@ -433,7 +433,7 @@ export function BuiltByACoach() {
 export function FinalCta() {
   return (
     <section
-      className="relative py-28"
+      className="relative py-14 md:py-28"
       style={{
         background:
           "linear-gradient(135deg, rgba(23,105,255,0.10) 0%, rgba(149,204,31,0.10) 100%)",

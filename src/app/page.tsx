@@ -52,7 +52,7 @@ export default async function HomePage() {
   ]);
 
   return (
-    <div className="bg-surface text-foreground">
+    <div className="overflow-x-hidden bg-surface text-foreground">
       {/* ---------- Hero ----------
           Above-the-fold: server-rendered HTML, no client JS required to paint.
           The illustration owns LCP via `priority` — every other image on the
@@ -62,7 +62,7 @@ export default async function HomePage() {
             section's top edge crest the fold is the single most reliable
             "scroll for more" cue — a 100vh hero teaches visitors there's
             nothing below. */}
-        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-10 px-6 py-16 md:flex-row md:items-center md:gap-12 md:py-20 lg:gap-16">
+        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-6 px-5 py-10 sm:gap-10 sm:px-6 sm:py-16 md:flex-row md:items-center md:gap-12 md:py-20 lg:gap-16">
           <div className="flex-1">
             <h1
               className="text-4xl font-extrabold leading-[1.02] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl"
@@ -76,7 +76,7 @@ export default async function HomePage() {
             </h1>
 
             <p
-              className="mt-8 max-w-xl text-lg leading-relaxed"
+              className="mt-5 max-w-xl text-base leading-relaxed sm:mt-8 sm:text-lg"
               style={{ color: "#475569" }}
             >
               Create custom playbooks and share them with your team. Quickly
@@ -84,7 +84,7 @@ export default async function HomePage() {
               7v7, and tackle football coaches.
             </p>
 
-            <div className="mt-10 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3 sm:mt-10">
               <Link
                 href="/login?mode=signup"
                 className="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
@@ -114,7 +114,7 @@ export default async function HomePage() {
               width={850}
               height={620}
               priority
-              className="h-auto w-full max-w-[320px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
+              className="h-auto w-full max-w-[220px] sm:max-w-[280px] md:max-w-none drop-shadow-[0_20px_45px_rgba(23,105,255,0.18)]"
             />
           </div>
         </div>
