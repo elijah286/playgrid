@@ -11,6 +11,7 @@ import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
 import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
+import { tagShareUrl } from "@/lib/share/tag-url";
 
 const DEFAULT_FROM_EMAIL = "XO Gridmaker <onboarding@resend.dev>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -221,7 +222,10 @@ export async function resendCoachInviteAction(
   const senderName = (profile?.display_name as string | null) ?? null;
 
   const { SITE_URL } = await getSiteUrl();
-  const inviteUrl = `${SITE_URL}/invite/${inv.token as string}`;
+  const inviteUrl = tagShareUrl(`${SITE_URL}/invite/${inv.token as string}`, {
+    kind: "playbook_invite",
+    channel: "email",
+  });
   return sendPlaybookInviteEmailAction({
     playbookId: inv.playbook_id as string,
     toEmail: inv.email as string,
@@ -566,7 +570,10 @@ export async function sharePlaybookWithEmailsAction(input: {
           results.push({ email, kind: "failed", error: inv.error });
           continue;
         }
-        const inviteUrl = `${SITE_URL}/invite/${inv.invite.token}`;
+        const inviteUrl = tagShareUrl(`${SITE_URL}/invite/${inv.invite.token}`, {
+          kind: "playbook_invite",
+          channel: "email",
+        });
         const sendRes = await sendPlaybookInviteEmailAction({
           playbookId: input.playbookId,
           toEmail: email,

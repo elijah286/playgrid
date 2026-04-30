@@ -45,7 +45,7 @@ export async function createShareLinkForPlayAction(playId: string) {
       actor_user_id: user.id,
       share_kind: "play_link",
       resource_id: playId,
-      channel: "link",
+      channel: "copy_link",
       share_token: token,
     });
   } catch {

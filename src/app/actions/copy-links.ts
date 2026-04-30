@@ -107,7 +107,7 @@ export async function createCopyLinkAction(input: {
       actor_user_id: user.id,
       share_kind: "playbook_copy",
       resource_id: input.playbookId,
-      channel: "link",
+      channel: "copy_link",
       share_token: token,
       metadata: {
         max_uses: input.maxUses ?? null,
