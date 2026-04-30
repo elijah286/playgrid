@@ -15,11 +15,11 @@ export function PhoneFrame({
 }) {
   return (
     <div
-      className={`relative mx-auto w-[260px] rounded-[40px] bg-neutral-900 p-2 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.35)] ring-1 ring-black/20 ${className}`}
+      className={`relative mx-auto w-[200px] rounded-[32px] bg-neutral-900 p-1.5 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.35)] ring-1 ring-black/20 sm:w-[230px] sm:rounded-[36px] sm:p-2 md:w-[260px] md:rounded-[40px] ${className}`}
       style={{ aspectRatio: "9 / 19.5" }}
     >
-      <div className="absolute left-1/2 top-3 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black" />
-      <div className="relative h-full w-full overflow-hidden rounded-[32px] bg-white">
+      <div className="absolute left-1/2 top-2 z-10 h-4 w-20 -translate-x-1/2 rounded-full bg-black sm:top-3 sm:h-5 sm:w-24" />
+      <div className="relative h-full w-full overflow-hidden rounded-[26px] bg-white sm:rounded-[28px] md:rounded-[32px]">
         {children}
       </div>
     </div>
@@ -35,10 +35,10 @@ export function TabletFrame({
 }) {
   return (
     <div
-      className={`relative mx-auto w-[520px] max-w-full rounded-[28px] bg-neutral-900 p-3 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.4)] ring-1 ring-black/20 ${className}`}
+      className={`relative mx-auto w-full max-w-[360px] rounded-[20px] bg-neutral-900 p-2 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.4)] ring-1 ring-black/20 sm:max-w-[440px] sm:rounded-[24px] md:w-[520px] md:max-w-none md:rounded-[28px] md:p-3 ${className}`}
       style={{ aspectRatio: "4 / 3" }}
     >
-      <div className="absolute inset-3 overflow-hidden rounded-[18px] bg-white [&>*]:!h-full [&>*]:!w-full [&_img]:!h-full [&_img]:!w-full [&_img]:object-cover [&_img]:object-top">
+      <div className="absolute inset-2 overflow-hidden rounded-[14px] bg-white sm:rounded-[16px] md:inset-3 md:rounded-[18px] [&>*]:!h-full [&>*]:!w-full [&_img]:!h-full [&_img]:!w-full [&_img]:object-cover [&_img]:object-top">
         {children}
       </div>
     </div>
