@@ -468,8 +468,32 @@ function looksIncomplete(s: string): boolean {
 
 export function PlayDiagramEmbed({ json }: { json: string }) {
   const trimmed = json.trim();
+  // Forgive the common model slip of using ```play with a saved-play id payload
+  // (the correct fence is ```play-ref). If the body is just `{"id": "..."}`
+  // and has no players/diagram fields, route to the ref renderer instead of
+  // crashing in the converter.
+  const refId = useMemo(() => {
+    if (!trimmed) return null;
+    try {
+      const obj = JSON.parse(trimmed) as Record<string, unknown>;
+      if (
+        obj &&
+        typeof obj.id === "string" &&
+        obj.id.length > 0 &&
+        obj.players === undefined &&
+        obj.formation === undefined
+      ) {
+        return obj.id;
+      }
+    } catch {
+      /* fall through to the diagram parser */
+    }
+    return null;
+  }, [trimmed]);
+
   const parsed = useMemo<{ doc: PlayDocument | null; error: string | null }>(() => {
     if (!trimmed) return { doc: null, error: null };
+    if (refId) return { doc: null, error: null };
     try {
       const diagram = JSON.parse(trimmed) as CoachDiagram;
       const doc = coachDiagramToPlayDocument(diagram);
@@ -488,6 +512,9 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
 
   // Empty fence (mid-stream / model emitted ```play\n```) — render nothing.
   if (!trimmed) return null;
+
+  // Saved-play id slipped into a ```play fence — render the ref instead.
+  if (refId) return <PlayDiagramRef json={trimmed} />;
 
   // Failed to parse, but the JSON looks like it's still streaming in. Show a
   // quiet field-shaped placeholder instead of the angry yellow warning — the
