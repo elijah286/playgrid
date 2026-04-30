@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getPlayForEditorAction } from "@/app/actions/plays";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
@@ -191,15 +191,6 @@ function DiagramCanvas({ doc, animPositions }: {
   doc: PlayDocument;
   animPositions: Map<string, Point2> | null;
 }) {
-  // Stable per-instance gradient id. Multiple diagrams in the same chat
-  // turn used to share the literal id "caiFieldGrad", and SVG with
-  // duplicate <defs> ids can resolve `url(#caiFieldGrad)` to a stale or
-  // wrong gradient — the field then falls back to the parent's `color`
-  // (sometimes orange/red from the anchored playbook accent). React's
-  // useId gives each canvas its own id, so the gradient is always
-  // unambiguously this canvas's. Same for the per-diagram fallback fill.
-  const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const gradId = `caiFieldGrad-${reactId}`;
   const vb     = useMemo(() => computeViewBox(doc), [doc]);
   const aspect = vb.w / vb.h;
   const TARGET = 16 / 10;
@@ -289,22 +280,20 @@ function DiagramCanvas({ doc, animPositions }: {
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
         width="100%" height="100%"
         preserveAspectRatio="none"
+        // Explicit color="black" so any SVG element that ever falls back
+        // to currentColor (e.g. an unresolved fill="url(#…)") paints black
+        // — never the parent's text color, which on the Coach Cal panel
+        // can be the anchored playbook accent (red/orange on Chiefs Girls).
+        color="#000"
       >
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={theme.bgMain} />
-            <stop offset="100%" stopColor={theme.bgDark} />
-          </linearGradient>
-        </defs>
-        {/* Field gradient — covers the full unit-square; viewBox clips it.
-            A solid fallback fill is drawn FIRST in case the gradient id
-            collides with another SVG on the page (browser then resolves
-            url(#…) to the wrong gradient or to currentColor, which used
-            to surface as an orange field on Chiefs Girls because the
-            playbook accent leaked through). The gradient overlays it
-            normally; the fallback only shows if the gradient fails. */}
+        {/* Field is a SOLID fill. The previous gradient (top→bottom green)
+            had to be referenced via fill="url(#caiFieldGrad-…)", and a
+            failed url ref or duplicate-id collision would let the rect
+            fall back to currentColor — which on a tinted chat panel
+            surfaced as an orange field. Solid fill removes the failure
+            mode entirely; visually it's nearly identical to the gradient
+            on a 16:10 viewport. */}
         <rect x={0} y={0} width={1} height={1} fill={theme.bgMain} />
-        <rect x={0} y={0} width={1} height={1} fill={`url(#${gradId})`} />
         {yardLines}
         {yardNumbers}
         {hashMarks}

@@ -123,6 +123,11 @@ export function CoachAiChat({
   const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
   const [optInPending, setOptInPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Tracks whether the user is "stuck to bottom" (within a small tolerance).
+  // We only auto-scroll while this is true. The instant the user scrolls up
+  // mid-stream to read something, this flips false and we stop dragging
+  // them back down — until their next submit, which re-pins to bottom.
+  const stuckToBottomRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const prevStorageKeyRef = useRef<string | null>(null);
   const router = useRouter();
@@ -149,10 +154,17 @@ export function CoachAiChat({
     if (res.ok) setFeedbackOptIn(consenting ? "consenting" : "declined");
   }
 
-  // Auto-scroll whenever content changes
+  // Auto-scroll only while the user is stuck to the bottom. The moment
+  // they scroll up to read something mid-stream, stuckToBottomRef flips
+  // false (via the onScroll handler on the scroll container) and we stop
+  // forcing them back down. The next user submit re-pins to bottom (see
+  // the submit handler).
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    if (stuckToBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [turns, streaming, partialText, statusText]);
 
   useEffect(() => {
@@ -231,6 +243,12 @@ export function CoachAiChat({
     setTurns((cur) => [...cur, userTurn]);
     setDraft("");
     setStreaming(true);
+    // The user just submitted — re-pin to bottom so they see their own
+    // message and the streaming reply, even if they had scrolled up to
+    // re-read an earlier diagram while drafting. (Once Cal starts
+    // generating, the onScroll handler takes over: scroll up = stop
+    // dragging them down.)
+    stuckToBottomRef.current = true;
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -378,7 +396,19 @@ export function CoachAiChat({
           </div>
         </div>
       )}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-4 py-4"
+        onScroll={(e) => {
+          // Track whether the user is parked at the bottom. Tolerance of
+          // ~24px so a near-bottom position still counts as "stuck"
+          // (smooth-scroll lag, sub-pixel rounding). The autoscroll effect
+          // checks this ref before forcing scrollTop to scrollHeight.
+          const el = e.currentTarget;
+          const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          stuckToBottomRef.current = distFromBottom <= 24;
+        }}
+      >
         {turns.length === 0 && !streaming ? (
           <Empty />
         ) : (
