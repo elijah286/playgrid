@@ -217,7 +217,9 @@ export default function PrivacyPage() {
           <p className="mt-2">
             XO Gridmaker is intended for coaches and adults. We don&apos;t knowingly
             collect personal information from children under 13. Players
-            viewing shared playbooks don&apos;t need to create an account.
+            invited to a playbook sign in with their email to view it; only
+            individual play links (e.g. a single play shared by URL) can be
+            viewed without an account.
           </p>
         </section>
 
