@@ -67,6 +67,43 @@ export type ValidationResult =
   | { ok: true }
   | { ok: false; errors: string[] };
 
+/** Phantom-write detection: write tools that Cal MUST have actually called
+ *  this turn if the user-visible text claims the corresponding action
+ *  succeeded. Maps a tool name to regexes that signal a success claim. */
+const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
+  {
+    tool: "create_playbook",
+    patterns: [
+      /\bplaybook\s+created\b/i,
+      /\bcreated\s+(?:the\s+|your\s+)?playbook\b/i,
+      /\[Open\s[^\]]+\]\(\/playbooks\/[0-9a-f-]{8,}\)/i,
+    ],
+  },
+  {
+    tool: "create_practice_plan",
+    patterns: [
+      /\bpractice\s+plan\s+(?:created|saved)\b/i,
+      /\bcreated\s+(?:the\s+|your\s+)?practice\s+plan\b/i,
+      /\[Open\s+practice\s+plan\]\(\/practice-plans\/[0-9a-f-]{8,}\)/i,
+    ],
+  },
+  {
+    tool: "create_play",
+    patterns: [
+      /\bplay\s+(?:created|saved|added)\b/i,
+      /\bcreated\s+(?:the\s+)?play\b/i,
+      /\bsaved\s+(?:the\s+)?play\b/i,
+    ],
+  },
+  {
+    tool: "create_event",
+    patterns: [
+      /\b(?:scheduled|added)\s+(?:the\s+)?(?:practice|game|scrimmage|event)\b/i,
+      /\bevent\s+(?:created|added|scheduled)\b/i,
+    ],
+  },
+];
+
 export function validateDiagrams(opts: {
   text: string;
   variant: string | null | undefined;
@@ -77,11 +114,35 @@ export function validateDiagrams(opts: {
    *  route in the diagram must match one of these snapshots (path AND
    *  curve flag) — catches hand-authored named routes. */
   routeTemplates?: RouteTemplateSnapshot[];
+  /** Names of write tools that ran successfully (ok:true) this turn.
+   *  Used to detect phantom success claims — Cal can't say "playbook
+   *  created" if create_playbook wasn't actually called. */
+  writeToolsCalledOk?: ReadonlyArray<string>;
 }): ValidationResult {
-  const fences = extractPlayFences(opts.text);
-  if (fences.length === 0) return { ok: true };
+  // ── Phantom-write detection ────────────────────────────────────
+  // This runs FIRST and independently of diagram fences — Cal can claim a
+  // playbook was created without emitting any ```play``` block, which used
+  // to bypass validation entirely.
+  const phantomErrors: string[] = [];
+  const calledTools = new Set(opts.writeToolsCalledOk ?? []);
+  for (const { tool, patterns } of WRITE_CLAIM_PATTERNS) {
+    if (calledTools.has(tool)) continue;
+    const hit = patterns.find((re) => re.test(opts.text));
+    if (hit) {
+      phantomErrors.push(
+        `claimed "${tool}" success in your reply but never called the tool this turn (matched phrase "${hit.exec(opts.text)?.[0] ?? ""}"). The user will see broken state. Either call ${tool} now and re-emit, or remove the success claim entirely.`,
+      );
+    }
+  }
 
-  const errors: string[] = [];
+  const fences = extractPlayFences(opts.text);
+  if (fences.length === 0) {
+    return phantomErrors.length === 0
+      ? { ok: true }
+      : { ok: false, errors: phantomErrors };
+  }
+
+  const errors: string[] = [...phantomErrors];
   const expected = expectedFullCount(opts.variant);
 
   for (let i = 0; i < fences.length; i++) {

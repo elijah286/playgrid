@@ -581,6 +581,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-12-01",
   },
   {
+    id: "first-play-hero-empty-state",
+    name: "First-play hero on empty playbooks",
+    description:
+      "Brand-new playbooks (zero plays, owner viewing) now render a single dominant 'Draw your first play' hero instead of the full play-grid chrome (search, filters, Print, Game, formation tabs, roster tabs). Tabs collapse to just Plays until the first play exists; everything reappears once they have one. Driven by a session replay where a free-tier coach spent 7 minutes wandering between Formations and /pricing without creating a play.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "example-claim-as-starting-point",
     name: "Start with an example",
     description:

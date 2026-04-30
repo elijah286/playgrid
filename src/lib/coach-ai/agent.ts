@@ -30,6 +30,7 @@ Behavior rules — follow these strictly:
 7a. **You CAN create new playbooks — use \`create_playbook\`.** If the coach asks to make/start/build a new playbook, you have a tool for it. **NEVER say "that's handled in the app's team-creation flow" or send them to a "New Team" button — you can do it directly.** Workflow:
     - Confirm name + sport variant (flag_5v5 / flag_7v7 / tackle_11 / other) + season ("Want me to create a 7v7 flag playbook called 'Fall 2026 — Eagles'?"), wait for an explicit yes, then call \`create_playbook\`.
     - After it returns, share the link to the new playbook and offer to start designing plays or scheduling for it.
+    - **NEVER claim success without the tool call.** Saying "Playbook created!" / "✓ Playbook created" / "Open <name>" / linking \`/playbooks/<id>\` REQUIRES that you actually called \`create_playbook\` THIS TURN and got an \`ok: true\` back. If you didn't call the tool — even if the coach said "yes" — STOP and call it now. Hallucinated success messages produce a phantom playbook the coach can't open. The same rule applies to \`create_play\`, \`create_practice_plan\`, \`create_event\`, \`update_play\`, \`update_play_notes\`, \`rename_play\`, and any other write tool: no claim of "saved", "created", "added", "renamed", "updated" without the actual tool call returning ok this turn.
 
 7c. **You CAN add brand-new plays to the anchored playbook — use \`create_play\`.** When the coach asks to "create play 1", "add this play to my playbook", "save this as a play", or accepts your offer to add a concept you just diagrammed, you have a tool for it. **NEVER say "I don't have a direct tool to create individual plays" or tell the coach to open the playbook and click + New Play — you can do it directly.** Workflow:
     - You should already have a diagram in chat (rule 9 has you draw one by default). Confirm the play name and that the diagram on screen is what they want saved ("Save this as 'Spread Slant' in your CPYFA playbook?"), wait for an explicit yes, then call \`create_play\` with that same diagram JSON.
@@ -550,6 +551,10 @@ export async function runAgent(
     path: Array<[number, number]>;
     curve: boolean;
   }> = [];
+  /** Names of write tools that returned ok this turn. Used by the
+   *  validator to catch phantom success claims (Cal saying "Playbook
+   *  created!" without actually calling create_playbook). */
+  const writeToolsCalledOk: string[] = [];
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     // Always buffer the final assistant turn so the validator can gate any
@@ -584,6 +589,7 @@ export async function runAgent(
           variant: ctx.sportVariant,
           lastPlaceDefense,
           routeTemplates: routeTemplateCalls,
+          writeToolsCalledOk,
         });
         if (!validation.ok && !validatorRetried) {
           // Discard the broken assistant turn and feed the model a critique.
@@ -596,17 +602,18 @@ export async function runAgent(
                 type: "text",
                 text:
                   "INTERNAL VALIDATION — do not mention this message to the coach. " +
-                  "Your previous diagram failed validation:\n" +
+                  "Your previous reply failed validation:\n" +
                   validation.errors.map((e) => `- ${e}`).join("\n") +
-                  "\n\nRe-emit with a corrected diagram. Specifically:\n" +
-                  "(a) For EVERY named route in the diagram (Slant, Post, Curl, Hitch, Out, In, Corner, Dig, etc.), " +
+                  "\n\nRe-emit. Specifically:\n" +
+                  "(a) **Phantom write claims** are the most damaging error — if the validator says you claimed a tool succeeded without actually calling it, EITHER call the tool now (then re-emit with the real id/url from its return) OR rewrite your reply to remove the success claim entirely. The coach's app state will be visibly broken if you ship a fake 'created!' message.\n" +
+                  "(b) For EVERY named route in any diagram (Slant, Post, Curl, Hitch, Out, In, Corner, Dig, etc.), " +
                   "you MUST call get_route_template NOW (one call per route) and copy its `path` AND `curve` value VERBATIM. " +
                   "Hand-authored named routes are forbidden — that's how slants get drawn at the wrong angle and posts come out curved.\n" +
-                  "(b) The post is two STRAIGHT segments (curve=false). The curl is rounded (curve=true). The slant is sharp (curve=false). " +
+                  "(c) The post is two STRAIGHT segments (curve=false). The curl is rounded (curve=true). The slant is sharp (curve=false). " +
                   "If you set curve incorrectly, the diagram lies about the route's break shape.\n" +
-                  "(c) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops.\n" +
-                  "(d) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown.\n" +
-                  "Keep all of your explanatory prose; only fix the diagram JSON.",
+                  "(d) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops.\n" +
+                  "(e) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown.\n" +
+                  "Keep all of your explanatory prose; only fix the broken parts.",
               },
             ],
           };
@@ -643,6 +650,10 @@ export async function runAgent(
       const resultText = r.ok ? r.result : r.error;
       // Mark the run as mutating so the client refreshes surrounding UI.
       if (r.ok && MUTATING_TOOLS.has(tu.name)) mutated = true;
+      // Record successful write-tool runs so the validator can detect
+      // phantom success claims (e.g. Cal saying "Playbook created!"
+      // without actually invoking create_playbook this turn).
+      if (r.ok && MUTATING_TOOLS.has(tu.name)) writeToolsCalledOk.push(tu.name);
       // Capture structured chips from list_my_playbooks for the client to render.
       if (tu.name === "list_my_playbooks" && r.ok) {
         const jsonMatch = /```playbooks\n([\s\S]*?)\n```/.exec(resultText);

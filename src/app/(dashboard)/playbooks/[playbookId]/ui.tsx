@@ -1139,35 +1139,66 @@ function PlaybookDetailClientInner({
         <div className="-mx-6 overflow-x-auto px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:overflow-visible sm:px-0">
         <div className="border-b border-border min-w-max sm:min-w-0">
           <nav className="-mb-px flex gap-6" aria-label="Playbook sections">
-            {(
-              [
-                { key: "plays" as const, label: "Plays", count: initialPlays.filter((p) => !p.is_archived).length, variant: "default" as const },
-                { key: "formations" as const, label: "Formations", count: initialFormations.length, variant: "default" as const },
+            {(() => {
+              // Empty-playbook simplification: a brand-new owner/editor with
+              // zero plays sees only the Plays tab. Formations + Roster +
+              // Calendar etc. lured at least one user (Anton, 04/29) into
+              // an 8-minute side-quest that ended in a frustrated bounce.
+              // Re-expand after the first play is created.
+              const noPlaysYet = initialPlays.length === 0 && !isViewer && !isPreview;
+              const tabs: Array<{
+                key: "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans";
+                label: string;
+                count: number | null;
+                variant: "default";
+              }> = [
                 {
-                  key: "roster" as const,
+                  key: "plays",
+                  label: "Plays",
+                  count: initialPlays.filter((p) => !p.is_archived).length,
+                  variant: "default",
+                },
+              ];
+              if (!noPlaysYet) {
+                tabs.push({
+                  key: "formations",
+                  label: "Formations",
+                  count: initialFormations.length,
+                  variant: "default",
+                });
+                tabs.push({
+                  key: "roster",
                   label: "Roster",
                   count: initialRoster.filter((m) => m.status === "active").length,
-                  variant: "default" as const,
-                },
-                ...(teamCalendarAvailable
-                  ? [{
-                      key: "calendar" as const,
-                      label: "Calendar",
-                      // Neutral count of upcoming events. RSVP urgency lives
-                      // in the cross-playbook Inbox; per-playbook badges stay
-                      // informational so coaches don't see two red dots.
-                      count: calendarUpcomingTotal > 0 ? calendarUpcomingTotal : null,
-                      variant: "default" as const,
-                    }]
-                  : []),
-                ...(gameResultsAvailable
-                  ? [{ key: "games" as const, label: "Results", count: null as number | null, variant: "default" as const }]
-                  : []),
-                ...(practicePlansAvailable
-                  ? [{ key: "practice_plans" as const, label: "Practice Plans", count: null as number | null, variant: "default" as const }]
-                  : []),
-              ] satisfies Array<{ key: "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans"; label: string; count: number | null; variant: "default" }>
-            ).map((t) => {
+                  variant: "default",
+                });
+                if (teamCalendarAvailable) {
+                  tabs.push({
+                    key: "calendar",
+                    label: "Calendar",
+                    count: calendarUpcomingTotal > 0 ? calendarUpcomingTotal : null,
+                    variant: "default",
+                  });
+                }
+                if (gameResultsAvailable) {
+                  tabs.push({
+                    key: "games",
+                    label: "Results",
+                    count: null,
+                    variant: "default",
+                  });
+                }
+                if (practicePlansAvailable) {
+                  tabs.push({
+                    key: "practice_plans",
+                    label: "Practice Plans",
+                    count: null,
+                    variant: "default",
+                  });
+                }
+              }
+              return tabs;
+            })().map((t) => {
               const active = tab === t.key;
               return (
                 <button
@@ -1200,8 +1231,12 @@ function PlaybookDetailClientInner({
         </div>
         </div>
 
-        {tab === "plays" && (
-        /* Slim top bar: type tabs, search, filters, print, new */
+        {tab === "plays" && !(initialPlays.length === 0 && !isViewer && !isPreview) && (
+        /* Slim top bar: type tabs, search, filters, print, new.
+           Suppressed for brand-new owners (zero plays) — the FirstPlayHero
+           below is the only action that makes sense there, and showing
+           Print/Game/Search invites confused taps that go to nothing or
+           bounce to /pricing (game mode upgrade dialog). */
         <div className="flex flex-wrap items-end gap-3">
           {/* Type filter lives in the Filters panel on mobile to save a
               row of vertical space; shown inline on desktop for fast
@@ -1521,22 +1556,29 @@ function PlaybookDetailClientInner({
         {/* Main area */}
         <div className="min-w-0">
       {filtered.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          heading="No plays yet"
-          description={
-            isViewer
-              ? "This playbook doesn't have any plays yet. Your coach will add them here."
-              : "Create your first play to start designing routes and formations."
-          }
-          action={
-            isViewer ? undefined : (
-              <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
-                New play
-              </Button>
-            )
-          }
-        />
+        // Brand-new owner/editor: replace the small empty-state with a
+        // hero so "Draw your first play" is the dominant element on the
+        // page. Viewers and search-empty states keep the small card.
+        initialPlays.length === 0 && !isViewer && !isPreview ? (
+          <FirstPlayHero onCreate={openFormationPicker} loading={creating} />
+        ) : (
+          <EmptyState
+            icon={FileText}
+            heading="No plays yet"
+            description={
+              isViewer
+                ? "This playbook doesn't have any plays yet. Your coach will add them here."
+                : "Create your first play to start designing routes and formations."
+            }
+            action={
+              isViewer ? undefined : (
+                <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
+                  New play
+                </Button>
+              )
+            }
+          />
+        )
       ) : (
         <div className="relative space-y-6">
           {isReordering && (
@@ -4287,6 +4329,75 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
       <div className="h-px flex-1 bg-border" />
     </div>
+  );
+}
+
+/**
+ * Dominant first-play CTA shown on a brand-new playbook with zero plays.
+ *
+ * Why this exists: a session replay (Anton, 04/29) showed a free-tier coach
+ * land on /playbooks/<id>, sit on the page for 7+ minutes, wander into
+ * /formations/<id>/edit three times, hit /pricing → /account → back to
+ * the playbook three times — never created a play and bounced. The "No
+ * plays yet" empty card was buried under tabs, search, filters, Print,
+ * and Game buttons; "Draw your first play" was not the visually dominant
+ * next step.
+ *
+ * Replaces the small empty card and pairs with suppression of the slim
+ * top bar + non-essential tabs while plays.length === 0.
+ */
+function FirstPlayHero({
+  onCreate,
+  loading,
+}: {
+  onCreate: () => void;
+  loading: boolean;
+}) {
+  return (
+    <section
+      aria-labelledby="first-play-hero"
+      className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-surface-raised to-surface-raised p-8 text-center shadow-sm sm:p-12"
+    >
+      <div
+        className="pointer-events-none absolute -right-16 -top-16 size-64 rounded-full opacity-30 blur-3xl"
+        style={{ background: "rgba(23,105,255,0.35)" }}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -bottom-20 -left-12 size-72 rounded-full opacity-25 blur-3xl"
+        style={{ background: "rgba(149,204,31,0.4)" }}
+        aria-hidden
+      />
+      <div className="relative mx-auto max-w-xl">
+        <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
+          <Plus className="size-3.5" aria-hidden /> Step 1
+        </span>
+        <h2
+          id="first-play-hero"
+          className="mt-4 text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl"
+        >
+          Draw your first play.
+        </h2>
+        <p className="mt-3 text-base leading-relaxed text-muted">
+          Pick a formation, draw routes, name it. Once you have a play, the
+          rest of the playbook unlocks — formations, roster, sharing, print
+          and Game Mode.
+        </p>
+        <div className="mt-6 flex justify-center">
+          <Button
+            variant="primary"
+            size="lg"
+            leftIcon={Plus}
+            onClick={onCreate}
+            loading={loading}
+            className="px-8 py-4 text-base font-bold"
+          >
+            Draw your first play
+          </Button>
+        </div>
+        <p className="mt-3 text-xs text-muted">Free — takes about a minute.</p>
+      </div>
+    </section>
   );
 }
 
