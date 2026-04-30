@@ -673,9 +673,9 @@ export const FEATURES: FeatureEntry[] = [
   // ── Marketing site ──────────────────────────────────────────────
   {
     id: "marketing-hero-playbook",
-    name: "Hero playbook (admin-pickable)",
+    name: "Hero playbook (admin-pickable, with A/B tracking)",
     description:
-      "Site admin can promote any published example playbook to take over the home-page hero shot — the book tile renders in place of the X/O illustration, with a 'Try this playbook' CTA that opens it in the visitor-preview editor. Single-selection (only one hero across the whole DB, enforced by a unique partial index); promoting a new one auto-clears the old. If no hero is set, the home page falls back to the existing logo with no behavior change.",
+      "Site admin can flag any published example playbooks to take over the home-page hero shot — the book tile renders in place of the X/O illustration, with a 'Try this playbook' CTA that opens it in the visitor-preview editor. Multiple playbooks can be flagged at once; the home page picks one at random per render and logs an impression. The CTA logs a click event before navigation. Per-playbook impressions and clicks live in marketing_hero_events so winners can be picked from CTR over time. If no playbook is flagged, the home page falls back to the existing logo with no behavior change.",
     category: "Marketing site",
     status: "ga",
     addedDate: "2026-04-30",

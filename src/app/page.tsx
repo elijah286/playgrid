@@ -24,6 +24,7 @@ import {
   loadHeroMarketingExample,
 } from "@/lib/site/example-playbooks";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
+import { HeroPlaybookCta } from "@/features/marketing/HeroPlaybookCta";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import {
   BuiltByACoach,
@@ -115,22 +116,18 @@ export default async function HomePage() {
           </div>
 
           {heroExample ? (
-            <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[280px] lg:w-[320px]">
-              {/* Match the size of example tiles in the strip below — a
-                  giant tile in the hero feels like a billboard, not a
-                  product. centerOnOpen auto-opens the book on mobile so
-                  phone visitors immediately see the play thumbnails;
-                  desktop keeps the hover-to-open animation. */}
+            // Same column dimensions as the logo branch so the tile sits
+            // in the same X location regardless of which one renders.
+            <div className="flex w-full shrink-0 flex-col items-center gap-5 md:w-[420px] lg:w-[460px]">
+              {/* Tile matches the size of example tiles in the strip below
+                  so the hero reads "here's a real playbook, click in"
+                  instead of "look at this giant splash." centerOnOpen is
+                  intentionally OFF — the book opens in place on hover
+                  instead of sliding to viewport center. */}
               <div className="w-44 sm:w-52 lg:w-60">
-                <ExampleBookTile tile={heroExample} centerOnOpen />
+                <ExampleBookTile tile={heroExample} />
               </div>
-              <Link
-                href={`/playbooks/${heroExample.id}`}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-surface-inset"
-              >
-                Try this playbook
-                <ArrowRight className="size-4" />
-              </Link>
+              <HeroPlaybookCta playbookId={heroExample.id} />
             </div>
           ) : (
             <div className="flex w-full shrink-0 items-center justify-center md:w-[420px] lg:w-[460px]">

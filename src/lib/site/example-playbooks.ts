@@ -14,18 +14,34 @@ export async function loadExamplePlaybooks(): Promise<ExampleBookTileData[]> {
 }
 
 /**
- * Same data shape as loadExamplePlaybooks(), but returns the single
- * playbook flagged is_hero_marketing_example (or null if no hero is
- * set or the flagged book is somehow no longer a public example).
+ * Same data shape as loadExamplePlaybooks(), but returns ONE tile —
+ * picked at random — from the pool of playbooks an admin has flagged
+ * is_hero_marketing_example. Returns null if no playbooks are flagged.
+ *
+ * Side effect: logs an impression event in marketing_hero_events so we
+ * can compute per-playbook CTR over time. Failures don't block the
+ * render — tracking is best-effort.
  *
  * Used by the home-page hero shot to swap the static X/O illustration
- * for a real example tile when an admin has picked one.
+ * for a real example tile when an admin has picked one (or several).
  */
 export async function loadHeroMarketingExample(): Promise<
   ExampleBookTileData | null
 > {
-  const tiles = await loadExamplePlaybooksFiltered({ heroOnly: true });
-  return tiles[0] ?? null;
+  const pool = await loadExamplePlaybooksFiltered({ heroOnly: true });
+  if (pool.length === 0) return null;
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+
+  // Fire-and-forget impression log. Don't await — the home page should
+  // never wait on tracking, and a failure here shouldn't block render.
+  if (hasSupabaseEnv()) {
+    const svc = createServiceRoleClient();
+    void svc
+      .from("marketing_hero_events")
+      .insert({ playbook_id: picked.id, event_type: "impression" });
+  }
+
+  return picked;
 }
 
 async function loadExamplePlaybooksFiltered({

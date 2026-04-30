@@ -213,10 +213,11 @@ export async function setPlaybookExampleAuthorLabelAction(
 }
 
 /**
- * Promote a published example playbook to the home-page hero shot — or
- * un-set the current hero. Single-selection: setting a new hero atomically
- * clears any existing hero. The unique partial index on
- * is_hero_marketing_example enforces this at the DB layer too.
+ * Toggle the hero-shot flag on a published example playbook. Multiple
+ * playbooks can be flagged at once — the home-page loader picks one at
+ * random per render and logs an impression. Effectiveness (impressions
+ * + click-throughs to "Try this playbook") is tracked in
+ * marketing_hero_events so the admin can pick winners over time.
  *
  * Caller must already have marked the playbook as a public example. We
  * don't auto-mark because hero is a downstream choice, not the same
@@ -241,14 +242,6 @@ export async function setPlaybookHeroExampleAction(
         error: "Publish this example before making it the hero.",
       };
     }
-
-    // Clear any existing hero first, then set the new one. The partial
-    // unique index would reject the set otherwise.
-    const { error: clearErr } = await gate.supabase
-      .from("playbooks")
-      .update({ is_hero_marketing_example: false })
-      .eq("is_hero_marketing_example", true);
-    if (clearErr) return { ok: false as const, error: clearErr.message };
   }
 
   const { error } = await gate.supabase
@@ -257,13 +250,32 @@ export async function setPlaybookHeroExampleAction(
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
 
-  // Home page reads the hero — bust the layout cache so visitors see the
-  // new selection on next render.
+  // Home page reads the hero pool — bust the layout cache so visitors
+  // see the updated rotation on next render.
   revalidatePath("/", "layout");
   revalidatePath("/home");
   revalidatePath("/examples");
   revalidatePath(`/playbooks/${playbookId}`);
   return { ok: true as const, isHero };
+}
+
+/**
+ * Log a click-through from the hero-shot CTA. Fired client-side from a
+ * thin wrapper around the "Try this playbook" link. We don't gate this
+ * on auth — the home page is a public marketing surface and any tap on
+ * the hero CTA is a meaningful signal.
+ */
+export async function logHeroExampleClickAction(playbookId: string) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "no-env" };
+  // Service-role client because the events table is locked down at the RLS
+  // layer; only server actions and the home-page loader write to it.
+  const { createServiceRoleClient } = await import("@/lib/supabase/admin");
+  const svc = createServiceRoleClient();
+  const { error } = await svc
+    .from("marketing_hero_events")
+    .insert({ playbook_id: playbookId, event_type: "click" });
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
 }
 
 export async function getExamplesPageEnabledAction() {
