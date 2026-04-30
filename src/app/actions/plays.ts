@@ -1945,7 +1945,7 @@ export async function createCustomOpponentAction(parentPlayId: string) {
       playbook_id: parent.playbook_id,
       name: doc.metadata.coachName,
       shorthand: "",
-      wristband_code: null,
+      wristband_code: "",
       formation_name: "",
       concept: "",
       tags: [],
