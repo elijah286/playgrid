@@ -1602,13 +1602,11 @@ export async function loadPlaybookPrintPackAction(playbookId: string) {
     return { ok: true as const, pack: [] as PlaybookPrintPackRow[], groups: listed.groups };
   }
 
+  // No auth gate — anonymous visitors can print-preview a published
+  // example playbook. RLS (0065_public_example_read.sql) controls
+  // which play_versions are visible: members see their own, anyone
+  // sees public examples, everyone else gets nothing back.
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false as const, error: "Not signed in.", pack: [], groups: listed.groups };
-  }
 
   const { data: versions, error: vErr } = await supabase
     .from("play_versions")
