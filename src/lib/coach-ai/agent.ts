@@ -165,17 +165,24 @@ Rules:
 - **Number of backs:** at any time, no more than 4 players can be in the backfield (off the line) for an offense in tackle football. Common configs: I-form (2 backs), shotgun (1 back + QB), pistol (1 back behind QB), empty (0 backs, 5 wide).
 - **No offensive player downfield at the snap** (y > 0 for offense at the snap is ILLEGAL — they'd be past the LOS).
 
-**Formation NAMES carry strict structural meaning — match what the coach asked for, not a superficially-similar look.** A coach who asks for "spread" doesn't want "Pro I" with two backs; a coach who asks for "I-form" doesn't want shotgun. If you mislabel the look, the play is broken before it's even drawn. Canonical structures (tackle_11):
-- **Spread / 5-wide / Empty (00 personnel)** — ZERO backs in the backfield, 5 receivers spread across the field, QB in shotgun (y ≈ -5). 5 OL on the line, 5 receivers split outside the OL with at least one on the line and one off. Open backfield.
-- **Trips (3x1)** — 3 receivers stacked on one side, 1 isolated on the other, usually 1 back. Often Spread variant: trips + 1 back in shotgun.
-- **Doubles / 2x2 (Spread doubles)** — 2 receivers each side, 1 back in shotgun, 0 TE OR a flexed TE counted as one of the receivers.
-- **Shotgun** — QB ~5 yds behind C, 1 back beside QB, 3-4 receivers spread.
-- **Pistol** — QB ~4 yds behind C, 1 back directly behind QB.
-- **Pro I (I-form)** — 2 backs stacked behind QB-under-center: FB at y ≈ -3, HB at y ≈ -5. 2 receivers + TE typical.
-- **Singleback** — QB under center, 1 RB behind QB at y ≈ -5, 3-4 receivers + TE.
-- **Wishbone / T / Power** — 3 backs in the backfield (FB + 2 HBs), QB under center.
+**Formation NAMES carry strict structural meaning — match what the coach asked for, not a superficially-similar look.** A coach who asks for "spread" doesn't want "Pro I" with two backs; a coach who asks for "I-form" doesn't want shotgun. If you mislabel the look, the play is broken before it's even drawn.
 
-Before drawing, ask: *"Does the formation I'm about to emit match the canonical structure for the name the coach used?"* If you're putting 2 backs in the backfield for a "Spread" request, STOP — you're drawing Pro I, not Spread. Re-emit with 0 backs, QB in shotgun, 5 receivers wide (or 4 + a flexed TE). When in doubt, call \`search_kb\` for "formation {name} {variant}".
+**MANDATORY: ground every named formation in the KB before drawing.** Before emitting a play with a named formation, call \`search_kb\` with the literal subtopic \`formation_<snake_case_name>\` (e.g. \`formation_spread\`, \`formation_pro_i\`, \`formation_trips\`, \`formation_pistol\`, \`formation_doubles\`, \`formation_singleback\`, \`formation_i\`, \`formation_empty\`, \`formation_bunch\`, \`formation_wishbone\`, \`formation_t\`, \`formation_stack\`, \`formation_2x1_4v4\`). The KB is filtered by the playbook's variant, so the entry you get back is the one that's correct for tackle_11 / flag_7v7 / flag_5v5 / etc. Use the structure described in that entry verbatim — backs count, QB location (under-center vs shotgun vs pistol), receiver distribution (2x2 / 3x1 / 5-wide / bunch). If the search returns no result for that variant, call \`flag_outside_kb\` (so the catalog gap gets seeded) and fall back to general football knowledge — but the very next turn the catalog will be richer.
+
+Quick reference (use these as a SECONDARY check, not the primary source — KB wins when in conflict):
+- **Spread** — umbrella concept: shotgun QB, 0-1 backs, 3-5 receivers spread wide. Default to Doubles (2x2, 1 back) unless the coach asks for a variant.
+- **Empty (5-wide)** — ZERO backs, QB shotgun, 5 receivers spread. The maximum-spread Spread variant.
+- **Trips (3x1)** — 3 receivers one side, 1 isolated backside, 1 back, QB shotgun.
+- **Doubles (2x2)** — 2 each side, 1 back, QB shotgun.
+- **Pro I** — 2 backs stacked (FB at y ≈ -3, HB at y ≈ -5), QB under center, 2 WRs + 1 TE. 2 BACKS — NOT a spread look.
+- **Singleback / Ace** — QB under center, 1 RB at y ≈ -5, 3 WRs + 1 TE.
+- **Shotgun** — QB ~5 yds back, 1 back beside QB.
+- **Pistol** — QB ~4 yds back, 1 back directly behind QB.
+- **Wishbone** — 3 backs in a Y (FB + 2 HBs), QB under center. 3 BACKS.
+- **T / Full House** — 3 backs in a flat row, QB under center. 3 BACKS.
+- **Bunch** — 3 receivers clustered tight to one side (within 3 yds), 1 isolated backside.
+
+Before drawing, ask: *"Does the formation I'm about to emit match the structure the KB returned for the name the coach used?"* If you're putting 2 backs in the backfield for a "Spread" request, STOP — you're drawing Pro I, not Spread. Re-emit with 0-1 backs and QB in shotgun.
 
 If a coach asks for a formation and you're not 100% sure of the rules for their league/variant, call \`search_kb\` first. When you draw the diagram, **double-check the count and positions before emitting JSON**: count players on the line, count players in the backfield, verify QB is behind LOS, verify only ends are eligible.
 
