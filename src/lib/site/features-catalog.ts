@@ -247,6 +247,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-29",
   },
   {
+    id: "name-capture-prompt",
+    name: "One-time name prompt",
+    description:
+      "Coaches who never set a display name (older OTP-only signups, accounts that predate the new-user-profile step) get a one-time, dismissible \"What should we call you?\" modal on next dashboard visit. Triggered when profiles.display_name is null OR equals the user's email — the legacy default. Saves to profiles.display_name; remembers dismissal in localStorage so it doesn't reappear on every navigation. Closes the loop on the \"why is this coach showing up as their email?\" rosters issue.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-04-29",
+  },
+  {
     id: "share-link-smart-deep-link",
     name: "Share-link smart deep-link",
     description:
