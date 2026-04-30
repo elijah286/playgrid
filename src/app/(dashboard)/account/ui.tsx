@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, CreditCard, IdCard, KeyRound, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
+import { AlertTriangle, Check, CreditCard, IdCard, KeyRound, Lock, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
   deleteOwnAccountAction,
@@ -15,7 +15,11 @@ import {
 import { createBillingPortalSessionAction, setSeatQuantityAction } from "@/app/actions/billing";
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
-import { TIER_LABEL } from "@/lib/billing/features";
+import {
+  FREE_MAX_PLAYBOOKS_OWNED,
+  FREE_MAX_PLAYS_PER_PLAYBOOK,
+  TIER_LABEL,
+} from "@/lib/billing/features";
 import type { SeatUsage, SeatCollaborator, PendingCoachInvite } from "@/lib/billing/seats";
 import { resendCoachInviteAction } from "@/app/actions/invites";
 import { setAiFeedbackOptInAction } from "@/app/actions/coach-ai-feedback";
@@ -449,9 +453,83 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
           </p>
         ) : null}
 
+        <PlanCapabilityList tier={tier} />
+
         {err ? <p className="text-xs text-red-700">{err}</p> : null}
       </div>
     </Card>
+  );
+}
+
+/**
+ * Tier-aware capability list shown inside the Plan card. Free-tier users
+ * who hit /account from the playbook page (e.g. after bouncing off the
+ * Game Mode upgrade dialog) need this to answer the question "what does
+ * my current plan actually include?" — without it, the only prominent
+ * action on the page is "See pricing", which fed a frustration loop in
+ * a real session replay (Anton, 04/29).
+ *
+ * Source of truth is `lib/billing/features.ts` — keep this list aligned
+ * with the gates used elsewhere in the app.
+ */
+function PlanCapabilityList({ tier }: { tier: "free" | "coach" | "coach_ai" }) {
+  // Each row: label + which tier(s) include it. The list is the same
+  // for every viewer; we mark each row as included or locked based on
+  // the viewer's tier so a free user sees what they have AND what they
+  // unlock by upgrading, without leaving the account page.
+  const rows: Array<{ label: string; includedAt: "free" | "coach" | "coach_ai" }> = [
+    { label: `Up to ${FREE_MAX_PLAYBOOKS_OWNED} playbook`, includedAt: "free" },
+    { label: `${FREE_MAX_PLAYS_PER_PLAYBOOK} plays per playbook`, includedAt: "free" },
+    { label: "Mobile, tablet, and desktop editor", includedAt: "free" },
+    { label: "Print playsheets (with watermark)", includedAt: "free" },
+    { label: "View shared plays without an account", includedAt: "free" },
+    { label: "Unlimited plays and playbooks", includedAt: "coach" },
+    { label: "Co-coaches and team sharing", includedAt: "coach" },
+    { label: "Game Mode (sideline call sheet)", includedAt: "coach" },
+    { label: "Wristband cards + watermark-free print", includedAt: "coach" },
+    { label: "Coach Cal AI assistant", includedAt: "coach_ai" },
+  ];
+
+  const rank: Record<"free" | "coach" | "coach_ai", number> = {
+    free: 0,
+    coach: 1,
+    coach_ai: 2,
+  };
+  const viewerRank = rank[tier];
+
+  return (
+    <div className="rounded-md border border-border bg-surface px-3 py-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+        What you have on {TIER_LABEL[tier]}
+      </p>
+      <ul className="space-y-1.5 text-xs">
+        {rows.map((r) => {
+          const included = rank[r.includedAt] <= viewerRank;
+          return (
+            <li
+              key={r.label}
+              className={`flex items-center gap-2 ${
+                included ? "text-foreground" : "text-muted"
+              }`}
+            >
+              {included ? (
+                <Check className="size-3.5 shrink-0 text-emerald-500" aria-hidden />
+              ) : (
+                <Lock className="size-3.5 shrink-0 text-muted/70" aria-hidden />
+              )}
+              <span className={included ? "" : "line-through decoration-muted/40"}>
+                {r.label}
+              </span>
+              {!included && (
+                <span className="ml-auto rounded-full bg-surface-inset px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  {TIER_LABEL[r.includedAt]}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
