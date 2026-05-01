@@ -855,6 +855,113 @@ function PlayEditorClientInner({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo, selectedRouteId, selectedNodeId, dispatch]);
 
+  // Defense plays anchor a snapshot of the offense they were drawn against;
+  // offense plays use the opponent overlay picker. Same node is rendered on
+  // desktop sidebar and (in view mode) on mobile under the playback panel.
+  const opponentCardNode = !showToolbar ? (
+    isDefense && vsSnapshot ? (
+      <VsPlayCard
+        playId={playId}
+        snapshot={vsSnapshot}
+        showRoutes={showOpponentRoutes}
+        onShowRoutesChange={setShowOpponentRoutes}
+        onSnapshotReplaced={(snap: VsPlaySnapshot) =>
+          dispatch({
+            type: "document.setMetadata",
+            patch: { vsPlaySnapshot: snap },
+          })
+        }
+        onUnlinked={() =>
+          dispatch({
+            type: "document.setMetadata",
+            patch: { vsPlayId: null, vsPlaySnapshot: null },
+          })
+        }
+      />
+    ) : (
+      <OpponentOverlayCard
+        currentPlayId={playId}
+        currentPlaybookId={playbookId}
+        playType={doc.metadata.playType ?? "offense"}
+        nav={initialNav}
+        allFormations={opponentFormations ?? allFormations}
+        hasSelection={
+          opponentPlayers != null ||
+          (customOpponentPlayId != null && !opponentHidden)
+        }
+        onChange={(players) => {
+          setOpponentPlayers(players);
+          if (players == null) setOpponentPickedRoutes(null);
+        }}
+        onChangeRoutes={setOpponentPickedRoutes}
+        showRoutes={showOpponentRoutes}
+        onShowRoutesChange={setShowOpponentRoutes}
+        hasCustomOpponent={customOpponentPlayId != null}
+        opponentHidden={opponentHidden}
+        canEditCustom={canEdit && !isExamplePreview}
+        onCreateCustom={
+          isDefense
+            ? undefined
+            : async () => {
+                if (
+                  blockIfPreview(
+                    "Custom opponents aren't saved on example plays. Start your own playbook to keep changes.",
+                  )
+                ) {
+                  return;
+                }
+                const res = await createCustomOpponentAction(playId);
+                if (!res.ok) {
+                  toast(res.error, "error");
+                  return;
+                }
+                setCustomOpponentPlayId(res.hiddenPlayId);
+                setOpponentHidden(false);
+                setOpponentPlayers(null);
+                setOpponentPickedRoutes(null);
+                router.refresh();
+              }
+        }
+        onSetHidden={async (hidden) => {
+          const res = await setOpponentHiddenAction(playId, hidden);
+          if (!res.ok) {
+            toast(res.error, "error");
+            return;
+          }
+          setOpponentHidden(hidden);
+        }}
+        onSaveCustomAsPlay={async (name) => {
+          const res = await promoteCustomOpponentAction(playId, name);
+          if (!res.ok) {
+            toast(res.error, "error");
+            return;
+          }
+          toast(`Saved "${name}" as a defensive play.`, "success");
+          router.push(`/plays/${res.playId}/edit`);
+        }}
+        onInstallVsPlay={
+          isDefense
+            ? async (offId: string) => {
+                if (
+                  blockIfPreview(
+                    "Installing a vs-play against an example play isn't saved. Start your own playbook to keep changes.",
+                  )
+                ) {
+                  return;
+                }
+                const res = await installDefenseVsPlayAction(playId, offId);
+                if (!res.ok) {
+                  toast(res.error, "error");
+                  return;
+                }
+                router.push(`/plays/${res.playId}/edit`);
+              }
+            : undefined
+        }
+      />
+    )
+  ) : null;
+
   return (
     <div ref={rootRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       {isNavPending && (
@@ -1185,6 +1292,13 @@ function PlayEditorClientInner({
               </div>
             )}
 
+            {/* Mobile opponent card — mirrors the desktop sidebar's opponent
+                picker / vs-play card so coaches on phones can preview a
+                defense against an offense play. View mode only. */}
+            {mode === "view" && !isExamplePreview && opponentCardNode && (
+              <div className="sm:hidden">{opponentCardNode}</div>
+            )}
+
             {/* Mobile edit mode: swap field-size controls ⇄ notes editor.
                 Desktop renders both stacked. */}
             {canEdit && mode === "edit" && !notesOpen && (
@@ -1257,114 +1371,7 @@ function PlayEditorClientInner({
             {canEdit && !showToolbar && (
               <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
             )}
-            {!showToolbar && isDefense && vsSnapshot ? (
-              <VsPlayCard
-                playId={playId}
-                snapshot={vsSnapshot}
-                showRoutes={showOpponentRoutes}
-                onShowRoutesChange={setShowOpponentRoutes}
-                onSnapshotReplaced={(snap: VsPlaySnapshot) =>
-                  dispatch({
-                    type: "document.setMetadata",
-                    patch: { vsPlaySnapshot: snap },
-                  })
-                }
-                onUnlinked={() =>
-                  dispatch({
-                    type: "document.setMetadata",
-                    patch: { vsPlayId: null, vsPlaySnapshot: null },
-                  })
-                }
-              />
-            ) : !showToolbar ? (
-              <OpponentOverlayCard
-                currentPlayId={playId}
-                currentPlaybookId={playbookId}
-                playType={doc.metadata.playType ?? "offense"}
-                nav={initialNav}
-                allFormations={opponentFormations ?? allFormations}
-                hasSelection={
-                  opponentPlayers != null ||
-                  (customOpponentPlayId != null && !opponentHidden)
-                }
-                onChange={(players) => {
-                  setOpponentPlayers(players);
-                  if (players == null) setOpponentPickedRoutes(null);
-                }}
-                onChangeRoutes={setOpponentPickedRoutes}
-                showRoutes={showOpponentRoutes}
-                onShowRoutesChange={setShowOpponentRoutes}
-                hasCustomOpponent={customOpponentPlayId != null}
-                opponentHidden={opponentHidden}
-                canEditCustom={canEdit && !isExamplePreview}
-                onCreateCustom={
-                  // Custom-opponent flow currently only works in the offense
-                  // → defense direction (drops a default defense). Disabled
-                  // on defense plays until a parallel offense template +
-                  // editor flow exists.
-                  isDefense
-                    ? undefined
-                    : async () => {
-                        if (
-                          blockIfPreview(
-                            "Custom opponents aren't saved on example plays. Start your own playbook to keep changes.",
-                          )
-                        ) {
-                          return;
-                        }
-                        const res = await createCustomOpponentAction(playId);
-                        if (!res.ok) {
-                          toast(res.error, "error");
-                          return;
-                        }
-                        setCustomOpponentPlayId(res.hiddenPlayId);
-                        setOpponentHidden(false);
-                        setOpponentPlayers(null);
-                        setOpponentPickedRoutes(null);
-                        router.refresh();
-                      }
-                }
-                onSetHidden={async (hidden) => {
-                  const res = await setOpponentHiddenAction(playId, hidden);
-                  if (!res.ok) {
-                    toast(res.error, "error");
-                    return;
-                  }
-                  setOpponentHidden(hidden);
-                }}
-                onSaveCustomAsPlay={async (name) => {
-                  const res = await promoteCustomOpponentAction(playId, name);
-                  if (!res.ok) {
-                    toast(res.error, "error");
-                    return;
-                  }
-                  toast(`Saved "${name}" as a defensive play.`, "success");
-                  router.push(`/plays/${res.playId}/edit`);
-                }}
-                onInstallVsPlay={
-                  isDefense
-                    ? async (offId: string) => {
-                        if (
-                          blockIfPreview(
-                            "Installing a vs-play against an example play isn't saved. Start your own playbook to keep changes.",
-                          )
-                        ) {
-                          return;
-                        }
-                        const res = await installDefenseVsPlayAction(
-                          playId,
-                          offId,
-                        );
-                        if (!res.ok) {
-                          toast(res.error, "error");
-                          return;
-                        }
-                        router.push(`/plays/${res.playId}/edit`);
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
+            {opponentCardNode}
             {!showToolbar && !isDefense && (
               <PlayResultsCard
                 playbookId={playbookId}

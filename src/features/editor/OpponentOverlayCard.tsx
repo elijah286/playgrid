@@ -106,6 +106,10 @@ export function OpponentOverlayCard({
   const [selection, setSelection] = useState<Selection>(
     hasCustomOpponent ? { kind: "custom" } : { kind: "none" },
   );
+  // Tracks whether the most recently picked play (selection.kind === "play")
+  // had any routes saved. Drives the disabled state on "Show routes" so coaches
+  // get a visual hint that the box won't do anything for this opponent.
+  const [pickedHasRoutes, setPickedHasRoutes] = useState(false);
   const [query, setQuery] = useState("");
   const [formationsOpen, setFormationsOpen] = useState(false);
   const [playsOpen, setPlaysOpen] = useState(true);
@@ -168,12 +172,14 @@ export function OpponentOverlayCard({
 
   const pickFormation = (f: SavedFormation) => {
     setSelection({ kind: "formation", id: f.id, label: f.displayName });
+    setPickedHasRoutes(false);
     onChange(f.players);
     onChangeRoutes?.(null);
   };
 
   const pickPlay = (p: PlaybookPlayNavItem) => {
     setSelection({ kind: "play", id: p.id, label: p.name });
+    setPickedHasRoutes(false);
     startTransition(async () => {
       const res = await getPlayForEditorAction(p.id);
       if (!res.ok) {
@@ -197,9 +203,11 @@ export function OpponentOverlayCard({
         return;
       }
       onChange(players);
+      const routes = res.document.layers.routes ?? [];
+      setPickedHasRoutes(routes.length > 0);
       // Surface the picked play's routes so the parent can optionally render
       // them as ghost arrows (see `showRoutes`).
-      onChangeRoutes?.(res.document.layers.routes ?? []);
+      onChangeRoutes?.(routes);
     });
   };
 
@@ -214,6 +222,7 @@ export function OpponentOverlayCard({
       return;
     }
     setSelection({ kind: "none" });
+    setPickedHasRoutes(false);
     onChange(null);
     onChangeRoutes?.(null);
   };
@@ -402,11 +411,23 @@ export function OpponentOverlayCard({
             {pending && <span className="text-[10px] text-muted">loading…</span>}
           </div>
           {selection.kind === "play" && onShowRoutesChange && (
-            <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-muted">
+            <label
+              className={`flex select-none items-center gap-1.5 text-[11px] ${
+                pickedHasRoutes
+                  ? "cursor-pointer text-muted"
+                  : "cursor-not-allowed text-muted/50"
+              }`}
+              title={
+                pickedHasRoutes
+                  ? undefined
+                  : "This opponent play has no routes saved."
+              }
+            >
               <input
                 type="checkbox"
-                className="size-3.5 cursor-pointer accent-primary"
-                checked={showRoutes}
+                disabled={!pickedHasRoutes}
+                className="size-3.5 accent-primary disabled:cursor-not-allowed"
+                checked={pickedHasRoutes && showRoutes}
                 onChange={(e) => onShowRoutesChange(e.target.checked)}
               />
               <span>Show {playType === "defense" ? "offense" : "opponent"} routes</span>
@@ -488,6 +509,7 @@ export function OpponentOverlayCard({
                     [p.formation_name, p.concept].filter(Boolean).join(" · ") ||
                     labelForKind(p.play_type)
                   }
+                  editHref={`/plays/${p.id}/edit`}
                 />
               );
             })}
@@ -564,28 +586,43 @@ function RowButton({
   onClick,
   primary,
   secondary,
+  editHref,
 }: {
   active: boolean;
   onClick: () => void;
   primary: string;
   secondary?: string;
+  editHref?: string;
 }) {
   return (
-    <li>
+    <li
+      className={`group flex items-stretch rounded-md transition-colors ${
+        active
+          ? "bg-primary/10 ring-1 ring-primary/40"
+          : "hover:bg-surface-inset"
+      }`}
+    >
       <button
         type="button"
         onClick={onClick}
-        className={`w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-          active
-            ? "bg-primary/10 text-foreground ring-1 ring-primary/40"
-            : "text-foreground hover:bg-surface-inset"
-        }`}
+        className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-xs text-foreground"
       >
         <div className="truncate font-medium">{primary}</div>
         {secondary && (
           <div className="truncate text-[11px] text-muted">{secondary}</div>
         )}
       </button>
+      {editHref && (
+        <a
+          href={editHref}
+          onClick={(e) => e.stopPropagation()}
+          className="flex shrink-0 items-center gap-1 rounded-md px-2 text-[11px] text-muted opacity-0 transition-opacity hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+          title="Edit this play"
+        >
+          <Pencil className="size-3" />
+          Edit
+        </a>
+      )}
     </li>
   );
 }
