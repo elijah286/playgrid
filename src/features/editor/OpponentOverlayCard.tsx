@@ -256,6 +256,17 @@ export function OpponentOverlayCard({
 
   const empty =
     filteredFormations.length === 0 && filteredPlays.length === 0;
+  // No plays/formations of the wanted kind exist anywhere in this playbook —
+  // distinct from "search returned nothing." Drives a richer empty-state
+  // card and hides the search bar (nothing to search through).
+  const playbookHasNoEligible =
+    eligibleFormations.length === 0 && eligiblePlays.length === 0;
+  const opposingKindLabel =
+    playType === "offense"
+      ? "defensive plays"
+      : playType === "defense"
+        ? "offensive plays"
+        : "opponent plays";
 
   return (
     <div className="flex max-h-[420px] min-h-0 flex-col rounded-xl border border-border bg-surface-inset/50">
@@ -281,16 +292,18 @@ export function OpponentOverlayCard({
         {label}
       </p>
 
-      <div className="relative px-3 pt-2">
-        <Search className="pointer-events-none absolute left-5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search formations and plays…"
-          className="w-full rounded-md border border-border bg-surface-raised py-1.5 pl-7 pr-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
-        />
-      </div>
+      {!playbookHasNoEligible && (
+        <div className="relative px-3 pt-2">
+          <Search className="pointer-events-none absolute left-5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search formations and plays…"
+            className="w-full rounded-md border border-border bg-surface-raised py-1.5 pl-7 pr-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+          />
+        </div>
+      )}
 
       {selection.kind === "custom" && hasCustomOpponent && (
         <div className="mx-3 mt-2 flex flex-col gap-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs">
@@ -323,7 +336,7 @@ export function OpponentOverlayCard({
                 Show
               </button>
             ) : null}
-            {canEditCustom && onSaveCustomAsPlay && (
+            {canEditCustom && onSaveCustomAsPlay && !opponentHidden && (
               <button
                 type="button"
                 disabled={customPending}
@@ -438,10 +451,21 @@ export function OpponentOverlayCard({
           </div>
         )}
 
-        {empty && !hasCustomOpponent && !onCreateCustom && (
-          <p className="px-3 py-6 text-center text-xs text-muted">
-            {q ? "No matches." : "No eligible plays or formations yet."}
-          </p>
+        {empty && !hasCustomOpponent && q.length > 0 && (
+          <p className="px-3 py-6 text-center text-xs text-muted">No matches.</p>
+        )}
+
+        {playbookHasNoEligible && !hasCustomOpponent && q.length === 0 && (
+          <div className="mx-3 my-2 rounded-md border border-border bg-surface-raised px-3 py-3 text-xs leading-snug text-muted">
+            <p className="font-medium text-foreground">
+              No {opposingKindLabel} in this playbook yet.
+            </p>
+            <p className="mt-1">
+              {onCreateCustom
+                ? "Drop a custom opponent above to sketch one for this play, or add real ones to the playbook later."
+                : "Add some to the playbook to view them here."}
+            </p>
+          </div>
         )}
 
         {filteredPlays.length > 0 && (

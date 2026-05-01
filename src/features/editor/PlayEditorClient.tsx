@@ -283,15 +283,22 @@ function PlayEditorClientInner({
   useEffect(() => {
     editableOppRef.current = editableOppPlayers;
   }, [editableOppPlayers]);
+  // Re-seed local state from the snapshot only when the *underlying* hidden
+  // play version changes (initial load, custom create, restore from cleared).
+  // After-save round-trips reuse the same `sourceVersionId` so they don't
+  // trigger a re-seed and therefore can't clobber an in-flight drag.
+  const seededVersionRef = useRef<string | null>(null);
   useEffect(() => {
     if (customOpponentPlayId == null || opponentHidden) {
       setEditableOppPlayers(null);
+      seededVersionRef.current = null;
       return;
     }
+    const ver = vsSnapshot?.sourceVersionId ?? null;
+    if (ver === seededVersionRef.current) return;
+    seededVersionRef.current = ver;
     setEditableOppPlayers(vsSnapshot?.players ?? null);
-    // Intentionally exclude `vsSnapshot` so save-roundtrips don't reset state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customOpponentPlayId, opponentHidden]);
+  }, [customOpponentPlayId, opponentHidden, vsSnapshot]);
 
   // Active "side" of the canvas. When a custom opponent is in play, dragging
   // an opponent token flips this to "opponent" (offense dims out); touching a
@@ -1174,25 +1181,33 @@ function PlayEditorClientInner({
                 hasCustomOpponent={customOpponentPlayId != null}
                 opponentHidden={opponentHidden}
                 canEditCustom={canEdit && !isExamplePreview}
-                onCreateCustom={async () => {
-                  if (
-                    blockIfPreview(
-                      "Custom opponents aren't saved on example plays. Start your own playbook to keep changes.",
-                    )
-                  ) {
-                    return;
-                  }
-                  const res = await createCustomOpponentAction(playId);
-                  if (!res.ok) {
-                    toast(res.error, "error");
-                    return;
-                  }
-                  setCustomOpponentPlayId(res.hiddenPlayId);
-                  setOpponentHidden(false);
-                  setOpponentPlayers(null);
-                  setOpponentPickedRoutes(null);
-                  router.refresh();
-                }}
+                onCreateCustom={
+                  // Custom-opponent flow currently only works in the offense
+                  // → defense direction (drops a default defense). Disabled
+                  // on defense plays until a parallel offense template +
+                  // editor flow exists.
+                  isDefense
+                    ? undefined
+                    : async () => {
+                        if (
+                          blockIfPreview(
+                            "Custom opponents aren't saved on example plays. Start your own playbook to keep changes.",
+                          )
+                        ) {
+                          return;
+                        }
+                        const res = await createCustomOpponentAction(playId);
+                        if (!res.ok) {
+                          toast(res.error, "error");
+                          return;
+                        }
+                        setCustomOpponentPlayId(res.hiddenPlayId);
+                        setOpponentHidden(false);
+                        setOpponentPlayers(null);
+                        setOpponentPickedRoutes(null);
+                        router.refresh();
+                      }
+                }
                 onSetHidden={async (hidden) => {
                   const res = await setOpponentHiddenAction(playId, hidden);
                   if (!res.ok) {
