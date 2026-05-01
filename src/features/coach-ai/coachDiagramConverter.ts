@@ -243,23 +243,34 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     return { dp, team, x: dp.x, y };
   });
 
-  // Resolve overlaps within each team. If two players share (x, y) within
-  // ~1.2 yards, fan them apart along x. This prevents the "Y on top of RT"
-  // failure we keep seeing — token radius is large enough that ≤1yd offsets
-  // visually overlap.
-  const OVERLAP_THRESHOLD = 1.2;
-  const NUDGE_STEP = 1.6;
+  // Resolve overlaps within each team. The token is rendered as a circle of
+  // normalized radius 0.032 (see PlayDiagramEmbed) — i.e. visual diameter
+  // 0.064 in normalized field units. Two tokens visually overlap when their
+  // NORMALIZED center-to-center distance is < 0.064. The previous version
+  // checked hypot in YARDS against 1.2, which fails badly on tackle_11
+  // (53yd wide): the visual diameter there is 0.064 × 53 ≈ 3.4 yards, so
+  // O-line tokens placed at the realistic 2-yard splits jam together
+  // ("LT LC Q CR H" mash-up). We now check in normalized coords with a
+  // small breathing buffer so adjacent linemen sit close but never overlap.
+  const TOKEN_DIAMETER_NORM = 0.064;
+  const OVERLAP_THRESHOLD_NORM = TOKEN_DIAMETER_NORM * 1.05; // 5% breathing
+  const NUDGE_STEP_YDS_X = OVERLAP_THRESHOLD_NORM * profile.fieldWidthYds;
   for (let i = 0; i < staged.length; i++) {
     for (let j = 0; j < i; j++) {
       const a = staged[i];
       const b = staged[j];
       if (a.team !== b.team) continue;
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      if (Math.hypot(dx, dy) < OVERLAP_THRESHOLD) {
-        // Push `i` outward — direction = sign of (a.x - b.x), defaulting to +.
-        const dir = dx === 0 ? (a.x >= 0 ? 1 : -1) : Math.sign(dx);
-        a.x = b.x + dir * NUDGE_STEP;
+      // Compare in normalized space — that's what the renderer cares about.
+      const aN = toNorm(a.x, a.y);
+      const bN = toNorm(b.x, b.y);
+      const dnx = aN.x - bN.x;
+      const dny = aN.y - bN.y;
+      if (Math.hypot(dnx, dny) < OVERLAP_THRESHOLD_NORM) {
+        // Push `i` outward along x — direction = sign of (a.x - b.x),
+        // defaulting to push toward the nearer sideline so we don't pile
+        // everyone toward center.
+        const dir = a.x === b.x ? (a.x >= 0 ? 1 : -1) : Math.sign(a.x - b.x);
+        a.x = b.x + dir * NUDGE_STEP_YDS_X;
       }
     }
   }
