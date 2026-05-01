@@ -291,6 +291,7 @@ export async function updatePlaybookSettingsAction(
     rushingYards: settings.rushingAllowed ? settings.rushingYards ?? 0 : null,
     handoffsAllowed: !!settings.handoffsAllowed,
     blockingAllowed: !!settings.blockingAllowed,
+    centerIsEligible: !!settings.centerIsEligible,
     maxPlayers: Math.round(settings.maxPlayers),
   };
 

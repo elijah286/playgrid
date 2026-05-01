@@ -255,9 +255,11 @@ export function generateOtherVariantPlayers(count: number): Player[] {
 export function defaultPlayersForVariant(variant: SportVariant, playerCount?: number): Player[] {
   switch (variant) {
     case "flag_5v5":
+      // In flag 5v5 the center is an eligible receiver — only 5 offensive
+      // players, nobody is purely a blocker.
       return [
         mkPlayer("p_qb", "QB",  "Q", 0.50, 0.20),        // shotgun QB, 5 yds back
-        mkPlayer("p_c",  "C",   "C", 0.50, 0.38, false), // center on line
+        mkPlayer("p_c",  "C",   "C", 0.50, 0.38),        // center, eligible
         mkPlayer("p_x",  "WR",  "X", 0.12, 0.38),        // wide left, on line
         mkPlayer("p_y",  "WR",  "Y", 0.32, 0.38),        // inside left, on line
         mkPlayer("p_z",  "WR",  "Z", 0.88, 0.38),        // wide right, on line

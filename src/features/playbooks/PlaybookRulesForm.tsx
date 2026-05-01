@@ -61,6 +61,12 @@ export function PlaybookRulesForm({ value, onChange, disabled, hideHeader }: Pro
         checked={value.blockingAllowed}
         onChange={(c) => set("blockingAllowed", c)}
       />
+      <Row
+        label="Center is eligible receiver"
+        disabled={disabled}
+        checked={value.centerIsEligible}
+        onChange={(c) => set("centerIsEligible", c)}
+      />
 
       <label className="flex items-center justify-between gap-2 text-sm text-foreground">
         <span>Number of players</span>

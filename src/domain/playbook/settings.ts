@@ -12,6 +12,12 @@ export type PlaybookSettings = {
   rushingYards: number | null;
   handoffsAllowed: boolean;
   blockingAllowed: boolean;
+  /**
+   * Whether the center is an eligible receiver. True for flag 5v5 (only 5
+   * offensive players, no pure linemen); false for 7v7 / tackle / other by
+   * default. Drives play-editor route assignment + Coach Cal play generation.
+   */
+  centerIsEligible: boolean;
   maxPlayers: number;
 };
 
@@ -40,6 +46,7 @@ export function defaultSettingsForVariant(
         rushingYards: null,
         handoffsAllowed: false,
         blockingAllowed: false,
+        centerIsEligible: false,
         maxPlayers: 7,
       };
     case "flag_5v5":
@@ -48,6 +55,7 @@ export function defaultSettingsForVariant(
         rushingYards: 7,
         handoffsAllowed: true,
         blockingAllowed: false,
+        centerIsEligible: true,
         maxPlayers: 5,
       };
     case "tackle_11":
@@ -56,6 +64,7 @@ export function defaultSettingsForVariant(
         rushingYards: 0,
         handoffsAllowed: true,
         blockingAllowed: true,
+        centerIsEligible: false,
         maxPlayers: 11,
       };
     case "other":
@@ -64,6 +73,7 @@ export function defaultSettingsForVariant(
         rushingYards: 0,
         handoffsAllowed: true,
         blockingAllowed: true,
+        centerIsEligible: false,
         maxPlayers: Math.max(4, Math.min(11, customPlayers ?? 7)),
       };
   }
@@ -92,6 +102,8 @@ export function normalizePlaybookSettings(
       typeof r.handoffsAllowed === "boolean" ? r.handoffsAllowed : defaults.handoffsAllowed,
     blockingAllowed:
       typeof r.blockingAllowed === "boolean" ? r.blockingAllowed : defaults.blockingAllowed,
+    centerIsEligible:
+      typeof r.centerIsEligible === "boolean" ? r.centerIsEligible : defaults.centerIsEligible,
     maxPlayers:
       typeof r.maxPlayers === "number" && r.maxPlayers > 0
         ? Math.round(r.maxPlayers)

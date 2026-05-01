@@ -78,6 +78,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2025-09-01",
   },
+  {
+    id: "playbook-center-eligible",
+    name: "Center-is-eligible toggle",
+    description:
+      "Per-playbook game rule that marks the center as an eligible receiver. On by default for flag 5v5 (where C is just the snapper, not a lineman) and off for 7v7/tackle/other. Drives the play editor and Coach Cal so every 5v5 pass play assigns C a route.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-05-01",
+  },
 
   // ── Plays & formations ──────────────────────────────────────────
   {
