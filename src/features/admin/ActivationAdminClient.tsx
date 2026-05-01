@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui";
 import {
   getActivationSummaryAction,
   type MonetizationSummary,
+  type SportVariantTrend,
 } from "@/app/actions/admin-activation";
 
 function formatInt(n: number): string {
