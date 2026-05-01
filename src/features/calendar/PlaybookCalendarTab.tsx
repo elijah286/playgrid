@@ -2,15 +2,19 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
+  Bell,
+  CalendarDays,
   CalendarPlus,
   ChevronDown,
   Clock,
   ExternalLink,
   MapPin,
+  MapPinned,
   Pencil,
   Rss,
   Users,
 } from "lucide-react";
+import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 import { Button, useToast } from "@/components/ui";
 import {
   clearRsvpAction,

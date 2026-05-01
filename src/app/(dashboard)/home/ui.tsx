@@ -1626,7 +1626,10 @@ export function DashboardClient({
       )}
 
       {!isEmpty && !effectiveHideAnimation && (
-        <div className="flex justify-center pt-2">
+        <div className="flex flex-col items-center gap-1.5 pt-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Tile style
+          </span>
           <SegmentedControl
             size="sm"
             value={view}
