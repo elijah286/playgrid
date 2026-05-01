@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { ChevronRight, Eye, EyeOff, Pencil, Save, Search, Swords, Users, X } from "lucide-react";
-import type { PlayDocument, Player } from "@/domain/play/types";
+import type { PlayDocument, Player, Route } from "@/domain/play/types";
 import type { PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import type { SavedFormation } from "@/app/actions/formations";
 import { getPlayForEditorAction } from "@/app/actions/plays";
@@ -37,7 +37,39 @@ type Props = {
   onSetHidden?: (hidden: boolean) => Promise<void> | void;
   /** Promote the hidden custom into a standalone play under the given name. */
   onSaveCustomAsPlay?: (name: string) => Promise<void> | void;
+  /** Optional callback for the picked play's routes. The parent decides
+   *  whether to render them based on `showRoutes`. Resets to null when the
+   *  selection clears or moves to a formation. */
+  onChangeRoutes?: (routes: Route[] | null) => void;
+  /** When provided, the card surfaces a "Show offense routes" checkbox under
+   *  a play selection so the defensive coach can see the offense's routes
+   *  while drawing the defensive reaction. */
+  showRoutes?: boolean;
+  onShowRoutesChange?: (next: boolean) => void;
 };
+
+// Heuristic: defenders are stored with `shape: "triangle"` by default. Use
+// this to filter mixed-side player rosters that may have leaked into a play's
+// own `layers.players` from older install/copy paths. Special-teams shapes
+// (square/diamond/star) are kept regardless of the wanted side.
+function isLikelyDefenderShape(p: Player): boolean {
+  return p.shape === "triangle";
+}
+function isLikelyOffenseShape(p: Player): boolean {
+  // Default (undefined) and "circle" are the offensive default.
+  return p.shape == null || p.shape === "circle";
+}
+function filterToOpposingSide(
+  players: Player[],
+  pickedPlayType: PlayDocument["metadata"]["playType"] | undefined,
+): Player[] {
+  // Trust the picked play's declared playType: offense plays should only
+  // surface offense tokens, defense plays only defense tokens. Special-teams
+  // and unknown types pass through unchanged.
+  if (pickedPlayType === "offense") return players.filter((p) => !isLikelyDefenderShape(p));
+  if (pickedPlayType === "defense") return players.filter((p) => !isLikelyOffenseShape(p));
+  return players;
+}
 
 type Selection =
   | { kind: "none" }
@@ -66,6 +98,9 @@ export function OpponentOverlayCard({
   onCreateCustom,
   onSetHidden,
   onSaveCustomAsPlay,
+  onChangeRoutes,
+  showRoutes = false,
+  onShowRoutesChange,
 }: Props) {
   const { toast } = useToast();
   const [selection, setSelection] = useState<Selection>(
@@ -134,6 +169,7 @@ export function OpponentOverlayCard({
   const pickFormation = (f: SavedFormation) => {
     setSelection({ kind: "formation", id: f.id, label: f.displayName });
     onChange(f.players);
+    onChangeRoutes?.(null);
   };
 
   const pickPlay = (p: PlaybookPlayNavItem) => {
@@ -145,16 +181,25 @@ export function OpponentOverlayCard({
         setSelection({ kind: "none" });
         return;
       }
-      const players = res.document.layers.players ?? [];
+      // Filter to the opposing side. Picked plays should only contribute
+      // their own side's players — never the side they themselves were
+      // installed against. Without this, picking an offensive play that has
+      // a defense installed (custom opponent or older mixed data) doubles
+      // up the field.
+      const allPlayers = res.document.layers.players ?? [];
+      const players = filterToOpposingSide(allPlayers, p.play_type);
       if (players.length === 0) {
         toast(
-          `"${p.name}" has no player positions saved — open it and place defenders first.`,
+          `"${p.name}" has no opposing player positions saved — open it and place players first.`,
           "error",
         );
         setSelection({ kind: "none" });
         return;
       }
       onChange(players);
+      // Surface the picked play's routes so the parent can optionally render
+      // them as ghost arrows (see `showRoutes`).
+      onChangeRoutes?.(res.document.layers.routes ?? []);
     });
   };
 
@@ -170,6 +215,7 @@ export function OpponentOverlayCard({
     }
     setSelection({ kind: "none" });
     onChange(null);
+    onChangeRoutes?.(null);
   };
 
   const showCustom = () => {
@@ -342,6 +388,17 @@ export function OpponentOverlayCard({
             </span>
             {pending && <span className="text-[10px] text-muted">loading…</span>}
           </div>
+          {selection.kind === "play" && onShowRoutesChange && (
+            <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-muted">
+              <input
+                type="checkbox"
+                className="size-3.5 cursor-pointer accent-primary"
+                checked={showRoutes}
+                onChange={(e) => onShowRoutesChange(e.target.checked)}
+              />
+              <span>Show {playType === "defense" ? "offense" : "opponent"} routes</span>
+            </label>
+          )}
           {selection.kind === "play" && onInstallVsPlay && (
             <button
               type="button"

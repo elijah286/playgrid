@@ -250,6 +250,11 @@ function PlayEditorClientInner({
 
   // Transient opponent overlay (never saved, resets on navigation)
   const [opponentPlayers, setOpponentPlayers] = useState<Player[] | null>(null);
+  // Routes from a transient picked-opponent play. Rendered as ghost arrows
+  // when the user enables "Show offense routes" in the picker. Reset whenever
+  // the player list resets so a stale route set never lingers behind a new
+  // selection.
+  const [opponentPickedRoutes, setOpponentPickedRoutes] = useState<Route[] | null>(null);
 
   // Custom opponent state — backed by a hidden play attached to this play.
   // `customOpponentPlayId` is null when no custom is attached. `opponentHidden`
@@ -996,8 +1001,12 @@ function PlayEditorClientInner({
                       : vsSnapshot?.players ?? null)
                 }
                 opponentRoutes={
-                  isDefense && vsSnapshot && showOpponentRoutes
-                    ? vsSnapshot.routes
+                  showOpponentRoutes
+                    ? (opponentPickedRoutes && opponentPickedRoutes.length > 0
+                        ? opponentPickedRoutes
+                        : isDefense && vsSnapshot
+                          ? vsSnapshot.routes
+                          : null)
                     : null
                 }
                 opponentEditable={
@@ -1144,7 +1153,13 @@ function PlayEditorClientInner({
                   opponentPlayers != null ||
                   (customOpponentPlayId != null && !opponentHidden)
                 }
-                onChange={setOpponentPlayers}
+                onChange={(players) => {
+                  setOpponentPlayers(players);
+                  if (players == null) setOpponentPickedRoutes(null);
+                }}
+                onChangeRoutes={setOpponentPickedRoutes}
+                showRoutes={showOpponentRoutes}
+                onShowRoutesChange={setShowOpponentRoutes}
                 hasCustomOpponent={customOpponentPlayId != null}
                 opponentHidden={opponentHidden}
                 canEditCustom={canEdit && !isExamplePreview}
@@ -1164,6 +1179,7 @@ function PlayEditorClientInner({
                   setCustomOpponentPlayId(res.hiddenPlayId);
                   setOpponentHidden(false);
                   setOpponentPlayers(null);
+                  setOpponentPickedRoutes(null);
                   router.refresh();
                 }}
                 onSetHidden={async (hidden) => {
