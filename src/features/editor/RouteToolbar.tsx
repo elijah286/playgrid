@@ -14,6 +14,7 @@ import {
   Trash2,
   Square,
   Circle,
+  Check,
 } from "lucide-react";
 import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
 import { SegmentedControl, IconButton } from "@/components/ui";
@@ -50,6 +51,13 @@ type Props = {
   isDefense?: boolean;
   onAddRectZone?: () => void;
   onAddEllipseZone?: () => void;
+  /** Render a "Done" button on the right side of the toolbar. Click clears
+   *  the current selection; disabled when nothing is selected. Only shown on
+   *  pointer-and-keyboard devices — touch devices use the bigger Edit/Done
+   *  toggle that lives above the field. */
+  showDoneButton?: boolean;
+  hasAnySelection?: boolean;
+  onDone?: () => void;
 };
 
 const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
@@ -140,6 +148,9 @@ export function RouteToolbar({
   isDefense = false,
   onAddRectZone,
   onAddEllipseZone,
+  showDoneButton = false,
+  hasAnySelection = false,
+  onDone,
 }: Props) {
   const showPlayerActions = !isDefense;
   const strokeOptions = isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE;
@@ -310,6 +321,29 @@ export function RouteToolbar({
               />
             </Tooltip>
           </>
+        )}
+
+        {showDoneButton && onDone && (
+          <Tooltip
+            content={
+              hasAnySelection
+                ? "Done — deselect (Esc)"
+                : "Nothing selected"
+            }
+          >
+            <span className="ml-auto inline-flex">
+              <button
+                type="button"
+                disabled={!hasAnySelection}
+                onClick={onDone}
+                aria-label="Done editing current selection"
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface-inset px-2 text-xs font-medium text-foreground transition-colors hover:bg-surface-raised disabled:cursor-default disabled:opacity-40 disabled:hover:bg-surface-inset"
+              >
+                <Check className="size-3.5" />
+                Done
+              </button>
+            </span>
+          </Tooltip>
         )}
       </div>
     </div>

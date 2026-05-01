@@ -91,6 +91,7 @@ function snapOutsidePlayer(p: Point2, carrier: Point2): Point2 {
 // here — extend src/domain/play/fieldTheme.ts and they propagate automatically.
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { EquipmentIconShape } from "@/features/practice-plans/EquipmentIcon";
+import { Modal } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -1321,6 +1322,50 @@ function EditorCanvasImpl({
     },
     [segmentMenu, dispatch],
   );
+
+  // Motion: convert all segments from the route's start through the clicked
+  // segment (inclusive) to strokePattern="motion". The segment immediately
+  // after the motion span is the snap point — the player ends motion there
+  // and the rest of the route runs post-snap.
+  const [motionConfirm, setMotionConfirm] = useState<{
+    routeId: string;
+    upToSegmentId: string;
+  } | null>(null);
+  const applyMotionThroughSegment = useCallback(
+    (routeId: string, upToSegmentId: string) => {
+      const route = doc.layers.routes.find((r) => r.id === routeId);
+      if (!route) return;
+      const idx = route.segments.findIndex((s) => s.id === upToSegmentId);
+      if (idx < 0) return;
+      for (let i = 0; i <= idx; i++) {
+        dispatch({
+          type: "route.setSegmentStroke",
+          routeId,
+          segmentId: route.segments[i].id,
+          strokePattern: "motion",
+        });
+      }
+    },
+    [dispatch, doc.layers.routes],
+  );
+  const handleMakeMotionFromMenu = useCallback(() => {
+    if (!segmentMenu) return;
+    const route = doc.layers.routes.find((r) => r.id === segmentMenu.routeId);
+    if (!route) return;
+    // Legality: any *other* player carrying a route with a motion segment.
+    const conflict = doc.layers.routes.some(
+      (r) =>
+        r.carrierPlayerId !== route.carrierPlayerId &&
+        r.segments.some((s) => s.strokePattern === "motion"),
+    );
+    setSegmentMenu(null);
+    setSegmentMenuSub(null);
+    if (conflict) {
+      setMotionConfirm({ routeId: route.id, upToSegmentId: segmentMenu.segmentId });
+      return;
+    }
+    applyMotionThroughSegment(route.id, segmentMenu.segmentId);
+  }, [segmentMenu, doc.layers.routes, applyMotionThroughSegment]);
 
   // Is the segment the terminal (end) of its route? Used to show dash-style
   // options only on the last leg.
@@ -2667,6 +2712,15 @@ function EditorCanvasImpl({
           >
             Create branch here
           </button>
+          {doc.metadata.playType !== "defense" && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+              onClick={handleMakeMotionFromMenu}
+            >
+              Make motion
+            </button>
+          )}
           <div className="border-t border-border" />
           <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide text-muted">
             Segment style
@@ -3043,6 +3097,46 @@ function EditorCanvasImpl({
           </ClampedMenu>
         );
       })()}
+
+      <Modal
+        open={motionConfirm != null}
+        onClose={() => setMotionConfirm(null)}
+        title="Two players in motion"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setMotionConfirm(null)}
+              className="rounded-md border border-border bg-surface-inset px-3 py-1.5 text-sm text-foreground hover:bg-surface-raised"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (motionConfirm) {
+                  applyMotionThroughSegment(
+                    motionConfirm.routeId,
+                    motionConfirm.upToSegmentId,
+                  );
+                }
+                setMotionConfirm(null);
+              }}
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Add motion anyway
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-2 text-sm text-foreground">
+          <p>
+            Another player already has motion. Two players in motion at the
+            snap is illegal unless they both get re-set before the snap.
+          </p>
+          <p className="text-muted">Are you sure you want to add motion?</p>
+        </div>
+      </Modal>
     </div>
   );
 }

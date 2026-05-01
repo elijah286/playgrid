@@ -354,30 +354,29 @@ function PlayEditorClientInner({
   const [isNavPending, startNavTransition] = useTransition();
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
-  // Mobile defaults to view-only so a coach can just watch the play on a
-  // phone without tripping over edit controls. Desktop always renders the
-  // full editor regardless of this state (see `editOnlyCls` below).
-  const [mode, setMode] = useState<"view" | "edit">("view");
-  // When the user explicitly picks a mode (Done / Edit button), we stop
-  // letting the matchMedia listener auto-flip on subsequent resizes.
-  // Otherwise a Done click on desktop would get clobbered the next time
-  // the user resized or rotated the device.
-  const userPickedModeRef = useRef(false);
+  // Touch devices (phones, tablets) get an explicit Edit/Done lock to
+  // prevent accidental drags from a stray finger. Pointer-and-keyboard
+  // devices (desktop, laptop) skip the lock entirely — Done becomes a
+  // selection-clearing action instead, since the canvas is interaction-safe
+  // with a mouse. We detect via `(hover: none) and (pointer: coarse)` so
+  // hybrid laptops with touchscreens but a mouse stay in desktop mode.
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(min-width: 640px)");
-    // On desktop (or as soon as the viewport grows past the breakpoint),
-    // force edit mode — desktop should never be locked behind the mobile
-    // "Edit play" button. We don't force back to view on shrink: a coach
-    // who explicitly tapped Edit on mobile keeps their chosen state.
-    const apply = () => {
-      if (userPickedModeRef.current) return;
-      if (mql.matches) setMode("edit");
-    };
+    const mql = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const apply = () => setIsTouchDevice(mql.matches);
     apply();
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
   }, []);
+
+  // Touch defaults to view-only so a coach can just watch the play on a
+  // phone without tripping over edit controls. Non-touch always renders the
+  // full editor: `effectiveMode` short-circuits to "edit" on those devices
+  // regardless of what `mode` happens to be set to (it's never user-flippable
+  // outside of touch).
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const effectiveMode = isTouchDevice ? mode : "edit";
 
   // Toggle wired to both the mobile Edit/Done button and the desktop
   // Done/Edit button in EditorHeaderBar. Clears any selection when
@@ -393,7 +392,6 @@ function PlayEditorClientInner({
         setSelectedSegmentId(null);
         setSelectedZoneId(null);
       }
-      userPickedModeRef.current = true;
       return next;
     });
   }, []);
@@ -772,7 +770,7 @@ function PlayEditorClientInner({
       {/* Hide the full header bar on mobile while actively editing — the
           Done editing button moves to the very top so the field has as much
           vertical room as possible. Desktop always keeps the header. */}
-      <div className={mode === "edit" ? "hidden sm:block" : ""}>
+      <div className={isTouchDevice && mode === "edit" ? "hidden sm:block" : ""}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <Link
           href={`/playbooks/${playbookId}`}
@@ -801,9 +799,9 @@ function PlayEditorClientInner({
         onSaveAsNewFormation={saveAsNewFormation}
         allFormations={allFormations}
         canEdit={canEdit}
-        hideMobileNav={mode === "edit"}
-        mode={mode}
-        onToggleMode={toggleMode}
+        hideMobileNav={isTouchDevice && mode === "edit"}
+        mode={isTouchDevice ? mode : undefined}
+        onToggleMode={isTouchDevice ? toggleMode : undefined}
       />
       </div>
 
@@ -818,12 +816,13 @@ function PlayEditorClientInner({
       {/* Routes */}
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-h-[260px] min-w-0 flex-col gap-3 sm:min-h-[420px]">
-            {/* Mobile-only Edit/Done toggle. Sits directly above the field
-                (and above the edit toolbar) so coaches can flip between
-                viewing and editing without hunting through the UI. Desktop
-                doesn't need this because it always renders in edit mode. */}
-            {canEdit && (mobileEditingEnabled || gameModeAvailable) && (
-              <div className="flex w-full gap-2 sm:hidden">
+            {/* Touch-only Edit/Done toggle. Sits directly above the field
+                so coaches on phones / tablets can flip between viewing and
+                editing without hunting through the UI. Pointer-and-keyboard
+                devices skip this entirely — they get a "Done" button in the
+                toolbar that simply clears the current selection. */}
+            {canEdit && isTouchDevice && (mobileEditingEnabled || gameModeAvailable) && (
+              <div className="flex w-full gap-2">
                 {mobileEditingEnabled && (
                   <button
                     type="button"
@@ -869,7 +868,7 @@ function PlayEditorClientInner({
             <div
               data-toolbar-slot
               className={`${
-                mode === "edit" ? "" : "hidden sm:block"
+                effectiveMode === "edit" ? "" : "hidden"
               } ${
                 showToolbar ? "" : "opacity-60 [&_button]:cursor-default"
               }`}
@@ -930,6 +929,18 @@ function PlayEditorClientInner({
                 onAddEllipseZone={() =>
                   dispatch({ type: "zone.add", zone: mkZone("ellipse", "") })
                 }
+                showDoneButton={!isTouchDevice}
+                hasAnySelection={
+                  selectedPlayerId != null ||
+                  selectedRouteId != null ||
+                  selectedNodeId != null ||
+                  selectedSegmentId != null ||
+                  selectedZoneId != null
+                }
+                onDone={() => {
+                  handleDone();
+                  setSelectedZoneId(null);
+                }}
               />
             </div>
             )}
@@ -957,7 +968,7 @@ function PlayEditorClientInner({
               className={`field-viewport relative mx-auto w-full overflow-hidden ${
                 isExamplePreview ? "hidden sm:block" : ""
               } ${
-                !canEdit || mode === "view"
+                !canEdit || (isTouchDevice && mode === "view")
                   ? "pointer-events-none select-none"
                   : ""
               }`}
