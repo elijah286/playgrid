@@ -51,6 +51,28 @@ import {
   useExamplePreview,
 } from "@/features/admin/ExamplePreviewContext";
 
+/**
+ * Order-insensitive JSON serialization. Used to compare a locally-edited
+ * `PlayDocument` against an incoming server doc that has been through
+ * `sanitizedDoc` (write-side) and `normalizePlayDocument` (read-side).
+ * Both rebuild the doc with `{...spread, override}`, which preserves
+ * value-equality but can shuffle key order — which `JSON.stringify`
+ * faithfully encodes, so naive string compare reports false negatives.
+ * The only effect of those rebuilds we *care* about is value drift
+ * (sanitized FK to null), and stableStringify catches that.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+  return (
+    "{" +
+    keys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k])).join(",") +
+    "}"
+  );
+}
+
 type Props = {
   playId: string;
   playbookId: string;
@@ -148,28 +170,40 @@ function PlayEditorClientInner({
   // new server doc, which also clears the undo stack (the previous edits
   // were superseded).
   const lastSyncedDocRef = useRef<PlayDocument>(initialDocument);
-  // Serialized form of the most recent doc we sent to the server. Used to
-  // recognise our own save-roundtrip when it echoes back through
-  // `initialDocument` after `router.refresh()`. Without this, a refresh that
-  // resolves *after* the user has continued editing locally would clobber
-  // those newer edits with the older saved version — anchors visibly snap
-  // back to where they were before the latest drag. Set BEFORE calling
-  // `router.refresh()` so the inevitable prop update finds it.
-  const lastSentStr = useRef<string | null>(null);
+  // True whenever local edits exist that haven't been confirmed-saved.
+  // Flipped on by the autosave effect on every real `doc` change; flipped
+  // off only when a save lands AND no edit landed during the save round-trip
+  // (see autosave effect below). Drives reconciliation: while dirty, we
+  // never accept an incoming `initialDocument`, since either it's our own
+  // save echoing back (after key-order drift through normalize/sanitize) or
+  // it's stale relative to local — both cases would visibly clobber edits
+  // and wipe the undo stack via `replaceDocument`.
+  const isDirtyRef = useRef(false);
+  // Latest local doc reference, kept on a ref so the autosave timer can
+  // tell whether local has moved on while a save was in flight without
+  // depending on stale closure scope.
+  const docRef = useRef(doc);
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
   useEffect(() => {
     if (initialDocument === lastSyncedDocRef.current) return;
-    const incomingStr = JSON.stringify(initialDocument);
-    // Our own save coming back through router.refresh() — local has either
-    // caught up to or moved past this state. Either way, don't touch it.
-    if (lastSentStr.current && incomingStr === lastSentStr.current) {
+    // Active local edits — never replace. Even if `initialDocument` is
+    // semantically what we just sent, swapping it in would wipe the undo
+    // stack (replaceDocument calls createUndoState which clears past/future).
+    if (isDirtyRef.current) {
       lastSyncedDocRef.current = initialDocument;
       return;
     }
-    const localStr = JSON.stringify(doc);
-    if (incomingStr === localStr) {
+    // Idle. Use an order-insensitive deep compare so that `sanitizedDoc`
+    // and `normalizePlayDocument` rebuilding with `{...spread, override}`
+    // don't trick us into a no-op-but-destructive replace.
+    if (stableStringify(initialDocument) === stableStringify(doc)) {
       lastSyncedDocRef.current = initialDocument;
       return;
     }
+    // Truly different from local while we're idle — treat as external
+    // mutation (Coach Cal in another tab, etc.).
     replaceDocument(initialDocument);
     lastSyncedDocRef.current = initialDocument;
     isFirstDocRender.current = true; // skip the upcoming autosave from this replace
@@ -436,21 +470,30 @@ function PlayEditorClientInner({
     if (isArchived) return;
     if (gameLock) return; // paused while a live game is running
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    // Mark dirty as soon as any real local edit lands. The reconciliation
+    // effect reads this to decide whether an incoming `initialDocument`
+    // should be allowed to overwrite local state.
+    isDirtyRef.current = true;
     autoSaveTimer.current = setTimeout(async () => {
       setIsSaving(true);
-      // Snapshot the doc we're about to send. The reconciliation effect
-      // compares this string to the next `initialDocument` to recognise its
-      // own save echoing back, instead of treating it as an external mutation
-      // that should overwrite local edits.
-      const sentStr = JSON.stringify(doc);
-      const res = await savePlayVersionAction(playId, doc);
+      // Capture the exact doc reference we're about to send. After the save
+      // resolves, we compare against the latest local reference to detect
+      // whether the user kept editing while the save was in flight.
+      const sentDoc = doc;
+      const res = await savePlayVersionAction(playId, sentDoc);
       if (isGameModeLocked(res)) {
         setGameLock({
           playbookId: res.gameLock.playbookId,
           callerName: res.gameLock.callerName,
         });
       } else if (res.ok) {
-        lastSentStr.current = sentStr;
+        // Only declare clean if local hasn't moved past what we sent. If
+        // the user dispatched any command during the await, `docRef.current`
+        // points at a newer doc than `sentDoc` and dirty stays true so the
+        // next reconciliation can't clobber the in-flight edits.
+        if (docRef.current === sentDoc) {
+          isDirtyRef.current = false;
+        }
         router.refresh();
       } else {
         toast(res.error, "error");
