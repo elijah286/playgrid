@@ -8,7 +8,9 @@ import { previewExamplePlaybookAction } from "@/app/actions/example-claim";
 import { AuthFlow } from "@/features/auth/AuthFlow";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { FREE_MAX_PLAYBOOKS_OWNED, tierAtLeast } from "@/lib/billing/features";
-import { ClaimExampleButton } from "./ui";
+import { ClaimExampleForm } from "./ui";
+import { defaultClaimedPlaybookName } from "@/lib/playbook/default-name";
+import type { SportVariant } from "@/domain/play/types";
 
 type Props = { params: Promise<{ playbookId: string }> };
 
@@ -79,24 +81,38 @@ export default async function ExampleClaimPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // If the caller already owns/edits a copy of this example (claimed
-  // earlier), bounce them straight to it instead of creating a duplicate.
+  // Owners of an example (typically site admins who built it) shouldn't
+  // re-claim — bounce to the source. Non-owner members CAN still claim;
+  // a Team Coach added as an editor on an example is a real use case (they
+  // want a customizable copy of their own).
+  let viewerDisplayName: string | null = null;
   if (user) {
-    const { data: existingMembership } = await supabase
+    const { data: ownerMembership } = await supabase
       .from("playbook_members")
-      .select("playbook_id")
+      .select("role")
       .eq("playbook_id", preview.playbookId)
       .eq("user_id", user.id)
       .eq("status", "active")
+      .eq("role", "owner")
       .maybeSingle();
-    if (existingMembership) {
+    if (ownerMembership) {
       redirect(`/playbooks/${preview.playbookId}`);
     }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    viewerDisplayName = (profile?.display_name as string | null) ?? null;
   }
 
   const quota = await getQuotaState();
   const next = `/copy/example/${playbookId}`;
   const accent = preview.color || "#2563eb";
+  const suggestedName = defaultClaimedPlaybookName(
+    viewerDisplayName,
+    preview.sportVariant as SportVariant | null,
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5 px-6 pb-16 pt-10 sm:pt-16">
@@ -110,28 +126,15 @@ export default async function ExampleClaimPage({ params }: Props) {
       />
 
       {user ? (
-        <div className="space-y-3 rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              This becomes yours.
-            </p>
-            <p className="mt-0.5 text-xs text-muted">
-              Rename it, swap the logo, change colors, edit any play. The
-              example stays untouched for the next coach.
-            </p>
-          </div>
-
-          <QuotaDisclosure quota={quota} />
-
-          <ClaimExampleButton
-            playbookId={playbookId}
-            blockedByQuota={quota.kind === "free_full"}
-          />
-
-          <p className="text-[11px] text-muted">
-            Signed in as <span className="font-medium">{user.email}</span>
-          </p>
-        </div>
+        <ClaimExampleForm
+          playbookId={playbookId}
+          suggestedName={suggestedName}
+          sourceColor={accent}
+          sourceLogoUrl={preview.logoUrl}
+          userEmail={user.email ?? null}
+          blockedByQuota={quota.kind === "free_full"}
+          quotaNote={<QuotaDisclosure quota={quota} />}
+        />
       ) : (
         <div className="space-y-4 rounded-2xl border border-border bg-surface-raised p-6 shadow-elevated">
           <div>

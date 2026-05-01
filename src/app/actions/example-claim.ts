@@ -53,11 +53,26 @@ export async function previewExamplePlaybookAction(
   };
 }
 
+export type ClaimCustomizations = {
+  /** Override the copied playbook's name. Trimmed; empty string = use source. */
+  name?: string;
+  /** Hex color, e.g. "#2563eb". Omit to keep the source color. */
+  color?: string;
+  /** Logo URL or null to clear. Omit to keep the source logo. */
+  logoUrl?: string | null;
+};
+
 /** Clones a published example playbook into the caller's workspace as a
  *  fresh, owned playbook. Mirrors acceptCopyLinkAction but skips the
- *  token-redeem and referral side-effects (examples have no sender). */
+ *  token-redeem and referral side-effects (examples have no sender).
+ *
+ *  When `customizations` is provided, the new playbook is created with
+ *  the user-chosen name/color/logo instead of copying from the source —
+ *  the claim flow surfaces an inline editor so coaches own their
+ *  playbook's identity from the first second they see it. */
 export async function acceptExamplePlaybookAction(
   playbookId: string,
+  customizations?: ClaimCustomizations,
 ): Promise<
   | { ok: true; playbookId: string }
   | { ok: false; error: string; needsUpgrade?: boolean }
@@ -111,15 +126,26 @@ export async function acceptExamplePlaybookAction(
     };
   }
 
+  const overrideName = customizations?.name?.trim();
+  const overrideColor = customizations?.color?.trim();
+  const overrideLogoUrl =
+    customizations && "logoUrl" in customizations
+      ? customizations.logoUrl
+      : undefined;
   const { data: newBook, error: pbErr } = await supabase
     .from("playbooks")
     .insert({
       team_id: targetTeamId,
-      name: src.name,
+      name: (overrideName && overrideName.length > 0
+        ? overrideName
+        : (src.name as string)
+      ).slice(0, 120),
       sport_variant: src.sport_variant,
       custom_offense_count: src.custom_offense_count,
-      color: src.color,
-      logo_url: src.logo_url,
+      color:
+        overrideColor && overrideColor.length > 0 ? overrideColor : src.color,
+      logo_url:
+        overrideLogoUrl === undefined ? src.logo_url : overrideLogoUrl,
       season: src.season,
     })
     .select("id")

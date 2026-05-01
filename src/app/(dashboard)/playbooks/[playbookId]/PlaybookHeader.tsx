@@ -107,6 +107,7 @@ export function PlaybookHeader({
   allowPlayerDuplication,
   allowGameResultsDuplication,
   gameResultsAvailable,
+  suggestedDuplicateName,
   playActions,
   exampleAdmin,
   exampleStatus,
@@ -136,6 +137,9 @@ export function PlaybookHeader({
   allowPlayerDuplication?: boolean;
   allowGameResultsDuplication?: boolean;
   gameResultsAvailable?: boolean;
+  /** Smart-default name for the duplicate dialog (e.g. "Eli's Flag Playbook").
+   *  Encourages owners and copiers to rename rather than ship "(copy)". */
+  suggestedDuplicateName?: string;
   playActions?: PlaybookHeaderPlayActions;
   exampleAdmin?: ExampleAdminState | null;
   exampleStatus?: { isPublished: boolean } | null;
@@ -239,10 +243,22 @@ export function PlaybookHeader({
     });
   }
 
-  function handleDuplicate(newName: string, copyGameResults: boolean, copyKb: boolean) {
+  function handleDuplicate(args: {
+    newName: string;
+    color: string;
+    logoUrl: string | null;
+    copyGameResults: boolean;
+    copyKb: boolean;
+  }) {
     setDuplicateOpen(false);
     run(
-      () => duplicatePlaybookAction(playbookId, newName, { copyGameResults, copyKb }),
+      () =>
+        duplicatePlaybookAction(playbookId, args.newName, {
+          copyGameResults: args.copyGameResults,
+          copyKb: args.copyKb,
+          color: args.color,
+          logoUrl: args.logoUrl,
+        }),
       (res) => {
         if (res.id) router.push(`/playbooks/${res.id}`);
       },
@@ -593,6 +609,9 @@ export function PlaybookHeader({
         <DuplicatePlaybookDialog
           playbookId={playbookId}
           playbookName={name}
+          suggestedName={suggestedDuplicateName ?? `${name} (copy)`}
+          sourceColor={accentColor}
+          sourceLogoUrl={logoUrl ?? null}
           allowGameResultsCopy={Boolean(
             allowGameResultsDuplication && gameResultsAvailable,
           )}
@@ -614,17 +633,31 @@ export function PlaybookHeader({
 function DuplicatePlaybookDialog({
   playbookId,
   playbookName,
+  suggestedName,
+  sourceColor,
+  sourceLogoUrl,
   allowGameResultsCopy,
   onClose,
   onDuplicate,
 }: {
   playbookId: string;
   playbookName: string;
+  suggestedName: string;
+  sourceColor: string;
+  sourceLogoUrl: string | null;
   allowGameResultsCopy: boolean;
   onClose: () => void;
-  onDuplicate: (name: string, copyGameResults: boolean, copyKb: boolean) => void;
+  onDuplicate: (args: {
+    newName: string;
+    color: string;
+    logoUrl: string | null;
+    copyGameResults: boolean;
+    copyKb: boolean;
+  }) => void;
 }) {
-  const [name, setName] = useState(`${playbookName} (copy)`);
+  const [name, setName] = useState(suggestedName);
+  const [color, setColor] = useState(sourceColor);
+  const [logoUrl, setLogoUrl] = useState<string>(sourceLogoUrl ?? "");
   const [copyGameResults, setCopyGameResults] = useState(false);
   const [copyKb, setCopyKb] = useState(false);
   const [kbCount, setKbCount] = useState<number | null>(null);
@@ -642,7 +675,13 @@ function DuplicatePlaybookDialog({
   function submit() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onDuplicate(trimmed, allowGameResultsCopy && copyGameResults, copyKb);
+    onDuplicate({
+      newName: trimmed,
+      color,
+      logoUrl: logoUrl.length > 0 ? logoUrl : null,
+      copyGameResults: allowGameResultsCopy && copyGameResults,
+      copyKb,
+    });
   }
   return (
     <div
@@ -678,11 +717,42 @@ function DuplicatePlaybookDialog({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder={suggestedName}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submit();
               }}
             />
           </div>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Team color
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {PALETTE.map((c) => {
+                const active = color.toLowerCase() === c.toLowerCase();
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                      active ? "border-foreground scale-110" : "border-border"
+                    }`}
+                    style={{ backgroundColor: c }}
+                    aria-label={c}
+                  />
+                );
+              })}
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-8 w-8 cursor-pointer rounded-full border-2 border-border"
+                aria-label="Custom color"
+              />
+            </div>
+          </div>
+          <LogoPicker value={logoUrl} onChange={setLogoUrl} />
           {allowGameResultsCopy && (
             <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-surface-inset/50 p-3">
               <input

@@ -404,7 +404,12 @@ export async function deletePlaybookAction(playbookId: string) {
 export async function duplicatePlaybookAction(
   playbookId: string,
   newName?: string,
-  opts?: { copyGameResults?: boolean; copyKb?: boolean },
+  opts?: {
+    copyGameResults?: boolean;
+    copyKb?: boolean;
+    color?: string;
+    logoUrl?: string | null;
+  },
 ) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const supabase = await createClient();
@@ -463,6 +468,8 @@ export async function duplicatePlaybookAction(
     };
   }
 
+  const overrideColor = opts?.color?.trim();
+  const hasLogoOverride = !!opts && "logoUrl" in opts;
   const { data: newBook, error: pbErr } = await supabase
     .from("playbooks")
     .insert({
@@ -470,8 +477,9 @@ export async function duplicatePlaybookAction(
       name: (newName?.trim() || `${src.name} (copy)`).slice(0, 120),
       sport_variant: src.sport_variant,
       custom_offense_count: src.custom_offense_count,
-      color: src.color,
-      logo_url: src.logo_url,
+      color:
+        overrideColor && overrideColor.length > 0 ? overrideColor : src.color,
+      logo_url: hasLogoOverride ? opts!.logoUrl : src.logo_url,
       season: src.season,
     })
     .select("id")

@@ -725,6 +725,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-29",
   },
   {
+    id: "claim-and-duplicate-customize",
+    name: "Customize on claim or duplicate",
+    description:
+      "When a coach claims an example or duplicates a playbook, the dialog now pre-fills a smart default name (\"{First}'s {Sport} Playbook\"), source color, and source logo — and lets them tweak any of the three before the copy is created. Beats landing on a copy still named \"Flag 5v5 Example\" or \"Foo (copy)\". Team Coaches viewing an example as a non-owner member also see a \"Make this mine\" CTA in the build-your-own banner so they can claim a copy without going to /home — previously that banner only sent them to a blank create flow.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-05-01",
+  },
+  {
     id: "example-sticky-cta-desktop",
     name: "Sticky desktop CTA on examples",
     description:

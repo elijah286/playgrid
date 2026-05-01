@@ -23,6 +23,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
+import { defaultClaimedPlaybookName } from "@/lib/playbook/default-name";
 import { PlaybookDetailClient } from "./ui";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 import {
@@ -133,6 +134,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   type ViewerRole = "owner" | "editor" | "viewer" | null;
   let senderName: string | null = null;
+  let viewerDisplayName: string | null = null;
   let viewerRole: ViewerRole = null;
   let isMember = false;
   let ownerDisplayName: string | null = null;
@@ -142,8 +144,8 @@ export default async function PlaybookDetailPage({ params }: Props) {
       .select("display_name")
       .eq("id", user.id)
       .maybeSingle();
-    senderName =
-      (profile?.display_name as string | null) || user.email || null;
+    viewerDisplayName = (profile?.display_name as string | null) ?? null;
+    senderName = viewerDisplayName || user.email || null;
 
     const { data: membership } = await supabase
       .from("playbook_members")
@@ -388,6 +390,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
           allowGameResultsDuplication:
             (book.allow_game_results_duplication as boolean | null) ?? false,
           gameResultsAvailable,
+          suggestedDuplicateName: defaultClaimedPlaybookName(
+            viewerDisplayName,
+            sportVariant,
+          ),
           exampleAdmin: canManageExample
             ? {
                 isExample,

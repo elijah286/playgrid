@@ -348,6 +348,7 @@ function PlaybookDetailClientInner({
     allowPlayerDuplication: boolean;
     allowGameResultsDuplication: boolean;
     gameResultsAvailable: boolean;
+    suggestedDuplicateName: string;
     exampleAdmin: {
       isExample: boolean;
       isPublished: boolean;
@@ -1086,6 +1087,7 @@ function PlaybookDetailClientInner({
           allowPlayerDuplication={headerProps.allowPlayerDuplication}
           allowGameResultsDuplication={headerProps.allowGameResultsDuplication}
           gameResultsAvailable={headerProps.gameResultsAvailable}
+          suggestedDuplicateName={headerProps.suggestedDuplicateName}
           exampleAdmin={headerProps.exampleAdmin}
           exampleStatus={headerProps.exampleStatus}
           isExamplePreview={headerProps.isExamplePreview}
@@ -1139,6 +1141,7 @@ function PlaybookDetailClientInner({
           <BuildYourOwnBanner
             playbookId={playbookId}
             ownerName={headerProps.ownerDisplayName}
+            isExample={headerProps.exampleStatus !== null}
           />
         )}
 
@@ -4476,9 +4479,14 @@ function ShareFirstBanner() {
 function BuildYourOwnBanner({
   playbookId,
   ownerName,
+  isExample,
 }: {
   playbookId: string;
   ownerName: string | null;
+  /** When true, the playbook is a published example. Coaches who landed
+   *  here as a non-owner member should be able to claim a copy of the
+   *  example as a starting point — not bounce to a blank create flow. */
+  isExample: boolean;
 }) {
   const dismissKey = `pb-${playbookId}-build-own-dismissed`;
   const [hidden, setHidden] = useState(true);
@@ -4499,19 +4507,21 @@ function BuildYourOwnBanner({
     }
     setHidden(true);
   }
+  const ctaHref = isExample ? `/copy/example/${playbookId}` : "/home?create=1";
+  const ctaLabel = isExample ? "Make this mine" : "Build my playbook";
+  const message = isExample
+    ? `Want your own copy of this example? Claim it as your starting point — keep collaborating here too.`
+    : `Like what ${ownerName ?? "this coach"} built? You can build your own playbook for free — keep collaborating here too.`;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2">
-      <p className="min-w-0 flex-1 text-sm text-foreground">
-        Like what {ownerName ?? "this coach"} built? You can build your own
-        playbook for free — keep collaborating here too.
-      </p>
+      <p className="min-w-0 flex-1 text-sm text-foreground">{message}</p>
       <div className="flex items-center gap-1">
         <Link
-          href="/home?create=1"
+          href={ctaHref}
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
         >
           <Plus className="size-3.5" />
-          Build my playbook
+          {ctaLabel}
         </Link>
         <button
           type="button"
