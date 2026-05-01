@@ -430,9 +430,10 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3" noValidate>
           {/* Apple sign-in. Required by App Store Review Guideline 4.8 when
-              email/password sign-up is offered. Shown on the email step only
-              so it's not a distraction once the user is mid-flow. */}
-          {step === "email" && (
+              email/password sign-up is offered, so it's gated on
+              NEXT_PUBLIC_AUTH_APPLE_ENABLED — flip on once the Apple Developer
+              Services ID + secret JWT are wired into Supabase. */}
+          {step === "email" && process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === "true" && (
             <>
               <Button
                 type="button"
