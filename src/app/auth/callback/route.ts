@@ -5,8 +5,22 @@ import { snapshotFirstTouchToProfile } from "@/lib/attribution/snapshot";
 // OAuth + PKCE callback. Supabase redirects here with `?code=...` after the
 // provider (Apple, Google, etc.) authenticates the user. We exchange the code
 // for a session, set the auth cookies, then forward to `next` (or /home).
+//
+// Behind Railway's proxy, `new URL(request.url).origin` returns the
+// internal container address (http://localhost:8080) instead of the public
+// xogridmaker.com origin, which made every OAuth login bounce to a dead
+// localhost URL. Read the forwarded headers so the redirect lands on the
+// real public origin.
+function publicOrigin(request: NextRequest): string {
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (host) return `${proto}://${host}`;
+  return new URL(request.url).origin;
+}
+
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = publicOrigin(request);
   const code = searchParams.get("code");
   const nextParam = searchParams.get("next") ?? "/home";
   const safeNext =
