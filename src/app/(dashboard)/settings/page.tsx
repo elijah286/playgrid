@@ -258,7 +258,7 @@ export default async function SettingsPage() {
             : null
         }
         activationError={activationRes.ok ? null : activationRes.error}
-        initialAnalyticsExcludedEmails={analyticsExcludedEmails}
+        initialExcludedEmails={analyticsExcludedEmails}
         initialSeeds={seedsRes.ok ? seedsRes.formations : []}
         initialBetaFeatures={betaFeatures}
         initialHideOwnerInfoAbout={hideOwnerInfoAbout}

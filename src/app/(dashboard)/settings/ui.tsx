@@ -129,7 +129,6 @@ export function SettingsClient({
   trafficError,
   initialActivationSummary,
   activationError,
-  initialAnalyticsExcludedEmails,
   initialSeeds,
   initialBetaFeatures,
   initialHideOwnerInfoAbout,
@@ -148,7 +147,6 @@ export function SettingsClient({
   initialCoachCalPack,
   initialReferralConfig,
   initialExcludedEmails,
-  excludedEmailsError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -176,7 +174,6 @@ export function SettingsClient({
   trafficError: string | null;
   initialActivationSummary: MonetizationSummary | null;
   activationError: string | null;
-  initialAnalyticsExcludedEmails: string[];
   initialSeeds: SavedFormation[];
   initialBetaFeatures: BetaFeatures;
   initialHideOwnerInfoAbout: boolean;
@@ -195,12 +192,12 @@ export function SettingsClient({
   initialCoachCalPack: CoachCalPackConfig;
   initialReferralConfig: ReferralConfig;
   initialExcludedEmails: string[];
-  excludedEmailsError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
-    "traffic" | "monetization" | "settings"
+    "traffic" | "monetization"
   >("traffic");
+  const [usersSubTab, setUsersSubTab] = useState<"list" | "settings">("list");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -335,7 +332,6 @@ export function SettingsClient({
           {usersSubTab === "settings" && (
             <AnalyticsExclusionsAdminClient
               initialEmails={initialExcludedEmails}
-              initialError={excludedEmailsError}
             />
           )}
         </div>
@@ -364,16 +360,6 @@ export function SettingsClient({
             >
               Monetization Health
             </button>
-            <button
-              onClick={() => setAnalyticsSubTab("settings")}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                analyticsSubTab === "settings"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-            >
-              Settings
-            </button>
           </div>
           {analyticsSubTab === "traffic" && (
             <TrafficAdminClient
@@ -385,11 +371,6 @@ export function SettingsClient({
             <ActivationAdminClient
               initialSummary={initialActivationSummary}
               initialError={activationError}
-            />
-          )}
-          {analyticsSubTab === "settings" && (
-            <AnalyticsExclusionsAdminClient
-              initialEmails={initialAnalyticsExcludedEmails}
             />
           )}
         </div>
