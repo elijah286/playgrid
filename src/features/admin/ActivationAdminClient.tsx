@@ -1,0 +1,248 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useToast } from "@/components/ui";
+import {
+  getActivationSummaryAction,
+  type MonetizationSummary,
+} from "@/app/actions/admin-activation";
+
+function formatInt(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
+function pct(n: number): string {
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+function StatTile({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-surface-raised p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
+      {sub ? <p className="mt-1 text-xs text-muted">{sub}</p> : null}
+    </div>
+  );
+}
+
+export function ActivationAdminClient({
+  initialSummary,
+  initialError,
+}: {
+  initialSummary: MonetizationSummary | null;
+  initialError: string | null;
+}) {
+  const { toast } = useToast();
+  const [summary, setSummary] = useState<MonetizationSummary | null>(initialSummary);
+  const [error, setError] = useState(initialError);
+  const [loading, setLoading] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    const res = await getActivationSummaryAction();
+    if (res.ok) {
+      setSummary(res.summary);
+      setError(null);
+      toast({ title: "Refreshed", description: "Monetization data updated." });
+    } else {
+      setError(res.error);
+      toast({
+        title: "Error",
+        description: res.error,
+        variant: "destructive",
+      });
+    }
+    setLoading(false);
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+        <button
+          onClick={refresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium hover:bg-surface-raised disabled:opacity-50"
+        >
+          <RefreshCw size={16} />
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted">Loading monetization data...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Monetization Health</h2>
+          <p className="mt-1 text-sm text-muted">
+            Track activation signals and monetization funnel
+          </p>
+        </div>
+        <button
+          onClick={refresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-raised disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Activation Funnel */}
+      <section className="space-y-4">
+        <h3 className="text-base font-semibold">Activation Funnel</h3>
+        <p className="text-sm text-muted">
+          What % of users progress through each activation milestone?
+        </p>
+        <div className="space-y-3">
+          {[
+            {
+              label: "All Users",
+              value: summary.funnel.totalUsers,
+              percentage: 100,
+            },
+            {
+              label: "Created a Playbook",
+              value: summary.funnel.playbookCreators,
+              percentage:
+                summary.funnel.totalUsers > 0
+                  ? (summary.funnel.playbookCreators / summary.funnel.totalUsers) * 100
+                  : 0,
+            },
+            {
+              label: "Created a Play",
+              value: summary.funnel.playCreators,
+              percentage:
+                summary.funnel.totalUsers > 0
+                  ? (summary.funnel.playCreators / summary.funnel.totalUsers) * 100
+                  : 0,
+            },
+            {
+              label: "16+ Plays (Team Coach Ready)",
+              value: summary.funnel.playCreators16Plus,
+              percentage:
+                summary.funnel.totalUsers > 0
+                  ? (summary.funnel.playCreators16Plus / summary.funnel.totalUsers) * 100
+                  : 0,
+            },
+            {
+              label: "Tried Coach AI",
+              value: summary.funnel.coachAiUsers,
+              percentage:
+                summary.funnel.totalUsers > 0
+                  ? (summary.funnel.coachAiUsers / summary.funnel.totalUsers) * 100
+                  : 0,
+            },
+          ].map((stage, idx) => (
+            <div key={idx} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{stage.label}</span>
+                <span className="text-sm font-semibold">{formatInt(stage.value)}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-surface-raised">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${Math.max(stage.percentage, 2)}%` }}
+                />
+              </div>
+              <div className="text-xs text-muted">{pct(stage.percentage / 100)}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Activation Cohorts */}
+      <section className="space-y-4">
+        <h3 className="text-base font-semibold">Play Creation Cohorts</h3>
+        <p className="text-sm text-muted">
+          Distribution of users by play count—16+ is the Team Coach threshold
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
+          {summary.cohorts.map((cohort) => (
+            <div
+              key={cohort.bucket}
+              className="rounded-lg border border-border bg-surface-raised p-4"
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                {cohort.bucket}
+              </p>
+              <p className="mt-3 text-2xl font-semibold">{formatInt(cohort.count)}</p>
+              <p className="mt-1 text-xs text-muted">{pct(cohort.percentage)}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Key Metrics Grid */}
+      <section className="space-y-4">
+        <h3 className="text-base font-semibold">Key Metrics</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatTile
+            label="Total Users"
+            value={formatInt(summary.funnel.totalUsers)}
+          />
+          <StatTile
+            label="% Creating Plays"
+            value={pct(
+              summary.funnel.playCreators / Math.max(1, summary.funnel.totalUsers),
+            )}
+          />
+          <StatTile
+            label="16+ Play Users (Monetization Ready)"
+            value={formatInt(summary.funnel.playCreators16Plus)}
+            sub={pct(
+              summary.funnel.playCreators16Plus / Math.max(1, summary.funnel.totalUsers),
+            )}
+          />
+          <StatTile
+            label="Coach AI Adoption"
+            value={formatInt(summary.funnel.coachAiUsers)}
+            sub={pct(
+              summary.funnel.coachAiUsers / Math.max(1, summary.funnel.totalUsers),
+            )}
+          />
+        </div>
+      </section>
+
+      {/* Interpretation Guide */}
+      <section className="space-y-2 rounded-lg border border-border bg-surface-raised p-4">
+        <p className="text-sm font-medium">Interpretation Guide</p>
+        <ul className="space-y-1 text-xs text-muted">
+          <li>
+            <strong>16+ plays:</strong> Best indicator of engagement; target audience for
+            Team Coach upsell
+          </li>
+          <li>
+            <strong>Coach AI adoption:</strong> Indicator of Pro Coach potential; track CTA
+            engagement
+          </li>
+          <li>
+            <strong>Activation funnel:</strong> Bottleneck analysis—where are users dropping
+            off?
+          </li>
+        </ul>
+      </section>
+    </div>
+  );
+}

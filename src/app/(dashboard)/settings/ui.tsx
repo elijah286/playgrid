@@ -31,6 +31,7 @@ import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
+import { ActivationAdminClient } from "@/features/admin/ActivationAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
 import { CoachSeatsAdminClient } from "@/features/admin/CoachSeatsAdminClient";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
@@ -48,6 +49,7 @@ import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type { GiftCodeRow } from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import type { TrafficSummary } from "@/app/actions/admin-traffic";
+import type { MonetizationSummary } from "@/app/actions/admin-activation";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -88,7 +90,7 @@ type AdminKeyProps = { configured: boolean; statusLabel: string };
 
 type Tab =
   | "users"
-  | "traffic"
+  | "analytics"
   | "invites"
   | "payments"
   | "integrations"
@@ -164,6 +166,8 @@ export function SettingsClient({
   initialMobileEditingEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
+  initialActivationSummary: MonetizationSummary | null;
+  activationError: string | null;
   initialSeeds: SavedFormation[];
   initialBetaFeatures: BetaFeatures;
   initialHideOwnerInfoAbout: boolean;
@@ -181,12 +185,13 @@ export function SettingsClient({
   initialReferralConfig: ReferralConfig;
 }) {
   const [tab, setTab] = useState<Tab>("users");
+  const [analyticsSubTab, setAnalyticsSubTab] = useState<"traffic" | "monetization">("traffic");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   const tabOptions = [
     { value: "users" as const, label: "Users", icon: Users },
-    { value: "traffic" as const, label: "Traffic", icon: BarChart3 },
+    { value: "analytics" as const, label: "Analytics", icon: BarChart3 },
     { value: "invites" as const, label: "Coach invites", icon: Ticket },
     { value: "payments" as const, label: "Payments", icon: CreditCard },
     { value: "integrations" as const, label: "Integrations", icon: KeyRound },
@@ -289,11 +294,43 @@ export function SettingsClient({
         </div>
       )}
 
-      {tab === "traffic" && (
-        <TrafficAdminClient
-          initialSummary={initialTrafficSummary}
-          initialError={trafficError}
-        />
+      {tab === "analytics" && (
+        <div className="space-y-6">
+          <div className="flex gap-2 border-b border-border">
+            <button
+              onClick={() => setAnalyticsSubTab("traffic")}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                analyticsSubTab === "traffic"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Traffic
+            </button>
+            <button
+              onClick={() => setAnalyticsSubTab("monetization")}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                analyticsSubTab === "monetization"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Monetization Health
+            </button>
+          </div>
+          {analyticsSubTab === "traffic" && (
+            <TrafficAdminClient
+              initialSummary={initialTrafficSummary}
+              initialError={trafficError}
+            />
+          )}
+          {analyticsSubTab === "monetization" && (
+            <ActivationAdminClient
+              initialSummary={initialActivationSummary}
+              initialError={activationError}
+            />
+          )}
+        </div>
       )}
 
       {tab === "invites" && (

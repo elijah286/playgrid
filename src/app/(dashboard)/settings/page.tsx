@@ -31,6 +31,7 @@ import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
+import { getActivationSummaryAction } from "@/app/actions/admin-activation";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { listCoachAiKbMissesAction } from "@/app/actions/coach-ai-feedback";
 import {
@@ -71,6 +72,7 @@ export default async function SettingsPage() {
     examplesPageEnabled,
     freeMaxPlays,
     trafficRes,
+    activationRes,
     seedsRes,
     mobileEditingEnabled,
     betaFeatures,
@@ -101,6 +103,7 @@ export default async function SettingsPage() {
     getExamplesPageEnabled(),
     getFreeMaxPlaysPerPlaybook(),
     getTrafficSummaryAction(30),
+    getActivationSummaryAction(),
     listSeedFormationsAction(),
     getMobileEditingEnabled(),
     getBetaFeatures(),
@@ -243,6 +246,12 @@ export default async function SettingsPage() {
               }
         }
         trafficError={trafficRes.ok ? null : trafficRes.error}
+        initialActivationSummary={
+          activationRes.ok
+            ? activationRes.summary
+            : null
+        }
+        activationError={activationRes.ok ? null : activationRes.error}
         initialSeeds={seedsRes.ok ? seedsRes.formations : []}
         initialBetaFeatures={betaFeatures}
         initialHideOwnerInfoAbout={hideOwnerInfoAbout}
