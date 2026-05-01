@@ -50,3 +50,27 @@ export async function setAnalyticsExcludedEmailsAction(
     return { ok: false, error: e instanceof Error ? e.message : "Save failed." };
   }
 }
+
+export async function toggleAnalyticsExclusionAction(
+  email: string,
+): Promise<{ ok: true; emails: string[] } | { ok: false; error: string }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth;
+  try {
+    const current = await getAnalyticsExcludedEmails();
+    const normalized = email.trim().toLowerCase();
+    let next: string[];
+    if (current.includes(normalized)) {
+      // Remove it
+      next = current.filter((e) => e !== normalized);
+    } else {
+      // Add it
+      next = [...current, normalized];
+    }
+    const saved = await setAnalyticsExcludedEmails(next);
+    revalidatePath("/settings");
+    return { ok: true, emails: saved };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Toggle failed." };
+  }
+}
