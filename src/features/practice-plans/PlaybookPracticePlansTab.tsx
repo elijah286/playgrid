@@ -2,7 +2,16 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Plus, Loader2, Clock, Layers } from "lucide-react";
+import {
+  Plus,
+  Loader2,
+  Clock,
+  Layers,
+  ClipboardList,
+  Users,
+  Repeat,
+  CalendarRange,
+} from "lucide-react";
 import {
   createPracticePlanAction,
   deletePracticePlanAction,
@@ -10,8 +19,77 @@ import {
   type PracticePlanRow,
 } from "@/app/actions/practice-plans";
 import { formatOffset } from "@/domain/practice-plan/types";
+import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 
-export function PlaybookPracticePlansTab({ playbookId }: { playbookId: string }) {
+export function PlaybookPracticePlansTab({
+  playbookId,
+  canUseTeamFeatures = true,
+}: {
+  playbookId: string;
+  canUseTeamFeatures?: boolean;
+}) {
+  if (!canUseTeamFeatures) {
+    return <PracticePlansUpgradePanel />;
+  }
+  return <PlaybookPracticePlansTabInner playbookId={playbookId} />;
+}
+
+function PracticePlansUpgradePanel() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-4 pt-2">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Practice Plans</h2>
+        <p className="text-sm text-muted">
+          Reusable practice templates. Attach to a calendar event when you&apos;re ready.
+        </p>
+      </div>
+      <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
+        <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
+          <ClipboardList className="size-5" />
+        </div>
+        <p className="text-sm font-semibold text-foreground">
+          Practice plans are a Team Coach feature
+        </p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+          Build reusable practice templates, collaborate with your co-coaches,
+          and share the plan with your players.
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          See Team Coach plan
+        </button>
+      </div>
+      <TeamCoachUpgradeDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Practice plans are a Team Coach feature"
+        intro="Walk into every practice with a plan. Build templates once, reuse them all season, and keep your staff and players on the same page."
+        upgradeQuery="practice-plans"
+        Icon={ClipboardList}
+        bullets={[
+          {
+            Icon: Repeat,
+            text: "Reusable templates with timed blocks and parallel station lanes — copy a plan, tweak the date, and you're set for next week.",
+          },
+          {
+            Icon: Users,
+            text: "Co-coaches with collaborator seats edit the same plan in real time. No more emailed PDFs.",
+          },
+          {
+            Icon: CalendarRange,
+            text: "Attach a plan to any calendar event so players know exactly what's running before they arrive.",
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+function PlaybookPracticePlansTabInner({ playbookId }: { playbookId: string }) {
   const [plans, setPlans] = useState<PracticePlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

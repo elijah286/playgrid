@@ -296,6 +296,7 @@ function PlaybookDetailClientInner({
   initialCalendarUpcomingTotal = 0,
   versionHistoryAvailable = false,
   practicePlansAvailable = false,
+  canUseTeamFeatures = false,
 }: {
   playbookId: string;
   sportVariant: string;
@@ -325,6 +326,9 @@ function PlaybookDetailClientInner({
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
+  /** When true, the viewer's tier unlocks team features (calendar, practice
+   *  plans). When false, those tabs render an upgrade pitch instead. */
+  canUseTeamFeatures?: boolean;
   // Data for the playbook banner. Rendered inside the sticky header region
   // so it stays pinned while plays scroll. Kept as raw data (not JSX) so
   // the client can wire play-action callbacks into the banner's menu.
@@ -1544,6 +1548,7 @@ function PlaybookDetailClientInner({
         <PlaybookCalendarTab
           playbookId={playbookId}
           viewerIsCoach={headerProps.viewerIsCoach}
+          canUseTeamFeatures={canUseTeamFeatures}
           onCountsChange={(counts) => {
             setCalendarUpcomingTotal(counts.upcomingTotal);
           }}
@@ -1551,7 +1556,10 @@ function PlaybookDetailClientInner({
       )}
 
       {tab === "practice_plans" && practicePlansAvailable && (
-        <PlaybookPracticePlansTab playbookId={playbookId} />
+        <PlaybookPracticePlansTab
+          playbookId={playbookId}
+          canUseTeamFeatures={canUseTeamFeatures}
+        />
       )}
 
       {tab === "plays" && (

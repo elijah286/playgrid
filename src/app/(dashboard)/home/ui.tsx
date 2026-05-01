@@ -1009,6 +1009,7 @@ export function DashboardClient({
   hideAnimation = false,
   isAdmin = false,
   teamCalendarAvailable = false,
+  canUseTeamFeatures = false,
   inboxAlerts = [],
   activityEntries = [],
   initialTab = "playbooks",
@@ -1017,6 +1018,7 @@ export function DashboardClient({
   hideAnimation?: boolean;
   isAdmin?: boolean;
   teamCalendarAvailable?: boolean;
+  canUseTeamFeatures?: boolean;
   inboxAlerts?: InboxAlert[];
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
@@ -1392,7 +1394,7 @@ export function DashboardClient({
 
       {teamCalendarAvailable && (
         <div hidden={homeTab !== "calendar"} className="mt-6">
-          <HomeCalendarTab />
+          <HomeCalendarTab canUseTeamFeatures={canUseTeamFeatures} />
         </div>
       )}
 

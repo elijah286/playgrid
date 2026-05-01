@@ -193,6 +193,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const viewerEntitlement = await getCurrentEntitlement();
   const viewerIsCoach = tierAtLeast(viewerEntitlement, "coach");
   const viewerCanUseGameMode = canUseGameMode(viewerEntitlement);
+  const viewerCanUseTeamFeatures = tierAtLeast(viewerEntitlement, "coach");
 
   // Site admins get two extra action menu items: "Use as Example"
   // (toggle is_example) and "Publish / Unpublish" (toggle
@@ -367,6 +368,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
         practicePlansAvailable={practicePlansAvailable}
         initialCalendarUpcomingTotal={calendarCounts.upcomingTotal}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
+        canUseTeamFeatures={
+          viewerCanUseTeamFeatures || isAdmin || isExamplePreview
+        }
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,

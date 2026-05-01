@@ -7,6 +7,8 @@ import {
   getBetaFeatures,
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { tierAtLeast } from "@/lib/billing/features";
 import { DashboardClient } from "./ui";
 
 type Props = {
@@ -15,20 +17,29 @@ type Props = {
 
 export default async function HomePage({ searchParams }: Props) {
   const { error: errFromQuery, tab } = await searchParams;
-  const [res, inbox, activity, hideAnimation, profileRes, betaFeatures] =
-    await Promise.all([
-      getDashboardSummaryAction(),
-      listInboxAlertsAction(),
-      listActivityFeedAction(),
-      getHideLobbyAnimation(),
-      getCurrentUserProfile(),
-      getBetaFeatures(),
-    ]);
+  const [
+    res,
+    inbox,
+    activity,
+    hideAnimation,
+    profileRes,
+    betaFeatures,
+    entitlement,
+  ] = await Promise.all([
+    getDashboardSummaryAction(),
+    listInboxAlertsAction(),
+    listActivityFeedAction(),
+    getHideLobbyAnimation(),
+    getCurrentUserProfile(),
+    getBetaFeatures(),
+    getCurrentEntitlement(),
+  ]);
   const isAdmin = profileRes.profile?.role === "admin";
   const teamCalendarAvailable = isBetaFeatureAvailable(
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
   );
+  const canUseTeamFeatures = isAdmin || tierAtLeast(entitlement, "coach");
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
@@ -54,6 +65,7 @@ export default async function HomePage({ searchParams }: Props) {
           hideAnimation={hideAnimation}
           isAdmin={isAdmin}
           teamCalendarAvailable={teamCalendarAvailable}
+          canUseTeamFeatures={canUseTeamFeatures}
           inboxAlerts={inboxAlerts}
           activityEntries={activityEntries}
           initialTab={initialTab}

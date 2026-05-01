@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { CalendarPlus, Calendar, MapPin, X } from "lucide-react";
+import {
+  Bell,
+  CalendarDays,
+  CalendarPlus,
+  Calendar,
+  MapPin,
+  MapPinned,
+  Users,
+  X,
+} from "lucide-react";
+import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 import { Button, useToast } from "@/components/ui";
 import {
   listMyCoachablePlaybooksAction,
@@ -20,7 +30,71 @@ type ViewKind = "list" | "week" | "month";
 
 const FALLBACK_PLAYBOOK_COLOR = "#64748B";
 
-export function HomeCalendarTab() {
+export function HomeCalendarTab({
+  canUseTeamFeatures = true,
+}: {
+  canUseTeamFeatures?: boolean;
+} = {}) {
+  if (!canUseTeamFeatures) {
+    return <HomeCalendarUpgradePanel />;
+  }
+  return <HomeCalendarTabInner />;
+}
+
+function HomeCalendarUpgradePanel() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-10 text-center">
+        <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
+          <CalendarDays className="size-5" />
+        </div>
+        <p className="text-sm font-semibold text-foreground">
+          Team calendar is a Team Coach feature
+        </p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+          Schedule practices, games, and scrimmages across all your playbooks
+          and let players RSVP from any device.
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          See Team Coach plan
+        </button>
+      </div>
+      <TeamCoachUpgradeDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Team calendar is a Team Coach feature"
+        intro="Run your season from one shared schedule — practices, games, and scrimmages with everything your players need to show up ready."
+        upgradeQuery="team-calendar"
+        Icon={CalendarDays}
+        bullets={[
+          {
+            Icon: CalendarPlus,
+            text: "Schedule practices, games, and scrimmages with recurrence, arrival times, and locations.",
+          },
+          {
+            Icon: Users,
+            text: "Players RSVP from any device. See who's coming at a glance.",
+          },
+          {
+            Icon: MapPinned,
+            text: "Embedded maps and one-tap directions for every event.",
+          },
+          {
+            Icon: Bell,
+            text: "Subscribe from Apple, Google, or Outlook so the schedule lives where families already look.",
+          },
+        ]}
+      />
+    </>
+  );
+}
+
+function HomeCalendarTabInner() {
   const [events, setEvents] = useState<CrossPlaybookEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
