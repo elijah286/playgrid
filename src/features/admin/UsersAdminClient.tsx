@@ -113,11 +113,16 @@ type Dialog =
 export function UsersAdminClient({
   initialUsers,
   currentUserId,
+  initialExcludedEmails = [],
 }: {
   initialUsers: AdminUserRow[];
   currentUserId: string;
+  initialExcludedEmails?: string[];
 }) {
   const [users, setUsers] = useState(initialUsers);
+  const [excludedEmails, setExcludedEmails] = useState<Set<string>>(
+    new Set(initialExcludedEmails.map(e => e.toLowerCase()))
+  );
   const [query, setQuery] = useState("");
   const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -126,6 +131,11 @@ export function UsersAdminClient({
   const [sortKey, setSortKey] = useState<SortKey>("lastSignIn");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+
+  // Sync excluded emails when they change
+  useEffect(() => {
+    setExcludedEmails(new Set(initialExcludedEmails.map(e => e.toLowerCase())));
+  }, [initialExcludedEmails]);
   function toggleSort(k: NonNullable<SortKey>) {
     setSortKey((cur) => {
       if (cur !== k) {
@@ -140,13 +150,15 @@ export function UsersAdminClient({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matched = !q
-      ? users
-      : users.filter((u) => {
-          return (
-            u.email.toLowerCase().includes(q) ||
-            (u.displayName ?? "").toLowerCase().includes(q)
-          );
-        });
+      ? users.filter((u) => !excludedEmails.has(u.email.toLowerCase()))
+      : users
+          .filter((u) => !excludedEmails.has(u.email.toLowerCase()))
+          .filter((u) => {
+            return (
+              u.email.toLowerCase().includes(q) ||
+              (u.displayName ?? "").toLowerCase().includes(q)
+            );
+          });
     if (!sortKey) return matched;
     const sign = sortDir === "asc" ? 1 : -1;
     // Null values always sort to the bottom regardless of direction —
@@ -222,7 +234,7 @@ export function UsersAdminClient({
             />
           </div>
           <span className="text-xs text-muted">
-            {filtered.length} / {users.length} users
+            {filtered.length} / {users.length - excludedEmails.size} users
           </span>
           <button
             type="button"

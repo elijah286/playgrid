@@ -325,7 +325,11 @@ export function SettingsClient({
                   {usersError}
                 </p>
               ) : (
-                <UsersAdminClient initialUsers={initialUsers} currentUserId={currentUserId} />
+                <UsersAdminClient
+                  initialUsers={initialUsers}
+                  currentUserId={currentUserId}
+                  initialExcludedEmails={initialExcludedEmails}
+                />
               )}
             </div>
           )}
