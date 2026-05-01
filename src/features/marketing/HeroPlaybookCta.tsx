@@ -5,24 +5,27 @@ import { ArrowRight } from "lucide-react";
 import { logHeroExampleClickAction } from "@/app/actions/admin-examples";
 
 /**
- * Thin client wrapper around the hero "Try this playbook" link that
- * fires a click-tracking event before navigating. The action is
- * fire-and-forget — we don't block the navigation on the network
- * round-trip, and a tracking failure is silent.
+ * Hero-tile companion CTA. The hero tile itself opens its own
+ * playbook on click — this button routes coaches to the full examples
+ * gallery so they can browse across variants and ages instead of
+ * being railroaded into the one example we happen to show.
+ *
+ * Click is logged with the currently-shown playbookId so the
+ * marketing-hero CTR metric still has a referent (the example that
+ * was on screen when the click happened), even though the
+ * destination changed. Fire-and-forget — never block the navigation
+ * on a tracking round-trip.
  */
 export function HeroPlaybookCta({ playbookId }: { playbookId: string }) {
   return (
     <Link
-      href={`/playbooks/${playbookId}`}
+      href="/examples"
       onClick={() => {
-        // Don't await — the link navigation should fire immediately and
-        // tracking is best-effort. The server action returns a Promise we
-        // intentionally drop on the floor.
         void logHeroExampleClickAction(playbookId);
       }}
       className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm hover:bg-surface-inset"
     >
-      Try this playbook
+      See more example playbooks
       <ArrowRight className="size-4" />
     </Link>
   );
