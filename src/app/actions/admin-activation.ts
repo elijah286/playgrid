@@ -23,10 +23,16 @@ export type SportVariantDistribution = {
   percentage: number;
 };
 
+export type SportVariantTrend = {
+  month: string;
+  variants: Record<string, number>;
+};
+
 export type MonetizationSummary = {
   cohorts: ActivationCohort[];
   funnel: ActivationFunnel;
   sportVariants: SportVariantDistribution[];
+  sportVariantTrends: SportVariantTrend[];
 };
 
 export async function getActivationSummaryAction(): Promise<
@@ -45,7 +51,7 @@ export async function getActivationSummaryAction(): Promise<
     // Get sport variant distribution
     const { data: sportVariantData } = await admin
       .from("playbooks")
-      .select("sport_variant, id", { count: "exact" })
+      .select("sport_variant, id, created_at", { count: "exact" })
       .not("sport_variant", "is", null);
 
     // Get users grouped by play count
@@ -148,6 +154,30 @@ export async function getActivationSummaryAction(): Promise<
         }))
         .sort((a, b) => b.count - a.count);
 
+      // Compute sport variant trends by month
+      const trendsByMonth: Record<string, Record<string, number>> = {};
+      if (sportVariantData) {
+        sportVariantData.forEach((row: any) => {
+          const createdAt = row.created_at ? new Date(row.created_at) : null;
+          if (createdAt) {
+            const month = `${createdAt.getUTCFullYear()}-${String(
+              createdAt.getUTCMonth() + 1,
+            ).padStart(2, "0")}`;
+            if (!trendsByMonth[month]) {
+              trendsByMonth[month] = {};
+            }
+            const variant = row.sport_variant || "unknown";
+            trendsByMonth[month][variant] = (trendsByMonth[month][variant] || 0) + 1;
+          }
+        });
+      }
+      const sportVariantTrends: SportVariantTrend[] = Object.entries(trendsByMonth)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, variants]) => ({
+          month,
+          variants,
+        }));
+
       return {
         ok: true,
         summary: {
@@ -160,6 +190,7 @@ export async function getActivationSummaryAction(): Promise<
             coachAiUsers,
           },
           sportVariants,
+          sportVariantTrends,
         },
       };
     }
@@ -230,12 +261,37 @@ export async function getActivationSummaryAction(): Promise<
       }))
       .sort((a, b) => b.count - a.count);
 
+    // Compute sport variant trends by month
+    const trendsByMonth: Record<string, Record<string, number>> = {};
+    if (sportVariantData) {
+      sportVariantData.forEach((row: any) => {
+        const createdAt = row.created_at ? new Date(row.created_at) : null;
+        if (createdAt) {
+          const month = `${createdAt.getUTCFullYear()}-${String(
+            createdAt.getUTCMonth() + 1,
+          ).padStart(2, "0")}`;
+          if (!trendsByMonth[month]) {
+            trendsByMonth[month] = {};
+          }
+          const variant = row.sport_variant || "unknown";
+          trendsByMonth[month][variant] = (trendsByMonth[month][variant] || 0) + 1;
+        }
+      });
+    }
+    const sportVariantTrends: SportVariantTrend[] = Object.entries(trendsByMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, variants]) => ({
+        month,
+        variants,
+      }));
+
     return {
       ok: true,
       summary: {
         cohorts,
         funnel,
         sportVariants,
+        sportVariantTrends,
       },
     };
   } catch (error) {

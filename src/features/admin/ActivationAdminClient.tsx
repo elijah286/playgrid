@@ -34,6 +34,71 @@ function StatTile({
   );
 }
 
+function SportVariantTrendChart({ trends }: { trends: SportVariantTrend[] }) {
+  if (trends.length === 0) return null;
+
+  // Get all unique variants
+  const allVariants = new Set<string>();
+  trends.forEach((t) => {
+    Object.keys(t.variants).forEach((v) => allVariants.add(v));
+  });
+  const variants = Array.from(allVariants).sort();
+
+  // Colors for variants
+  const colors: Record<string, string> = {
+    flag_7v7: "#3b82f6",
+    flag_11v11: "#8b5cf6",
+    tackle: "#ef4444",
+    touch: "#10b981",
+  };
+
+  const getColor = (variant: string, index: number) => {
+    return colors[variant] || ["#06b6d4", "#f59e0b", "#ec4899"][index % 3];
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        {trends.map((trend) => (
+          <div key={trend.month} className="space-y-1">
+            <div className="text-xs font-medium text-muted">{trend.month}</div>
+            <div className="flex gap-1">
+              {variants.map((variant, idx) => {
+                const count = trend.variants[variant] || 0;
+                const total = Object.values(trend.variants).reduce((a, b) => a + b, 0);
+                const percentage = total > 0 ? (count / total) * 100 : 0;
+                if (count === 0) return null;
+                return (
+                  <div
+                    key={variant}
+                    className="h-6 rounded-sm transition-all hover:opacity-80"
+                    style={{
+                      width: `${Math.max(percentage, 2)}%`,
+                      backgroundColor: getColor(variant, idx),
+                    }}
+                    title={`${variant.replace(/_/g, " ")}: ${count}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 text-xs">
+        {variants.map((variant, idx) => (
+          <div key={variant} className="flex items-center gap-2">
+            <div
+              className="h-2 w-2 rounded-sm"
+              style={{ backgroundColor: getColor(variant, idx) }}
+            />
+            <span className="capitalize text-muted">{variant.replace(/_/g, " ")}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ActivationAdminClient({
   initialSummary,
   initialError,
@@ -250,6 +315,21 @@ export function ActivationAdminClient({
             <p className="text-xs text-muted">No playbooks created yet.</p>
           )}
         </div>
+      </section>
+
+      {/* Sport Variant Trends */}
+      <section className="space-y-4">
+        <h3 className="text-base font-semibold">Game Type Trends Over Time</h3>
+        <p className="text-sm text-muted">
+          See how sport variants shift seasonally (tackle in fall, 7v7 off-season, etc.)
+        </p>
+        {summary.sportVariantTrends.length > 0 ? (
+          <div className="space-y-4">
+            <SportVariantTrendChart trends={summary.sportVariantTrends} />
+          </div>
+        ) : (
+          <p className="text-xs text-muted">Not enough data to show trends yet.</p>
+        )}
       </section>
 
       {/* Interpretation Guide */}
