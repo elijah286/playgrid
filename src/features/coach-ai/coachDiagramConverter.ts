@@ -38,9 +38,18 @@ export type CoachDiagramPlayer = {
 
 export type CoachDiagramRoute = {
   from: string;                     // player id
-  path: [number, number][];         // waypoints as [x_yards, y_yards] (same coord system)
+  path: [number, number][];         // POST-snap waypoints as [x_yards, y_yards]. May be empty when only `motion` is set.
   curve?: boolean;
   tip?: "arrow" | "t" | "none";
+  /**
+   * Optional PRE-snap motion waypoints in the same yard coord system.
+   * Rendered as the dashed motion zig-zag from the player's start position
+   * through these points. The player ends motion at the LAST motion
+   * waypoint — the post-snap `path` (if any) starts from there. Use this
+   * for jet motion, shifts, fly sweep window-dressing, formation-into-
+   * formation looks, etc. Omit for plays without presnap motion.
+   */
+  motion?: [number, number][];
   /**
    * Optional playback delay in seconds before this route starts moving.
    * Useful for defender reaction routes — e.g. a hook defender that
@@ -352,23 +361,35 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     const carrier = routeLookup.get(dr.from);
     if (!carrier) continue;
 
-    // Nodes: start from player position, then each waypoint
+    // Nodes: start from player position, then presnap motion waypoints
+    // (if any), then postsnap route waypoints. Motion segments use the
+    // "motion" strokePattern so the renderer draws them as the dashed
+    // pre-snap zig-zag and the animation system collapses them to a
+    // straight line at runtime.
     const startNode: RouteNode = { id: uid(), position: { ...carrier.position } };
-    const waypointNodes: RouteNode[] = dr.path.map(([wx, wy]) => ({
+    const motionNodes: RouteNode[] = (dr.motion ?? []).map(([wx, wy]) => ({
       id:       uid(),
       position: toNorm(wx, wy),
     }));
-    const nodes = [startNode, ...waypointNodes];
+    const pathNodes: RouteNode[] = dr.path.map(([wx, wy]) => ({
+      id:       uid(),
+      position: toNorm(wx, wy),
+    }));
+    const nodes = [startNode, ...motionNodes, ...pathNodes];
 
-    // Segments: each consecutive pair
+    // Segments: motion segments first (strokePattern "motion"), then
+    // postsnap segments (strokePattern "solid"). Motion is always drawn
+    // straight — curving a motion path makes no sense visually.
     const segments: RouteSegment[] = [];
+    const motionCount = motionNodes.length;
     for (let i = 0; i < nodes.length - 1; i++) {
+      const isMotion = i < motionCount;
       segments.push({
         id:            uid(),
         fromNodeId:    nodes[i].id,
         toNodeId:      nodes[i + 1].id,
-        shape:         dr.curve ? "curve" : "straight",
-        strokePattern: "solid",
+        shape:         isMotion ? "straight" : (dr.curve ? "curve" : "straight"),
+        strokePattern: isMotion ? "motion" : "solid",
         controlOffset: null,
       });
     }
@@ -384,6 +405,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         stroke:      carrier.style.fill,
         strokeWidth: 1.8,
       },
+      ...(motionCount > 0 ? { motion: true } : {}),
       endDecoration: dr.tip ?? "arrow",
       ...(typeof dr.startDelaySec === "number" && dr.startDelaySec > 0
         ? { startDelaySec: dr.startDelaySec }

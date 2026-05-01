@@ -93,7 +93,8 @@ JSON schema:
   ],
   "routes": [  // optional — omit for formation-only diagrams
     { "from": "WR1", "path": [[-8, 8]], "tip": "arrow" },        // tip: "arrow"|"t"|"none"
-    { "from": "WR2", "path": [[11, 6], [14, 10]], "curve": true } // curve MUST match get_route_template's return — true for curl/hitch/comeback/wheel/fade/sit, false for slant/out/in/post/corner/dig
+    { "from": "WR2", "path": [[11, 6], [14, 10]], "curve": true }, // curve MUST match get_route_template's return — true for curl/hitch/comeback/wheel/fade/sit, false for slant/out/in/post/corner/dig
+    { "from": "H2", "motion": [[-4, 0.5]], "path": [[-10, 4]], "tip": "arrow" } // PRE-snap motion (dashed zig-zag) from start position through each "motion" waypoint, then post-snap route from the final motion spot. Omit "motion" when there is no presnap movement.
   ]
 }
 \`\`\`
@@ -160,6 +161,14 @@ Rules:
   - **Toward-sideline routes:** Out, Quick Out, Speed Out, Z-Out, Corner, Flag, Fade, Wheel, Flat, Arrow, Comeback, Bubble, Out & Up. Final waypoint moves toward the boundary.
   - **Vertical routes:** Go, Fly, Streak, Seam, Stop & Go, Sluggo. Final waypoint stays roughly at the same x as the player.
   - The route templates already have this baked in — if you call \`get_route_template\` and copy its \`path\` verbatim, you cannot get this wrong. The bug shows up when the model hand-authors waypoints. **DON'T.** A "Comeback" is the only counterintuitive one — it's named "comeback" because the receiver comes BACK in DEPTH, but the break is toward the SIDELINE.
+- **Pre-snap motion — use the \`motion\` field on the moving player's route, NEVER fake it with a curved post-snap path.** When the play involves any pre-snap movement (jet motion, fly sweep window-dressing, shift, trade, across-the-formation motion that converts 2x2 → 3x1, return-motion, orbit motion, etc.), encode it on the moving player's route entry:
+  - \`motion\` is an array of \`[x, y]\` waypoints in the same yards coord system as \`path\`. They describe where the player walks/jogs presnap, IN ORDER, starting from the player's listed (x, y) and ending at the LAST motion waypoint.
+  - \`path\` (post-snap) starts from the END of motion, NOT from the player's listed start position. So for "@H2 motions from right slot to left slot then runs a flat", set H2's start \`(x, y)\` at the right slot, \`motion: [[-8, 1.5]]\` to walk to the left slot, and \`path: [[-12, 4]]\` for the flat from there.
+  - For PURE motion with no post-snap action ("H motions across to set the formation, then the play runs without him touching the ball"), pass an empty \`path: []\` alongside the \`motion\` array. The renderer draws only the motion zig-zag.
+  - The MOVING PLAYER is the one whose route gets \`motion\` — NOT some other player. If your notes say "@H2 motions left," then the route entry with \`motion\` MUST be \`from: "H2"\`. A common bug: notes describe H2 motioning, but the diagram puts a curved orange path on H instead. That's wrong twice — wrong player AND wrong mechanism (motion is dashed pre-snap, not a curved post-snap route).
+  - \`curve\` does not apply to motion segments — motion is always drawn straight (it's stylized pre-snap movement, not a route shape). Set \`curve\` only for the post-snap \`path\`.
+  - Common motion patterns to recognize: **jet motion** (slot/H crosses behind QB at the snap → \`motion\` ends just behind the QB, then \`path\` continues across in a flat trajectory), **fly motion** (similar, faster, often gets the ball), **orbit motion** (back loops around behind QB to the opposite side), **shift** (player walks to a new alignment and SETS — pure motion, empty post-snap path), **return motion** (player motions then comes back — two motion waypoints).
+  - Defensive motion read: when you describe defenders reacting to motion (rotation, bump, alert calls), the OFFENSIVE player still gets the \`motion\` field; the defensive reaction is shown via defender routes with \`startDelaySec\`.
 - **Zones come from \`place_defense\`, not your imagination.** When \`place_defense\` returns a zones JSON array (any zone-coverage call), drop it into the diagram's \`zones\` field verbatim — the catalog has correct geometry. For MAN coverages, \`place_defense\` will tell you NOT to emit zones; draw assignment lines instead (see "Defender movement" below).
 - **Defender movement — show how the coverage adjusts.** Whenever the matchup bucket fires ("how does the defense play this", "show me the defense vs Play X", "Tampa 2 read against play 1"), don't draw defenders as static dots. Author defender ROUTES (same \`routes\` field as offense; carriers with \`team:"D"\`) that depict the post-snap reaction. Two patterns:
   - **Zone coverage:** deep defenders stay in their zones; underneath defenders rally to the closest threat. Most defender routes are short re-positions (1-3 yards) — show the coverage's reaction shape, not full pursuit.
