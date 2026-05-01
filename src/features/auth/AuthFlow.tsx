@@ -11,6 +11,17 @@ import { Button, Input, useToast } from "@/components/ui";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 import { suggestEmailDomainCorrection } from "@/lib/auth/email-typo";
 
+function GoogleGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.32A9 9 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.97 10.72A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.29-1.72V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.04l3.01-2.32z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.32C4.68 5.16 6.66 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
 /**
  * A single unified sign-in / sign-up flow. Email first; the form branches
  * on whether that email already has an account. Code is the universal
@@ -107,7 +118,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
 
   // ---------- Effects: step transitions ----------
 
-  async function signInWithApple() {
+  async function signInWithOAuthProvider(provider: "apple" | "google", label: string) {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setPending(true);
@@ -115,7 +126,7 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: "apple",
+        provider,
         options: {
           redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
         },
@@ -123,11 +134,13 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
       if (error) throw error;
       // signInWithOAuth navigates the page; nothing more to do here.
     } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : "Could not start Apple sign-in.");
+      setFormError(e instanceof Error ? e.message : `Could not start ${label} sign-in.`);
       setPending(false);
       submittingRef.current = false;
     }
   }
+  const signInWithApple = () => signInWithOAuthProvider("apple", "Apple");
+  const signInWithGoogle = () => signInWithOAuthProvider("google", "Google");
 
   async function submitEmail() {
     if (!hasSupabaseEnv()) {
@@ -429,29 +442,46 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
         />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-          {/* Apple sign-in. Required by App Store Review Guideline 4.8 when
-              email/password sign-up is offered, so it's gated on
-              NEXT_PUBLIC_AUTH_APPLE_ENABLED — flip on once the Apple Developer
-              Services ID + secret JWT are wired into Supabase. */}
-          {step === "email" && process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === "true" && (
-            <>
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                onClick={() => void signInWithApple()}
-                disabled={pending}
-              >
-                <Apple className="mr-2 size-4" aria-hidden />
-                Continue with Apple
-              </Button>
-              <div className="flex items-center gap-2 text-xs text-muted">
-                <span className="h-px flex-1 bg-border" aria-hidden />
-                <span>or</span>
-                <span className="h-px flex-1 bg-border" aria-hidden />
-              </div>
-            </>
-          )}
+          {/* Social sign-in. Each provider is gated on its own env flag so we
+              don't show buttons that 400 because the provider isn't configured
+              in Supabase yet. Apple is required by App Store Review Guideline
+              4.8 when email/password sign-up is offered — turn it back on once
+              the Apple Developer Services ID + secret JWT are wired up. */}
+          {step === "email" &&
+            (process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true" ||
+              process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === "true") && (
+              <>
+                {process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => void signInWithGoogle()}
+                    disabled={pending}
+                  >
+                    <GoogleGlyph className="mr-2 size-4" aria-hidden />
+                    Continue with Google
+                  </Button>
+                )}
+                {process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === "true" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => void signInWithApple()}
+                    disabled={pending}
+                  >
+                    <Apple className="mr-2 size-4" aria-hidden />
+                    Continue with Apple
+                  </Button>
+                )}
+                <div className="flex items-center gap-2 text-xs text-muted">
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                  <span>or</span>
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                </div>
+              </>
+            )}
 
           {/* Email — shown on every step except new-user-profile where it's implicit */}
           {step !== "new-user-profile" && step !== "set-new-password" && (
