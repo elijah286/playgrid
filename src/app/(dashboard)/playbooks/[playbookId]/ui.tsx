@@ -1259,29 +1259,26 @@ function PlaybookDetailClientInner({
            Print/Game/Search invites confused taps that go to nothing or
            bounce to /pricing (game mode upgrade dialog). */
         <div className="flex flex-wrap items-end gap-3">
-          {/* Type filter lives in the Filters panel on mobile to save a
-              row of vertical space; shown inline on desktop for fast
-              switching. */}
-          <div className="hidden sm:block">
-            <SegmentedControl
-              value={typeFilter}
-              onChange={(v) => setTypeFilter(v as PlayType | "all")}
-              options={
-                variant === "tackle_11"
-                  ? [
-                      { value: "all", label: "All" },
-                      { value: "offense", label: "Offense" },
-                      { value: "defense", label: "Defense" },
-                      { value: "special_teams", label: "Special teams" },
-                    ]
-                  : [
-                      { value: "all", label: "All" },
-                      { value: "offense", label: "Offense" },
-                      { value: "defense", label: "Defense" },
-                    ]
-              }
-            />
-          </div>          <div className="min-w-0 flex-1">
+          {/* Type tabs are the primary play filter — visible at all
+              breakpoints; flex-wrap on the container handles narrow widths. */}
+          <SegmentedControl
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v as PlayType | "all")}
+            options={
+              variant === "tackle_11"
+                ? [
+                    { value: "all", label: "All" },
+                    { value: "offense", label: "Offense" },
+                    { value: "defense", label: "Defense" },
+                    { value: "special_teams", label: "Special teams" },
+                  ]
+                : [
+                    { value: "all", label: "All" },
+                    { value: "offense", label: "Offense" },
+                    { value: "defense", label: "Defense" },
+                  ]
+            }
+          />          <div className="min-w-0 flex-1">
             <Input
               leftIcon={Search}
               value={q}
@@ -1291,9 +1288,9 @@ function PlaybookDetailClientInner({
           </div>
 
           <div ref={filtersPanelRef} className="relative">
-            {/* Filters button: text on desktop, icon-only on mobile to free
-                room for the Game mode button. The "•" badge remains
-                regardless to signal active filters. */}
+            {/* Filters button: icon-only across breakpoints to keep the
+                toolbar compact and let the search input breathe. The "•"
+                badge signals active filters. */}
             <Button
               variant="secondary"
               leftIcon={SlidersHorizontal}
@@ -1301,15 +1298,10 @@ function PlaybookDetailClientInner({
               aria-expanded={filtersOpen}
               aria-label="Filters"
               title="Filters"
-              className="px-2.5 sm:px-3"
+              className="px-2.5"
             >
-              <span className="hidden sm:inline">
-                {groupBy === "type" && typeFilter === "all" && view === "active"
-                  ? "Filters"
-                  : "Filters •"}
-              </span>
-              {!(groupBy === "type" && typeFilter === "all" && view === "active") && (
-                <span className="sm:hidden" aria-hidden="true">•</span>
+              {!(groupBy === "type" && view === "active") && (
+                <span aria-hidden="true">•</span>
               )}
             </Button>
             {filtersOpen && (
@@ -1381,31 +1373,6 @@ function PlaybookDetailClientInner({
                   </div>
                 </div>
                 <div>
-                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                    Type
-                  </div>
-                  <SegmentedControl
-                    size="sm"
-                    className="w-full [&>button]:flex-1"
-                    value={typeFilter}
-                    onChange={(v) => setTypeFilter(v as PlayType | "all")}
-                    options={
-                      variant === "tackle_11"
-                        ? [
-                            { value: "all", label: "All" },
-                            { value: "offense", label: "Off" },
-                            { value: "defense", label: "Def" },
-                            { value: "special_teams", label: "ST" },
-                          ]
-                        : [
-                            { value: "all", label: "All" },
-                            { value: "offense", label: "Off" },
-                            { value: "defense", label: "Def" },
-                          ]
-                    }
-                  />
-                </div>
-                <div>
                   <label className="flex cursor-pointer items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
                       <Hash className="size-3" /> Show play numbers
@@ -1473,14 +1440,18 @@ function PlaybookDetailClientInner({
             }}
             aria-label={reorderMode ? "Done reordering" : "Reorder plays"}
             title={reorderMode ? "Done reordering" : "Reorder plays"}
-            className="hidden sm:inline-flex"
+            className="hidden px-2.5 sm:inline-flex"
           >
-            {reorderMode ? "Done" : "Reorder"}
+            {reorderMode && <span>Done</span>}
           </Button>
           <Link href={`/playbooks/${playbookId}/print`} className="hidden sm:inline-flex">
-            <Button variant="secondary" leftIcon={Printer}>
-              Print playbook
-            </Button>
+            <Button
+              variant="secondary"
+              leftIcon={Printer}
+              aria-label="Print playbook"
+              title="Print playbook"
+              className="px-2.5"
+            />
           </Link>
           {/* Game mode button. On every viewport — laptop sideliners on
               desktop, the primary sideline entry on mobile. Hidden when the
