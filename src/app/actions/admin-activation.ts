@@ -17,9 +17,16 @@ export type ActivationFunnel = {
   coachAiUsers: number;
 };
 
+export type SportVariantDistribution = {
+  variant: string;
+  count: number;
+  percentage: number;
+};
+
 export type MonetizationSummary = {
   cohorts: ActivationCohort[];
   funnel: ActivationFunnel;
+  sportVariants: SportVariantDistribution[];
 };
 
 export async function getActivationSummaryAction(): Promise<
@@ -34,6 +41,12 @@ export async function getActivationSummaryAction(): Promise<
     const { count: totalUsers } = await admin
       .from("profiles")
       .select("*", { count: "exact", head: true });
+
+    // Get sport variant distribution
+    const { data: sportVariantData } = await admin
+      .from("playbooks")
+      .select("sport_variant, id", { count: "exact" })
+      .not("sport_variant", "is", null);
 
     // Get users grouped by play count
     const { data: playCounts, error: playCountsError } = await admin.rpc(
@@ -113,6 +126,28 @@ export async function getActivationSummaryAction(): Promise<
       // Coach AI users - would need separate tracking
       const coachAiUsers = 0; // TODO: track usage
 
+      // Sport variant distribution
+      const sportVariantCounts: Record<string, number> = {};
+      if (sportVariantData) {
+        sportVariantData.forEach((row: any) => {
+          const variant = row.sport_variant || "unknown";
+          sportVariantCounts[variant] = (sportVariantCounts[variant] || 0) + 1;
+        });
+      }
+      const totalVariants = Object.values(sportVariantCounts).reduce(
+        (sum, count) => sum + count,
+        0,
+      );
+      const sportVariants: SportVariantDistribution[] = Object.entries(
+        sportVariantCounts,
+      )
+        .map(([variant, count]) => ({
+          variant,
+          count: count as number,
+          percentage: totalVariants > 0 ? (count as number) / totalVariants : 0,
+        }))
+        .sort((a, b) => b.count - a.count);
+
       return {
         ok: true,
         summary: {
@@ -124,6 +159,7 @@ export async function getActivationSummaryAction(): Promise<
             playCreators16Plus,
             coachAiUsers,
           },
+          sportVariants,
         },
       };
     }
@@ -172,11 +208,34 @@ export async function getActivationSummaryAction(): Promise<
       coachAiUsers: 0, // TODO: track usage
     };
 
+    // Sport variant distribution
+    const sportVariantCounts: Record<string, number> = {};
+    if (sportVariantData) {
+      sportVariantData.forEach((row: any) => {
+        const variant = row.sport_variant || "unknown";
+        sportVariantCounts[variant] = (sportVariantCounts[variant] || 0) + 1;
+      });
+    }
+    const totalVariants = Object.values(sportVariantCounts).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    const sportVariants: SportVariantDistribution[] = Object.entries(
+      sportVariantCounts,
+    )
+      .map(([variant, count]) => ({
+        variant,
+        count: count as number,
+        percentage: totalVariants > 0 ? (count as number) / totalVariants : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
     return {
       ok: true,
       summary: {
         cohorts,
         funnel,
+        sportVariants,
       },
     };
   } catch (error) {

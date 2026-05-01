@@ -221,6 +221,37 @@ export function ActivationAdminClient({
         </div>
       </section>
 
+      {/* Sport Variant Distribution */}
+      <section className="space-y-4">
+        <h3 className="text-base font-semibold">Game Type Distribution</h3>
+        <p className="text-sm text-muted">
+          Which sport variants are driving engagement?
+        </p>
+        <div className="space-y-3">
+          {summary.sportVariants.length > 0 ? (
+            summary.sportVariants.map((sport) => (
+              <div key={sport.variant} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium capitalize">
+                    {sport.variant.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-sm font-semibold">{formatInt(sport.count)}</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-surface-raised">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all"
+                    style={{ width: `${Math.max(sport.percentage * 100, 2)}%` }}
+                  />
+                </div>
+                <div className="text-xs text-muted">{pct(sport.percentage)}</div>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-muted">No playbooks created yet.</p>
+          )}
+        </div>
+      </section>
+
       {/* Interpretation Guide */}
       <section className="space-y-2 rounded-lg border border-border bg-surface-raised p-4">
         <p className="text-sm font-medium">Interpretation Guide</p>
@@ -236,6 +267,10 @@ export function ActivationAdminClient({
           <li>
             <strong>Activation funnel:</strong> Bottleneck analysis—where are users dropping
             off?
+          </li>
+          <li>
+            <strong>Game type:</strong> Shows which sport variant has highest engagement—informs
+            feature roadmap prioritization
           </li>
         </ul>
       </section>
