@@ -52,14 +52,10 @@ export function ActivationAdminClient({
     if (res.ok) {
       setSummary(res.summary);
       setError(null);
-      toast({ title: "Refreshed", description: "Monetization data updated." });
+      toast("Monetization data updated.", "success");
     } else {
       setError(res.error);
-      toast({
-        title: "Error",
-        description: res.error,
-        variant: "destructive",
-      });
+      toast(res.error, "error");
     }
     setLoading(false);
   }

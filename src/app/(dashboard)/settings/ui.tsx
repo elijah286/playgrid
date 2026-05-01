@@ -126,6 +126,8 @@ export function SettingsClient({
   initialMobileEditingEnabled,
   initialTrafficSummary,
   trafficError,
+  initialActivationSummary,
+  activationError,
   initialSeeds,
   initialBetaFeatures,
   initialHideOwnerInfoAbout,
