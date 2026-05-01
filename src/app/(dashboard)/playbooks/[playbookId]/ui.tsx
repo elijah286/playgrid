@@ -1524,6 +1524,7 @@ function PlaybookDetailClientInner({
           members={initialRoster}
           claims={initialRosterClaims}
           viewerIsCoach={headerProps.viewerIsCoach}
+          canEditRoster={headerProps.canShare}
           canManage={headerProps.canManage}
           teamName={headerProps.name}
           senderName={headerProps.senderName}
@@ -2369,6 +2370,7 @@ function RosterPanel({
   members,
   claims,
   viewerIsCoach,
+  canEditRoster,
   canManage,
   teamName,
   senderName,
@@ -2377,6 +2379,7 @@ function RosterPanel({
   members: PlaybookRosterMember[];
   claims: PendingRosterClaim[];
   viewerIsCoach: boolean;
+  canEditRoster: boolean;
   canManage: boolean;
   teamName: string;
   senderName: string | null;
@@ -2387,15 +2390,8 @@ function RosterPanel({
   const [renaming, setRenaming] = useState<PlaybookRosterMember | null>(null);
   const [roleEditing, setRoleEditing] = useState<PlaybookRosterMember | null>(null);
   const [positionEditing, setPositionEditing] = useState<PlaybookRosterMember | null>(null);
-  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   function openAddPlayer() {
-    if (!viewerIsCoach) {
-      setUpgradeNotice({
-        title: "Managing the roster is a Team Coach feature",
-        message: "Upgrade to Team Coach ($9/mo or $99/yr) to add players to the roster.",
-      });
-      return;
-    }
+    if (!canEditRoster) return;
     setShowAddPlayerModal(true);
   }
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -2590,7 +2586,7 @@ function RosterPanel({
           <p className="text-xs text-muted">Players and coaches with access to this playbook.</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {viewerIsCoach && (
+          {canEditRoster && (
             <Button variant="secondary" leftIcon={Plus} onClick={openAddPlayer}>
               Add player
             </Button>
@@ -2883,7 +2879,13 @@ function RosterPanel({
       {active.length === 0 && activeCoaches.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface-raised p-8 text-center">
           <p className="text-sm font-semibold text-foreground">No one on the roster yet</p>
-          <p className="mt-1 text-xs text-muted">Use Invite to share this playbook with a player or coach.</p>
+          <p className="mt-1 text-xs text-muted">
+            {canEditRoster
+              ? viewerIsCoach
+                ? "Add players below, or use Invite to share this playbook with a player or coach."
+                : "Add your players' names, jerseys, and positions below. Inviting them comes with Team Coach."
+              : "Your coach will add the roster here."}
+          </p>
         </div>
       ) : active.length === 0 ? null : (
         <section>
@@ -2902,7 +2904,7 @@ function RosterPanel({
                   <th className="px-4 py-2.5 font-semibold">Role</th>
                   <th className="px-4 py-2.5 font-semibold">Jersey</th>
                   <th className="px-4 py-2.5 font-semibold">Position</th>
-                  {viewerIsCoach && <th className="w-10 px-4 py-2.5" />}
+                  {canEditRoster && <th className="w-10 px-4 py-2.5" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -2965,7 +2967,7 @@ function RosterPanel({
                     <tr key={m.id}>
                       <td className="px-4 py-2.5 font-medium text-foreground">
                         <span className="inline-flex items-center gap-2">
-                          {viewerIsCoach ? (
+                          {canEditRoster ? (
                             <button
                               type="button"
                               onClick={() => setRenaming(m)}
@@ -3016,7 +3018,7 @@ function RosterPanel({
                         {m.jersey_number ? `#${m.jersey_number}` : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-muted">
-                        {viewerIsCoach ? (
+                        {canEditRoster ? (
                           <button
                             type="button"
                             onClick={() => setPositionEditing(m)}
@@ -3033,7 +3035,7 @@ function RosterPanel({
                           m.position || "—"
                         )}
                       </td>
-                      {viewerIsCoach && (
+                      {canEditRoster && (
                         <td className="px-4 py-2.5 text-right">
                           <ActionMenu items={items} />
                         </td>
@@ -3086,13 +3088,6 @@ function RosterPanel({
           setRoleEditing(null);
           router.refresh();
         }}
-      />
-
-      <UpgradeModal
-        open={!!upgradeNotice}
-        onClose={() => setUpgradeNotice(null)}
-        title={upgradeNotice?.title ?? ""}
-        message={upgradeNotice?.message ?? ""}
       />
 
     </div>

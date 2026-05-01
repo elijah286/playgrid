@@ -229,6 +229,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-06-01",
   },
   {
+    id: "roster-free-tier-build",
+    name: "Free-tier roster building",
+    description:
+      "Coaches on the free tier can add, rename, and edit their full roster (names, jersey numbers, positions) inside any playbook. Inviting players to actually join — sending links, approving claims, granting coach access — remains a Team Coach feature, so the upgrade moment lands when the coach is ready to share, not when they're organizing.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-05-01",
+  },
+  {
     id: "roster-invites",
     name: "Invite team members",
     description:
