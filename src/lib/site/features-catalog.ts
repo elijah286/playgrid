@@ -644,6 +644,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-09-01",
   },
   {
+    id: "admin-analytics-exclusions",
+    name: "Analytics email exclusions",
+    description:
+      "Site Admin → Analytics → Settings lets the owner list emails (own, family, test accounts) to exclude from the Traffic and Monetization Health dashboards so internal activity doesn't skew the numbers.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-01",
+  },
+  {
     id: "admin-traffic",
     name: "Traffic dashboard",
     description:

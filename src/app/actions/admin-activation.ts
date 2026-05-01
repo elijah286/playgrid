@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getAnalyticsExcludedUserIds } from "@/lib/site/analytics-exclusions-config";
 
 export type ActivationCohort = {
   bucket: string;
@@ -42,11 +43,13 @@ export async function getActivationSummaryAction(): Promise<
 
   try {
     const admin = createServiceRoleClient();
+    const excludedIds = await getAnalyticsExcludedUserIds();
 
-    // Get total users
-    const { count: totalUsers } = await admin
+    // Get total users (less explicit exclusions)
+    const { count: rawTotalUsers } = await admin
       .from("profiles")
       .select("*", { count: "exact", head: true });
+    const totalUsers = Math.max(0, (rawTotalUsers ?? 0) - excludedIds.size);
 
     // Get sport variant distribution
     const { data: sportVariantData } = await admin
@@ -61,8 +64,9 @@ export async function getActivationSummaryAction(): Promise<
 
     if (playCountsError) {
       // Fallback if RPC doesn't exist yet - compute manually
-      const { data: users } = await admin.from("profiles").select("id");
-      if (!users) return { ok: false, error: "Failed to fetch user data" };
+      const { data: usersRaw } = await admin.from("profiles").select("id");
+      if (!usersRaw) return { ok: false, error: "Failed to fetch user data" };
+      const users = usersRaw.filter((u) => !excludedIds.has(u.id as string));
 
       const { data: playcounts } = await admin
         .from("plays")
@@ -183,7 +187,7 @@ export async function getActivationSummaryAction(): Promise<
         summary: {
           cohorts,
           funnel: {
-            totalUsers: totalUsers ?? 0,
+            totalUsers,
             playbookCreators,
             playCreators,
             playCreators16Plus,
@@ -232,7 +236,7 @@ export async function getActivationSummaryAction(): Promise<
     });
 
     const funnel: ActivationFunnel = {
-      totalUsers: totalUsers ?? 0,
+      totalUsers,
       playbookCreators: totalWithPlays,
       playCreators: totalWithPlays,
       playCreators16Plus: cohorts.find((c) => c.bucket === "16+ plays")?.count ?? 0,

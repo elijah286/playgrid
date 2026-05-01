@@ -33,6 +33,7 @@ import { getReferralConfig } from "@/lib/site/referral-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { getActivationSummaryAction } from "@/app/actions/admin-activation";
+import { getAnalyticsExcludedEmails } from "@/lib/site/analytics-exclusions-config";
 import { listSeedFormationsAction } from "@/app/actions/formations";
 import { listCoachAiKbMissesAction } from "@/app/actions/coach-ai-feedback";
 import {
@@ -88,6 +89,7 @@ export default async function SettingsPage() {
     coachCalPack,
     referralConfig,
     authProviders,
+    analyticsExcludedEmails,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -120,6 +122,7 @@ export default async function SettingsPage() {
     getCoachCalPackConfig(),
     getReferralConfig(),
     getAuthProvidersConfig(),
+    getAnalyticsExcludedEmails(),
   ]);
 
   return (
@@ -255,6 +258,7 @@ export default async function SettingsPage() {
             : null
         }
         activationError={activationRes.ok ? null : activationRes.error}
+        initialAnalyticsExcludedEmails={analyticsExcludedEmails}
         initialSeeds={seedsRes.ok ? seedsRes.formations : []}
         initialBetaFeatures={betaFeatures}
         initialHideOwnerInfoAbout={hideOwnerInfoAbout}

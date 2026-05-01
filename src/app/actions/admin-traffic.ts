@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getAnalyticsExcludedUserIds } from "@/lib/site/analytics-exclusions-config";
 
 export type TrafficSummary = {
   windowDays: number;
@@ -106,6 +107,11 @@ export async function getTrafficSummaryAction(
     if (adminsErr) throw new Error(adminsErr.message);
     const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
 
+    // Plus any user IDs the admin has explicitly excluded (own/family/test
+    // accounts configured under Analytics → Settings).
+    const excludedExtra = await getAnalyticsExcludedUserIds();
+    for (const id of excludedExtra) adminIds.add(id);
+
     // Pull all non-bot views in window. Volume should be manageable for an admin tool.
     const { data: viewsRaw, error: viewsErr } = await admin
       .from("page_views")
@@ -134,15 +140,21 @@ export async function getTrafficSummaryAction(
       .gte("created_at", windowStart.toISOString())
       .limit(100000);
     if (signupsErr) throw new Error(signupsErr.message);
-    const newProfiles = (newProfilesRaw ?? []).filter((p) => (p.role as string) !== "admin");
+    const newProfiles = (newProfilesRaw ?? []).filter(
+      (p) => (p.role as string) !== "admin" && !adminIds.has(p.id as string),
+    );
 
     const signupUserIds = new Set<string>(newProfiles.map((p) => p.id as string));
 
-    // Total users (excluding admins).
-    const { count: totalUsersCount } = await admin
+    // Total users (excluding admins and explicit exclusions).
+    const { count: rawTotalUsersCount } = await admin
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .neq("role", "admin");
+    const totalUsersCount = Math.max(
+      0,
+      (rawTotalUsersCount ?? 0) - excludedExtra.size,
+    );
 
     // Active cohorts via user_activity_days (excluding admins).
     const { data: active7 } = await admin
@@ -263,7 +275,7 @@ export async function getTrafficSummaryAction(
         views: views.length,
         uniqueSessions: sessions,
         signups: newProfiles.length,
-        totalUsers: totalUsersCount ?? 0,
+        totalUsers: totalUsersCount,
         activeLast7,
         activeLast30,
       },
