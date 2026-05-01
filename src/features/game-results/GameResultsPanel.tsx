@@ -14,11 +14,19 @@ import {
   type GameRow as GameRowData,
 } from "@/app/actions/game-results";
 import { useToast } from "@/components/ui";
+import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 
 type KindFilter = "all" | "game" | "scrimmage";
 type SortOrder = "newest" | "oldest";
 
-export function GameResultsPanel({ playbookId }: { playbookId: string }) {
+export function GameResultsPanel({
+  playbookId,
+  canUseGameMode = false,
+}: {
+  playbookId: string;
+  canUseGameMode?: boolean;
+}) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [games, setGames] = useState<GameRowData[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
@@ -131,19 +139,35 @@ export function GameResultsPanel({ playbookId }: { playbookId: string }) {
 
   if (games.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
-        <p className="text-sm font-semibold text-foreground">No games yet</p>
-        <p className="mt-1 text-sm text-muted">
-          Schedule a game from the Calendar tab, or run one from Game Mode to
-          see it here.
-        </p>
-        <Link
-          href={`/playbooks/${playbookId}/game`}
-          className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Open Game Mode
-        </Link>
-      </div>
+      <>
+        <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
+          <p className="text-sm font-semibold text-foreground">No games yet</p>
+          <p className="mt-1 text-sm text-muted">
+            Schedule a game from the Calendar tab, or run one from Game Mode to
+            see it here.
+          </p>
+          {canUseGameMode ? (
+            <Link
+              href={`/playbooks/${playbookId}/game`}
+              className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Open Game Mode
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Open Game Mode
+            </button>
+          )}
+        </div>
+        <GameModeUpgradeDialog
+          open={upgradeOpen}
+          onClose={() => setUpgradeOpen(false)}
+        />
+      </>
     );
   }
 

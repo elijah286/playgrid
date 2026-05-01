@@ -1532,7 +1532,7 @@ function PlaybookDetailClientInner({
       )}
 
       {tab === "games" && gameResultsAvailable && (
-        <GameResultsPanel playbookId={playbookId} />
+        <GameResultsPanel playbookId={playbookId} canUseGameMode={canUseGameMode} />
       )}
 
       {tab === "calendar" && teamCalendarAvailable && (
