@@ -1,13 +1,16 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
-type Tier = "free" | "coach" | "coach_ai";
+export type DeviceClass = "desktop" | "mobile";
 
-/** Concurrent session cap by tier. Free is intentionally tight (1 device);
- *  Coach allows desktop + mobile; Coach AI adds a third for power users. */
-export const SESSION_CAP_BY_TIER: Record<Tier, number> = {
-  free: 1,
-  coach: 2,
-  coach_ai: 3,
+/** Concurrent session policy. Uniform across tiers: every user gets 1
+ *  desktop slot + 2 mobile slots. A new sign-in only evicts within its own
+ *  bucket — a desktop login can never kick a phone, and vice versa. Two
+ *  mobile slots covers the common phone + tablet pairing without needing
+ *  (notoriously unreliable) tablet UA detection. Capacitor / native-app
+ *  traffic counts as mobile. */
+export const SESSION_CAP_BY_CLASS: Record<DeviceClass, number> = {
+  desktop: 1,
+  mobile: 2,
 };
 
 export const DEVICE_ID_COOKIE = "xog_device_id";
@@ -22,10 +25,10 @@ export type TouchResult =
 
 /**
  * Idempotent per-request session touch. Inserts a row on first sight of a
- * (user, device) pair (and enforces the concurrent-session cap by revoking
- * the LRU active row when over). Updates last_seen_at on subsequent
- * requests. Returns `revoked` if the row has been revoked elsewhere — the
- * caller should sign the user out.
+ * (user, device) pair (and enforces the bucket-scoped concurrent-session
+ * cap by revoking the LRU active row in the same device class when over).
+ * Updates last_seen_at on subsequent requests. Returns `revoked` if the row
+ * has been revoked elsewhere — the caller should sign the user out.
  */
 export async function touchUserSession(input: {
   userId: string;
@@ -54,35 +57,37 @@ export async function touchUserSession(input: {
 
   // First time we've seen this device for this user. Insert + cap-enforce.
   const label = labelForUserAgent(input.userAgent);
+  const deviceClass = deviceClassForUserAgent(input.userAgent);
   await admin.from("user_sessions").insert({
     user_id: input.userId,
     device_id: input.deviceId,
     ip: input.ip,
     user_agent: input.userAgent,
     device_label: label,
+    device_class: deviceClass,
   });
-  await enforceSessionCap(input.userId);
+  await enforceSessionCap(input.userId, deviceClass);
   return { kind: "ok" };
 }
 
 /**
- * Counts active sessions for the user; if over the tier cap, revokes
- * least-recently-active rows until we're at the cap. The just-inserted row
- * has the most recent last_seen_at, so it survives by construction.
+ * Counts active sessions for the user *within the given device class*; if
+ * over the bucket cap, revokes least-recently-active rows in that bucket
+ * until we're at the cap. The just-inserted row has the most recent
+ * last_seen_at, so it survives by construction. The other bucket is
+ * untouched.
  */
-async function enforceSessionCap(userId: string): Promise<void> {
+async function enforceSessionCap(
+  userId: string,
+  deviceClass: DeviceClass,
+): Promise<void> {
   const admin = createServiceRoleClient();
-  const { data: entRow } = await admin
-    .from("user_entitlements")
-    .select("tier")
-    .eq("user_id", userId)
-    .maybeSingle();
-  const tier = ((entRow?.tier as Tier | null) ?? "free") as Tier;
-  const cap = SESSION_CAP_BY_TIER[tier];
+  const cap = SESSION_CAP_BY_CLASS[deviceClass];
   const { data: active } = await admin
     .from("user_sessions")
     .select("id, last_seen_at")
     .eq("user_id", userId)
+    .eq("device_class", deviceClass)
     .is("revoked_at", null)
     .order("last_seen_at", { ascending: false });
 
@@ -99,6 +104,7 @@ async function enforceSessionCap(userId: string): Promise<void> {
  *  imprecise — it's a hint for the audit list, not a security signal. */
 export function labelForUserAgent(ua: string | null): string {
   if (!ua) return "Unknown device";
+  if (/PlaybookApp|Capacitor/i.test(ua)) return "Playbook app";
   const browser =
     /Edg\//.test(ua) ? "Edge" :
     /Chrome\//.test(ua) ? "Chrome" :
@@ -113,4 +119,17 @@ export function labelForUserAgent(ua: string | null): string {
     /Linux/.test(ua) ? "Linux" :
     "device";
   return `${browser} on ${os}`;
+}
+
+/** Bucket a UA into desktop vs mobile for concurrent-session caps. The
+ *  Capacitor wrapper / native app counts as mobile regardless of host OS.
+ *  Caveat: iPadOS Safari ships a Mac desktop UA by default, so an iPad in
+ *  the browser will be classed as desktop — by design, since reliably
+ *  detecting iPad server-side from UA alone isn't possible. The native
+ *  app wrapper avoids this. */
+export function deviceClassForUserAgent(ua: string | null): DeviceClass {
+  if (!ua) return "desktop";
+  if (/PlaybookApp|Capacitor/i.test(ua)) return "mobile";
+  if (/iPhone|iPod|Android|Mobile/i.test(ua)) return "mobile";
+  return "desktop";
 }
