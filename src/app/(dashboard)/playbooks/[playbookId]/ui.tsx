@@ -662,7 +662,12 @@ function PlaybookDetailClientInner({
     }
   }
 
-  const isViewer = (!headerProps.viewerIsCoach && !isPreview) || isArchived;
+  // Read-only when the viewer's role on this playbook is "viewer" (or no
+  // role at all, for example previews). Owners and editors can always edit
+  // their own content regardless of billing tier — the play editor itself
+  // is free; only Team Coach features (sharing, duplication, Game Mode)
+  // are tier-gated and use viewerIsCoach via dedicated upgrade prompts.
+  const isViewer = (!headerProps.canShare && !isPreview) || isArchived;
 
   function openFormationPicker() {
     if (isViewer) {
