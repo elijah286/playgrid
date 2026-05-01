@@ -9,10 +9,16 @@
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
-import { sportProfileForVariant } from "@/domain/play/factory";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import type { PlayDocument, SportVariant } from "@/domain/play/types";
+import type { PlaySpec } from "@/domain/play/spec";
+import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
+import { playSpecToCoachDiagram, type RenderWarning } from "@/domain/play/specRenderer";
 import type { CoachAiTool } from "./tools";
+import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
+import { projectSpecToNotes } from "./notes-from-spec";
+import { lintNotesAgainstSpec, formatNotesLintIssues } from "./notes-lint";
+import { explainSpec } from "./explain-from-spec";
 
 const LOS_Y = 0.4;
 
@@ -156,11 +162,22 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
     ]);
     const fromLabel = idByPlayerUuid.get(r.carrierPlayerId) ?? r.carrierPlayerId;
     const hasCurve = r.segments.some((s) => s.shape === "curve");
+    // Round-trip the saved RouteSemantic back to a `route_kind` string so
+    // subsequent update_play calls keep passing the SFPA validator. For
+    // family="custom" with a tag, prefer the tag (e.g. "dig"); otherwise
+    // use the family name. Routes saved before SFPA shipped have
+    // semantic=null and round-trip without route_kind (still valid).
+    const kind = r.semantic
+      ? r.semantic.family === "custom"
+        ? (r.semantic.tags?.[0] ?? "")
+        : r.semantic.family
+      : "";
     return {
       from: fromLabel,
       path,
       ...(hasCurve ? { curve: true } : {}),
       tip: (r.endDecoration ?? "arrow") as "arrow" | "t" | "none",
+      ...(kind ? { route_kind: kind } : {}),
     };
   });
 
@@ -190,6 +207,154 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
     players,
     routes,
     ...(zones.length > 0 ? { zones } : {}),
+  };
+}
+
+/**
+ * Format route-assignment errors into a single critique string Cal sees as
+ * the tool's `error` field. Lists each violation by carrier + declared kind
+ * so Cal can re-emit the diagram with corrected route_kinds (or corrected
+ * geometry if the kind is right but the path was wrong).
+ */
+function formatRouteAssignmentErrors(errors: RouteAssignmentError[]): string {
+  const lines = errors.map((e) => `  • ${e.carrier} (declared "${e.declaredKind}"): ${e.message}`);
+  return (
+    `Route-assignment validation failed for ${errors.length} route(s) — diagram NOT saved. ` +
+    `Each declared route_kind must agree with the path's depth and side per the catalog's constraints. ` +
+    `Fix the route_kind to match the geometry, or fix the path to match the route_kind, then re-emit.\n` +
+    lines.join("\n")
+  );
+}
+
+/**
+ * Format renderer warnings (from playSpecToCoachDiagram) into a critique.
+ * When the input was a PlaySpec, every warning becomes a hard error —
+ * the spec is the source of truth, and any silent substitution
+ * (formation fallback, unknown defense, missing player) means Cal
+ * authored something the catalog can't honor verbatim.
+ */
+function formatSpecRenderWarnings(warnings: ReadonlyArray<RenderWarning>): string {
+  const lines = warnings.map((w) => `  • [${w.code}] ${w.message}`);
+  return (
+    `PlaySpec render failed — ${warnings.length} issue(s). The spec is the source of truth, so silent fallbacks aren't acceptable. ` +
+    `Fix the spec (or change to a catalog formation/defense/route family) and re-emit.\n` +
+    lines.join("\n")
+  );
+}
+
+/**
+ * Walk a saved spec and produce a one-line confidence summary. Used in
+ * create_play / update_play tool results so Cal sees, immediately after
+ * a save, which elements (if any) are low-confidence — and can prompt
+ * the coach to confirm before claiming success.
+ *
+ * Returns "" when everything is high — saves Cal a noise line.
+ */
+function summarizeConfidence(spec: PlaySpec | null): string {
+  if (!spec) return "";
+  type Item = { label: string; conf: "high" | "med" | "low" };
+  const items: Item[] = [];
+  items.push({ label: `formation "${spec.formation.name}"`, conf: spec.formation.confidence ?? "high" });
+  if (spec.defense) {
+    items.push({
+      label: `defense ${spec.defense.front}/${spec.defense.coverage}`,
+      conf: spec.defense.confidence ?? "high",
+    });
+  }
+  for (const a of spec.assignments) {
+    items.push({ label: `@${a.player}`, conf: a.confidence ?? "high" });
+  }
+  const lows = items.filter((i) => i.conf === "low");
+  const meds = items.filter((i) => i.conf === "med");
+  if (lows.length === 0 && meds.length === 0) return "";
+
+  const lowClause = lows.length > 0 ? `Low-confidence: ${lows.map((i) => i.label).slice(0, 5).join(", ")}${lows.length > 5 ? ` (+${lows.length - 5} more)` : ""}.` : "";
+  const medClause = meds.length > 0 ? `Medium-confidence: ${meds.map((i) => i.label).slice(0, 5).join(", ")}.` : "";
+  const reminder =
+    lows.length > 0
+      ? " Surface these to the coach before claiming the play is fully ready — they may need confirmation."
+      : "";
+  return `\n\n${[lowClause, medClause].filter(Boolean).join(" ")}${reminder}`;
+}
+
+/**
+ * Result shape from resolveDiagramAndSpec. `diagram` is what gets
+ * rendered + persisted; `spec` is what gets stamped on
+ * PlayDocument.metadata.spec for downstream notes generation.
+ */
+type ResolvedInput =
+  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null }
+  | { ok: false; error: string };
+
+/**
+ * Resolve the inputs Cal can pass to create_play / update_play into a
+ * single (diagram, spec) pair. The two paths:
+ *
+ *   1. PlaySpec input — Cal composed via primitives. Render to diagram
+ *      via specRenderer; promote any warnings to errors (the spec is
+ *      authoritative, no silent fallbacks); save spec verbatim.
+ *
+ *   2. Legacy CoachDiagram input — Cal emitted waypoints directly.
+ *      Use the diagram as-is; derive a best-effort spec via
+ *      coachDiagramToPlaySpec so future edits + notes generation have
+ *      a structured handle.
+ *
+ * Either input may be provided; play_spec wins if both. The diagram-only
+ * path is the backward-compatible legacy flow and stays supported until
+ * Cal's prompt is updated to prefer specs (Phase 4).
+ */
+function resolveDiagramAndSpec(
+  rawSpec: unknown,
+  rawDiagram: unknown,
+  resolvedVariant: SportVariant,
+  options: {
+    formationName?: string;
+    playType?: "offense" | "defense" | "special_teams";
+  } = {},
+): ResolvedInput {
+  // Path 1: PlaySpec input. Validate shape, render, propagate warnings.
+  if (rawSpec && typeof rawSpec === "object") {
+    const spec = rawSpec as PlaySpec;
+    if (!spec.formation || typeof spec.formation.name !== "string") {
+      return { ok: false, error: "play_spec.formation.name is required (e.g. 'Spread', 'Trips Right')." };
+    }
+    if (!Array.isArray(spec.assignments)) {
+      return { ok: false, error: "play_spec.assignments must be an array." };
+    }
+    // Variant: tools' resolved variant (from playbook + diagram hint) wins
+    // over whatever the spec author set, so a typo can't drift the play
+    // off its parent playbook's variant.
+    const specForRender: PlaySpec = { ...spec, variant: resolvedVariant };
+    const { diagram, warnings } = playSpecToCoachDiagram(specForRender);
+    if (warnings.length > 0) {
+      return { ok: false, error: formatSpecRenderWarnings(warnings) };
+    }
+    return { ok: true, diagram, spec: specForRender };
+  }
+
+  // Path 2: legacy CoachDiagram input.
+  if (rawDiagram && typeof rawDiagram === "object") {
+    const diagram = rawDiagram as CoachDiagram;
+    if (!Array.isArray(diagram.players)) {
+      return { ok: false, error: "diagram.players must be an array." };
+    }
+    // Best-effort spec derivation. The parser falls back to
+    // unspecified/custom for anything it can't classify, so this won't
+    // fabricate assignments.
+    const derivedSpec = coachDiagramToPlaySpec(diagram, {
+      variant: resolvedVariant,
+      formation: options.formationName,
+      playType: options.playType,
+    });
+    return { ok: true, diagram, spec: derivedSpec };
+  }
+
+  return {
+    ok: false,
+    error:
+      "Either play_spec (preferred) or diagram (legacy) is required. " +
+      "play_spec is the structured composition path: { variant, formation: { name }, assignments: [...] }. " +
+      "diagram is the legacy waypoint format.",
   };
 }
 
@@ -400,18 +565,30 @@ const update_play: CoachAiTool = {
           type: "string",
           description: "UUID, slot number (\"4\"), or exact name of the play to update.",
         },
+        play_spec: {
+          type: "object",
+          description:
+            "PlaySpec JSON (preferred) — structured composition format, same shape as on create_play. " +
+            "When provided, replaces the play's content and the saved canonical spec. " +
+            "When `play_spec` is provided, `diagram` is ignored.",
+        },
         diagram: {
           type: "object",
           description:
-            "CoachDiagram JSON — same format as diagrams rendered in chat. " +
-            "Must include players array. Routes are optional.",
+            "CoachDiagram JSON — LEGACY waypoint format. Prefer play_spec when possible. " +
+            "Same format as diagrams rendered in chat. " +
+            "For every route that's a NAMED catalog family (slant, post, dig, curl, out, " +
+            "in, hitch, comeback, corner, fade, wheel, drag, flat, seam, go, etc.) set " +
+            "`route_kind: \"<family>\"` on the route — the server validates depth + side " +
+            "against the catalog. A 12-yard slant is rejected here before persistence.",
         },
         note: {
           type: "string",
           description: "Short edit note for the version history (1-2 sentences).",
         },
       },
-      required: ["play_id", "diagram"],
+      // play_spec OR diagram must be provided (validated in handler).
+      required: ["play_id"],
       additionalProperties: false,
     },
   },
@@ -423,14 +600,6 @@ const update_play: CoachAiTool = {
     const resolved = await resolvePlayId(rawId, ctx.playbookId);
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
-
-    let diagram: CoachDiagram;
-    try {
-      diagram = input.diagram as CoachDiagram;
-      if (!Array.isArray(diagram?.players)) throw new Error("diagram.players must be an array");
-    } catch (e) {
-      return { ok: false, error: `Invalid diagram: ${e instanceof Error ? e.message : "bad format"}` };
-    }
 
     try {
       const admin = createServiceRoleClient();
@@ -446,15 +615,28 @@ const update_play: CoachAiTool = {
       if (error) return { ok: false, error: error.message };
       if (!play) return { ok: false, error: "Play not found or not in this playbook." };
 
-      // Resolve variant from playbook (authoritative) or diagram hint
-      const resolvedVariant = (ctx.sportVariant ?? play.sport_variant ?? diagram.variant ?? "flag_7v7") as SportVariant;
+      // Resolve variant from playbook (authoritative) or input hint.
+      const specHintVariant = (input.play_spec as { variant?: string } | null | undefined)?.variant;
+      const diagramHintVariant = (input.diagram as { variant?: string } | null | undefined)?.variant;
+      const resolvedVariant = (ctx.sportVariant ?? play.sport_variant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
 
-      // Strip cross-side players before persisting (mirrors create_play —
-      // see comment there). Without this, an update that included
-      // defenders for visualization would save them as offensive players
-      // and trip the editor's variant count check.
+      // Read the parent play's type — drives both spec parsing hints
+      // and the cross-side strip below.
       const playRow = play as { play_type?: string };
       const playType = (playRow.play_type as "offense" | "defense" | "special_teams" | undefined) ?? "offense";
+
+      // Resolve spec/diagram inputs through the shared helper.
+      const inputResolved = resolveDiagramAndSpec(input.play_spec, input.diagram, resolvedVariant, {
+        playType,
+      });
+      if (!inputResolved.ok) return { ok: false, error: inputResolved.error };
+      const diagram = inputResolved.diagram;
+      const persistedSpec = inputResolved.spec;
+
+      // Strip cross-side players before persisting. Without this, an
+      // update that included defenders for visualization would save
+      // them as offensive players and trip the editor's variant count
+      // check.
       const dropTeam: "O" | "D" | null =
         playType === "offense" ? "D" : playType === "defense" ? "O" : null;
       let updateStripped = 0;
@@ -473,6 +655,15 @@ const update_play: CoachAiTool = {
       }
       void updateStripped;
       const diagramWithVariant: CoachDiagram = cleanDiagram;
+
+      // SFPA Layer 2 gate: every route that declared route_kind must satisfy
+      // the catalog's constraints (depth, side). Catches "12-yard slant"
+      // and "post breaking outside" before they persist.
+      const assignmentCheck = validateRouteAssignments(diagramWithVariant);
+      if (!assignmentCheck.ok) {
+        return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
+      }
+
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
 
       // Carry over existing metadata (notes, coachName) from the parent version
@@ -492,6 +683,11 @@ const update_play: CoachAiTool = {
           };
         }
       }
+      // Stamp the canonical spec on the saved document. This OVERWRITES
+      // any prior spec, intentionally — an update means the spec has
+      // moved, and the new spec (whether spec-input or derived from a
+      // legacy diagram) is now authoritative for downstream notes.
+      if (persistedSpec) newDoc.metadata.spec = persistedSpec;
 
       // Get the caller's user id from the active session
       const supabase = await createClient();
@@ -541,7 +737,8 @@ const update_play: CoachAiTool = {
           `Play "${play.name}" updated successfully (version ${versionResult.versionId.slice(0, 8)}).\n\n` +
           `Saved diagram: ${playerCount} player(s), ${routeCount} route(s)` +
           (routeSummary ? ` (carriers: ${routeSummary})` : "") +
-          `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.`,
+          `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.` +
+          summarizeConfidence(persistedSpec),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play failed" };
@@ -561,12 +758,28 @@ const create_play: CoachAiTool = {
       type: "object",
       properties: {
         name: { type: "string", description: "Play name. 1-80 chars. Required." },
+        play_spec: {
+          type: "object",
+          description:
+            "PlaySpec JSON (preferred) — the structured composition format. Shape: " +
+            "{ schemaVersion: 1, variant, formation: { name, strength? }, defense?: { front, coverage, strength? }, " +
+            "assignments: [{ player: \"X\", action: { kind: \"route\", family: \"Slant\" } }, ...] }. " +
+            "Geometry is derived from the catalogs — no waypoints, no overlap risk. " +
+            "Renderer rejects unknown formations, defenses, or route families instead of silently substituting. " +
+            "Use this when you can describe the play in named primitives (catalog routes, named formation, named defense). " +
+            "When `play_spec` is provided, `diagram` is ignored.",
+        },
         diagram: {
           type: "object",
           description:
-            "CoachDiagram JSON — same format as diagrams rendered in chat. Must include " +
-            "a players array with at least the offensive personnel. Routes are optional " +
-            "(formation-only plays are valid).",
+            "CoachDiagram JSON — LEGACY waypoint format. Prefer play_spec when possible. " +
+            "Same format as diagrams rendered in chat: players + optional routes/zones. " +
+            "For every route that's a NAMED catalog family (slant, post, dig, curl, out, " +
+            "in, hitch, comeback, corner, fade, wheel, drag, flat, seam, go, etc.) set " +
+            "`route_kind: \"<family>\"` on the route — the server validates that the path's " +
+            "depth and side actually match that family. A 12-yard slant or a post breaking " +
+            "outside is rejected here BEFORE persistence, with a structured error you can " +
+            "act on. Omit `route_kind` only for genuinely off-catalog custom shapes.",
         },
         formation_name: {
           type: "string",
@@ -582,7 +795,9 @@ const create_play: CoachAiTool = {
           description: "Optional short note recorded on the initial version (1-2 sentences).",
         },
       },
-      required: ["name", "diagram"],
+      // `name` is required. play_spec OR diagram must be provided
+      // (validated in handler — JSON schema can't express "exactly one").
+      required: ["name"],
       additionalProperties: false,
     },
   },
@@ -593,20 +808,23 @@ const create_play: CoachAiTool = {
     const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
     if (!name) return { ok: false, error: "Play name is required." };
 
-    let diagram: CoachDiagram;
-    try {
-      diagram = input.diagram as CoachDiagram;
-      if (!Array.isArray(diagram?.players)) throw new Error("diagram.players must be an array");
-    } catch (e) {
-      return { ok: false, error: `Invalid diagram: ${e instanceof Error ? e.message : "bad format"}` };
-    }
-
     const playType = (typeof input.play_type === "string" && ["offense", "defense", "special_teams"].includes(input.play_type)
       ? input.play_type
       : "offense") as "offense" | "defense" | "special_teams";
     const formationName = typeof input.formation_name === "string" ? input.formation_name.slice(0, 60) : undefined;
 
-    const resolvedVariant = (ctx.sportVariant ?? diagram.variant ?? "flag_7v7") as SportVariant;
+    // Resolve variant: playbook's variant > spec/diagram hint > default.
+    const specHintVariant = (input.play_spec as { variant?: string } | null | undefined)?.variant;
+    const diagramHintVariant = (input.diagram as { variant?: string } | null | undefined)?.variant;
+    const resolvedVariant = (ctx.sportVariant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
+
+    const resolved = resolveDiagramAndSpec(input.play_spec, input.diagram, resolvedVariant, {
+      formationName,
+      playType,
+    });
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    let diagram = resolved.diagram;
+    const persistedSpec = resolved.spec;
 
     // ── Strip cross-side players before persisting ──────────────────
     // Cal sometimes ships a chat diagram that includes BOTH offense + defense
@@ -662,10 +880,23 @@ const create_play: CoachAiTool = {
 
       // Now save the diagram as a new version on the freshly created play.
       const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
+
+      // SFPA Layer 2 gate: every route that declared route_kind must satisfy
+      // the catalog's constraints (depth, side). Catches "12-yard slant"
+      // and "post breaking outside" before they persist.
+      const assignmentCheck = validateRouteAssignments(diagramWithVariant);
+      if (!assignmentCheck.ok) {
+        return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
+      }
+
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
       newDoc.metadata.coachName = name;
       if (formationName) newDoc.metadata.formation = formationName;
       newDoc.metadata.playType = playType;
+      // Stamp the canonical spec on the saved document. Future edits +
+      // notes generation can read this back as the semantic source of
+      // truth without re-deriving from the diagram.
+      if (persistedSpec) newDoc.metadata.spec = persistedSpec;
 
       const supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -700,7 +931,8 @@ const create_play: CoachAiTool = {
         ok: true,
         result:
           `Created play "${name}" in the current playbook. Tell the coach it's ready and link them: ` +
-          `[Open ${name}](${url}).${stripNote}`,
+          `[Open ${name}](${url}).${stripNote}` +
+          summarizeConfidence(persistedSpec),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };
@@ -783,7 +1015,15 @@ const update_play_notes: CoachAiTool = {
       "- For DEFENSIVE plays: open with what defenders should be watching for " +
       "  from the offense (formation tells, motion, route distributions). Then " +
       "  list each defender's read/key. Call out any pattern-match triggers.\n" +
-      "- Keep it tight — 4-8 short bullets typically. Coaches will scan, not read.",
+      "- Keep it tight — 4-8 short bullets typically. Coaches will scan, not read.\n\n" +
+      "OPTIONAL `from_spec: true` mode: if the play has a saved PlaySpec on " +
+      "metadata.spec (created via play_spec on create_play/update_play), pass " +
+      "`from_spec: true` and OMIT `notes` to regenerate the notes deterministically " +
+      "from the saved spec. The spec → notes projection is canonical: same spec → " +
+      "same notes, every time. Use this when you want to guarantee the prose matches " +
+      "the diagram (no fabrication risk). You can pass BOTH `notes` and `from_spec` to " +
+      "use the projection as a starting point that you then rephrase — but the rephrased " +
+      "notes still need to be consistent with the spec.",
     input_schema: {
       type: "object",
       properties: {
@@ -795,14 +1035,23 @@ const update_play_notes: CoachAiTool = {
           type: "string",
           description:
             "The new notes content. Use @Label to reference players. " +
-            "Pass empty string to clear notes.",
+            "Pass empty string to clear notes. Required UNLESS `from_spec: true`.",
+        },
+        from_spec: {
+          type: "boolean",
+          description:
+            "When true, regenerate notes from the play's saved PlaySpec via the " +
+            "canonical projection (projectSpecToNotes). Fails if no spec is saved " +
+            "on the play. Mutually optional with `notes` — pass both to use " +
+            "projection as a starting point, or just `from_spec: true` to overwrite " +
+            "with the canonical projection.",
         },
         edit_note: {
           type: "string",
           description: "Short one-line note for the version history. Default: 'Updated notes via Coach Cal'.",
         },
       },
-      required: ["play_id", "notes"],
+      required: ["play_id"],
       additionalProperties: false,
     },
   },
@@ -810,8 +1059,14 @@ const update_play_notes: CoachAiTool = {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
     if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
     const rawId = typeof input.play_id === "string" ? input.play_id : "";
-    const notes = typeof input.notes === "string" ? input.notes : "";
-    if (notes.length > 4000) return { ok: false, error: "notes must be 4000 characters or fewer." };
+    const fromSpec = input.from_spec === true;
+    const explicitNotes = typeof input.notes === "string" ? input.notes : null;
+    if (!fromSpec && explicitNotes === null) {
+      return { ok: false, error: "Provide `notes` (the prose) OR `from_spec: true` (regenerate from saved spec)." };
+    }
+    if (explicitNotes !== null && explicitNotes.length > 4000) {
+      return { ok: false, error: "notes must be 4000 characters or fewer." };
+    }
     const resolved = await resolvePlayId(rawId, ctx.playbookId);
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
@@ -840,6 +1095,39 @@ const update_play_notes: CoachAiTool = {
       if (parentErr) return { ok: false, error: parentErr.message };
       const parentDoc = parent?.document as PlayDocument | null;
       if (!parentDoc) return { ok: false, error: "Could not read current play document." };
+
+      // Resolve final notes content. from_spec mode reads the saved
+      // spec and runs the canonical projection. When both `notes` and
+      // `from_spec` are present, `notes` wins (Cal's rephrased text)
+      // and the projection is informational only.
+      let notes: string;
+      if (explicitNotes !== null) {
+        notes = explicitNotes;
+      } else {
+        // from_spec mode without explicit notes — projection IS the notes.
+        const savedSpec = parentDoc.metadata.spec ?? null;
+        if (!savedSpec) {
+          return {
+            ok: false,
+            error:
+              "from_spec=true but this play has no saved PlaySpec on metadata.spec. " +
+              "Either pass `notes` directly, or first save the play with a play_spec via create_play/update_play.",
+          };
+        }
+        notes = projectSpecToNotes(savedSpec);
+      }
+
+      // Notes-spec consistency lint: when Cal supplies its OWN prose AND
+      // the play has a saved spec, the prose must not contradict the
+      // spec's per-player route families. Catches "@X runs a post" when
+      // spec says Slant. Conservative — silent paraphrasing is allowed,
+      // only ACTIVE contradictions fail. See notes-lint.ts for details.
+      if (explicitNotes !== null && parentDoc.metadata.spec) {
+        const lint = lintNotesAgainstSpec(notes, parentDoc.metadata.spec);
+        if (!lint.ok) {
+          return { ok: false, error: formatNotesLintIssues(lint.issues) };
+        }
+      }
 
       const newDoc: PlayDocument = {
         ...parentDoc,
@@ -1043,6 +1331,102 @@ const create_practice_plan: CoachAiTool = {
   },
 };
 
+/**
+ * explain_play — produces a structural explanation of a saved play
+ * directly from its PlaySpec. NO LLM synthesis happens server-side; the
+ * output is a deterministic projection from spec data + catalog
+ * lookups. This is the "ask Cal to defend a play" capability: Cal can
+ * always explain why a play means what it means, by walking the spec
+ * rather than reciting from memory.
+ *
+ * Falls back to deriving a spec from the saved diagram when the play
+ * predates the PlaySpec era — output is shaped the same, but
+ * confidence flags will surface that the spec is parser-derived.
+ */
+const explain_play: CoachAiTool = {
+  def: {
+    name: "explain_play",
+    description:
+      "Explain a saved play structurally — formation, defense (if set), per-player assignments, " +
+      "and confidence per element. The server walks the play's saved PlaySpec and returns a " +
+      "deterministic markdown explanation; no prose generation, no fabrication risk. " +
+      "Use this when the coach asks 'why does this play work', 'what are X's reads', " +
+      "'walk me through this play', or when you (Cal) need to verify your understanding " +
+      "of a saved play before suggesting an edit. Available when anchored to a playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: {
+          type: "string",
+          description: "UUID, slot number (\"4\"), or exact name of the play to explain.",
+        },
+      },
+      required: ["play_id"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
+
+    try {
+      const admin = createServiceRoleClient();
+      const { data: play, error } = await admin
+        .from("plays")
+        .select("id, name, current_version_id, sport_variant, play_type")
+        .eq("id", playId)
+        .eq("playbook_id", ctx.playbookId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) return { ok: false, error: error.message };
+      if (!play) return { ok: false, error: "Play not found or not in this playbook." };
+
+      const versionId = play.current_version_id as string | null;
+      if (!versionId) return { ok: false, error: "Play has no current version." };
+
+      const { data: version, error: vErr } = await admin
+        .from("play_versions")
+        .select("document")
+        .eq("id", versionId)
+        .maybeSingle();
+      if (vErr) return { ok: false, error: vErr.message };
+      const doc = version?.document as PlayDocument | null;
+      if (!doc) return { ok: false, error: "Could not read saved play document." };
+
+      // Prefer the saved spec. If absent (legacy plays), derive one from
+      // the diagram so the explanation still has a structural source.
+      // The parser-derived path attaches lower confidence so the output
+      // surfaces "this is reconstructed, not authored" honestly.
+      const savedSpec = doc.metadata.spec ?? null;
+      let specForExplain = savedSpec;
+      let derivedNote = "";
+      if (!specForExplain) {
+        const diagram = playDocumentToCoachDiagram(doc, play.name as string);
+        specForExplain = coachDiagramToPlaySpec(diagram, {
+          variant: (play.sport_variant ?? doc.sportProfile.variant) as SportVariant,
+          formation: doc.metadata.formation || undefined,
+          playType: (play.play_type as "offense" | "defense" | "special_teams" | undefined) ?? undefined,
+        });
+        derivedNote =
+          "\n\n_Note: this play predates the PlaySpec era; explanation was reconstructed from the diagram. " +
+          "Some confidence flags reflect parser inference, not authored intent._";
+      }
+
+      const explanation = explainSpec(specForExplain);
+      return {
+        ok: true,
+        result: `${explanation}${derivedNote}`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "explain_play failed" };
+    }
+  },
+};
+
 export const PLAY_TOOLS: CoachAiTool[] = [
   list_plays,
   get_play,
@@ -1050,5 +1434,6 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   update_play,
   rename_play,
   update_play_notes,
+  explain_play,
   create_practice_plan,
 ];

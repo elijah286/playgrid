@@ -269,6 +269,27 @@ export type PlayMetadata = {
    * the offense do not leak into the matchup until resync.
    */
   vsPlaySnapshot?: VsPlaySnapshot | null;
+  /**
+   * Canonical PlaySpec — the semantic representation of this play. When
+   * present, this is the SOURCE OF TRUTH for what the play means
+   * (formation, defense, per-player assignments). The rendered geometry
+   * in PlayDocument.layers is a projection of this spec.
+   *
+   * Persistence rules:
+   *   - Coach Cal write paths (create_play / update_play) populate this
+   *     automatically whenever they can derive it (always, for spec-shaped
+   *     inputs; best-effort, for legacy CoachDiagram inputs).
+   *   - Editor write paths (manual edits in the play editor) leave this
+   *     untouched — it stays consistent until something semantically
+   *     incompatible happens, then a reconciler will mark it stale.
+   *   - Notes generation reads from this when present and falls back to
+   *     PlayMetadata.notes / Cal's free-form generation otherwise.
+   *
+   * Stored as a JSON-compatible object on PlayDocument.metadata; uses the
+   * existing play_versions.document jsonb column so no schema migration
+   * is needed to persist.
+   */
+  spec?: import("./spec").PlaySpec | null;
 };
 
 export type VsPlaySnapshot = {

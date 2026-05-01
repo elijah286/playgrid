@@ -20,9 +20,11 @@ import {
   type Route,
   type RouteNode,
   type RouteSegment,
+  type RouteSemantic,
   type SportVariant,
   type Zone,
 } from "@/domain/play/types";
+import { findTemplate } from "@/domain/play/routeTemplates";
 
 // ── Schema the LLM emits ────────────────────────────────────────────────────
 
@@ -57,6 +59,18 @@ export type CoachDiagramRoute = {
    * 8-yard mark (~0.6s with default pacing).
    */
   startDelaySec?: number;
+  /**
+   * Optional canonical route family name (case-insensitive lookup against
+   * ROUTE_TEMPLATES — e.g. "slant", "post", "dig", "curl"). When set:
+   *   1. validateRouteAssignments() checks the path's depth + side against
+   *      the catalog's `constraints` for that family. A "12-yard slant"
+   *      (slants cap at ~7 yds) is rejected before persistence.
+   *   2. The converter populates `Route.semantic` on the resulting
+   *      PlayDocument, giving downstream notes generation an authoritative
+   *      hook to describe the route consistently.
+   * Custom / off-catalog routes leave this unset.
+   */
+  route_kind?: string;
 };
 
 export type CoachDiagramZone = {
@@ -200,6 +214,32 @@ function guessRole(p: CoachDiagramPlayer): PlayerRole {
 
 let _uid = 0;
 function uid() { return `cd_${++_uid}_${Math.random().toString(36).slice(2, 7)}`; }
+
+/**
+ * Map a CoachDiagramRoute's `route_kind` to a RouteSemantic suitable for
+ * persistence on the resulting Route. RouteSemantic.family is a narrow
+ * enum (slant/go/post/corner/comeback/out/in/whip/wheel/flat/custom) — for
+ * catalog families outside that set (dig, hitch, curl, etc.) we use
+ * `"custom"` with a tag holding the canonical name. Once the enum is
+ * widened in a follow-up, this fallback path goes away.
+ */
+const RECOGNIZED_FAMILIES: ReadonlySet<RouteSemantic["family"]> = new Set([
+  "slant", "go", "post", "corner", "comeback", "out", "in", "whip", "wheel", "flat", "custom",
+]);
+
+function semanticFromRouteKind(rawKind: string | undefined): RouteSemantic | null {
+  if (!rawKind) return null;
+  const trimmed = rawKind.trim();
+  if (!trimmed) return null;
+  // findTemplate honors aliases (e.g. "fly" → Go, "shallow" → Drag) so
+  // Cal's natural names resolve to the catalog's canonical name.
+  const template = findTemplate(trimmed);
+  const canonical = (template?.name ?? trimmed).toLowerCase();
+  if (RECOGNIZED_FAMILIES.has(canonical as RouteSemantic["family"])) {
+    return { family: canonical as RouteSemantic["family"] };
+  }
+  return { family: "custom", tags: [canonical] };
+}
 
 // ── Main converter ──────────────────────────────────────────────────────────
 
@@ -466,7 +506,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     routes.push({
       id:              uid(),
       carrierPlayerId: carrier.id,
-      semantic:        null,
+      semantic:        semanticFromRouteKind(dr.route_kind),
       nodes,
       segments,
       style: {

@@ -70,6 +70,27 @@ export type BreakDirection =
   | "vertical"         // through the middle / no lateral commitment (Go, Seam, Stop & Go)
   | "varies";          // reserved for future double-moves whose direction is config-dependent
 
+/**
+ * Hard constraints for a route family. Used by the diagram-level validator
+ * (validateRouteAssignments) to reject impossible combinations BEFORE they
+ * persist — e.g. a "12-yard slant" (slants top out around 7 yds) or a
+ * "slant outside" (slants always finish toward the QB).
+ *
+ * Authored in YARDS measured from the player's start, since coaches and the
+ * LLM both reason about routes in yards, not normalized field fractions.
+ * fieldLengthYds is 25 across every variant (see sportProfileForVariant), so
+ * yards convert cleanly with `template_y_norm * 25`.
+ */
+export type RouteConstraints = {
+  /** Inclusive yard range for the route's deepest waypoint, measured from
+   *  the player's start. A 12-yard slant violates `slant`'s [3, 7] range. */
+  depthRangeYds: { min: number; max: number };
+  /** Required final-waypoint side relative to the player's start.
+   *  Mirrors `breakDir` semantically but is what the validator checks
+   *  against the assignment's geometry. */
+  side: BreakDirection;
+};
+
 export type RouteTemplate = {
   /** Display name. Lookup is case-insensitive. */
   name: string;
@@ -91,6 +112,8 @@ export type RouteTemplate = {
    *  (which implies direction) matches its GEOMETRY (which the renderer
    *  draws). Mismatches throw on import. */
   breakDir: BreakDirection;
+  /** Hard constraints checked at diagram-validation time. See RouteConstraints. */
+  constraints: RouteConstraints;
   /** Canonical written definition. MUST mirror the KB entry (subtopic
    *  matches `kbSubtopic`). Format: "STEM (if any) → BREAK shape/angle/
    *  direction → CATCH depth. When-to-use. Route tree # if applicable." */
@@ -115,6 +138,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight"],
     breakStyle: "none",
     breakDir: "vertical",
+    constraints: { depthRangeYds: { min: 10, max: 25 }, side: "vertical" },
     kbSubtopic: "route_go",
     description:
       "Straight vertical sprint downfield (route tree #9). No break — full-speed release, accelerate upfield, ball thrown over the top. Stretches the defense vertically. Best vs single-high coverage with no deep help.",
@@ -134,6 +158,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb" },
     kbSubtopic: "route_slant",
     description:
       "3-yard vertical stem then a SHARP 25°-above-horizontal cut across the middle (angle measured from horizontal — mostly lateral with a shallow upfield lean, NOT a steep vertical-leaning break). Catches at 5-6 yds depth, having gained 5-7 yds laterally (route tree #2). Beats press man (inside leverage fast) and Cover 2 (slant fits between underneath defenders).",
@@ -150,6 +175,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 8, max: 12 }, side: "toward_sideline" },
     kbSubtopic: "route_out",
     description:
       "Vertical 10 yards then a SHARP 90° break toward the sideline (route tree #3). Stops the clock — common late-game call. Vulnerable to a jumping cornerback if undisguised.",
@@ -166,6 +192,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 6, max: 10 }, side: "toward_qb" },
     kbSubtopic: "route_in",
     description:
       "Vertical 8 yards then a SHARP 90° break to the inside (toward the QB / middle of the field). Shallower than a Dig — sits in front of the LBs / under the safeties. Common quick-game intermediate vs zone.",
@@ -182,6 +209,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_qb" },
     kbSubtopic: "route_post",
     description:
       "Vertical 11-12 yards then a SHARP 45°-above-horizontal break inside toward the goalpost / middle of the field (route tree #8). Beats single-high (Cover 1, Cover 3) when the safety bites, and beats Cover 2 between the safeties. Pair with a deep crosser to clear the safety.",
@@ -198,6 +226,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_sideline" },
     kbSubtopic: "route_corner",
     description:
       "Vertical 11-12 yards then a SHARP 45°-above-horizontal break outside toward the back pylon (route tree #7). Beats Cover 2 (corner sits flat) and Cover 4 (corner stays inside on outside #1). Often the high in a smash concept.",
@@ -217,6 +246,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 8, max: 13 }, side: "toward_qb" },
     kbSubtopic: "route_curl",
     description:
       "Vertical 10-12 yards then a ROUNDED ~180° turn back toward the QB, settling in a soft spot in the zone at ~9 yds depth (route tree #6). The break is a smooth turn-back, NOT a sharp corner — receiver decelerates, faces the QB, and finishes with a slight inside lean toward the middle. Reliable vs zone — find the window between defenders.",
@@ -235,6 +265,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 9, max: 14 }, side: "toward_sideline" },
     kbSubtopic: "route_comeback",
     description:
       "Vertical 12-13 yards then a ROUNDED break back at ~45° toward the sideline, settling at ~10 yds depth (route tree #5). 'Comeback' refers to coming back DOWN in depth, not toward the QB — it's a sideline route. Stops the clock. Defender must drive forward — comeback wins on the cushion.",
@@ -250,6 +281,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight"],
     breakStyle: "none",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 0, max: 4 }, side: "toward_sideline" },
     kbSubtopic: "route_flat",
     description:
       "Receiver releases directly to the sideline at 0-3 yards depth. Common RB or slot route paired with a curl/corner over the top to high-low the flat defender.",
@@ -267,6 +299,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve", "straight"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline" },
     kbSubtopic: "route_wheel",
     description:
       "RB or slot releases flat to the sideline (~3 yds depth, ~6 yds out), then ROUNDS UP and runs vertical along the sideline (the rounded turnup is the wheel). Beats LBs in man coverage who can't run with a back. Common pair with a deep crosser to clear the safety.",
@@ -284,6 +317,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight", "straight"],
     breakStyle: "multi",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline" },
     kbSubtopic: "route_out_and_up",
     description:
       "Sell the quick out at 5 yds, then SHARPLY break vertical up the sideline. Beats corners who jump outs. Effective on the boundary.",
@@ -299,6 +333,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight"],
     breakStyle: "none",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 1, max: 5 }, side: "toward_sideline" },
     kbSubtopic: "route_arrow",
     description:
       "RB or slot releases at a slight angle to the flat, gaining a bit of depth (~3 yds). Outlet for the QB and high-low partner with a sit/curl over the top.",
@@ -317,6 +352,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb" },
     kbSubtopic: "route_stick",
     description:
       "Vertical stem to 5-6 yards, then a small ROUNDED settle facing the QB (the receiver stops and turns back). Foundation of the stick concept (with a flat underneath and a clear over the top). Quick-game staple, 3rd-and-medium reliable.",
@@ -334,6 +370,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 3, max: 6 }, side: "toward_qb" },
     kbSubtopic: "route_hitch",
     description:
       "5-yard vertical release then a ROUNDED quick turn back toward the QB, settling at 4-5 yds with a slight inside lean (route tree #1). The turn-back is a smooth settle, not a sharp corner. Beats off-coverage instantly. Quick-game staple.",
@@ -350,6 +387,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 4, max: 7 }, side: "toward_sideline" },
     kbSubtopic: "route_quick_out",
     description:
       "5-yard out — vertical then SHARP 90° break to the sideline at full speed (no break-down). Catches at 4-5 yds. Beats off-man, stops the clock, gets the ball out fast vs pressure.",
@@ -366,6 +404,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight"],
     breakStyle: "none",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 1, max: 4 }, side: "toward_qb" },
     kbSubtopic: "route_drag",
     description:
       "Shallow crossing route — receiver releases across the formation toward the middle at 2-4 yds depth, gaining a small amount of depth as he crosses. No hard break. Foundation of mesh and shallow concepts. Beats man — defender has to fight through traffic.",
@@ -382,6 +421,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "none",
     breakDir: "vertical",
+    constraints: { depthRangeYds: { min: 10, max: 25 }, side: "vertical" },
     kbSubtopic: "route_seam",
     description:
       "Vertical sprint from a slot or TE alignment, splitting the deep safeties. No hard break — slight inside release, then sustained vertical. Beats Cover 2 (gap between safeties) and Cover 4 (vertical the safety can't carry). Foundation route in 4 verts.",
@@ -398,6 +438,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["curve", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 10, max: 22 }, side: "toward_sideline" },
     kbSubtopic: "route_fade",
     description:
       "Vertical release with a ROUNDED outside arc toward the sideline (no hard break). Ball thrown back-shoulder or up-and-away. Red-zone staple — defender can't recover when the throw is placed up-and-away. Usually a tall WR vs a short DB.",
@@ -415,6 +456,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["curve", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: -3, max: 1 }, side: "toward_sideline" },
     kbSubtopic: "route_bubble_screen",
     description:
       "Receiver releases backward and outside in a ROUNDED banana arc, catching a quick lateral pass behind the LOS. Other receivers block downfield. Common RPO tag.",
@@ -431,6 +473,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight"],
     breakStyle: "none",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb" },
     kbSubtopic: "route_snag",
     description:
       "Receiver releases inside on a slight angle, settling 5-6 yards downfield in a soft spot. More deliberate than a hitch. Often the inside route in a snag concept (with corner over and flat under).",
@@ -448,6 +491,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 10, max: 18 }, side: "toward_qb" },
     kbSubtopic: "route_skinny_post",
     description:
       "Vertical 10 yards then a SHALLOW inside break (~70° above horizontal — much closer to vertical than a true 45° post). Beats Cover 3 between the corner and the deep middle safety. Common as the pass option in inside-zone RPOs.",
@@ -465,6 +509,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "multi",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 4, max: 8 }, side: "toward_qb" },
     kbSubtopic: "route_whip",
     description:
       "Receiver fakes outward (like a quick out) for 3-5 yards, then SHARPLY whips back inside on a slant angle. Misdirection — beats man when defender bites on the out fake. The 'whip' refers to the inside snap-back, finishing toward the QB.",
@@ -481,6 +526,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_sideline",
+    constraints: { depthRangeYds: { min: 5, max: 9 }, side: "toward_sideline" },
     kbSubtopic: "route_out",
     description:
       "Deeper variant of the Out — vertical 7 yds then a SHARP 90° break to the sideline. Typically run by the Z (flanker) when a regular Out's depth is wrong for the timing. Same family as Out (route tree #3); see Route: Out for details.",
@@ -497,6 +543,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 5, max: 9 }, side: "toward_qb" },
     kbSubtopic: "route_in",
     description:
       "Deeper variant of the In — vertical 7 yds then a SHARP 90° break to the inside (toward the QB / middle). Typically run by the Z (flanker) when a regular In's depth is wrong for the timing. Same family as In; see Route: In for details.",
@@ -515,6 +562,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve", "straight"],
     breakStyle: "multi",
     breakDir: "vertical",
+    constraints: { depthRangeYds: { min: 12, max: 25 }, side: "vertical" },
     kbSubtopic: "route_hitch_and_go",
     description:
       "Stem 5 yds, fake the hitch (small ROUNDED settle), then release vertical at full speed. Beats off-coverage corners who break aggressively on the hitch. Same family as sluggo (slant-and-go).",
@@ -532,6 +580,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "straight"],
     breakStyle: "sharp",
     breakDir: "toward_qb",
+    constraints: { depthRangeYds: { min: 10, max: 16 }, side: "toward_qb" },
     kbSubtopic: "route_dig",
     description:
       "Vertical 12-15 yards then a SHARP 90° break to the inside (toward the QB / middle), finishing across the middle (route tree #4). Beats man and zone — sits in the window between LB depth and safety depth. Foundation of dig-post and levels concepts.",
@@ -599,6 +648,58 @@ function assertBreakDirInvariants(): void {
 
 // Run immediately so a bad template crashes at import time, not at runtime.
 assertBreakDirInvariants();
+
+/**
+ * Verifies every template's `constraints.depthRangeYds` actually contains
+ * its canonical geometry's deepest waypoint, AND that `constraints.side`
+ * agrees with `breakDir`. Catches the class of bug where a coach widens a
+ * template's break point without updating the constraint, or where the
+ * declared side flips out from under the geometry.
+ *
+ * fieldLengthYds is 25 for every variant (see sportProfileForVariant), so
+ * yards = template_y_norm * 25.
+ */
+function assertConstraintsMatchGeometry(): void {
+  const FIELD_LENGTH_YDS = 25;
+  for (const t of ROUTE_TEMPLATES) {
+    if (!t.constraints) {
+      throw new Error(`Route template "${t.name}" is missing constraints.`);
+    }
+    const { depthRangeYds, side } = t.constraints;
+    if (side !== t.breakDir) {
+      throw new Error(
+        `Route template "${t.name}" has constraints.side="${side}" but breakDir="${t.breakDir}". They MUST agree — side is what the diagram validator checks against; breakDir is what the geometry validator checks against. Set them to the same value.`,
+      );
+    }
+    // The "deepest" yard for the constraint = max y across the route's
+    // template points (yards from start). Most routes finish at their max,
+    // but curl/sit settle back so check the whole path.
+    let maxYds = 0;
+    let minYds = 0;
+    for (const p of t.points) {
+      const yds = p.y * FIELD_LENGTH_YDS;
+      if (yds > maxYds) maxYds = yds;
+      if (yds < minYds) minYds = yds;
+    }
+    // The canonical depth is the deepest point reached. Allow 0.5yd of
+    // slack on each side — author intent is a band, not a hairline.
+    const canonical = Math.max(Math.abs(maxYds), Math.abs(minYds)) === Math.abs(minYds) && minYds < 0
+      ? minYds
+      : maxYds;
+    if (canonical < depthRangeYds.min - 0.5 || canonical > depthRangeYds.max + 0.5) {
+      throw new Error(
+        `Route template "${t.name}" canonical depth ${canonical.toFixed(1)} yds falls outside its declared depthRangeYds [${depthRangeYds.min}, ${depthRangeYds.max}]. Either widen the range or move the template's break point.`,
+      );
+    }
+    if (depthRangeYds.min > depthRangeYds.max) {
+      throw new Error(
+        `Route template "${t.name}" has inverted depth range [${depthRangeYds.min}, ${depthRangeYds.max}].`,
+      );
+    }
+  }
+}
+
+assertConstraintsMatchGeometry();
 
 /* ------------------------------------------------------------------ */
 /*  Lookup helpers                                                     */
