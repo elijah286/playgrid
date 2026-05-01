@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { previewCopyLinkAction } from "@/app/actions/copy-links";
 import { AuthFlow } from "@/features/auth/AuthFlow";
+import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import {
   FREE_MAX_PLAYBOOKS_OWNED,
@@ -76,6 +77,7 @@ async function getQuotaState(): Promise<QuotaState> {
 
 export default async function CopyPage({ params }: Props) {
   const { token } = await params;
+  const authProviders = await getAuthProvidersConfig();
 
   if (!hasSupabaseEnv()) {
     return (
@@ -200,7 +202,13 @@ export default async function CopyPage({ params }: Props) {
               Free accounts get one playbook; you can upgrade later for more.
             </p>
           </div>
-          <AuthFlow next={next} heading="" subheading="" />
+          <AuthFlow
+            next={next}
+            heading=""
+            subheading=""
+            appleEnabled={authProviders.apple}
+            googleEnabled={authProviders.google}
+          />
         </div>
       )}
     </div>

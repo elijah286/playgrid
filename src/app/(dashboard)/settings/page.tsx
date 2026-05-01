@@ -28,6 +28,7 @@ import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
 import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
+import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
@@ -86,6 +87,7 @@ export default async function SettingsPage() {
     coachBonusRes,
     coachCalPack,
     referralConfig,
+    authProviders,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -117,6 +119,7 @@ export default async function SettingsPage() {
     listCoachBonusGrantsAction(),
     getCoachCalPackConfig(),
     getReferralConfig(),
+    getAuthProvidersConfig(),
   ]);
 
   return (
@@ -256,6 +259,8 @@ export default async function SettingsPage() {
         initialBetaFeatures={betaFeatures}
         initialHideOwnerInfoAbout={hideOwnerInfoAbout}
         initialReferralConfig={referralConfig}
+        initialAppleSigninEnabled={authProviders.apple}
+        initialGoogleSigninEnabled={authProviders.google}
         initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
         coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}
         initialOpexServices={opexServicesRes.ok ? opexServicesRes.services : []}

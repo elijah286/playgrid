@@ -42,6 +42,10 @@ export type AuthFlowProps = {
    *  "Welcome back" depending on whether the entered email already has an
    *  account. */
   onStepChange?: (step: Step) => void;
+  /** Site-admin OAuth provider toggles. Hidden when false so we never
+   *  surface a button that 400s because the provider isn't configured. */
+  appleEnabled?: boolean;
+  googleEnabled?: boolean;
 };
 
 export type Step =
@@ -64,7 +68,15 @@ function isInvalidCredentials(err: unknown): boolean {
   );
 }
 
-export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }: AuthFlowProps) {
+export function AuthFlow({
+  next,
+  heading,
+  subheading,
+  inviteCode,
+  onStepChange,
+  appleEnabled = false,
+  googleEnabled = false,
+}: AuthFlowProps) {
   const { toast } = useToast();
 
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
@@ -442,46 +454,44 @@ export function AuthFlow({ next, heading, subheading, inviteCode, onStepChange }
         />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-          {/* Social sign-in. Each provider is gated on its own env flag so we
-              don't show buttons that 400 because the provider isn't configured
-              in Supabase yet. Apple is required by App Store Review Guideline
-              4.8 when email/password sign-up is offered — turn it back on once
-              the Apple Developer Services ID + secret JWT are wired up. */}
-          {step === "email" &&
-            (process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true" ||
-              process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === "true") && (
-              <>
-                {process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true" && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={() => void signInWithGoogle()}
-                    disabled={pending}
-                  >
-                    <GoogleGlyph className="mr-2 size-4" aria-hidden />
-                    Continue with Google
-                  </Button>
-                )}
-                {process.env.NEXT_PUBLIC_AUTH_APPLE_ENABLED === "true" && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={() => void signInWithApple()}
-                    disabled={pending}
-                  >
-                    <Apple className="mr-2 size-4" aria-hidden />
-                    Continue with Apple
-                  </Button>
-                )}
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <span className="h-px flex-1 bg-border" aria-hidden />
-                  <span>or</span>
-                  <span className="h-px flex-1 bg-border" aria-hidden />
-                </div>
-              </>
-            )}
+          {/* Social sign-in. Each provider is controlled by a Site Admin
+              toggle (site_settings.{apple,google}_signin_enabled) so we
+              never surface a button that 400s when the provider isn't
+              configured in Supabase. Apple is required by App Store Review
+              Guideline 4.8 once the iOS app ships, so flip it back on then. */}
+          {step === "email" && (appleEnabled || googleEnabled) && (
+            <>
+              {googleEnabled && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => void signInWithGoogle()}
+                  disabled={pending}
+                >
+                  <GoogleGlyph className="mr-2 size-4" aria-hidden />
+                  Continue with Google
+                </Button>
+              )}
+              {appleEnabled && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => void signInWithApple()}
+                  disabled={pending}
+                >
+                  <Apple className="mr-2 size-4" aria-hidden />
+                  Continue with Apple
+                </Button>
+              )}
+              <div className="flex items-center gap-2 text-xs text-muted">
+                <span className="h-px flex-1 bg-border" aria-hidden />
+                <span>or</span>
+                <span className="h-px flex-1 bg-border" aria-hidden />
+              </div>
+            </>
+          )}
 
           {/* Email — shown on every step except new-user-profile where it's implicit */}
           {step !== "new-user-profile" && step !== "set-new-password" && (

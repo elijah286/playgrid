@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { previewInviteAction } from "@/app/actions/invites";
 import { AuthFlow } from "@/features/auth/AuthFlow";
+import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
 import type { SportVariant } from "@/domain/play/types";
 import { AcceptInviteButton } from "./ui";
@@ -48,6 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function InvitePage({ params }: Props) {
   const { token } = await params;
+  const authProviders = await getAuthProvidersConfig();
 
   if (!hasSupabaseEnv()) {
     return (
@@ -192,6 +194,8 @@ export default async function InvitePage({ params }: Props) {
           heading="Sign in or create an account"
           subheading="Enter your email to join. We'll send a code if you're new here."
           inviteCode={token}
+          appleEnabled={authProviders.apple}
+          googleEnabled={authProviders.google}
         />
       )}
     </div>

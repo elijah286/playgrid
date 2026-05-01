@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthFlow, type Step } from "@/features/auth/AuthFlow";
 
-export function LoginForm() {
+export function LoginForm({
+  appleEnabled,
+  googleEnabled,
+}: {
+  appleEnabled: boolean;
+  googleEnabled: boolean;
+}) {
   const searchParams = useSearchParams();
   const nextParam = searchParams.get("next") ?? "";
   const safeNext = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "";
@@ -54,6 +60,8 @@ export function LoginForm() {
         next={safeNext || undefined}
         inviteCode={inviteCode}
         onStepChange={setStep}
+        appleEnabled={appleEnabled}
+        googleEnabled={googleEnabled}
       />
     </div>
   );

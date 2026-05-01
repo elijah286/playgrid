@@ -131,6 +131,8 @@ export function SettingsClient({
   initialSeeds,
   initialBetaFeatures,
   initialHideOwnerInfoAbout,
+  initialAppleSigninEnabled,
+  initialGoogleSigninEnabled,
   initialCoachAiKbMisses,
   coachAiKbMissesError,
   initialOpexServices,
@@ -173,6 +175,8 @@ export function SettingsClient({
   initialSeeds: SavedFormation[];
   initialBetaFeatures: BetaFeatures;
   initialHideOwnerInfoAbout: boolean;
+  initialAppleSigninEnabled: boolean;
+  initialGoogleSigninEnabled: boolean;
   initialCoachAiKbMisses: KbMissRow[];
   coachAiKbMissesError: string | null;
   initialOpexServices: OpexService[];
@@ -489,6 +493,8 @@ export function SettingsClient({
             initialMobileEditingEnabled={initialMobileEditingEnabled}
             initialHideOwnerInfoAbout={initialHideOwnerInfoAbout}
             initialReferralConfig={initialReferralConfig}
+            initialAppleSigninEnabled={initialAppleSigninEnabled}
+            initialGoogleSigninEnabled={initialGoogleSigninEnabled}
           />
         </div>
       )}

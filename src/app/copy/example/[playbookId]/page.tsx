@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { previewExamplePlaybookAction } from "@/app/actions/example-claim";
 import { AuthFlow } from "@/features/auth/AuthFlow";
+import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
 import { FREE_MAX_PLAYBOOKS_OWNED, tierAtLeast } from "@/lib/billing/features";
 import { ClaimExampleForm } from "./ui";
@@ -57,6 +58,7 @@ async function getQuotaState(): Promise<QuotaState> {
 
 export default async function ExampleClaimPage({ params }: Props) {
   const { playbookId } = await params;
+  const authProviders = await getAuthProvidersConfig();
 
   if (!hasSupabaseEnv()) {
     return (
@@ -147,7 +149,13 @@ export default async function ExampleClaimPage({ params }: Props) {
               for more.
             </p>
           </div>
-          <AuthFlow next={next} heading="" subheading="" />
+          <AuthFlow
+            next={next}
+            heading=""
+            subheading=""
+            appleEnabled={authProviders.apple}
+            googleEnabled={authProviders.google}
+          />
         </div>
       )}
     </div>

@@ -8,6 +8,10 @@ import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays
 import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editing";
 import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
 import { setReferralConfigAction } from "@/app/actions/admin-referral";
+import {
+  setAppleSigninEnabledAction,
+  setGoogleSigninEnabledAction,
+} from "@/app/actions/admin-auth-providers";
 import type { ReferralConfig } from "@/lib/site/referral-config";
 
 export function SiteSettingsAdminClient({
@@ -17,6 +21,8 @@ export function SiteSettingsAdminClient({
   initialMobileEditingEnabled,
   initialHideOwnerInfoAbout,
   initialReferralConfig,
+  initialAppleSigninEnabled,
+  initialGoogleSigninEnabled,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
@@ -24,6 +30,8 @@ export function SiteSettingsAdminClient({
   initialMobileEditingEnabled: boolean;
   initialHideOwnerInfoAbout: boolean;
   initialReferralConfig: ReferralConfig;
+  initialAppleSigninEnabled: boolean;
+  initialGoogleSigninEnabled: boolean;
 }) {
   const { toast } = useToast();
 
@@ -38,6 +46,39 @@ export function SiteSettingsAdminClient({
 
   const [hideOwnerInfoAbout, setHideOwnerInfoAbout] = useState(initialHideOwnerInfoAbout);
   const [hideOwnerPending, startHideOwnerTransition] = useTransition();
+
+  const [appleSigninEnabled, setAppleSigninEnabled] = useState(initialAppleSigninEnabled);
+  const [applePending, startAppleTransition] = useTransition();
+  const [googleSigninEnabled, setGoogleSigninEnabled] = useState(initialGoogleSigninEnabled);
+  const [googlePending, startGoogleTransition] = useTransition();
+
+  function toggleAppleSignin(next: boolean) {
+    const prev = appleSigninEnabled;
+    setAppleSigninEnabled(next);
+    startAppleTransition(async () => {
+      const res = await setAppleSigninEnabledAction(next);
+      if (!res.ok) {
+        setAppleSigninEnabled(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(next ? "Apple sign-in enabled." : "Apple sign-in disabled.", "success");
+    });
+  }
+
+  function toggleGoogleSignin(next: boolean) {
+    const prev = googleSigninEnabled;
+    setGoogleSigninEnabled(next);
+    startGoogleTransition(async () => {
+      const res = await setGoogleSigninEnabledAction(next);
+      if (!res.ok) {
+        setGoogleSigninEnabled(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(next ? "Google sign-in enabled." : "Google sign-in disabled.", "success");
+    });
+  }
 
   const [savedFreeMaxPlays, setSavedFreeMaxPlays] = useState(initialFreeMaxPlays);
   const [freeMaxPlaysInput, setFreeMaxPlaysInput] = useState(String(initialFreeMaxPlays));
@@ -299,6 +340,53 @@ export function SiteSettingsAdminClient({
             onChange={(e) => toggleMobileEditing(e.target.checked)}
           />
           <span>{mobileEditingEnabled ? "On" : "Off"}</span>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Continue with Google
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            Show the Google sign-in button on the login page. Requires the
+            Google provider to be enabled in Supabase Auth → Providers with
+            valid OAuth credentials. Off hides the button entirely.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={googleSigninEnabled}
+            disabled={googlePending}
+            onChange={(e) => toggleGoogleSignin(e.target.checked)}
+          />
+          <span>{googleSigninEnabled ? "On" : "Off"}</span>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Continue with Apple
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            Show the Apple sign-in button on the login page. Requires an
+            Apple Developer Services ID + secret JWT wired into Supabase Auth
+            → Providers (the JWT expires every 6 months). Apple is required
+            by App Store Review Guideline 4.8 once the iOS app ships.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={appleSigninEnabled}
+            disabled={applePending}
+            onChange={(e) => toggleAppleSignin(e.target.checked)}
+          />
+          <span>{appleSigninEnabled ? "On" : "Off"}</span>
         </label>
       </div>
 

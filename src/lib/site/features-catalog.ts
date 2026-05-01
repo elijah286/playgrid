@@ -815,6 +815,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "internal",
     addedDate: "2026-04-28",
   },
+  {
+    id: "admin-oauth-provider-toggles",
+    name: "OAuth sign-in toggles",
+    description:
+      "Site admins control whether the \"Continue with Google\" and \"Continue with Apple\" buttons appear on the login page. Each provider can be flipped independently so a misconfigured one (missing keys, expired Apple JWT) never surfaces a button that errors.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-01",
+  },
 ];
 
 /** Group features by category, preserving the order they appear in FEATURES. */

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import { LoginForm } from "./ui";
+import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 
 export const metadata: Metadata = {
   title: "Log in or sign up",
@@ -11,7 +12,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/login" },
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const authProviders = await getAuthProvidersConfig();
   return (
     <div className="mx-auto flex min-h-full max-w-md flex-col justify-center gap-8 px-6 py-16">
       <div>
@@ -24,7 +26,10 @@ export default function LoginPage() {
         </Link>
       </div>
       <Suspense fallback={null}>
-        <LoginForm />
+        <LoginForm
+          appleEnabled={authProviders.apple}
+          googleEnabled={authProviders.google}
+        />
       </Suspense>
     </div>
   );
