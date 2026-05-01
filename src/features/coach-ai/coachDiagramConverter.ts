@@ -241,11 +241,34 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   type StagedPlayer = { dp: CoachDiagramPlayer; team: "O" | "D"; x: number; y: number };
   const staged: StagedPlayer[] = diagram.players.map((dp) => {
     const team = guessTeam(dp);
+    const rawX = Number.isFinite(dp.x) ? dp.x : 0;
+    const rawY = Number.isFinite(dp.y) ? dp.y : 0;
     const y = team === "D"
-      ? Math.max(MIN_DEFENDER_Y_YDS, dp.y)
-      : Math.min(MAX_OFFENSE_Y_YDS, dp.y);
-    return { dp, team, x: dp.x, y };
+      ? Math.max(MIN_DEFENDER_Y_YDS, rawY)
+      : Math.min(MAX_OFFENSE_Y_YDS, rawY);
+    return { dp, team, x: rawX, y };
   });
+
+  // QB MUST be behind the center — football rule, not a stylistic preference.
+  // Models occasionally drop the QB at the right hash (next to the slot) or
+  // shift him a yard off-center on shotgun calls; both render as a malformed
+  // formation. Snap the QB's x to the center's x while preserving y (so
+  // under-center y≈-1 and shotgun y≈-5 both still work). If the diagram
+  // omits a center, fall back to x=0 (the field midline).
+  const centerOnO = staged.find((sp) =>
+    sp.team === "O" && (
+      (sp.dp.role ?? sp.dp.id).toUpperCase() === "C" ||
+      guessRole(sp.dp) === "C"
+    ),
+  );
+  const centerX = centerOnO ? centerOnO.x : 0;
+  for (const sp of staged) {
+    if (sp.team !== "O") continue;
+    const lab = (sp.dp.role ?? sp.dp.id).toUpperCase();
+    if (lab === "QB" || lab === "Q" || guessRole(sp.dp) === "QB") {
+      sp.x = centerX;
+    }
+  }
 
   // Resolve overlaps within each team. The token is rendered as a circle of
   // normalized radius 0.032 (see PlayDiagramEmbed) — i.e. visual diameter
@@ -259,24 +282,54 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   const TOKEN_DIAMETER_NORM = 0.064;
   const OVERLAP_THRESHOLD_NORM = TOKEN_DIAMETER_NORM * 1.05; // 5% breathing
   const NUDGE_STEP_YDS_X = OVERLAP_THRESHOLD_NORM * profile.fieldWidthYds;
-  for (let i = 0; i < staged.length; i++) {
-    for (let j = 0; j < i; j++) {
-      const a = staged[i];
-      const b = staged[j];
-      if (a.team !== b.team) continue;
-      // Compare in normalized space — that's what the renderer cares about.
-      const aN = toNorm(a.x, a.y);
-      const bN = toNorm(b.x, b.y);
-      const dnx = aN.x - bN.x;
-      const dny = aN.y - bN.y;
-      if (Math.hypot(dnx, dny) < OVERLAP_THRESHOLD_NORM) {
-        // Push `i` outward along x — direction = sign of (a.x - b.x),
-        // defaulting to push toward the nearer sideline so we don't pile
-        // everyone toward center.
-        const dir = a.x === b.x ? (a.x >= 0 ? 1 : -1) : Math.sign(a.x - b.x);
-        a.x = b.x + dir * NUDGE_STEP_YDS_X;
+  // The QB has just been snapped to center.x and must STAY there. If a slot
+  // or back is too close to the QB, push the OTHER guy aside instead of
+  // moving the QB. Same rule applies to the C — he anchors the OL spacing.
+  const isAnchored = (sp: StagedPlayer): boolean => {
+    if (sp.team !== "O") return false;
+    const lab = (sp.dp.role ?? sp.dp.id).toUpperCase();
+    return lab === "QB" || lab === "Q" || lab === "C" ||
+      guessRole(sp.dp) === "QB" || guessRole(sp.dp) === "C";
+  };
+  // Iterate to convergence. The previous single-pass nudge resolved each
+  // pair once, but a player can land on top of a third player after being
+  // pushed (cascading collisions). Loop until no overlaps remain or we hit
+  // a safety cap. MAX_ITERS is intentionally generous — 22 offensive +
+  // defensive players × ~3 cascades stays well under 100.
+  const MAX_ITERS = 100;
+  for (let iter = 0; iter < MAX_ITERS; iter++) {
+    let moved = false;
+    for (let i = 0; i < staged.length; i++) {
+      for (let j = 0; j < i; j++) {
+        const a = staged[i];
+        const b = staged[j];
+        if (a.team !== b.team) continue;
+        const aN = toNorm(a.x, a.y);
+        const bN = toNorm(b.x, b.y);
+        const dnx = aN.x - bN.x;
+        const dny = aN.y - bN.y;
+        if (Math.hypot(dnx, dny) < OVERLAP_THRESHOLD_NORM) {
+          // Decide who moves. Anchored players (QB, C) never move; push the
+          // other one. If both are anchored (shouldn't happen — only one Q
+          // and one C per team) prefer pushing `a`.
+          const aAnchored = isAnchored(a);
+          const bAnchored = isAnchored(b);
+          const moveA = !aAnchored;
+          const mover = moveA ? a : b;
+          const pivot = moveA ? b : a;
+          const dir = mover.x === pivot.x
+            ? (mover.x >= 0 ? 1 : -1)
+            : Math.sign(mover.x - pivot.x);
+          mover.x = pivot.x + dir * NUDGE_STEP_YDS_X;
+          moved = true;
+          // If both were anchored, the loop won't converge — break out so
+          // we don't spin forever. (A diagram with two QBs is malformed
+          // anyway; we just don't want to hang the renderer.)
+          if (aAnchored && bAnchored) iter = MAX_ITERS;
+        }
       }
     }
+    if (!moved) break;
   }
 
   // Build Player objects.
