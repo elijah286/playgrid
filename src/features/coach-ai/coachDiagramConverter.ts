@@ -208,11 +208,15 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   const profile = sportProfileForVariant(variant);
   const LOS_Y = 0.4; // normalized LOS position in the 25-yard window
 
-  /** Convert AI yards → normalized field coords */
+  /** Convert AI yards → normalized field coords. Non-finite inputs (model
+   *  emitted a missing/null/NaN coord) collapse to the field center instead
+   *  of poisoning the viewBox computation downstream with NaN. */
   function toNorm(xYds: number, yYds: number): { x: number; y: number } {
+    const xn = Number.isFinite(xYds) ? 0.5 + xYds / profile.fieldWidthYds : 0.5;
+    const yn = Number.isFinite(yYds) ? LOS_Y + yYds / profile.fieldLengthYds : LOS_Y;
     return {
-      x: Math.max(0, Math.min(1, 0.5 + xYds / profile.fieldWidthYds)),
-      y: Math.max(0, Math.min(1, LOS_Y + yYds / profile.fieldLengthYds)),
+      x: Math.max(0, Math.min(1, xn)),
+      y: Math.max(0, Math.min(1, yn)),
     };
   }
 
@@ -433,9 +437,11 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   const MAX_HALF_H = 0.32;
   const zones: Zone[] = (diagram.zones ?? []).map((dz, i) => {
     const palette = ZONE_PALETTE[i % ZONE_PALETTE.length];
-    const center = toNorm(dz.center[0], dz.center[1]);
-    const halfW = Math.min(Math.abs(dz.size[0]) / 2 / profile.fieldWidthYds, MAX_HALF_W);
-    const halfH = Math.min(Math.abs(dz.size[1]) / 2 / profile.fieldLengthYds, MAX_HALF_H);
+    const center = toNorm(dz.center?.[0] ?? 0, dz.center?.[1] ?? 0);
+    const sizeW = Number.isFinite(dz.size?.[0]) ? Math.abs(dz.size[0]) : 0;
+    const sizeH = Number.isFinite(dz.size?.[1]) ? Math.abs(dz.size[1]) : 0;
+    const halfW = Math.min(sizeW / 2 / profile.fieldWidthYds, MAX_HALF_W);
+    const halfH = Math.min(sizeH / 2 / profile.fieldLengthYds, MAX_HALF_H);
     return {
       id: uid(),
       kind: dz.kind,

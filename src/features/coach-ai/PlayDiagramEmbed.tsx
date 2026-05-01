@@ -28,33 +28,41 @@ function computeViewBox(doc: PlayDocument): ViewBox {
   let minX = Infinity, maxX = -Infinity;
   let minSvgY = Infinity, maxSvgY = -Infinity;
 
+  // Track every coordinate through Number.isFinite so a single bad value
+  // (model emitted NaN / undefined / a string) can't poison the bounds and
+  // collapse the viewBox to NaN downstream — which the browser silently
+  // rejects, falling back to pixel space and letting the chat panel's
+  // accent color bleed through the SVG (manifests as an "orange field").
+  const seeX = (v: number) => {
+    if (!Number.isFinite(v)) return;
+    if (v < minX) minX = v;
+    if (v > maxX) maxX = v;
+  };
+  const seeSvgY = (v: number) => {
+    if (!Number.isFinite(v)) return;
+    if (v < minSvgY) minSvgY = v;
+    if (v > maxSvgY) maxSvgY = v;
+  };
+
   for (const p of doc.layers.players) {
-    if (p.position.x < minX) minX = p.position.x;
-    if (p.position.x > maxX) maxX = p.position.x;
-    const sy = 1 - p.position.y;
-    if (sy < minSvgY) minSvgY = sy;
-    if (sy > maxSvgY) maxSvgY = sy;
+    seeX(p.position.x);
+    seeSvgY(1 - p.position.y);
   }
   for (const r of doc.layers.routes) {
     for (const n of r.nodes) {
-      if (n.position.x < minX) minX = n.position.x;
-      if (n.position.x > maxX) maxX = n.position.x;
-      const sy = 1 - n.position.y;
-      if (sy < minSvgY) minSvgY = sy;
-      if (sy > maxSvgY) maxSvgY = sy;
+      seeX(n.position.x);
+      seeSvgY(1 - n.position.y);
     }
   }
   for (const z of doc.layers.zones ?? []) {
-    const left = z.center.x - z.size.w;
-    const right = z.center.x + z.size.w;
-    if (left < minX) minX = left;
-    if (right > maxX) maxX = right;
-    const top = 1 - (z.center.y + z.size.h);
-    const bot = 1 - (z.center.y - z.size.h);
-    if (top < minSvgY) minSvgY = top;
-    if (bot > maxSvgY) maxSvgY = bot;
+    seeX(z.center.x - z.size.w);
+    seeX(z.center.x + z.size.w);
+    seeSvgY(1 - (z.center.y + z.size.h));
+    seeSvgY(1 - (z.center.y - z.size.h));
   }
-  if (!isFinite(minSvgY)) { minX = 0; maxX = 1; minSvgY = 0.22; maxSvgY = 0.78; }
+  if (!isFinite(minSvgY) || !isFinite(minX)) {
+    minX = 0; maxX = 1; minSvgY = 0.22; maxSvgY = 0.78;
+  }
 
   const losY = 1 - (doc.lineOfScrimmageY ?? 0.4);
   const tenY = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.4);
@@ -76,6 +84,14 @@ function computeViewBox(doc: PlayDocument): ViewBox {
     const needed = vbW / TARGET;
     vbY = Math.max(0, vbY - (needed - vbH) / 2);
     vbH = Math.min(1 - vbY, needed);
+  }
+  // Last-line-of-defense: any non-finite value in the viewBox makes the
+  // browser ignore it entirely (we end up rendering in raw pixel space).
+  // Fall back to the full unit field rather than letting that happen.
+  if (!Number.isFinite(vbX) || !Number.isFinite(vbY) ||
+      !Number.isFinite(vbW) || !Number.isFinite(vbH) ||
+      vbW <= 0 || vbH <= 0) {
+    return { x: 0, y: 0, w: 1, h: 1 };
   }
   return { x: vbX, y: vbY, w: vbW, h: vbH };
 }
