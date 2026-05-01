@@ -51,11 +51,22 @@ export async function getActivationSummaryAction(): Promise<
       .select("*", { count: "exact", head: true });
     const totalUsers = Math.max(0, (rawTotalUsers ?? 0) - excludedIds.size);
 
-    // Get sport variant distribution
-    const { data: sportVariantData } = await admin
+    // Get sport variant distribution (including owner info to filter excluded users)
+    const { data: sportVariantRaw } = await admin
       .from("playbooks")
-      .select("sport_variant, id, created_at", { count: "exact" })
+      .select(
+        "sport_variant, id, created_at, teams!inner(org_id, organizations!inner(owner_id))",
+        { count: "exact" },
+      )
       .not("sport_variant", "is", null);
+
+    // Filter out playbooks from excluded users
+    const sportVariantData = sportVariantRaw
+      ? sportVariantRaw.filter(
+          (row: any) =>
+            !excludedIds.has(row.teams?.organizations?.[0]?.owner_id as string),
+        )
+      : [];
 
     // Get users grouped by play count
     const { data: playCounts, error: playCountsError } = await admin.rpc(
