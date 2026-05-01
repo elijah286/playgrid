@@ -1470,9 +1470,9 @@ export function DashboardClient({
             )}
             <Link
               href="/examples"
-              className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-surface-raised px-3 text-xs font-semibold text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-surface-inset"
             >
-              Browse example playbooks →
+              Browse examples
             </Link>
             <Button
               variant="primary"
@@ -1482,17 +1482,6 @@ export function DashboardClient({
             >
               New Playbook
             </Button>
-            {!effectiveHideAnimation && (
-              <SegmentedControl
-                size="sm"
-                value={view}
-                onChange={setView}
-                options={[
-                  { value: "preview", label: "Preview" },
-                  { value: "classic", label: "Simple" },
-                ]}
-              />
-            )}
           </div>
         )}
       </div>
@@ -1634,6 +1623,20 @@ export function DashboardClient({
             </>
           )}
         </section>
+      )}
+
+      {!isEmpty && !effectiveHideAnimation && (
+        <div className="flex justify-center pt-2">
+          <SegmentedControl
+            size="sm"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "preview", label: "Preview" },
+              { value: "classic", label: "Simple" },
+            ]}
+          />
+        </div>
       )}
 
       {duplicating && (
