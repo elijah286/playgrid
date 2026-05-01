@@ -23,10 +23,6 @@ import {
   type AdminUserActivity,
   type AdminUserStats,
 } from "@/app/actions/admin-users";
-import {
-  getAnalyticsExcludedEmailsAction,
-  toggleAnalyticsExclusionAction,
-} from "@/app/actions/admin-analytics-exclusions";
 import { grantCompAction, revokeCompAction } from "@/app/actions/admin-billing";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { Modal } from "@/components/ui";
@@ -129,17 +125,6 @@ export function UsersAdminClient({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("lastSignIn");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [excludedEmails, setExcludedEmails] = useState<Set<string>>(new Set());
-
-  // Load excluded emails on mount
-  useEffect(() => {
-    startTransition(async () => {
-      const res = await getAnalyticsExcludedEmailsAction();
-      if (res.ok) {
-        setExcludedEmails(new Set(res.emails));
-      }
-    });
-  }, []);
 
   function toggleSort(k: NonNullable<SortKey>) {
     setSortKey((cur) => {
@@ -274,7 +259,6 @@ export function UsersAdminClient({
                 dir={sortDir}
                 onClick={() => toggleSort("timeOnSite")}
               />
-              <th className="w-12 px-4 py-3 text-center">Excl.</th>
               <th className="w-12 px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>

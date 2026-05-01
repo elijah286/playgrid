@@ -147,6 +147,8 @@ export function SettingsClient({
   initialCoachBonusRows,
   initialCoachCalPack,
   initialReferralConfig,
+  initialExcludedEmails,
+  excludedEmailsError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -192,6 +194,8 @@ export function SettingsClient({
   initialCoachBonusRows: CoachBonusRow[];
   initialCoachCalPack: CoachCalPackConfig;
   initialReferralConfig: ReferralConfig;
+  initialExcludedEmails: string[];
+  excludedEmailsError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
@@ -294,13 +298,45 @@ export function SettingsClient({
       />
 
       {tab === "users" && (
-        <div>
-          {usersError ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
-              {usersError}
-            </p>
-          ) : (
-            <UsersAdminClient initialUsers={initialUsers} currentUserId={currentUserId} />
+        <div className="space-y-6">
+          <div className="flex gap-2 border-b border-border">
+            <button
+              onClick={() => setUsersSubTab("list")}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                usersSubTab === "list"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Users
+            </button>
+            <button
+              onClick={() => setUsersSubTab("settings")}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                usersSubTab === "settings"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              Settings
+            </button>
+          </div>
+          {usersSubTab === "list" && (
+            <div>
+              {usersError ? (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
+                  {usersError}
+                </p>
+              ) : (
+                <UsersAdminClient initialUsers={initialUsers} currentUserId={currentUserId} />
+              )}
+            </div>
+          )}
+          {usersSubTab === "settings" && (
+            <AnalyticsExclusionsAdminClient
+              initialEmails={initialExcludedEmails}
+              initialError={excludedEmailsError}
+            />
           )}
         </div>
       )}
