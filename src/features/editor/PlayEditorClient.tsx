@@ -148,9 +148,23 @@ function PlayEditorClientInner({
   // new server doc, which also clears the undo stack (the previous edits
   // were superseded).
   const lastSyncedDocRef = useRef<PlayDocument>(initialDocument);
+  // Serialized form of the most recent doc we sent to the server. Used to
+  // recognise our own save-roundtrip when it echoes back through
+  // `initialDocument` after `router.refresh()`. Without this, a refresh that
+  // resolves *after* the user has continued editing locally would clobber
+  // those newer edits with the older saved version — anchors visibly snap
+  // back to where they were before the latest drag. Set BEFORE calling
+  // `router.refresh()` so the inevitable prop update finds it.
+  const lastSentStr = useRef<string | null>(null);
   useEffect(() => {
     if (initialDocument === lastSyncedDocRef.current) return;
     const incomingStr = JSON.stringify(initialDocument);
+    // Our own save coming back through router.refresh() — local has either
+    // caught up to or moved past this state. Either way, don't touch it.
+    if (lastSentStr.current && incomingStr === lastSentStr.current) {
+      lastSyncedDocRef.current = initialDocument;
+      return;
+    }
     const localStr = JSON.stringify(doc);
     if (incomingStr === localStr) {
       lastSyncedDocRef.current = initialDocument;
@@ -424,6 +438,11 @@ function PlayEditorClientInner({
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       setIsSaving(true);
+      // Snapshot the doc we're about to send. The reconciliation effect
+      // compares this string to the next `initialDocument` to recognise its
+      // own save echoing back, instead of treating it as an external mutation
+      // that should overwrite local edits.
+      const sentStr = JSON.stringify(doc);
       const res = await savePlayVersionAction(playId, doc);
       if (isGameModeLocked(res)) {
         setGameLock({
@@ -431,6 +450,7 @@ function PlayEditorClientInner({
           callerName: res.gameLock.callerName,
         });
       } else if (res.ok) {
+        lastSentStr.current = sentStr;
         router.refresh();
       } else {
         toast(res.error, "error");
