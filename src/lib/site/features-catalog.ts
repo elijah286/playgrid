@@ -256,6 +256,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-29",
   },
   {
+    id: "home-browse-examples",
+    name: "Browse examples link on /home",
+    description:
+      "A small \"Browse example playbooks →\" link sits next to the New Playbook button on the dashboard home, and again under the empty-state tile when the coach has no playbooks yet. Routes to the existing /examples gallery so coaches can discover starter playbooks without leaving the app. Quota disclosure on the example claim page handles the 1-free-playbook constraint at click time.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-05-01",
+  },
+  {
+    id: "claim-flow-signup-heading",
+    name: "Claim-flow signup heading",
+    description:
+      "When a coach lands on /login from a copy or example claim link (any next=/copy/* param), the page heading defaults to \"Get started\" instead of \"Welcome back\" — most claim-link clickers are net-new users, and the welcome-back framing made them think they had a forgotten account. Heading still flips to \"Welcome back\" once AuthFlow's email step confirms an existing account.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-05-01",
+  },
+  {
     id: "name-capture-prompt",
     name: "One-time name prompt",
     description:

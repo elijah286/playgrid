@@ -9,8 +9,16 @@ export function LoginForm() {
   const nextParam = searchParams.get("next") ?? "";
   const safeNext = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "";
   const inviteCode = searchParams.get("invite")?.trim().toUpperCase() || undefined;
-  const isSignup = searchParams.get("mode") === "signup";
+  const explicitSignup = searchParams.get("mode") === "signup";
   const reason = searchParams.get("reason");
+
+  // Claim flows (someone forwarded a copy / example link) almost always
+  // bring net-new users — surfacing "Welcome back" makes them think they
+  // already have an account they don't remember. Treat any /copy/* next
+  // param as signup intent so the heading defaults to "Get started"
+  // until AuthFlow's email step actually confirms an existing account.
+  const isClaimFlow = safeNext.startsWith("/copy/") || safeNext.startsWith("/copy?");
+  const isSignup = explicitSignup || isClaimFlow;
 
   const [step, setStep] = useState<Step>("email");
 

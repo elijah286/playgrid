@@ -1468,6 +1468,12 @@ export function DashboardClient({
                 Show marketing examples
               </label>
             )}
+            <Link
+              href="/examples"
+              className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Browse example playbooks →
+            </Link>
             <Button
               variant="primary"
               size="sm"
@@ -1496,8 +1502,14 @@ export function DashboardClient({
       )}
 
       {isEmpty ? (
-        <div className="mx-auto w-60 pt-4 sm:w-64">
+        <div className="mx-auto flex w-60 flex-col items-center gap-3 pt-4 sm:w-64">
           <MarketingPlaybookTile onCreate={() => setShowCreate(true)} />
+          <Link
+            href="/examples"
+            className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Or browse example playbooks →
+          </Link>
         </div>
       ) : view === "preview" ? (
         <section className="space-y-6">
