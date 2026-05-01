@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowDownUp, Trash2 } from "lucide-react";
+import { ArrowDownUp, Gamepad2, Trash2 } from "lucide-react";
 import {
   deleteGameSessionAction,
   deleteScheduledEventAction,
@@ -138,36 +138,49 @@ export function GameResultsPanel({
   }
 
   if (games.length === 0) {
-    return (
-      <>
-        <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
-          <p className="text-sm font-semibold text-foreground">No games yet</p>
-          <p className="mt-1 text-sm text-muted">
-            Schedule a game from the Calendar tab, or run one from Game Mode to
-            see it here.
-          </p>
-          {canUseGameMode ? (
-            <Link
-              href={`/playbooks/${playbookId}/game`}
-              className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Open Game Mode
-            </Link>
-          ) : (
+    if (!canUseGameMode) {
+      return (
+        <>
+          <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
+            <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
+              <Gamepad2 className="size-5" />
+            </div>
+            <p className="text-sm font-semibold text-foreground">
+              Results are a Team Coach feature
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+              Run games from Game Mode and review every called play, win-rate,
+              and tag here after the final whistle.
+            </p>
             <button
               type="button"
               onClick={() => setUpgradeOpen(true)}
               className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              Open Game Mode
+              See Team Coach plan
             </button>
-          )}
-        </div>
-        <GameModeUpgradeDialog
-          open={upgradeOpen}
-          onClose={() => setUpgradeOpen(false)}
-        />
-      </>
+          </div>
+          <GameModeUpgradeDialog
+            open={upgradeOpen}
+            onClose={() => setUpgradeOpen(false)}
+          />
+        </>
+      );
+    }
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
+        <p className="text-sm font-semibold text-foreground">No games yet</p>
+        <p className="mt-1 text-sm text-muted">
+          Schedule a game from the Calendar tab, or run one from Game Mode to
+          see it here.
+        </p>
+        <Link
+          href={`/playbooks/${playbookId}/game`}
+          className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Open Game Mode
+        </Link>
+      </div>
     );
   }
 
