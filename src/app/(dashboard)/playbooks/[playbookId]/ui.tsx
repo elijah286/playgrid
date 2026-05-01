@@ -97,6 +97,7 @@ import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/Copy
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { PlaybookPracticePlansTab } from "@/features/practice-plans/PlaybookPracticePlansTab";
+import { RosterUpgradePanel } from "@/features/upgrade/RosterUpgradePanel";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
@@ -1518,17 +1519,20 @@ function PlaybookDetailClientInner({
         )}
       </div>
 
-      {tab === "roster" && (
-        <RosterPanel
-          playbookId={playbookId}
-          members={initialRoster}
-          claims={initialRosterClaims}
-          viewerIsCoach={headerProps.viewerIsCoach}
-          canManage={headerProps.canManage}
-          teamName={headerProps.name}
-          senderName={headerProps.senderName}
-        />
-      )}
+      {tab === "roster" &&
+        (canUseTeamFeatures ? (
+          <RosterPanel
+            playbookId={playbookId}
+            members={initialRoster}
+            claims={initialRosterClaims}
+            viewerIsCoach={headerProps.viewerIsCoach}
+            canManage={headerProps.canManage}
+            teamName={headerProps.name}
+            senderName={headerProps.senderName}
+          />
+        ) : (
+          <RosterUpgradePanel />
+        ))}
 
       {tab === "formations" && (
         <PlaybookFormationsTab
