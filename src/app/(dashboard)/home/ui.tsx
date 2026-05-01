@@ -1052,7 +1052,12 @@ export function DashboardClient({
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
-  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  const [upgradeNotice, setUpgradeNotice] = useState<{
+    title: string;
+    message: string;
+    secondaryLabel?: string;
+    secondaryHref?: string;
+  } | null>(null);
   useEffect(() => {
     if (searchParams.get("create") === "1") {
       setShowCreate(true);
@@ -1150,10 +1155,18 @@ export function DashboardClient({
       if (!res.ok) {
         if (/Free tier is limited/i.test(res.error)) {
           setShowCreate(false);
+          // If they already own a playbook, point them back to it instead
+          // of leaving the upgrade modal as a dead-end. Free users get one
+          // playbook — claimed examples and self-created ones share that
+          // slot, and the existing one is fully editable.
+          const existing = ownedAll[0] ?? null;
           setUpgradeNotice({
-            title: "Free tier is limited to 1 playbook",
-            message:
-              "Upgrade to Team Coach ($9/mo or $99/yr) to create unlimited playbooks. Your existing content stays where it is.",
+            title: "You already have your free playbook",
+            message: existing
+              ? `Free accounts include one playbook — “${existing.name}”. Open it to add or edit plays, or upgrade to Team Coach ($9/mo or $99/yr) for unlimited playbooks.`
+              : "Upgrade to Team Coach ($9/mo or $99/yr) to create unlimited playbooks. Your existing content stays where it is.",
+            secondaryLabel: existing ? "Open my playbook" : undefined,
+            secondaryHref: existing ? `/playbooks/${existing.id}` : undefined,
           });
         } else {
           toast(res.error, "error");
@@ -1670,6 +1683,8 @@ export function DashboardClient({
         onClose={() => setUpgradeNotice(null)}
         title={upgradeNotice?.title ?? ""}
         message={upgradeNotice?.message ?? ""}
+        secondaryLabel={upgradeNotice?.secondaryLabel}
+        secondaryHref={upgradeNotice?.secondaryHref}
       />
       </div>
     </div>

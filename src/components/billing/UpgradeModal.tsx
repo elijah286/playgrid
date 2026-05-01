@@ -10,6 +10,11 @@ type Props = {
   message: string;
   ctaLabel?: string;
   ctaHref?: string;
+  /** Optional secondary action shown above the upgrade CTA. Use for
+   *  "go back to your existing thing" alternatives so the modal isn't
+   *  a dead-end paywall. */
+  secondaryLabel?: string;
+  secondaryHref?: string;
 };
 
 export function UpgradeModal({
@@ -19,6 +24,8 @@ export function UpgradeModal({
   message,
   ctaLabel = "Upgrade",
   ctaHref = "/pricing",
+  secondaryLabel,
+  secondaryHref,
 }: Props) {
   if (!open) return null;
   return (
@@ -48,6 +55,15 @@ export function UpgradeModal({
         <Lock className="size-6 text-muted" />
         <p className="text-sm font-semibold text-foreground">{title}</p>
         <p className="text-xs text-muted">{message}</p>
+        {secondaryLabel && secondaryHref && (
+          <Link
+            href={secondaryHref}
+            onClick={onClose}
+            className="inline-flex items-center rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-inset"
+          >
+            {secondaryLabel}
+          </Link>
+        )}
         <Link
           href={ctaHref}
           data-web-only
