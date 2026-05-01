@@ -203,9 +203,26 @@ export async function POST(req: Request): Promise<Response> {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false;
       const send = (event: string, data: unknown) => {
+        if (closed) return;
         controller.enqueue(enc.encode(sseChunk(event, data)));
       };
+
+      // Heartbeat: SSE comment frames every 15s so Railway's edge proxy
+      // never sees the stream as idle. Long agent turns (multi-tool fan-out
+      // like "create three plays") can spend 30+s inside a single chat()
+      // call — buffered for diagram validation, so no text_delta escapes —
+      // and the proxy was cutting the connection, surfacing in the browser
+      // as "Load failed". Comment frames (`: ...\n\n`) are ignored by the
+      // client SSE parser (no `data:` line → no yield) so they don't
+      // perturb the message stream.
+      const heartbeat = setInterval(() => {
+        if (closed) return;
+        try {
+          controller.enqueue(enc.encode(": keepalive\n\n"));
+        } catch { /* controller already closed */ }
+      }, 15_000);
 
       try {
         const result = await runAgent(history, ctx, (e: AgentStreamEvent) => {
@@ -231,6 +248,8 @@ export async function POST(req: Request): Promise<Response> {
         const msg = e instanceof Error ? e.message : "Unknown error";
         send("error", { message: msg });
       } finally {
+        clearInterval(heartbeat);
+        closed = true;
         controller.close();
       }
     },
