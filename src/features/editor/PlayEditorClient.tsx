@@ -460,6 +460,61 @@ function PlayEditorClientInner({
     callerName: string | null;
   } | null>(null);
 
+  // While a player/route/node/segment/zone is selected, we treat the user
+  // as actively sketching and DEFER saving until they signal completion
+  // (deselect via Done, click-outside, Esc, or switching selection). With
+  // nothing selected, doc edits (toolbar, field-size, etc.) save through
+  // the same short debounce as before — those are discrete commits, not
+  // sketches in progress.
+  const SAVE_DEBOUNCE_IDLE_MS = 1_500;
+  const SAVE_DEBOUNCE_FLUSH_MS = 200;
+  const SAVE_SAFETY_NET_MS = 30_000;
+  const anySelected =
+    selectedPlayerId != null ||
+    selectedRouteId != null ||
+    selectedNodeId != null ||
+    selectedSegmentId != null ||
+    selectedZoneId != null;
+  // Refs so async timer callbacks see the latest values without re-running.
+  const anySelectedRef = useRef(anySelected);
+  useEffect(() => {
+    anySelectedRef.current = anySelected;
+  }, [anySelected]);
+  const canSaveRef = useRef(false);
+  useEffect(() => {
+    canSaveRef.current =
+      canEdit && !isExamplePreview && !isArchived && gameLock == null;
+  }, [canEdit, isExamplePreview, isArchived, gameLock]);
+
+  const runSave = useCallback(async () => {
+    if (!canSaveRef.current) return;
+    if (!isDirtyRef.current) return;
+    setIsSaving(true);
+    // Capture the exact doc reference we're about to send. After the save
+    // resolves, we compare against the latest local reference to detect
+    // whether the user kept editing while the save was in flight.
+    const sentDoc = docRef.current;
+    const res = await savePlayVersionAction(playId, sentDoc);
+    if (isGameModeLocked(res)) {
+      setGameLock({
+        playbookId: res.gameLock.playbookId,
+        callerName: res.gameLock.callerName,
+      });
+    } else if (res.ok) {
+      // Only declare clean if local hasn't moved past what we sent.
+      if (docRef.current === sentDoc) {
+        isDirtyRef.current = false;
+      }
+      router.refresh();
+    } else {
+      toast(res.error, "error");
+    }
+    setIsSaving(false);
+  }, [playId, router, toast]);
+
+  // Doc-change driven autosave scheduling. Marks dirty and schedules the
+  // save: a long safety-net timer while a selection is active, the regular
+  // short debounce otherwise. The deselect effect below clears + flushes.
   useEffect(() => {
     if (!canEdit) return;
     if (isFirstDocRender.current) {
@@ -468,40 +523,38 @@ function PlayEditorClientInner({
     }
     if (isExamplePreview) return;
     if (isArchived) return;
-    if (gameLock) return; // paused while a live game is running
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    // Mark dirty as soon as any real local edit lands. The reconciliation
-    // effect reads this to decide whether an incoming `initialDocument`
-    // should be allowed to overwrite local state.
+    if (gameLock) return;
     isDirtyRef.current = true;
-    autoSaveTimer.current = setTimeout(async () => {
-      setIsSaving(true);
-      // Capture the exact doc reference we're about to send. After the save
-      // resolves, we compare against the latest local reference to detect
-      // whether the user kept editing while the save was in flight.
-      const sentDoc = doc;
-      const res = await savePlayVersionAction(playId, sentDoc);
-      if (isGameModeLocked(res)) {
-        setGameLock({
-          playbookId: res.gameLock.playbookId,
-          callerName: res.gameLock.callerName,
-        });
-      } else if (res.ok) {
-        // Only declare clean if local hasn't moved past what we sent. If
-        // the user dispatched any command during the await, `docRef.current`
-        // points at a newer doc than `sentDoc` and dirty stays true so the
-        // next reconciliation can't clobber the in-flight edits.
-        if (docRef.current === sentDoc) {
-          isDirtyRef.current = false;
-        }
-        router.refresh();
-      } else {
-        toast(res.error, "error");
-      }
-      setIsSaving(false);
-    }, 1500);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    const delay = anySelected ? SAVE_SAFETY_NET_MS : SAVE_DEBOUNCE_IDLE_MS;
+    autoSaveTimer.current = setTimeout(() => void runSave(), delay);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, canEdit, isExamplePreview, isArchived]);
+  }, [doc, canEdit, isExamplePreview, isArchived, gameLock]);
+
+  // Selection-driven autosave flush. When the user deselects (anySelected
+  // transitions to false) and there are unsaved edits from the just-ended
+  // selection, flush the save promptly instead of waiting out the 30s
+  // safety net. A tiny debounce absorbs deselect+reselect ping-pong.
+  useEffect(() => {
+    if (anySelected) return;
+    if (!isDirtyRef.current) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => void runSave(), SAVE_DEBOUNCE_FLUSH_MS);
+  }, [anySelected, runSave]);
+
+  // Best-effort flush on unmount. The server action invocation is fired
+  // and not awaited — the network round-trip likely outlives the unmount,
+  // and even if the response never reaches the client, the server-side
+  // write completes. Without this, navigating mid-selection within the 30s
+  // safety net would lose unsaved edits.
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      if (isDirtyRef.current && canSaveRef.current) {
+        void savePlayVersionAction(playId, docRef.current);
+      }
+    };
+  }, [playId]);
 
   useEffect(() => {
     if (!isSaving) return;
