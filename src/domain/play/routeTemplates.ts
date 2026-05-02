@@ -255,7 +255,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     constraints: { depthRangeYds: { min: 4, max: 13 }, side: "toward_qb" },
     kbSubtopic: "route_curl",
     description:
-      "Vertical 10-12 yards then a ROUNDED ~180° turn back toward the QB, settling in a soft spot in the zone at ~9 yds depth (route tree #6). The break is a smooth turn-back, NOT a sharp corner — receiver decelerates, faces the QB, and finishes with a slight inside lean toward the middle. Reliable vs zone — find the window between defenders.",
+      "Vertical stem then a ROUNDED ~180° turn back toward the QB, settling in a soft spot in the zone (route tree #6). Canonical depth varies by use: traditional pro-style Curl runs 10-12 yds vertical, settling at ~9 yds; SHORT Curls (5-7 yds vertical, settling at ~5 yds) are the underneath in Curl-Flat / Flood concepts. The catalog accepts ANY depth in [4, 13] — a coach asking for a 7-yard curl is asking for the short variant, not a deviation. The break is a smooth turn-back, NOT a sharp corner — receiver decelerates, faces the QB, and finishes with a slight inside lean toward the middle. Reliable vs zone — find the window between defenders.",
   },
   {
     name: "Comeback",

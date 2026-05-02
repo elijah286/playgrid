@@ -373,16 +373,19 @@ const get_route_template: CoachAiTool = {
       }
     })();
 
+    const { depthRangeYds } = template.constraints;
     return {
       ok: true,
       result:
         `Canonical "${template.name}" (${template.breakStyle} break, ${template.breakDir}) from (${playerX}, ${playerY}) on ${variantLabel}.\n\n` +
-        `DEFINITION (use this wording verbatim when explaining the route):\n${template.description}\n\n` +
+        `**Depth range (THE TRUTH — not the prose description): [${depthRangeYds.min}, ${depthRangeYds.max}] yds.** Any depth in this range renders as a valid "${template.name}" with route_kind="${template.name}". The description below describes the canonical/most-common variant — short or long depths within the range are also valid (e.g. a 5-yd Curl in a Curl-Flat concept, an 8-yd Drag in a deep-cross variant). When the coach asks for a depth IN THIS RANGE, just draw it — do NOT call it a "deviation" or "outside catalog".\n\n` +
+        `DEFINITION (canonical narrative — paraphrase, don't read verbatim if depths in your draw differ from this prose):\n${template.description}\n\n` +
         `Direction: ${dirLabel}.\n` +
         `path: ${pathJson}\n` +
         `curve: ${curve}\n` +
         `tip: "arrow"\n\n` +
-        `Drop into your diagram's "routes" array (copy path AND curve flag exactly):\n${routeJsonFragment}`,
+        `Drop into your diagram's "routes" array (copy path AND curve flag exactly):\n${routeJsonFragment}\n\n` +
+        `If the coach asks for a depth OUTSIDE [${depthRangeYds.min}, ${depthRangeYds.max}], set \`nonCanonical: true\` on the route to bypass the depth-range validator.`,
     };
   },
 };
