@@ -21,8 +21,18 @@
  *     placeholder won't render anything).
  */
 
-import type { CoachDiagram, CoachDiagramPlayer, CoachDiagramRoute } from "@/features/coach-ai/coachDiagramConverter";
-import type { AssignmentAction, PlaySpec } from "./spec";
+import type {
+  CoachDiagram,
+  CoachDiagramPlayer,
+  CoachDiagramRoute,
+  CoachDiagramZone,
+} from "@/features/coach-ai/coachDiagramConverter";
+import type {
+  AssignmentAction,
+  DefenderAction,
+  DefenderAssignment,
+  PlaySpec,
+} from "./spec";
 import {
   synthesizeOffense,
   synthesizeOffenseFallback,
@@ -30,7 +40,13 @@ import {
 } from "./offensiveSynthesize";
 import {
   alignmentForStrength,
+  alignmentWithAssignments,
   findDefensiveAlignment,
+  findZoneById,
+  zonesForStrength,
+  type DefenderAssignmentSpec,
+  type DefensiveAlignment,
+  type DefensiveAlignmentZone,
 } from "./defensiveAlignments";
 import { sportProfileForVariant } from "./factory";
 import { findTemplate, ROUTE_TEMPLATES, type RouteTemplate } from "./routeTemplates";
@@ -45,7 +61,10 @@ export type RenderWarning = {
     | "defense_unknown"
     | "assignment_player_missing"
     | "route_template_missing"
-    | "formation_player_count_mismatch";
+    | "formation_player_count_mismatch"
+    | "defender_assignment_player_missing"
+    | "defender_zone_unknown"
+    | "defender_man_target_missing";
   message: string;
 };
 
@@ -112,8 +131,12 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
   }));
 
   // 2) Build defensive players via the alignment catalog (when defense
-  //    ref provided + matched).
-  const defensePlayers = renderDefense(spec, warnings);
+  //    ref provided + matched). Also resolves per-defender assignments —
+  //    catalog defaults overlaid with `spec.defenderAssignments`
+  //    deviations — and emits the corresponding zones and movement
+  //    routes (man-match arrows, blitz arrows, custom paths).
+  const defenseRender = renderDefense(spec, warnings);
+  const defensePlayers = defenseRender.players;
 
   // 3) Build routes from assignments. Skip players the synthesizer
   //    didn't place (warn about it). Skip non-route actions — they
@@ -133,6 +156,20 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
     if (route) routes.push(route);
   }
 
+  // 4) Build defender movement routes from resolved defender assignments.
+  //    Man-match arrows need offensive positions to point at, so we pass
+  //    `offensePlayers` for receiver lookup. Blitz arrows aim at the QB
+  //    (or interior gap) regardless of whether the offense is rendered.
+  for (const dm of defenseRender.movement) {
+    const route = routeFromDefenderAction(
+      dm.action,
+      dm.defender,
+      offensePlayers,
+      warnings,
+    );
+    if (route) routes.push(route);
+  }
+
   return {
     diagram: {
       title: spec.title,
@@ -140,13 +177,28 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
       focus: spec.playType === "defense" ? "D" : "O",
       players: [...offensePlayers, ...defensePlayers],
       routes,
+      ...(defenseRender.zones.length > 0 ? { zones: defenseRender.zones } : {}),
     },
     warnings,
   };
 }
 
-function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): CoachDiagramPlayer[] {
-  if (!spec.defense) return [];
+type DefenderRenderResult = {
+  /** Defender player tokens (same shape as offense, team:"D"). */
+  players: CoachDiagramPlayer[];
+  /** Zones drawn for `zone_drop` defenders. Empty for pure-man looks. */
+  zones: CoachDiagramZone[];
+  /**
+   * Per-defender movement to project to routes downstream.
+   * `defender` is the rendered CoachDiagramPlayer (post-mirror), so we
+   * already know the (x, y) origin. `action` is the resolved action
+   * (catalog default overlaid by spec deviation).
+   */
+  movement: Array<{ defender: CoachDiagramPlayer; action: DefenderAction }>;
+};
+
+function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRenderResult {
+  if (!spec.defense) return { players: [], zones: [], movement: [] };
   const { front, coverage, strength = "right" } = spec.defense;
   const alignment = findDefensiveAlignment(spec.variant, front, coverage);
   if (!alignment) {
@@ -154,16 +206,218 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): CoachDiagramP
       code: "defense_unknown",
       message: `No catalog match for defense ${front} / ${coverage} (variant ${spec.variant}). Defenders not rendered. Use one of the catalog combinations or call place_defense to synthesize.`,
     });
-    return [];
+    return { players: [], zones: [], movement: [] };
   }
-  const positions = alignmentForStrength(alignment, strength);
-  return positions.map((p) => ({
-    id: p.id,
-    role: p.id,
-    x: p.x,
-    y: p.y,
-    team: "D",
-  }));
+
+  // Resolve player positions + catalog assignments for this strength.
+  const catalogPlayers = alignmentWithAssignments(alignment, strength);
+
+  // Index spec deviations by defender id (first match wins).
+  const overrides = new Map<string, DefenderAction>();
+  if (spec.defenderAssignments) {
+    for (const da of spec.defenderAssignments) {
+      const exists = catalogPlayers.some((p) => p.id === da.defender);
+      if (!exists) {
+        warnings.push({
+          code: "defender_assignment_player_missing",
+          message: `defenderAssignment for "${da.defender}" but no such defender in ${alignment.front}/${alignment.coverage}. Pick one of: ${catalogPlayers.map((p) => p.id).join(", ")}.`,
+        });
+        continue;
+      }
+      // Don't overwrite if a previous override won — the spec listed the
+      // same defender twice. First one wins is consistent with the way
+      // PlayerAssignment de-dup works downstream.
+      if (!overrides.has(da.defender)) overrides.set(da.defender, da.action);
+    }
+  }
+
+  const players: CoachDiagramPlayer[] = [];
+  const movement: Array<{ defender: CoachDiagramPlayer; action: DefenderAction }> = [];
+  const usedZoneIds = new Set<string>();
+
+  for (const cp of catalogPlayers) {
+    const player: CoachDiagramPlayer = {
+      id: cp.id,
+      role: cp.id,
+      x: cp.x,
+      y: cp.y,
+      team: "D",
+    };
+    players.push(player);
+
+    // Resolve the action: spec override → bridge to DefenderAction; else
+    // promote the catalog assignment to the spec-shape DefenderAction.
+    const override = overrides.get(cp.id);
+    const action: DefenderAction = override ?? defenderActionFromCatalog(cp.assignment);
+
+    // Zone drop: collect the referenced zone for emission below.
+    if (action.kind === "zone_drop") {
+      const zoneId = action.zoneId ?? (cp.assignment.kind === "zone" ? cp.assignment.zoneId : undefined);
+      if (zoneId) usedZoneIds.add(zoneId);
+    }
+
+    // All other kinds emit movement (man-match line, blitz arrow,
+    // custom path, read-and-react). zone_drop has no per-defender
+    // movement — the zone shape is the visual.
+    if (action.kind !== "zone_drop") {
+      movement.push({ defender: player, action });
+    }
+  }
+
+  // Build zones: every catalog zone whose id is referenced gets drawn.
+  // For pure-man looks (no zone_drops), zones is empty — the renderer
+  // intentionally suppresses the labels rather than half-showing them.
+  const allZones = zonesForStrength(alignment, strength);
+  const zones: CoachDiagramZone[] = [];
+  for (const z of allZones) {
+    if (z.id && usedZoneIds.has(z.id)) {
+      zones.push({
+        kind: z.kind,
+        center: [z.center[0], z.center[1]],
+        size: [z.size[0], z.size[1]],
+        label: z.label,
+      });
+    }
+  }
+
+  // Validate spec-side zone_drop overrides reference real zones.
+  for (const [, action] of overrides) {
+    if (action.kind !== "zone_drop") continue;
+    if (!action.zoneId) continue;
+    const exists = allZones.some((z) => z.id === action.zoneId);
+    if (!exists) {
+      warnings.push({
+        code: "defender_zone_unknown",
+        message: `defenderAssignment.zone_drop references zoneId "${action.zoneId}" but ${alignment.front}/${alignment.coverage} has no such zone. Available: ${allZones.map((z) => z.id).filter(Boolean).join(", ")}.`,
+      });
+    }
+  }
+
+  return { players, zones, movement };
+}
+
+/** Bridge: catalog DefenderAssignmentSpec → spec DefenderAction. */
+function defenderActionFromCatalog(c: DefenderAssignmentSpec): DefenderAction {
+  switch (c.kind) {
+    case "zone": return { kind: "zone_drop", zoneId: c.zoneId };
+    case "man":  return { kind: "man_match", target: c.target };
+    case "blitz": return { kind: "blitz", gap: c.gap };
+    case "spy":  return { kind: "spy", target: c.target };
+  }
+}
+
+/**
+ * Project a DefenderAction into a CoachDiagramRoute, anchored at the
+ * defender's position. Returns null when the action shouldn't render
+ * a movement line (zone_drop is handled by zone shapes, not paths).
+ *
+ * Geometry conventions:
+ *   - man_match: short arrow from defender to target receiver. Capped
+ *     so the arrow is readable rather than spanning the field; the
+ *     animation engine pulls the defender on the snap.
+ *   - blitz: arrow from defender position toward (gap_x, 0) — i.e.
+ *     toward the LOS through the named rush lane.
+ *   - spy: small loop near the defender (drawn as a tiny arc).
+ *   - custom_path: waypoints passed through verbatim.
+ *   - read_and_react: rendered as a dashed conditional arrow with a
+ *     short startDelaySec to communicate "reactive". Phase D7 will
+ *     teach the animation engine to gate on the trigger.
+ */
+function routeFromDefenderAction(
+  action: DefenderAction,
+  defender: CoachDiagramPlayer,
+  offense: CoachDiagramPlayer[],
+  warnings: RenderWarning[],
+): CoachDiagramRoute | null {
+  switch (action.kind) {
+    case "zone_drop":
+      return null; // visual handled by zone shape
+    case "man_match": {
+      const target = action.target ? offense.find((p) => p.id === action.target) : null;
+      if (!target) {
+        if (action.target) {
+          warnings.push({
+            code: "defender_man_target_missing",
+            message: `Defender ${defender.id} matched on "${action.target}" but no such offensive player in the diagram. Add the receiver to the formation or change the target.`,
+          });
+        }
+        return null;
+      }
+      // End the arrow ~1 yard short of the target so the head lands on
+      // them rather than crossing through. Kept simple — a single
+      // segment from defender → target.
+      const dx = target.x - defender.x;
+      const dy = target.y - defender.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.5) return null;
+      const ratio = Math.max(0, (len - 1) / len);
+      const endX = defender.x + dx * ratio;
+      const endY = defender.y + dy * ratio;
+      return {
+        from: defender.id,
+        path: [[round(endX), round(endY)]],
+        tip: "arrow",
+        startDelaySec: 0.2,
+      };
+    }
+    case "blitz": {
+      // Aim toward the LOS through the named gap. Simple model: A is
+      // x≈±1.5, B≈±3.5, C≈±6, D≈±9, edge≈±10 (sign matches defender's
+      // side of the field). End at y=0 (LOS).
+      const gapWidth: Record<NonNullable<typeof action.gap>, number> = {
+        A: 1.5, B: 3.5, C: 6, D: 9, edge: 10.5,
+      };
+      const gx = gapWidth[action.gap ?? "A"];
+      const xSign = defender.x === 0 ? 1 : (defender.x > 0 ? 1 : -1);
+      return {
+        from: defender.id,
+        path: [[round(xSign * gx), 0]],
+        tip: "arrow",
+        startDelaySec: 0,
+      };
+    }
+    case "spy": {
+      // Small "stay-here" loop — defender holds position. We render
+      // this as a near-zero-length path so the engine has something to
+      // attach the spy marker to without producing a long arrow.
+      return {
+        from: defender.id,
+        path: [[round(defender.x + 0.5), round(defender.y - 0.5)]],
+        tip: "none",
+        startDelaySec: 0,
+      };
+    }
+    case "custom_path": {
+      if (!action.waypoints || action.waypoints.length === 0) return null;
+      return {
+        from: defender.id,
+        path: action.waypoints,
+        ...(action.curve ? { curve: true } : {}),
+        tip: "arrow",
+      };
+    }
+    case "read_and_react": {
+      // Phase D7 wires the trigger into the animation engine. For now,
+      // the renderer emits a dashed-style hook by tagging a small
+      // initial delay; downstream readers can detect read_and_react via
+      // the route_kind suffix we attach below.
+      const trigger = action.trigger.player;
+      const target = offense.find((p) => p.id === trigger);
+      if (!target) {
+        // Without a target the conditional arrow has no anchor. Skip
+        // silently — Phase D7's validator will catch this; emitting a
+        // warning here would double-report.
+        return null;
+      }
+      return {
+        from: defender.id,
+        path: [[round((defender.x + target.x) / 2), round((defender.y + target.y) / 2)]],
+        tip: "arrow",
+        startDelaySec: 0.6,
+        route_kind: `react_${action.behavior}`,
+      };
+    }
+  }
 }
 
 function routeFromAction(
