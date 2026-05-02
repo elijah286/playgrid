@@ -18,88 +18,38 @@ import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 
-// ── ViewBox computation (matches PlayThumbnail auto-zoom logic) ──────────────
+// ── Field-aspect computation (matches PlayEditorClient + GameFieldView) ──────
+//
+// The chat embed used to compute an auto-zoomed viewBox to fit content with
+// a 16:10 target ratio, which produced visible distortion when player
+// positions weren't symmetric (the "stretched" look a coach surfaced
+// 2026-05-01). The editor renders the FULL field at the variant's natural
+// aspect ratio — we now do the same in chat so coaches see identical
+// proportions across both surfaces.
+//
+// VIEWPORT_LENGTH_YDS = 25 is the standard-display window length all four
+// renderers share (editor PlayEditorClient.tsx, GameFieldView, chat,
+// FormationEditor). The 0.75 multiplier matches the editor — it scales
+// the visible 25-yd window down so the field is wider than tall by default.
 
-type ViewBox = { x: number; y: number; w: number; h: number };
+const VIEWPORT_LENGTH_YDS = 25;
 
-function computeViewBox(doc: PlayDocument): ViewBox {
-  const R = 0.032;
-  const PAD = R * 1.4;
-  let minX = Infinity, maxX = -Infinity;
-  let minSvgY = Infinity, maxSvgY = -Infinity;
-
-  // Track every coordinate through Number.isFinite so a single bad value
-  // (model emitted NaN / undefined / a string) can't poison the bounds and
-  // collapse the viewBox to NaN downstream — which the browser silently
-  // rejects, falling back to pixel space and letting the chat panel's
-  // accent color bleed through the SVG (manifests as an "orange field").
-  const seeX = (v: number) => {
-    if (!Number.isFinite(v)) return;
-    if (v < minX) minX = v;
-    if (v > maxX) maxX = v;
-  };
-  const seeSvgY = (v: number) => {
-    if (!Number.isFinite(v)) return;
-    if (v < minSvgY) minSvgY = v;
-    if (v > maxSvgY) maxSvgY = v;
-  };
-
-  for (const p of doc.layers.players) {
-    seeX(p.position.x);
-    seeSvgY(1 - p.position.y);
+/** Width-to-height ratio of the full field for a given variant. Matches
+ *  PlayEditorClient.tsx's `naturalAspect` calculation verbatim. */
+function fieldAspectFor(doc: PlayDocument): number {
+  const widthYds = doc.sportProfile?.fieldWidthYds;
+  if (typeof widthYds !== "number" || !Number.isFinite(widthYds) || widthYds <= 0) {
+    // Defensive: should never happen post-schema-validation, but if it
+    // somehow does, fall back to 16:10 so we render *something* sane.
+    return 16 / 10;
   }
-  for (const r of doc.layers.routes) {
-    for (const n of r.nodes) {
-      seeX(n.position.x);
-      seeSvgY(1 - n.position.y);
-    }
-  }
-  for (const z of doc.layers.zones ?? []) {
-    seeX(z.center.x - z.size.w);
-    seeX(z.center.x + z.size.w);
-    seeSvgY(1 - (z.center.y + z.size.h));
-    seeSvgY(1 - (z.center.y - z.size.h));
-  }
-  if (!isFinite(minSvgY) || !isFinite(minX)) {
-    minX = 0; maxX = 1; minSvgY = 0.22; maxSvgY = 0.78;
-  }
-
-  const losY = 1 - (doc.lineOfScrimmageY ?? 0.4);
-  const tenY = 1 - ((doc.lineOfScrimmageY ?? 0.4) + 0.4);
-  minSvgY = Math.min(minSvgY, tenY);
-  maxSvgY = Math.max(maxSvgY, losY);
-
-  let vbX = Math.max(0, minX - PAD);
-  let vbW = Math.min(1, maxX + PAD) - vbX;
-  let vbY = Math.max(0, minSvgY - PAD);
-  let vbH = Math.min(1, maxSvgY + PAD) - vbY;
-
-  const TARGET = 16 / 10;
-  const cur = vbW / vbH;
-  if (cur < TARGET) {
-    const needed = vbH * TARGET;
-    vbX = Math.max(0, vbX - (needed - vbW) / 2);
-    vbW = Math.min(1 - vbX, needed);
-  } else if (cur > TARGET) {
-    const needed = vbW / TARGET;
-    vbY = Math.max(0, vbY - (needed - vbH) / 2);
-    vbH = Math.min(1 - vbY, needed);
-  }
-  // Last-line-of-defense: any non-finite value in the viewBox makes the
-  // browser ignore it entirely (we end up rendering in raw pixel space).
-  // Fall back to the full unit field rather than letting that happen.
-  if (!Number.isFinite(vbX) || !Number.isFinite(vbY) ||
-      !Number.isFinite(vbW) || !Number.isFinite(vbH) ||
-      vbW <= 0 || vbH <= 0) {
-    return { x: 0, y: 0, w: 1, h: 1 };
-  }
-  return { x: vbX, y: vbY, w: vbW, h: vbH };
+  return widthYds / (VIEWPORT_LENGTH_YDS * 0.75);
 }
 
 // ── Player token shape ───────────────────────────────────────────────────────
 
-function PlayerToken({ player, cx, cy, r, sxCorr }: {
-  player: Player; cx: number; cy: number; r: number; sxCorr: number;
+function PlayerToken({ player, cx, cy, r }: {
+  player: Player; cx: number; cy: number; r: number;
 }) {
   const fill   = player.style.fill;
   const stroke = player.style.stroke;
@@ -129,8 +79,13 @@ function PlayerToken({ player, cx, cy, r, sxCorr }: {
     shapeEl = <circle cx={0} cy={0} r={r} {...common} />;
   }
 
+  // Pure translate — no scale correction. The SVG viewBox now uses the
+  // field's natural aspect ratio (matching the editor), so a circle in
+  // viewBox space renders as a real circle in CSS pixels. The previous
+  // sxCorr existed to compensate for an auto-zoomed viewBox forced into
+  // 16:10 — that distortion is gone.
   return (
-    <g transform={`translate(${cx} ${cy}) scale(${sxCorr} 1)`}>
+    <g transform={`translate(${cx} ${cy})`}>
       {shapeEl}
       <text x={0} y={labelY} textAnchor="middle" dominantBaseline="central"
         fontSize={labelFont} fontWeight={700} fill={player.style.labelColor}
@@ -147,7 +102,12 @@ function PlayerToken({ player, cx, cy, r, sxCorr }: {
 
 // ── Route end decoration (arrow / T) ─────────────────────────────────────────
 
-function RouteDecorations({ doc, stroke, R: _R }: { doc: PlayDocument; stroke: string; R: number }) {
+function RouteDecorations({ doc, fieldAspect }: {
+  doc: PlayDocument; fieldAspect: number;
+}) {
+  // All x coordinates are scaled by fieldAspect to match the new viewBox
+  // (matches editor's `fx` transform). Y is unchanged (still in [0, 1]).
+  const fx = (x: number) => x * fieldAspect;
   return (
     <>
       {doc.layers.routes.map((r) => {
@@ -162,9 +122,9 @@ function RouteDecorations({ doc, stroke, R: _R }: { doc: PlayDocument; stroke: s
           if (!fromNode || !toNode) return null;
           const dirFromX = seg.shape === "curve" && seg.controlOffset ? seg.controlOffset.x : fromNode.position.x;
           const dirFromY = seg.shape === "curve" && seg.controlOffset ? seg.controlOffset.y : fromNode.position.y;
-          const tipX = toNode.position.x;
+          const tipX = fx(toNode.position.x);
           const tipY = 1 - toNode.position.y;
-          const fromX = dirFromX, fromY = 1 - dirFromY;
+          const fromX = fx(dirFromX), fromY = 1 - dirFromY;
           const dx = tipX - fromX, dy = tipY - fromY;
           const len = Math.hypot(dx, dy);
           if (len < 1e-4) return null;
@@ -207,11 +167,13 @@ function DiagramCanvas({ doc, animPositions }: {
   doc: PlayDocument;
   animPositions: Map<string, Point2> | null;
 }) {
-  const vb     = useMemo(() => computeViewBox(doc), [doc]);
-  const aspect = vb.w / vb.h;
-  const TARGET = 16 / 10;
-  const sxCorr = aspect / TARGET;
-  const R      = 0.032;
+  // Full-field aspect ratio matching the editor + game-mode renderers.
+  // Replaces the previous auto-zoom-to-content viewBox that distorted
+  // proportions and produced the "stretched" look a coach surfaced
+  // 2026-05-01.
+  const fieldAspect = useMemo(() => fieldAspectFor(doc), [doc]);
+  const fx = (x: number) => x * fieldAspect; // mirrors EditorCanvas's fx
+  const R  = 0.032;
 
   // Field-chrome rendering — must mirror EditorCanvas so a coach sees the same
   // field treatment in chat as they do in the editor. The full chrome (yard
@@ -250,7 +212,7 @@ function DiagramCanvas({ doc, animPositions }: {
     const svgY = 1 - y;
     if (yd !== losYd) {
       yardLines.push(
-        <line key={`h${yd}`} x1={0} y1={svgY} x2={1} y2={svgY}
+        <line key={`h${yd}`} x1={0} y1={svgY} x2={fieldAspect} y2={svgY}
           stroke={theme.lineColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />,
       );
     }
@@ -258,11 +220,11 @@ function DiagramCanvas({ doc, animPositions }: {
     if (label && showYardNumbers) {
       const numY = svgY + 0.018;
       yardNumbers.push(
-        <text key={`nL${yd}`} x={0.27} y={numY} fontSize={0.04} fontWeight={700}
+        <text key={`nL${yd}`} x={fx(0.27)} y={numY} fontSize={0.04} fontWeight={700}
           fill={theme.numberColor} textAnchor="middle" pointerEvents="none">
           {label}
         </text>,
-        <text key={`nR${yd}`} x={0.73} y={numY} fontSize={0.04} fontWeight={700}
+        <text key={`nR${yd}`} x={fx(0.73)} y={numY} fontSize={0.04} fontWeight={700}
           fill={theme.numberColor} textAnchor="middle" pointerEvents="none">
           {label}
         </text>,
@@ -273,15 +235,17 @@ function DiagramCanvas({ doc, animPositions }: {
   if (showHash) {
     const TICK_HALF = 0.010;
     const N_TICKS = 20;
+    const hashLeftX  = fx(hashLeftFrac);
+    const hashRightX = fx(hashRightFrac);
     for (let i = 1; i < N_TICKS; i++) {
       const y = i / N_TICKS;
       hashMarks.push(
-        <line key={`hml${i}`} x1={hashLeftFrac} y1={y - TICK_HALF}
-          x2={hashLeftFrac} y2={y + TICK_HALF}
+        <line key={`hml${i}`} x1={hashLeftX} y1={y - TICK_HALF}
+          x2={hashLeftX} y2={y + TICK_HALF}
           stroke={theme.hashColor} strokeWidth={2.25} strokeLinecap="round"
           vectorEffect="non-scaling-stroke" />,
-        <line key={`hmr${i}`} x1={hashRightFrac} y1={y - TICK_HALF}
-          x2={hashRightFrac} y2={y + TICK_HALF}
+        <line key={`hmr${i}`} x1={hashRightX} y1={y - TICK_HALF}
+          x2={hashRightX} y2={y + TICK_HALF}
           stroke={theme.hashColor} strokeWidth={2.25} strokeLinecap="round"
           vectorEffect="non-scaling-stroke" />,
       );
@@ -291,11 +255,17 @@ function DiagramCanvas({ doc, animPositions }: {
   const animatingIds = new Set(animPositions?.keys() ?? []);
 
   return (
-    <div className="aspect-[16/10] w-full max-w-[640px] overflow-hidden rounded-xl border border-border">
+    <div
+      className="w-full max-w-[640px] overflow-hidden rounded-xl border border-border"
+      // Dynamic aspect ratio matching the field's natural proportions.
+      // tackle_11 → ~2.83:1, flag_7v7 → 1.6:1, flag_5v5 → 1.33:1.
+      // Preserves the editor's framing (no auto-zoom distortion).
+      style={{ aspectRatio: String(fieldAspect) }}
+    >
       <svg
-        viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+        viewBox={`0 0 ${fieldAspect} 1`}
         width="100%" height="100%"
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
         // Explicit color="black" so any SVG element that ever falls back
         // to currentColor (e.g. an unresolved fill="url(#…)") paints black
         // — never the parent's text color, which on the Coach Cal panel
@@ -309,25 +279,22 @@ function DiagramCanvas({ doc, animPositions }: {
             surfaced as an orange field. Solid fill removes the failure
             mode entirely; visually it's nearly identical to the gradient
             on a 16:10 viewport. */}
-        <rect x={0} y={0} width={1} height={1} fill={theme.bgMain} />
+        <rect x={0} y={0} width={fieldAspect} height={1} fill={theme.bgMain} />
         {yardLines}
         {yardNumbers}
         {hashMarks}
         {/* Line of scrimmage — drawn on top of yard lines, dashed. */}
-        <line x1={0} x2={1} y1={losSvgY} y2={losSvgY}
+        <line x1={0} x2={fieldAspect} y1={losSvgY} y2={losSvgY}
           stroke={theme.losColor} strokeWidth={2} strokeDasharray="6 4"
           vectorEffect="non-scaling-stroke" />
 
         {/* Zones (drawn under routes/players so markers stay legible) */}
         {(doc.layers.zones ?? []).map((z) => {
-          const cx = z.center.x;
+          const cx = fx(z.center.x);
           const cy = 1 - z.center.y;
-          const w = z.size.w * 2;
+          const w = z.size.w * fieldAspect * 2; // zone width is in normalized field units, scale x
           const h = z.size.h * 2;
           const labelY = cy - z.size.h + 0.028;
-          // Hardcode fill="none" — coverage diagrams stack 6+ overlapping
-          // zones, so any fill (even translucent) compounds into a dark
-          // blob over the field. Outline-only is the only safe choice.
           const common = {
             fill: "none" as const,
             stroke: z.style.stroke,
@@ -338,9 +305,9 @@ function DiagramCanvas({ doc, animPositions }: {
           return (
             <g key={z.id}>
               {z.kind === "ellipse" ? (
-                <ellipse cx={cx} cy={cy} rx={z.size.w} ry={z.size.h} {...common} />
+                <ellipse cx={cx} cy={cy} rx={z.size.w * fieldAspect} ry={z.size.h} {...common} />
               ) : (
-                <rect x={cx - z.size.w} y={cy - z.size.h} width={w} height={h} rx={0.012} ry={0.012} {...common} />
+                <rect x={cx - z.size.w * fieldAspect} y={cy - z.size.h} width={w} height={h} rx={0.012} ry={0.012} {...common} />
               )}
               {z.label && (
                 <text
@@ -364,32 +331,38 @@ function DiagramCanvas({ doc, animPositions }: {
           );
         })}
 
-        {/* Routes (always static) */}
-        {doc.layers.routes.map((r) => {
-          const segs = routeToRenderedSegments(r);
-          const stroke = resolveRouteStroke(r, doc.layers.players);
-          return (
-            <g key={r.id}>
-              {segs.map((rs) => (
-                <path key={rs.segmentId} d={rs.d} fill="none" stroke={stroke}
-                  strokeWidth={1.8} strokeDasharray={rs.dash}
-                  strokeLinejoin="round" strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke" />
-              ))}
-            </g>
-          );
-        })}
+        {/* Routes (always static). Path d="" strings are emitted in
+            normalized 0..1 coords by routeToRenderedSegments — wrap in a
+            scale transform so x maps to viewBox-aspect space. y is left
+            alone (still 0..1). Strokes use vector-effect=non-scaling so
+            they render at constant pixel width regardless of the scale. */}
+        <g transform={`scale(${fieldAspect} 1)`}>
+          {doc.layers.routes.map((r) => {
+            const segs = routeToRenderedSegments(r);
+            const stroke = resolveRouteStroke(r, doc.layers.players);
+            return (
+              <g key={r.id}>
+                {segs.map((rs) => (
+                  <path key={rs.segmentId} d={rs.d} fill="none" stroke={stroke}
+                    strokeWidth={1.8} strokeDasharray={rs.dash}
+                    strokeLinejoin="round" strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke" />
+                ))}
+              </g>
+            );
+          })}
+        </g>
 
-        {/* Route decorations */}
-        <RouteDecorations doc={doc} stroke="" R={R} />
+        {/* Route decorations (computed in viewBox-aspect space directly) */}
+        <RouteDecorations doc={doc} fieldAspect={fieldAspect} />
 
         {/* Static players (hidden during animation if they have a route) */}
         {doc.layers.players.map((p) => {
           if (animPositions && animatingIds.has(p.id)) return null;
           return (
             <PlayerToken key={p.id} player={p}
-              cx={p.position.x} cy={1 - p.position.y}
-              r={R} sxCorr={sxCorr} />
+              cx={fx(p.position.x)} cy={1 - p.position.y}
+              r={R} />
           );
         })}
 
@@ -399,8 +372,8 @@ function DiagramCanvas({ doc, animPositions }: {
           if (!pos) return null;
           return (
             <PlayerToken key={`anim-${p.id}`} player={p}
-              cx={pos.x} cy={1 - pos.y}
-              r={R} sxCorr={sxCorr} />
+              cx={fx(pos.x)} cy={1 - pos.y}
+              r={R} />
           );
         })}
       </svg>
