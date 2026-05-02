@@ -608,6 +608,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-02",
   },
+  {
+    id: "coach-ai-show-more-details",
+    name: "Inline \"Show more\" on long Cal replies",
+    description:
+      "Long answers used to bury everything under a binary \"Show details\" disclosure. Now Cal shows a peek of the deeper breakdown right under the TL;DR with a soft fade and a subtle \"Show more\" link — coaches can scan the depth without committing to a full reveal.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-02",
+  },
 
   // ── Game mode ──────────────────────────────────────────────────
   {
