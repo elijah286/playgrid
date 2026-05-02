@@ -16,7 +16,7 @@ import {
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
-import { fieldAspectFor } from "@/domain/play/render-config";
+import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 
 // ── Player token shape ───────────────────────────────────────────────────────
@@ -136,15 +136,26 @@ function RouteDecorations({ doc, fieldAspect }: {
 
 // ── Main canvas ──────────────────────────────────────────────────────────────
 
-function DiagramCanvas({ doc, animPositions }: {
+function DiagramCanvas({ doc, animPositions, fullFieldWidth }: {
   doc: PlayDocument;
   animPositions: Map<string, Point2> | null;
+  fullFieldWidth: boolean;
 }) {
   // Full-field aspect ratio matching the editor + game-mode renderers.
   // Replaces the previous auto-zoom-to-content viewBox that distorted
   // proportions and produced the "stretched" look a coach surfaced
   // 2026-05-01.
-  const fieldAspect = useMemo(() => fieldAspectFor(doc), [doc]);
+  //
+  // Clamping mirrors PlayEditorClient's "full field width" toggle: when
+  // OFF (default), wide variants like tackle_11 cap at NARROW_FIELD_ASPECT
+  // (≈ flag_7v7's 1.6:1) so the chat panel doesn't render a 2.83:1 strip
+  // that compresses the OL row. When ON, the field renders at its
+  // natural variant aspect (sideline-to-sideline). User-controlled via
+  // the Controls checkbox below.
+  const fieldAspect = useMemo(() => {
+    const natural = fieldAspectFor(doc);
+    return fullFieldWidth ? natural : Math.min(natural, NARROW_FIELD_ASPECT);
+  }, [doc, fullFieldWidth]);
   const fx = (x: number) => x * fieldAspect; // mirrors EditorCanvas's fx
   const R  = 0.032;
 
@@ -356,7 +367,11 @@ function DiagramCanvas({ doc, animPositions }: {
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 
-function Controls({ anim }: { anim: ReturnType<typeof usePlayAnimation> }) {
+function Controls({ anim, fullFieldWidth, onToggleFullFieldWidth }: {
+  anim: ReturnType<typeof usePlayAnimation>;
+  fullFieldWidth: boolean;
+  onToggleFullFieldWidth: (next: boolean) => void;
+}) {
   const isPlaying = anim.phase === "motion" || anim.phase === "play";
   const isDone    = anim.phase === "done";
 
@@ -381,7 +396,22 @@ function Controls({ anim }: { anim: ReturnType<typeof usePlayAnimation> }) {
           <RotateCcw className="size-3" />
         </button>
       )}
-      <div className="ml-auto flex items-center gap-1 text-[11px] text-muted">
+      {/* Full-field-width toggle. Mirrors the editor's same checkbox so a
+          coach can scan the play with the OL row at usable size (default,
+          off → ≈ 1.6:1) or expand to true sideline-to-sideline (on →
+          variant's natural aspect, e.g. ~2.83:1 for tackle_11). State is
+          per-message — each chat diagram has its own toggle. */}
+      <label className="ml-auto mr-2 flex cursor-pointer select-none items-center gap-1 text-[11px] text-muted hover:text-foreground">
+        <input
+          type="checkbox"
+          checked={fullFieldWidth}
+          onChange={(e) => onToggleFullFieldWidth(e.target.checked)}
+          className="size-3 cursor-pointer"
+          aria-label="Show full field width"
+        />
+        <span>Full field width</span>
+      </label>
+      <div className="flex items-center gap-1 text-[11px] text-muted">
         <span>Speed:</span>
         {[0.5, 1, 2].map((s) => (
           <button
@@ -511,6 +541,12 @@ function PlayDocRender({ doc }: { doc: PlayDocument }) {
   const anim = usePlayAnimation(doc);
   const hasRoutes = doc.layers.routes.length > 0;
   const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;
+  // Per-message field-width toggle. Defaults OFF — matches the editor's
+  // default of clamping wide variants (tackle_11, six-man) to roughly
+  // the 7v7 aspect so the chat panel stays at a usable size on a
+  // typical screen. Coach can opt in to the full sideline-to-sideline
+  // view via the checkbox in Controls.
+  const [fullFieldWidth, setFullFieldWidth] = useState<boolean>(false);
   return (
     <div className="my-3 space-y-1">
       {doc.metadata.formation && (
@@ -518,8 +554,14 @@ function PlayDocRender({ doc }: { doc: PlayDocument }) {
           {doc.metadata.formation}
         </p>
       )}
-      <DiagramCanvas doc={doc} animPositions={animPositions} />
-      {hasRoutes && <Controls anim={anim} />}
+      <DiagramCanvas doc={doc} animPositions={animPositions} fullFieldWidth={fullFieldWidth} />
+      {hasRoutes && (
+        <Controls
+          anim={anim}
+          fullFieldWidth={fullFieldWidth}
+          onToggleFullFieldWidth={setFullFieldWidth}
+        />
+      )}
     </div>
   );
 }
