@@ -442,9 +442,9 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     // 5v5 ~11yd. All cross the formation meaningfully.
     points: [
       { x: 0, y: 0 },
-      { x: -0.05, y: 0.06 },
-      { x: -0.20, y: 0.06 },
-      { x: -0.45, y: 0.06 },
+      { x: -0.05, y: 0.12 },
+      { x: -0.20, y: 0.12 },
+      { x: -0.45, y: 0.12 },
     ],
     shapes: ["straight", "curve", "curve"],
     // breakStyle: "none" — semantically the drag has no hard break;
@@ -452,12 +452,21 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     // controls VISUAL rendering (Bezier arc, not a rigid line); the
     // breakStyle is the semantic label that describes the route's
     // structure to coaches.
+    //
+    // 2026-05-02: bumped template default from 1.5yd → 3yd and widened
+    // catalog range from [1, 4] → [1, 6]. Coach feedback: 1.5yd Mesh
+    // drags rendered cramped right at the LOS — the canonical
+    // Throw Deep / Hudl playbook art shows mesh routes crossing at
+    // 4-6yd depth where the cross is visually separated from the
+    // line. Canonical drag depth in coaching context is closer to
+    // 3-5yd than 1-2yd. depthYds scaling makes this work for both
+    // shallow and deeper variants without re-authoring the template.
     breakStyle: "none",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 1, max: 4 }, side: "toward_qb" },
+    constraints: { depthRangeYds: { min: 1, max: 6 }, side: "toward_qb" },
     kbSubtopic: "route_drag",
     description:
-      "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 1.5-2 yds depth. The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation, not an angled one. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
+      "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 3-5 yds depth (canonical default ~3yd; can deepen to 5-6yd via depthYds for the OVER drag in a Mesh). The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation that VISIBLY clears the OL row, not crammed against the LOS. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
   },
   {
     name: "Seam",

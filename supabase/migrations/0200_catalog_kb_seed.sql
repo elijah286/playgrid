@@ -46,8 +46,8 @@ Depth: 10-16 yards from the LOS.
 Direction: breaks inside, toward the QB / middle of the field.
 Break shape: sharp.
 Also called: Square-In.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Dig).', true, false),
-  ('global', null, 'scheme', 'route_drag', 'Route: Drag', 'Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 1.5-2 yds depth. The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation, not an angled one. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense''s other routes generate underneath.
-Depth: 1-4 yards from the LOS.
+  ('global', null, 'scheme', 'route_drag', 'Route: Drag', 'Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 3-5 yds depth (canonical default ~3yd; can deepen to 5-6yd via depthYds for the OVER drag in a Mesh). The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation that VISIBLY clears the OL row, not crammed against the LOS. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense''s other routes generate underneath.
+Depth: 1-6 yards from the LOS.
 Direction: breaks inside, toward the QB / middle of the field.
 Break shape: none.
 Also called: Shallow, Shallow Cross.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Drag).', true, false),

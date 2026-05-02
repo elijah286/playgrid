@@ -153,14 +153,15 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("Mesh: two DIFFERENTIATED drags pass (one under at 2yd, one over at 4yd)", () => {
-    // Slot ranges are [1, 2.5] (under) and [3.5, 5] (over) so the two
-    // drags must be at different depths. Depths 2 and 4 hit one slot
-    // each.
+  it("Mesh: two DIFFERENTIATED drags pass (one under at 3yd, one over at 5yd)", () => {
+    // Slot ranges are [2, 3.5] (under) and [4.5, 6] (over) so the two
+    // drags must be at different MEANINGFUL depths (not crammed at the
+    // LOS where the cross is invisible). Depths 3 and 5 hit one slot
+    // each and produce a visible cross above the OL row.
     const result = assertConcept(
       buildSpec([
-        { player: "X", action: { kind: "route", family: "Drag", depthYds: 2 } },
-        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 4 } },
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 3 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 5 } },
       ]),
       "Mesh",
     );
@@ -172,8 +173,23 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     // depth render as a collision, not a mesh. Force differentiation.
     const result = assertConcept(
       buildSpec([
-        { player: "X", action: { kind: "route", family: "Drag", depthYds: 3 } },
-        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 3 } },
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 4 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 4 } },
+      ]),
+      "Mesh",
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("Mesh: REJECTS two drags both crammed at LOS (1yd, 2yd) — invisible cross", () => {
+    // 2026-05-02: tightened slot floors to [2, 3.5] and [4.5, 6] so
+    // shallow drags that overlap with the OL row are rejected. A 1yd
+    // drag fits no slot; a 2yd drag fits the under slot but a 1yd drag
+    // doesn't satisfy any slot.
+    const result = assertConcept(
+      buildSpec([
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 1 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 2 } },
       ]),
       "Mesh",
     );

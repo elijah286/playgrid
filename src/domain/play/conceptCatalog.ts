@@ -163,16 +163,17 @@ const MESH: ConceptEntry = {
   name: "Mesh",
   aliases: ["Mesh Concept"],
   description:
-    "Two crossing drags that 'mesh' past each other at HIGH/LOW depths — one drag UNDER (1-2 yds) and one OVER (3-5 yds). The depth differentiation is what makes them mesh: same depth means a collision, different depths means a clean cross. Cal MUST set depthYds explicitly on each drag (e.g. 2 and 4) — without that, the matcher rejects because the two slots have non-overlapping depth ranges. Natural pick / rub action vs man, finds soft spots in zone.",
+    "Two crossing drags that 'mesh' past each other at differentiated depths — one UNDER (3 yds) and one OVER (5-6 yds). The depth differentiation + meaningful absolute depth is what makes them mesh visibly: same depth = collision; both crammed at the LOS = invisible cross. Cal MUST set depthYds explicitly on each drag (e.g. 3 and 5) so the over-drag passes ABOVE the under-drag with visible separation from the OL row. Natural pick / rub action vs man, finds soft spots in zone.",
   required: [
     // Differentiated slots — non-overlapping depth ranges force the
-    // two drags to be at different depths. A 2yd drag fits the under
-    // slot (1-2.5) but NOT the over slot (3.5-5); a 4yd drag fits the
-    // over slot but NOT the under slot. This is the catalog enforcing
-    // canonical Mesh geometry rather than letting Cal stack two drags
-    // at the same depth (which renders as a collision, not a mesh).
-    { role: "any", family: "Drag", depthRangeYds: { min: 1, max: 2.5 } }, // under-drag
-    { role: "any", family: "Drag", depthRangeYds: { min: 3.5, max: 5 } }, // over-drag
+    // two drags to be at different depths AND at meaningful depth (not
+    // crammed at the LOS). 2026-05-02: bumped from [1,2.5]+[3.5,5] to
+    // [2,3.5]+[4.5,6] after coach surfaced that the prior shallow
+    // mesh rendered cramped against the OL row. Canonical Throw Deep
+    // / Hudl Mesh routes cross at 4-6yd depth — visibly separated
+    // from the line — not at 2yd where they overlap with the OL.
+    { role: "any", family: "Drag", depthRangeYds: { min: 2,   max: 3.5 } }, // under-drag (~3yd)
+    { role: "any", family: "Drag", depthRangeYds: { min: 4.5, max: 6   } }, // over-drag (~5-6yd)
   ],
 };
 
