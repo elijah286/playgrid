@@ -354,11 +354,15 @@ function placeReceivers(
   // adjacent receivers don't visually overlap (~7 yards for tackle, less
   // for flag).
   const insideStepLeft = variant === "tackle_11" ? 7 : variant === "flag_7v7" ? 5 : 4;
+  // Note: TE on right (rec.te === 1 with rec.te placement above) doesn't
+  // affect left-side slot clamping. Left slots need only clear LT.
+  const leftInnerClamp = variant === "tackle_11" ? 7 : 0;
   for (let i = 0; i < rec.left; i++) {
     const x = -(wideX - i * insideStepLeft) + (i > 0 && rec.bunchSide === "left" ? 3 : 0);
     const onLine = i === 0;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("left", i, false), x: clampSlotXAwayFromOL(x, onLine, variant), y });
+    const clamped = onLine ? Math.round(x * 10) / 10 : clampSlotXAwayFromOL(x, onLine, variant, leftInnerClamp);
+    players.push({ id: labelFor("left", i, false), x: clamped, y });
   }
 
   // RIGHT side. If te=1 the TE (Y) goes ON the line just outside RT;
@@ -377,6 +381,12 @@ function placeReceivers(
     players.push({ id: "Y", x: yX, y: 0 });
   }
   const insideStepRight = insideStepLeft;
+  // For tackle_11 with a TE present, slots must clear Y (at x=6) by at
+  // least the resolver's normalized threshold — that means slot
+  // |x| ≥ 9. We bump the inner clamp accordingly so the formula's
+  // original output is overridden when it'd land inside [-9, 9].
+  // Without a TE, slots only need to clear the OL row (|x| ≥ 7).
+  const innerClamp = variant === "tackle_11" && teRight ? 9 : variant === "tackle_11" ? 7 : 0;
   for (let i = 0; i < rec.right; i++) {
     // baseX accounts for the TE-occupied slot at the inside-most
     // position when te=1: WRs step further outward to leave room.
@@ -388,31 +398,92 @@ function placeReceivers(
     // legal (two split-end-style attached/wide receivers).
     const onLine = i === 0;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("right", i, false), x: clampSlotXAwayFromOL(x, onLine, variant), y });
+    const clamped = onLine ? Math.round(x * 10) / 10 : clampSlotXAwayFromOL(x, onLine, variant, innerClamp);
+    players.push({ id: labelFor("right", i, false), x: clamped, y });
+  }
+
+  // Trips spacing repair: when a clamp lifted the inner-most slot
+  // upward, the next-outer slot may now be too close (within the
+  // overlap threshold). Re-space inner slots if they're under 4yd
+  // apart, working from the outermost-on-the-side back toward the
+  // OL. This keeps Trips Right's two slots at e.g. (12, 7) instead
+  // of (11, 7) so the overlap resolver doesn't trigger.
+  if (variant === "tackle_11" && rec.right >= 2) {
+    respaceSlotsForTackle11(players, "right", innerClamp);
+  }
+  if (variant === "tackle_11" && rec.left >= 2) {
+    respaceSlotsForTackle11(players, "left", innerClamp);
   }
 
   return players;
 }
 
 /**
+ * Walk the slots on one side from outside-in and ensure each
+ * consecutive pair is at least MIN_SLOT_SPACING_YDS apart in x. If
+ * the inside-OL clamp pushed a slot outward, the next-outer slot may
+ * now violate spacing; this pushes it further out. Doesn't move the
+ * outermost on-line WR (Z/X anchor the formation width).
+ */
+function respaceSlotsForTackle11(
+  players: SynthOffensePlayer[],
+  side: "left" | "right",
+  innerClamp: number,
+): void {
+  const MIN_SLOT_SPACING = 4; // yds — keeps normalized distance > 0.075
+  const sideSign = side === "right" ? 1 : -1;
+  // Off-the-line slots on this side, sorted innermost-first (smallest |x|).
+  const slots = players
+    .filter((p) => p.y < 0 && Math.sign(p.x) === sideSign)
+    .sort((a, b) => Math.abs(a.x) - Math.abs(b.x));
+  // Walk inside → outside; each next slot must be ≥ MIN_SLOT_SPACING further.
+  let lastX = innerClamp - MIN_SLOT_SPACING; // primer so the first slot's |x| is at least innerClamp
+  for (const slot of slots) {
+    const minAbs = Math.abs(lastX) + MIN_SLOT_SPACING;
+    if (Math.abs(slot.x) < minAbs) {
+      slot.x = sideSign * minAbs;
+    }
+    lastX = slot.x;
+  }
+}
+
+/**
  * Clamp a synthesized slot's x-position so it stays clear of the OL
- * row. For tackle_11, the OL spans x=[-4, +4]; an inner-most slot in
- * Trips (rec.left=3 or rec.right=3) lands at exactly x=±4 from the
- * natural formula `wideX - 2*insideStep = 18 - 14 = 4`, putting the
- * slot directly above/below LT or RT and producing an overlap-resolver
- * failure ("S and H overlap" — surfaced 2026-05-02). Push slots out by
- * 2yd minimum so they sit OUTSIDE the OL row, where the resolver can
- * separate them cleanly. Outermost WRs (onLine=true) are at x=±18 and
- * never need clamping; the OL itself isn't routed through this helper.
+ * row AND of the overlap resolver's normalized-distance threshold.
+ * For tackle_11, the OL spans x=[-4, +4]; an inner-most slot in Trips
+ * lands at exactly x=±4 from the natural formula
+ * `wideX - 2*insideStep = 18 - 14 = 4`. Surfaced 2026-05-02 as
+ * "S and H overlap" failures.
+ *
+ * MIN_OUTSIDE_OL math (TIGHTER THAN "just clear the OL"):
+ *   The overlap resolver compares normalized positions:
+ *     dnx = dx_yds / 53    (tackle_11 field width)
+ *     dny = dy_yds / 25    (field length window)
+ *     overlap if hypot(dnx, dny) < 0.0672 (≈ token diameter × 1.05)
+ *   Slots are at y=-1 (off-the-line); RT/LT at y=0. So dy_yds = 1
+ *   and dny = 0.04. To clear the threshold we need:
+ *     dnx² > 0.0672² - 0.04² = 0.00291  →  dnx > 0.054
+ *     dx_yds > 0.054 × 53 = 2.86 yds
+ *   So the slot must be at least 2.86 yds (call it 3 with rounding)
+ *   from RT/LT in x. RT is at x=4, so slot needs |x| ≥ 7.
+ *
+ * Picking 7 (not 8) as the clamp: 8 would create a different overlap
+ * with the next slot out (H at x=11, S clamped to 8 → 3yd apart →
+ * dnx = 0.057 < 0.0672 → resolver fails again). 7 leaves S at the
+ * correct distance from BOTH RT and H.
  *
  * Flag variants don't have an OL, so no clamping needed.
  */
-function clampSlotXAwayFromOL(x: number, onLine: boolean, variant: SynthOffense["variant"]): number {
+function clampSlotXAwayFromOL(
+  x: number,
+  onLine: boolean,
+  variant: SynthOffense["variant"],
+  innerClamp: number,
+): number {
   const rounded = Math.round(x * 10) / 10;
-  if (variant !== "tackle_11" || onLine) return rounded;
-  const MIN_OUTSIDE_OL = 6; // OL spans [-4, +4]; slots must clear by 2yd
-  if (rounded > 0 && rounded < MIN_OUTSIDE_OL) return MIN_OUTSIDE_OL;
-  if (rounded < 0 && rounded > -MIN_OUTSIDE_OL) return -MIN_OUTSIDE_OL;
+  if (variant !== "tackle_11" || onLine || innerClamp <= 0) return rounded;
+  if (rounded > 0 && rounded < innerClamp) return innerClamp;
+  if (rounded < 0 && rounded > -innerClamp) return -innerClamp;
   return rounded;
 }
 

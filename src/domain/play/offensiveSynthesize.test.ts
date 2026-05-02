@@ -155,9 +155,9 @@ describe("synthesizeOffense — slots clear the OL row in tackle_11 (regression:
   // slot at x=4 — exactly RT's column. Slot at (4, -1) and RT at (4, 0)
   // were 1yd apart vertically and the resolver couldn't separate them
   // when other players were also clustered. Fix: clamp inner slots to
-  // |x| >= 6 so they sit OUTSIDE the OL row (x=[-4, +4]) by 2yd.
+  // |x| >= 7 so they sit OUTSIDE the OL row (x=[-4, +4]) by 2yd.
 
-  it("Trips Right: every slot's |x| >= 6 (clear of the OL row)", () => {
+  it("Trips Right: every slot's |x| >= 7 (clear of the OL row)", () => {
     const synth = synthesizeOffense("tackle_11", "Trips Right");
     expect(synth).not.toBeNull();
     // Inner slots are off-the-line (y < 0). Outermost WRs (y === 0) and
@@ -166,12 +166,12 @@ describe("synthesizeOffense — slots clear the OL row in tackle_11 (regression:
     for (const slot of slots) {
       expect(
         Math.abs(slot.x),
-        `Slot @${slot.id} at x=${slot.x} is too close to the OL (must be |x| >= 6)`,
-      ).toBeGreaterThanOrEqual(6);
+        `Slot @${slot.id} at x=${slot.x} is too close to the OL (must be |x| >= 7)`,
+      ).toBeGreaterThanOrEqual(7);
     }
   });
 
-  it("Trips Left: every slot's |x| >= 6 (clear of the OL row)", () => {
+  it("Trips Left: every slot's |x| >= 7 (clear of the OL row)", () => {
     const synth = synthesizeOffense("tackle_11", "Trips Left");
     expect(synth).not.toBeNull();
     const slots = (synth?.players ?? []).filter((p) => p.y !== 0 && p.y !== -5 && !["LT","LG","C","RG","RT","QB"].includes(p.id));
@@ -179,7 +179,7 @@ describe("synthesizeOffense — slots clear the OL row in tackle_11 (regression:
       expect(
         Math.abs(slot.x),
         `Slot @${slot.id} at x=${slot.x} is too close to the OL`,
-      ).toBeGreaterThanOrEqual(6);
+      ).toBeGreaterThanOrEqual(7);
     }
   });
 
@@ -188,7 +188,7 @@ describe("synthesizeOffense — slots clear the OL row in tackle_11 (regression:
     expect(synth).not.toBeNull();
     const slots = (synth?.players ?? []).filter((p) => p.y < 0 && !["LT","LG","C","RG","RT","QB"].includes(p.id));
     for (const slot of slots) {
-      expect(Math.abs(slot.x)).toBeGreaterThanOrEqual(6);
+      expect(Math.abs(slot.x)).toBeGreaterThanOrEqual(7);
     }
   });
 });

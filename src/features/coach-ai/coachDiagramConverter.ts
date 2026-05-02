@@ -427,6 +427,20 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     const lab = (sp.dp.role ?? sp.dp.id).toUpperCase();
     return LINEMAN_LABELS.has(lab) || lab === "C";
   };
+  // Tight end attached to the OL is conceptually part of the OL row
+  // for overlap-resolution purposes — real TE alignment puts him 1-2yd
+  // outside RT, well within the resolver's normalized-distance
+  // threshold but visually CORRECT (the TE is supposed to look tight).
+  // 2026-05-02 surfaced this when Y at (6, 0) and RT at (4, 0) triggered
+  // a Y-vs-RT overlap that cascaded into Y-vs-H oscillation in
+  // Singleback / Pro Set / Pro I formations. Treating an on-line Y as
+  // OL-adjacent breaks the cycle.
+  const isOnLineTe = (sp: StagedPlayer): boolean => {
+    if (sp.team !== "O") return false;
+    const lab = (sp.dp.role ?? sp.dp.id).toUpperCase();
+    return lab === "Y" && sp.y === 0;
+  };
+  const isOlRow = (sp: StagedPlayer): boolean => isLineman(sp) || isOnLineTe(sp);
   // Iterate to convergence. The previous single-pass nudge resolved each
   // pair once, but a player can land on top of a third player after being
   // pushed (cascading collisions). Loop until no overlaps remain or we hit
@@ -442,7 +456,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         const b = staged[j];
         if (a.team !== b.team) continue;
         // Skip OL-OL pairs — see "Lineman pairs are exempt" above.
-        if (isLineman(a) && isLineman(b)) continue;
+        if (isOlRow(a) && isOlRow(b)) continue;
         const aN = toNorm(a.x, a.y);
         const bN = toNorm(b.x, b.y);
         const dnx = aN.x - bN.x;
@@ -485,7 +499,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         const a = staged[i];
         const b = staged[j];
         if (a.team !== b.team) continue;
-        if (isLineman(a) && isLineman(b)) continue;
+        if (isOlRow(a) && isOlRow(b)) continue;
         const aN = toNorm(a.x, a.y);
         const bN = toNorm(b.x, b.y);
         if (Math.hypot(aN.x - bN.x, aN.y - bN.y) < OVERLAP_THRESHOLD_NORM) {

@@ -16,6 +16,7 @@ import { generateConceptSkeleton } from "./conceptSkeleton";
 import { CONCEPT_CATALOG, findConcept } from "./conceptCatalog";
 import { assertConcept } from "./conceptMatch";
 import { playSpecToCoachDiagram } from "./specRenderer";
+import { coachDiagramToPlayDocument } from "@/features/coach-ai/coachDiagramConverter";
 
 describe("generateConceptSkeleton — every catalog concept has a builder", () => {
   for (const concept of CONCEPT_CATALOG) {
@@ -100,6 +101,40 @@ describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
   });
 });
 
+describe("generateConceptSkeleton — every skeleton survives the overlap resolver (real end-to-end check)", () => {
+  // The unit-level "no overlapping (x, y)" check in the next describe
+  // block isn't sufficient — the production overlap resolver uses a
+  // normalized-distance THRESHOLD (≈ 0.0672), not exact equality. A
+  // slot at x=6 next to RT at x=4 (different y) has unique (x, y) but
+  // is still within the resolver's threshold and triggers the same
+  // failure that surfaced 2026-05-02. This test runs the full
+  // coachDiagramToPlayDocument pipeline (which is what the chat embed
+  // uses) and asserts it doesn't throw the overlap-resolver error.
+  for (const concept of CONCEPT_CATALOG) {
+    const sides: Array<"left" | "right" | undefined> = ["left", "right", undefined];
+    for (const strength of sides) {
+      const label = strength ? `${concept.name} (${strength})` : concept.name;
+      it(`${label} in tackle_11 passes the overlap resolver end-to-end`, () => {
+        const result = generateConceptSkeleton(concept.name, { variant: "tackle_11", strength });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const { diagram } = playSpecToCoachDiagram(result.spec);
+        // Wrap in the chat-fence shape coachDiagramToPlayDocument expects.
+        const fenceShape = {
+          title: result.spec.title ?? result.concept,
+          variant: "tackle_11" as const,
+          focus: "O" as const,
+          ...diagram,
+        };
+        expect(
+          () => coachDiagramToPlayDocument(fenceShape),
+          `${label}: overlap resolver threw — geometry isn't safe`,
+        ).not.toThrow();
+      });
+    }
+  }
+});
+
 describe("generateConceptSkeleton — Flood Right tackle_11 doesn't trigger the overlap resolver (S vs H regression)", () => {
   // Reproduces the exact scenario the coach hit 2026-05-02: a Flood
   // Right play in tackle_11 that failed with "Overlap resolver failed
@@ -119,9 +154,11 @@ describe("generateConceptSkeleton — Flood Right tackle_11 doesn't trigger the 
     expect(h, "Flood Right: H not in rendered formation").toBeDefined();
     // Distinct x positions.
     expect(s!.x).not.toBe(h!.x);
-    // Both clear of the OL row (|x| >= 6 in tackle_11).
-    expect(Math.abs(s!.x)).toBeGreaterThanOrEqual(6);
-    expect(Math.abs(h!.x)).toBeGreaterThanOrEqual(6);
+    // Both clear of the OL row by enough margin to pass the overlap
+    // resolver's normalized threshold (|x| >= 7 in tackle_11 — see
+    // clampSlotXAwayFromOL math comment).
+    expect(Math.abs(s!.x)).toBeGreaterThanOrEqual(7);
+    expect(Math.abs(h!.x)).toBeGreaterThanOrEqual(7);
     // Both on the same (right) side per Flood semantics.
     expect(s!.x).toBeGreaterThan(0);
     expect(h!.x).toBeGreaterThan(0);
