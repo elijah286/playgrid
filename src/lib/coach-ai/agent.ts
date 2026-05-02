@@ -791,21 +791,23 @@ export async function runAgent(
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     // Always buffer the final assistant turn so the validator can gate any
-    // diagram before it reaches the coach. Previous trigger was "only if a
-    // tool was called this turn" — that left a hole where Cal could skip
-    // get_route_template entirely and freehand a slant/curl/post, and the
-    // validator never ran. Cost is a small latency bump (tokens generate
-    // before streaming) — acceptable to guarantee correctness.
-    const shouldBuffer = !validatorRetried;
+    // diagram before it reaches the coach AND so the authoritative-tool-
+    // fence rewrite (below) can replace Cal's fence with the tool's. Prior
+    // version disabled buffering on retry turns (`!validatorRetried`),
+    // which left a hole: when the validator caught a broken fence and
+    // Cal's retry was ALSO broken (training-bias persistence), the retry
+    // streamed directly to the client without rewrite — coach saw the
+    // broken fence anyway. Surfaced 2026-05-02 (Mesh, screenshot from
+    // coach: prose said H@2 / S@8 but both drags rendered at 2yd).
+    // Validation still only runs on the first try (line below) so we
+    // don't recurse — we just buffer-and-emit on retry.
+    const shouldBuffer = true;
     const result = await chat({
       system,
       messages,
       tools,
       maxTokens: 4096,
-      onTextDelta:
-        onEvent && !shouldBuffer
-          ? (text) => onEvent({ type: "text_delta", text })
-          : undefined,
+      onTextDelta: undefined,
     });
     modelId = result.modelId;
     provider = result.provider;
@@ -907,19 +909,20 @@ export async function runAgent(
         // see Cal's broken fence as "prior").
         let textToEmit = scrubCritiqueLeak(bufferedText);
         if (lastFenceFromTool && textToEmit) {
-          const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/;
-          if (FENCE_RE.test(textToEmit)) {
-            textToEmit = textToEmit.replace(FENCE_RE, "```play\n" + lastFenceFromTool + "\n```");
-            // Also rewrite the buffered assistant message so prior-fence
-            // lookups on subsequent turns find the authoritative fence.
+          const before = textToEmit;
+          textToEmit = applyAuthoritativeFenceRewrite(textToEmit, lastFenceFromTool);
+          if (textToEmit !== before) {
+            // The buffered text had a fence and we replaced it. Mirror the
+            // rewrite on the assistant message in `messages` so the next
+            // turn's prior-fence lookup finds the authoritative fence.
             const lastMsg = messages[messages.length - 1];
             if (lastMsg && lastMsg.role === "assistant") {
               if (typeof lastMsg.content === "string") {
-                lastMsg.content = lastMsg.content.replace(FENCE_RE, "```play\n" + lastFenceFromTool + "\n```");
+                lastMsg.content = applyAuthoritativeFenceRewrite(lastMsg.content, lastFenceFromTool);
               } else {
                 for (const block of lastMsg.content) {
-                  if (block.type === "text" && FENCE_RE.test(block.text)) {
-                    block.text = block.text.replace(FENCE_RE, "```play\n" + lastFenceFromTool + "\n```");
+                  if (block.type === "text") {
+                    block.text = applyAuthoritativeFenceRewrite(block.text, lastFenceFromTool);
                   }
                 }
               }
@@ -1146,6 +1149,26 @@ export async function runAgent(
  * an apology trigger ("apologize", "you're right") AND a validator/
  * validation reference. Never modifies content past the first blank line.
  */
+/** Replace any ```play fence in `text` with the supplied tool-returned
+ *  fence body (the JSON between the ```play and ``` markers). Returns
+ *  the rewritten text. If `text` has no ```play fence or `toolFenceBody`
+ *  is empty/null, returns `text` unchanged.
+ *
+ *  This is the authoritative-tool-fence rewrite (AGENTS.md Rule 10's
+ *  "Cal does prose; tools do geometry" — Cal cannot corrupt the fence
+ *  because Cal's fence is replaced with the tool's verbatim output).
+ *  Surfaced 2026-05-02 (Mesh): tool returned correct staggered drags
+ *  but Cal post-processed them to both-at-2yd. */
+export function applyAuthoritativeFenceRewrite(
+  text: string,
+  toolFenceBody: string | null,
+): string {
+  if (!toolFenceBody || !text) return text;
+  const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/;
+  if (!FENCE_RE.test(text)) return text;
+  return text.replace(FENCE_RE, "```play\n" + toolFenceBody + "\n```");
+}
+
 function scrubCritiqueLeak(text: string): string {
   if (!text) return text;
   const APOLOGY_RE = /\b(apologi[sz]e|you'?re right|i was wrong|let me fix this|let me redo|i need to fix)\b/i;
