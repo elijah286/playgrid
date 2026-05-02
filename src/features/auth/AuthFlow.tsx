@@ -195,7 +195,7 @@ export function AuthFlow({
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       window.location.assign(safeNext);
-      return;
+      return; // keep pending=true through navigation so the button stays in its loading state
     } catch (e: unknown) {
       if (isInvalidCredentials(e)) {
         setBadPassword(true);
@@ -203,7 +203,6 @@ export function AuthFlow({
         setFormError(e instanceof Error ? e.message : "Sign-in failed.");
       }
       submittingRef.current = false;
-    } finally {
       setPending(false);
     }
   }

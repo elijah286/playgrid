@@ -198,12 +198,14 @@ export function PlaybookFormationsTab({
 
   function handleDelete(id: string, name: string) {
     if (!window.confirm(`Delete "${name}"? This can't be undone.`)) return;
+    const snapshot = formations;
+    setFormations((prev) => prev.filter((f) => f.id !== id));
     startTransition(async () => {
       const res = await deleteFormationAction(id);
       if (res.ok) {
-        setFormations((prev) => prev.filter((f) => f.id !== id));
         toast(`"${name}" deleted.`, "success");
       } else {
+        setFormations(snapshot);
         toast(res.error, "error");
       }
     });
@@ -272,15 +274,18 @@ export function PlaybookFormationsTab({
     if (ids.length === 0) return;
     const n = ids.length;
     if (!window.confirm(`Delete ${n} ${n === 1 ? "formation" : "formations"}? This can't be undone.`)) return;
+    const idSet = new Set(ids);
+    const snapshot = formations;
+    setFormations((prev) => prev.filter((f) => !idSet.has(f.id)));
     startTransition(async () => {
       for (const id of ids) {
         const res = await deleteFormationAction(id);
         if (!res.ok) {
+          setFormations(snapshot);
           toast(res.error, "error");
           return;
         }
       }
-      setFormations((prev) => prev.filter((f) => !selectedIds.has(f.id)));
       toast(`${n} ${n === 1 ? "formation" : "formations"} deleted.`, "success");
       setSelectionMode(false);
       setSelectedIds(new Set());

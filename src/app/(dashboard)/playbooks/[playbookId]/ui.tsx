@@ -827,6 +827,27 @@ function PlaybookDetailClientInner({
     });
   }
 
+  // Optimistically remove plays from the visible list so the UI feels instant.
+  // The server action still runs inside a transition; on failure we restore
+  // the snapshot and surface the error.
+  function handleDeletePlays(ids: string[], onOk?: () => void) {
+    const idSet = new Set(ids);
+    const snapshot = localPlays;
+    setLocalPlays((prev) => prev.filter((p) => !idSet.has(p.id)));
+    startTransition(async () => {
+      for (const id of ids) {
+        const res = await deletePlayAction(id);
+        if (!res.ok) {
+          setLocalPlays(snapshot);
+          toast(res.error ?? "Could not delete.", "error");
+          return;
+        }
+      }
+      onOk?.();
+      router.refresh();
+    });
+  }
+
   function onRenamePlay(id: string, current: string) {
     const next = window.prompt("Rename play", current);
     if (next == null) return;
@@ -1635,7 +1656,7 @@ function PlaybookDetailClientInner({
                 onSelect: () =>
                   confirmAnd(
                     `Delete "${p.name}"? This can't be undone.`,
-                    () => handle(() => deletePlayAction(p.id)),
+                    () => handleDeletePlays([p.id]),
                   ),
               },
             ];
@@ -2022,23 +2043,14 @@ function PlaybookDetailClientInner({
                     )
                   )
                     return;
-                  handle(
-                    async () => {
-                      for (const id of ids) {
-                        const res = await deletePlayAction(id);
-                        if (!res.ok) return res;
-                      }
-                      return { ok: true as const };
-                    },
-                    () => {
-                      toast(
-                        `${n} ${n === 1 ? "play" : "plays"} deleted.`,
-                        "success",
-                      );
-                      setSelectionMode(false);
-                      setSelectedPlayIds(new Set());
-                    },
-                  );
+                  handleDeletePlays(ids, () => {
+                    toast(
+                      `${n} ${n === 1 ? "play" : "plays"} deleted.`,
+                      "success",
+                    );
+                    setSelectionMode(false);
+                    setSelectedPlayIds(new Set());
+                  });
                 }}
                 className="text-danger hover:text-danger"
               >
