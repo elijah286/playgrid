@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { GraduationCap, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronDown, GraduationCap, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { usePlaybookAnchor } from "./playbook-anchor";
+import { listPlaybooksAction, type PlaybookRow } from "@/app/actions/playbooks";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 
@@ -130,6 +132,13 @@ export function CoachAiLauncher({
   const [size, setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
   const [fontSize, setFontSize] = useState<FontSize>(14);
 
+  // Context switcher (clickable header → popover with the user's playbooks).
+  const [contextOpen, setContextOpen] = useState(false);
+  const [playbookList, setPlaybookList] = useState<PlaybookRow[] | null>(null);
+  const [loadingPlaybooks, setLoadingPlaybooks] = useState(false);
+  const contextPopoverRef = useRef<HTMLDivElement>(null);
+  const contextBtnRef = useRef<HTMLButtonElement>(null);
+
   // Desktop window position (top-left anchor). Null = use Tailwind fallback (mobile / before init).
   const [windowPos, setWindowPos] = useState<WindowPos | null>(null);
 
@@ -205,12 +214,46 @@ export function CoachAiLauncher({
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
+      if (contextOpen) { setContextOpen(false); return; }
       if (fullscreen) setFullscreen(false);
       else setOpen(false);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, fullscreen]);
+  }, [open, fullscreen, contextOpen]);
+
+  // Fetch playbooks the first time the context switcher opens. Refresh on
+  // each subsequent open so a freshly-created playbook shows up.
+  useEffect(() => {
+    if (!contextOpen) return;
+    let cancelled = false;
+    setLoadingPlaybooks(true);
+    listPlaybooksAction().then((res) => {
+      if (cancelled) return;
+      setPlaybookList(res.ok ? res.playbooks : []);
+      setLoadingPlaybooks(false);
+    }).catch(() => {
+      if (cancelled) return;
+      setPlaybookList([]);
+      setLoadingPlaybooks(false);
+    });
+    return () => { cancelled = true; };
+  }, [contextOpen]);
+
+  // Close context popover on outside click.
+  useEffect(() => {
+    if (!contextOpen) return;
+    function onDown(e: MouseEvent) {
+      if (
+        contextPopoverRef.current && !contextPopoverRef.current.contains(e.target as Node) &&
+        contextBtnRef.current && !contextBtnRef.current.contains(e.target as Node)
+      ) {
+        setContextOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [contextOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -533,32 +576,100 @@ export function CoachAiLauncher({
                 <CoachAiIcon className="size-5 text-primary" bare />
               </div>
 
-              <div className="min-w-0 flex-1">
-                <div
-                  className={cn(
-                    "inline-block text-sm font-semibold leading-tight text-foreground",
-                    anchoredName && "border-b-[2px] pb-0.5",
-                  )}
-                  style={
-                    anchoredName && anchoredColor
-                      ? { borderBottomColor: anchoredColor }
-                      : undefined
-                  }
+              <div className="min-w-0 flex-1 relative" data-no-drag>
+                <button
+                  ref={contextBtnRef}
+                  type="button"
+                  onClick={() => setContextOpen((v) => !v)}
+                  aria-haspopup="listbox"
+                  aria-expanded={contextOpen}
+                  title="Switch context"
+                  className="group flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 -my-0.5 text-left transition hover:bg-surface-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  Coach Cal
-                  {adminTrainingActive && (
-                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
-                      <GraduationCap className="size-3" /> Training
-                    </span>
-                  )}
-                </div>
-                <div className="truncate text-[11px] leading-tight text-muted">
-                  {adminTrainingActive
-                    ? "Curating the global knowledge base — confirms before each write."
-                    : anchoredName
-                      ? `Anchored to ${anchoredName}`
-                      : "Your AI coaching partner"}
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "inline-block text-sm font-semibold leading-tight text-foreground",
+                        anchoredName && "border-b-[2px] pb-0.5",
+                      )}
+                      style={
+                        anchoredName && anchoredColor
+                          ? { borderBottomColor: anchoredColor }
+                          : undefined
+                      }
+                    >
+                      Coach Cal
+                      {adminTrainingActive && (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
+                          <GraduationCap className="size-3" /> Training
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-[11px] leading-tight text-muted">
+                      {adminTrainingActive
+                        ? "Curating the global knowledge base — confirms before each write."
+                        : anchoredName
+                          ? `Anchored to ${anchoredName}`
+                          : "Your AI coaching partner"}
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "size-3.5 shrink-0 text-muted transition-transform group-hover:text-foreground",
+                      contextOpen && "rotate-180",
+                    )}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {contextOpen && (
+                  <div
+                    ref={contextPopoverRef}
+                    role="listbox"
+                    aria-label="Switch playbook context"
+                    className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-auto rounded-lg border border-border bg-surface-raised shadow-xl ring-1 ring-black/5"
+                  >
+                    <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                      Anchor Coach Cal to
+                    </div>
+                    {loadingPlaybooks && (
+                      <div className="px-2 pb-2 text-[12px] text-muted">Loading playbooks…</div>
+                    )}
+                    {!loadingPlaybooks && (playbookList?.length ?? 0) === 0 && (
+                      <div className="px-2 pb-2 text-[12px] text-muted">No playbooks yet.</div>
+                    )}
+                    {!loadingPlaybooks && playbookList?.map((pb) => {
+                      const isCurrent = pb.id === playbookId;
+                      return (
+                        <Link
+                          key={pb.id}
+                          href={`/playbooks/${pb.id}`}
+                          onClick={() => setContextOpen(false)}
+                          role="option"
+                          aria-selected={isCurrent}
+                          className={cn(
+                            "flex items-center gap-2 px-2 py-1.5 text-[12px] hover:bg-surface-inset",
+                            isCurrent && "bg-surface-inset",
+                          )}
+                        >
+                          <Check
+                            className={cn(
+                              "size-3.5 shrink-0",
+                              isCurrent ? "text-primary" : "text-transparent",
+                            )}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium text-foreground">{pb.name}</div>
+                            {pb.season && (
+                              <div className="truncate text-[10px] text-muted">{pb.season}</div>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* ── Toolbar ──────────────────────────────────────────────── */}

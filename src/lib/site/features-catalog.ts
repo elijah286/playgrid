@@ -590,6 +590,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-04-29",
   },
+  {
+    id: "coach-ai-context-switcher",
+    name: "Cal context switcher",
+    description:
+      "The \"Anchored to …\" header in the Coach Cal window is now clickable, opening a dropdown of the coach's playbooks. Picking one navigates to that playbook and re-anchors Cal to it in a single click — no need to leave the chat to change context.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-02",
+  },
 
   // ── Game mode ──────────────────────────────────────────────────
   {
