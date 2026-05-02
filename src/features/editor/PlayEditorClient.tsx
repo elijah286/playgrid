@@ -7,7 +7,7 @@ import { ChevronLeft, FlaskConical } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
-import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
+import { resolveEndDecoration, mkZone, zoneStyleFromColor } from "@/domain/play/factory";
 import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import {
   createCustomOpponentAction,
@@ -298,6 +298,12 @@ function PlayEditorClientInner({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  /** Zone the user is about to place — preview follows the cursor until a click
+   *  on the field commits, or a click outside the field cancels. */
+  const [pendingZone, setPendingZone] = useState<{
+    kind: "rectangle" | "ellipse";
+    style: { fill: string; stroke: string };
+  } | null>(null);
 
   // Transient opponent overlay (never saved, resets on navigation)
   const [opponentPlayers, setOpponentPlayers] = useState<Player[] | null>(null);
@@ -1176,12 +1182,20 @@ function PlayEditorClientInner({
                   }
                 }}
                 isDefense={doc.metadata.playType === "defense"}
-                onAddRectZone={() =>
-                  dispatch({ type: "zone.add", zone: mkZone("rectangle", "") })
-                }
-                onAddEllipseZone={() =>
-                  dispatch({ type: "zone.add", zone: mkZone("ellipse", "") })
-                }
+                onAddRectZone={() => {
+                  const baseColor = selectedPlayer?.style.fill ?? null;
+                  setPendingZone({
+                    kind: "rectangle",
+                    style: zoneStyleFromColor(baseColor),
+                  });
+                }}
+                onAddEllipseZone={() => {
+                  const baseColor = selectedPlayer?.style.fill ?? null;
+                  setPendingZone({
+                    kind: "ellipse",
+                    style: zoneStyleFromColor(baseColor),
+                  });
+                }}
                 showDoneButton={!isTouchDevice}
                 hasAnySelection={
                   selectedPlayerId != null ||
@@ -1247,6 +1261,16 @@ function PlayEditorClientInner({
                 onSelectNode={setSelectedNodeId}
                 onSelectSegment={setSelectedSegmentId}
                 onSelectZone={setSelectedZoneId}
+                pendingZone={pendingZone}
+                onCommitPendingZone={(position) => {
+                  if (!pendingZone) return;
+                  dispatch({
+                    type: "zone.add",
+                    zone: mkZone(pendingZone.kind, "", position, pendingZone.style),
+                  });
+                  setPendingZone(null);
+                }}
+                onCancelPendingZone={() => setPendingZone(null)}
                 activeShape={activeShape}
                 activeStrokePattern={activeStrokePattern}
                 onActiveStrokePatternChange={setActiveStrokePattern}

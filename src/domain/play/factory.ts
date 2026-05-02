@@ -291,10 +291,41 @@ export function uid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${idCounter}`;
 }
 
+/** Convert a player/route color (hex or rgb/rgba) to a zone fill+stroke pair
+ *  so a zone added while a player is selected adopts that player's hue. */
+export function zoneStyleFromColor(color: string | undefined | null): { fill: string; stroke: string } {
+  const fallback = { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)" };
+  if (!color) return fallback;
+  const s = color.trim();
+  let r: number | null = null, g: number | null = null, b: number | null = null;
+  if (s.startsWith("#")) {
+    const hex = s.slice(1);
+    const full = hex.length === 3 ? hex.split("").map((h) => h + h).join("") : hex;
+    if (full.length === 6) {
+      const n = parseInt(full, 16);
+      if (!Number.isNaN(n)) {
+        r = (n >> 16) & 0xff; g = (n >> 8) & 0xff; b = n & 0xff;
+      }
+    }
+  } else {
+    const m = s.match(/rgba?\(([^)]+)\)/i);
+    if (m) {
+      const parts = m[1].split(",").map((p) => parseFloat(p.trim()));
+      if (parts.length >= 3) { r = parts[0]; g = parts[1]; b = parts[2]; }
+    }
+  }
+  if (r == null || g == null || b == null) return fallback;
+  return {
+    fill: `rgba(${r},${g},${b},0.18)`,
+    stroke: `rgba(${r},${g},${b},0.7)`,
+  };
+}
+
 export function mkZone(
   kind: "rectangle" | "ellipse",
   label: string,
   center: { x: number; y: number } = { x: 0.5, y: 0.65 },
+  style: { fill: string; stroke: string } = { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)" },
 ): import("./types").Zone {
   return {
     id: uid("zn"),
@@ -302,7 +333,7 @@ export function mkZone(
     center,
     size: { w: 0.14, h: 0.1 },
     label,
-    style: { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)" },
+    style,
   };
 }
 

@@ -155,6 +155,14 @@ type Props = {
    *  suppressed so taps on empty canvas only deselect — avoids the footgun
    *  where a stray touch-drag silently created a route. Extending an existing
    *  anchor (clicking its node) still works in both modes. */
+  /** When set, a ghost zone preview follows the cursor inside the field;
+   *  clicking the field commits it, clicking outside cancels. */
+  pendingZone?: {
+    kind: "rectangle" | "ellipse";
+    style: { fill: string; stroke: string };
+  } | null;
+  onCommitPendingZone?: (position: Point2) => void;
+  onCancelPendingZone?: () => void;
 };
 
 function parseColor(c: string): { r: number; g: number; b: number } | null {
@@ -326,9 +334,15 @@ function EditorCanvasImpl({
   onOpponentPlayerMove,
   activeSide = "primary",
   onActivateSide,
+  pendingZone = null,
+  onCommitPendingZone,
+  onCancelPendingZone,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  /** Ghost cursor position in normalized field coords while a pendingZone is
+   *  active. Defaults to field center until the user moves the mouse. */
+  const [ghostPos, setGhostPos] = useState<Point2>({ x: 0.5, y: 0.65 });
   const [interaction, setInteraction] = useState<Interaction>({ type: "idle" });
   const interactionRef = useRef(interaction);
   // Cross-device double-tap tracker. React's onDoubleClick doesn't fire
@@ -593,6 +607,36 @@ function EditorCanvasImpl({
     },
     [fieldAspect],
   );
+
+  /* ---------- Pending zone preview tracking ---------- */
+  // While the user has clicked a zone toolbar button but not yet committed,
+  // the ghost zone follows the cursor. toNorm clamps to [0,1] so when the
+  // cursor leaves the field the ghost sticks to the nearest border. A
+  // window-level pointerdown in capture phase outside the wrapper cancels.
+  useEffect(() => {
+    if (!pendingZone) return;
+    const onMove = (e: PointerEvent) => {
+      setGhostPos(toNorm(e));
+    };
+    const onDown = (e: PointerEvent) => {
+      const wrap = wrapperRef.current;
+      if (!wrap) return;
+      const target = e.target as Node | null;
+      if (target && wrap.contains(target)) {
+        // Click inside the field wrapper — let handlePointerDown commit it.
+        return;
+      }
+      onCancelPendingZone?.();
+    };
+    window.addEventListener("pointermove", onMove);
+    // Capture so we run before the toolbar button's bubble-phase onClick;
+    // the button replaces pendingZone after this fires, so re-arming works.
+    window.addEventListener("pointerdown", onDown, true);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [pendingZone, toNorm, onCancelPendingZone]);
 
   /* ---------- Opponent drag (isolated state machine) ---------- */
   // Custom-opponent players live outside `doc.layers.players`, so they need a
@@ -978,9 +1022,14 @@ function EditorCanvasImpl({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
+      if (pendingZone) {
+        e.stopPropagation();
+        onCommitPendingZone?.(toNorm(e));
+        return;
+      }
       startInteraction(e, { kind: "canvas" });
     },
-    [startInteraction],
+    [pendingZone, onCommitPendingZone, toNorm, startInteraction],
   );
 
   const handlePointerMove = useCallback(
@@ -1721,6 +1770,32 @@ function EditorCanvasImpl({
             >
               Rush {rushYds}y
             </text>
+          </g>
+        );
+      })()}
+
+      {/* Ghost zone preview — follows the cursor until the user commits. */}
+      {pendingZone && (() => {
+        const cx = ghostPos.x * fieldAspect;
+        const cy = 1 - ghostPos.y;
+        const w = 0.14 * fieldAspect;
+        const h = 0.1;
+        const common = {
+          fill: pendingZone.style.fill,
+          stroke: pendingZone.style.stroke,
+          strokeWidth: 2.5,
+          strokeDasharray: "6 4",
+          vectorEffect: "non-scaling-stroke" as const,
+          opacity: 0.9,
+          pointerEvents: "none" as const,
+        };
+        return (
+          <g pointerEvents="none">
+            {pendingZone.kind === "rectangle" ? (
+              <rect x={cx - w} y={cy - h} width={w * 2} height={h * 2} rx={0.01} {...common} />
+            ) : (
+              <ellipse cx={cx} cy={cy} rx={w} ry={h} {...common} />
+            )}
           </g>
         );
       })()}
