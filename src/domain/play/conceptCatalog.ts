@@ -146,10 +146,16 @@ const FOUR_VERTS: ConceptEntry = {
   name: "Four Verticals",
   aliases: ["Four Verts", "4 Verts", "Verticals"],
   description:
-    "Four receivers run vertical, stretching every coverage deep. Outside WRs run go routes; inside slots / TE run seams to split the safeties. Beats Cover 2 (4 verts vs 2 deep), Cover 3 (seams threaten the FS), and any single-high look.",
+    "FOUR receivers run vertical, stretching every coverage deep. The two outside WRs run Go routes; the two inside players (slot + TE, or two slots) run Seams to split the safeties. The concept LITERALLY requires four vertical routes — a play with only two verts is NOT '4 verts', it's a different concept (e.g. seam-flood, dagger). Beats Cover 2 (4 verts vs 2 deep), Cover 3 (seams threaten the FS), and any single-high look.",
   required: [
+    // Two outside Gos — the boundaries of the vertical stretch.
     { role: "outside_wr", family: "Go",   depthRangeYds: { min: 12, max: 25 } },
-    { role: "slot",       family: "Seam", depthRangeYds: { min: 12, max: 25 } },
+    { role: "outside_wr", family: "Go",   depthRangeYds: { min: 12, max: 25 } },
+    // Two inside Seams — the middle of the vertical stretch (split the
+    // safeties). Role "any" because the inside verts can be slot, TE, or
+    // motion player — geometry is what matters, not personnel.
+    { role: "any",        family: "Seam", depthRangeYds: { min: 12, max: 25 } },
+    { role: "any",        family: "Seam", depthRangeYds: { min: 12, max: 25 } },
   ],
 };
 

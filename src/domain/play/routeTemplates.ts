@@ -273,18 +273,26 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Flat",
     directional: true,
-    // positive x = outside flat
+    // Canonical flat route: NEARLY HORIZONTAL release directly to the
+    // sideline at 0-2 yds depth. Receiver gains very little depth as he
+    // travels laterally. Tiny inflection waypoint + curve segment so
+    // the path arcs gently outward rather than reading as a rigid
+    // diagonal. Lateral 0.22 of field width → ~12 yds in tackle_11,
+    // ~7 yds in 7v7, ~5.5 yds in 5v5 — gets to the flat.
+    // Final depth 0.06 = 1.5 yds: angle from horizontal is
+    // arctan(1.5/12) = ~7° in tackle_11. Reads as flat, not climbing.
     points: [
       { x: 0, y: 0 },
-      { x: 0.22, y: 0.08 },
+      { x: 0.06, y: 0.02 },
+      { x: 0.22, y: 0.06 },
     ],
-    shapes: ["straight"],
+    shapes: ["straight", "curve"],
     breakStyle: "none",
     breakDir: "toward_sideline",
     constraints: { depthRangeYds: { min: 0, max: 4 }, side: "toward_sideline" },
     kbSubtopic: "route_flat",
     description:
-      "Receiver releases directly to the sideline at 0-3 yards depth. Common RB or slot route paired with a curl/corner over the top to high-low the flat defender.",
+      "Receiver releases on a NEARLY HORIZONTAL path directly to the sideline at 0-2 yds depth — gains very little depth as he travels laterally (the route is FLAT — that's literally the name). Common RB or slot route paired with a curl/corner/sit over the top to high-low the flat defender. The path may arc slightly as the receiver flattens out from the snap angle, but it should NEVER read as a steep climbing diagonal.",
   },
   {
     name: "Wheel",
@@ -325,10 +333,16 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
   {
     name: "Arrow",
     directional: true,
-    // Slight depth (~3 yds) toward outside flat.
+    // Clean diagonal toward the flat at a CONSISTENT shallow angle
+    // (~25° from horizontal — flatter than the prior 32°). Lateral
+    // 0.18 of field width / depth 0.10 = ~9.5yd lateral × 2.5yd depth
+    // in tackle_11 → arctan(2.5/9.5) ≈ 15° — flatter than canonical
+    // 25° but reads cleanly as a flat-ish angle route. Single straight
+    // segment is correct: arrow has no break, no settle, no curve —
+    // just a clean angled release.
     points: [
       { x: 0, y: 0 },
-      { x: 0.16, y: 0.12 },
+      { x: 0.18, y: 0.10 },
     ],
     shapes: ["straight"],
     breakStyle: "none",
@@ -336,7 +350,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     constraints: { depthRangeYds: { min: 1, max: 5 }, side: "toward_sideline" },
     kbSubtopic: "route_arrow",
     description:
-      "RB or slot releases at a slight angle to the flat, gaining a bit of depth (~3 yds). Outlet for the QB and high-low partner with a sit/curl over the top.",
+      "RB or slot releases on a CLEAN DIAGONAL toward the flat at a shallow angle (~25° from horizontal). Mostly lateral with a small upfield component — finishes ~2-3 yds deep, ~10 yds out (tackle_11 reference). No break, no settle. Outlet for the QB and a natural high-low partner with a sit/curl over the top.",
   },
   {
     name: "Sit",
@@ -464,36 +478,49 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     name: "Bubble",
     aliases: ["Bubble Screen"],
     directional: true,
-    // Banana arc behind the LOS toward the sideline.
+    // Canonical bubble screen: receiver retreats 2-3 yds behind the LOS
+    // to APEX the banana arc, then accelerates outward and slightly
+    // forward to catch a lateral pass. The DEEP APEX (-0.10 = 2.5 yds
+    // back) is what defines the route — without it, this is a now
+    // screen, not a bubble. Wider lateral (0.20 of field width =
+    // ~10 yds in tackle_11) so the receiver actually clears the
+    // formation. Both segments curved → smooth banana shape, not a
+    // shallow zig-zag.
     points: [
       { x: 0, y: 0 },
-      { x: 0.04, y: -0.04 },
-      { x: 0.16, y: -0.02 },
+      { x: 0.06, y: -0.10 },
+      { x: 0.20, y: -0.04 },
     ],
     shapes: ["curve", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_sideline",
-    constraints: { depthRangeYds: { min: -3, max: 1 }, side: "toward_sideline" },
+    constraints: { depthRangeYds: { min: -4, max: 1 }, side: "toward_sideline" },
     kbSubtopic: "route_bubble_screen",
     description:
-      "Receiver releases backward and outside in a ROUNDED banana arc, catching a quick lateral pass behind the LOS. Other receivers block downfield. Common RPO tag.",
+      "Receiver releases BACKWARD and outside in a ROUNDED banana arc — apex is 2-3 yds behind the LOS — then arcs forward toward the sideline to catch a quick lateral pass. The deep apex is what makes this a BUBBLE (vs a now screen, which catches at the LOS). Other receivers block downfield. Common RPO tag and quick-perimeter answer.",
   },
   {
     name: "Spot",
     aliases: ["Snag"],
     directional: true,
-    // Inside release to a soft spot, deliberate sit.
+    // Inside release to a soft spot, then a small ROUNDED settle facing
+    // the QB. The settle (curved turn-back) is the whole point of the
+    // route — without it, this is just a slant. Geometry: release inside
+    // on a slight angle to ~5.5 yds, then bend back ~0.5 yd to settle
+    // facing the QB. The "curve" segment renders the turn-back as a
+    // smooth arc, matching playbook art for the snag/spot route.
     points: [
       { x: 0, y: 0 },
       { x: -0.10, y: 0.22 },
+      { x: -0.08, y: 0.20 },
     ],
-    shapes: ["straight"],
-    breakStyle: "none",
+    shapes: ["straight", "curve"],
+    breakStyle: "rounded",
     breakDir: "toward_qb",
     constraints: { depthRangeYds: { min: 3, max: 7 }, side: "toward_qb" },
     kbSubtopic: "route_snag",
     description:
-      "Receiver releases inside on a slight angle, settling 5-6 yards downfield in a soft spot. More deliberate than a hitch. Often the inside route in a snag concept (with corner over and flat under).",
+      "Receiver releases inside on a slight angle, then SETTLES with a small ROUNDED turn-back facing the QB at 5-6 yds depth in a soft spot in the zone. The settle is what defines this route — it is NOT a clean diagonal that ends; the receiver finishes by stopping and squaring up to the QB so he's a ready target. More deliberate than a hitch (longer angled release, deeper sit). Often the inside route in a snag concept (with corner over and flat under).",
   },
   {
     name: "Skinny Post",

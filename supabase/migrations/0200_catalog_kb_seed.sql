@@ -18,12 +18,12 @@ insert into public.rag_documents (
   sport_variant, sanctioning_body, source, source_note,
   authoritative, needs_review
 ) values
-  ('global', null, 'scheme', 'route_arrow', 'Route: Arrow', 'RB or slot releases at a slight angle to the flat, gaining a bit of depth (~3 yds). Outlet for the QB and high-low partner with a sit/curl over the top.
+  ('global', null, 'scheme', 'route_arrow', 'Route: Arrow', 'RB or slot releases on a CLEAN DIAGONAL toward the flat at a shallow angle (~25° from horizontal). Mostly lateral with a small upfield component — finishes ~2-3 yds deep, ~10 yds out (tackle_11 reference). No break, no settle. Outlet for the QB and a natural high-low partner with a sit/curl over the top.
 Depth: 1-5 yards from the LOS.
 Direction: breaks outside, toward the sideline.
 Break shape: none.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Arrow).', true, false),
-  ('global', null, 'scheme', 'route_bubble_screen', 'Route: Bubble', 'Receiver releases backward and outside in a ROUNDED banana arc, catching a quick lateral pass behind the LOS. Other receivers block downfield. Common RPO tag.
-Depth: -3-1 yards from the LOS.
+  ('global', null, 'scheme', 'route_bubble_screen', 'Route: Bubble', 'Receiver releases BACKWARD and outside in a ROUNDED banana arc — apex is 2-3 yds behind the LOS — then arcs forward toward the sideline to catch a quick lateral pass. The deep apex is what makes this a BUBBLE (vs a now screen, which catches at the LOS). Other receivers block downfield. Common RPO tag and quick-perimeter answer.
+Depth: -4-1 yards from the LOS.
 Direction: breaks outside, toward the sideline.
 Break shape: rounded.
 Also called: Bubble Screen.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Bubble).', true, false),
@@ -55,7 +55,7 @@ Also called: Shallow, Shallow Cross.', null, null, 'catalog', 'Generated from sr
 Depth: 10-22 yards from the LOS.
 Direction: breaks outside, toward the sideline.
 Break shape: rounded.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Fade).', true, false),
-  ('global', null, 'scheme', 'route_flat', 'Route: Flat', 'Receiver releases directly to the sideline at 0-3 yards depth. Common RB or slot route paired with a curl/corner over the top to high-low the flat defender.
+  ('global', null, 'scheme', 'route_flat', 'Route: Flat', 'Receiver releases on a NEARLY HORIZONTAL path directly to the sideline at 0-2 yds depth — gains very little depth as he travels laterally (the route is FLAT — that''s literally the name). Common RB or slot route paired with a curl/corner/sit over the top to high-low the flat defender. The path may arc slightly as the receiver flattens out from the snap angle, but it should NEVER read as a steep climbing diagonal.
 Depth: 0-4 yards from the LOS.
 Direction: breaks outside, toward the sideline.
 Break shape: none.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Flat).', true, false),
@@ -109,10 +109,10 @@ Also called: Glance.', null, null, 'catalog', 'Generated from src/domain/play/ro
 Depth: 3-7 yards from the LOS.
 Direction: breaks inside, toward the QB / middle of the field.
 Break shape: sharp.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Slant).', true, false),
-  ('global', null, 'scheme', 'route_snag', 'Route: Spot', 'Receiver releases inside on a slight angle, settling 5-6 yards downfield in a soft spot. More deliberate than a hitch. Often the inside route in a snag concept (with corner over and flat under).
+  ('global', null, 'scheme', 'route_snag', 'Route: Spot', 'Receiver releases inside on a slight angle, then SETTLES with a small ROUNDED turn-back facing the QB at 5-6 yds depth in a soft spot in the zone. The settle is what defines this route — it is NOT a clean diagonal that ends; the receiver finishes by stopping and squaring up to the QB so he''s a ready target. More deliberate than a hitch (longer angled release, deeper sit). Often the inside route in a snag concept (with corner over and flat under).
 Depth: 3-7 yards from the LOS.
 Direction: breaks inside, toward the QB / middle of the field.
-Break shape: none.
+Break shape: rounded.
 Also called: Snag.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Spot).', true, false),
   ('global', null, 'scheme', 'route_stick', 'Route: Sit', 'Vertical stem to 5-6 yards, then a small ROUNDED settle facing the QB (the receiver stops and turns back). Foundation of the stick concept (with a flat underneath and a clear over the top). Quick-game staple, 3rd-and-medium reliable.
 Depth: 3-7 yards from the LOS.

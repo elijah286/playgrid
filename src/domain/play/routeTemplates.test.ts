@@ -173,6 +173,68 @@ describe("Drag — canonical 'release flat, cross full formation' shape", () => 
   });
 });
 
+describe("Visual fidelity assertions for routes whose shape was a 2026-05-01 audit miss", () => {
+  // These are catalog-authored visual properties (not catalog invariants).
+  // Each one corresponds to a route whose previous geometry rendered
+  // wrong even though it satisfied the depth/side validators. Failing
+  // any of these is a coach-eye-test regression.
+  const FIELD_WIDTH_TACKLE_11 = 53;
+
+  function template(name: string) {
+    const t = ROUTE_TEMPLATES.find((r) => r.name === name);
+    if (!t) throw new Error(`template ${name} missing`);
+    return t;
+  }
+
+  it("Spot/Snag: ends with a settle (final waypoint is BACKWARD from the previous one)", () => {
+    const t = template("Spot");
+    const last = t.points[t.points.length - 1];
+    const prev = t.points[t.points.length - 2];
+    expect(
+      last.y,
+      `Spot's final point y=${last.y} must be < previous y=${prev.y} — that's the SETTLE turn-back. Without it the route has no settle and reads as a slant.`,
+    ).toBeLessThan(prev.y);
+  });
+
+  it("Flat: cross segment angle ≤ 12° from horizontal in tackle_11 (it's NOT a climbing diagonal)", () => {
+    const t = template("Flat");
+    const last = t.points[t.points.length - 1];
+    const prev = t.points[t.points.length - 2];
+    const dxYds = Math.abs(last.x - prev.x) * FIELD_WIDTH_TACKLE_11;
+    const dyYds = Math.abs(last.y - prev.y) * FIELD_LENGTH_YDS;
+    const angleDeg = (Math.atan2(dyYds, dxYds) * 180) / Math.PI;
+    expect(
+      angleDeg,
+      `Flat's outside segment is ${angleDeg.toFixed(1)}° — should be ≤ 12° to read as horizontal. The whole point of the route is in the name.`,
+    ).toBeLessThanOrEqual(12);
+  });
+
+  it("Bubble: apex retreats ≥ 2 yds behind the LOS (it's a BUBBLE, not a now screen)", () => {
+    const t = template("Bubble");
+    let minY = 0;
+    for (const p of t.points) {
+      if (p.y < minY) minY = p.y;
+    }
+    const apexYds = minY * FIELD_LENGTH_YDS;
+    expect(
+      apexYds,
+      `Bubble's apex is ${apexYds.toFixed(1)} yds back — should be ≤ -2 yds for the canonical banana arc. Without the deep apex this is a now screen.`,
+    ).toBeLessThanOrEqual(-2);
+  });
+
+  it("Arrow: angle ≤ 30° from horizontal (clean diagonal, not a steep climb)", () => {
+    const t = template("Arrow");
+    const last = t.points[t.points.length - 1];
+    const dxYds = Math.abs(last.x) * FIELD_WIDTH_TACKLE_11;
+    const dyYds = Math.abs(last.y) * FIELD_LENGTH_YDS;
+    const angleDeg = (Math.atan2(dyYds, dxYds) * 180) / Math.PI;
+    expect(
+      angleDeg,
+      `Arrow's angle is ${angleDeg.toFixed(1)}° — canonical is ~25°. > 30° reads as a wheel/seam, not an arrow.`,
+    ).toBeLessThanOrEqual(30);
+  });
+});
+
 describe.each(ROUTE_TEMPLATES.map((t) => [t.name, t] as const))(
   "round-trip: %s",
   (_name, template: RouteTemplate) => {
