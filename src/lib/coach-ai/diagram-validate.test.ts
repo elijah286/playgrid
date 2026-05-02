@@ -421,6 +421,126 @@ describe("validateDiagrams — concept-claim requires skeleton/modify tool", () 
   });
 });
 
+describe("validateDiagrams — skeleton-fidelity gate", () => {
+  // 2026-05-02 image-1 retry: even with the concept-skeleton-required
+  // gate, Cal called get_concept_skeleton, IGNORED its returned fence,
+  // and re-rendered Mesh routes via get_route_template at default
+  // depth — H@~2yd and S@~2yd, collapsing the staggered cross. The
+  // fidelity gate compares emitted route paths against the skeleton's
+  // returned fence per-player and forces re-emit on depth drift.
+
+  function meshSkeletonFence() {
+    return JSON.stringify({
+      title: "Mesh",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "H", x: -10, y: -1, team: "O" },
+        { id: "S", x: 10, y: -1, team: "O" },
+      ],
+      routes: [
+        // Skeleton's H drag at depth=2 → max y=1 from carrier.y=-1
+        { from: "H", path: [[-8.3, 1], [-0.4, 1], [12.9, 1]], route_kind: "Drag" },
+        // Skeleton's S drag at depth=6 → max y=5 from carrier.y=-1
+        { from: "S", path: [[8.4, 5], [0.4, 5], [-12.8, 5]], route_kind: "Drag" },
+      ],
+    });
+  }
+
+  function fullMeshFenceWithRoutes(hMaxY: number, sMaxY: number) {
+    return makeFence({
+      title: "Mesh",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0, team: "O" }, { id: "LG", x: -2, y: 0, team: "O" },
+        { id: "C",  x: 0,  y: 0, team: "O" }, { id: "RG", x: 2,  y: 0, team: "O" },
+        { id: "RT", x: 4,  y: 0, team: "O" },
+        { id: "X", x: -18, y: 0, team: "O" }, { id: "Z", x: 18, y: 0, team: "O" },
+        { id: "H", x: -10, y: -1, team: "O" }, { id: "S", x: 10, y: -1, team: "O" },
+        { id: "B", x: 2, y: -5, team: "O" },
+      ],
+      routes: [
+        { from: "H", path: [[-8.3, hMaxY], [12.9, hMaxY]], route_kind: "Drag" },
+        { from: "S", path: [[8.4, sMaxY], [-12.8, sMaxY]], route_kind: "Drag" },
+      ],
+    });
+  }
+
+  it("REJECTS when emitted routes drift from skeleton's depths (image-1 retry)", () => {
+    // Skeleton: H@max-y=1, S@max-y=5. Emitted: both at max-y=2 (Cal
+    // rebuilt at default ~2yd). Fidelity gate must catch this even
+    // though conceptSkeletonCalled=true.
+    const result = validateDiagrams({
+      text:
+        `${fullMeshFenceWithRoutes(2, 2)}\n` +
+        `Mesh — @H drag underneath, @S drag over the top.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+      skeletonReturnedFenceJson: meshSkeletonFence(),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const fidelityErr = result.errors.find((e) => /skeleton-fidelity/i.test(e));
+    expect(fidelityErr).toBeDefined();
+    expect(fidelityErr).toMatch(/@S/);
+  });
+
+  it("ACCEPTS when emitted routes match skeleton's depths (verbatim copy)", () => {
+    const result = validateDiagrams({
+      text:
+        `${fullMeshFenceWithRoutes(1, 5)}\n` +
+        `Mesh — @H drag underneath at 2yd, @S drag over the top at 6yd.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+      skeletonReturnedFenceJson: meshSkeletonFence(),
+    });
+    if (!result.ok) {
+      // Other gates may fire; only check that the fidelity error didn't.
+      expect(result.errors.find((e) => /skeleton-fidelity/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("ACCEPTS small rounding drift (<= 0.6yd)", () => {
+    // Skeleton: H@1, S@5. Emit: H@1.4, S@5.5 (rounding drift). Pass.
+    const result = validateDiagrams({
+      text:
+        `${fullMeshFenceWithRoutes(1.4, 5.5)}\n` +
+        `Mesh — @H underneath, @S over the top.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+      skeletonReturnedFenceJson: meshSkeletonFence(),
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /skeleton-fidelity/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("does not fire when no skeleton fence was captured", () => {
+    // No skeletonReturnedFenceJson → fidelity gate inactive (not all
+    // play-emit turns came from a skeleton).
+    const result = validateDiagrams({
+      text:
+        `${fullMeshFenceWithRoutes(2, 2)}\n` +
+        `Mesh — @H drag, @S drag.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+      skeletonReturnedFenceJson: null,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /skeleton-fidelity/i.test(e))).toBeUndefined();
+    }
+  });
+});
+
 describe("validateDiagrams — modify-not-regenerate gate", () => {
   // 2026-05-02: coach asked "make one of the mesh routes a lot deeper"
   // and Cal redrew the entire play with a different formation, swapped

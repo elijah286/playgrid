@@ -223,7 +223,7 @@ Rules:
 
    You may swap a player ID (e.g. coach uses "Y" not "S"), adjust a route's depth via \`depthYds\` + \`nonCanonical: true\` if the coach asked for an unusual depth, or add pre-snap motion via \`motion: [...]\` on a route. **NEVER reposition players by editing x/y** — call \`place_offense\` for an alternate formation if the coach wanted one. The skeleton is golden-tested: every catalog concept renders without overlap and satisfies its own concept validator. Use it.
 
-   Only skip this tool when the coach genuinely wants something off-catalog (a custom combo not in CONCEPT_CATALOG). **STRUCTURAL ENFORCEMENT (2026-05-02):** the chat-time validator REJECTS any full play (offense ≥ variant count) whose title or prose names a catalog concept (Mesh, Smash, Curl-Flat, Stick, Snag, Flood/Sail, Drive, Levels, Y-Cross, Dagger, Four Verticals) when neither \`get_concept_skeleton\` nor a surgical-modify tool ran this turn. Hand-authoring a named concept is no longer possible — call the skeleton.
+   Only skip this tool when the coach genuinely wants something off-catalog (a custom combo not in CONCEPT_CATALOG). **STRUCTURAL ENFORCEMENT (2026-05-02):** the chat-time validator REJECTS any full play (offense ≥ variant count) whose title or prose names a catalog concept (Mesh, Smash, Curl-Flat, Stick, Snag, Flood/Sail, Drive, Levels, Y-Cross, Dagger, Four Verticals) when neither \`get_concept_skeleton\` nor a surgical-modify tool ran this turn. Hand-authoring a named concept is no longer possible — call the skeleton. **SECOND ENFORCEMENT — skeleton-fidelity (2026-05-02):** after \`get_concept_skeleton\` returns a fence, you MUST drop ITS routes into your reply VERBATIM. Do NOT call \`get_route_template\` for routes the skeleton already provided. Do NOT re-derive paths. The skeleton's depths (e.g. Mesh under-drag @ 2yd, over-drag @ 6yd) are the source of truth; calling \`get_route_template\` afterward returns the family's DEFAULT depth (~1.5-3yd) and produces flat routes. The validator now compares each emitted route's deepest-y waypoint against the skeleton's; drift > 0.6yd forces a re-emit. The skeleton fence is shaped exactly like a \`\`\`play fence — copy the entire JSON into your reply between \`\`\`play and \`\`\`, including \`players\`, \`routes\`, \`title\`, \`variant\`, \`focus\`. Don't reformat. Don't simplify.
 
 - **Named CONCEPTS have STRUCTURAL requirements — the catalog enforces them.** When you name a concept anywhere in the title, headline, or prose ("Mesh", "Smash", "Curl-Flat", "Stick", "Snag", "Four Verticals", "Flood/Sail", "Drive", "Levels", "Y-Cross", "Dagger", or any of their aliases), the play's routes MUST satisfy that concept's required-assignment pattern with depths inside the concept-specific range. The chat-time validator runs this check against the diagram-derived spec on every turn — a mismatch blocks your reply and forces a re-emit. **The skeleton tool above is the easiest way to satisfy these requirements; if you skip it, you must satisfy them manually.** Cheat sheet (depth ranges in yards):
   - **Mesh**: TWO Drag routes at DIFFERENTIATED, MEANINGFUL depths so they cross VISIBLY above the OL — set \`depthYds: 3\` on the under-drag, \`depthYds: 5\` on the over-drag (NOT 1 and 2 — that crams both routes against the LOS where the cross is invisible; canonical Throw Deep / Hudl Mesh art shows the cross at 4-6yd depth, clearly above the line). The catalog enforces this: slot ranges are [2, 3.5] (under) and [4.5, 6] (over). Both drags run by INSIDE players (slot/H/Y), NOT both outside X/Z. Pair with a SINGLE over-the-top sit/dig at 8-12 yds and a back to flat — NEVER 3+ verticals (that's 4 Verts with a drag tag, not Mesh). KB: \`search_kb("concept_mesh")\`.
@@ -700,6 +700,11 @@ export async function runAgent(
   let conceptSkeletonInvoked = false;
   let modifyPlayRouteInvoked = false;
   let addDefenseToPlayInvoked = false;
+  /** When get_concept_skeleton runs successfully, the verbatim ```play
+   *  fence JSON it returned. The validator uses this to enforce
+   *  route-path fidelity — Cal must emit the skeleton's routes verbatim,
+   *  not re-derive them at default depths. */
+  let skeletonReturnedFenceJson: string | null = null;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let lastPlaceOffense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
@@ -789,6 +794,7 @@ export async function runAgent(
           placeOffenseCalled: placeOffenseInvoked,
           placeDefenseCalled: placeDefenseInvoked,
           conceptSkeletonCalled: conceptSkeletonInvoked,
+          skeletonReturnedFenceJson,
           modifyPlayRouteCalled: modifyPlayRouteInvoked,
           addDefenseToPlayCalled: addDefenseToPlayInvoked,
           priorAssistantTurnHadFence,
@@ -937,7 +943,19 @@ export async function runAgent(
       // modify-not-regenerate gates depend on. Keep these flags scoped
       // to "this turn only" — that's what makes the gates fire iff the
       // relevant tool was actually called for the current emit.
-      if (tu.name === "get_concept_skeleton" && r.ok) conceptSkeletonInvoked = true;
+      if (tu.name === "get_concept_skeleton" && r.ok) {
+        conceptSkeletonInvoked = true;
+        // Capture the skeleton's returned ```play fence so the
+        // validator can enforce route-path fidelity. Surfaced
+        // 2026-05-02: even with the concept-skeleton-required gate,
+        // Cal was calling the tool, IGNORING its output, and
+        // re-rendering routes via get_route_template at default
+        // depths — so the Mesh's H@2yd / S@6yd staggering collapsed
+        // back to both at ~2yd. The fence-fidelity gate compares
+        // emitted route paths against the skeleton's verbatim.
+        const fenceMatch = /```play\n([\s\S]*?)\n```/.exec(resultText);
+        if (fenceMatch) skeletonReturnedFenceJson = fenceMatch[1].trim();
+      }
       if (tu.name === "modify_play_route"   && r.ok) modifyPlayRouteInvoked = true;
       if (tu.name === "add_defense_to_play" && r.ok) addDefenseToPlayInvoked = true;
       // Mark place_offense as invoked. The validator uses this to enforce

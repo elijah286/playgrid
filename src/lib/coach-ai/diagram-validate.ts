@@ -164,6 +164,37 @@ function checkProseUsesYards(text: string): string[] {
   ];
 }
 
+/**
+ * Compare an emitted route's path against the skeleton-returned route's
+ * path. Returns null on match, or a short reason string on mismatch.
+ * Tolerance: 0.5yd per waypoint coordinate (the skeleton renderer
+ * rounds to 0.1yd, so 0.5yd absorbs any rounding drift while catching
+ * "default depth ~1.5yd" vs "explicit 6yd" mismatches).
+ */
+function comparePaths(
+  emitted: ReadonlyArray<[number, number]> | undefined,
+  skeleton: ReadonlyArray<[number, number]> | undefined,
+): string | null {
+  if (!Array.isArray(emitted) || emitted.length === 0) {
+    return "emitted route has no path";
+  }
+  if (!Array.isArray(skeleton) || skeleton.length === 0) return null;
+  // Compare the deepest y of each path — that's the route's effective
+  // depth, the most coach-visible attribute, and the value that
+  // collapses when Cal rebuilds at default depth instead of using the
+  // skeleton's depthYds. Allowing waypoint-count differences (a
+  // skeleton path may have 3 nodes; Cal's emit may have 2 of the
+  // template's 4) keeps the gate from over-firing on legitimate
+  // simplifications, but the deepest-y check still catches the
+  // "depth collapsed" failure.
+  const emittedMaxY = Math.max(...emitted.map((p) => (Array.isArray(p) ? p[1] : 0)));
+  const skeletonMaxY = Math.max(...skeleton.map((p) => (Array.isArray(p) ? p[1] : 0)));
+  if (Math.abs(emittedMaxY - skeletonMaxY) > 0.6) {
+    return `depth collapsed — emitted route's deepest waypoint is at y=${emittedMaxY} but the skeleton placed it at y=${skeletonMaxY} (${Math.abs(emittedMaxY - skeletonMaxY).toFixed(1)}yd off)`;
+  }
+  return null;
+}
+
 function extractPlayFences(text: string): string[] {
   // Mirror PlayDiagramEmbed's fence detection. The model emits ```play\n{...}\n```.
   const fences: string[] = [];
@@ -251,6 +282,15 @@ export function validateDiagrams(opts: {
    *  a 'Mesh' with both drags at 2yd" failure mode by promoting the
    *  prompt rule to a structural gate. */
   conceptSkeletonCalled?: boolean;
+  /** When get_concept_skeleton ran ok, the verbatim ```play fence JSON
+   *  it returned. The validator enforces that the emitted diagram's
+   *  route paths match this skeleton fence per-player — catches the
+   *  "Cal called the skeleton but rebuilt routes at default depth"
+   *  failure mode. Surfaced 2026-05-02 (image 1 retry): mesh skeleton
+   *  outputs H@2yd and S@6yd, but Cal's emitted fence had both at
+   *  default ~2yd. The concept-skeleton gate alone wasn't enough —
+   *  needs a fidelity check on the actual paths. */
+  skeletonReturnedFenceJson?: string | null;
   /** True if modify_play_route ran ok this turn. Counts as a valid
    *  source for both the concept-claim gate (the prior fence was
    *  presumably catalog-correct) and the modify-not-regenerate gate. */
@@ -699,6 +739,52 @@ export function validateDiagrams(opts: {
             `The skeleton tool returns a canonical fence with the concept's required depths and player roles already correct — call \`get_concept_skeleton({ concept: "${claimedConcepts[0]}" })\` and drop the returned fence VERBATIM. ` +
             `If the concept is genuinely off-catalog (no entry in CONCEPT_CATALOG), drop the concept name from the title and prose so this gate doesn't fire.`,
           );
+        }
+
+        // GATE A.5 — skeleton-fidelity. When get_concept_skeleton ran
+        // this turn AND returned a fence, the emitted diagram's route
+        // paths MUST match the skeleton's verbatim (per-player). The
+        // concept gate above only checks "did the tool run" — Cal
+        // could call it, ignore the output, and rebuild routes via
+        // get_route_template at default depths (image-1 retry,
+        // 2026-05-02: Cal called skeleton, then re-rendered Mesh with
+        // both drags at ~2yd instead of the skeleton's 2 + 6). This
+        // gate compares depths waypoint-by-waypoint and forces a
+        // re-emit when Cal's emit drifts from the skeleton.
+        //
+        // Tolerance: 0.6yd of depth drift per route (rounding plus a
+        // hair of slack for legitimate refinements). Larger drift
+        // means Cal abandoned the skeleton's depth — the exact
+        // failure mode this gate exists for.
+        if (opts.skeletonReturnedFenceJson) {
+          try {
+            const skeletonJson = JSON.parse(opts.skeletonReturnedFenceJson) as Diagram;
+            const skeletonRoutesByCarrier = new Map<string, [number, number][]>();
+            for (const r of (skeletonJson.routes ?? []) as Array<DiagramRoute>) {
+              if (typeof r.from === "string" && Array.isArray(r.path)) {
+                skeletonRoutesByCarrier.set(r.from.toUpperCase(), r.path);
+              }
+            }
+            const drifts: string[] = [];
+            for (const r of (json.routes ?? []) as Array<DiagramRoute>) {
+              if (typeof r.from !== "string" || !Array.isArray(r.path)) continue;
+              const skeletonPath = skeletonRoutesByCarrier.get(r.from.toUpperCase());
+              if (!skeletonPath) continue;
+              const reason = comparePaths(r.path, skeletonPath);
+              if (reason) drifts.push(`@${r.from}: ${reason}`);
+            }
+            if (drifts.length > 0) {
+              errors.push(
+                `${tag}skeleton-fidelity: get_concept_skeleton returned a fence with specific route depths, but your emitted diagram drifted from it. ${drifts.join("; ")}. ` +
+                `This is the failure mode the skeleton tool exists to prevent — calling the tool then rebuilding routes via get_route_template at default depths collapses the concept's depth differentiation. ` +
+                `RECOVERY: copy the skeleton's \`\`\`play fence VERBATIM into your reply. Do NOT call get_route_template for routes that the skeleton already provided — its paths are coach-canonical and depth-correct. The skeleton's geometry is the source of truth; your job is to drop it in, not re-derive it.`,
+              );
+            }
+          } catch {
+            // Skeleton fence didn't parse — skip the fidelity check
+            // (the tool result extraction would have surfaced this
+            // separately).
+          }
         }
 
         for (const conceptName of claimedConcepts) {
