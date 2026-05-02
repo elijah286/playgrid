@@ -608,51 +608,52 @@ export function CoachAiLauncher({
                 <CoachAiIcon className="size-5 text-primary" bare />
               </div>
 
-              <div className="min-w-0 flex-1 relative" data-no-drag>
-                <button
-                  ref={contextBtnRef}
-                  type="button"
-                  onClick={() => setContextOpen((v) => !v)}
-                  aria-haspopup="listbox"
-                  aria-expanded={contextOpen}
-                  title="Switch context"
-                  className="group flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 -my-0.5 text-left transition hover:bg-surface-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className={cn(
-                        "inline-block text-sm font-semibold leading-tight text-foreground",
-                        anchoredName && "border-b-[2px] pb-0.5",
-                      )}
-                      style={
-                        anchoredName && anchoredColor
-                          ? { borderBottomColor: anchoredColor }
-                          : undefined
-                      }
-                    >
-                      Coach Cal
-                      {adminTrainingActive && (
-                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
-                          <GraduationCap className="size-3" /> Training
-                        </span>
-                      )}
-                    </div>
-                    <div className="truncate text-[11px] leading-tight text-muted">
-                      {adminTrainingActive
-                        ? "Curating the global knowledge base — confirms before each write."
-                        : anchoredName
-                          ? `Anchored to ${anchoredName}`
-                          : "Your AI coaching partner"}
-                    </div>
-                  </div>
-                  <ChevronDown
+              <div className="min-w-0 flex-1 relative">
+                <div className="flex items-center gap-1">
+                  <div
                     className={cn(
-                      "size-3.5 shrink-0 text-muted transition-transform group-hover:text-foreground",
-                      contextOpen && "rotate-180",
+                      "inline-block text-sm font-semibold leading-tight text-foreground",
+                      anchoredName && "border-b-[2px] pb-0.5",
                     )}
-                    aria-hidden="true"
-                  />
-                </button>
+                    style={
+                      anchoredName && anchoredColor
+                        ? { borderBottomColor: anchoredColor }
+                        : undefined
+                    }
+                  >
+                    Coach Cal
+                    {adminTrainingActive && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800 ring-1 ring-amber-300 dark:text-amber-200">
+                        <GraduationCap className="size-3" /> Training
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    ref={contextBtnRef}
+                    type="button"
+                    onClick={() => setContextOpen((v) => !v)}
+                    aria-haspopup="listbox"
+                    aria-expanded={contextOpen}
+                    aria-label="Switch playbook context"
+                    title="Switch playbook context"
+                    className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-surface-inset hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "size-3.5 transition-transform",
+                        contextOpen && "rotate-180",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+                <div className="truncate text-[11px] leading-tight text-muted">
+                  {adminTrainingActive
+                    ? "Curating the global knowledge base — confirms before each write."
+                    : anchoredName
+                      ? `Anchored to ${anchoredName}`
+                      : "Your AI coaching partner"}
+                </div>
 
                 {contextOpen && (
                   <div
