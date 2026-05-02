@@ -382,6 +382,23 @@ export async function archivePlaybookAction(playbookId: string, archived: boolea
     return { ok: false as const, error: "Can't archive the default Inbox playbook." };
   }
 
+  // Archive is a Coach-tier feature. On the free tier we cap at one playbook,
+  // so "archive" is a footgun: the slot stays consumed but the book looks put
+  // away — the user gets stuck unable to claim or duplicate anything new.
+  // Force them to either delete-to-reclaim or upgrade. Unarchiving is always
+  // allowed so a downgraded coach can still recover their books.
+  if (archived) {
+    const entitlement = await getUserEntitlement(user.id);
+    if (!tierAtLeast(entitlement, "coach")) {
+      return {
+        ok: false as const,
+        error:
+          "Archiving is a Team Coach feature. On the free tier, archived playbooks would still consume your one playbook slot — delete it instead, or upgrade to Team Coach ($9/mo or $99/yr) to archive.",
+        needsUpgrade: true as const,
+      };
+    }
+  }
+
   const { error } = await supabase
     .from("playbooks")
     .update({ is_archived: archived })

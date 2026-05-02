@@ -233,12 +233,19 @@ export function PlaybookHeader({
   }, [canManage, canShare, viewerIsCoach, searchParams, router]);
 
   function run(
-    fn: () => Promise<{ ok: boolean; error?: string } | { ok: true; id?: string }>,
+    fn: () => Promise<{ ok: boolean; error?: string; needsUpgrade?: boolean } | { ok: true; id?: string }>,
     onOk?: (r: { ok: true; id?: string }) => void,
   ) {
     fn().then((res) => {
       if (!res.ok) {
-        toast(("error" in res && res.error) || "Something went wrong.", "error");
+        if ("needsUpgrade" in res && res.needsUpgrade) {
+          setUpgradeNotice({
+            title: "Upgrade to Team Coach",
+            message: ("error" in res && res.error) || "This is a Team Coach feature.",
+          });
+        } else {
+          toast(("error" in res && res.error) || "Something went wrong.", "error");
+        }
         return;
       }
       onOk?.(res as { ok: true; id?: string });
