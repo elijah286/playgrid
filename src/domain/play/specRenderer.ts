@@ -237,7 +237,15 @@ function pathFromTemplate(
     ? (carrier.x >= 0 ? 1 : -1)
     : 1;
 
-  return template.points.map(({ x, y }) => {
+  // Skip the first template point — it's the carrier-relative origin
+  // (0, 0), which downstream coachDiagramToPlayDocument adds as the
+  // start node from the carrier's position. Including it here produced
+  // duplicate consecutive nodes (degenerate zero-length segment) on
+  // every spec-rendered route, surfaced 2026-05-01.
+  const waypoints = template.points[0]?.x === 0 && template.points[0]?.y === 0
+    ? template.points.slice(1)
+    : template.points;
+  return waypoints.map(({ x, y }) => {
     const xYds = carrier.x + x * fieldWidthYds * xSign;
     const yYds = carrier.y + y * FIELD_LENGTH_YDS;
     return [round(xYds), round(yYds)] as [number, number];

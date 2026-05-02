@@ -472,19 +472,30 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       } else if (LINEMAN_LABELS.has(rawLabel)) {
         style = STYLE_LINEMAN;
         label = rawLabel.slice(0, 2);
-      } else if (rawLabel === "X") { style = STYLE_X; label = "X"; }
-      else if (rawLabel === "Y" || rawLabel === "TE" || role === "TE") { style = STYLE_Y; label = "Y"; }
-      else if (rawLabel === "Z") { style = STYLE_Z; label = "Z"; }
-      else if (rawLabel === "S" || rawLabel === "A") { style = STYLE_S; label = rawLabel.slice(0, 1); }
-      else if (rawLabel === "H" || rawLabel === "F" || rawLabel === "B" || rawLabel === "RB" || role === "RB") {
-        style = STYLE_H;
-        label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 1);
       } else {
-        // Generic offensive skill (WR, WR1, slot, etc.) — rotate palette.
-        style = RECEIVER_ROTATION[receiverIdx % RECEIVER_ROTATION.length];
-        receiverIdx += 1;
-        // Hard 2-char limit — matches the play editor.
-        label = rawLabel.slice(0, 2);
+        // Strip trailing digits so "H2", "X2", "Z2", "F2", "B2", "S2"
+        // all route to the SAME color/style as their base label. The
+        // displayed label keeps the suffix (so H2 still shows "H2"),
+        // but the COLOR matches the base. Without this, H2 used to
+        // fall through to the generic receiver-rotation palette and
+        // get STYLE_X (red) — visually indistinguishable from the X
+        // receiver. Surfaced 2026-05-01 in production.
+        const baseLabel = rawLabel.replace(/\d+$/, "");
+        if (baseLabel === "X") { style = STYLE_X; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "Y" || baseLabel === "TE" || role === "TE") { style = STYLE_Y; label = rawLabel === "TE" ? "Y" : rawLabel.slice(0, 2); }
+        else if (baseLabel === "Z") { style = STYLE_Z; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "S" || baseLabel === "A") { style = STYLE_S; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "H" || baseLabel === "F" || baseLabel === "B" || baseLabel === "RB" || role === "RB") {
+          style = STYLE_H;
+          label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 2);
+        } else {
+          // Genuinely unknown skill label (no recognizable base) —
+          // rotate the palette so multiple unknown receivers get
+          // distinct colors instead of all the same.
+          style = RECEIVER_ROTATION[receiverIdx % RECEIVER_ROTATION.length];
+          receiverIdx += 1;
+          label = rawLabel.slice(0, 2);
+        }
       }
       // Non-focus offense overrides position-derived style.
       if (!isFocus) style = STYLE_NON_FOCUS;

@@ -156,6 +156,30 @@ describe("PlaySpec → CoachDiagram (renderer)", () => {
     expect(warnings.some((w) => w.code === "defense_unknown")).toBe(true);
   });
 
+  it("does NOT emit a duplicate start node (regression: spec-rendered routes had 2 identical nodes)", () => {
+    // 2026-05-01 production bug: every spec-rendered route had 4 nodes
+    // where node[0] == node[1] (the carrier position appeared twice).
+    // Cause: pathFromTemplate emitted the template's first point (which
+    // is at carrier-relative offset (0,0) = the carrier itself), then
+    // the downstream converter prepended its own start node from the
+    // carrier's position. Duplicate node = degenerate zero-length
+    // segment that confuses SVG path generation.
+    const { diagram } = playSpecToCoachDiagram(spreadSlantPost());
+    for (const r of diagram.routes ?? []) {
+      // Path is the post-start waypoints (start node added by converter).
+      // The first waypoint must NOT be at the carrier's position.
+      const carrier = diagram.players.find((p) => p.id === r.from);
+      expect(carrier).toBeDefined();
+      const firstWp = r.path[0];
+      const dx = Math.abs(firstWp[0] - carrier!.x);
+      const dy = Math.abs(firstWp[1] - carrier!.y);
+      expect(
+        Math.hypot(dx, dy),
+        `route from "${r.from}" first waypoint ${JSON.stringify(firstWp)} duplicates carrier position (${carrier!.x}, ${carrier!.y})`,
+      ).toBeGreaterThan(0.01);
+    }
+  });
+
   it("emits route paths anchored at the carrier (not at origin)", () => {
     const { diagram } = playSpecToCoachDiagram(spreadSlantPost());
     const routes = diagram.routes ?? [];

@@ -61,9 +61,28 @@ const LOS_COLORS: Record<string, string> = {
 };
 
 /** Resolve every theme color for a given background choice. Legacy "gray"
- *  plays fall back to the white theme so they don't render an unstyled mess. */
+ *  plays fall back to the white theme so they don't render an unstyled mess.
+ *
+ *  Defense in depth: any UNKNOWN string (e.g. a corrupted save, a future
+ *  variant the runtime doesn't recognize, or coach AI accidentally writing
+ *  an arbitrary value) ALSO falls back to green. Without this, an unknown
+ *  key produces `BG_COLORS[key] === undefined` and accessing `.main` on it
+ *  crashes the renderer. The renderer is the LAST line of defense before
+ *  a coach sees a play; falling back is always better than throwing or
+ *  rendering a giant color block.
+ */
 export function resolveFieldTheme(bg: FieldBackground | null | undefined): FieldTheme {
-  const key = bg === "gray" ? "white" : (bg ?? "green");
+  const requested: string = bg === "gray" ? "white" : (bg ?? "green");
+  // Validate the key is in our palette dicts. If not, log and fall back
+  // to green — we want to see the bad value in dev tools but never let
+  // it corrupt the render.
+  const key = requested in BG_COLORS ? requested : "green";
+  if (key !== requested && typeof console !== "undefined") {
+    console.warn(
+      `[fieldTheme] Unknown background "${requested}" — falling back to green. ` +
+      `Valid values: ${Object.keys(BG_COLORS).join(", ")}.`,
+    );
+  }
   return {
     bgMain: BG_COLORS[key].main,
     bgDark: BG_COLORS[key].dark,

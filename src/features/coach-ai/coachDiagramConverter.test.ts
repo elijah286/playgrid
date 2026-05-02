@@ -117,6 +117,49 @@ describe("overlap resolver — non-OL pairs ARE resolved", () => {
   });
 });
 
+describe("player color routing — suffixed labels match base color", () => {
+  // Production bug 2026-05-01: H2 was rendered RED (X color) instead of
+  // ORANGE (H color) because the label-match used exact-equality
+  // (rawLabel === "H") and "H2" fell through to the generic-receiver
+  // rotation palette. Same potential issue for X2, Y2, Z2, F2, B2, S2.
+
+  function colorFor(label: string): string {
+    const doc = coachDiagramToPlayDocument(diagram([
+      { id: "C", x: 0, y: 0 },
+      { id: "QB", x: 0, y: -5 },
+      { id: label, x: 5, y: 0 },
+    ]));
+    return doc.layers.players.find((p) => p.label === label)?.style.fill ?? "";
+  }
+
+  it("H2 has the same color as H (orange #F26522)", () => {
+    expect(colorFor("H2")).toBe(colorFor("H"));
+    expect(colorFor("H2")).toBe("#F26522");
+  });
+
+  it("X2 has the same color as X (red #EF4444)", () => {
+    expect(colorFor("X2")).toBe(colorFor("X"));
+    expect(colorFor("X2")).toBe("#EF4444");
+  });
+
+  it("Z2 has the same color as Z (blue #3B82F6)", () => {
+    expect(colorFor("Z2")).toBe(colorFor("Z"));
+  });
+
+  it("F2 / B2 share the H color (all orange backs)", () => {
+    expect(colorFor("F2")).toBe("#F26522");
+    expect(colorFor("B2")).toBe("#F26522");
+  });
+
+  it("preserves the FULL suffixed label for display (H2 not H)", () => {
+    const doc = coachDiagramToPlayDocument(diagram([
+      { id: "C", x: 0, y: 0 },
+      { id: "H2", x: 5, y: 0 },
+    ]));
+    expect(doc.layers.players.find((p) => p.label === "H2")).toBeDefined();
+  });
+});
+
 describe("overlap resolver — no residual non-OL overlaps after resolution", () => {
   it("the full Spread Doubles tackle_11 layout has no non-OL overlaps", () => {
     // Real-world inputs: the synthesizer's Spread Doubles output. The
