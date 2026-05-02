@@ -153,10 +153,18 @@ function buildAssignments(diagram: CoachDiagram): PlayerAssignment[] {
 
   const assignments: PlayerAssignment[] = [];
   for (const p of diagram.players) {
-    if (p.team === "D" || isDefenderLabel(p.id, p.role)) continue;
+    // Skip explicit defenders. For ambiguous labels (S/B/T/G overlap
+    // with offense), respect the team field — the comment in
+    // DEFENDER_LABELS said "team field disambiguates" but the original
+    // check skipped any matching label REGARDLESS of team, dropping
+    // offensive S / B / T players from the spec entirely. Surfaced
+    // 2026-05-02 — a Flood with S as the slot was producing zero
+    // Curl assignments because S was filtered out.
+    if (p.team === "D") continue;
+    if (p.team !== "O" && isDefenderLabel(p.id, p.role)) continue;
 
     const route = routesByCarrier.get(p.id);
-    const action = inferAction(p.id, p.role, route);
+    const action = inferAction(p.id, p.role, route, { x: p.x, y: p.y });
     assignments.push({
       player: p.id,
       action,
@@ -197,13 +205,14 @@ function inferAction(
   id: string,
   role: string | undefined,
   route: CoachDiagramRoute | undefined,
+  carrier?: { x: number; y: number },
 ): AssignmentAction {
   const uid = (role ?? id).toUpperCase();
   // Strip numeric suffix for category lookup ("Z2" → "Z").
   const baseLabel = uid.replace(/\d+$/, "");
 
   // Route present → that's the assignment.
-  if (route) return actionFromRoute(route);
+  if (route) return actionFromRoute(route, carrier);
 
   // No route. Infer from position label.
   if (LINEMAN_IDS.has(baseLabel)) return { kind: "block" };
@@ -225,12 +234,45 @@ function inferAction(
   return { kind: "unspecified" };
 }
 
-function actionFromRoute(route: CoachDiagramRoute): AssignmentAction {
+/**
+ * Deepest waypoint depth relative to the carrier, in yards. Negative
+ * for routes that go BEHIND the LOS (bubble screens). The matcher and
+ * concept catalog work in absolute yards — same convention.
+ */
+function computeDeepestDepth(
+  path: ReadonlyArray<readonly [number, number]>,
+  carrier: { x: number; y: number },
+): number {
+  let deepest = 0;
+  for (const [, y] of path) {
+    const dy = y - carrier.y;
+    if (Math.abs(dy) > Math.abs(deepest)) deepest = dy;
+  }
+  return deepest;
+}
+
+function actionFromRoute(
+  route: CoachDiagramRoute,
+  carrier?: { x: number; y: number },
+): AssignmentAction {
   const kind = (route.route_kind ?? "").trim();
   if (kind) {
     const template = findTemplate(kind);
     if (template) {
-      return { kind: "route", family: template.name };
+      // Compute depthYds from the path's deepest waypoint relative to
+      // the carrier. Without this, the concept matcher falls back to
+      // the catalog family midpoint, which silently rejects concepts
+      // (Flood / Curl-Flat) where the concept tightens the depth
+      // relative to the family. Surfaced 2026-05-02 — Curl-Flat /
+      // Flood would fail concept-match at chat-time even when Cal
+      // authored a 5yd Curl correctly, because the parser never
+      // preserved the 5yd → spec inferred 8.5yd from catalog mid.
+      const depthYds = carrier ? computeDeepestDepth(route.path, carrier) : undefined;
+      const action: AssignmentAction = { kind: "route", family: template.name };
+      if (depthYds !== undefined && Number.isFinite(depthYds)) {
+        return { ...action, depthYds: Math.round(depthYds * 10) / 10 };
+      }
+      return action;
     }
     // route_kind set but unrecognized — store as custom with the label
     // for round-trip preservation. The validator catches unrecognized

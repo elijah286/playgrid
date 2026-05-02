@@ -431,6 +431,28 @@ export function validateDiagrams(opts: {
             errors.push(
               `${tag}${formatConceptViolations(conceptName, result.violations)}`,
             );
+            continue;
+          }
+          // Family + depth match passed. Now check structural
+          // constraints that depend on rendered POSITIONS — currently
+          // just sameSideRequired (Flood / Sail), but designed to
+          // extend (e.g. "stack-must-be-3x1", "trips-strong" etc).
+          if (result.concept.sameSideRequired) {
+            const matchedPositions = (json.players ?? [])
+              .filter((p) => result.usedPlayers.has(p.id) && typeof p.x === "number");
+            const left  = matchedPositions.filter((p) => p.x < 0).length;
+            const right = matchedPositions.filter((p) => p.x > 0).length;
+            if (left > 0 && right > 0) {
+              const sideSummary = matchedPositions
+                .map((p) => `@${p.id} at x=${p.x}`)
+                .join(", ");
+              errors.push(
+                `${tag}Concept "${conceptName}" is a SIDE-FLOODING concept — every required route MUST be on the same side of the formation (all left or all right). ` +
+                `Matched players span both sides: ${sideSummary}. ` +
+                `Move the routes so all 3 stack on the same side: "${conceptName} Right" → all 3 to the right (x > 0); "${conceptName} Left" → all 3 to the left (x < 0). ` +
+                `Don't re-emit the same play with the same name unless the routes are all on the same side.`,
+              );
+            }
           }
         }
 

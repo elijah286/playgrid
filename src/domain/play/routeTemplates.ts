@@ -246,7 +246,13 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     shapes: ["straight", "curve"],
     breakStyle: "rounded",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 8, max: 13 }, side: "toward_qb" },
+    // Widened 2026-05-02 from [8, 13] → [4, 13] so short curls
+    // (the "speed curl" / Curl-Flat / Flood underneath at 5-7yd)
+    // pass route-assignment-validate. Latent bug: Curl-Flat and
+    // Flood both require Curl at 4-7yd, but the validator rejected
+    // any 5yd Curl with route_kind="Curl". Wide range covers both
+    // modern short curls and traditional 10-12yd curls.
+    constraints: { depthRangeYds: { min: 4, max: 13 }, side: "toward_qb" },
     kbSubtopic: "route_curl",
     description:
       "Vertical 10-12 yards then a ROUNDED ~180° turn back toward the QB, settling in a soft spot in the zone at ~9 yds depth (route tree #6). The break is a smooth turn-back, NOT a sharp corner — receiver decelerates, faces the QB, and finishes with a slight inside lean toward the middle. Reliable vs zone — find the window between defenders.",

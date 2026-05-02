@@ -134,6 +134,91 @@ describe("validateDiagrams — prose-completeness", () => {
     expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
   });
 
+  it("placeholder section break — see Flood side check below", () => {
+    expect(true).toBe(true);
+  });
+});
+
+describe("validateDiagrams — side enforcement (Flood / Sail)", () => {
+  // Flood is a side-flooding concept: the catalog's family+depth match
+  // must additionally satisfy "all 3 matched players on the same side".
+  // Without this, Cal could put Corner on the left + Curl on the right
+  // and the matcher passes — which is what surfaced 2026-05-02 (a
+  // "Flood Left" with Z and S on the right side of the formation).
+
+  it("REJECTS a Flood when matched players span both sides of the formation", () => {
+    // Corner at depth 14 (in [12,18]), Curl at 5 (in [4,7]), Flat at 2
+    // (in [0,4]). Catalog-compliant geometries; concept matcher passes
+    // family+depth — but the players span both sides, so the side
+    // check rejects.
+    const fence = makeFence({
+      title: "Flood Left",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0,   y: -3, team: "O" },
+        { id: "X", x: -22, y:  0, team: "O" }, // left  — Corner deep
+        { id: "S", x:  10, y:  0, team: "O" }, // RIGHT — Curl (wrong side!)
+        { id: "B", x:  -3, y:  0, team: "O" }, // left  — Flat
+      ],
+      routes: [
+        // X (left, x=-22) Corner breaks OUTSIDE = toward LEFT sideline → more negative x.
+        { from: "X", path: [[-26, 14]],  route_kind: "Corner" },
+        // S (right, x=10) Curl settles toward QB → slightly inside (more negative x).
+        { from: "S", path: [[8,    5]],  route_kind: "Curl" },
+        // B (left, x=-3) Flat releases toward LEFT sideline → more negative x.
+        { from: "B", path: [[-12,  2]],  route_kind: "Flat" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@X runs a corner. @S runs a curl. @B runs a flat. Flood Left.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [
+        snapshot("Corner", -22, 0, [[-26, 14]]),
+        snapshot("Curl",    10, 0, [[8,    5]]),
+        snapshot("Flat",    -3, 0, [[-12,  2]]),
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const sideError = result.errors.find((e) => e.toLowerCase().includes("same side"));
+    expect(sideError, `expected a same-side error; got: ${result.errors.join(" | ")}`).toBeDefined();
+  });
+
+  it("ACCEPTS a Flood when all 3 matched players are on the same side", () => {
+    const fence = makeFence({
+      title: "Flood Right",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x:   0, y: -3, team: "O" },
+        { id: "Z", x:  22, y:  0, team: "O" },
+        { id: "S", x:  10, y:  0, team: "O" },
+        { id: "B", x:   3, y:  0, team: "O" },
+      ],
+      routes: [
+        // Z (right, x=22) Corner breaks OUTSIDE = toward RIGHT sideline → more positive x.
+        { from: "Z", path: [[26, 14]], route_kind: "Corner" },
+        // S (right, x=10) Curl settles toward QB → slightly inside (more negative x).
+        { from: "S", path: [[8,   5]], route_kind: "Curl" },
+        // B (right, x=3) Flat releases toward RIGHT sideline → more positive x.
+        { from: "B", path: [[12,  2]], route_kind: "Flat" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@Z runs a corner. @S runs a curl. @B runs a flat. Flood Right.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [
+        snapshot("Corner", 22, 0, [[26, 14]]),
+        snapshot("Curl",   10, 0, [[8,   5]]),
+        snapshot("Flat",    3, 0, [[12,  2]]),
+      ],
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+});
+
+describe("validateDiagrams — bare prose-mention exemption", () => {
   it("EXEMPTS linemen and QB from the prose-mention requirement", () => {
     // Linemen running pass-protection / RB drop routes don't need
     // narration in the prose.

@@ -89,6 +89,13 @@ export type ConceptEntry = {
   description: string;
   /** The pattern of assignments a satisfying spec must contain. */
   required: ConceptAssignment[];
+  /** When true, every player matched to a required slot must be on the
+   *  SAME side of the formation (all x ≥ 0 or all x ≤ 0). The matcher
+   *  itself only checks family + depth; the chat-time validator runs
+   *  this side check using the diagram's player positions after the
+   *  family/depth match passes. Used by side-flooding concepts (Flood,
+   *  Sail) where the entire structural premise is "stretch ONE side". */
+  sameSideRequired?: boolean;
 };
 
 // ── Concept entries ─────────────────────────────────────────────────────
@@ -189,13 +196,18 @@ const FLOOD: ConceptEntry = {
   description:
     "Three receivers stretching ONE SIDE of the field at THREE depths — Corner deep (12-18 yds), Curl mid (4-7 yds), Flat low (0-4 yds). All on the SAME SIDE so the cornerback (high-low) and the flat defender are both stretched. Forces a single underneath defender to pick one. Beats Cover 3 and most rotated zones. Erhardt-Perkins / pro-style staple.",
   required: [
-    // The matcher checks family + depth, not side. Cal must put all
-    // three on the same side per the agent prompt + KB; the catalog
-    // enforces only that the three correct families/depths are present.
+    // Family + depth slots. The chat-time validator additionally
+    // enforces sameSideRequired: all 3 matched players must be on the
+    // same side of the formation (all x>0 or all x<0). Without that,
+    // Cal could assign Corner to the left side and Flat to the right
+    // and the matcher would still pass — which is what surfaced
+    // 2026-05-02 ("Flood Left" with routes scattered across the
+    // formation).
     { role: "any", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
     { role: "any", family: "Curl",   depthRangeYds: { min: 4,  max: 7  } },
     { role: "any", family: "Flat",   depthRangeYds: { min: 0,  max: 4  } },
   ],
+  sameSideRequired: true,
 };
 
 const DRIVE: ConceptEntry = {
