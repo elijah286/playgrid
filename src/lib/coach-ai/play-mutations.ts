@@ -120,10 +120,23 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     const carrierX = typeof carrier.x === "number" ? carrier.x : 0;
     const carrierY = typeof carrier.y === "number" ? carrier.y : 0;
     const fieldWidthYds = fieldWidthFor(variantStr);
-    const xSign = resolvedDirection === "left" ? -1
-      : resolvedDirection === "right" ? 1
-      : template.directional !== false ? (carrierX >= 0 ? 1 : -1)
-      : 1;
+    // xSign formula must mirror specRenderer.pathFromTemplate (the
+    // single source of geometric truth — see AGENTS.md Rule 10). For
+    // direction overrides we factor in the template's natural-sign so
+    // that templates with negative-x terminal waypoints (Drag, Dig,
+    // Slant) flip correctly. Without this, a revise_play call with
+    // set_direction="right" on a Drag would silently render leftward.
+    // Surfaced 2026-05-02 (third Flood bug — backside drag).
+    const xSign = (() => {
+      if (template.directional === false) return 1;
+      if (resolvedDirection === "left" || resolvedDirection === "right") {
+        const lastPt = template.points[template.points.length - 1];
+        const naturalSign = lastPt && lastPt.x !== 0 ? Math.sign(lastPt.x) : 1;
+        const desiredSign = resolvedDirection === "right" ? 1 : -1;
+        return desiredSign * naturalSign;
+      }
+      return carrierX >= 0 ? 1 : -1;
+    })();
     const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
     const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
     const yScale = setDepth !== null && templateMaxYds > 0.5 ? setDepth / templateMaxYds : 1;

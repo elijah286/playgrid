@@ -312,6 +312,57 @@ describe("Renderer — direction override on route actions", () => {
     expect(finalX).toBeGreaterThan(0);
   });
 
+  it("Flood (full skeleton, Right): backside-slot Drag ends on the RIGHT side (template-sign bug)", () => {
+    // 2026-05-02 (third Flood-direction bug): the previous direction
+    // override was {direction:'right' → xSign:+1}, which works for
+    // Flat (template terminal x=+0.45) but BREAKS for Drag (template
+    // terminal x=-0.45, "toward QB"). The backside-slot drag was
+    // therefore rendering LEFTWARD on Flood Right (final x ≈ -34).
+    // The fix multiplies xSign by the template's natural-sign so
+    // negative-terminal templates (Drag, Dig, Slant) flip correctly.
+    const skel = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "right" });
+    expect(skel.ok).toBe(true);
+    if (!skel.ok) return;
+    const result = playSpecToCoachDiagram(skel.spec);
+    const hRoute = result.diagram.routes?.find((r) => r.from === "H");
+    expect(hRoute).toBeDefined();
+    if (!hRoute) return;
+    const finalX = hRoute.path[hRoute.path.length - 1][0];
+    expect(finalX).toBeGreaterThan(0);
+  });
+
+  it("direction='right' on a Drag template (negative-terminal) renders RIGHT, not LEFT", () => {
+    // Direct unit test on the renderer — independent of the Flood
+    // skeleton — that pins the template-sign-aware direction override.
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 3, direction: "right" } },
+      ],
+    });
+    const hRoute = result.diagram.routes?.find((r) => r.from === "H");
+    if (!hRoute) return;
+    const finalX = hRoute.path[hRoute.path.length - 1][0];
+    expect(finalX).toBeGreaterThan(0);
+  });
+
+  it("direction='left' on a Drag template renders LEFT", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "S", action: { kind: "route", family: "Drag", depthYds: 3, direction: "left" } },
+      ],
+    });
+    const sRoute = result.diagram.routes?.find((r) => r.from === "S");
+    if (!sRoute) return;
+    const finalX = sRoute.path[sRoute.path.length - 1][0];
+    expect(finalX).toBeLessThan(0);
+  });
+
   it("Flood (full skeleton, Left): B's Flat ends on the LEFT side", () => {
     // End-to-end: build the actual Flood Left skeleton via
     // generateConceptSkeleton and verify the rendered diagram has B's

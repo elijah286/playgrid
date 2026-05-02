@@ -608,21 +608,37 @@ function pathFromTemplate(
   direction?: "left" | "right",
 ): [number, number][] {
   const fieldWidthYds = sportProfileForVariant(variant).fieldWidthYds;
-  // template.points are in normalized template coords (positive x = OUTSIDE).
+  // template.points use a "natural" coord system: positive x means
+  // OUTSIDE (toward sideline); negative x means INSIDE (toward
+  // QB/middle). Different families pick different signs depending on
+  // semantics — Flat/Out terminate at positive x; Drag/Dig/Slant
+  // terminate at negative x.
+  //
   // Decide xSign:
-  //   1. Explicit `direction` override on the assignment wins — used when
-  //      the route's intended side is logically decoupled from the
-  //      carrier's starting x (e.g. RB's flat to the flood side; Flood
-  //      Left's B sits at x≈+2 in Spread Doubles but the flat must
-  //      go LEFT). Surfaced 2026-05-02.
-  //   2. Otherwise, directional templates (Flat, Out, Drag, etc.) point
-  //      toward the carrier's natural sideline (right when x ≥ 0).
+  //   1. Explicit `direction` override wins for directional templates.
+  //      We must factor the TEMPLATE's natural-sign in: a template
+  //      whose terminal waypoint is at -0.45 (Drag, "toward middle")
+  //      needs xSign=-1 to render rightward, NOT +1. Without this
+  //      factoring, Flood Right's backside-drag rendered LEFTWARD
+  //      because the previous `direction="right" → xSign=+1` rule
+  //      silently relied on the Flat template's positive terminal
+  //      and broke for Drag. Surfaced 2026-05-02 (third Flood bug).
+  //   2. Otherwise, directional templates point toward the carrier's
+  //      natural sideline (right when x ≥ 0).
   //   3. Non-directional templates (Go, Seam) ignore xSign entirely.
-  const xSign = direction === "left" ? -1
-    : direction === "right" ? 1
-    : template.directional !== false
-      ? (carrier.x >= 0 ? 1 : -1)
-      : 1;
+  const xSign = (() => {
+    if (template.directional === false) return 1;
+    if (direction === "left" || direction === "right") {
+      const lastPt = template.points[template.points.length - 1];
+      const naturalSign = lastPt && lastPt.x !== 0 ? Math.sign(lastPt.x) : 1;
+      const desiredSign = direction === "right" ? 1 : -1;
+      // Flip xSign so that template_x * xSign ends up with the desired
+      // absolute sign, regardless of which side the template's
+      // natural-direction points to.
+      return desiredSign * naturalSign;
+    }
+    return carrier.x >= 0 ? 1 : -1;
+  })();
 
   // Per-assignment depth override: scale every y proportionally so the
   // template's deepest waypoint lands at depthYds. Only positive depths
