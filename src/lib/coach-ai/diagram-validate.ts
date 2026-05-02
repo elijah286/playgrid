@@ -76,6 +76,15 @@ type PlaceDefenseSnapshot = {
   players: Array<{ id: string; x: number; y: number }>;
 };
 
+/** Snapshot of one place_offense return. Mirrors PlaceDefenseSnapshot.
+ *  The validator uses this to catch the case where Cal calls
+ *  place_offense but then silently repositions / renames / drops
+ *  offensive players before emitting the diagram (which produces the
+ *  malformed-OL bugs we keep chasing). */
+type PlaceOffenseSnapshot = {
+  players: Array<{ id: string; x: number; y: number }>;
+};
+
 /** Snapshot of one get_route_template call this turn. The validator uses
  *  these to verify Cal copied the tool result into the diagram instead of
  *  hand-authoring (the curl-bug class of failure). */
@@ -155,6 +164,11 @@ export function validateDiagrams(opts: {
   /** Most recent place_defense return, if any. Used to catch the model
    *  silently repositioning, renaming, or dropping defenders. */
   lastPlaceDefense: PlaceDefenseSnapshot | null;
+  /** Most recent place_offense return, if any. Symmetric with
+   *  lastPlaceDefense — catches Cal modifying offensive positions
+   *  after calling place_offense (which previously had no snapshot
+   *  check, so silent OL repositioning could ship undetected). */
+  lastPlaceOffense?: PlaceOffenseSnapshot | null;
   /** Every get_route_template call from this turn. If non-empty, every
    *  route in the diagram must match one of these snapshots (path AND
    *  curve flag) — catches hand-authored named routes. */
@@ -431,6 +445,49 @@ export function validateDiagrams(opts: {
         if (diagramCurve !== best.snap.curve) {
           errors.push(
             `${tag}route from "${from}" has curve=${diagramCurve}, but get_route_template's "${best.snap.name}" returned curve=${best.snap.curve}. A ${best.snap.curve ? "rounded" : "sharp"} route drawn ${diagramCurve ? "rounded" : "sharp"} renders wrong (curl as straight line, slant as arc).`,
+          );
+        }
+      }
+    }
+
+    // If place_offense ran this turn, the diagram's offense must match
+    // what it returned (no silent repositioning, renaming, or dropping).
+    // Mirror of the place_defense block below — catches the LT-on-LG
+    // class of bug where Cal called place_offense but then nudged a
+    // lineman without using the canonical position.
+    if (opts.lastPlaceOffense && offense.length > 0) {
+      const expectedById = new Map<string, { count: number; positions: Array<{ x: number; y: number }> }>();
+      for (const ep of opts.lastPlaceOffense.players) {
+        const cur = expectedById.get(ep.id);
+        if (cur) {
+          cur.count += 1;
+          cur.positions.push({ x: ep.x, y: ep.y });
+        } else {
+          expectedById.set(ep.id, { count: 1, positions: [{ x: ep.x, y: ep.y }] });
+        }
+      }
+      const seenIds = new Map<string, number>();
+      for (const o of offense) seenIds.set(o.id, (seenIds.get(o.id) ?? 0) + 1);
+      for (const [id, info] of expectedById) {
+        const actual = seenIds.get(id) ?? 0;
+        if (actual < info.count) {
+          errors.push(
+            `${tag}offensive player "${id}" missing — place_offense returned ${info.count} of them, diagram has ${actual}. ` +
+            `Copy place_offense's players verbatim — modifying or omitting any breaks the formation.`,
+          );
+        }
+      }
+      // Position drift: per-id, every actual must be close to one expected.
+      for (const o of offense) {
+        const info = expectedById.get(o.id);
+        if (!info) continue;
+        const close = info.positions.some(
+          (e) => Math.abs(e.x - o.x) <= 0.5 && Math.abs(e.y - o.y) <= 0.5,
+        );
+        if (!close) {
+          errors.push(
+            `${tag}offensive player "${o.id}" repositioned from place_offense's output (now at ${o.x},${o.y}). ` +
+            `Don't hand-tune — call place_offense with the right formation name and copy verbatim.`,
           );
         }
       }

@@ -383,7 +383,14 @@ function placeReceivers(
 /* ------------------------------------------------------------------ */
 
 function placeTackleLine(): SynthOffensePlayer[] {
-  // Standard 5 OL on the LOS, evenly spaced ~2 yards apart.
+  // 5 OL on the LOS at football-realistic 2-yard splits. Tokens
+  // visually overlap slightly (rendered diameter ~3.4yd > 2yd split),
+  // but that's CORRECT — linemen ARE shoulder-to-shoulder, and a coach
+  // reading the diagram expects to see them tight together. The
+  // overlap-resolver in coachDiagramConverter explicitly skips OL-OL
+  // pairs so it doesn't try to "fix" this and produce ahistorical
+  // wider spreads (or oscillate, as it did before — see
+  // coachDiagramConverter "Lineman pairs are exempt").
   return [
     { id: "LT", x: -4, y: 0 },
     { id: "LG", x: -2, y: 0 },

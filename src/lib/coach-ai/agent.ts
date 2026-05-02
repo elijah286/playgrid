@@ -639,6 +639,7 @@ export async function runAgent(
   let placeDefenseInvoked = false;
   let placeOffenseInvoked = false;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
+  let lastPlaceOffense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
   /** Every get_route_template call this turn — lets the validator catch
    *  hand-authored named routes (the curl-as-vertical-line bug). */
@@ -686,6 +687,7 @@ export async function runAgent(
           text: bufferedText,
           variant: ctx.sportVariant,
           lastPlaceDefense,
+          lastPlaceOffense,
           routeTemplates: routeTemplateCalls,
           writeToolsCalledOk,
           placeOffenseCalled: placeOffenseInvoked,
@@ -834,6 +836,16 @@ export async function runAgent(
       // mirroring the place_defense gate.
       if (tu.name === "place_offense" && r.ok) {
         placeOffenseInvoked = true;
+        // Capture the returned offense for snapshot-drift validation —
+        // mirror of the place_defense block above. Same regex shape, just
+        // team:"O" instead of team:"D".
+        const m = /Drop these players into your diagram \(team:"O"\):\s*(\[[\s\S]+?\])/.exec(resultText);
+        if (m) {
+          try {
+            const parsed = JSON.parse(m[1]) as Array<{ id: string; x: number; y: number }>;
+            if (Array.isArray(parsed)) lastPlaceOffense = { players: parsed };
+          } catch { /* ignore — validator will skip the position-drift check */ }
+        }
       }
       toolResultBlocks.push({
         type: "tool_result",

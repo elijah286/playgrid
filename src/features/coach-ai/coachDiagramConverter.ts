@@ -331,12 +331,30 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     return lab === "QB" || lab === "Q" || lab === "C" ||
       guessRole(sp.dp) === "QB" || guessRole(sp.dp) === "C";
   };
+  // Lineman pairs are exempt from overlap resolution. Real OL splits are
+  // 1-2 yards, but the rendered token diameter on tackle_11 is ~3.4yds
+  // (token radius 0.032 normalized × 53yd field width). So adjacent
+  // linemen are always going to "visually overlap" by the token-pixel
+  // definition — and that's CORRECT, because coaches read the OL row as
+  // a single tight unit.
+  //
+  // The previous resolver tried to nudge linemen apart and entered an
+  // oscillation: nudging LG outward landed it inside C's anchor zone,
+  // C pushed it back, repeat. After MAX_ITERS the resolver left LG
+  // visually stacked on LT (the bug surfaced 2026-05-01 in production).
+  // Skipping OL-OL pairs eliminates the cycle entirely.
+  const isLineman = (sp: StagedPlayer): boolean => {
+    if (sp.team !== "O") return false;
+    const lab = (sp.dp.role ?? sp.dp.id).toUpperCase();
+    return LINEMAN_LABELS.has(lab) || lab === "C";
+  };
   // Iterate to convergence. The previous single-pass nudge resolved each
   // pair once, but a player can land on top of a third player after being
   // pushed (cascading collisions). Loop until no overlaps remain or we hit
   // a safety cap. MAX_ITERS is intentionally generous — 22 offensive +
   // defensive players × ~3 cascades stays well under 100.
   const MAX_ITERS = 100;
+  let lastIterMoved = false;
   for (let iter = 0; iter < MAX_ITERS; iter++) {
     let moved = false;
     for (let i = 0; i < staged.length; i++) {
@@ -344,6 +362,8 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         const a = staged[i];
         const b = staged[j];
         if (a.team !== b.team) continue;
+        // Skip OL-OL pairs — see "Lineman pairs are exempt" above.
+        if (isLineman(a) && isLineman(b)) continue;
         const aN = toNorm(a.x, a.y);
         const bN = toNorm(b.x, b.y);
         const dnx = aN.x - bN.x;
@@ -369,7 +389,42 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         }
       }
     }
+    lastIterMoved = moved;
     if (!moved) break;
+  }
+  // Hard-failure assertion: if the resolver didn't converge (still moved
+  // on the last iteration after MAX_ITERS), there's a structural problem
+  // in the inputs — a 3-player oscillation, mutual anchoring conflict,
+  // or other geometry the resolver can't fix. Surface it loudly rather
+  // than silently saving a malformed diagram (which is exactly what the
+  // 2026-05-01 LT-on-LG bug looked like). The error includes which
+  // players still overlap so Cal can re-emit with corrected geometry.
+  if (lastIterMoved) {
+    const overlaps: string[] = [];
+    for (let i = 0; i < staged.length; i++) {
+      for (let j = 0; j < i; j++) {
+        const a = staged[i];
+        const b = staged[j];
+        if (a.team !== b.team) continue;
+        if (isLineman(a) && isLineman(b)) continue;
+        const aN = toNorm(a.x, a.y);
+        const bN = toNorm(b.x, b.y);
+        if (Math.hypot(aN.x - bN.x, aN.y - bN.y) < OVERLAP_THRESHOLD_NORM) {
+          overlaps.push(`"${a.dp.id}" and "${b.dp.id}" (Δ ${Math.hypot(a.x - b.x, a.y - b.y).toFixed(2)} yds)`);
+        }
+      }
+    }
+    if (overlaps.length > 0) {
+      throw new Error(
+        `Overlap resolver failed to converge after ${MAX_ITERS} iterations. ` +
+        `Players still overlap: ${overlaps.slice(0, 4).join("; ")}` +
+        `${overlaps.length > 4 ? `, +${overlaps.length - 4} more` : ""}. ` +
+        `This usually means two players were authored at exactly the same (x, y), ` +
+        `or three players are clustered in a way the greedy nudge can't separate. ` +
+        `Re-emit the diagram with distinct positions, or call place_offense / place_defense ` +
+        `to use the canonical layout.`,
+      );
+    }
   }
 
   // Build Player objects.
