@@ -302,41 +302,59 @@ export function lintProseDepthAgainstSpec(prose: string, spec: PlaySpec): DepthL
 
   for (const sentence of sentences) {
     if (!sentence.trim()) continue;
-    const refs = [...sentence.matchAll(/@([A-Za-z][A-Za-z0-9]{0,3})\b/g)];
-    if (refs.length === 0) continue;
+    // Sub-clause split. Sentences with multiple @-refs frequently
+    // describe each player in their own comma-separated clause:
+    //   "@H runs the under-drag at 2 yards, @S runs the over-drag at
+    //    2 yards as well (both shallow crossers), with @X at 5 yards."
+    // The previous "any-depth-in-sentence-passes" heuristic missed
+    // @S's wrong depth here because "5 yards" (intended for @X) was
+    // within tolerance of @S's expected 6yd. Splitting on commas
+    // (and dashes / parens / semicolons) localizes each @-ref to the
+    // depth in its own clause. Surfaced 2026-05-02 (Mesh prose said
+    // "S runs the over-drag at 2 yards" while the spec had S@6yd).
+    // Clause separators: commas, semicolons, parens, em/en-dashes,
+    // and standalone " - " (with spaces). Do NOT include the bare
+    // ASCII hyphen — it splits intra-word in "under-drag" / "over-drag"
+    // and detaches @-refs from their depth phrase. Surfaced
+    // 2026-05-02: prose split on "-" in "under-drag" left @H in a
+    // clause with no depth, masking @S's wrong 2yd claim.
+    const clauses = sentence.split(/[,;()—–]+|(?:\s-\s)/);
+    for (const rawClause of clauses) {
+      const clause = rawClause.trim();
+      if (!clause) continue;
+      const refs = [...clause.matchAll(/@([A-Za-z][A-Za-z0-9]{0,3})\b/g)];
+      if (refs.length === 0) continue;
+      const depthMatches = [...clause.matchAll(depthRe)]
+        .map((m) => parseFloat(m[1]))
+        .filter((n) => Number.isFinite(n) && n >= 0 && n <= 30);
+      if (depthMatches.length === 0) continue;
 
-    const depthMatches = [...sentence.matchAll(depthRe)]
-      .map((m) => parseFloat(m[1]))
-      .filter((n) => Number.isFinite(n) && n >= 0 && n <= 30);
-    if (depthMatches.length === 0) continue;
+      for (const m of refs) {
+        const player = m[1].toUpperCase();
+        const expected = playerToDepth.get(player);
+        if (expected === undefined) continue;
 
-    for (const m of refs) {
-      const player = m[1].toUpperCase();
-      const expected = playerToDepth.get(player);
-      if (expected === undefined) continue;
+        // Within a clause, ANY-close still applies — coaches do
+        // sometimes mention multiple depths for the same player
+        // ("@X runs a 12-yard dig settling at 10 yards"). The fix
+        // here is the clause boundary, not the comparison logic.
+        const anyClose = depthMatches.some((d) => Math.abs(d - expected) <= TOLERANCE_YDS);
+        if (anyClose) continue;
+        const closest = depthMatches.reduce((best, d) =>
+          Math.abs(d - expected) < Math.abs(best - expected) ? d : best,
+        depthMatches[0]);
 
-      // For each depth in the sentence, check whether ANY matches
-      // expected. If at least one is close enough, the sentence is
-      // consistent (it may mention several depths — e.g. read
-      // progressions. Pass if ANY hit; fail only when every depth is
-      // far from expected.
-      const anyClose = depthMatches.some((d) => Math.abs(d - expected) <= TOLERANCE_YDS);
-      if (anyClose) continue;
-      // Pick the closest mismatched depth as the reported error.
-      const closest = depthMatches.reduce((best, d) =>
-        Math.abs(d - expected) < Math.abs(best - expected) ? d : best,
-      depthMatches[0]);
+        const dedupeKey = `${player}|${closest}|${expected}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
 
-      const dedupeKey = `${player}|${closest}|${expected}`;
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-
-      issues.push({
-        player,
-        expectedDepthYds: expected,
-        proseDepthYds: closest,
-        bullet: sentence.trim(),
-      });
+        issues.push({
+          player,
+          expectedDepthYds: expected,
+          proseDepthYds: closest,
+          bullet: clause,
+        });
+      }
     }
   }
 

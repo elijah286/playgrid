@@ -156,31 +156,47 @@ export function sanitizeCoachDiagram(
     cleanPlayers.push({ ...p });
   }
 
-  // Resolve overlaps. Two non-OL players within 0.3yd — nudge the
-  // second one outward by 1.0yd. Stable order: by index, so the
-  // result is deterministic.
+  // Resolve overlaps. Players within 0.3yd — nudge the second one
+  // outward by 1.0yd. The nudge is skipped ONLY when BOTH players
+  // are linemen (real OL splits are tight, 1-2yd, and the OL
+  // validator already enforces the spacing). When a non-OL player
+  // (TE, slot, RB) collides with an OL, we DO nudge — because a
+  // skill player parked on top of a tackle is a pure rendering
+  // collision the user will see. Surfaced 2026-05-02: Cal emitted
+  // a Mesh edit with @Y stacked on @RT; the previous "skip if
+  // either is OL" rule masked it. Stable order: by index → result
+  // is deterministic.
   const NUDGE_THRESHOLD = 0.3;
   const NUDGE_DISTANCE  = 1.0;
   for (let i = 0; i < cleanPlayers.length; i++) {
     const a = cleanPlayers[i];
-    if (OL_IDS.has(a.id.toUpperCase())) continue;
+    const aIsOl = OL_IDS.has(a.id.toUpperCase());
     for (let j = i + 1; j < cleanPlayers.length; j++) {
       const b = cleanPlayers[j];
       if (a.team !== b.team) continue; // offense + defense overlap is allowed (mirroring)
-      if (OL_IDS.has(b.id.toUpperCase())) continue;
+      const bIsOl = OL_IDS.has(b.id.toUpperCase());
+      if (aIsOl && bIsOl) continue; // OL-OL: legitimate tight splits
       const dx = Math.abs(a.x - b.x);
       const dy = Math.abs(a.y - b.y);
       if (dx <= NUDGE_THRESHOLD && dy <= NUDGE_THRESHOLD) {
-        // Nudge b outward away from center on the x-axis. If b is at
-        // x=0, nudge right.
-        const sign = b.x >= 0 ? 1 : -1;
-        const nudgedX = b.x + sign * NUDGE_DISTANCE;
+        // Nudge the NON-OL away. When both are non-OL (the original
+        // case), nudge `b` (stable: nudge the second occurrence).
+        // When one is OL and one isn't, nudge the NON-OL — the OL row
+        // holds its position. So:
+        //   aIsOl → nudge j (b is the non-OL)
+        //   bIsOl → nudge i (a is the non-OL)
+        //   neither → nudge j (default: second occurrence)
+        const nudgeTargetIdx = aIsOl ? j : (bIsOl ? i : j);
+        const target = cleanPlayers[nudgeTargetIdx];
+        const sign = target.x >= 0 ? 1 : -1;
+        const nudgedX = target.x + sign * NUDGE_DISTANCE;
+        const otherId = nudgeTargetIdx === j ? a.id : b.id;
         warnings.push({
           code: "player_overlap_nudged",
-          subject: b.id,
-          message: `@${b.id} overlapped @${a.id} at (${a.x}, ${a.y}); nudged x to ${nudgedX.toFixed(1)}.`,
+          subject: target.id,
+          message: `@${target.id} overlapped @${otherId} at (${target.x}, ${target.y}); nudged x to ${nudgedX.toFixed(1)}.`,
         });
-        cleanPlayers[j] = { ...b, x: nudgedX };
+        cleanPlayers[nudgeTargetIdx] = { ...target, x: nudgedX };
       }
     }
   }

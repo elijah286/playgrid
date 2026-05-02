@@ -849,6 +849,18 @@ export async function runAgent(
                   "If you set curve incorrectly, the diagram lies about the route's break shape.\n" +
                   "(d) For defense, use EXACTLY the players from place_defense's last return — no renames, repositions, drops.\n" +
                   "(e) Hit the variant's full offense count (7 for flag_7v7, 11 for tackle_11, 5 for flag_5v5) when defense is shown.\n" +
+                  "(f) **If the surgical-edit gate fired** (offense players[] drifted from prior fence), the FIX is to drop the offense player array below VERBATIM into your re-emit, then only modify the routes the request actually targets. Do NOT retype the players from memory.\n" +
+                  (priorAssistantFenceJson
+                    ? `\n--- PRIOR FENCE'S OFFENSE PLAYERS (copy this array verbatim into your players[] field, then add defenders if needed) ---\n${(() => {
+                        try {
+                          const prior = JSON.parse(priorAssistantFenceJson) as { players?: Array<{ team?: string }> };
+                          const offense = (prior.players ?? []).filter((p) => p.team !== "D");
+                          return JSON.stringify(offense, null, 2);
+                        } catch {
+                          return "(prior fence didn't parse — cannot inline; copy from chat history above)";
+                        }
+                      })()}\n--- END PRIOR PLAYERS ---\n\n`
+                    : "") +
                   "Keep all of your explanatory prose; only fix the broken parts.",
               },
             ],
@@ -892,7 +904,19 @@ export async function runAgent(
         onEvent?.({ type: "tool_call", name: tu.name });
         onEvent?.({ type: "status", text: TOOL_STATUS[tu.name] ?? `Running ${tu.name}…` });
       }
-      const r = await runTool(tu.name, tu.input, ctx);
+      // FENCE INPUT AUTO-CORRECTION (2026-05-02): every tool that
+      // edits a prior fence (modify_play_route, revise_play,
+      // add_defense_to_play, compose_defense, set_defender_assignment)
+      // takes a prior_play_fence / on_play string. Cal has been observed
+      // FABRICATING this input from memory, with formations that don't
+      // match the actual most-recent chat fence — the tool then
+      // dutifully edits the fabrication and ships a wrong-formation
+      // play. Fix: when the chat already has a prior fence and Cal's
+      // input drifts from it (different player count, different ids),
+      // overwrite the input with the real chat fence. Cal's intent
+      // (what to change) is preserved; only the baseline is corrected.
+      const correctedInput = autoCorrectPriorFence(tu.name, tu.input as Record<string, unknown>, priorAssistantFenceJson);
+      const r = await runTool(tu.name, correctedInput, ctx);
       const resultText = r.ok ? r.result : r.error;
       // Mark the run as mutating so the client refreshes surrounding UI.
       if (r.ok && MUTATING_TOOLS.has(tu.name)) mutated = true;
@@ -1086,4 +1110,66 @@ function extractAssistantText(msg: ChatMessage): string {
     .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
     .map((b) => b.text)
     .join("\n\n");
+}
+
+/** Tool names that accept a prior play fence as a string input. Their
+ *  parameter names differ slightly — modify/revise/add use
+ *  `prior_play_fence`, compose_defense uses `on_play` — so we map them
+ *  here. */
+const PRIOR_FENCE_TOOLS: Readonly<Record<string, string>> = {
+  modify_play_route:        "prior_play_fence",
+  revise_play:              "prior_play_fence",
+  add_defense_to_play:      "prior_play_fence",
+  set_defender_assignment:  "prior_play_fence",
+  compose_defense:          "on_play",
+};
+
+/** Quick fingerprint of an offense roster for "did Cal pass us a
+ *  fabricated fence?" detection. We compare the fingerprints — if
+ *  Cal's input has the same count and same id-set as the actual chat
+ *  fence, accept it (positions might differ slightly through
+ *  legitimate paths); if they differ, the input is fabricated. */
+function offenseFingerprint(fenceJson: string): { count: number; ids: string } | null {
+  try {
+    const parsed = JSON.parse(fenceJson) as { players?: Array<{ id?: unknown; team?: unknown }> };
+    if (!Array.isArray(parsed.players)) return null;
+    const offense = parsed.players.filter((p) => p && (p as { team?: string }).team !== "D");
+    const ids = offense.map((p) => (p as { id?: string }).id ?? "?").sort().join(",");
+    return { count: offense.length, ids };
+  } catch {
+    return null;
+  }
+}
+
+/** When a fence-editing tool is called with a `prior_play_fence` /
+ *  `on_play` that drifts from the actual most-recent chat fence,
+ *  replace it with the real one. Preserves Cal's other inputs (the
+ *  mods, defender, action — what to change) so only the BASELINE is
+ *  corrected. */
+function autoCorrectPriorFence(
+  toolName: string,
+  input: Record<string, unknown>,
+  priorAssistantFenceJson: string | null,
+): Record<string, unknown> {
+  const paramName = PRIOR_FENCE_TOOLS[toolName];
+  if (!paramName || !priorAssistantFenceJson) return input;
+  const provided = typeof input[paramName] === "string" ? (input[paramName] as string) : "";
+  if (!provided.trim()) {
+    // Cal didn't pass anything — inject the real prior. Reduces the
+    // chance of "I'm not sure what to edit" defaults inside the tool.
+    return { ...input, [paramName]: priorAssistantFenceJson };
+  }
+  const providedFp = offenseFingerprint(provided);
+  const actualFp = offenseFingerprint(priorAssistantFenceJson);
+  if (!providedFp || !actualFp) return input;
+  // Drift detector: same player count AND same id-set = same baseline,
+  // accept Cal's input verbatim (it's probably the right fence with
+  // some incidental whitespace differences). Different count or ids
+  // = Cal fabricated the input; replace it.
+  if (providedFp.count === actualFp.count && providedFp.ids === actualFp.ids) {
+    return input;
+  }
+  // Cal's fence drifted — overwrite with the real one. The tool will
+  // edit the correct baseline; coach sees the right play.
+  return { ...input, [paramName]: priorAssistantFenceJson };
 }

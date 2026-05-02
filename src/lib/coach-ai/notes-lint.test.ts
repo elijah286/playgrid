@@ -13,7 +13,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { lintNotesAgainstSpec, lintProseAgainstSpec } from "./notes-lint";
+import { lintNotesAgainstSpec, lintProseAgainstSpec, lintProseDepthAgainstSpec } from "./notes-lint";
+import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "@/domain/play/spec";
 
 function specWithRoutes(routes: Record<string, string>): PlaySpec {
@@ -296,6 +297,65 @@ Cover 3 splits the field into thirds. The post beats this.`,
     const result = lintProseAgainstSpec(
       `Pull and lead through the hole.`,
       specWithRoutes({}),
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("lintProseDepthAgainstSpec — clause-level scoping (the screenshot regression)", () => {
+  // Coach surfaced 2026-05-02 (Mesh play): Cal's prose said
+  //   "@H runs the under-drag at 2 yards, @S runs the over-drag at
+  //    2 yards as well (both shallow crossers), with @X settling at
+  //    5 yards"
+  // while the spec had H@2, S@6, X@8. The previous "any-depth-in-
+  // sentence-passes" heuristic missed @S because "5 yards" (intended
+  // for @X) was within tolerance of @S's expected 6yd. The fix:
+  // split each sentence into clauses on commas/dashes/parens, so each
+  // @-ref is bound to depths in its own clause.
+
+  it("catches @S confabulation when an unrelated @X depth is in the same sentence", () => {
+    const skel = generateConceptSkeleton("Mesh", { variant: "tackle_11" });
+    if (!skel.ok) throw new Error("skeleton failed");
+    const prose =
+      "@H runs the under-drag at 2 yards, @S runs the over-drag at 2 yards as well " +
+      "(both shallow crossers), with @X settling in the hole between safeties at 5 " +
+      "yards for the intermediate void.";
+    const result = lintProseDepthAgainstSpec(prose, skel.spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const sIssue = result.issues.find((i) => i.player === "S");
+    expect(sIssue).toBeDefined();
+    expect(sIssue?.proseDepthYds).toBe(2);
+    expect(sIssue?.expectedDepthYds).toBe(6);
+  });
+
+  it("does NOT split intra-word hyphens (under-drag stays one clause)", () => {
+    const skel = generateConceptSkeleton("Mesh", { variant: "tackle_11" });
+    if (!skel.ok) throw new Error("skeleton failed");
+    // Correct prose — H at 2yd matches spec; should pass.
+    const result = lintProseDepthAgainstSpec(
+      "@H runs the under-drag at 2 yards as the shallow cross.",
+      skel.spec,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("preserves the existing 'any-depth-in-clause-passes' rule within a clause", () => {
+    // Coaches sometimes mention multiple depths in one clause — e.g.
+    // "@X runs a 12-yard dig settling at 10 yards". As long as ONE of
+    // the depths matches expected (10 ≈ 10), the lint passes.
+    const result = lintProseDepthAgainstSpec(
+      "@X runs a 12-yard dig settling at 10 yards.",
+      {
+        schemaVersion: 4 as never,
+        variant: "tackle_11" as const,
+        title: "T",
+        playType: "offense" as const,
+        formation: { name: "Spread Doubles" },
+        assignments: [
+          { player: "X", action: { kind: "route", family: "Dig", depthYds: 10 } },
+        ],
+      },
     );
     expect(result.ok).toBe(true);
   });

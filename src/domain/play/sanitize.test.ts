@@ -340,3 +340,59 @@ describe("sanitize — combined corruption (multiple passes interact)", () => {
     expect(result.warnings.length).toBeGreaterThanOrEqual(5);
   });
 });
+
+describe("sanitize — OL-overlap edge case (Y stacked on RT)", () => {
+  // 2026-05-02 (image 2 from coach feedback): Cal emitted a Mesh edit
+  // where @Y was placed at the same (x, y) as @RT, and the renderer
+  // showed them stacked ("IRT Y" overlapping). The previous nudge
+  // rule skipped when EITHER player was an OL — masking this case.
+  // Now: skip ONLY when BOTH are OL (real OL splits are tight). When
+  // a non-OL player overlaps an OL, the non-OL gets nudged.
+
+  it("NUDGES a non-OL player off an OL it's stacked on", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        players: [
+          { id: "Q",  x: 0, y: -3, team: "O" },
+          { id: "RT", x: 4, y:  0, team: "O" },
+          { id: "Y",  x: 4, y:  0, team: "O" }, // stacked on RT
+        ],
+      }),
+    );
+    // Y must be nudged (not RT — OL row holds its position).
+    const rt = result.diagram.players.find((p) => p.id === "RT")!;
+    const y = result.diagram.players.find((p) => p.id === "Y")!;
+    expect(rt.x).toBe(4); // OL unchanged
+    expect(y.x).not.toBe(4); // Y moved
+    expect(result.warnings.some((w) => w.code === "player_overlap_nudged" && w.subject === "Y")).toBe(true);
+  });
+
+  it("STILL skips OL-OL overlap (preserves tight splits)", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        players: [
+          { id: "LG", x: -2, y: 0, team: "O" },
+          { id: "C",  x: -2, y: 0, team: "O" }, // intentionally same-x for test
+        ],
+      }),
+    );
+    expect(result.warnings.filter((w) => w.code === "player_overlap_nudged")).toHaveLength(0);
+  });
+
+  it("nudges Y regardless of array order (OL holds even when listed second)", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        players: [
+          { id: "Q", x:  0, y: -3, team: "O" },
+          { id: "Y", x:  4, y:  0, team: "O" }, // listed first
+          { id: "RT", x: 4, y:  0, team: "O" }, // listed second
+        ],
+      }),
+    );
+    const rt = result.diagram.players.find((p) => p.id === "RT")!;
+    const y = result.diagram.players.find((p) => p.id === "Y")!;
+    expect(rt.x).toBe(4);
+    expect(y.x).not.toBe(4);
+    expect(result.warnings.some((w) => w.code === "player_overlap_nudged" && w.subject === "Y")).toBe(true);
+  });
+});
