@@ -249,18 +249,14 @@ const LINEMAN_LABELS = new Set([
   "LT1", "LG1", "RG1", "RT1",
 ]);
 
-// Outlined zone palette — fill is `none` because coverage diagrams (Cover 3,
-// Tampa 2, etc.) stack 6+ zones and any translucent fill compounds into a
-// near-opaque dark blob over the field. Keep the dashed stroke distinct per
-// zone so adjacent zones still read as separate.
-const ZONE_PALETTE: { fill: string; stroke: string }[] = [
-  { fill: "none", stroke: "rgba(250, 204, 21, 0.95)"  }, // amber
-  { fill: "none", stroke: "rgba(96, 165, 250, 0.95)"  }, // blue
-  { fill: "none", stroke: "rgba(244, 114, 182, 0.95)" }, // pink
-  { fill: "none", stroke: "rgba(167, 139, 250, 0.95)" }, // violet
-  { fill: "none", stroke: "rgba(45, 212, 191, 0.95)"  }, // teal
-  { fill: "none", stroke: "rgba(251, 146, 60, 0.95)"  }, // orange
-];
+// Single zone style — matches `mkZone`, which is what coaches get when
+// they drop a zone via the editor's rect/ellipse tools. Cal-generated
+// zones must read as user-equivalent: same translucent blue fill +
+// dashed blue stroke, no rainbow palette. Stacked coverage zones
+// (Cover 3 = 7 zones, Cover 2 = 7) compound into a darker blob, but
+// that's the editor's native behavior — consistency with what coaches
+// can produce themselves wins over visual polish.
+const ZONE_STYLE = { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)" };
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -688,14 +684,15 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
   }
 
   // Build Zone objects (yards → normalized; full size → half-extents).
-  // Ignore the AI's `color` for FILL — models often emit opaque dark hexes
-  // which stack into a black blob over the field. Use the translucent
-  // palette for fill regardless; stroke can still take the AI hint.
-  // Also clamp half-extents so a single zone can't dominate the field.
+  // Style is the SAME for every zone — matches what `mkZone` produces,
+  // which is what coaches get when they drop a rect/ellipse via the
+  // editor toolbar. Ignore any `color` hint from Cal: zones must read
+  // as user-equivalent, so a coach can't tell a Cal-drawn zone from
+  // one they drew themselves. Also clamp half-extents so a single
+  // zone can't dominate the field.
   const MAX_HALF_W = 0.32;
   const MAX_HALF_H = 0.32;
-  const zones: Zone[] = (diagram.zones ?? []).map((dz, i) => {
-    const palette = ZONE_PALETTE[i % ZONE_PALETTE.length];
+  const zones: Zone[] = (diagram.zones ?? []).map((dz) => {
     const center = toNorm(dz.center?.[0] ?? 0, dz.center?.[1] ?? 0);
     const sizeW = Number.isFinite(dz.size?.[0]) ? Math.abs(dz.size[0]) : 0;
     const sizeH = Number.isFinite(dz.size?.[1]) ? Math.abs(dz.size[1]) : 0;
@@ -708,8 +705,8 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       size: { w: halfW, h: halfH },
       label: dz.label,
       style: {
-        fill: palette.fill,
-        stroke: dz.color ?? palette.stroke,
+        fill: ZONE_STYLE.fill,
+        stroke: ZONE_STYLE.stroke,
       },
     };
   });

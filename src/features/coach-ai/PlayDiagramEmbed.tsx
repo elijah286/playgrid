@@ -280,7 +280,11 @@ function DiagramCanvas({ doc, animPositions, fullFieldWidth }: {
           const h = z.size.h * 2;
           const labelY = cy - z.size.h + 0.028;
           const common = {
-            fill: "none" as const,
+            // Use the zone's stored fill so chat preview matches the
+            // editor (translucent blue). Old behavior was fill="none"
+            // with a rainbow stroke palette — that diverged from what
+            // coaches see when they drop a zone via the editor toolbar.
+            fill: z.style.fill,
             stroke: z.style.stroke,
             strokeWidth: 1.4,
             strokeDasharray: "6 4",
