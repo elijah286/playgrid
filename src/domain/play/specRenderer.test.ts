@@ -248,3 +248,26 @@ describe("Renderer — read_and_react geometry (Phase D7)", () => {
     expect(final[1]).toBe(defender!.y);
   });
 });
+
+describe("Renderer — zones tagged with owner label for per-defender colors", () => {
+  it("Cover 1 deep-middle zone is owned by FS", () => {
+    const { diagram } = playSpecToCoachDiagram(
+      makeSpec({ defense: { front: "7v7 Man", coverage: "Cover 1" } }),
+    );
+    const fsZone = (diagram.zones ?? []).find((z) => z.label.toLowerCase().includes("deep middle"));
+    expect(fsZone?.ownerLabel).toBe("FS");
+  });
+
+  it("Cover 3 deep thirds owned by the corners and FS", () => {
+    const { diagram } = playSpecToCoachDiagram(
+      makeSpec({ defense: { front: "7v7 Zone", coverage: "Cover 3" } }),
+    );
+    const zones = diagram.zones ?? [];
+    const deepL = zones.find((z) => z.label === "Deep 1/3 L");
+    const deepM = zones.find((z) => z.label === "Deep 1/3 M");
+    const deepR = zones.find((z) => z.label === "Deep 1/3 R");
+    expect(deepL?.ownerLabel).toBe("CB");
+    expect(deepM?.ownerLabel).toBe("FS");
+    expect(deepR?.ownerLabel).toBe("CB");
+  });
+});

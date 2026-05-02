@@ -74,6 +74,10 @@ type DefenseAlignmentZone = {
   center: [number, number];
   size: [number, number];
   label: string;
+  /** Bare defender label that owns this zone (e.g. "FS", "WL", "CB").
+   *  Used downstream to tint the zone to match the owning defender's
+   *  triangle color. */
+  ownerLabel?: string;
 };
 
 type DefensePlayerWithAssignment = {
@@ -122,12 +126,23 @@ function computeDefenseAlignment(
         y: p.y,
         assignment: p.assignment,
       })),
-      zones: zonesForStrength(catalogMatch, strength).map((z) => ({
-        kind: z.kind,
-        center: [z.center[0], z.center[1]] as [number, number],
-        size: [z.size[0], z.size[1]] as [number, number],
-        label: z.label,
-      })),
+      zones: (() => {
+        // Pair each zone with the FIRST defender that drops into it so
+        // the chat fence can tint zones to match their triangle.
+        const owners = new Map<string, string>();
+        for (const p of alignmentWithAssignments(catalogMatch, strength)) {
+          if (p.assignment.kind === "zone" && !owners.has(p.assignment.zoneId)) {
+            owners.set(p.assignment.zoneId, p.id);
+          }
+        }
+        return zonesForStrength(catalogMatch, strength).map((z) => ({
+          kind: z.kind,
+          center: [z.center[0], z.center[1]] as [number, number],
+          size: [z.size[0], z.size[1]] as [number, number],
+          label: z.label,
+          ...(z.id && owners.get(z.id) ? { ownerLabel: owners.get(z.id) } : {}),
+        }));
+      })(),
       manCoverage: catalogMatch.manCoverage === true,
       synthesized: false,
     };
@@ -830,14 +845,18 @@ const add_defense_to_play: CoachAiTool = {
     });
 
     const isMan = alignment.manCoverage;
-    const newZones = isMan
-      ? []
-      : alignment.zones.map((z) => ({
-          kind: z.kind,
-          center: z.center,
-          size: z.size,
-          label: z.label,
-        }));
+    // Emit only the zones that some defender actually drops into (per
+    // the catalog's per-defender assignments, surfaced via ownerLabel).
+    // Cover 1 keeps the FS deep-middle zone; Cover 0 emits nothing.
+    const newZones = alignment.zones
+      .filter((z) => z.ownerLabel)
+      .map((z) => ({
+        kind: z.kind,
+        center: z.center,
+        size: z.size,
+        label: z.label,
+        ownerLabel: z.ownerLabel,
+      }));
 
     // Compose new fence: offense unchanged + new defenders + new zones (or
     // empty zones for man coverage). Preserve title/variant/focus/etc. from
@@ -1151,7 +1170,10 @@ const place_defense: CoachAiTool = {
     );
 
     const isMan = alignment.manCoverage;
-    const zones = isMan ? [] : alignment.zones;
+    // Emit only zones that have a defender actually dropping into them
+    // (alignment.zones already carries `ownerLabel` from the catalog).
+    // Cover 1 keeps the FS deep-middle zone; Cover 0 emits none.
+    const zones = alignment.zones.filter((z) => z.ownerLabel);
     const zonesJson = JSON.stringify(zones);
 
     // Per-defender assignment breakdown — surfaced so Cal can narrate

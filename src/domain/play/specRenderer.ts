@@ -252,6 +252,11 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
 
   const players: CoachDiagramPlayer[] = [];
   const movement: Array<{ defender: CoachDiagramPlayer; action: DefenderAction }> = [];
+  /** zoneId → owning defender's bare role label (used to color the zone
+   *  to match its triangle in the converter). First defender to claim a
+   *  zoneId wins; subsequent zone_drops on the same id (rare) fall
+   *  through to the default blue. */
+  const zoneOwners = new Map<string, string>();
   const usedZoneIds = new Set<string>();
 
   for (let i = 0; i < catalogPlayers.length; i++) {
@@ -271,10 +276,14 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
     const override = overrides.get(uid);
     const action: DefenderAction = override ?? defenderActionFromCatalog(cp.assignment);
 
-    // Zone drop: collect the referenced zone for emission below.
+    // Zone drop: collect the referenced zone for emission below + remember
+    // who owns it so the converter can color the zone to match the triangle.
     if (action.kind === "zone_drop") {
       const zoneId = action.zoneId ?? (cp.assignment.kind === "zone" ? cp.assignment.zoneId : undefined);
-      if (zoneId) usedZoneIds.add(zoneId);
+      if (zoneId) {
+        usedZoneIds.add(zoneId);
+        if (!zoneOwners.has(zoneId)) zoneOwners.set(zoneId, cp.id);
+      }
     }
 
     // All other kinds emit movement (man-match line, blitz arrow,
@@ -292,11 +301,13 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
   const zones: CoachDiagramZone[] = [];
   for (const z of allZones) {
     if (z.id && usedZoneIds.has(z.id)) {
+      const owner = zoneOwners.get(z.id);
       zones.push({
         kind: z.kind,
         center: [z.center[0], z.center[1]],
         size: [z.size[0], z.size[1]],
         label: z.label,
+        ...(owner ? { ownerLabel: owner } : {}),
       });
     }
   }

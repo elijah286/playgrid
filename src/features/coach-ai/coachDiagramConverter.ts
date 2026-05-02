@@ -93,6 +93,15 @@ export type CoachDiagramZone = {
   label: string;
   /** Optional fill color (hex). Defaults to a rotating translucent palette. */
   color?: string;
+  /**
+   * Optional defender id (e.g. "FS", "CB", "WL") this zone belongs to.
+   * When set, the converter colors the zone to match the owning
+   * defender's role color — a Cover 1 deep-middle zone owned by the
+   * FS paints in the safety color (orange), so the field reads as
+   * "this zone goes with that triangle" at a glance. Independent of
+   * `color`; `ownerLabel` wins when both are set.
+   */
+  ownerLabel?: string;
 };
 
 export type CoachDiagram = {
@@ -154,6 +163,7 @@ const coachDiagramZoneSchema = z.object({
   size: z.tuple([z.number(), z.number()]),
   label: z.string(),
   color: z.string().optional(),
+  ownerLabel: z.string().optional(),
 }).strict();
 
 export const coachDiagramSchema = z.object({
@@ -203,6 +213,7 @@ const STYLE_DEF_HOOK:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", lab
 const STYLE_DEF_FLAT:    PlayerStyle = { fill: "#0EA5E9", stroke: "#075985", labelColor: "#FFFFFF" }; // flat defenders — teal
 const STYLE_DEF_LB:      PlayerStyle = { fill: "#EC4899", stroke: "#831843", labelColor: "#FFFFFF" }; // LBs / Mike — magenta
 const STYLE_DEF_NICKEL:  PlayerStyle = { fill: "#F472B6", stroke: "#9d174d", labelColor: "#FFFFFF" }; // nickel / slot DB — rose
+const STYLE_DEF_DL:      PlayerStyle = { fill: "#7F1D1D", stroke: "#450a0a", labelColor: "#FFFFFF" }; // D-line (DE/DT/NT) — dark crimson, distinct from CB primary red
 // Interior offensive linemen are ineligible — they should be visually muted so
 // skill-position routes pop. Gray, neutral.
 const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelColor: "#0f172a" };
@@ -239,8 +250,12 @@ function defenderStyleFor(rawLabel: string): PlayerStyle {
   ) return STYLE_DEF_LB;
   // Nickel / slot DB.
   if (u === "NB" || u === "NICKEL" || u === "STAR" || u === "DIME") return STYLE_DEF_NICKEL;
+  // D-line — ends, tackles, nose tackles. Without a dedicated entry these
+  // fell through to the generic red and looked identical to the CBs.
+  if (u === "DE" || u === "DT" || u === "DL" || u === "NT" || u === "NG" || u === "DI" || u === "EDGE") return STYLE_DEF_DL;
   return STYLE_DEF;
 }
+
 
 // Labels for interior O-line — gets the muted-gray treatment regardless of
 // position-rotation order.
@@ -249,14 +264,39 @@ const LINEMAN_LABELS = new Set([
   "LT1", "LG1", "RG1", "RT1",
 ]);
 
-// Single zone style — matches `mkZone`, which is what coaches get when
-// they drop a zone via the editor's rect/ellipse tools. Cal-generated
-// zones must read as user-equivalent: same translucent blue fill +
-// dashed blue stroke, no rainbow palette. Stacked coverage zones
-// (Cover 3 = 7 zones, Cover 2 = 7) compound into a darker blob, but
-// that's the editor's native behavior — consistency with what coaches
-// can produce themselves wins over visual polish.
+// Default zone style — matches `mkZone`, which is what coaches get
+// when they drop a zone via the editor's rect/ellipse tools. Used as a
+// fallback when no `ownerLabel` is supplied (e.g. user hand-drawn
+// zones). Cal-emitted catalog zones override this with the owning
+// defender's role color so the zone visually pairs with its triangle.
 const ZONE_STYLE = { fill: "rgba(59,130,246,0.18)", stroke: "rgba(59,130,246,0.7)" };
+
+/**
+ * Convert a hex color (e.g. "#F97316") to a translucent rgba fill at
+ * the given opacity. Used to derive zone fills from defender role
+ * colors so a Cover 1 deep-middle zone owned by the FS paints in the
+ * same orange family as the FS triangle.
+ */
+function hexToRgba(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex; // already rgba/css; pass through
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Resolve zone style from an owner defender label, falling back to the
+ *  default user-style blue when no owner is set. */
+function zoneStyleForOwner(ownerLabel: string | undefined): { fill: string; stroke: string } {
+  if (!ownerLabel) return ZONE_STYLE;
+  const ds = defenderStyleFor(ownerLabel);
+  return {
+    fill: hexToRgba(ds.fill, 0.18),
+    stroke: hexToRgba(ds.fill, 0.85),
+  };
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -698,6 +738,7 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
     const sizeH = Number.isFinite(dz.size?.[1]) ? Math.abs(dz.size[1]) : 0;
     const halfW = Math.min(sizeW / 2 / profile.fieldWidthYds, MAX_HALF_W);
     const halfH = Math.min(sizeH / 2 / profile.fieldLengthYds, MAX_HALF_H);
+    const style = zoneStyleForOwner(dz.ownerLabel);
     return {
       id: uid(),
       kind: dz.kind,
@@ -705,8 +746,8 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       size: { w: halfW, h: halfH },
       label: dz.label,
       style: {
-        fill: ZONE_STYLE.fill,
-        stroke: ZONE_STYLE.stroke,
+        fill: style.fill,
+        stroke: style.stroke,
       },
     };
   });
