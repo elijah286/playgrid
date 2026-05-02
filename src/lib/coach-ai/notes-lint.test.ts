@@ -326,7 +326,10 @@ describe("lintProseDepthAgainstSpec — clause-level scoping (the screenshot reg
     const sIssue = result.issues.find((i) => i.player === "S");
     expect(sIssue).toBeDefined();
     expect(sIssue?.proseDepthYds).toBe(2);
-    expect(sIssue?.expectedDepthYds).toBe(6);
+    // Mesh skeleton over-drag is 8yd (bumped from 6yd 2026-05-02 for
+    // visual separation). The lint catches @S claim of "2 yards" vs
+    // spec @ 8yd.
+    expect(sIssue?.expectedDepthYds).toBe(8);
   });
 
   it("does NOT split intra-word hyphens (under-drag stays one clause)", () => {

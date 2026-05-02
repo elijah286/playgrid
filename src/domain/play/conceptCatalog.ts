@@ -170,17 +170,22 @@ const MESH: ConceptEntry = {
   name: "Mesh",
   aliases: ["Mesh Concept"],
   description:
-    "Two crossing drags that 'mesh' past each other at differentiated depths — one UNDER (3 yds) and one OVER (5-6 yds). The depth differentiation + meaningful absolute depth is what makes them mesh visibly: same depth = collision; both crammed at the LOS = invisible cross. Cal MUST set depthYds explicitly on each drag (e.g. 3 and 5) so the over-drag passes ABOVE the under-drag with visible separation from the OL row. Natural pick / rub action vs man, finds soft spots in zone.",
+    "Two crossing drags that 'mesh' past each other at differentiated depths — one UNDER (~2 yds) and one OVER (~7-8 yds). The depth differentiation + meaningful absolute depth is what makes them mesh visibly: same depth = collision; close depths = visually-collided in the chat preview; both crammed at the LOS = invisible cross. Cal MUST set depthYds explicitly on each drag (e.g. 2 and 8) so the over-drag passes CLEARLY ABOVE the under-drag with unambiguous visible separation. Natural pick / rub action vs man, finds soft spots in zone.",
   required: [
     // Differentiated slots — non-overlapping depth ranges force the
     // two drags to be at different depths AND at meaningful depth (not
-    // crammed at the LOS). 2026-05-02: bumped from [1,2.5]+[3.5,5] to
-    // [2,3.5]+[4.5,6] after coach surfaced that the prior shallow
-    // mesh rendered cramped against the OL row. Canonical Throw Deep
-    // / Hudl Mesh routes cross at 4-6yd depth — visibly separated
-    // from the line — not at 2yd where they overlap with the OL.
-    { role: "any", family: "Drag", depthRangeYds: { min: 2,   max: 3.5 } }, // under-drag (~3yd)
-    { role: "any", family: "Drag", depthRangeYds: { min: 4.5, max: 6   } }, // over-drag (~5-6yd)
+    // crammed at the LOS).
+    //
+    // Depth history:
+    //   [1, 2.5] + [3.5, 5]   — original; mesh too shallow against OL
+    //   [2, 3.5] + [4.5, 6]   — bumped 2026-05-02 (image 1 retry); 4yd
+    //                            gap rendered visually too close in
+    //                            the chat preview's compressed aspect
+    //   [2, 3.5] + [6, 9]     — current. ~6yd gap renders as
+    //                            unambiguously stacked. Coaches won't
+    //                            mistake the cross for a collision.
+    { role: "any", family: "Drag", depthRangeYds: { min: 2,   max: 3.5 } }, // under-drag (~2yd)
+    { role: "any", family: "Drag", depthRangeYds: { min: 6,   max: 9   } }, // over-drag (~7-8yd)
   ],
 };
 

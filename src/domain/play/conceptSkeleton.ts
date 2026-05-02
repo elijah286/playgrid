@@ -280,18 +280,18 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
   // Inside slots run the differentiated drags (H under, S over). Outside
   // X/Z run a sit + clear over the top.
   //
-  // Depth choice — 2 + 6 instead of 3 + 5: catalog ranges are [2, 3.5]
-  // (under) and [4.5, 6] (over). A 3 + 5 pick gives only ~2yd visual
-  // separation, which gets visually swallowed by the route token width
-  // (~3.4yd in tackle_11) — coaches reported "the drags look at the
-  // same yardage" 2026-05-02 even though the spec correctly recorded
-  // different depths. Picking the OUTER ENDS of the slot ranges yields
-  // 4yd visible separation, which renders as clearly distinct drags.
+  // Depth choice — 2 + 8: catalog ranges are [2, 3.5] (under) and
+  // [6, 9] (over). Visual-separation history:
+  //   3 + 5  →  ~2yd gap, visually swallowed by token width
+  //   2 + 6  →  4yd gap, still read as collided in chat preview
+  //   2 + 8  →  6yd gap, unambiguously stacked. Coaches won't
+  //              mistake the cross for a collision (surfaced
+  //              twice in 2026-05-02 sessions).
   // Both still satisfy concept_mesh's slot constraints.
   const assignments: PlayerAssignment[] = [
     routeAt("H", "Drag", 2),    // under-drag (low end of [2, 3.5])
-    routeAt("S", "Drag", 6),    // over-drag (top end of [4.5, 6])
-    routeAt("X", "Sit", 8),     // over-the-top sit
+    routeAt("S", "Drag", 8),    // over-drag (mid of [6, 9])
+    routeAt("X", "Sit", 12),    // over-the-top sit (deeper than over-drag)
     routeAt("Z", "Go", 18),     // single deep clear
     routeAt("B", "Flat", 2),    // outlet
     qbDropback(),
@@ -302,7 +302,7 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
     concept: "Mesh",
     spec: baseSpec(variant, "Mesh", "Spread Doubles", undefined, assignments),
     notes:
-      `Mesh: H under-drag @ 2yd + S over-drag @ 6yd — 4yd visual separation makes the cross unambiguous. X sits @ 8yd over the top, Z clears with go @ 18yd, B is the flat outlet.`,
+      `Mesh: H under-drag @ 2yd + S over-drag @ 8yd — 6yd visual separation makes the cross unambiguous. X sits @ 12yd over the top, Z clears with go @ 18yd, B is the flat outlet.`,
   };
 }
 

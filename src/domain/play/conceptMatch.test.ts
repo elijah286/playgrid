@@ -153,15 +153,16 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("Mesh: two DIFFERENTIATED drags pass (one under at 3yd, one over at 5yd)", () => {
-    // Slot ranges are [2, 3.5] (under) and [4.5, 6] (over) so the two
-    // drags must be at different MEANINGFUL depths (not crammed at the
-    // LOS where the cross is invisible). Depths 3 and 5 hit one slot
-    // each and produce a visible cross above the OL row.
+  it("Mesh: two DIFFERENTIATED drags pass (one under at 2yd, one over at 8yd)", () => {
+    // Slot ranges are [2, 3.5] (under) and [6, 9] (over) so the two
+    // drags must be at different MEANINGFUL depths AND with enough
+    // visible separation (~6yd) that the chat preview's compressed
+    // aspect doesn't read the cross as a collision. Depths 2 and 8
+    // hit one slot each.
     const result = assertConcept(
       buildSpec([
-        { player: "X", action: { kind: "route", family: "Drag", depthYds: 3 } },
-        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 5 } },
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 8 } },
       ]),
       "Mesh",
     );

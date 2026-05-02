@@ -469,10 +469,17 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     // shallow and deeper variants without re-authoring the template.
     breakStyle: "none",
     breakDir: "toward_qb",
-    constraints: { depthRangeYds: { min: 1, max: 6 }, side: "toward_qb" },
+    // 2026-05-02: max bumped from 6 to 9 so the Mesh over-drag can
+    // run at 7-8yd. At the chat preview's compressed aspect ratio, a
+    // 4yd gap (under @2 + over @6) reads as visually collided; coaches
+    // surfaced this twice. ~6yd gap (under @2 + over @8) is
+    // unambiguous. The route is still a "shallow cross" semantically
+    // — 8yd is the coaching ceiling for what's still called a drag
+    // before it crosses into "deep cross" territory.
+    constraints: { depthRangeYds: { min: 1, max: 9 }, side: "toward_qb" },
     kbSubtopic: "route_drag",
     description:
-      "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 3-5 yds depth (canonical default ~3yd; can deepen to 5-6yd via depthYds for the OVER drag in a Mesh). The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation that VISIBLY clears the OL row, not crammed against the LOS. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
+      "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 3-5 yds depth (canonical default ~3yd; can deepen to 7-8yd via depthYds for the OVER drag in a Mesh). The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation that VISIBLY clears the OL row, not crammed against the LOS. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
   },
   {
     name: "Seam",
