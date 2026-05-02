@@ -100,6 +100,34 @@ describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
   });
 });
 
+describe("generateConceptSkeleton — Flood Right tackle_11 doesn't trigger the overlap resolver (S vs H regression)", () => {
+  // Reproduces the exact scenario the coach hit 2026-05-02: a Flood
+  // Right play in tackle_11 that failed with "Overlap resolver failed
+  // to converge ... 'S' and 'H' overlap (Δ 3.56 yds)". Root cause was
+  // the synthesizer placing the inner slot at x=4 (RT's column).
+  // Now: with the synthesizer clamp (|x| >= 6 for slots), the rendered
+  // diagram should have S and H at distinct, non-OL-overlapping
+  // positions.
+  it("rendered Flood Right has S and H at non-overlapping x positions, both clear of the OL row", () => {
+    const result = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "right" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { diagram } = playSpecToCoachDiagram(result.spec);
+    const s = diagram.players.find((p) => p.id === "S");
+    const h = diagram.players.find((p) => p.id === "H");
+    expect(s, "Flood Right: S not in rendered formation").toBeDefined();
+    expect(h, "Flood Right: H not in rendered formation").toBeDefined();
+    // Distinct x positions.
+    expect(s!.x).not.toBe(h!.x);
+    // Both clear of the OL row (|x| >= 6 in tackle_11).
+    expect(Math.abs(s!.x)).toBeGreaterThanOrEqual(6);
+    expect(Math.abs(h!.x)).toBeGreaterThanOrEqual(6);
+    // Both on the same (right) side per Flood semantics.
+    expect(s!.x).toBeGreaterThan(0);
+    expect(h!.x).toBeGreaterThan(0);
+  });
+});
+
 describe("generateConceptSkeleton — every skeleton RENDERS without overlap or fallback (regression for S+H stacking)", () => {
   // Every skeleton must produce a CoachDiagram where (a) the synthesizer
   // recognized the formation (no formation_fallback warning), and (b) no

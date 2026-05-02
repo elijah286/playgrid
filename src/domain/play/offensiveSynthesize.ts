@@ -358,7 +358,7 @@ function placeReceivers(
     const x = -(wideX - i * insideStepLeft) + (i > 0 && rec.bunchSide === "left" ? 3 : 0);
     const onLine = i === 0;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("left", i, false), x: Math.round(x * 10) / 10, y });
+    players.push({ id: labelFor("left", i, false), x: clampSlotXAwayFromOL(x, onLine, variant), y });
   }
 
   // RIGHT side. If te=1 the TE (Y) goes ON the line just outside RT;
@@ -388,10 +388,32 @@ function placeReceivers(
     // legal (two split-end-style attached/wide receivers).
     const onLine = i === 0;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("right", i, false), x: Math.round(x * 10) / 10, y });
+    players.push({ id: labelFor("right", i, false), x: clampSlotXAwayFromOL(x, onLine, variant), y });
   }
 
   return players;
+}
+
+/**
+ * Clamp a synthesized slot's x-position so it stays clear of the OL
+ * row. For tackle_11, the OL spans x=[-4, +4]; an inner-most slot in
+ * Trips (rec.left=3 or rec.right=3) lands at exactly x=±4 from the
+ * natural formula `wideX - 2*insideStep = 18 - 14 = 4`, putting the
+ * slot directly above/below LT or RT and producing an overlap-resolver
+ * failure ("S and H overlap" — surfaced 2026-05-02). Push slots out by
+ * 2yd minimum so they sit OUTSIDE the OL row, where the resolver can
+ * separate them cleanly. Outermost WRs (onLine=true) are at x=±18 and
+ * never need clamping; the OL itself isn't routed through this helper.
+ *
+ * Flag variants don't have an OL, so no clamping needed.
+ */
+function clampSlotXAwayFromOL(x: number, onLine: boolean, variant: SynthOffense["variant"]): number {
+  const rounded = Math.round(x * 10) / 10;
+  if (variant !== "tackle_11" || onLine) return rounded;
+  const MIN_OUTSIDE_OL = 6; // OL spans [-4, +4]; slots must clear by 2yd
+  if (rounded > 0 && rounded < MIN_OUTSIDE_OL) return MIN_OUTSIDE_OL;
+  if (rounded < 0 && rounded > -MIN_OUTSIDE_OL) return -MIN_OUTSIDE_OL;
+  return rounded;
 }
 
 /* ------------------------------------------------------------------ */
