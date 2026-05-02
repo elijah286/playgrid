@@ -350,6 +350,160 @@ describe("validateDiagrams — tackle_11 OL-completeness", () => {
   });
 });
 
+describe("validateDiagrams — concept-claim requires skeleton/modify tool", () => {
+  // 2026-05-02: Cal hand-authored a "Mesh" with both drags at 2yd. The
+  // catalog's assertConcept layer rejects when the spec's depth values
+  // are clean, but the only structural way to guarantee canonical
+  // geometry is to route through get_concept_skeleton. This gate fires
+  // when a full play CLAIMS a catalog concept name without calling
+  // either the skeleton tool or one of the modify tools.
+
+  function fullTackleMeshFence() {
+    return makeFence({
+      title: "Spread Doubles — Mesh",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0, team: "O" }, { id: "LG", x: -2, y: 0, team: "O" },
+        { id: "C",  x: 0,  y: 0, team: "O" }, { id: "RG", x: 2,  y: 0, team: "O" },
+        { id: "RT", x: 4,  y: 0, team: "O" },
+        { id: "X", x: -18, y: 0, team: "O" }, { id: "Z", x: 18, y: 0, team: "O" },
+        { id: "H", x: -10, y: -1, team: "O" }, { id: "S", x: 10, y: -1, team: "O" },
+        { id: "B", x: 2, y: -5, team: "O" },
+      ],
+      routes: [
+        { from: "H", path: [[-10, 2], [10, 2]], route_kind: "Drag" },
+        { from: "S", path: [[10, 2], [-10, 2]], route_kind: "Drag" },
+      ],
+    });
+  }
+
+  it("REJECTS a full Mesh play when no skeleton or modify tool was called", () => {
+    const result = validateDiagrams({
+      text: `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const skeletonError = result.errors.find((e) => e.includes("get_concept_skeleton"));
+    expect(skeletonError).toBeDefined();
+  });
+
+  it("ACCEPTS a full Mesh play when get_concept_skeleton was called", () => {
+    const result = validateDiagrams({
+      text: `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+    });
+    // The concept-skeleton gate doesn't fire — though other gates may
+    // (skipping route templates, mesh assertConcept rejecting both at
+    // 2yd, etc.). We only check that THIS gate didn't trigger.
+    if (!result.ok) {
+      expect(result.errors.find((e) => e.includes("did NOT call get_concept_skeleton"))).toBeUndefined();
+    }
+  });
+
+  it("ACCEPTS when modify_play_route was called (surgical edit path)", () => {
+    const result = validateDiagrams({
+      text: `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      modifyPlayRouteCalled: true,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => e.includes("did NOT call get_concept_skeleton"))).toBeUndefined();
+    }
+  });
+});
+
+describe("validateDiagrams — modify-not-regenerate gate", () => {
+  // 2026-05-02: coach asked "make one of the mesh routes a lot deeper"
+  // and Cal redrew the entire play with a different formation, swapped
+  // player roles, and a 20yd dig that broke the mesh concept. This
+  // gate enforces that when the prior turn had a fence and the new
+  // turn emits a fence, one of the surgical-modify tools must have run
+  // (unless the user explicitly asked for a fresh play).
+
+  const minimalFence = makeFence({
+    title: "Test",
+    variant: "tackle_11",
+    players: [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "X", x: -13, y: 0, team: "O" },
+    ],
+    routes: [{ from: "X", path: [[-13, 3], [-7, 5.8]], route_kind: "Slant" }],
+  });
+
+  it("REJECTS regeneration when prior fence existed and no modify tool was called", () => {
+    const result = validateDiagrams({
+      text: `${minimalFence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+      priorAssistantTurnHadFence: true,
+      userRequestsNewPlay: false,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const regenError = result.errors.find((e) => e.includes("regenerated from scratch"));
+    expect(regenError).toBeDefined();
+  });
+
+  it("ACCEPTS when modify_play_route was called this turn", () => {
+    const result = validateDiagrams({
+      text: `${minimalFence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+      priorAssistantTurnHadFence: true,
+      userRequestsNewPlay: false,
+      modifyPlayRouteCalled: true,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("ACCEPTS when add_defense_to_play was called this turn", () => {
+    const result = validateDiagrams({
+      text: `${minimalFence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+      priorAssistantTurnHadFence: true,
+      userRequestsNewPlay: false,
+      addDefenseToPlayCalled: true,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("ACCEPTS when the user explicitly requested a new play", () => {
+    const result = validateDiagrams({
+      text: `${minimalFence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+      priorAssistantTurnHadFence: true,
+      userRequestsNewPlay: true,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("ACCEPTS the first play of a session (no prior fence)", () => {
+    const result = validateDiagrams({
+      text: `${minimalFence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+      priorAssistantTurnHadFence: false,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+});
+
 describe("validateDiagrams — bare prose-mention exemption", () => {
   it("EXEMPTS linemen and QB from the prose-mention requirement", () => {
     // Linemen running pass-protection / RB drop routes don't need

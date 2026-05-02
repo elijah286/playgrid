@@ -194,6 +194,32 @@ export function validateDiagrams(opts: {
   /** True if place_defense ran successfully this turn. Same idea for
    *  full-defense diagrams. */
   placeDefenseCalled?: boolean;
+  /** True if get_concept_skeleton ran successfully this turn. Used by
+   *  the concept-claim gate: when Cal names a catalog concept (Mesh,
+   *  Smash, Curl-Flat, etc.) in the title or prose, the diagram must
+   *  have come from the skeleton tool — or from a modify tool that fed
+   *  on a prior skeleton-derived fence. Closes the "Cal hand-authored
+   *  a 'Mesh' with both drags at 2yd" failure mode by promoting the
+   *  prompt rule to a structural gate. */
+  conceptSkeletonCalled?: boolean;
+  /** True if modify_play_route ran ok this turn. Counts as a valid
+   *  source for both the concept-claim gate (the prior fence was
+   *  presumably catalog-correct) and the modify-not-regenerate gate. */
+  modifyPlayRouteCalled?: boolean;
+  /** True if add_defense_to_play ran ok this turn. Same role as
+   *  modify_play_route — surgical-modify path that preserves prior
+   *  offense. */
+  addDefenseToPlayCalled?: boolean;
+  /** True iff the prior assistant turn contained a ```play fence.
+   *  Together with the modify-tool flags, this gates the
+   *  "regenerated instead of modifying" failure mode (image 2 from
+   *  2026-05-02 — coach asked "make a route deeper" and the entire
+   *  play was redrawn with a different formation). */
+  priorAssistantTurnHadFence?: boolean;
+  /** True iff the latest user message asks for a fresh play (regex
+   *  match on phrases like "new play", "another concept", "show me a
+   *  different one"). Bypasses the modify-not-regenerate gate. */
+  userRequestsNewPlay?: boolean;
 }): ValidationResult {
   // ── Phantom-write detection ────────────────────────────────────
   // This runs FIRST and independently of diagram fences — Cal can claim a
@@ -220,6 +246,32 @@ export function validateDiagrams(opts: {
 
   const errors: string[] = [...phantomErrors];
   const expected = expectedFullCount(opts.variant);
+
+  // GATE B — modify-not-regenerate. When the prior assistant turn
+  // already had a play fence and this turn emits a new fence without
+  // calling either surgical-modify tool, Cal regenerated instead of
+  // editing. Surfaced 2026-05-02: coach asked "make one of the mesh
+  // routes a lot deeper" and Cal redrew the entire play with a
+  // different formation, swapped player roles, and a 20yd dig that
+  // broke the mesh concept. The prompt at agent.ts:253 says "USE THE
+  // SURGICAL-MODIFY TOOLS, NEVER hand-author the new diagram"; this
+  // gate enforces it. Bypassed when the user explicitly asks for a
+  // fresh play ("show me a new one", "draw a different play").
+  if (
+    opts.priorAssistantTurnHadFence === true &&
+    !opts.userRequestsNewPlay &&
+    opts.modifyPlayRouteCalled !== true &&
+    opts.addDefenseToPlayCalled !== true
+  ) {
+    errors.push(
+      `prior turn had a play diagram, you emitted a new diagram, but you did NOT call modify_play_route or add_defense_to_play this turn. ` +
+      `That means you regenerated from scratch instead of surgically editing — every regeneration in production has scrambled the play (different formation, swapped roles, dropped players, redrawn routes). ` +
+      `Use the surgical tools: ` +
+      `(a) For a single-route change ("make the drag deeper", "change @Z to a post", "deepen the slant"), call \`modify_play_route\` with the prior \`\`\`play fence VERBATIM as \`prior_play_fence\`. ` +
+      `(b) For adding a defense overlay ("show this vs Cover 3", "add the defense"), call \`add_defense_to_play\` with the prior fence. ` +
+      `(c) The coach genuinely wanted a fresh play? They'll say so explicitly ("show me a new play", "draw a different concept") — and the gate bypasses on those phrases. If you read the request as "fresh play" but the gate fired, the request was actually an edit and you should use modify_play_route.`,
+    );
+  }
 
   for (let i = 0; i < fences.length; i++) {
     const tag = fences.length > 1 ? `Diagram ${i + 1}: ` : "";
@@ -485,6 +537,38 @@ export function validateDiagrams(opts: {
         // can't see.
         const conceptScanText = `${json.title ?? ""}\n${opts.text}`;
         const claimedConcepts = parseConceptsFromText(conceptScanText);
+
+        // GATE A — claimed catalog concept must come from the skeleton
+        // tool (or from a modify-tool path that fed on a prior skeleton
+        // fence). Promotes the agent.ts:219 prompt rule to a hard gate.
+        // Surfaced 2026-05-02 when Cal hand-authored a "Mesh" with both
+        // drags at 2yd; the catalog assertConcept layer correctly
+        // rejects, but Cal can sidestep it entirely by mis-pathing the
+        // routes. Requiring the skeleton routes the play through the
+        // golden generator that hardcodes the canonical depths.
+        // Threshold: only fires for FULL plays (offense >= variant
+        // count). Single-route demos and partial diagrams that mention
+        // a concept name in passing don't need to round-trip the
+        // skeleton. Also bypasses when the modify-tools ran (the
+        // diagram is the surgical-edit output of an earlier emit).
+        const skeletonOrModifyCalled =
+          opts.conceptSkeletonCalled === true ||
+          opts.modifyPlayRouteCalled === true ||
+          opts.addDefenseToPlayCalled === true;
+        if (
+          claimedConcepts.length > 0 &&
+          offense.length >= expected &&
+          !skeletonOrModifyCalled
+        ) {
+          errors.push(
+            `${tag}diagram claims catalog concept(s) ${claimedConcepts.map((c) => `"${c}"`).join(", ")} ` +
+            `but you did NOT call get_concept_skeleton, modify_play_route, or add_defense_to_play this turn. ` +
+            `Hand-authoring named concepts produces broken plays (e.g. Mesh with both drags at the same depth, Flood with routes scattered to both sides). ` +
+            `The skeleton tool returns a canonical fence with the concept's required depths and player roles already correct — call \`get_concept_skeleton({ concept: "${claimedConcepts[0]}" })\` and drop the returned fence VERBATIM. ` +
+            `If the concept is genuinely off-catalog (no entry in CONCEPT_CATALOG), drop the concept name from the title and prose so this gate doesn't fire.`,
+          );
+        }
+
         for (const conceptName of claimedConcepts) {
           const result = assertConcept(derived, conceptName);
           if (!result.ok) {

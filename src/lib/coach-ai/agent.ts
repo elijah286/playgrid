@@ -222,7 +222,7 @@ Rules:
 
    You may swap a player ID (e.g. coach uses "Y" not "S"), adjust a route's depth via \`depthYds\` + \`nonCanonical: true\` if the coach asked for an unusual depth, or add pre-snap motion via \`motion: [...]\` on a route. **NEVER reposition players by editing x/y** — call \`place_offense\` for an alternate formation if the coach wanted one. The skeleton is golden-tested: every catalog concept renders without overlap and satisfies its own concept validator. Use it.
 
-   Only skip this tool when the coach genuinely wants something off-catalog (a custom combo not in CONCEPT_CATALOG).
+   Only skip this tool when the coach genuinely wants something off-catalog (a custom combo not in CONCEPT_CATALOG). **STRUCTURAL ENFORCEMENT (2026-05-02):** the chat-time validator REJECTS any full play (offense ≥ variant count) whose title or prose names a catalog concept (Mesh, Smash, Curl-Flat, Stick, Snag, Flood/Sail, Drive, Levels, Y-Cross, Dagger, Four Verticals) when neither \`get_concept_skeleton\` nor a surgical-modify tool ran this turn. Hand-authoring a named concept is no longer possible — call the skeleton.
 
 - **Named CONCEPTS have STRUCTURAL requirements — the catalog enforces them.** When you name a concept anywhere in the title, headline, or prose ("Mesh", "Smash", "Curl-Flat", "Stick", "Snag", "Four Verticals", "Flood/Sail", "Drive", "Levels", "Y-Cross", "Dagger", or any of their aliases), the play's routes MUST satisfy that concept's required-assignment pattern with depths inside the concept-specific range. The chat-time validator runs this check against the diagram-derived spec on every turn — a mismatch blocks your reply and forces a re-emit. **The skeleton tool above is the easiest way to satisfy these requirements; if you skip it, you must satisfy them manually.** Cheat sheet (depth ranges in yards):
   - **Mesh**: TWO Drag routes at DIFFERENTIATED, MEANINGFUL depths so they cross VISIBLY above the OL — set \`depthYds: 3\` on the under-drag, \`depthYds: 5\` on the over-drag (NOT 1 and 2 — that crams both routes against the LOS where the cross is invisible; canonical Throw Deep / Hudl Mesh art shows the cross at 4-6yd depth, clearly above the line). The catalog enforces this: slot ranges are [2, 3.5] (under) and [4.5, 6] (over). Both drags run by INSIDE players (slot/H/Y), NOT both outside X/Z. Pair with a SINGLE over-the-top sit/dig at 8-12 yds and a back to flat — NEVER 3+ verticals (that's 4 Verts with a drag tag, not Mesh). KB: \`search_kb("concept_mesh")\`.
@@ -250,7 +250,7 @@ Rules:
   - **Color:** route stroke auto-matches the carrier's token color, so blocks on linemen render gray, runner path renders orange (RB), lead-block on FB renders orange — readable without manual color overrides.
   - **Notes still describe reads:** the diagram shows WHERE everyone goes; the notes explain WHY ("@B reads the first LB who shows color — bounces it to the edge if Mike fills the A-gap, cuts up if Mike scrapes over the top"). Both halves are required for a teachable run-play install.
   - Same applies to play-action and RPO designs: draw the run action AND the route concept, so the coach sees the conflict the play creates.
-- **Editing a play you already drew — USE THE SURGICAL-MODIFY TOOLS, NEVER hand-author the new diagram.** When the coach asks to modify, add to, or tweak a play you (or an earlier turn) just rendered, your job is to identify the request type and call the matching tool. Hand-authoring the new diagram is FORBIDDEN — every time Cal has tried it, players got dropped, formations shifted, routes vanished, defenders stacked. The tools take the prior fence verbatim and apply the minimum diff for you. Mapping coach asks → tools:
+- **Editing a play you already drew — USE THE SURGICAL-MODIFY TOOLS, NEVER hand-author the new diagram.** When the coach asks to modify, add to, or tweak a play you (or an earlier turn) just rendered, your job is to identify the request type and call the matching tool. Hand-authoring the new diagram is FORBIDDEN — every time Cal has tried it, players got dropped, formations shifted, routes vanished, defenders stacked. The tools take the prior fence verbatim and apply the minimum diff for you. **STRUCTURAL ENFORCEMENT (2026-05-02):** the chat-time validator REJECTS any turn where (a) the prior assistant turn contained a play fence, (b) the new turn emits a fence, and (c) neither \`modify_play_route\` nor \`add_defense_to_play\` ran this turn — UNLESS the user's message contains an explicit "new play" intent ("show me a different play", "draw another concept", "fresh design"). If the user said "make the drag deeper", "swap @Z to a corner", "add the defense", "show this vs Cover 3", "deepen the slant" — that's an EDIT, not a new play; you MUST call the matching surgical tool. Mapping coach asks → tools:
   - **Adding/changing a defense** ("show this against Cover 1", "vs Tampa 2", "add the defense", "how does Cover 3 defend this", "show me the matchup vs 4-3 Over") → \`add_defense_to_play\`. Pass the prior \`\`\`play fence VERBATIM as \`prior_play_fence\` plus the front + coverage. Tool overlays defenders + zones; offense is byte-for-byte identical in the output.
   - **Changing one route's depth, family, or modifier** ("make the drag deeper", "change @Z to a post instead of a corner", "deepen @X's slant to 7yds", "swap @H's hitch for a curl") → \`modify_play_route\`. Pass the prior fence verbatim plus the player + the change (\`set_family\`, \`set_depth_yds\`, \`set_non_canonical\`). Tool replaces only the targeted route; everything else round-trips.
   - **Saved play in the playbook** (the coach references "play 3" or "the snag we saved earlier"): call \`get_play\` first to fetch its JSON, then feed that JSON to the modify tool. Same workflow — the source of \`prior_play_fence\` is just the get_play result instead of the chat.
@@ -691,9 +691,47 @@ export async function runAgent(
   // (they never call place_defense), so the latency cost is narrow.
   let placeDefenseInvoked = false;
   let placeOffenseInvoked = false;
+  // 2026-05-02: Cal kept hand-authoring named-concept plays (mesh with
+  // both drags at 2yd, etc.) and regenerating from scratch when asked
+  // to tweak a route. The fix is a pair of validator gates that require
+  // the routing-tools were actually called. Track the relevant ones.
+  let conceptSkeletonInvoked = false;
+  let modifyPlayRouteInvoked = false;
+  let addDefenseToPlayInvoked = false;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let lastPlaceOffense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
+
+  // History-derived signals for the new gates. The "prior fence" check
+  // catches Cal regenerating an existing play instead of using the
+  // surgical-modify tools; the "new play intent" exception lets the
+  // coach explicitly ask for a fresh draw.
+  const priorAssistantTurnHadFence = (() => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      if (m.role !== "assistant") continue;
+      return /```play\s*\n[\s\S]*?\n```/.test(extractAssistantText(m));
+    }
+    return false;
+  })();
+  const lastUserText = (() => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      if (m.role !== "user") continue;
+      if (typeof m.content === "string") return m.content;
+      return m.content
+        .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+        .map((b) => b.text)
+        .join("\n");
+    }
+    return "";
+  })();
+  // Phrases that signal "draw a fresh play, don't modify the previous
+  // one" — bypass the modify-not-regenerate gate. Conservative match:
+  // require a fresh-intent verb adjacent to a play-noun.
+  const userRequestsNewPlay =
+    /\b(new|different|another|fresh|start\s+over|switch\s+to|show\s+me\s+a)\b[^.]{0,40}\b(play|concept|formation|design|look)\b/i.test(lastUserText) ||
+    /\b(make|draw|create|show|build|give\s+me)\b[^.]{0,40}\b(another|new|different|second)\b[^.]{0,40}\b(play|concept|formation|design)\b/i.test(lastUserText);
   /** Every get_route_template call this turn — lets the validator catch
    *  hand-authored named routes (the curl-as-vertical-line bug). */
   const routeTemplateCalls: Array<{
@@ -745,6 +783,11 @@ export async function runAgent(
           writeToolsCalledOk,
           placeOffenseCalled: placeOffenseInvoked,
           placeDefenseCalled: placeDefenseInvoked,
+          conceptSkeletonCalled: conceptSkeletonInvoked,
+          modifyPlayRouteCalled: modifyPlayRouteInvoked,
+          addDefenseToPlayCalled: addDefenseToPlayInvoked,
+          priorAssistantTurnHadFence,
+          userRequestsNewPlay,
         });
         if (!validation.ok && !validatorRetried) {
           // Discard the broken assistant turn and feed the model a critique.
@@ -884,6 +927,13 @@ export async function runAgent(
           } catch { /* ignore — validator will skip the position-drift check */ }
         }
       }
+      // Track the routing-tool calls that the catalog-concept and
+      // modify-not-regenerate gates depend on. Keep these flags scoped
+      // to "this turn only" — that's what makes the gates fire iff the
+      // relevant tool was actually called for the current emit.
+      if (tu.name === "get_concept_skeleton" && r.ok) conceptSkeletonInvoked = true;
+      if (tu.name === "modify_play_route"   && r.ok) modifyPlayRouteInvoked = true;
+      if (tu.name === "add_defense_to_play" && r.ok) addDefenseToPlayInvoked = true;
       // Mark place_offense as invoked. The validator uses this to enforce
       // that any full-offense diagram had place_offense called this turn,
       // mirroring the place_defense gate.

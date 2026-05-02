@@ -181,6 +181,22 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("Mesh: REJECTS two drags both at 2yd (the image-1 production case)", () => {
+    // 2026-05-02: a coach surfaced a Cal-generated mesh where BOTH H
+    // and S were described as "drag to 2 yards" — same depth, no
+    // visible cross. Slot 1 [2, 3.5] is satisfied by one drag at 2yd,
+    // but slot 2 [4.5, 6] is not satisfied by anything → reject. Pins
+    // that the exact reproduction case fails the gate.
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "S", action: { kind: "route", family: "Drag", depthYds: 2 } },
+      ]),
+      "Mesh",
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it("Mesh: REJECTS two drags both crammed at LOS (1yd, 2yd) — invisible cross", () => {
     // 2026-05-02: tightened slot floors to [2, 3.5] and [4.5, 6] so
     // shallow drags that overlap with the OL row are rejected. A 1yd
