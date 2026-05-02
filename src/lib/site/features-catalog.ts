@@ -382,6 +382,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "coach-cal-compose-revise-architecture",
+    name: "Coach Cal compose/revise architecture + defensive renderer",
+    description:
+      "Coach Cal's play-composition pipeline rebuilt from validators-as-gatekeepers to constructive-tools-as-source-of-truth. New tools — compose_play, revise_play, compose_defense — produce coach-canonical fences from intent (concept name + optional overrides for compose; player + intent-level mods for revise). Cal cannot freelance route geometry because Cal never authors waypoints. Every fence passes through a defensive sanitizer (drops oversize zones, NaN coords, out-of-bounds players) before display, so corrupt schema can never paint the whole field or stack players on top of each other. Identity-preservation is enforced inside revise_play (players[] is byte-equal across batched mods), making the \"Why did you flip it?\" regression structurally impossible. Old tools (get_concept_skeleton, modify_play_route, add_defense_to_play, place_defense) stay registered as backward-compatible aliases so existing chats continue to work.",
+    category: "Coach AI",
+    status: "beta",
+    addedDate: "2026-05-02",
+  },
+  {
     id: "coach-cal-defense-composition",
     name: "Coach Cal defense composition framework",
     description:

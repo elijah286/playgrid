@@ -50,6 +50,7 @@ import {
 } from "./defensiveAlignments";
 import { sportProfileForVariant } from "./factory";
 import { findTemplate, ROUTE_TEMPLATES, type RouteTemplate } from "./routeTemplates";
+import { sanitizeCoachDiagram } from "./sanitize";
 import type { SportVariant } from "./types";
 
 /** Field length is 25 for every variant; field width depends on variant. */
@@ -64,7 +65,8 @@ export type RenderWarning = {
     | "formation_player_count_mismatch"
     | "defender_assignment_player_missing"
     | "defender_zone_unknown"
-    | "defender_man_target_missing";
+    | "defender_man_target_missing"
+    | "sanitizer_dropped";
   message: string;
 };
 
@@ -170,17 +172,28 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
     if (route) routes.push(route);
   }
 
-  return {
-    diagram: {
-      title: spec.title,
-      variant: spec.variant,
-      focus: spec.playType === "defense" ? "D" : "O",
-      players: [...offensePlayers, ...defensePlayers],
-      routes,
-      ...(defenseRender.zones.length > 0 ? { zones: defenseRender.zones } : {}),
-    },
-    warnings,
+  // Final defensive pass — clamp/drop any corrupt geometry so the
+  // renderer never paints a broken diagram. Belt-and-suspenders:
+  // synthesizers are supposed to produce clean output, but if a
+  // catalog entry, a future schema change, or a hand-authored override
+  // slips through, the sanitizer guarantees the visual stays sane.
+  // See sanitize.ts for the full rule list.
+  const rawDiagram: CoachDiagram = {
+    title: spec.title,
+    variant: spec.variant,
+    focus: spec.playType === "defense" ? "D" : "O",
+    players: [...offensePlayers, ...defensePlayers],
+    routes,
+    ...(defenseRender.zones.length > 0 ? { zones: defenseRender.zones } : {}),
   };
+  const sanitized = sanitizeCoachDiagram(rawDiagram, spec.variant);
+  for (const w of sanitized.warnings) {
+    warnings.push({
+      code: "sanitizer_dropped",
+      message: `[${w.code}] ${w.message}`,
+    });
+  }
+  return { diagram: sanitized.diagram, warnings };
 }
 
 type DefenderRenderResult = {

@@ -9,6 +9,8 @@
 // coach never sees the broken render.
 
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
+import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
+import type { SportVariant } from "@/domain/play/types";
 import {
   assertConcept,
   formatConceptViolations,
@@ -36,6 +38,7 @@ type Diagram = {
   variant?: string;
   players?: Player[];
   routes?: DiagramRoute[];
+  zones?: Array<{ kind?: string; center?: [number, number]; size?: [number, number]; label?: string }>;
 };
 
 /**
@@ -435,6 +438,44 @@ export function validateDiagrams(opts: {
       errors.push(`${tag}diagram JSON failed to parse.`);
       continue;
     }
+
+    // SANITIZER GATE — defensive geometry pass. Catches corrupt
+    // schema (oversize zones, NaN coords, route waypoints flying off
+    // the field) BEFORE the lints below run. Major corruption (zones
+    // dropped, players dropped, routes dropped) becomes a validation
+    // error that forces re-emit; minor clamps (a single waypoint
+    // nudged) pass silently. Surfaced 2026-05-02 image 3: Flood Left
+    // shipped with a single zone covering the whole field. The
+    // sanitizer drops it; this gate forces Cal to re-emit without
+    // it.
+    try {
+      const sanitized = sanitizeCoachDiagram(json as CoachDiagram, opts.variant as SportVariant | undefined);
+      const severe = sanitized.warnings.filter((w) =>
+        w.code === "zone_dropped_oversized" ||
+        w.code === "zone_dropped_nonfinite" ||
+        w.code === "player_dropped_nonfinite" ||
+        w.code === "player_dropped_out_of_bounds" ||
+        w.code === "route_dropped_unknown_carrier" ||
+        w.code === "route_dropped_empty_path" ||
+        w.code === "route_dropped_nonfinite_waypoint",
+      );
+      for (const w of severe) {
+        errors.push(
+          `${tag}sanitizer rejected corrupt element [${w.code}]${w.subject ? ` on @${w.subject}` : ""}: ${w.message} ` +
+          `Re-emit the fence WITHOUT this element. The renderer would silently drop it anyway — better to ship a clean diagram.`,
+        );
+      }
+      // Use the sanitized diagram for downstream gates so that lints
+      // like the overlap check don't crash on null coordinates that
+      // JSON serialization produced from NaN inputs. The original
+      // `json` is kept only for fields the sanitizer doesn't touch
+      // (e.g. `title`, `focus`).
+      json = { ...json, players: sanitized.diagram.players, routes: sanitized.diagram.routes, zones: sanitized.diagram.zones };
+    } catch {
+      // Sanitizer failed — fall through to existing checks. Don't
+      // crash validation on sanitizer error.
+    }
+
     const players = Array.isArray(json.players) ? json.players : [];
     const offense = players.filter((p) => p.team !== "D");
     const defense = players.filter((p) => p.team === "D");

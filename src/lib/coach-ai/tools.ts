@@ -17,6 +17,10 @@ import {
   type DefenderAssignmentSpec,
 } from "@/domain/play/defensiveAlignments";
 import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
+import { applyRouteMods, type RouteMod } from "./play-mutations";
+import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
+import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
+import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
 
 export type CoachAiMode = "normal" | "admin_training";
 
@@ -891,6 +895,308 @@ const add_defense_to_play: CoachAiTool = {
       result:
         `${summaryLines.join("\n")}\n\n` +
         `**PLAY FENCE — drop VERBATIM into your reply. Offense is byte-for-byte identical to the prior diagram; only defense changed:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\``,
+    };
+  },
+};
+
+// ── compose_play / revise_play (Pillars 1 + 2 of the 2026-05-02 refactor) ─
+// These tools replace the freehand-fence-emit path for catalog plays.
+//
+// compose_play: ONE tool that takes intent (concept name + optional
+// strength + optional overrides) and returns a complete validated
+// fence. The skeleton + override application + sanitizer all run
+// together — Cal cannot freelance route geometry because Cal never
+// authors waypoints.
+//
+// revise_play: identity-preserving batched edits. Accepts an array of
+// route mods and returns a fence whose players[] is byte-identical to
+// the input. Replaces the per-call modify_play_route loop and makes
+// "Why did you flip it?" structurally impossible.
+//
+// Both tools route through the same play-mutations helpers, which
+// route through the same sanitizer the renderer uses. Single source of
+// geometric truth — AGENTS.md hard-rule layer 5.
+const compose_play: CoachAiTool = {
+  def: {
+    name: "compose_play",
+    description:
+      "Compose a complete play diagram from a CATALOG CONCEPT (Mesh, Smash, Curl-Flat, Stick, Snag, Four Verticals, Flood/Sail, Drive, Levels, Y-Cross, Dagger). " +
+      "MANDATORY first call when a coach asks for a named-concept play — Cal does not freelance route geometry; the catalog + renderer produce coach-canonical depths and player roles. " +
+      "Inputs: " +
+      "(1) `concept` — the catalog name (case-insensitive, aliases supported). " +
+      "(2) `strength` — optional, for side-flooding concepts (Flood, Smash, Curl-Flat, Stick, Snag): 'left' or 'right'. " +
+      "(3) `overrides` — optional array of intent-level route changes to apply on top of the canonical skeleton, e.g. [{ player: 'H', set_depth_yds: 5 }, { player: 'Z', set_family: 'Post' }]. " +
+      "Returns: a SANITIZED ```play fence ready to drop verbatim into the reply, plus the matching PlaySpec for create_play. The skeleton's canonical depths (e.g. Mesh under-drag @ 2yd, over-drag @ 6yd) are baked into the path waypoints; do NOT re-derive geometry via get_route_template after this tool runs.",
+    input_schema: {
+      type: "object",
+      properties: {
+        concept: { type: "string", description: "Catalog concept name (Mesh, Flood, Sail, Curl-Flat, Smash, Stick, Snag, Four Verticals, 4 Verts, Drive, Levels, Y-Cross, Dagger). Aliases supported." },
+        strength: { type: "string", enum: ["left", "right"], description: "Strong side for side-flooding concepts. Defaults to 'right'." },
+        overrides: {
+          type: "array",
+          description: "Optional intent-level route changes applied on top of the skeleton. Each item: { player, set_family?, set_depth_yds?, set_non_canonical? }. Use this when the coach asks for a custom variant on a catalog play (e.g. 'mesh with the over-drag at 8 yards' → overrides: [{ player: 'S', set_depth_yds: 8, set_non_canonical: true }]).",
+          items: {
+            type: "object",
+            properties: {
+              player: { type: "string" },
+              set_family: { type: "string" },
+              set_depth_yds: { type: "number" },
+              set_non_canonical: { type: "boolean" },
+            },
+            required: ["player"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["concept"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const concept = typeof input.concept === "string" ? input.concept.trim() : "";
+    if (!concept) return { ok: false, error: "concept is required." };
+    const strengthRaw = typeof input.strength === "string" ? input.strength.toLowerCase() : undefined;
+    const strength = strengthRaw === "left" || strengthRaw === "right" ? strengthRaw : undefined;
+    const overrides = Array.isArray(input.overrides) ? (input.overrides as RouteMod[]) : [];
+
+    const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
+
+    const result = generateConceptSkeleton(concept, { variant, strength });
+    if (!result.ok) {
+      return {
+        ok: false,
+        error:
+          `${result.error}\n\nAvailable concepts: ${result.availableConcepts.join(", ")}.\n` +
+          `If the coach didn't name a catalog concept, this tool can't help — they want something off-catalog and you'll need to author the play another way.`,
+      };
+    }
+
+    const renderResult = playSpecToCoachDiagram(result.spec);
+    let fence = {
+      title: result.spec.title ?? result.concept,
+      variant,
+      focus: "O" as const,
+      ...renderResult.diagram,
+    };
+
+    // Apply overrides on the canonical skeleton fence. Each override
+    // is a route mod (depth/family/nonCanonical) applied via the
+    // shared play-mutations helper, so the geometry is recomputed
+    // from the catalog template and every override stays
+    // identity-preserving.
+    let appliedOverrides: string[] = [];
+    if (overrides.length > 0) {
+      const applied = applyRouteMods(JSON.stringify(fence), overrides, variant);
+      if (!applied.ok) {
+        return {
+          ok: false,
+          error:
+            `Concept skeleton built, but overrides failed:\n${applied.errors.map((e) => `  • ${e}`).join("\n")}\n` +
+            `Drop the overrides that don't apply, or correct the player IDs / depths and call again.`,
+        };
+      }
+      fence = applied.fence as typeof fence;
+      appliedOverrides = applied.appliedSummaries;
+    }
+
+    const fenceJson = JSON.stringify(fence, null, 2);
+    const specJson = JSON.stringify(result.spec, null, 2);
+    const renderWarnings = renderResult.warnings.length > 0
+      ? `\n\n**Renderer warnings (informational; the diagram still rendered):**\n${renderResult.warnings.map((w) => `  • [${w.code}] ${w.message}`).join("\n")}`
+      : "";
+    const overridesNote = appliedOverrides.length > 0
+      ? `\n\n**Overrides applied:** ${appliedOverrides.join("; ")}.`
+      : "";
+
+    return {
+      ok: true,
+      result:
+        `Composed "${result.concept}" (${variant}${strength ? `, strength=${strength}` : ""}):\n\n` +
+        `**Summary:** ${result.notes}${overridesNote}\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`. Geometry is coach-canonical and sanitized; do NOT call get_route_template for any route in this fence — the depths are already correct:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\`\n\n` +
+        `**PlaySpec — pass to create_play if the coach wants the play saved to their playbook:**\n` +
+        `\`\`\`json\n${specJson}\n\`\`\`${renderWarnings}\n\n` +
+        `Customizations the coach may ask for AFTER this fence is in chat: call \`revise_play\` (NOT compose_play again — that would reset other tweaks). \`revise_play\` takes the fence + an array of route mods and preserves players[] verbatim.`,
+    };
+  },
+};
+
+const revise_play: CoachAiTool = {
+  def: {
+    name: "revise_play",
+    description:
+      "Apply a batch of intent-level route mods to an existing play diagram while PRESERVING every player position, ID, and team byte-for-byte. Use this for ANY edit to a play that already exists in the chat — single-route changes ('make the drag deeper'), multi-route changes ('change @Z to a Post AND deepen @X to 12 yards'), and concept-faithful tweaks (deepening one of two mesh drags, swapping a curl for a hitch in a curl-flat). " +
+      "Inputs: " +
+      "(1) `prior_play_fence` — the previous diagram JSON, copied verbatim from the chat. " +
+      "(2) `mods` — array of route changes; each item: { player, set_family?, set_depth_yds?, set_non_canonical? }. " +
+      "Returns: a SANITIZED full fence with the requested changes applied. The tool REJECTS any mod that would change player IDs, positions, or team — those edits go through different paths (place_offense for formation changes; the user explicitly asking for a 'new play'). " +
+      "**CONCEPT FIDELITY**: when the play is a named catalog concept (Mesh, Smash, etc.), pick mods that keep the concept truthful. Mesh = two crossing drags at differentiated depths — 'make a mesh route deeper' means deepen ONE drag (e.g. set_depth_yds: 6 on the over-drag), NOT swap a drag for a dig. The chat-time validator catches concept-breaking mods via assertConcept; better to push back than ship a mod that fails.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prior_play_fence: {
+          type: "string",
+          description: "The previous diagram JSON, copied verbatim from the most recent ```play fence in the chat (the entire body between the opening ```play and closing ```). MUST include all players, routes, and any zones from that diagram.",
+        },
+        mods: {
+          type: "array",
+          description: "Array of intent-level route mods. Each item: { player: 'X', set_family?: 'Post', set_depth_yds?: 12, set_non_canonical?: true }. Multiple mods apply atomically — if any one is invalid, the whole batch rejects.",
+          items: {
+            type: "object",
+            properties: {
+              player: { type: "string" },
+              set_family: { type: "string" },
+              set_depth_yds: { type: "number" },
+              set_non_canonical: { type: "boolean" },
+            },
+            required: ["player"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["prior_play_fence", "mods"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence : "";
+    const mods = Array.isArray(input.mods) ? (input.mods as RouteMod[]) : [];
+
+    const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined);
+    const r = applyRouteMods(priorJson, mods, variant);
+    if (!r.ok) {
+      return {
+        ok: false,
+        error: `revise_play failed:\n${r.errors.map((e) => `  • ${e}`).join("\n")}`,
+      };
+    }
+    const fenceJson = JSON.stringify(r.fence, null, 2);
+    return {
+      ok: true,
+      result:
+        `Applied ${r.appliedSummaries.length} mod(s): ${r.appliedSummaries.join("; ")}.\n` +
+        `All other players, routes, and zones are byte-identical to the prior diagram.\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\``,
+    };
+  },
+};
+
+// ── compose_defense (Pillar 4 — symmetric defender pipeline) ──────────────
+// One tool replaces both place_defense (defense-only) and
+// add_defense_to_play (overlay-on-play). The unified shape:
+//   - omit on_play  → returns a defense-only fence
+//   - pass on_play  → overlays defense onto the prior play, preserving
+//                     offense byte-for-byte
+// Sanitized output guarantees zones never paint the whole field
+// (image-3 case from 2026-05-02). Old tools stay as legacy aliases so
+// existing chats continue to work.
+const compose_defense: CoachAiTool = {
+  def: {
+    name: "compose_defense",
+    description:
+      "Compose a defensive scheme — either standalone (returns a defense-only diagram) OR overlayed onto an existing play (preserves offense byte-for-byte). Use this for ANY defense placement: 'show me a 4-3 Cover 3', 'show this play vs Tampa 2', 'add the defense', 'how does Cover 1 defend this'. " +
+      "Inputs: " +
+      "(1) `front` — defensive front (e.g. '4-3 Over', 'Nickel (4-2-5)', '7v7 Zone'). " +
+      "(2) `coverage` — coverage name ('Cover 1', 'Cover 3', 'Tampa 2'). " +
+      "(3) `strength` — optional, 'left' or 'right' (default 'right'). " +
+      "(4) `on_play` — optional. When provided, the defense is overlayed onto this prior ```play fence, preserving offense exactly; any existing defenders in the prior fence are stripped and replaced. When omitted, returns a defense-only diagram. " +
+      "Output is sanitized — zones cannot exceed field bounds, NaN coordinates are dropped, etc.",
+    input_schema: {
+      type: "object",
+      properties: {
+        front:    { type: "string" },
+        coverage: { type: "string" },
+        strength: { type: "string", enum: ["left", "right"] },
+        on_play:  { type: "string", description: "Optional. The previous ```play fence JSON (verbatim). When provided, defense is overlayed; offense is preserved unchanged." },
+      },
+      required: ["front", "coverage"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const front = typeof input.front === "string" ? input.front.trim() : "";
+    const coverage = typeof input.coverage === "string" ? input.coverage.trim() : "";
+    if (!front || !coverage) return { ok: false, error: "front and coverage are required." };
+    const strength: "left" | "right" = input.strength === "left" ? "left" : "right";
+    const onPlayRaw = typeof input.on_play === "string" ? input.on_play.trim() : "";
+
+    const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
+    const alignment = computeDefenseAlignment(variant, front, coverage, strength);
+    if (!alignment.ok) return alignment;
+
+    // Suffix duplicate ids — same logic as place_defense / add_defense_to_play.
+    const seenIds = new Map<string, number>();
+    const uniqueDefenders = alignment.players.map((p) => {
+      const count = (seenIds.get(p.id) ?? 0) + 1;
+      seenIds.set(p.id, count);
+      return {
+        id: count === 1 ? p.id : `${p.id}${count}`,
+        role: p.id,
+        x: p.x,
+        y: p.y,
+        team: "D" as const,
+      };
+    });
+
+    const isMan = alignment.manCoverage;
+    const zones = isMan
+      ? []
+      : alignment.zones.map((z) => ({ kind: z.kind, center: z.center, size: z.size, label: z.label }));
+
+    let fence: Record<string, unknown>;
+    if (onPlayRaw) {
+      try {
+        fence = JSON.parse(onPlayRaw);
+      } catch (e) {
+        return { ok: false, error: `Could not parse on_play as JSON: ${(e as Error).message}` };
+      }
+      const priorPlayers = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
+      const offenseOnly = priorPlayers.filter((p) => p.team !== "D");
+      fence = {
+        ...fence,
+        players: [...offenseOnly, ...uniqueDefenders],
+      };
+      if (zones.length > 0) fence.zones = zones;
+      else delete fence.zones;
+    } else {
+      // Defense-only fence: title from the scheme, no offense.
+      fence = {
+        title: `${alignment.front} ${alignment.coverage}`,
+        variant,
+        focus: "D",
+        players: uniqueDefenders,
+        routes: [],
+        ...(zones.length > 0 ? { zones } : {}),
+      };
+    }
+
+    // Sanitize — drops oversize zones and any other corrupt geometry
+    // before the fence reaches the coach.
+    const sanitized = sanitizeCoachDiagram(fence as import("@/features/coach-ai/coachDiagramConverter").CoachDiagram, variant);
+    const finalFence = {
+      ...fence,
+      players: sanitized.diagram.players,
+      routes: sanitized.diagram.routes,
+      zones: sanitized.diagram.zones,
+    };
+    const fenceJson = JSON.stringify(finalFence, null, 2);
+
+    const summary = onPlayRaw
+      ? `Overlayed "${alignment.front} / ${alignment.coverage}" defense onto the prior play (${alignment.variant}, strength=${strength}). Offense byte-identical; defense replaced.`
+      : `Composed "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}, defense-only).`;
+    const sanitizerNote = sanitized.warnings.length > 0
+      ? `\n\nSanitizer cleaned up ${sanitized.warnings.length} corrupt element(s) before output:\n${sanitized.warnings.map((w) => `  • [${w.code}] ${w.message}`).join("\n")}`
+      : "";
+    const manNote = isMan ? `\n\nMAN COVERAGE: zones omitted. If the coach wants assignment lines, use \`set_defender_assignment\` per defender.` : "";
+
+    return {
+      ok: true,
+      result:
+        `${summary}\n${alignment.description}${manNote}${sanitizerNote}\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
         `\`\`\`play\n${fenceJson}\n\`\`\``,
     };
   },
@@ -2095,7 +2401,7 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, place_defense, place_offense, modify_play_route, add_defense_to_play, set_defender_assignment, flag_outside_kb, flag_refusal];
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, compose_defense, place_defense, place_offense, modify_play_route, add_defense_to_play, set_defender_assignment, flag_outside_kb, flag_refusal];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {

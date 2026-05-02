@@ -836,6 +836,87 @@ describe("validateDiagrams — yards-units lint", () => {
   });
 });
 
+describe("validateDiagrams — sanitizer gate (image-3 purple-field case)", () => {
+  // 2026-05-02 image 3: Cal emitted a Flood Left where a single zone
+  // had size that covered the whole field — the renderer painted the
+  // entire viewport purple. The sanitizer drops oversize zones; the
+  // validator surfaces the drop as an error so Cal must re-emit
+  // without the corrupt element.
+
+  it("REJECTS a fence with an oversize zone", () => {
+    const fence = makeFence({
+      title: "Flood Left",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -13, y: 0, team: "O" },
+      ],
+      routes: [{ from: "X", path: [[-13, 3], [-7, 5.8]], route_kind: "Slant" }],
+      zones: [
+        { kind: "rectangle", center: [0, 10], size: [200, 50], label: "WholeField" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const sanErr = result.errors.find((e) => /sanitizer rejected.*zone_dropped_oversized/.test(e));
+    expect(sanErr).toBeDefined();
+  });
+
+  it("REJECTS a fence with a NaN-position player", () => {
+    const fence = makeFence({
+      title: "Test",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: NaN, y: 0, team: "O" },
+      ],
+      routes: [],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\nbroken.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const sanErr = result.errors.find((e) => /sanitizer rejected.*player_dropped_nonfinite/.test(e));
+    expect(sanErr).toBeDefined();
+  });
+
+  it("ACCEPTS a fence with normal-sized zones", () => {
+    const fence = makeFence({
+      title: "Cover 3",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -13, y: 0, team: "O" },
+      ],
+      routes: [{ from: "X", path: [[-13, 3], [-7, 5.8]], route_kind: "Slant" }],
+      zones: [
+        { kind: "rectangle", center: [-15, 12], size: [12, 8], label: "Curl/Flat" },
+        { kind: "rectangle", center: [0, 18], size: [16, 6], label: "Hook" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+    });
+    if (!result.ok) {
+      // Other gates may fire (this is a stripped-down test play); only
+      // ensure the sanitizer didn't reject a clean diagram.
+      expect(result.errors.find((e) => /sanitizer rejected/.test(e))).toBeUndefined();
+    }
+  });
+});
+
 describe("validateDiagrams — bare prose-mention exemption", () => {
   it("EXEMPTS linemen and QB from the prose-mention requirement", () => {
     // Linemen running pass-protection / RB drop routes don't need

@@ -128,3 +128,88 @@ Where possible, the rules themselves are tests:
 - Rule 6 → KB build script asserts non-overlap (Phase 5)
 
 When you're tempted to violate a rule "just this once," check whether the rule is enforced by code or by convention. If by code, you'll fail. If by convention, you're trading a one-day shortcut for a multi-month patch cadence return. Don't.
+
+### Rule 8 — Constructive composition is the only path for catalog concepts
+
+After 2026-05-02 (the "validators alone aren't enough" refactor), there is exactly ONE way to produce a catalog-concept play: `compose_play({ concept, strength?, overrides? })`. The tool wraps `generateConceptSkeleton` + sanitizer + `applyRouteMods` and returns a coach-canonical fence. Cal cannot freelance route geometry for catalog concepts because Cal never authors waypoints — the tool produces the entire fence verbatim.
+
+Do not add a second composition path. If a new requirement appears (RPO concepts, special teams, novel formations), it goes through `compose_play` by extending the catalog + skeleton, NOT by adding a parallel tool. The chat-time validator's concept-skeleton gate enforces this: any catalog-concept claim without `compose_play` (or `get_concept_skeleton`, the legacy alias) on the call stack is rejected at chat-time.
+
+Anti-patterns to refuse:
+- A new tool that emits a play fence freehand, bypassing the skeleton.
+- A handler that composes the skeleton then re-derives routes via `get_route_template`.
+- A "convenience" function that copies the skeleton's path waypoints and tweaks the depth in-place — that's `applyRouteMod`'s job; reimplementing it duplicates the depth-scaling math.
+
+### Rule 9 — Edits are identity-preserving by construction, not by convention
+
+`revise_play` (and any future edit tool) must call `applyRouteMods` from `src/lib/coach-ai/play-mutations.ts`. That function snapshots `players[]` (id, x, y, team) before applying mods and verifies it's unchanged after. A mod that touches positions or IDs returns ok=false — the regression "Why did you flip it?" becomes structurally impossible.
+
+Do not write a new edit tool that mutates `players[]` directly. If a coach asks for something that requires a formation change, that's `compose_play` (with a different formation) or `place_offense` — NOT a revise. The split between revise (route shape) and compose (player layout) is load-bearing.
+
+### Rule 10 — The sanitizer runs at every render boundary
+
+`sanitizeCoachDiagram` in `src/domain/play/sanitize.ts` is the last line of defense before geometry reaches a coach. It runs:
+- At the end of `playSpecToCoachDiagram` (renderer output).
+- Inside `applyRouteMods` (every edit tool's output).
+- Inside `compose_play` and `compose_defense` (every constructive tool's output).
+- At the start of the chat-time validator's per-fence loop (catches corrupt fences before lint runs).
+
+When a new code path produces or transforms a `CoachDiagram`, it MUST sanitize. The single hard test for this is the image-3 case (`zone_dropped_oversized`): if a path can produce an oversize zone, the sanitizer must drop it before display. New corruption modes get new sanitizer rules (with stable warning codes) + a regression test in `sanitize.test.ts`.
+
+Anti-patterns to refuse:
+- A renderer/converter that returns a `CoachDiagram` without sanitizing.
+- A tool that emits a fence to chat without running the sanitizer (`compose_play`, `compose_defense`, `revise_play` all do; new tools must too).
+- A hand-coded "this can't happen" check that should have been a sanitizer rule. If a corruption case can hit prod, it goes in the sanitizer with a test.
+
+### Rule 11 — Defenders go through the same shape as offense
+
+Defense composition uses `compose_defense` (unified create/overlay). It produces defenders + zones the same way `compose_play` produces offense + routes:
+- The catalog/synthesizer is the source of placement.
+- The output is sanitized — zones cannot exceed field bounds; defender positions cannot be NaN.
+- When overlaying onto a play, offense is byte-preserved.
+- Defender id collisions (two DTs) get suffixed (`DT`, `DT2`) so the diagram-level uniqueness constraint isn't violated.
+
+Single-defender assignment changes go through `set_defender_assignment`. Multi-defender batched edits should be done via repeated `set_defender_assignment` calls — there's no `revise_defense` because defender-assignment edits are heterogeneous (zone, man, blitz, spy, custom path) and each path has its own validation. If a future need surfaces a clear use case for batched defender mods, the symmetric tool goes here.
+
+### Rule 12 — Test plans are mandatory for new functionality
+
+Every new tool, helper, or sanitizer rule lands with regression tests in the same commit. The test files are collocated (`*.test.ts` next to the source). Required coverage:
+
+| Layer | Test pattern | Examples |
+|---|---|---|
+| Sanitizer rule | one test per warning code; idempotence + purity | `sanitize.test.ts` |
+| Composition tool | golden output for the canonical concept; one test per failure mode | `compose-play.test.ts` (when added) |
+| Edit tool | identity-preservation across batched mods; one test per rejection case | `play-mutations.test.ts` |
+| Validator gate | one positive (passes) + one negative (rejects) test per new gate | `diagram-validate.test.ts` |
+| Catalog entry | round-trip + cue coverage (already in `routeTemplates.test.ts`) | `routeTemplates.test.ts` |
+
+When a coach surfaces a regression, the FIRST commit fixing it adds a failing test that reproduces the bug at the right layer (per Rule 1). The fix lands second, with the test going green.
+
+A new feature without tests is not "shipped" — it's "merged but undefended." The next refactor will silently break it, and the next coach who hits the bug will surface it as a regression.
+
+### Architecture in one diagram
+
+```
+                 ┌──────────────────────────────────────────┐
+                 │    Cal (LLM) emits intent only           │
+                 └─────────┬───────────────┬────────────────┘
+                           │               │
+                           ▼               ▼
+              compose_play (offense)   compose_defense
+              revise_play (edits)      set_defender_assignment
+                           │               │
+                           └───────┬───────┘
+                                   ▼
+                  applyRouteMods  /  computeDefenseAlignment
+                                   │
+                                   ▼
+                   sanitizeCoachDiagram (Rule 10)
+                                   │
+                                   ▼
+                  ```play fence  →  chat-time validator
+                                   │
+                                   ▼ (validator OK)
+                          coach sees the diagram
+```
+
+Cal NEVER produces waypoints, defender positions, or zone rectangles directly. Every geometric value originates from a catalog or synthesizer and passes through the sanitizer before display.
