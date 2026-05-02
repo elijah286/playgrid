@@ -131,6 +131,48 @@ describe("ROUTE_TEMPLATES catalog", () => {
   });
 });
 
+describe("Drag — canonical 'release flat, cross full formation' shape", () => {
+  // The canonical drag (Throw Deep / Hudl playbook art): a brief inside
+  // release stem (~1 yd vertical), then a NEARLY-FLAT cross all the way
+  // across the formation. Coaches reading the rendered diagram should see
+  // a horizontal route, not a steady upfield diagonal.
+  //
+  // Production bug 2026-05-01: Cal's drag rendered as a single straight
+  // diagonal — depth-gain-to-lateral ratio of ~0.30, so it read as a
+  // climbing route rather than a horizontal cross. Geometry was within
+  // the depth constraint but the visual failed the coach's eye test.
+  const drag = ROUTE_TEMPLATES.find((t) => t.name === "Drag");
+  if (!drag) throw new Error("Drag template missing");
+  it("renders with cross segment angle ≤ 12° from horizontal in tackle_11", () => {
+    const FIELD_WIDTH_YDS_TACKLE_11 = 53;
+    // The cross segment is the LAST segment of the template (release →
+    // far side). Measure its angle in absolute yards.
+    const lastIdx = drag.points.length - 1;
+    const prev = drag.points[lastIdx - 1];
+    const last = drag.points[lastIdx];
+    const dxYds = Math.abs(last.x - prev.x) * FIELD_WIDTH_YDS_TACKLE_11;
+    const dyYds = Math.abs(last.y - prev.y) * FIELD_LENGTH_YDS;
+    const angleDeg = (Math.atan2(dyYds, dxYds) * 180) / Math.PI;
+    expect(
+      angleDeg,
+      `Drag cross segment is ${angleDeg.toFixed(1)}° — should be ≤ 12° to read as a horizontal cross, not a climbing diagonal`,
+    ).toBeLessThanOrEqual(12);
+  });
+  it("crosses ≥ 30% of the field width laterally (so the receiver actually crosses the formation)", () => {
+    const last = drag.points[drag.points.length - 1];
+    const lateralFraction = Math.abs(last.x);
+    expect(
+      lateralFraction,
+      `Drag final x=${last.x} (only ${(lateralFraction * 100).toFixed(0)}% of field width). Canonical drag crosses the entire formation; bump the template to ≥ 0.40 if a constraint pushed it down.`,
+    ).toBeGreaterThanOrEqual(0.30);
+  });
+  it("ends at shallow depth (≤ 4 yds) — never a climbing route", () => {
+    const last = drag.points[drag.points.length - 1];
+    const depthYds = last.y * FIELD_LENGTH_YDS;
+    expect(depthYds).toBeLessThanOrEqual(4);
+  });
+});
+
 describe.each(ROUTE_TEMPLATES.map((t) => [t.name, t] as const))(
   "round-trip: %s",
   (_name, template: RouteTemplate) => {

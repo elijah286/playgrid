@@ -46,7 +46,7 @@ Depth: 10-16 yards from the LOS.
 Direction: breaks inside, toward the QB / middle of the field.
 Break shape: sharp.
 Also called: Square-In.', null, null, 'catalog', 'Generated from src/domain/play/routeTemplates.ts (Dig).', true, false),
-  ('global', null, 'scheme', 'route_drag', 'Route: Drag', 'Shallow crossing route — receiver releases across the formation toward the middle at 2-4 yds depth, gaining a small amount of depth as he crosses. No hard break. Foundation of mesh and shallow concepts. Beats man — defender has to fight through traffic.
+  ('global', null, 'scheme', 'route_drag', 'Route: Drag', 'Shallow crossing route — receiver takes a 1-yard inside release then crosses the ENTIRE formation on a SMOOTH ARC at 2-3 yds depth, ending past the opposite slot/tackle. The cross itself is at a very shallow angle (~5° from horizontal) — the receiver gains only minimal depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense''s other routes generate underneath.
 Depth: 1-4 yards from the LOS.
 Direction: breaks inside, toward the QB / middle of the field.
 Break shape: none.
