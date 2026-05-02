@@ -143,20 +143,21 @@ describe("Drag — canonical 'release flat, cross full formation' shape", () => 
   // the depth constraint but the visual failed the coach's eye test.
   const drag = ROUTE_TEMPLATES.find((t) => t.name === "Drag");
   if (!drag) throw new Error("Drag template missing");
-  it("renders with cross segment angle ≤ 12° from horizontal in tackle_11", () => {
-    const FIELD_WIDTH_YDS_TACKLE_11 = 53;
-    // The cross segment is the LAST segment of the template (release →
-    // far side). Measure its angle in absolute yards.
-    const lastIdx = drag.points.length - 1;
-    const prev = drag.points[lastIdx - 1];
-    const last = drag.points[lastIdx];
-    const dxYds = Math.abs(last.x - prev.x) * FIELD_WIDTH_YDS_TACKLE_11;
-    const dyYds = Math.abs(last.y - prev.y) * FIELD_LENGTH_YDS;
-    const angleDeg = (Math.atan2(dyYds, dxYds) * 180) / Math.PI;
-    expect(
-      angleDeg,
-      `Drag cross segment is ${angleDeg.toFixed(1)}° — should be ≤ 12° to read as a horizontal cross, not a climbing diagonal`,
-    ).toBeLessThanOrEqual(12);
+  it("cross segments after release have ZERO depth gain (pinned-flat cross)", () => {
+    // Narrow-aspect chat preview compresses x by ~57%, so any depth
+    // gain across the cross segments shows up as a visible diagonal.
+    // Solution: pin every cross-segment waypoint at the same y so the
+    // route renders as a true horizontal arc. The release segment
+    // (first segment) is allowed to gain depth — the cross segments
+    // (every segment after) must not.
+    expect(drag.points.length).toBeGreaterThanOrEqual(3);
+    const releaseEndY = drag.points[1].y;
+    for (let i = 2; i < drag.points.length; i++) {
+      expect(
+        drag.points[i].y,
+        `Drag cross-segment waypoint ${i} has y=${drag.points[i].y} but release ended at y=${releaseEndY}. Cross waypoints MUST stay at the same depth — any drift produces a diagonal climb in narrow-aspect chat preview.`,
+      ).toBe(releaseEndY);
+    }
   });
   it("crosses ≥ 30% of the field width laterally (so the receiver actually crosses the formation)", () => {
     const last = drag.points[drag.points.length - 1];

@@ -410,24 +410,43 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     name: "Drag",
     aliases: ["Shallow", "Shallow Cross"],
     directional: true,
-    // Canonical drag shape: brief inside release stem (~1 yd vertical),
-    // then a SMOOTH CURVED cross all the way across the formation,
-    // ending past the opposite slot/tackle. The cross is rendered as a
-    // gentle Bezier arc (NOT a sharp break and NOT a single rigid
-    // diagonal) — receiver bends naturally as he releases inside and
-    // gains a small amount of depth across.
-    // Lateral 0.40 of field width → ~21 yds in tackle_11 (slot to
-    // opposite slot), ~12 yds in 7v7, ~10 yds in 5v5 — all of which
-    // actually cross the formation. The cross segment angle is ~5° from
-    // horizontal: the receiver gains only 1-2 yds of additional depth
-    // across ~20 yds of lateral travel. This matches the smooth-arc
-    // look coaches recognize from playbook art (Throw Deep, Hudl).
+    // Canonical drag shape — 4 waypoints to PIN the cross at constant
+    // depth and read as horizontal even when narrow-aspect chat
+    // preview compresses x by ~57%. The catmull-rom interpolation
+    // between waypoints at the same y produces a near-pure-horizontal
+    // arc with a small natural bow at the release transition.
+    //
+    // Geometry:
+    //   p0 (0, 0)         — start at LOS
+    //   p1 (-0.05, 0.06)  — end of release: 2.5 yd inside, 1.5 yd up
+    //   p2 (-0.20, 0.06)  — mid-cross anchor: 11 yd inside, SAME 1.5 yd depth
+    //   p3 (-0.45, 0.06)  — end of cross:    24 yd inside, SAME 1.5 yd depth
+    //
+    // Cross segments (p1→p2, p2→p3) have ZERO depth change in the
+    // template — the catmull-rom adds at most a ~0.25 yd bow during
+    // the release transition. The pinned mid-anchor prevents the
+    // curve from drifting upward across the formation, which was the
+    // failure mode of the prior 3-waypoint version.
+    //
+    // Iteration log:
+    //   • Original (pre-2026-05-01): single straight 17yd × 2.5yd
+    //     diagonal — read as a diagonal climb (~11° narrow-display).
+    //   • 1st fix: 21yd × 3yd, "straight + curve" — slight improvement
+    //     but coach still saw climb (~14° narrow-display).
+    //   • 2nd fix: 24yd × 1.75yd, "straight + curve" — better but
+    //     curve still drifted upward toward endpoint (~5° actual).
+    //   • This pass: 4 waypoints, pinned mid + end at same y. True
+    //     angle of cross ~0°; narrow-display ~0°. Reads as horizontal.
+    //
+    // Per-variant lateral travel: tackle_11 ~24yd, 7v7 ~13.5yd,
+    // 5v5 ~11yd. All cross the formation meaningfully.
     points: [
       { x: 0, y: 0 },
-      { x: -0.03, y: 0.04 },
-      { x: -0.40, y: 0.12 },
+      { x: -0.05, y: 0.06 },
+      { x: -0.20, y: 0.06 },
+      { x: -0.45, y: 0.06 },
     ],
-    shapes: ["straight", "curve"],
+    shapes: ["straight", "curve", "curve"],
     // breakStyle: "none" — semantically the drag has no hard break;
     // it's a continuous shallow cross. The "curve" segment shape above
     // controls VISUAL rendering (Bezier arc, not a rigid line); the
@@ -438,7 +457,7 @@ export const ROUTE_TEMPLATES: RouteTemplate[] = [
     constraints: { depthRangeYds: { min: 1, max: 4 }, side: "toward_qb" },
     kbSubtopic: "route_drag",
     description:
-      "Shallow crossing route — receiver takes a 1-yard inside release then crosses the ENTIRE formation on a SMOOTH ARC at 2-3 yds depth, ending past the opposite slot/tackle. The cross itself is at a very shallow angle (~5° from horizontal) — the receiver gains only minimal depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
+      "Shallow crossing route — receiver takes a 1-yard inside release then crosses the formation on a SMOOTH NEARLY-HORIZONTAL ARC at 1.5-2 yds depth. The cross itself is at a very shallow angle (~2-3° from horizontal) — the receiver gains essentially no depth as he travels laterally; he is NOT climbing diagonally and the path is NOT a rigid straight line. Coaches reading the diagram should see a HORIZONTAL line across the formation, not an angled one. Foundation of mesh, drive, and shallow-cross concepts. Beats man coverage — the defender has to fight through traffic that the offense's other routes generate underneath.",
   },
   {
     name: "Seam",
