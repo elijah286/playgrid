@@ -18,6 +18,7 @@ import { playSpecToCoachDiagram, type RenderWarning } from "@/domain/play/specRe
 import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import type { CoachAiTool } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
+import { validateDefenderAssignments, formatDefenseValidationErrors } from "./defense-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
 import { lintNotesAgainstSpec, formatNotesLintIssues } from "./notes-lint";
 import { explainSpec } from "./explain-from-spec";
@@ -341,6 +342,14 @@ function resolveDiagramAndSpec(
       };
     }
     const spec = parsed.data as PlaySpec;
+    // Phase D4: validate defender overrides BEFORE rendering so the
+    // error message points at the spec, not the warning surface. Render
+    // warnings still fire for catalog-defaulted defenders (e.g. unknown
+    // defense ref); this layer covers the spec-side overrides.
+    const defenseValidation = validateDefenderAssignments(spec);
+    if (!defenseValidation.ok) {
+      return { ok: false, error: formatDefenseValidationErrors(defenseValidation.errors) };
+    }
     const { diagram, warnings } = playSpecToCoachDiagram(spec);
     if (warnings.length > 0) {
       return { ok: false, error: formatSpecRenderWarnings(warnings) };
