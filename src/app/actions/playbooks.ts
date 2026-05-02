@@ -151,7 +151,10 @@ export async function listCopyTargetPlaybooksAction(): Promise<
   return { ok: true, playbooks: rows };
 }
 
-/** List playbooks. Excludes the per-team "Inbox" (is_default) by default. */
+/** List playbooks the signed-in user is a member of (any role). Scoped via
+ * `playbook_members` so public/example playbooks the user doesn't own or
+ * collaborate on are excluded — matches what the home dashboard tiles show.
+ * Excludes the per-team "Inbox" (is_default) and archived books by default. */
 export async function listPlaybooksAction(opts?: {
   includeDefault?: boolean;
   includeArchived?: boolean;
@@ -168,16 +171,33 @@ export async function listPlaybooksAction(opts?: {
   await ensureDefaultWorkspace(supabase, user.id);
 
   let query = supabase
-    .from("playbooks")
-    .select("id, name, sport_variant, season, created_at, updated_at, team_id, is_default, is_archived")
-    .order("updated_at", { ascending: false });
+    .from("playbook_members")
+    .select(
+      "playbooks!inner(id, name, sport_variant, season, created_at, updated_at, team_id, is_default, is_archived)",
+    )
+    .eq("user_id", user.id);
 
-  if (!opts?.includeDefault) query = query.eq("is_default", false);
-  if (!opts?.includeArchived) query = query.eq("is_archived", false);
+  if (!opts?.includeDefault) query = query.eq("playbooks.is_default", false);
+  if (!opts?.includeArchived) query = query.eq("playbooks.is_archived", false);
 
   const { data, error } = await query;
   if (error) return { ok: false as const, error: error.message, playbooks: [] };
-  return { ok: true as const, playbooks: (data ?? []) as PlaybookRow[] };
+
+  type Row = { playbooks: PlaybookRow };
+  // Dedupe by id — a user can have multiple membership rows for the same
+  // playbook (e.g. legacy seed data) and we don't want duplicates in the UI.
+  const seen = new Set<string>();
+  const rows = ((data ?? []) as unknown as Row[])
+    .map((r) => r.playbooks)
+    .filter((p): p is PlaybookRow => !!p)
+    .filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    })
+    .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+
+  return { ok: true as const, playbooks: rows };
 }
 
 export async function createPlaybookAction(
