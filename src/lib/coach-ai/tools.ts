@@ -432,6 +432,8 @@ const get_concept_skeleton: CoachAiTool = {
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { generateConceptSkeleton } = require("@/domain/play/conceptSkeleton") as typeof import("@/domain/play/conceptSkeleton");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { playSpecToCoachDiagram } = require("@/domain/play/specRenderer") as typeof import("@/domain/play/specRenderer");
     const result = generateConceptSkeleton(concept, { variant, strength });
 
     if (!result.ok) {
@@ -443,15 +445,45 @@ const get_concept_skeleton: CoachAiTool = {
       };
     }
 
+    // Render the spec into a fully-positioned CoachDiagram so Cal can
+    // drop it into a `play` fence VERBATIM — no hand-authoring of
+    // positions. Surfaced 2026-05-02: even after the skeleton tool
+    // shipped, Cal authored a Flood Right play and stacked S+H at the
+    // same (x,y) because the spec doesn't carry positions and Cal had
+    // to invent them. The renderer's synthesizer places players at
+    // canonical, non-overlapping positions for the requested formation
+    // — feed Cal the rendered output instead of asking it to position
+    // 11 players from scratch.
+    const renderResult = playSpecToCoachDiagram(result.spec);
+    const renderWarnings = renderResult.warnings.length > 0
+      ? `\n\n**Renderer warnings (read but generally ignore — these surface formation/defense fallbacks):**\n${renderResult.warnings.map((w) => `  • [${w.code}] ${w.message}`).join("\n")}`
+      : "";
+
+    // Compose the play-fence-ready diagram. We intentionally include the
+    // title + variant in the fence shape (Cal's prompt schema for `play`
+    // fences expects those) and let Cal trim/extend if customizing.
+    const fenceJson = JSON.stringify(
+      {
+        title: result.spec.title ?? result.concept,
+        variant,
+        focus: "O",
+        ...renderResult.diagram,
+      },
+      null,
+      2,
+    );
     const specJson = JSON.stringify(result.spec, null, 2);
+
     return {
       ok: true,
       result:
         `Skeleton for "${result.concept}" (${variant}${strength ? `, strength=${strength}` : ""}):\n\n` +
         `**Summary:** ${result.notes}\n\n` +
-        `**PlaySpec — pass this to \`create_play\` (or render directly via the \`play\` fence after converting):**\n` +
-        `\`\`\`json\n${specJson}\n\`\`\`\n\n` +
-        `Customize before saving: swap player IDs if your formation differs, set \`depthYds\` to non-canonical values with \`nonCanonical: true\` if the coach asked for a specific depth, add motion / play-action / RPO tags as needed.`,
+        `**PLAY FENCE — drop this VERBATIM into your reply between \`\`\`play and \`\`\`. Do NOT modify player positions; the synthesizer placed them canonically. You may swap a player ID, adjust a route family/depth, or add motion if the coach asked for those — but DO NOT re-author the players[] array from scratch (that's how the S+H overlap bug happens):**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\`\n\n` +
+        `**PlaySpec — pass this to \`create_play\` if the coach wants to save the play to their playbook:**\n` +
+        `\`\`\`json\n${specJson}\n\`\`\`${renderWarnings}\n\n` +
+        `Customizations the coach may ask for (apply to BOTH the play fence and the spec): swap player IDs (e.g. coach's team uses "Y" not "S"), adjust a route's depth via \`depthYds\` + add \`nonCanonical: true\` if outside catalog range, add pre-snap motion via \`motion: [...]\` on a route. NEVER reposition players by editing x/y — call \`place_offense\` for an alternate formation if needed.`,
     };
   },
 };

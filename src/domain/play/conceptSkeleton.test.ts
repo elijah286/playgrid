@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { generateConceptSkeleton } from "./conceptSkeleton";
 import { CONCEPT_CATALOG, findConcept } from "./conceptCatalog";
 import { assertConcept } from "./conceptMatch";
+import { playSpecToCoachDiagram } from "./specRenderer";
 
 describe("generateConceptSkeleton — every catalog concept has a builder", () => {
   for (const concept of CONCEPT_CATALOG) {
@@ -97,6 +98,40 @@ describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
     const depths = drags.map((d) => (d.action.kind === "route" ? d.action.depthYds : undefined));
     expect(new Set(depths).size).toBe(2); // must be DIFFERENT depths
   });
+});
+
+describe("generateConceptSkeleton — every skeleton RENDERS without overlap or fallback (regression for S+H stacking)", () => {
+  // Every skeleton must produce a CoachDiagram where (a) the synthesizer
+  // recognized the formation (no formation_fallback warning), and (b) no
+  // two offensive players occupy the same (x, y). This locks in the
+  // "Cal hand-authored S+H at the same position" failure mode (2026-05-02)
+  // — the skeleton tool now feeds Cal a rendered diagram, so as long as
+  // every skeleton renders cleanly, that bug class is impossible.
+  for (const concept of CONCEPT_CATALOG) {
+    it(`${concept.name}: renders to a CoachDiagram with NO overlapping players and NO formation_fallback`, () => {
+      const result = generateConceptSkeleton(concept.name, { variant: "tackle_11" });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const { diagram, warnings } = playSpecToCoachDiagram(result.spec);
+      expect(
+        warnings.find((w) => w.code === "formation_fallback"),
+        `${concept.name}: formation_fallback fired — synthesizer didn't recognize "${result.spec.formation.name}". Use a parsed name.`,
+      ).toBeUndefined();
+      // No two offensive players at exactly the same (x, y).
+      const offense = diagram.players.filter((p) => p.team !== "D");
+      const positions = new Set<string>();
+      const collisions: string[] = [];
+      for (const p of offense) {
+        const key = `${p.x},${p.y}`;
+        if (positions.has(key)) collisions.push(`@${p.id} at (${p.x}, ${p.y})`);
+        positions.add(key);
+      }
+      expect(
+        collisions,
+        `${concept.name}: players overlap at the same (x, y): ${collisions.join(", ")}`,
+      ).toEqual([]);
+    });
+  }
 });
 
 describe("generateConceptSkeleton — concept catalog smoke (every concept's skeleton is well-formed)", () => {

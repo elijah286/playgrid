@@ -358,21 +358,25 @@ function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
 
 function buildYCross(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   const variant = opts.variant;
+  // "Singleback" formation produces a Y/TE (which Y-Cross requires by
+  // definition — the Y is the deep crosser). Spread Doubles has no Y,
+  // so a Y-Cross skeleton emitted under that formation would silently
+  // drop the @Y assignment when synthesized.
   const assignments: PlayerAssignment[] = [
     routeAt("Y", "Dig", 15),    // the Y/TE deep cross
     routeAt("X", "Post", 14),   // the clear (post)
     routeAt("B", "Flat", 2),    // the outlet
     routeAt("Z", "Go", 18),     // backside clear
-    routeAt("H", "Drag", 3),    // backside drag
+    routeAt("H", "Drag", 3),    // backside drag (slot)
     qbDropback(),
     ...lineBlocks(variant),
   ];
   return {
     ok: true,
     concept: "Y-Cross",
-    spec: baseSpec(variant, "Y-Cross", "Pro", undefined, assignments),
+    spec: baseSpec(variant, "Y-Cross", "Singleback", undefined, assignments),
     notes:
-      `Y-Cross: Y deep cross @ 15yd, X post @ 14yd to clear the safety, B flat @ 2yd outlet — triangle stretch. Z backside clear.`,
+      `Y-Cross: Y deep cross @ 15yd, X post @ 14yd to clear the safety, B flat @ 2yd outlet — triangle stretch. Z backside clear. Singleback formation provides the Y/TE.`,
   };
 }
 
