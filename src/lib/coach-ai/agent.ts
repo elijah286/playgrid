@@ -222,6 +222,12 @@ Rules:
 
 - **PLAY EDITS — \`revise_play\` is the ONLY way to change a play that's already in the chat.** When the coach asks to modify a play you (or an earlier turn) just rendered ("make the drag deeper", "swap @Z to a Post", "deepen the under-drag to 4 yards", "change @H to a slant"), call \`revise_play({ prior_play_fence: "...", mods: [{ player: "Z", set_family: "Post" }, ...] })\`. The tool: (a) preserves \`players[]\` byte-for-byte (positions, IDs, team) — you cannot accidentally flip the formation; (b) recomputes route paths from the catalog template; (c) sanitizes the output. Multiple mods apply atomically — if any one fails, the whole batch rejects. **DO NOT regenerate the fence by hand or by calling compose_play again** — that resets every other tweak. revise_play is the surgical path; use it.
 
+- **SURGICAL EDITS — minimum diff that obliges the request.** When the coach asks for a small change ("make it a curved line", "add depth to the QB", "deepen the drag", "swap @Z to a Post"), the modification must be the SMALLEST diff that obliges the request. EVERY player not explicitly targeted MUST round-trip byte-identical: same id, same x/y, same team. Same for routes you didn't change. The chat-time validator REJECTS any edit where offense players[] drifts from the prior fence (unless the coach asked for a formation change AND you called place_offense). Common ways this gate fires:
+  - **You fabricated \`prior_play_fence\` from memory** — the prior fence is in the chat above; copy it BYTE-FOR-BYTE, do not retype it. If the rendered diagram from compose_play is multi-line JSON, copy the entire JSON between \`\`\`play and \`\`\` exactly.
+  - **You called modify_play_route / revise_play with the wrong input** — the tool dutifully edits whatever you pass it. If you pass it a wrong-formation fence, it returns a wrong-formation fence.
+  - **You decided to "improve" the formation while editing a route** — don't. If the formation is wrong, that's a separate conversation. The coach asked for a route change; do that and only that.
+  - When in doubt, mentally diff your output against the prior fence: every player's (id, x, y, team) should be identical, and every route the coach didn't ask about should be identical.
+
 - **DEFENSE COMPOSITION — \`compose_defense\` is the unified create/overlay tool.** When the coach asks for a defense — standalone ("show me 4-3 Cover 3", "draw a Tampa 2") OR overlayed on a play ("show this play vs Cover 1", "add the defense") — call \`compose_defense({ front, coverage, strength?, on_play? })\`. Pass \`on_play\` (the prior \`\`\`play fence verbatim) when overlaying; omit it when drawing the defense by itself. The tool: (a) places defenders + zones from the catalog/synthesizer; (b) suffixes duplicate ids; (c) sanitizes zones (no oversize zones painting the whole field). When overlaying, offense is byte-identical to the input.
 
 - **CONCEPT SKELETONS — your first move when the coach asks for a named concept play.** When the coach asks for a play built around a catalog concept ("show me a Mesh", "draw a Flood Right", "build a Curl-Flat", "give me a Y-Cross"), your FIRST call is \`get_concept_skeleton\` with the concept name (and \`strength\` if it's a side-flooding concept like Flood). The tool returns TWO blocks:
@@ -721,12 +727,20 @@ export async function runAgent(
   // surgical-modify tools; the "new play intent" exception lets the
   // coach explicitly ask for a fresh draw.
   const priorAssistantFenceJson = (() => {
+    // Walk back through ALL assistant turns, not just the last one —
+    // if Cal had a fence two turns ago and answered a Q without a
+    // fence one turn ago, we still want to track that fence as the
+    // surgical-edit baseline. The previous "last-message-only" form
+    // dropped the baseline after any text-only Q&A turn (surfaced
+    // 2026-05-02 — coach asked Cal to "make it a curved line", Cal
+    // had a prior fence two turns back, but the surgical-edit gate
+    // didn't fire because the immediate prior message had no fence).
     for (let i = history.length - 1; i >= 0; i--) {
       const m = history[i];
       if (m.role !== "assistant") continue;
       const text = extractAssistantText(m);
       const match = /```play\s*\n([\s\S]*?)\n```/.exec(text);
-      return match ? match[1].trim() : null;
+      if (match) return match[1].trim();
     }
     return null;
   })();

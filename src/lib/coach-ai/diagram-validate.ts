@@ -168,6 +168,39 @@ function checkProseUsesYards(text: string): string[] {
 }
 
 /**
+ * Compare two offense rosters from successive diagrams and return a
+ * list of drift reasons. Empty list = byte-identical (modulo float
+ * rounding). Used by the surgical-edit identity gate to enforce that
+ * non-targeted players round-trip across an edit. Tolerance: 0.05yd
+ * per coordinate (rounding noise from JSON.stringify of computed
+ * positions; legitimate moves are full yards).
+ */
+function diffOffenseIdentity(prior: Player[], current: Player[]): string[] {
+  const reasons: string[] = [];
+  const priorById = new Map(prior.map((p) => [p.id, p]));
+  const currentById = new Map(current.map((p) => [p.id, p]));
+  for (const id of priorById.keys()) {
+    if (!currentById.has(id)) reasons.push(`@${id} dropped`);
+  }
+  for (const [id, c] of currentById) {
+    const p = priorById.get(id);
+    if (!p) {
+      reasons.push(`@${id} added (not in prior)`);
+      continue;
+    }
+    if (Math.abs((p.x ?? 0) - (c.x ?? 0)) > 0.05 || Math.abs((p.y ?? 0) - (c.y ?? 0)) > 0.05) {
+      reasons.push(`@${id} moved from (${p.x}, ${p.y}) to (${c.x}, ${c.y})`);
+    }
+    const priorTeam = (p as Player).team ?? "O";
+    const curTeam = (c as Player).team ?? "O";
+    if (priorTeam !== curTeam) {
+      reasons.push(`@${id} switched team ${priorTeam} → ${curTeam}`);
+    }
+  }
+  return reasons;
+}
+
+/**
  * Compare an emitted route's path against the skeleton-returned route's
  * path. Returns null on match, or a short reason string on mismatch.
  * Tolerance: 0.5yd per waypoint coordinate (the skeleton renderer
@@ -417,7 +450,8 @@ export function validateDiagrams(opts: {
     opts.priorAssistantTurnHadFence === true &&
     !opts.userRequestsNewPlay &&
     opts.modifyPlayRouteCalled !== true &&
-    opts.addDefenseToPlayCalled !== true
+    opts.addDefenseToPlayCalled !== true &&
+    opts.placeOffenseCalled !== true   // legitimate formation change
   ) {
     errors.push(
       `prior turn had a play diagram, you emitted a new diagram, but you did NOT call modify_play_route or add_defense_to_play this turn. ` +
@@ -479,6 +513,48 @@ export function validateDiagrams(opts: {
     const players = Array.isArray(json.players) ? json.players : [];
     const offense = players.filter((p) => p.team !== "D");
     const defense = players.filter((p) => p.team === "D");
+
+    // SURGICAL-EDIT IDENTITY GATE — when a prior assistant fence
+    // exists and the user didn't ask for a fresh play, every entity
+    // the user did NOT explicitly target must round-trip byte-
+    // identical. The principle (coach feedback 2026-05-02): "when
+    // modifying a play, it should be as surgical and limited as is
+    // necessary to oblige the request." Catches Cal feeding the
+    // surgical-modify tools a fabricated `prior_play_fence` with a
+    // wrong formation, then claiming the wrong-formation result was
+    // an edit (image 2 from the same coach session: 'modify_play_route'
+    // chip fired, but Y appeared / S vanished / OL row broke).
+    //
+    // Specifically: the new fence's offense players[] must match the
+    // prior fence's offense players[] in (id, x, y, team). Defense
+    // can differ (compose_defense / add_defense_to_play legitimately
+    // replaces it). Bypassed when:
+    //   - The user explicitly asked for a fresh play.
+    //   - place_offense ran this turn (legitimate formation change).
+    if (
+      opts.priorAssistantTurnHadFence === true &&
+      opts.priorAssistantFenceJson &&
+      !opts.userRequestsNewPlay &&
+      !opts.placeOffenseCalled
+    ) {
+      try {
+        const priorJson = JSON.parse(opts.priorAssistantFenceJson) as Diagram;
+        const priorOffense = (priorJson.players ?? []).filter((p) => p.team !== "D");
+        const driftReasons = diffOffenseIdentity(priorOffense, offense);
+        if (driftReasons.length > 0) {
+          errors.push(
+            `${tag}offense players[] drifted from the prior diagram — surgical edits MUST preserve every player not explicitly targeted. ` +
+            `Drift detected: ${driftReasons.slice(0, 4).join("; ")}${driftReasons.length > 4 ? "; …" : ""}. ` +
+            `When the coach asks for a small change ("make the QB sprint out", "curve the route", "deepen the drag"), the modification must be the SMALLEST diff that obliges the request. ` +
+            `RECOVERY: re-emit the prior fence's players[] VERBATIM (same ids, same x/y, same team), and only modify the routes/zones the request actually targets. ` +
+            `If you used modify_play_route and got an unexpected result, you probably passed it a fabricated prior_play_fence — copy the most recent \`\`\`play fence from the chat exactly, do not retype it from memory. ` +
+            `If the coach actually wanted a different formation, they'll say so explicitly ("change to Trips Right", "use I-form") — and you should call place_offense.`,
+          );
+        }
+      } catch {
+        // Prior fence didn't parse — skip the gate rather than fail.
+      }
+    }
 
     // OL-completeness AND OL-spacing check (tackle_11 FULL PLAYS only).
     // Every tackle_11 full play must:

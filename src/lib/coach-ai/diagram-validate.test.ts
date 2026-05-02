@@ -541,6 +541,216 @@ describe("validateDiagrams — skeleton-fidelity gate", () => {
   });
 });
 
+describe("validateDiagrams — surgical-edit identity gate", () => {
+  // Coach surfaced 2026-05-02 (image 2): asked Cal to "make it a
+  // curved line" on a Flood Right play. Cal called modify_play_route
+  // (twice per the chips), but the emitted fence had a completely
+  // different formation — Y appeared, S vanished, OL row broke. Most
+  // likely cause: Cal fed modify_play_route a fabricated
+  // prior_play_fence with the wrong formation, and the tool dutifully
+  // applied a route change to the fabrication. The principle (coach
+  // feedback): "when modifying a play, it should be as surgical and
+  // limited as is necessary to oblige the request." This gate
+  // enforces players[] byte-equality across edits.
+
+  // A canonical Flood Right tackle_11 prior fence (compose_play output shape).
+  const priorFenceJson = JSON.stringify({
+    title: "Flood Right",
+    variant: "tackle_11",
+    players: [
+      { id: "Q",  x:  0, y: -3, team: "O" },
+      { id: "LT", x: -4, y: 0,  team: "O" },
+      { id: "LG", x: -2, y: 0,  team: "O" },
+      { id: "C",  x:  0, y: 0,  team: "O" },
+      { id: "RG", x:  2, y: 0,  team: "O" },
+      { id: "RT", x:  4, y: 0,  team: "O" },
+      { id: "X",  x:-18, y: 0,  team: "O" },
+      { id: "Z",  x: 18, y: 0,  team: "O" },
+      { id: "H",  x:-10, y: -1, team: "O" },
+      { id: "S",  x: 10, y: -1, team: "O" },
+      { id: "B",  x:  2, y: -5, team: "O" },
+    ],
+    routes: [{ from: "Z", path: [[26, 14]], route_kind: "Corner" }],
+  });
+
+  it("REJECTS an edit that drops a player (the image-2 scenario: S vanished)", () => {
+    // Same play but missing S (Cal's emitted fence dropped a player).
+    const fence = makeFence({
+      title: "Flood Right",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0,  team: "O" },
+        { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" },
+        { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "X",  x:-18, y: 0,  team: "O" },
+        { id: "Z",  x: 18, y: 0,  team: "O" },
+        { id: "H",  x:-10, y: -1, team: "O" },
+        // S MISSING — drift.
+        { id: "B",  x:  2, y: -5, team: "O" },
+      ],
+      routes: [{ from: "Z", path: [[26, 14]], route_kind: "Corner" }],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@Z runs a corner.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+      modifyPlayRouteCalled: true, // Cal claims to have used the tool
+      routeTemplates: [snapshot("Corner", 18, 0, [[26, 14]])],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const driftErr = result.errors.find((e) => /surgical/i.test(e) || /drifted/i.test(e));
+    expect(driftErr, `expected a surgical-edit drift error; got: ${result.errors.join(" | ")}`).toBeDefined();
+    expect(driftErr).toMatch(/@S/);
+  });
+
+  it("REJECTS an edit that adds a player (Y appeared)", () => {
+    const fence = makeFence({
+      title: "Flood Right",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0,  team: "O" }, { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" }, { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "X",  x:-18, y: 0,  team: "O" }, { id: "Z",  x: 18, y: 0,  team: "O" },
+        { id: "H",  x:-10, y: -1, team: "O" }, { id: "S",  x: 10, y: -1, team: "O" },
+        { id: "B",  x:  2, y: -5, team: "O" },
+        { id: "Y",  x:  6, y:  0, team: "O" }, // Y added — drift.
+      ],
+      routes: [{ from: "Z", path: [[26, 14]], route_kind: "Corner" }],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@Z runs a corner.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+      modifyPlayRouteCalled: true,
+      routeTemplates: [snapshot("Corner", 18, 0, [[26, 14]])],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const driftErr = result.errors.find((e) => /surgical/i.test(e) || /drifted/i.test(e));
+    expect(driftErr).toBeDefined();
+    expect(driftErr).toMatch(/@Y/);
+  });
+
+  it("REJECTS an edit that moves a player (S relocated)", () => {
+    const fence = makeFence({
+      title: "Flood Right",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0,  team: "O" }, { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" }, { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "X",  x:-18, y: 0,  team: "O" }, { id: "Z",  x: 18, y: 0,  team: "O" },
+        { id: "H",  x:-10, y: -1, team: "O" },
+        { id: "S",  x:  6, y: -3, team: "O" }, // moved from (10, -1)
+        { id: "B",  x:  2, y: -5, team: "O" },
+      ],
+      routes: [{ from: "Z", path: [[26, 14]], route_kind: "Corner" }],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@Z runs a corner.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+      modifyPlayRouteCalled: true,
+      routeTemplates: [snapshot("Corner", 18, 0, [[26, 14]])],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const driftErr = result.errors.find((e) => /surgical/i.test(e) || /drifted/i.test(e));
+    expect(driftErr).toBeDefined();
+    expect(driftErr).toMatch(/@S.*moved/);
+  });
+
+  it("ACCEPTS an edit where players[] is byte-identical (the legitimate revise_play case)", () => {
+    const fence = makeFence(JSON.parse(priorFenceJson));
+    const result = validateDiagrams({
+      text: `${fence}\n@Z runs a corner.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+      modifyPlayRouteCalled: true,
+      routeTemplates: [snapshot("Corner", 18, 0, [[26, 14]])],
+    });
+    if (!result.ok) {
+      // The drift error specifically must not appear; other gates may.
+      expect(result.errors.find((e) => /surgical/i.test(e) || /drifted/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("BYPASSES the gate when place_offense was called (legit formation change)", () => {
+    const fence = makeFence({
+      title: "Flood Right (now Trips Right)",
+      variant: "tackle_11",
+      players: [
+        // Wholly different formation — but place_offense was called,
+        // so the surgical-edit gate doesn't fire.
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0,  team: "O" }, { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" }, { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "X",  x:-18, y: 0,  team: "O" }, { id: "Z",  x: 18, y: 0,  team: "O" },
+        { id: "H",  x: 10, y: -1, team: "O" }, // moved to right
+        { id: "S",  x: 14, y: -1, team: "O" }, // moved
+        { id: "B",  x:  2, y: -5, team: "O" },
+      ],
+      routes: [{ from: "Z", path: [[26, 14]], route_kind: "Corner" }],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\nFlipped to Trips Right per coach request.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+      placeOffenseCalled: true,
+      routeTemplates: [snapshot("Corner", 18, 0, [[26, 14]])],
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /surgical/i.test(e) || /drifted/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("BYPASSES the gate when the user explicitly requested a new play", () => {
+    const fence = makeFence({
+      title: "Slant Concept (different play)",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0,  team: "O" }, { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" }, { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "X",  x:-18, y: 0,  team: "O" },
+        // Z dropped to swap formations
+      ],
+      routes: [],
+    });
+    const result = validateDiagrams({
+      text: fence,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+      userRequestsNewPlay: true,
+      placeOffenseCalled: true,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /surgical/i.test(e) || /drifted/i.test(e))).toBeUndefined();
+    }
+  });
+});
+
 describe("validateDiagrams — modify-not-regenerate gate", () => {
   // 2026-05-02: coach asked "make one of the mesh routes a lot deeper"
   // and Cal redrew the entire play with a different formation, swapped
