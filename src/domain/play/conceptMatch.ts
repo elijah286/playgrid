@@ -176,8 +176,13 @@ export function formatConceptViolations(
     return `  • ${v.reason}: ${JSON.stringify(v.required)}`;
   });
   return (
-    `Concept "${conceptName}" was claimed but the spec doesn't satisfy it. ` +
-    `${violations.length} unmet requirement(s):\n${lines.join("\n")}`
+    `Concept "${conceptName}" was claimed (in the title or prose) but the spec doesn't satisfy it. ` +
+    `${violations.length} unmet requirement(s):\n${lines.join("\n")}\n\n` +
+    `TWO RECOVERY PATHS — pick ONE for your re-emit:\n` +
+    `  (A) FIX THE SPEC to satisfy "${conceptName}": adjust the route families and/or depths so the requirements above are met. ` +
+    `(For Mesh: swap the dig/post for a second Drag at 1-5 yds. For Curl-Flat: shorten the Curl to 4-7 yds. Etc.)\n` +
+    `  (B) DROP THE CONCEPT NAME from the title and prose, leaving the play as-is. Rename to something generic like "Spread Doubles — Drag/Dig" if that's actually what you drew. The validator only fires when you NAME the concept; the play itself doesn't have to be a known concept.\n\n` +
+    `Do NOT re-emit the same play with the same concept name — that will fail the same way. If unsure of "${conceptName}"'s exact requirements, call search_kb("concept_${conceptName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}") or search_kb("play_${conceptName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}") to read the canonical KB entry first.`
   );
 }
 
