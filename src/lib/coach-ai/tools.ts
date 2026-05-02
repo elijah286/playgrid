@@ -12,7 +12,9 @@ import {
   findDefensiveAlignment,
   listDefensiveAlignments,
   alignmentForStrength,
+  alignmentWithAssignments,
   zonesForStrength,
+  type DefenderAssignmentSpec,
 } from "@/domain/play/defensiveAlignments";
 import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 
@@ -74,6 +76,18 @@ type DefenseAlignmentZone = {
   label: string;
 };
 
+type DefensePlayerWithAssignment = {
+  id: string;
+  x: number;
+  y: number;
+  /**
+   * Per-defender assignment from the catalog. Always set for catalog
+   * matches (D1); synthesized alignments fall back to a coverage-wide
+   * default since the synthesizer doesn't know per-defender intent.
+   */
+  assignment?: DefenderAssignmentSpec;
+};
+
 type DefenseAlignmentResult =
   | {
       ok: true;
@@ -81,7 +95,7 @@ type DefenseAlignmentResult =
       coverage: string;
       variant: string;
       description: string;
-      players: Array<{ id: string; x: number; y: number }>;
+      players: DefensePlayerWithAssignment[];
       zones: DefenseAlignmentZone[];
       manCoverage: boolean;
       synthesized: boolean;
@@ -102,7 +116,12 @@ function computeDefenseAlignment(
       coverage: catalogMatch.coverage,
       variant: catalogMatch.variant,
       description: catalogMatch.description,
-      players: alignmentForStrength(catalogMatch, strength),
+      players: alignmentWithAssignments(catalogMatch, strength).map((p) => ({
+        id: p.id,
+        x: p.x,
+        y: p.y,
+        assignment: p.assignment,
+      })),
       zones: zonesForStrength(catalogMatch, strength).map((z) => ({
         kind: z.kind,
         center: [z.center[0], z.center[1]] as [number, number],
@@ -849,6 +868,159 @@ const add_defense_to_play: CoachAiTool = {
   },
 };
 
+const set_defender_assignment: CoachAiTool = {
+  def: {
+    name: "set_defender_assignment",
+    description:
+      "Surgically change ONE defender's assignment on an existing play diagram while preserving every other player, route, and zone. Use this whenever the coach asks 'what about ML — have him blitz instead', 'have the FS play robber', 'put CB1 in man on Z'. " +
+      "Inputs: the prior play fence JSON (copied verbatim), the defender id, and an action object describing the new role. " +
+      "Action shapes: " +
+      "{ kind: \"zone_drop\", zoneId, zoneLabel, center: [x,y], size: [w,h] } — defender drops into a zone (omit per-defender route, ensure the zone shape is in zones[]); " +
+      "{ kind: \"man_match\", target } — defender matches the named offensive player (replaces route with an arrow to the target); " +
+      "{ kind: \"blitz\", gap } — defender rushes through the named gap (A/B/C/D/edge); " +
+      "{ kind: \"spy\", target } — defender mirrors a player; " +
+      "{ kind: \"custom_path\", waypoints, curve } — hand-drawn path. " +
+      "Returns the FULL updated play fence JSON ready to drop verbatim. Use modify_play_route for offensive route changes, place_defense for the initial defense placement, and this tool for any single-defender role change.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prior_play_fence: {
+          type: "string",
+          description:
+            "The previous diagram JSON, copied verbatim from the most recent ```play fence in the chat. MUST include all players, routes, and zones from that diagram.",
+        },
+        defender: {
+          type: "string",
+          description:
+            "Defender id whose assignment is changing (e.g. \"FS\", \"ML\", \"CB\"). Must match a player in prior_play_fence.players where team === \"D\".",
+        },
+        action: {
+          type: "object",
+          description:
+            "The defender's new role. Shape varies by kind — see tool description for variants.",
+        },
+      },
+      required: ["prior_play_fence", "defender", "action"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input) {
+    const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence.trim() : "";
+    const defender = typeof input.defender === "string" ? input.defender.trim() : "";
+    const action = (input.action ?? {}) as Record<string, unknown>;
+    if (!priorJson) return { ok: false, error: "prior_play_fence is required (copy the previous play fence verbatim)." };
+    if (!defender) return { ok: false, error: "defender is required." };
+    const kind = typeof action.kind === "string" ? action.kind : "";
+    const allowed = ["zone_drop", "man_match", "blitz", "spy", "custom_path"];
+    if (!allowed.includes(kind)) {
+      return { ok: false, error: `action.kind must be one of: ${allowed.join(", ")}.` };
+    }
+
+    let fence: Record<string, unknown>;
+    try {
+      fence = JSON.parse(priorJson);
+    } catch (e) {
+      return { ok: false, error: `Could not parse prior_play_fence as JSON: ${(e as Error).message}` };
+    }
+
+    const playersArr = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
+    const routesArr = Array.isArray(fence.routes) ? (fence.routes as Array<Record<string, unknown>>) : [];
+    const zonesArr = Array.isArray(fence.zones) ? (fence.zones as Array<Record<string, unknown>>) : [];
+
+    const defenderPlayer = playersArr.find((p) => p.id === defender && p.team === "D");
+    if (!defenderPlayer) {
+      const defs = playersArr.filter((p) => p.team === "D").map((p) => p.id).join(", ");
+      return { ok: false, error: `Defender "${defender}" not in prior_play_fence.players (team="D"). Available: ${defs || "(none)"}.` };
+    }
+    const dx = typeof defenderPlayer.x === "number" ? defenderPlayer.x : 0;
+    const dy = typeof defenderPlayer.y === "number" ? defenderPlayer.y : 0;
+
+    // Remove any existing route emanating from this defender — the new
+    // action's projection replaces it.
+    const remainingRoutes = routesArr.filter((r) => r.from !== defender);
+
+    let newRoute: Record<string, unknown> | null = null;
+    let newZones = zonesArr;
+    let summary = "";
+
+    switch (kind) {
+      case "zone_drop": {
+        const zoneLabel = typeof action.zoneLabel === "string" ? action.zoneLabel : (typeof action.zoneId === "string" ? action.zoneId : "Zone");
+        const center = Array.isArray(action.center) ? action.center as [number, number] : [dx, dy + 4];
+        const size = Array.isArray(action.size) ? action.size as [number, number] : [8, 8];
+        // Add the zone if not already present (matched by label).
+        const exists = zonesArr.some((z) => z.label === zoneLabel);
+        newZones = exists
+          ? zonesArr
+          : [...zonesArr, { kind: "rectangle", center, size, label: zoneLabel }];
+        summary = `${defender} drops into ${zoneLabel}`;
+        break;
+      }
+      case "man_match": {
+        const target = typeof action.target === "string" ? action.target : "";
+        if (!target) return { ok: false, error: "man_match requires action.target (offensive player id)." };
+        const tgt = playersArr.find((p) => p.id === target && p.team !== "D");
+        if (!tgt) {
+          const offs = playersArr.filter((p) => p.team !== "D").map((p) => p.id).join(", ");
+          return { ok: false, error: `man_match target "${target}" not in prior_play_fence offense. Available: ${offs}.` };
+        }
+        const tx = typeof tgt.x === "number" ? tgt.x : 0;
+        const ty = typeof tgt.y === "number" ? tgt.y : 0;
+        const ddx = tx - dx, ddy = ty - dy;
+        const len = Math.hypot(ddx, ddy);
+        if (len < 0.5) {
+          newRoute = { from: defender, path: [[tx, ty]], tip: "arrow", startDelaySec: 0.2 };
+        } else {
+          const ratio = (len - 1) / len;
+          const ex = Math.round((dx + ddx * ratio) * 10) / 10;
+          const ey = Math.round((dy + ddy * ratio) * 10) / 10;
+          newRoute = { from: defender, path: [[ex, ey]], tip: "arrow", startDelaySec: 0.2 };
+        }
+        summary = `${defender} man on ${target}`;
+        break;
+      }
+      case "blitz": {
+        const gap = typeof action.gap === "string" ? action.gap : "A";
+        const widths: Record<string, number> = { A: 1.5, B: 3.5, C: 6, D: 9, edge: 10.5 };
+        const gx = widths[gap] ?? 1.5;
+        const xSign = dx === 0 ? 1 : (dx > 0 ? 1 : -1);
+        newRoute = { from: defender, path: [[Math.round(xSign * gx * 10) / 10, 0]], tip: "arrow", startDelaySec: 0 };
+        summary = `${defender} blitz ${gap}-gap`;
+        break;
+      }
+      case "spy": {
+        newRoute = { from: defender, path: [[Math.round((dx + 0.5) * 10) / 10, Math.round((dy - 0.5) * 10) / 10]], tip: "none", startDelaySec: 0 };
+        summary = `${defender} spy${typeof action.target === "string" ? ` ${action.target}` : ""}`;
+        break;
+      }
+      case "custom_path": {
+        const waypoints = Array.isArray(action.waypoints) ? action.waypoints : null;
+        if (!waypoints || waypoints.length === 0) return { ok: false, error: "custom_path requires action.waypoints (non-empty [[x,y], ...])." };
+        newRoute = { from: defender, path: waypoints, tip: "arrow", ...(action.curve ? { curve: true } : {}) };
+        summary = `${defender} custom path (${waypoints.length} waypoints)`;
+        break;
+      }
+    }
+
+    const finalRoutes = newRoute ? [...remainingRoutes, newRoute] : remainingRoutes;
+    const newFence: Record<string, unknown> = {
+      ...fence,
+      routes: finalRoutes,
+    };
+    if (newZones.length > 0) newFence.zones = newZones;
+    else delete newFence.zones;
+
+    const fenceJson = JSON.stringify(newFence, null, 2);
+    return {
+      ok: true,
+      result:
+        `Surgical defender update — ${summary}. Every other player, route, and zone preserved verbatim from the prior diagram.\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\``,
+    };
+  },
+};
+
 const place_defense: CoachAiTool = {
   def: {
     name: "place_defense",
@@ -905,22 +1077,51 @@ const place_defense: CoachAiTool = {
     const zones = isMan ? [] : alignment.zones;
     const zonesJson = JSON.stringify(zones);
 
+    // Per-defender assignment breakdown — surfaced so Cal can narrate
+    // each defender's role, not just position them. This is what lets
+    // Cal answer "show their zones?" on Cover 1 with the correct
+    // mixed-coverage answer (FS deep middle zone + everyone else man)
+    // instead of either "all zone" or "all man".
+    const assignmentBreakdown = alignment.players
+      .map((p) => {
+        const a = p.assignment;
+        if (!a) return `  ${p.id}: (catalog default — likely man)`;
+        switch (a.kind) {
+          case "zone":  return `  ${p.id}: zone drop → ${a.zoneId}`;
+          case "man":   return `  ${p.id}: man on ${a.target ?? "receiver (by leverage)"}`;
+          case "blitz": return `  ${p.id}: blitz ${a.gap ?? "A"}-gap`;
+          case "spy":   return `  ${p.id}: spy ${a.target ?? "QB"}`;
+        }
+      })
+      .join("\n");
+
     const lines: string[] = [
       `${alignment.synthesized ? "Synthesized" : "Canonical"} "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):`,
       alignment.description,
       "",
+      `Per-defender assignments:\n${assignmentBreakdown}`,
+      "",
       `Drop these players into your diagram (team:"D"):`,
       playersJson,
     ];
-    if (isMan) {
+    if (isMan && zones.length === 0) {
       lines.push(
         "",
-        "MAN COVERAGE: do NOT emit zones for this look. Instead, draw an " +
-        "assignment line (a route from each defender to the receiver they're " +
-        "matched on) so the coach can see who has whom. The animation " +
-        "engine will track those routes during playback — set a small " +
-        "startDelaySec (~0.1-0.3s) on each defender route so they react to " +
-        "the snap rather than moving simultaneously with the offense.",
+        "PURE MAN COVERAGE: no zones drawn. Draw an assignment line (a " +
+        "route from each defender to the receiver they're matched on) so " +
+        "the coach can see who has whom. Use a small startDelaySec " +
+        "(~0.1-0.3s) on each defender route so they react to the snap.",
+      );
+    } else if (zones.length > 0 && isMan) {
+      lines.push(
+        "",
+        "MIXED COVERAGE (e.g. Cover 1 robber): draw the zone(s) for " +
+        "zone defenders AND man-assignment lines for the rest. Both go " +
+        "into the same diagram. The per-defender breakdown above tells " +
+        "you who's in zone vs. man.",
+        "",
+        "Zones for this coverage (drop into your diagram's `zones` field):",
+        zonesJson,
       );
     } else {
       lines.push(
@@ -1793,7 +1994,7 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, place_defense, place_offense, modify_play_route, add_defense_to_play, flag_outside_kb, flag_refusal];
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, place_defense, place_offense, modify_play_route, add_defense_to_play, set_defender_assignment, flag_outside_kb, flag_refusal];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {

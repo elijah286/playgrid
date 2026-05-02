@@ -216,3 +216,89 @@ describe("add_defense_to_play — preserves offense, only adds defenders + zones
     expect(result.ok).toBe(false);
   });
 });
+
+describe("set_defender_assignment — surgical defender role change (Phase D5)", () => {
+  /** Build a fence with offense + a defense already in place. */
+  function fenceWithDefense(): string {
+    const skeleton = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "right" });
+    if (!skeleton.ok) throw new Error("skeleton failed");
+    const spec = { ...skeleton.spec, defense: { front: "4-3 Over", coverage: "Cover 3" as const } };
+    const { diagram } = playSpecToCoachDiagram(spec);
+    return JSON.stringify({ title: "test", variant: "tackle_11", focus: "O", ...diagram }, null, 2);
+  }
+
+  it("registered in BASE_TOOLS", () => {
+    const tool = loadTool("set_defender_assignment");
+    expect(tool.def.name).toBe("set_defender_assignment");
+  });
+
+  it("changes ML from a hook zone defender to a blitzer", async () => {
+    const tool = loadTool("set_defender_assignment");
+    const fence = fenceWithDefense();
+    const result = await tool.handler(
+      { prior_play_fence: fence, defender: "ML", action: { kind: "blitz", gap: "A" } },
+      MIN_CTX,
+    );
+    expect(result.ok, !result.ok ? result.error : undefined).toBe(true);
+    if (!result.ok) return;
+    const match = (result.result as string).match(/```play\n([\s\S]+?)\n```/);
+    expect(match).not.toBeNull();
+    const newFence = JSON.parse(match![1]);
+    const mlRoute = (newFence.routes ?? []).find((r: any) => r.from === "ML");
+    expect(mlRoute, "ML should have a blitz route").toBeDefined();
+    expect(mlRoute.path[0][1]).toBe(0);  // ends at LOS
+  });
+
+  it("man_match adds an arrow toward the target receiver", async () => {
+    const tool = loadTool("set_defender_assignment");
+    const fence = fenceWithDefense();
+    const result = await tool.handler(
+      { prior_play_fence: fence, defender: "CB", action: { kind: "man_match", target: "X" } },
+      MIN_CTX,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const newFence = JSON.parse((result.result as string).match(/```play\n([\s\S]+?)\n```/)![1]);
+    const cbRoute = (newFence.routes ?? []).find((r: any) => r.from === "CB");
+    expect(cbRoute).toBeDefined();
+  });
+
+  it("rejects unknown defender", async () => {
+    const tool = loadTool("set_defender_assignment");
+    const fence = fenceWithDefense();
+    const result = await tool.handler(
+      { prior_play_fence: fence, defender: "GHOST", action: { kind: "blitz" } },
+      MIN_CTX,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects man_match with unknown target", async () => {
+    const tool = loadTool("set_defender_assignment");
+    const fence = fenceWithDefense();
+    const result = await tool.handler(
+      { prior_play_fence: fence, defender: "CB", action: { kind: "man_match", target: "PHANTOM" } },
+      MIN_CTX,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("preserves offense byte-for-byte", async () => {
+    const fence = fenceWithDefense();
+    const prior = JSON.parse(fence);
+    const tool = loadTool("set_defender_assignment");
+    const result = await tool.handler(
+      { prior_play_fence: fence, defender: "ML", action: { kind: "blitz", gap: "A" } },
+      MIN_CTX,
+    );
+    if (!result.ok) throw new Error(result.error);
+    const newFence = JSON.parse((result.result as string).match(/```play\n([\s\S]+?)\n```/)![1]);
+    const priorOffense = prior.players.filter((p: any) => p.team !== "D");
+    for (const p of priorOffense) {
+      const still = newFence.players.find((np: any) => np.id === p.id);
+      expect(still).toBeDefined();
+      expect(still.x).toBe(p.x);
+      expect(still.y).toBe(p.y);
+    }
+  });
+});
