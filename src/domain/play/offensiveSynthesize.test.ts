@@ -103,6 +103,52 @@ describe("synthesizeOffense — Pro Set regression (Z must be present)", () => {
   });
 });
 
+describe("synthesizeOffense — distinct LETTERS per slot (no H + H2 numeric suffixes)", () => {
+  // Per the KB (rag_documents:conventions/offense_labels for tackle_11):
+  // "Tackle 11 — Offensive personnel labels (X / Y / Z / H / F / T / Q)".
+  // Distinct letters per role, NEVER numeric suffixes. A coach surfaced
+  // 2026-05-02 that the synthesizer was producing H + H2 for spread
+  // doubles 2x2 — two slot receivers both labeled H + a downstream
+  // dedup pass appending "2".
+
+  it("Spread Doubles 2x2: produces X H Z S (no H + H2 duplication)", () => {
+    const synth = synthesizeOffense("tackle_11", "Spread Doubles");
+    const ids = (synth?.players ?? []).map((p) => p.id);
+    // No two players share the SAME letter (no "H + H2" pattern).
+    const unique = new Set(ids);
+    expect(unique.size, `duplicate label in [${ids.join(", ")}]`).toBe(ids.length);
+    // No numeric-suffix labels — those mean the dedup pass had to fire.
+    for (const id of ids) {
+      expect(id, `numeric-suffix label "${id}" indicates the synthesizer produced a duplicate`)
+        .not.toMatch(/\d$/);
+    }
+    // Both slot receivers present, distinct letters — H + S (not H + H2).
+    expect(ids).toContain("H");
+    expect(ids).toContain("S");
+  });
+
+  it("Empty (5-wide): all 5 receivers get distinct letters", () => {
+    const synth = synthesizeOffense("tackle_11", "Empty");
+    const skill = (synth?.players ?? []).filter(
+      (p) => !["LT", "LG", "C", "RG", "RT", "QB"].includes(p.id),
+    ).map((p) => p.id);
+    const unique = new Set(skill);
+    expect(unique.size, `duplicate among 5-wide receivers [${skill.join(", ")}]`).toBe(skill.length);
+    for (const id of skill) {
+      expect(id).not.toMatch(/\d$/);
+    }
+  });
+
+  it("Trips Right preserves the conventional Z H S labels", () => {
+    const synth = synthesizeOffense("tackle_11", "Trips Right");
+    const ids = (synth?.players ?? []).map((p) => p.id);
+    expect(ids).toContain("X");
+    expect(ids).toContain("Z");
+    expect(ids).toContain("H");
+    expect(ids).toContain("S");
+  });
+});
+
 describe("synthesizeOffense — no overlapping player positions", () => {
   it.each(FORMATION_CASES)(
     "$variant / $name has no two players at the same (x, y)",

@@ -171,6 +171,12 @@ const STYLE_Y:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
 const STYLE_S:    PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
 const STYLE_H:    PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
+// F is a slot/move position distinct from H (per the KB tackle_11
+// label convention X/Y/Z/H/F/T/Q). Previously F was routed to STYLE_H
+// and rendered as orange — visually indistinguishable from H, which a
+// coach correctly flagged 2026-05-02 as confusing in 2x2 doubles where
+// both slot players appeared on screen at the same time.
+const STYLE_F:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
 const STYLE_DEF:         PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" }; // generic — fallback when label doesn't match a role
 // Defender role palette. Triangles already mark "defender"; the hue makes
 // the role legible (corners vs safeties vs hooks vs flats) so a coach can
@@ -542,7 +548,14 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         else if (baseLabel === "Y" || baseLabel === "TE" || role === "TE") { style = STYLE_Y; label = rawLabel === "TE" ? "Y" : rawLabel.slice(0, 2); }
         else if (baseLabel === "Z") { style = STYLE_Z; label = rawLabel.slice(0, 2); }
         else if (baseLabel === "S" || baseLabel === "A") { style = STYLE_S; label = rawLabel.slice(0, 2); }
-        else if (baseLabel === "H" || baseLabel === "F" || baseLabel === "B" || baseLabel === "RB" || role === "RB") {
+        // F gets its OWN color now — purple — so it renders distinct
+        // from H (orange) when both appear in the same play (e.g. spread
+        // doubles 2x2 has slot H on one side and slot F on the other).
+        else if (baseLabel === "F") {
+          style = STYLE_F;
+          label = rawLabel.slice(0, 2);
+        }
+        else if (baseLabel === "H" || baseLabel === "B" || baseLabel === "RB" || role === "RB") {
           style = STYLE_H;
           label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 2);
         } else {

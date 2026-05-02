@@ -322,15 +322,31 @@ function placeReceivers(
   // Slots stand ~5-6 yards inside the outer receiver, well off the OL.
   const wideX = variant === "tackle_11" ? 18 : variant === "flag_7v7" ? 12 : 10;
 
-  // Helper: pick a label from a fixed pool, with on-the-line vs off-the-
-  // line distinction handled by y. The first player on each side is the
-  // outermost; subsequent ones step inward.
+  // Slot-letter allocator. Per the KB (rag_documents:conventions/
+  // offense_labels for tackle_11): "Tackle 11 — Offensive personnel
+  // labels (X / Y / Z / H / F / T / Q)" — distinct LETTERS per role,
+  // not numeric suffixes. Old code returned "H" for both left-side
+  // and right-side slots in 2x2 doubles, then a downstream dedup
+  // pass appended a "2" producing "H + H2" — which a coach correctly
+  // flagged 2026-05-02 as not matching any league convention.
+  //
+  // Pool order ["H", "S", "F"] preserves the existing convention for
+  // trips right (Z + H + S) and adds F for the cross-side slot in
+  // doubles (X H | Z F).
+  const slotPool = ["H", "S", "F"];
+  let slotIdx = 0;
+  const nextSlot = (): string => {
+    const letter = slotPool[slotIdx] ?? `S${slotIdx + 1}`;
+    slotIdx += 1;
+    return letter;
+  };
   const labelFor = (side: "left" | "right", index: number, te: boolean): string => {
     if (side === "left") {
-      return index === 0 ? "X" : index === 1 ? "H" : "S";
+      return index === 0 ? "X" : nextSlot();
     }
     if (te && index === 0) return "Y";
-    return index === 0 ? "Z" : index === 1 ? "H" : "S";
+    if (index === 0) return "Z";
+    return nextSlot();
   };
 
   // LEFT side. Outermost is on the line at y=0; subsequent slots step

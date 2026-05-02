@@ -146,8 +146,22 @@ describe("player color routing — suffixed labels match base color", () => {
     expect(colorFor("Z2")).toBe(colorFor("Z"));
   });
 
-  it("F2 / B2 share the H color (all orange backs)", () => {
-    expect(colorFor("F2")).toBe("#F26522");
+  it("F has its OWN color (purple, not orange) — distinct from H", () => {
+    // Per the KB tackle_11 convention (X / Y / Z / H / F / T / Q): F is
+    // a distinct slot/move position from H. Coaches need to tell them
+    // apart at a glance when both appear in the same play (spread
+    // doubles 2x2). 2026-05-02 surfaced as confusing when F + H both
+    // rendered orange.
+    expect(colorFor("F")).not.toBe(colorFor("H"));
+    expect(colorFor("F")).toBe("#A855F7"); // purple
+  });
+
+  it("F2 inherits F's purple (suffixed labels match base color)", () => {
+    expect(colorFor("F2")).toBe(colorFor("F"));
+    expect(colorFor("F2")).toBe("#A855F7");
+  });
+
+  it("B2 still shares the H color (all orange backs — B is a back, not a slot)", () => {
     expect(colorFor("B2")).toBe("#F26522");
   });
 

@@ -1,12 +1,116 @@
 "use client";
 
-import { Children, isValidElement, useState } from "react";
+import { Children, createContext, Fragment, isValidElement, useContext, useMemo, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 import { ChevronDown } from "lucide-react";
+import type { Player } from "@/domain/play/types";
+import { PlayerChip } from "@/features/editor/PlayerChip";
+import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 import { PlayDiagramEmbed, PlayDiagramRef } from "./PlayDiagramEmbed";
+
+/**
+ * Map from uppercase player label → Player, derived from any `play`
+ * fence in the assistant message. Used by markdown-component overrides
+ * (p / li / strong / em / h*) to replace `@Label` text tokens with the
+ * same colored chip the play-notes editor uses (PlayerChip).
+ *
+ * Surfaced 2026-05-02: a coach asked for the chat to use the same
+ * @Label-as-colored-circle convention as the play-notes panel. Reuses
+ * PlayerChip directly so the visual is identical across both surfaces.
+ */
+const ChatPlayersContext = createContext<Map<string, Player> | null>(null);
+
+/** Pull all players from any `play` fences in the message. Multiple
+ *  fences merge into one map; later fences win on duplicate labels. */
+function extractPlayersFromMessage(text: string): Map<string, Player> {
+  const map = new Map<string, Player>();
+  const re = /```play\s*\n([\s\S]*?)\n```/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    try {
+      const diagram = JSON.parse(m[1]) as CoachDiagram;
+      const doc = coachDiagramToPlayDocument(diagram);
+      for (const p of doc.layers.players) {
+        if (p.label) map.set(p.label.toUpperCase(), p);
+      }
+    } catch {
+      // Streaming JSON or off-shape — skip this fence; @Label tokens
+      // referring to its players will render as plain text rather than
+      // crashing the renderer.
+    }
+  }
+  return map;
+}
+
+/** Walk a React node and replace `@Label` text occurrences with
+ *  inline PlayerChip components. Conservative: only replaces tokens
+ *  whose label matches a known player; everything else passes
+ *  through unchanged. */
+function replaceAtLabels(
+  node: React.ReactNode,
+  players: Map<string, Player>,
+  keyPrefix = "atl",
+): React.ReactNode {
+  if (typeof node === "string") {
+    if (!node.includes("@")) return node;
+    const re = /@([A-Za-z][A-Za-z0-9]{0,3})\b/g;
+    const parts: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let m: RegExpExecArray | null;
+    let n = 0;
+    while ((m = re.exec(node)) !== null) {
+      const player = players.get(m[1].toUpperCase());
+      if (!player) continue;
+      if (m.index > lastIdx) parts.push(node.slice(lastIdx, m.index));
+      parts.push(
+        <span
+          key={`${keyPrefix}-${n}`}
+          className="mx-0.5 inline-flex items-center align-baseline"
+          aria-label={`Player ${player.label}`}
+        >
+          <PlayerChip player={player} size={16} />
+        </span>,
+      );
+      lastIdx = m.index + m[0].length;
+      n += 1;
+    }
+    if (parts.length === 0) return node;
+    if (lastIdx < node.length) parts.push(node.slice(lastIdx));
+    return <>{parts}</>;
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, i) => (
+      <Fragment key={`${keyPrefix}-i${i}`}>
+        {replaceAtLabels(child, players, `${keyPrefix}-i${i}`)}
+      </Fragment>
+    ));
+  }
+  if (isValidElement(node)) {
+    const elem = node as React.ReactElement<{ children?: React.ReactNode }>;
+    const props = elem.props as { children?: React.ReactNode };
+    if (props && "children" in props) {
+      return {
+        ...elem,
+        props: { ...props, children: replaceAtLabels(props.children, players, keyPrefix) },
+      } as React.ReactElement;
+    }
+  }
+  return node;
+}
+
+/** Hook returning a child-walker that, when there are players in
+ *  context, replaces `@Label` tokens with chips. When there are no
+ *  players (no play fence in the message), returns children as-is.
+ *  Designed to be called once at the top of each markdown-component
+ *  override that wraps prose. */
+function useAtLabelChildren(children: React.ReactNode): React.ReactNode {
+  const players = useContext(ChatPlayersContext);
+  if (!players || players.size === 0) return children;
+  return replaceAtLabels(children, players);
+}
 
 /**
  * Coach Cal answers follow a TL;DR-first convention (see agent prompt rule
@@ -105,20 +209,41 @@ function FootballDiagram({ text }: { text: string }) {
   );
 }
 
-const components: Components = {
-  h1: ({ children }) => (
-    <h1 className="mb-2 mt-3 text-base font-bold text-foreground first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="mb-1.5 mt-3 text-sm font-semibold text-foreground first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="mb-1 mt-2 text-sm font-semibold text-foreground/80 first:mt-0">{children}</h3>
-  ),
+// Named-PascalCase wrappers around the prose components — the
+// react-hooks lint rule requires Hook callers to start with an
+// uppercase letter, so we can't call useAtLabelChildren directly
+// inside the lowercase react-markdown component overrides. These
+// wrappers give the hook a properly-named host without changing
+// rendering behavior.
+type ChildrenProps = { children?: React.ReactNode };
+const H1WithChips = ({ children }: ChildrenProps) => (
+  <h1 className="mb-2 mt-3 text-base font-bold text-foreground first:mt-0">{useAtLabelChildren(children)}</h1>
+);
+const H2WithChips = ({ children }: ChildrenProps) => (
+  <h2 className="mb-1.5 mt-3 text-sm font-semibold text-foreground first:mt-0">{useAtLabelChildren(children)}</h2>
+);
+const H3WithChips = ({ children }: ChildrenProps) => (
+  <h3 className="mb-1 mt-2 text-sm font-semibold text-foreground/80 first:mt-0">{useAtLabelChildren(children)}</h3>
+);
+const PWithChips = ({ children }: ChildrenProps) => (
+  <p className="mb-2 leading-relaxed last:mb-0">{useAtLabelChildren(children)}</p>
+);
+const LiWithChips = ({ children }: ChildrenProps) => (
+  <li className="leading-relaxed marker:text-muted [&>p]:mb-0">{useAtLabelChildren(children)}</li>
+);
+const StrongWithChips = ({ children }: ChildrenProps) => (
+  <strong className="font-semibold text-foreground">{useAtLabelChildren(children)}</strong>
+);
+const EmWithChips = ({ children }: ChildrenProps) => (
+  <em className="italic text-foreground/80">{useAtLabelChildren(children)}</em>
+);
 
-  p: ({ children }) => (
-    <p className="mb-2 leading-relaxed last:mb-0">{children}</p>
-  ),
+const components: Components = {
+  h1: H1WithChips,
+  h2: H2WithChips,
+  h3: H3WithChips,
+
+  p: PWithChips,
 
   ul: ({ children }) => (
     <ul className="mb-2 space-y-0.5 pl-4 last:mb-0">{children}</ul>
@@ -126,9 +251,7 @@ const components: Components = {
   ol: ({ children }) => (
     <ol className="mb-2 list-decimal space-y-0.5 pl-4 last:mb-0">{children}</ol>
   ),
-  li: ({ children }) => (
-    <li className="leading-relaxed marker:text-muted [&>p]:mb-0">{children}</li>
-  ),
+  li: LiWithChips,
 
   // Block code — react-markdown renders <pre><code className="language-xxx">.
   // We override `code` below, so the child's `type` is our custom function,
@@ -200,10 +323,8 @@ const components: Components = {
     );
   },
 
-  strong: ({ children }) => (
-    <strong className="font-semibold text-foreground">{children}</strong>
-  ),
-  em: ({ children }) => <em className="italic text-foreground/80">{children}</em>,
+  strong: StrongWithChips,
+  em: EmWithChips,
 
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto rounded-lg border border-border">
@@ -221,12 +342,19 @@ const components: Components = {
 
 export function AssistantMessage({ text }: { text: string }) {
   const { preamble, details } = splitDetails(text);
+  // Players parsed once per message and shared via context — both
+  // preamble + details get the same chip mapping. Cheap (regex +
+  // JSON parse + converter), and gracefully no-ops when no fence
+  // is present.
+  const players = useMemo(() => extractPlayersFromMessage(text), [text]);
   return (
+    <ChatPlayersContext.Provider value={players}>
     <div className="text-sm text-foreground">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {preamble}
       </ReactMarkdown>
       {details && <DetailsDisclosure markdown={details} />}
     </div>
+    </ChatPlayersContext.Provider>
   );
 }

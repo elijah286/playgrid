@@ -183,14 +183,34 @@ describe("PlaySpec → CoachDiagram (renderer)", () => {
   it("emits route paths anchored at the carrier (not at origin)", () => {
     const { diagram } = playSpecToCoachDiagram(spreadSlantPost());
     const routes = diagram.routes ?? [];
+    // The renderer's job: route waypoints must be RELATIVE to the
+    // carrier's position, not absolute origin coordinates. A bug
+    // would produce wp ≈ (0, ~depth) regardless of carrier x.
+    //
+    // We verify by checking the LAST waypoint (the route's terminus)
+    // is reachable from carrier within the route's reasonable extent
+    // (< 25yd lateral, < 25yd vertical — fits any catalog route).
+    // The first waypoint check (which assumed every route has a
+    // vertical stem) was wrong for routes like Flat that step
+    // laterally from the carrier without a stem.
     for (const r of routes) {
       const carrier = diagram.players.find((p) => p.id === r.from);
       expect(carrier).toBeDefined();
-      // First waypoint should be near the carrier (not at origin).
-      // Slant has a 3yd stem so first wp is ~(carrier.x, carrier.y + 3).
-      const [wpX, wpY] = r.path[0];
-      expect(Math.abs(wpX - carrier!.x)).toBeLessThan(2);
-      expect(Math.abs(wpY - carrier!.y)).toBeLessThan(15);
+      const [endX, endY] = r.path[r.path.length - 1];
+      // Last waypoint within sensible distance of carrier.
+      expect(Math.abs(endX - carrier!.x)).toBeLessThan(25);
+      expect(Math.abs(endY - carrier!.y)).toBeLessThan(25);
+      // Sanity: a route with carrier at x=10 should NOT have all
+      // waypoints clustered at x≈0 (origin) — that'd be the bug.
+      // Check at least one waypoint is closer to carrier than to origin.
+      const carrierBased = r.path.some(
+        ([x, y]) => Math.hypot(x - carrier!.x, y - carrier!.y) < Math.hypot(x, y),
+      );
+      // Only enforce when carrier itself is far from origin (else origin-
+      // based and carrier-based are indistinguishable).
+      if (Math.hypot(carrier!.x, carrier!.y) > 5) {
+        expect(carrierBased, `route from "${r.from}" not anchored to carrier`).toBe(true);
+      }
     }
   });
 });
