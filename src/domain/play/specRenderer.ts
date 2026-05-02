@@ -397,25 +397,88 @@ function routeFromDefenderAction(
       };
     }
     case "read_and_react": {
-      // Phase D7 wires the trigger into the animation engine. For now,
-      // the renderer emits a dashed-style hook by tagging a small
-      // initial delay; downstream readers can detect read_and_react via
-      // the route_kind suffix we attach below.
+      // Phase D7: reactive movement. Geometry depends on the trigger
+      // player's route + the named behavior. Each behavior produces a
+      // distinct path shape so the diagram visibly shows the reaction.
+      //
+      // Behaviors:
+      //   - jump_route: defender drives to the route's break point.
+      //   - carry_vertical: defender follows the trigger straight up
+      //     a few yards then bails (the deep defender takes it).
+      //   - follow_to_flat: defender mirrors the trigger's release
+      //     and continues to the flat sideline.
+      //   - wall_off: defender steps inside-out to intercept a crosser.
+      //   - robber: defender drops to intermediate depth in the middle.
+      //
+      // The geometry is best-effort — without a fully-rendered diagram
+      // it can't perfectly intersect the route. The visual cue (delay +
+      // route_kind tag) communicates "this is reactive."
       const trigger = action.trigger.player;
       const target = offense.find((p) => p.id === trigger);
-      if (!target) {
-        // Without a target the conditional arrow has no anchor. Skip
-        // silently — Phase D7's validator will catch this; emitting a
-        // warning here would double-report.
-        return null;
-      }
+      if (!target) return null;
+      const path = reactivePathFor(action.behavior, defender, target);
       return {
         from: defender.id,
-        path: [[round((defender.x + target.x) / 2), round((defender.y + target.y) / 2)]],
+        path,
         tip: "arrow",
         startDelaySec: 0.6,
         route_kind: `react_${action.behavior}`,
       };
+    }
+  }
+}
+
+/**
+ * Compute waypoints for a reactive defender given the named behavior
+ * and trigger receiver. All paths anchor from the defender's position
+ * (the renderer doesn't include the start node in the route's path —
+ * it's added downstream from the carrier position).
+ */
+function reactivePathFor(
+  behavior: Extract<DefenderAction, { kind: "read_and_react" }>["behavior"],
+  defender: CoachDiagramPlayer,
+  target: CoachDiagramPlayer,
+): [number, number][] {
+  switch (behavior) {
+    case "jump_route": {
+      // Drive to a point ~2 yds short of the trigger's current spot,
+      // along the line from defender to trigger. Single waypoint.
+      const dx = target.x - defender.x;
+      const dy = target.y - defender.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ratio = Math.max(0.1, (len - 2) / len);
+      return [[round(defender.x + dx * ratio), round(defender.y + dy * ratio)]];
+    }
+    case "carry_vertical": {
+      // Step downfield 5 yds (toward the trigger's depth), then break
+      // off to the inside.
+      const xSign = target.x >= 0 ? 1 : -1;
+      return [
+        [round(defender.x), round(defender.y + 5)],
+        [round(defender.x - xSign * 2), round(defender.y + 7)],
+      ];
+    }
+    case "follow_to_flat": {
+      // Mirror the trigger's release laterally, ending in the flat
+      // (~3 yds depth, same side).
+      const xSign = target.x >= 0 ? 1 : -1;
+      return [
+        [round(defender.x + xSign * 3), round(defender.y - 1)],
+        [round(defender.x + xSign * 8), round(defender.y - 2)],
+      ];
+    }
+    case "wall_off": {
+      // Step inside-out to cut off the crosser. Single waypoint at the
+      // midpoint between defender and trigger, biased toward the
+      // defender's depth so it's a square-up step rather than a chase.
+      const midX = (defender.x + target.x) / 2;
+      return [[round(midX), round(defender.y)]];
+    }
+    case "robber": {
+      // Drop to intermediate depth in the middle of the field. End at
+      // x≈0, y≈8 (catalog Cover 1 FS depth is ~13, so 8 is "robber"
+      // depth — between the underneath defenders and the deep safety).
+      return [[0, 8]];
     }
   }
 }

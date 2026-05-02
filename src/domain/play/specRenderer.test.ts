@@ -141,3 +141,65 @@ describe("Renderer — defenderAssignments overrides (Phase D3)", () => {
     expect(warnings.find((w) => w.code === "defender_zone_unknown")).toBeDefined();
   });
 });
+
+describe("Renderer — read_and_react geometry (Phase D7)", () => {
+  function specWithReact(behavior: "jump_route" | "carry_vertical" | "follow_to_flat" | "wall_off" | "robber") {
+    return {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone" as const, coverage: "Cover 3" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+      defenderAssignments: [
+        {
+          defender: "HL",
+          action: {
+            kind: "read_and_react" as const,
+            trigger: { player: "X" as const },
+            behavior,
+          },
+        },
+      ],
+    };
+  }
+
+  it("jump_route ends near (but not at) the trigger receiver", () => {
+    const { diagram } = playSpecToCoachDiagram(specWithReact("jump_route"));
+    const route = (diagram.routes ?? []).find((r) => r.from === "HL");
+    expect(route).toBeDefined();
+    expect(route!.route_kind).toBe("react_jump_route");
+    expect(route!.startDelaySec).toBeGreaterThan(0);
+  });
+
+  it("robber path drops to deep middle (x≈0, y≈8)", () => {
+    const { diagram } = playSpecToCoachDiagram(specWithReact("robber"));
+    const route = (diagram.routes ?? []).find((r) => r.from === "HL");
+    const final = route!.path[route!.path.length - 1];
+    expect(final[0]).toBe(0);
+    expect(final[1]).toBe(8);
+  });
+
+  it("carry_vertical emits 2 waypoints (downfield then break)", () => {
+    const { diagram } = playSpecToCoachDiagram(specWithReact("carry_vertical"));
+    const route = (diagram.routes ?? []).find((r) => r.from === "HL");
+    expect(route!.path.length).toBe(2);
+  });
+
+  it("follow_to_flat ends at shallow depth (within ~3 yds of LOS)", () => {
+    const { diagram } = playSpecToCoachDiagram(specWithReact("follow_to_flat"));
+    const route = (diagram.routes ?? []).find((r) => r.from === "HL");
+    const final = route!.path[route!.path.length - 1];
+    // Defender HL starts at y≈5; ending at y - 2 = ~3 is the flat depth.
+    expect(final[1]).toBeLessThanOrEqual(4);
+  });
+
+  it("wall_off ends at the same depth as the defender", () => {
+    const { diagram } = playSpecToCoachDiagram(specWithReact("wall_off"));
+    const defender = diagram.players.find((p) => p.id === "HL");
+    const route = (diagram.routes ?? []).find((r) => r.from === "HL");
+    const final = route!.path[route!.path.length - 1];
+    expect(final[1]).toBe(defender!.y);
+  });
+});

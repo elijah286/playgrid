@@ -879,7 +879,8 @@ const set_defender_assignment: CoachAiTool = {
       "{ kind: \"man_match\", target } — defender matches the named offensive player (replaces route with an arrow to the target); " +
       "{ kind: \"blitz\", gap } — defender rushes through the named gap (A/B/C/D/edge); " +
       "{ kind: \"spy\", target } — defender mirrors a player; " +
-      "{ kind: \"custom_path\", waypoints, curve } — hand-drawn path. " +
+      "{ kind: \"custom_path\", waypoints, curve } — hand-drawn path; " +
+      "{ kind: \"read_and_react\", trigger: { player, on? }, behavior } — defender reacts to a specific offensive player's action (Phase D7); behavior is one of jump_route, carry_vertical, follow_to_flat, wall_off, robber. " +
       "Returns the FULL updated play fence JSON ready to drop verbatim. Use modify_play_route for offensive route changes, place_defense for the initial defense placement, and this tool for any single-defender role change.",
     input_schema: {
       type: "object",
@@ -911,7 +912,7 @@ const set_defender_assignment: CoachAiTool = {
     if (!priorJson) return { ok: false, error: "prior_play_fence is required (copy the previous play fence verbatim)." };
     if (!defender) return { ok: false, error: "defender is required." };
     const kind = typeof action.kind === "string" ? action.kind : "";
-    const allowed = ["zone_drop", "man_match", "blitz", "spy", "custom_path"];
+    const allowed = ["zone_drop", "man_match", "blitz", "spy", "custom_path", "read_and_react"];
     if (!allowed.includes(kind)) {
       return { ok: false, error: `action.kind must be one of: ${allowed.join(", ")}.` };
     }
@@ -998,6 +999,62 @@ const set_defender_assignment: CoachAiTool = {
         if (!waypoints || waypoints.length === 0) return { ok: false, error: "custom_path requires action.waypoints (non-empty [[x,y], ...])." };
         newRoute = { from: defender, path: waypoints, tip: "arrow", ...(action.curve ? { curve: true } : {}) };
         summary = `${defender} custom path (${waypoints.length} waypoints)`;
+        break;
+      }
+      case "read_and_react": {
+        const trigger = (action.trigger ?? {}) as Record<string, unknown>;
+        const triggerPlayerId = typeof trigger.player === "string" ? trigger.player : "";
+        const behavior = typeof action.behavior === "string" ? action.behavior : "";
+        const allowedBehaviors = ["jump_route", "carry_vertical", "follow_to_flat", "wall_off", "robber"];
+        if (!triggerPlayerId) return { ok: false, error: "read_and_react requires action.trigger.player (the offensive player to read)." };
+        if (!allowedBehaviors.includes(behavior)) return { ok: false, error: `read_and_react.behavior must be one of: ${allowedBehaviors.join(", ")}.` };
+        const tgt = playersArr.find((p) => p.id === triggerPlayerId && p.team !== "D");
+        if (!tgt) {
+          const offs = playersArr.filter((p) => p.team !== "D").map((p) => p.id).join(", ");
+          return { ok: false, error: `read_and_react trigger "${triggerPlayerId}" not in prior_play_fence offense. Available: ${offs}.` };
+        }
+        const tx = typeof tgt.x === "number" ? tgt.x : 0;
+        const ty = typeof tgt.y === "number" ? tgt.y : 0;
+        // Geometry mirrors specRenderer.reactivePathFor — keep these in
+        // sync (one fix here = one fix there).
+        let path: number[][];
+        switch (behavior) {
+          case "jump_route": {
+            const ddx = tx - dx, ddy = ty - dy;
+            const len = Math.hypot(ddx, ddy) || 1;
+            const ratio = Math.max(0.1, (len - 2) / len);
+            path = [[Math.round((dx + ddx * ratio) * 10) / 10, Math.round((dy + ddy * ratio) * 10) / 10]];
+            break;
+          }
+          case "carry_vertical": {
+            const xSign = tx >= 0 ? 1 : -1;
+            path = [[Math.round(dx * 10) / 10, Math.round((dy + 5) * 10) / 10], [Math.round((dx - xSign * 2) * 10) / 10, Math.round((dy + 7) * 10) / 10]];
+            break;
+          }
+          case "follow_to_flat": {
+            const xSign = tx >= 0 ? 1 : -1;
+            path = [[Math.round((dx + xSign * 3) * 10) / 10, Math.round((dy - 1) * 10) / 10], [Math.round((dx + xSign * 8) * 10) / 10, Math.round((dy - 2) * 10) / 10]];
+            break;
+          }
+          case "wall_off": {
+            path = [[Math.round(((dx + tx) / 2) * 10) / 10, Math.round(dy * 10) / 10]];
+            break;
+          }
+          case "robber": {
+            path = [[0, 8]];
+            break;
+          }
+          default:
+            path = [];
+        }
+        newRoute = {
+          from: defender,
+          path,
+          tip: "arrow",
+          startDelaySec: 0.6,
+          route_kind: `react_${behavior}`,
+        };
+        summary = `${defender} reads @${triggerPlayerId} → ${behavior}`;
         break;
       }
     }
