@@ -40,7 +40,12 @@ import type { SportVariant } from "./types";
 const FIELD_LENGTH_YDS = 25;
 
 export type RenderWarning = {
-  code: "formation_fallback" | "defense_unknown" | "assignment_player_missing" | "route_template_missing";
+  code:
+    | "formation_fallback"
+    | "defense_unknown"
+    | "assignment_player_missing"
+    | "route_template_missing"
+    | "formation_player_count_mismatch";
   message: string;
 };
 
@@ -71,6 +76,31 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
     // Variant didn't resolve — synthesizer returns null for unknowns.
     // Emit an empty diagram so the call doesn't crash.
     return { diagram: { variant: spec.variant, players: [], routes: [] }, warnings };
+  }
+
+  // Player-count integrity guard (AGENTS.md Rule 5: make it impossible).
+  // The synthesizer is supposed to return the variant's full count
+  // (tackle_11 → 11, flag_7v7 → 7, flag_5v5 → 5). Anything less is a
+  // synthesizer bug — historically Pro Set / Pro I / I-form silently
+  // returned 10 players for tackle_11 (missing Z) because the TE
+  // consumed a right-side WR slot. Saving plays from those broken
+  // outputs produced misshapen thumbnails.
+  //
+  // We surface the count mismatch as a warning rather than crashing —
+  // the resolver in play-tools then promotes it to an error for spec
+  // input, blocking persistence. The legacy diagram path doesn't run
+  // this code, so its existing behavior is unchanged.
+  const expectedCount = sportProfileForVariant(spec.variant).offensePlayerCount;
+  if (synth.players.length !== expectedCount) {
+    warnings.push({
+      code: "formation_player_count_mismatch",
+      message:
+        `Synthesizer returned ${synth.players.length} offensive players for "${requestedName}" ` +
+        `(${spec.variant} expects ${expectedCount}). The formation parser is missing a player — ` +
+        `commonly the Z (right WR) when te=1 + right=1, or a back. Either pick a different ` +
+        `formation that synthesizes to the right count, or fix the parser entry in ` +
+        `offensiveSynthesize.ts.`,
+    });
   }
 
   const offensePlayers: CoachDiagramPlayer[] = synth.players.map((p) => ({

@@ -321,7 +321,6 @@ function placeReceivers(
   // (30 yds for 7v7, 25 for 5v5) so splits are correspondingly tighter.
   // Slots stand ~5-6 yards inside the outer receiver, well off the OL.
   const wideX = variant === "tackle_11" ? 18 : variant === "flag_7v7" ? 12 : 10;
-  const slotX = variant === "tackle_11" ? 11 : variant === "flag_7v7" ? 7  : 6;
 
   // Helper: pick a label from a fixed pool, with on-the-line vs off-the-
   // line distinction handled by y. The first player on each side is the
@@ -346,23 +345,34 @@ function placeReceivers(
     players.push({ id: labelFor("left", i, false), x: Math.round(x * 10) / 10, y });
   }
 
-  // RIGHT side. If te=1 the TE goes ON the line just outside RT; other
-  // right-side receivers split wider in slots.
+  // RIGHT side. If te=1 the TE (Y) goes ON the line just outside RT;
+  // rec.right then counts WRs IN ADDITION to the TE — so a formation
+  // like Pro Set (1 left WR, 1 TE, 1 right WR) is { left: 1, right: 1,
+  // te: 1 } and produces X + Y + Z (3 right-side spots).
+  //
+  // Earlier the TE consumed one of rec.right's slots, which silently
+  // dropped Z whenever te=1 + right=1 (Pro Set, Pro I, I-form). The
+  // saved play came back with only 10 players for tackle_11 and the
+  // thumbnail rendered as a misshapen field. See the player-count
+  // integrity guard in specRenderer for the matching defensive check.
   const teRight = rec.te === 1;
-  let firstRightSlotIndex = 0;
-  if (teRight && rec.right >= 1) {
+  if (teRight) {
     const yX = variant === "tackle_11" ? 6 : variant === "flag_7v7" ? 5 : 4;
     players.push({ id: "Y", x: yX, y: 0 });
-    firstRightSlotIndex = 1;
   }
   const insideStepRight = insideStepLeft;
-  for (let i = firstRightSlotIndex; i < rec.right; i++) {
-    const idx = i - firstRightSlotIndex;
-    const baseX = idx === 0 ? wideX : wideX - (idx + (teRight ? 1 : 0)) * insideStepRight;
-    const x = baseX + (i > firstRightSlotIndex && rec.bunchSide === "right" ? -3 : 0);
-    const onLine = i === firstRightSlotIndex;
+  for (let i = 0; i < rec.right; i++) {
+    // baseX accounts for the TE-occupied slot at the inside-most
+    // position when te=1: WRs step further outward to leave room.
+    const baseX = i === 0 ? wideX : wideX - (i + (teRight ? 1 : 0)) * insideStepRight;
+    const x = baseX + (i > 0 && rec.bunchSide === "right" ? -3 : 0);
+    // Outermost WR (i=0) is always on the line at the sideline. Slots
+    // (i>0) are off the line. The TE (when present) is on the line at
+    // the inside x — both X-side WR and TE on the line on the right is
+    // legal (two split-end-style attached/wide receivers).
+    const onLine = i === 0;
     const y = onLine ? 0 : -1;
-    players.push({ id: labelFor("right", idx, teRight), x: Math.round(x * 10) / 10, y });
+    players.push({ id: labelFor("right", i, false), x: Math.round(x * 10) / 10, y });
   }
 
   return players;

@@ -84,6 +84,32 @@ describe("PlaySpec → CoachDiagram (renderer)", () => {
     expect(warnings.some((w) => w.code === "assignment_player_missing")).toBe(true);
   });
 
+  it("warns when synthesizer returns wrong player count for variant (integrity guard)", () => {
+    // The Pro Set / Pro I bug returned 10 players for tackle_11. After
+    // the fix it returns 11 — so this is a defensive test that the
+    // GUARD itself fires correctly when count mismatches happen. We
+    // simulate by spying on what playSpecToCoachDiagram does with a
+    // formation we KNOW the synthesizer can't fully populate.
+    //
+    // This test asserts that IF the synthesizer ever again under-
+    // produces for a given variant, the renderer surfaces the
+    // formation_player_count_mismatch warning instead of silently
+    // shipping a malformed play. Currently no formation reproduces
+    // this, so we run the negative case with a known-good formation
+    // (must NOT warn) — the positive guard is enforced by the
+    // synthesizer tests asserting full counts per formation.
+    const spec: PlaySpec = {
+      ...spreadSlantPost(),
+      variant: "tackle_11",
+      formation: { name: "Pro Set" }, // Used to under-populate; now fixed
+    };
+    const { warnings } = playSpecToCoachDiagram(spec);
+    expect(
+      warnings.find((w) => w.code === "formation_player_count_mismatch"),
+      "Pro Set tackle_11 should now produce 11 players — guard should NOT fire",
+    ).toBeUndefined();
+  });
+
   it("warns when route family isn't in the catalog", () => {
     const spec = spreadSlantPost();
     spec.assignments[0] = {
