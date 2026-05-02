@@ -293,24 +293,13 @@ function DiagramCanvas({ doc, animPositions, fullFieldWidth }: {
               ) : (
                 <rect x={cx - z.size.w * fieldAspect} y={cy - z.size.h} width={w} height={h} rx={0.012} ry={0.012} {...common} />
               )}
-              {z.label && (
-                <text
-                  x={cx}
-                  y={labelY}
-                  textAnchor="middle"
-                  dominantBaseline="hanging"
-                  fontSize={0.024}
-                  fontWeight={700}
-                  fill="rgba(255,255,255,0.92)"
-                  stroke="rgba(0,0,0,0.55)"
-                  strokeWidth={1.2}
-                  paintOrder="stroke"
-                  vectorEffect="non-scaling-stroke"
-                  style={{ fontFamily: "Inter, system-ui, sans-serif" }}
-                >
-                  {z.label}
-                </text>
-              )}
+              {/* Intentionally no label rendered. The editor canvas
+                  doesn't draw zone labels either — Cal must only
+                  produce diagrams a coach could create themselves in
+                  the editor, which means bare ovals/rectangles. The
+                  catalog still carries `label` strings (Cal uses them
+                  for narration in chat text + notes), but they never
+                  paint on the field. */}
             </g>
           );
         })}
