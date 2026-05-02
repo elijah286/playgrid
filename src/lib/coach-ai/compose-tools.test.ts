@@ -23,6 +23,7 @@
 
 import { describe, expect, it } from "vitest";
 import { BASE_TOOLS } from "./tools";
+import { coachDiagramSchema } from "@/features/coach-ai/coachDiagramConverter";
 
 function loadTool(name: string) {
   const tool = BASE_TOOLS.find((t) => t.def.name === name);
@@ -263,6 +264,86 @@ describe("compose_defense — unified create/overlay", () => {
     const tool = loadTool("compose_defense");
     const r = await tool.handler({ front: "" }, TACKLE_CTX);
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("Tool fence outputs round-trip through coachDiagramSchema", () => {
+  // 2026-05-02: a coach hit the chat UI rendering blank with prose
+  // visible — the diagram fence had a `direction` field on a route,
+  // which the strict-parse client converter rejected, leaving the
+  // diagram blank. This test pins that every constructive-tool
+  // output parses cleanly through the same schema the client uses.
+
+  it("compose_play (Mesh) output parses through coachDiagramSchema", async () => {
+    const tool = loadTool("compose_play");
+    const r = await tool.handler({ concept: "Mesh" }, TACKLE_CTX);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const parsed = coachDiagramSchema.safeParse(fence);
+    expect(parsed.success, parsed.success ? undefined : JSON.stringify(parsed.error.issues, null, 2)).toBe(true);
+  });
+
+  it("compose_play (Flood Right with overrides) output parses through coachDiagramSchema", async () => {
+    // Flood's skeleton emits `direction` on B's flat. compose_play
+    // serializes the rendered fence — the schema must accept any
+    // field the renderer or applyRouteMod can produce.
+    const tool = loadTool("compose_play");
+    const r = await tool.handler(
+      {
+        concept: "Flood",
+        strength: "right",
+        overrides: [{ player: "S", set_depth_yds: 10 }],
+      },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const parsed = coachDiagramSchema.safeParse(fence);
+    expect(parsed.success, parsed.success ? undefined : JSON.stringify(parsed.error.issues, null, 2)).toBe(true);
+  });
+
+  it("revise_play with set_direction produces a fence that round-trips", async () => {
+    // The exact failure mode that broke the UI: revise_play sets
+    // `direction: "left"` on a route, which writes the field into
+    // the rendered fence. Schema must accept it.
+    const compose = loadTool("compose_play");
+    const playR = await compose.handler({ concept: "Flood", strength: "right" }, TACKLE_CTX);
+    if (!playR.ok) throw new Error("compose_play failed");
+    const priorFence = (/```play\n([\s\S]*?)\n```/.exec(playR.result)!)[1];
+
+    const revise = loadTool("revise_play");
+    const r = await revise.handler(
+      { prior_play_fence: priorFence, mods: [{ player: "B", set_direction: "left" }] },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const parsed = coachDiagramSchema.safeParse(fence);
+    expect(parsed.success, parsed.success ? undefined : JSON.stringify(parsed.error.issues, null, 2)).toBe(true);
+    // And: the direction field was actually persisted.
+    const bRoute = (fence.routes as Array<{ from: string; direction?: string }>).find((rt) => rt.from === "B");
+    expect(bRoute?.direction).toBe("left");
+  });
+
+  it("compose_defense (overlay on play) output parses through coachDiagramSchema", async () => {
+    const compose = loadTool("compose_play");
+    const playR = await compose.handler({ concept: "Flood", strength: "right" }, TACKLE_CTX);
+    if (!playR.ok) throw new Error("compose_play failed");
+    const priorFence = (/```play\n([\s\S]*?)\n```/.exec(playR.result)!)[1];
+
+    const defenseTool = loadTool("compose_defense");
+    const r = await defenseTool.handler(
+      { front: "4-3 Over", coverage: "Cover 3", on_play: priorFence },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const parsed = coachDiagramSchema.safeParse(fence);
+    expect(parsed.success, parsed.success ? undefined : JSON.stringify(parsed.error.issues, null, 2)).toBe(true);
   });
 });
 

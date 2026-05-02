@@ -207,12 +207,30 @@ export async function POST(req: Request): Promise<Response> {
         controller.enqueue(enc.encode(sseChunk(event, data)));
       };
 
+      // Hard cap on a single runAgent call. Surfaced 2026-05-02: a coach
+      // saw the prose render but the chat UI stay in "thinking" pulse for
+      // several minutes. Most likely cause is a deploy mid-stream
+      // interrupting the agent loop; without a timeout the SSE connection
+      // hangs open and the client never sees `done`. 4 minutes covers
+      // even the slowest legitimate Opus 4.7 multi-tool turn (typical:
+      // 20-60s) with comfortable headroom; anything longer is almost
+      // certainly a hang.
+      const AGENT_TIMEOUT_MS = 4 * 60 * 1000;
+
       try {
-        const result = await runAgent(history, ctx, (e: AgentStreamEvent) => {
-          if (e.type === "status")     send("status",     { text: e.text });
-          if (e.type === "tool_call")  send("tool_call",  { name: e.name });
-          if (e.type === "text_delta") send("text_delta", { text: e.text });
-        });
+        const result = await Promise.race([
+          runAgent(history, ctx, (e: AgentStreamEvent) => {
+            if (e.type === "status")     send("status",     { text: e.text });
+            if (e.type === "tool_call")  send("tool_call",  { name: e.name });
+            if (e.type === "text_delta") send("text_delta", { text: e.text });
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`coach-ai agent timed out after ${AGENT_TIMEOUT_MS / 1000}s`)),
+              AGENT_TIMEOUT_MS,
+            ),
+          ),
+        ]);
 
         // Record usage asynchronously — don't block the response
         recordUsage(gate.userId).catch(() => { /* non-critical */ });
@@ -230,6 +248,18 @@ export async function POST(req: Request): Promise<Response> {
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
         send("error", { message: msg });
+        // Always emit a `done` after an error too — this is the
+        // belt-and-suspenders companion to the timeout. Even when the
+        // agent threw mid-stream (LLM API drop, tool crash), the client
+        // needs to leave its "thinking" state. Without a `done`, the
+        // pulsing UI stays up indefinitely (surfaced 2026-05-02).
+        send("done", {
+          toolCalls: [],
+          text: "",
+          playbookChips: null,
+          noteProposals: null,
+          mutated: false,
+        });
       } finally {
         controller.close();
       }

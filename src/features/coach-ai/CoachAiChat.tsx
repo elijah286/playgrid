@@ -248,6 +248,19 @@ export function CoachAiChat({
   }, [storageKey, turns]);
 
   function clearChat() {
+    // Abort any in-flight stream — otherwise the SSE consumer keeps
+    // reading until the server closes, and on a hung/disconnected
+    // stream that means the loading overlay (the "thinking" pulse)
+    // stays up forever masking what was already rendered. Surfaced
+    // 2026-05-02: a coach hit Clear during a stuck stream and saw
+    // the diagram pop in because the underlying turn HAD completed —
+    // only the streaming UI state hadn't cleared.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStreaming(false);
+    setPartialText("");
+    setStatusText(null);
+    setToolCallsDuringStream([]);
     setTurns([]);
     setError(null);
     if (typeof window !== "undefined") {

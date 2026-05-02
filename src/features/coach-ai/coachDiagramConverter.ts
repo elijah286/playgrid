@@ -72,6 +72,12 @@ export type CoachDiagramRoute = {
    * Custom / off-catalog routes leave this unset.
    */
   route_kind?: string;
+  /** Optional direction override (matches the spec.ts route action's
+   *  direction field). Set on a fence when applyRouteMod / revise_play
+   *  / compose_play overrides force a directional family to a specific
+   *  side. Round-trips through the converter so the renderer can
+   *  re-derive geometry on edit. */
+  direction?: "left" | "right";
   /**
    * EXPLICIT user-requested override of catalog depth bounds. When
    * true, validateRouteAssignments() skips the depth-range check for
@@ -155,6 +161,15 @@ const coachDiagramRouteSchema = z.object({
    *  the coach explicitly requested an unusual depth ("8-yard drag");
    *  the catalog enforcement still catches Cal-authored mistakes. */
   nonCanonical: z.boolean().optional(),
+  /** OPTIONAL direction override. When set on a fence by
+   *  applyRouteMod (revise_play with set_direction, or compose_play
+   *  overrides), the renderer routes the path toward the named
+   *  sideline regardless of carrier x. The strict-parse converter
+   *  rejected unknown fields previously — leaving the embed UI
+   *  hung in a render-fail state when a fence had this field
+   *  (surfaced 2026-05-02). Now optional in the schema; the spec
+   *  layer stores it on action.direction (see spec.ts). */
+  direction: z.enum(["left", "right"]).optional(),
 }).strict();
 
 const coachDiagramZoneSchema = z.object({
