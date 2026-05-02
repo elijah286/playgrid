@@ -5,7 +5,6 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
-import { ChevronDown } from "lucide-react";
 import type { Player } from "@/domain/play/types";
 import { PlayerChip } from "@/features/editor/PlayerChip";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
@@ -156,29 +155,41 @@ function splitDetails(text: string): { preamble: string; details: string | null 
   };
 }
 
-function DetailsDisclosure({ markdown }: { markdown: string }) {
+/**
+ * Inline "Show more" reveal for the body under `## Details`. Renders the
+ * details prose directly below the preamble — no boxed disclosure — but
+ * clips it to a few lines with a fade-out gradient until the coach taps
+ * "Show more". Less hostile than the old binary "click to reveal" panel:
+ * coaches see a peek of the depth and can opt in.
+ *
+ * Diagrams are already hoisted out of the details body by splitDetails(),
+ * so the clipped region is always plain prose / lists / tables.
+ */
+function DetailsFade({ markdown }: { markdown: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-3 rounded-lg border border-border bg-surface-inset/40">
+    <div className="mt-2">
+      <div
+        className={`relative overflow-hidden ${open ? "" : "max-h-[5.5em]"}`}
+        aria-expanded={open}
+      >
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {markdown}
+        </ReactMarkdown>
+        {!open && (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface-raised to-transparent"
+            aria-hidden
+          />
+        )}
+      </div>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted hover:bg-surface-inset"
+        className="mt-1 inline-flex items-center text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:underline"
       >
-        <span>{open ? "Hide details" : "Show details"}</span>
-        <ChevronDown
-          className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-          aria-hidden
-        />
+        {open ? "Show less" : "Show more"}
       </button>
-      {open && (
-        <div className="border-t border-border px-3 py-2 text-sm text-foreground">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-            {markdown}
-          </ReactMarkdown>
-        </div>
-      )}
     </div>
   );
 }
@@ -353,7 +364,7 @@ export function AssistantMessage({ text }: { text: string }) {
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {preamble}
       </ReactMarkdown>
-      {details && <DetailsDisclosure markdown={details} />}
+      {details && <DetailsFade markdown={details} />}
     </div>
     </ChatPlayersContext.Provider>
   );
