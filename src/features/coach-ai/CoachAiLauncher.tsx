@@ -48,6 +48,21 @@ function writeStorage(key: string, value: unknown) {
   try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
 }
 
+/** Convert a `#rrggbb` (or `#rgb`) string to `rgba(...)` at the given alpha.
+ *  Returns the input unchanged for any non-hex value so theme tokens like
+ *  `var(--color-…)` pass through. */
+function hexToRgba(hex: string | null | undefined, alpha: number): string | null {
+  if (!hex) return null;
+  const h = hex.trim().replace(/^#/, "");
+  if (h.length !== 3 && h.length !== 6) return null;
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /**
  * Floating Coach AI launcher.
  *
@@ -222,23 +237,32 @@ export function CoachAiLauncher({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, fullscreen, contextOpen]);
 
-  // Fetch playbooks the first time the context switcher opens. Refresh on
-  // each subsequent open so a freshly-created playbook shows up.
+  // Prefetch the user's playbooks once on mount so the context switcher
+  // opens with content already in hand — no spinner. Re-fetch each time
+  // the chat window opens so a freshly-created playbook shows up the next
+  // time the coach pops Cal back open.
   useEffect(() => {
-    if (!contextOpen) return;
     let cancelled = false;
-    setLoadingPlaybooks(true);
-    listPlaybooksAction().then((res) => {
-      if (cancelled) return;
-      setPlaybookList(res.ok ? res.playbooks : []);
-      setLoadingPlaybooks(false);
-    }).catch(() => {
-      if (cancelled) return;
-      setPlaybookList([]);
-      setLoadingPlaybooks(false);
-    });
+    function load() {
+      // Show spinner only if we don't already have data — prevents a flash
+      // every time the window re-opens.
+      if (playbookList === null) setLoadingPlaybooks(true);
+      listPlaybooksAction().then((res) => {
+        if (cancelled) return;
+        setPlaybookList(res.ok ? res.playbooks : []);
+        setLoadingPlaybooks(false);
+      }).catch(() => {
+        if (cancelled) return;
+        setPlaybookList((p) => p ?? []);
+        setLoadingPlaybooks(false);
+      });
+    }
+    load();
     return () => { cancelled = true; };
-  }, [contextOpen]);
+  // Re-fire on `open` toggling true. playbookList intentionally excluded —
+  // we don't want every list update to schedule another fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Close context popover on outside click.
   useEffect(() => {
@@ -563,6 +587,14 @@ export function CoachAiLauncher({
                   ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
                   : "border-border",
               )}
+              style={
+                !adminTrainingActive && anchoredColor
+                  ? {
+                      backgroundColor: hexToRgba(anchoredColor, 0.10) ?? undefined,
+                      borderBottomColor: hexToRgba(anchoredColor, 0.25) ?? undefined,
+                    }
+                  : undefined
+              }
             >
               {/* Icon container */}
               <div
@@ -640,6 +672,7 @@ export function CoachAiLauncher({
                     )}
                     {!loadingPlaybooks && playbookList?.map((pb) => {
                       const isCurrent = pb.id === playbookId;
+                      const tint = hexToRgba(pb.color ?? null, isCurrent ? 0.22 : 0.12);
                       return (
                         <Link
                           key={pb.id}
@@ -648,9 +681,18 @@ export function CoachAiLauncher({
                           role="option"
                           aria-selected={isCurrent}
                           className={cn(
-                            "flex items-center gap-2 px-2 py-1.5 text-[12px] hover:bg-surface-inset",
-                            isCurrent && "bg-surface-inset",
+                            "flex items-center gap-2 border-l-[3px] px-2 py-1.5 text-[12px] hover:brightness-105",
+                            !pb.color && "border-l-transparent",
+                            !pb.color && (isCurrent ? "bg-surface-inset" : "hover:bg-surface-inset"),
                           )}
+                          style={
+                            pb.color
+                              ? {
+                                  backgroundColor: tint ?? undefined,
+                                  borderLeftColor: pb.color,
+                                }
+                              : undefined
+                          }
                         >
                           <Check
                             className={cn(

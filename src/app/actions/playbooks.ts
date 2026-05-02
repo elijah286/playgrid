@@ -107,6 +107,7 @@ export type PlaybookRow = {
   team_id: string;
   is_default: boolean;
   is_archived: boolean;
+  color?: string | null;
   play_count?: number;
 };
 
@@ -173,7 +174,7 @@ export async function listPlaybooksAction(opts?: {
   let query = supabase
     .from("playbook_members")
     .select(
-      "playbooks!inner(id, name, sport_variant, season, created_at, updated_at, team_id, is_default, is_archived)",
+      "playbooks!inner(id, name, sport_variant, season, created_at, updated_at, team_id, is_default, is_archived, color)",
     )
     .eq("user_id", user.id);
 
