@@ -718,6 +718,18 @@ export async function runAgent(
    *  route-path fidelity — Cal must emit the skeleton's routes verbatim,
    *  not re-derive them at default depths. */
   let skeletonReturnedFenceJson: string | null = null;
+  /** The last fence returned by ANY fence-producing tool this turn
+   *  (compose_play, revise_play, modify_play_route, compose_defense,
+   *  add_defense_to_play, set_defender_assignment). After Cal emits,
+   *  we rewrite Cal's ```play block with this tool-returned fence —
+   *  Cal's only job is prose; the fence is the tool's job. Surfaced
+   *  2026-05-02 (Mesh again): coach confirmed compose_play returned a
+   *  staggered fence (verified locally) but Cal post-processed it to
+   *  both-at-2yd before emitting. The validator caught it but Cal
+   *  couldn't fix on retry, so the broken output passed through.
+   *  Authoritative-tool-output rewriting closes the loop: Cal cannot
+   *  corrupt the fence because Cal's fence is replaced. */
+  let lastFenceFromTool: string | null = null;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let lastPlaceOffense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
@@ -881,9 +893,41 @@ export async function runAgent(
         // the internal mechanism. Conservative match: only the FIRST
         // paragraph if it contains both an apology trigger AND a
         // validator/validation reference.
-        const cleaned = scrubCritiqueLeak(bufferedText);
-        if (onEvent && cleaned) {
-          onEvent({ type: "text_delta", text: cleaned });
+        // AUTHORITATIVE-TOOL-FENCE REWRITE — if any fence-producing
+        // tool ran this turn, replace Cal's ```play block with that
+        // tool's verbatim output. Cal cannot corrupt the fence
+        // because Cal's fence is not what the client sees. This
+        // closes the "Cal post-processed compose_play's output" hole
+        // (surfaced 2026-05-02 with Mesh: tool returned correct
+        // staggered drags, Cal flattened them to both-at-2yd before
+        // emitting). Cal's prose is preserved verbatim — only the
+        // fence block is replaced. Also updates the assistant message
+        // in `messages` so the next turn's history reflects the
+        // authoritative fence (otherwise revise_play / etc. would
+        // see Cal's broken fence as "prior").
+        let textToEmit = scrubCritiqueLeak(bufferedText);
+        if (lastFenceFromTool && textToEmit) {
+          const FENCE_RE = /```play\s*\n([\s\S]*?)\n```/;
+          if (FENCE_RE.test(textToEmit)) {
+            textToEmit = textToEmit.replace(FENCE_RE, "```play\n" + lastFenceFromTool + "\n```");
+            // Also rewrite the buffered assistant message so prior-fence
+            // lookups on subsequent turns find the authoritative fence.
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg && lastMsg.role === "assistant") {
+              if (typeof lastMsg.content === "string") {
+                lastMsg.content = lastMsg.content.replace(FENCE_RE, "```play\n" + lastFenceFromTool + "\n```");
+              } else {
+                for (const block of lastMsg.content) {
+                  if (block.type === "text" && FENCE_RE.test(block.text)) {
+                    block.text = block.text.replace(FENCE_RE, "```play\n" + lastFenceFromTool + "\n```");
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (onEvent && textToEmit) {
+          onEvent({ type: "text_delta", text: textToEmit });
         }
       }
       break;
@@ -918,6 +962,22 @@ export async function runAgent(
       const correctedInput = autoCorrectPriorFence(tu.name, tu.input as Record<string, unknown>, priorAssistantFenceJson);
       const r = await runTool(tu.name, correctedInput, ctx);
       const resultText = r.ok ? r.result : r.error;
+      // Capture the LAST fence emitted by any fence-producing tool
+      // this turn. After Cal's response is buffered we rewrite its
+      // ```play``` block with this fence — guarantees the client
+      // sees the tool's verbatim geometry, not Cal's modified copy.
+      const FENCE_PRODUCING_TOOLS = new Set([
+        "compose_play",
+        "revise_play",
+        "modify_play_route",
+        "compose_defense",
+        "add_defense_to_play",
+        "set_defender_assignment",
+      ]);
+      if (r.ok && FENCE_PRODUCING_TOOLS.has(tu.name)) {
+        const fenceMatch = /```play\s*\n([\s\S]*?)\n```/.exec(resultText);
+        if (fenceMatch) lastFenceFromTool = fenceMatch[1].trim();
+      }
       // Mark the run as mutating so the client refreshes surrounding UI.
       if (r.ok && MUTATING_TOOLS.has(tu.name)) mutated = true;
       // Record successful write-tool runs so the validator can detect
