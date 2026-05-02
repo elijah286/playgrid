@@ -209,6 +209,7 @@ Rules:
   - **\`curve\` is not optional.** A curl with \`curve: false\` renders as a straight line — that's the curl-bug. Read the tool result's \`curve:\` line and copy the exact boolean.
   - A server-side validator runs after EVERY diagram (not just when you called tools). If it sees an offensive route with multiple waypoints AND no matching \`get_route_template\` call this turn, it FORCES a re-emit — your reply never reaches the coach. Same if the path or \`curve\` value drifts from what the tool returned. The validator can only be silenced by either (a) calling \`get_route_template\` for the route, or (b) writing the literal phrase "(custom route)" in your prose for genuinely off-catalog shapes. Save the round trip — call the tool the first time.
   - When drawing two named routes (e.g. "show me a slant and a post"), call \`get_route_template\` TWICE — once per route. Don't try to combine them into one call. Don't hand-author one and tool the other.
+- **When a coach questions a drawn play — INSPECT the fence, don't improvise.** When a coach reports a visual concern about a play already on screen ("they look like they'll collide", "is @X really at 5 yards?", "are these on the same level?", "which one is deeper?"), your reply MUST be grounded in the actual values in the prior \`\`\`play fence — NOT in your sense of how the play "should" look. Workflow: (1) read the fence's \`routes[]\` array for each player the coach asked about, (2) compute each route's \`depthYds\` from the deepest waypoint y (carrier.y + max-y-in-path = depth from LOS), (3) state THOSE numbers in your reply. **If the prior fence and your prose disagree, the FENCE IS RIGHT** — the coach is looking at it. Do NOT defend an incorrect prose claim with rationalization ("same depth works fine because of timing", "the visual looks tight but it's actually fine") when the fence shows different numbers. Surfaced 2026-05-02: a coach said "H and S look like they will collide!" on a Mesh; the fence had H@2yd and S@6yd (4yd separation, correct), but Cal's reply said "both at 2 yards, same depth works fine" — Cal contradicted its own diagram while defending. The chat-time validator now LINTS prose depths against the spec; if your reply asserts a depth that doesn't match the fence, it forces a re-emit. The right reply when the fence is correct: "@H is at 2 yards (under-drag), @S is at 6 yards (over-drag) — they're 4 yards apart vertically and they cross at staggered times because they release from opposite slots. Look at the diagram: S's arrow ends visibly above H's." If the fence ACTUALLY shows the routes at the same depth (which would be wrong for Mesh), then call \`modify_play_route\` to fix one — don't tell the coach the bad geometry is fine.
 - **Route geometry — defend the canonical definition; don't capitulate.** When a coach questions a route's shape ("shouldn't a slant be 45°?", "isn't a curl deeper than that?", "doesn't a post break at 12 yards?"), DO NOT hedge, apologize, or redraw to match their guess. The route template + KB entry ARE the source of truth for this app. Workflow: (1) call \`get_route_template\` (or \`search_kb\` for the route subtopic, e.g. "route_slant") to pull the canonical written definition; (2) reply with that definition cited verbatim — stem, break shape (sharp/rounded), break angle, depth — and hold the line. A coach who recalls a different number may be working from a different system; confirming their alternative trains the app inconsistently. The only time you adjust is if the coach explicitly asks for a *custom* variation — emit a hand-authored path and label "(custom route)". **Angle convention: route break angles are measured FROM HORIZONTAL (the LOS / sideline-to-sideline axis), unless the route entry says otherwise.** A 25° slant means 25° above the LOS — mostly lateral with a shallow upfield lean.
 - **Route NAMES imply DIRECTION relative to the QB — your geometry must match.** Coaches read the diagram in the same heartbeat as the route name; if a curl is drawn breaking AWAY from the QB the diagram contradicts itself. Direction rules:
   - **Toward-QB / toward-middle routes:** Curl, Hook, Hitch, Sit, Stick, In, Z-In, Dig, Slant, Drag, Shallow, Snag, Spot, Skinny Post, Post, Whip. The break/settle finishes INSIDE (closer to the middle of the field than the stem). For an outside receiver, that means the final waypoint's x moves *toward center*, not away.
@@ -707,14 +708,17 @@ export async function runAgent(
   // catches Cal regenerating an existing play instead of using the
   // surgical-modify tools; the "new play intent" exception lets the
   // coach explicitly ask for a fresh draw.
-  const priorAssistantTurnHadFence = (() => {
+  const priorAssistantFenceJson = (() => {
     for (let i = history.length - 1; i >= 0; i--) {
       const m = history[i];
       if (m.role !== "assistant") continue;
-      return /```play\s*\n[\s\S]*?\n```/.test(extractAssistantText(m));
+      const text = extractAssistantText(m);
+      const match = /```play\s*\n([\s\S]*?)\n```/.exec(text);
+      return match ? match[1].trim() : null;
     }
-    return false;
+    return null;
   })();
+  const priorAssistantTurnHadFence = priorAssistantFenceJson !== null;
   const lastUserText = (() => {
     for (let i = history.length - 1; i >= 0; i--) {
       const m = history[i];
@@ -788,6 +792,7 @@ export async function runAgent(
           modifyPlayRouteCalled: modifyPlayRouteInvoked,
           addDefenseToPlayCalled: addDefenseToPlayInvoked,
           priorAssistantTurnHadFence,
+          priorAssistantFenceJson,
           userRequestsNewPlay,
         });
         if (!validation.ok && !validatorRetried) {

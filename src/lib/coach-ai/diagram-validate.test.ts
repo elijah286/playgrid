@@ -504,6 +504,218 @@ describe("validateDiagrams — modify-not-regenerate gate", () => {
   });
 });
 
+describe("validateDiagrams — prose-depth lint", () => {
+  // 2026-05-02: skeleton placed H@2yd and S@6yd, the diagram rendered
+  // correctly, but Cal's prose said "both drags at 2 yards" — Cal
+  // improvised a depth the spec didn't have. The depth lint catches
+  // active depth contradictions; family contradictions are caught by
+  // the existing lint.
+
+  function meshFence() {
+    return makeFence({
+      title: "Mesh",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0, team: "O" }, { id: "LG", x: -2, y: 0, team: "O" },
+        { id: "C",  x: 0,  y: 0, team: "O" }, { id: "RG", x: 2,  y: 0, team: "O" },
+        { id: "RT", x: 4,  y: 0, team: "O" },
+        { id: "X", x: -18, y: 0, team: "O" }, { id: "Z", x: 18, y: 0, team: "O" },
+        { id: "H", x: -10, y: -1, team: "O" }, { id: "S", x: 10, y: -1, team: "O" },
+        { id: "B", x: 2, y: -5, team: "O" },
+      ],
+      routes: [
+        // H drag at 2yd: starts at -10,-1 → ends at 13,1 (max y = 1, depth = 2 from carrier.y=-1)
+        { from: "H", path: [[-8.3, 1], [12.9, 1]], route_kind: "Drag" },
+        // S drag at 6yd: starts at 10,-1 → ends at -13,5 (max y = 5, depth = 6)
+        { from: "S", path: [[8.4, 5], [-12.8, 5]], route_kind: "Drag" },
+      ],
+    });
+  }
+
+  it("REJECTS prose claiming both mesh drags at 2 yards (image-3 case)", () => {
+    const result = validateDiagrams({
+      text:
+        `${meshFence()}\n` +
+        `Mesh concept. @H runs a drag at 2 yards left-to-right. ` +
+        `@S also runs a drag at 2 yards right-to-left. Same depth — they cross visually.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const depthErr = result.errors.find((e) => /@S.*2 yards.*6 yards/.test(e));
+    expect(depthErr).toBeDefined();
+  });
+
+  it("ACCEPTS prose with correct staggered depths (2 and 6)", () => {
+    const result = validateDiagrams({
+      text:
+        `${meshFence()}\n` +
+        `Mesh concept. @H runs a drag at 2 yards left-to-right. ` +
+        `@S runs a drag at 6 yards right-to-left.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+    });
+    if (!result.ok) {
+      // The depth lint shouldn't fire — but other gates may.
+      expect(result.errors.find((e) => e.includes("yards but"))).toBeUndefined();
+    }
+  });
+
+  it("ACCEPTS prose that paraphrases without naming a depth (no contradiction)", () => {
+    const result = validateDiagrams({
+      text:
+        `${meshFence()}\n` +
+        `Mesh concept. @H crosses left to right underneath. ` +
+        `@S crosses right to left over the top.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => e.includes("yards but"))).toBeUndefined();
+    }
+  });
+});
+
+describe("validateDiagrams — answer-mode lint against prior fence", () => {
+  // Image 3 case: Cal answers "which one should go on top?" with
+  // confabulated depths but emits NO new fence. Without the
+  // answer-mode lint, this slipped through entirely. With prior fence
+  // passed in, the validator can lint the prose against the saved
+  // spec.
+
+  const priorFenceJson = JSON.stringify({
+    title: "Mesh",
+    variant: "tackle_11",
+    players: [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "H", x: -10, y: -1, team: "O" },
+      { id: "S", x: 10, y: -1, team: "O" },
+    ],
+    routes: [
+      { from: "H", path: [[-8.3, 1], [12.9, 1]], route_kind: "Drag" },
+      { from: "S", path: [[8.4, 5], [-12.8, 5]], route_kind: "Drag" },
+    ],
+  });
+
+  it("REJECTS answer-mode prose that contradicts prior fence depths", () => {
+    const result = validateDiagrams({
+      text: "@H runs a drag at 2 yards. @S also runs a drag at 2 yards — same depth works because of timing.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const depthErr = result.errors.find((e) => /@S.*2 yards.*6 yards/.test(e));
+    expect(depthErr).toBeDefined();
+  });
+
+  it("ACCEPTS answer-mode prose that matches prior fence depths", () => {
+    const result = validateDiagrams({
+      text: "@H is at 2 yards (under-drag) and @S is at 6 yards (over-drag) — 4 yards of separation.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("REJECTS broad 'same N-yard depth' claims when prior fence has staggered depths", () => {
+    // Image 3 exact phrasing: "Same 2-yard depth works fine" on a
+    // Mesh play where the saved spec had H@2 and S@6.
+    const result = validateDiagrams({
+      text: "@H runs first as the under-drag, @S runs second. Same 2-yard depth works fine because the timing creates the pick.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const broadErr = result.errors.find((e) => e.includes("(broad-claim)") || /improvise depths/.test(e));
+    expect(broadErr).toBeDefined();
+  });
+
+  it("ACCEPTS answer-mode prose that doesn't reference depth at all", () => {
+    const result = validateDiagrams({
+      text: "@H runs first as the under-drag, @S runs second as the over-drag — they cross because they release from opposite slots.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: true,
+      priorAssistantFenceJson: priorFenceJson,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+});
+
+describe("validateDiagrams — yards-units lint", () => {
+  // Image 3 also: Cal said "@H starts at x=-11 (left slot)" — coaches
+  // shouldn't have to know that x is in yards. Every spatial
+  // measurement in prose must use yards explicitly.
+
+  it("REJECTS prose with bare x= / y= coordinates lacking yards", () => {
+    const result = validateDiagrams({
+      text: "@H starts at x=-11 (left slot) → crosses RIGHT toward x=+13. Runs first.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: false,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const unitErr = result.errors.find((e) => e.includes("without yard units"));
+    expect(unitErr).toBeDefined();
+  });
+
+  it("ACCEPTS prose that uses yards explicitly", () => {
+    const result = validateDiagrams({
+      text: "@H starts 11 yards inside the center and crosses 13 yards toward the right sideline.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: false,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("ACCEPTS coordinates with explicit yard units (x=-11 yards)", () => {
+    const result = validateDiagrams({
+      text: "@H starts at x=-11 yards (left slot) → crosses to x=+13 yards.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      priorAssistantTurnHadFence: false,
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+
+  it("IGNORES x/y inside fenced JSON (the fence itself contains x= and y=)", () => {
+    const fence = makeFence({
+      title: "Test",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -13, y: 0, team: "O" },
+      ],
+      routes: [{ from: "X", path: [[-13, 3], [-7, 5.8]], route_kind: "Slant" }],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@X runs a 5-yard slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+    });
+    expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
+  });
+});
+
 describe("validateDiagrams — bare prose-mention exemption", () => {
   it("EXEMPTS linemen and QB from the prose-mention requirement", () => {
     // Linemen running pass-protection / RB drop routes don't need

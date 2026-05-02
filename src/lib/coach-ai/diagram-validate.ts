@@ -15,7 +15,7 @@ import {
   parseConceptsFromText,
 } from "@/domain/play/conceptMatch";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
-import { lintProseAgainstSpec } from "./notes-lint";
+import { lintProseAgainstSpec, lintProseDepthAgainstSpec } from "./notes-lint";
 import { validateRouteAssignments } from "./route-assignment-validate";
 
 const OFFENSE_LETTERS = new Set([
@@ -113,6 +113,55 @@ export function expectedFullCount(variant: string | null | undefined): number {
     case "flag_7v7":  return 7;
     default:          return 7;
   }
+}
+
+/**
+ * Detect bare coordinate references in prose without yard units.
+ * Examples that fail:
+ *   "@H starts at x=-11 (left slot)"   → "x=-11" not followed by yards
+ *   "move @B to y=-6"                  → "y=-6" not followed by yards
+ * Examples that pass:
+ *   "@H starts 11 yards inside center"  (no raw coords)
+ *   "@H at x=-11 yards"                 (explicit yards)
+ *   "@B at y=-6 yds"                    (explicit yds)
+ *   x = 0 in JSON fences                (skipped — fences excluded)
+ *
+ * The schema's coord system IS yards, so "x=-11" is technically correct
+ * — but a coach reading prose shouldn't have to know that. The yards
+ * convention is a coaching-readability rule, not a math rule.
+ */
+function checkProseUsesYards(text: string): string[] {
+  // Strip fenced code blocks (```...```), inline code (`...`), and
+  // explicit JSON values like { "x": -11 }. Only prose remains.
+  const stripped = text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "");
+  const matches: Array<{ snippet: string; coord: string; value: string }> = [];
+  // Match "x=-11", "x = 13", "y=-6.5", etc. NOT followed (within ~6
+  // chars) by "yd"/"yard"/"yards" — that signals the coach wrote the
+  // unit explicitly.
+  const re = /\b([xy])\s*=\s*(-?\d+(?:\.\d+)?)\b(?!\s*(?:yd|yds|yard|yards))/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stripped)) !== null) {
+    const tail = stripped.slice(m.index + m[0].length, m.index + m[0].length + 10);
+    if (/^\s*(?:yd|yds|yard|yards)\b/i.test(tail)) continue;
+    // Snippet for the error message — the surrounding 60 chars.
+    const start = Math.max(0, m.index - 30);
+    const end = Math.min(stripped.length, m.index + m[0].length + 30);
+    matches.push({
+      snippet: stripped.slice(start, end).replace(/\s+/g, " ").trim(),
+      coord: m[1].toLowerCase(),
+      value: m[2],
+    });
+    if (matches.length >= 4) break; // cap noise — one error per turn is enough to force re-emit
+  }
+  if (matches.length === 0) return [];
+  return [
+    `prose references coordinates without yard units: ${matches.map((x) => `"${x.coord}=${x.value}"`).join(", ")}. ` +
+    `Coaches read this prose as English, not as schema field references — every spatial measurement MUST use yards explicitly. ` +
+    `Rewrite as "${matches[0].coord === "x" ? "11 yards inside the center" : "6 yards behind the QB"}" or "${matches[0].coord}=${matches[0].value} yards" — never bare \`${matches[0].coord}=${matches[0].value}\`. ` +
+    `Context: ${JSON.stringify(matches[0].snippet)}`,
+  ];
 }
 
 function extractPlayFences(text: string): string[] {
@@ -216,6 +265,13 @@ export function validateDiagrams(opts: {
    *  2026-05-02 — coach asked "make a route deeper" and the entire
    *  play was redrawn with a different formation). */
   priorAssistantTurnHadFence?: boolean;
+  /** The prior assistant turn's ```play fence JSON, when one existed.
+   *  Used to lint answer-mode replies (the new turn has no fence but
+   *  prose makes claims about the play) against the saved spec.
+   *  2026-05-02: coach asked "which drag should be on top, H or S?"
+   *  and Cal said "both at 2 yards" — but the prior fence had H@2 and
+   *  S@6. The depth lint catches this when given the prior spec. */
+  priorAssistantFenceJson?: string | null;
   /** True iff the latest user message asks for a fresh play (regex
    *  match on phrases like "new play", "another concept", "show me a
    *  different one"). Bypasses the modify-not-regenerate gate. */
@@ -239,12 +295,69 @@ export function validateDiagrams(opts: {
 
   const fences = extractPlayFences(opts.text);
   if (fences.length === 0) {
-    return phantomErrors.length === 0
+    // Answer-mode: no new fence emitted this turn. If a prior fence
+    // exists, lint the prose against the saved spec — catches the
+    // image-3 case where Cal answers "which drag is on top?" with
+    // confabulated depths ("both at 2 yards") that contradict the
+    // skeleton-derived spec from the previous turn. Conservative:
+    // only the family + depth lints fire here. Concept-claim and
+    // structural gates require a fresh fence to evaluate.
+    const answerModeErrors: string[] = [...phantomErrors];
+
+    // Units lint — Cal must reference positions in YARDS, never raw
+    // x= / y= coordinates without units. Surfaced 2026-05-02 image-3:
+    // Cal said "@H starts at x=-11 (left slot) → crosses RIGHT toward
+    // x=+13" — coaches reading prose shouldn't have to infer that
+    // "x=-11" means "11 yards inside the center". The fix is the
+    // prompt rule at agent.ts:218 ("distance unit is ALWAYS yards"),
+    // promoted here to a chat-time gate. Match patterns like "x=-11",
+    // "x = 13", "y=-3" not adjacent to "yard"/"yd"; tolerate explicit
+    // "x=-11 yards" or "x=11yd". Also runs in fence-emit mode below.
+    const unitsErrors = checkProseUsesYards(opts.text);
+    answerModeErrors.push(...unitsErrors);
+
+    if (opts.priorAssistantFenceJson) {
+      try {
+        const priorJson = JSON.parse(opts.priorAssistantFenceJson) as Diagram;
+        if (Array.isArray(priorJson.routes) && priorJson.routes.length > 0) {
+          const priorSpec = coachDiagramToPlaySpec(priorJson as CoachDiagram, {
+            variant: opts.variant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined,
+          });
+          const familyLint = lintProseAgainstSpec(opts.text, priorSpec);
+          if (!familyLint.ok) {
+            for (const issue of familyLint.issues) {
+              answerModeErrors.push(
+                `prose says @${issue.player} runs a "${issue.notesFamily}" but the saved play has @${issue.player} on a "${issue.expectedFamily}". ` +
+                `Don't improvise — read the actual route_kind off the prior play's fence before describing it. ` +
+                `If the coach wants the family changed, call modify_play_route. ` +
+                `Sentence: ${JSON.stringify(issue.bullet.slice(0, 160))}`,
+              );
+            }
+          }
+          const depthLint = lintProseDepthAgainstSpec(opts.text, priorSpec);
+          if (!depthLint.ok) {
+            for (const issue of depthLint.issues) {
+              answerModeErrors.push(
+                `prose says @${issue.player} is at ${issue.proseDepthYds} yards but the saved play has @${issue.player} at ${issue.expectedDepthYds} yards. ` +
+                `Don't improvise depths — read the actual depthYds off the spec. If the coach wants the depth changed, call modify_play_route. ` +
+                `Sentence: ${JSON.stringify(issue.bullet.slice(0, 160))}`,
+              );
+            }
+          }
+        }
+      } catch {
+        // Prior fence didn't parse — skip the answer-mode lint rather
+        // than fail (the prior turn would have caught a malformed
+        // fence already).
+      }
+    }
+    return answerModeErrors.length === 0
       ? { ok: true }
-      : { ok: false, errors: phantomErrors };
+      : { ok: false, errors: answerModeErrors };
   }
 
   const errors: string[] = [...phantomErrors];
+  errors.push(...checkProseUsesYards(opts.text));
   const expected = expectedFullCount(opts.variant);
 
   // GATE B — modify-not-regenerate. When the prior assistant turn
@@ -524,6 +637,25 @@ export function validateDiagrams(opts: {
             errors.push(
               `${tag}prose says @${issue.player} runs a "${issue.notesFamily}" but the diagram has @${issue.player} on a "${issue.expectedFamily}". ` +
               `Fix the prose to match the diagram (or fix the diagram + route_kind to match the prose). ` +
+              `Sentence: ${JSON.stringify(issue.bullet.slice(0, 160))}`,
+            );
+          }
+        }
+
+        // Depth lint — catches Cal improvising depths that contradict
+        // the spec. 2026-05-02: skeleton put H@2yd and S@6yd, diagram
+        // rendered correctly, but Cal's prose said "both drags at 2
+        // yards" — coach saw same-depth claim on a play that was
+        // actually staggered. The family lint above doesn't catch
+        // this because the family ("Drag") is correct; only the depth
+        // is wrong.
+        const depthLint = lintProseDepthAgainstSpec(opts.text, derived);
+        if (!depthLint.ok) {
+          for (const issue of depthLint.issues) {
+            errors.push(
+              `${tag}prose says @${issue.player} is at ${issue.proseDepthYds} yards but the diagram has @${issue.player} at ${issue.expectedDepthYds} yards. ` +
+              `Don't improvise depths — read the actual depthYds off the spec / route waypoints. ` +
+              `Either fix the prose to say "${issue.expectedDepthYds} yards" or modify_play_route to change the depth to match what you wrote. ` +
               `Sentence: ${JSON.stringify(issue.bullet.slice(0, 160))}`,
             );
           }

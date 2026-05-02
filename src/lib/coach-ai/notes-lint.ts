@@ -48,6 +48,21 @@ export type NotesLintResult =
   | { ok: true }
   | { ok: false; issues: NotesLintIssue[] };
 
+export type DepthLintIssue = {
+  /** The player whose bullet asserted a wrong depth. */
+  player: string;
+  /** Depth the spec assigns (yards). */
+  expectedDepthYds: number;
+  /** Depth the prose claimed (yards). */
+  proseDepthYds: number;
+  /** The sentence that triggered the issue. */
+  bullet: string;
+};
+
+export type DepthLintResult =
+  | { ok: true }
+  | { ok: false; issues: DepthLintIssue[] };
+
 /**
  * Lint a notes string against a saved PlaySpec.
  *
@@ -241,6 +256,147 @@ export function lintProseAgainstSpec(prose: string, spec: PlaySpec): NotesLintRe
         notesFamily: detected,
         bullet: sentence.trim(),
       });
+    }
+  }
+
+  return issues.length === 0 ? { ok: true } : { ok: false, issues };
+}
+
+/**
+ * Lint prose for DEPTH contradictions against the spec. Catches the
+ * 2026-05-02 mesh case: skeleton placed H@2yd and S@6yd, the diagram
+ * rendered correctly, but Cal's prose said "both drags can run at 2
+ * yards" — Cal improvised a depth that the spec didn't have. Same
+ * principle as the family lint: only fail on ACTIVE contradiction, not
+ * omission.
+ *
+ * Detection: for each "@Player ... N yards" / "@Player ... at Nyd"
+ * pattern in a sentence, parse N and compare against the spec's
+ * depthYds for that player (using catalog midpoint when depthYds isn't
+ * set on the action). Tolerance: 1.5yd (canonical depths cluster at
+ * integers; route templates round to 0.5yd; reading "5-yard slant" off
+ * a 5.8yd-rendered slant shouldn't fail). Larger gaps (a "2-yard drag"
+ * vs a 6yd drag) blow well past the tolerance and surface as issues.
+ */
+export function lintProseDepthAgainstSpec(prose: string, spec: PlaySpec): DepthLintResult {
+  if (!prose || !spec || !Array.isArray(spec.assignments)) return { ok: true };
+
+  const playerToDepth = new Map<string, number>();
+  for (const a of spec.assignments) {
+    if (a.action.kind !== "route") continue;
+    const template = findTemplate(a.action.family);
+    if (!template) continue;
+    const range = template.constraints.depthRangeYds;
+    const depth = a.action.depthYds ?? Math.round((range.min + range.max) / 2);
+    playerToDepth.set(a.player.toUpperCase(), depth);
+  }
+  if (playerToDepth.size === 0) return { ok: true };
+
+  const TOLERANCE_YDS = 1.5;
+  const sentences = prose.split(/(?<=[.!?])\s+|\n+/g);
+  const issues: DepthLintIssue[] = [];
+  const seen = new Set<string>();
+
+  // Match "N yards", "N yd", "N-yard", "Nyds" etc. Captures the number.
+  const depthRe = /\b(\d{1,2}(?:\.\d)?)\s*-?\s*(?:yd|yds|yard|yards)\b/gi;
+
+  for (const sentence of sentences) {
+    if (!sentence.trim()) continue;
+    const refs = [...sentence.matchAll(/@([A-Za-z][A-Za-z0-9]{0,3})\b/g)];
+    if (refs.length === 0) continue;
+
+    const depthMatches = [...sentence.matchAll(depthRe)]
+      .map((m) => parseFloat(m[1]))
+      .filter((n) => Number.isFinite(n) && n >= 0 && n <= 30);
+    if (depthMatches.length === 0) continue;
+
+    for (const m of refs) {
+      const player = m[1].toUpperCase();
+      const expected = playerToDepth.get(player);
+      if (expected === undefined) continue;
+
+      // For each depth in the sentence, check whether ANY matches
+      // expected. If at least one is close enough, the sentence is
+      // consistent (it may mention several depths — e.g. read
+      // progressions. Pass if ANY hit; fail only when every depth is
+      // far from expected.
+      const anyClose = depthMatches.some((d) => Math.abs(d - expected) <= TOLERANCE_YDS);
+      if (anyClose) continue;
+      // Pick the closest mismatched depth as the reported error.
+      const closest = depthMatches.reduce((best, d) =>
+        Math.abs(d - expected) < Math.abs(best - expected) ? d : best,
+      depthMatches[0]);
+
+      const dedupeKey = `${player}|${closest}|${expected}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      issues.push({
+        player,
+        expectedDepthYds: expected,
+        proseDepthYds: closest,
+        bullet: sentence.trim(),
+      });
+    }
+  }
+
+  // Broad-claim pass: catches "both drags at 2 yards", "same 2-yard
+  // depth", "all routes at 5 yards" — claims that assert a uniform
+  // depth across multiple players when the spec has conflicting
+  // depths. Image 3 (2026-05-02): Cal said "Same 2-yard depth works
+  // fine" on a Mesh where the spec had H@2 and S@6. The per-sentence
+  // lint above doesn't catch this because the broad claim has no
+  // @-reference.
+  const broadRe = /\b(both|all|same|every|each)\s+(?:\w+\s+){0,3}?(?:at\s+)?(\d{1,2}(?:\.\d)?)\s*-?\s*(?:yd|yds|yard|yards)\b/gi;
+  const familyToDepths = new Map<string, Set<number>>();
+  for (const a of spec.assignments) {
+    if (a.action.kind !== "route") continue;
+    const t = findTemplate(a.action.family);
+    if (!t) continue;
+    const range = t.constraints.depthRangeYds;
+    const depth = a.action.depthYds ?? Math.round((range.min + range.max) / 2);
+    const set = familyToDepths.get(t.name.toLowerCase()) ?? new Set<number>();
+    set.add(depth);
+    familyToDepths.set(t.name.toLowerCase(), set);
+  }
+  let bm: RegExpExecArray | null;
+  const broadProse = prose;
+  while ((bm = broadRe.exec(broadProse)) !== null) {
+    const keyword = bm[1].toLowerCase();
+    const claimedDepth = parseFloat(bm[2]);
+    if (!Number.isFinite(claimedDepth)) continue;
+    // Uniformity-asserting keywords ("same", "both", "all", "every",
+    // "each") are contradicted whenever the family has ≥2 distinct
+    // depths in the spec — regardless of whether the claimed number
+    // happens to match one of them. The error is the SAMENESS claim,
+    // not the specific number. Other keywords would need different
+    // logic; this regex only matches uniformity keywords today.
+    const isUniformityClaim = ["same", "both", "all", "every", "each"].includes(keyword);
+    for (const [, depths] of familyToDepths) {
+      if (depths.size < 2) continue;
+      const minD = Math.min(...depths);
+      const maxD = Math.max(...depths);
+      if (!isUniformityClaim) {
+        // Non-uniformity keyword paths only fail if the depth doesn't
+        // match any family value (kept for future expansion).
+        const matchesAny = [...depths].some((d) => Math.abs(d - claimedDepth) <= TOLERANCE_YDS);
+        if (matchesAny) continue;
+      }
+      const sentence = (() => {
+        const start = Math.max(0, bm!.index - 60);
+        const end = Math.min(broadProse.length, bm!.index + bm![0].length + 60);
+        return broadProse.slice(start, end).replace(/\s+/g, " ").trim();
+      })();
+      const dedupeKey = `BROAD|${claimedDepth}|${minD}-${maxD}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      issues.push({
+        player: "(broad-claim)",
+        expectedDepthYds: minD === maxD ? minD : (minD + maxD) / 2,
+        proseDepthYds: claimedDepth,
+        bullet: sentence,
+      });
+      break; // one issue per broad-claim match is enough
     }
   }
 
