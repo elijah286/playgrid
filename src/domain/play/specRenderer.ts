@@ -184,7 +184,7 @@ function routeFromAction(
       }
       return {
         from: carrier.id,
-        path: pathFromTemplate(template, carrier, variant),
+        path: pathFromTemplate(template, carrier, variant, action.depthYds),
         ...(hasCurveSegment(template) ? { curve: true } : {}),
         route_kind: template.name,
       };
@@ -223,11 +223,26 @@ function routeFromAction(
  *
  * fieldLengthYds = 25 across all variants; fieldWidthYds comes from the
  * variant's sport profile.
+ *
+ * depthYds (optional): when set, scales every waypoint's y proportionally
+ * so the deepest template waypoint lands at exactly `depthYds` yards from
+ * the LOS. This is the per-assignment override that makes concept-level
+ * route adaptations actually render — e.g. a Mesh's two drags can now
+ * render at 2yd (under) and 4yd (over) when Cal sets depthYds on each.
+ *
+ * The scale is applied to ALL y-values (including the release stem and
+ * intermediate anchors), so a drag's pinned-flat cross stays pinned at
+ * whatever depth it's scaled to. Routes whose template has zero positive
+ * depth (rare — only Bubble has all negatives) skip scaling to avoid
+ * divide-by-zero; routes whose template has both positive and negative
+ * y values (none currently) would need a sign-aware scale, but the
+ * current catalog doesn't exercise that case.
  */
 function pathFromTemplate(
   template: RouteTemplate,
   carrier: CoachDiagramPlayer,
   variant: SportVariant,
+  depthYds?: number,
 ): [number, number][] {
   const fieldWidthYds = sportProfileForVariant(variant).fieldWidthYds;
   // template.points are in normalized template coords (positive x = OUTSIDE).
@@ -236,6 +251,16 @@ function pathFromTemplate(
   const xSign = template.directional !== false
     ? (carrier.x >= 0 ? 1 : -1)
     : 1;
+
+  // Per-assignment depth override: scale every y proportionally so the
+  // template's deepest waypoint lands at depthYds. Only positive depths
+  // scale (negative-only templates like Bubble use their natural depth).
+  const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
+  const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
+  const yScale =
+    depthYds !== undefined && templateMaxYds > 0.5
+      ? depthYds / templateMaxYds
+      : 1;
 
   // Skip the first template point — it's the carrier-relative origin
   // (0, 0), which downstream coachDiagramToPlayDocument adds as the
@@ -247,7 +272,7 @@ function pathFromTemplate(
     : template.points;
   return waypoints.map(({ x, y }) => {
     const xYds = carrier.x + x * fieldWidthYds * xSign;
-    const yYds = carrier.y + y * FIELD_LENGTH_YDS;
+    const yYds = carrier.y + y * yScale * FIELD_LENGTH_YDS;
     return [round(xYds), round(yYds)] as [number, number];
   });
 }

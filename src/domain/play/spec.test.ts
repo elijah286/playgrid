@@ -180,6 +180,44 @@ describe("PlaySpec → CoachDiagram (renderer)", () => {
     }
   });
 
+  it("renderer scales template y by depthYds — concept-level adaptation actually changes geometry", () => {
+    // Architectural test: action.depthYds was always read by the
+    // matcher / prose / validator but IGNORED by the renderer until
+    // 2026-05-01. Without this, Cal could write `depthYds: 4` on a
+    // drag and the diagram would still draw it at the catalog default
+    // (1.5yd). This test pins the new behavior: same family, different
+    // depthYds → different rendered geometry.
+    const spec: PlaySpec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      title: "Mesh — high/low",
+      playType: "offense",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 4 } },
+      ],
+    };
+    const { diagram } = playSpecToCoachDiagram(spec);
+    const xRoute = diagram.routes?.find((r) => r.from === "X");
+    const zRoute = diagram.routes?.find((r) => r.from === "Z");
+    expect(xRoute, "X drag missing").toBeDefined();
+    expect(zRoute, "Z drag missing").toBeDefined();
+    const xCarrier = diagram.players.find((p) => p.id === "X")!;
+    const zCarrier = diagram.players.find((p) => p.id === "Z")!;
+    // Deepest waypoint y minus carrier y = the route's depth as drawn.
+    const xDepth = Math.max(...xRoute!.path.map(([, y]) => y - xCarrier.y));
+    const zDepth = Math.max(...zRoute!.path.map(([, y]) => y - zCarrier.y));
+    // X requested 2yd, Z requested 4yd. Allow ±0.3yd float slack.
+    expect(xDepth).toBeGreaterThan(1.7);
+    expect(xDepth).toBeLessThan(2.3);
+    expect(zDepth).toBeGreaterThan(3.7);
+    expect(zDepth).toBeLessThan(4.3);
+    // The whole point: the two drags render at DIFFERENT depths, so
+    // a Mesh's high/low pair actually meshes instead of colliding.
+    expect(zDepth - xDepth).toBeGreaterThan(1.5);
+  });
+
   it("emits route paths anchored at the carrier (not at origin)", () => {
     const { diagram } = playSpecToCoachDiagram(spreadSlantPost());
     const routes = diagram.routes ?? [];

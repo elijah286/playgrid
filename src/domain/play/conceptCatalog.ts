@@ -163,13 +163,16 @@ const MESH: ConceptEntry = {
   name: "Mesh",
   aliases: ["Mesh Concept"],
   description:
-    "Two crossing routes that 'mesh' (cross paths) at 4-6 yds. Both shallow drags from opposite sides converge underneath — a natural pick / rub action vs man coverage, and finds soft spots in zone. Often paired with a corner or sit on top.",
+    "Two crossing drags that 'mesh' past each other at HIGH/LOW depths — one drag UNDER (1-2 yds) and one OVER (3-5 yds). The depth differentiation is what makes them mesh: same depth means a collision, different depths means a clean cross. Cal MUST set depthYds explicitly on each drag (e.g. 2 and 4) — without that, the matcher rejects because the two slots have non-overlapping depth ranges. Natural pick / rub action vs man, finds soft spots in zone.",
   required: [
-    // Two drags. The matcher accepts any two players running Drag —
-    // doesn't enforce they come from opposite sides because that's a
-    // geometric check we can add later.
-    { role: "any", family: "Drag", depthRangeYds: { min: 1, max: 5 } },
-    { role: "any", family: "Drag", depthRangeYds: { min: 1, max: 5 } },
+    // Differentiated slots — non-overlapping depth ranges force the
+    // two drags to be at different depths. A 2yd drag fits the under
+    // slot (1-2.5) but NOT the over slot (3.5-5); a 4yd drag fits the
+    // over slot but NOT the under slot. This is the catalog enforcing
+    // canonical Mesh geometry rather than letting Cal stack two drags
+    // at the same depth (which renders as a collision, not a mesh).
+    { role: "any", family: "Drag", depthRangeYds: { min: 1, max: 2.5 } }, // under-drag
+    { role: "any", family: "Drag", depthRangeYds: { min: 3.5, max: 5 } }, // over-drag
   ],
 };
 

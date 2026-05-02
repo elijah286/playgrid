@@ -153,7 +153,23 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("Mesh: two drags pass", () => {
+  it("Mesh: two DIFFERENTIATED drags pass (one under at 2yd, one over at 4yd)", () => {
+    // Slot ranges are [1, 2.5] (under) and [3.5, 5] (over) so the two
+    // drags must be at different depths. Depths 2 and 4 hit one slot
+    // each.
+    const result = assertConcept(
+      buildSpec([
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 2 } },
+        { player: "Z", action: { kind: "route", family: "Drag", depthYds: 4 } },
+      ]),
+      "Mesh",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Mesh: REJECTS two drags at the same depth (collision, not a mesh)", () => {
+    // The whole point of the catalog change: two drags at the SAME
+    // depth render as a collision, not a mesh. Force differentiation.
     const result = assertConcept(
       buildSpec([
         { player: "X", action: { kind: "route", family: "Drag", depthYds: 3 } },
@@ -161,7 +177,7 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
       ]),
       "Mesh",
     );
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
   });
 
   it("Snag: spot + corner + flat passes", () => {
