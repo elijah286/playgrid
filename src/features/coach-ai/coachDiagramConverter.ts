@@ -72,6 +72,16 @@ export type CoachDiagramRoute = {
    * Custom / off-catalog routes leave this unset.
    */
   route_kind?: string;
+  /**
+   * EXPLICIT user-requested override of catalog depth bounds. When
+   * true, validateRouteAssignments() skips the depth-range check for
+   * this route (and notes-from-spec surfaces a "deeper than canonical"
+   * coaching note). Set ONLY when the coach explicitly asked for an
+   * unusual depth ("8-yard drag", "10-yard slant"). The catalog
+   * enforcement still catches Cal-authored mistakes — this is the
+   * escape hatch for legitimate coach intent.
+   */
+  nonCanonical?: boolean;
 };
 
 export type CoachDiagramZone = {
@@ -130,6 +140,12 @@ const coachDiagramRouteSchema = z.object({
   motion: z.array(waypointSchema).optional(),
   startDelaySec: z.number().optional(),
   route_kind: z.string().optional(),
+  /** EXPLICIT user-requested override of catalog depth bounds. When
+   *  true, route-assignment-validate skips the depth-range check for
+   *  this route and surfaces a coaching note instead. Set ONLY when
+   *  the coach explicitly requested an unusual depth ("8-yard drag");
+   *  the catalog enforcement still catches Cal-authored mistakes. */
+  nonCanonical: z.boolean().optional(),
 }).strict();
 
 const coachDiagramZoneSchema = z.object({

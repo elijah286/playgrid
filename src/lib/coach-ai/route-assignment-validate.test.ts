@@ -67,6 +67,37 @@ describe("validateRouteAssignments — depth constraints", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("ACCEPTS a 10-yard slant when nonCanonical: true (explicit coach override)", () => {
+    // Coach asked for "10-yard slant" — Cal honors with nonCanonical:true.
+    // Validator skips depth check; renders the route.
+    const result = validateRouteAssignments(
+      single(
+        { id: "X", x: -13, y: 0 },
+        { path: [[-13, 3], [-7, 10]], route_kind: "slant", nonCanonical: true },
+      ),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("ACCEPTS an 8-yard drag when nonCanonical: true", () => {
+    const result = validateRouteAssignments(
+      single(
+        { id: "H", x: -8, y: 0 },
+        { path: [[12, 8]], route_kind: "Drag", nonCanonical: true },
+      ),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("STILL REJECTS a 12-yard slant when nonCanonical is unset (Cal hallucination)", () => {
+    // The override flag is OPT-IN. Without it, the catalog rejects —
+    // so the safety net for Cal-authored mistakes stays intact.
+    const result = validateRouteAssignments(
+      single({ id: "X", x: -13, y: 0 }, { path: [[-13, 3], [-7, 12]], route_kind: "slant" }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it("rejects an 8-yard slant (clearly outside tolerance)", () => {
     const result = validateRouteAssignments(
       single({ id: "X", x: -13, y: 0 }, { path: [[-13, 3], [-7, 8]], route_kind: "slant" }),

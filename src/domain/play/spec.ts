@@ -114,6 +114,16 @@ export type AssignmentAction =
       family: string;
       depthYds?: number;
       modifiers?: RouteModifier[];
+      /** EXPLICIT user-requested override of catalog depth bounds.
+       *  When true, the route-assignment validator allows depthYds
+       *  outside the family's canonical range (instead of rejecting)
+       *  and surfaces a coaching note ("deeper than canonical drag —
+       *  more like a shallow cross"). Use this ONLY when the coach
+       *  explicitly requested an unusual depth ("8-yard drag",
+       *  "10-yard slant") — never to paper over hallucinated geometry.
+       *  The catalog enforcement still catches Cal-authored mistakes;
+       *  this flag is the escape hatch for legitimate coach intent. */
+      nonCanonical?: boolean;
     }
   /** Pass blocker. target is one of: "edge" (DE/OLB), "interior" (DT/NT),
    *  "blitz" (read-and-pick), or a specific defender label like "ML". */
@@ -233,6 +243,7 @@ const assignmentActionSchema = z.discriminatedUnion("kind", [
     family: z.string(),
     depthYds: z.number().optional(),
     modifiers: z.array(routeModifierSchema).optional(),
+    nonCanonical: z.boolean().optional(),
   }).strict(),
   z.object({
     kind: z.literal("block"),

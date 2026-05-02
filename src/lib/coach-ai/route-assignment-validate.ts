@@ -116,13 +116,24 @@ function checkRouteAgainstTemplate(
   const minWithTolerance = depthRangeYds.min - DEPTH_TOLERANCE_YDS;
   const maxWithTolerance = depthRangeYds.max + DEPTH_TOLERANCE_YDS;
   if (deepestSigned < minWithTolerance || deepestSigned > maxWithTolerance) {
+    // Explicit user-requested override: the coach said "8-yard drag"
+    // and Cal honored it by setting nonCanonical: true. The depth
+    // bounds are advisory in this case — render the route anyway, no
+    // error. The catalog still rejects Cal-authored mistakes (where
+    // nonCanonical is unset), so the safety net is intact for the
+    // hallucination case. This unblocks legitimate coach intent
+    // without weakening protection against Cal's own bad picks.
+    if (route.nonCanonical === true) {
+      return null;
+    }
     return {
       carrier: route.from,
       declaredKind: template.name,
       message:
         `route_kind="${template.name}" cannot be ${formatYds(deepestSigned)} yds — ` +
         `${template.name} routes finish in [${depthRangeYds.min}, ${depthRangeYds.max}] yds (constraint from catalog). ` +
-        suggestAlternativesByDepth(deepestSigned, side),
+        suggestAlternativesByDepth(deepestSigned, side) +
+        ` If the coach EXPLICITLY asked for this unusual depth, set \`nonCanonical: true\` on the route to bypass this check.`,
     };
   }
 
