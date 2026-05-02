@@ -267,13 +267,23 @@ function placeQB(qb: QBDepth): SynthOffensePlayer {
   }
 }
 
-function placeBacks(arr: BackArrangement): SynthOffensePlayer[] {
+function placeBacks(arr: BackArrangement, strength?: "left" | "right" | "balanced"): SynthOffensePlayer[] {
   switch (arr) {
     case "none": return [];
-    case "single":
-      // 1 back beside the QB. 4 yards offset so they're clearly separate
-      // tokens (2 yards rendered as overlap due to circle radius).
-      return [{ id: "B", x: -4, y: -5 }];
+    case "single": {
+      // 1 back beside the QB. Place on the STRONG side so RB swings,
+      // flats, and lead-blocks naturally favor the play's strength.
+      // Falls back to weak-side (legacy default) for "balanced" or
+      // unspecified strength. Surfaced 2026-05-02: a Flood Right with
+      // B starting on the left required B to swing across the
+      // formation for the strong-side flat, which violated the Flat
+      // route's "outside" side check (RB at x=-4 going to right is
+      // "inside" for a left-side carrier). Strong-side B places the
+      // RB at (4, -5) for strength=right, so the swing is naturally
+      // outside.
+      const bx = strength === "right" ? 4 : -4;
+      return [{ id: "B", x: bx, y: -5 }];
+    }
     case "i_stack":
       return [
         { id: "F", x: 0, y: -3 },   // FB
@@ -563,7 +573,7 @@ function synthesizeForVariant(
     players.push(...placeFlagCenter());
   }
   players.push(placeQB(spec.qb));
-  players.push(...placeBacks(spec.backs));
+  players.push(...placeBacks(spec.backs, spec.strength));
   players.push(...placeReceivers(fittedRec, variant));
 
   // Round x/y to 1 decimal so the rendered diagram doesn't carry float

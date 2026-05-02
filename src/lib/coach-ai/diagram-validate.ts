@@ -437,20 +437,41 @@ export function validateDiagrams(opts: {
           // constraints that depend on rendered POSITIONS — currently
           // just sameSideRequired (Flood / Sail), but designed to
           // extend (e.g. "stack-must-be-3x1", "trips-strong" etc).
+          //
+          // sameSide check uses route ENDPOINTS, not player starting
+          // positions. Coaches care about WHERE the route ends (where
+          // the QB throws). An RB-flat from a backfield-left start
+          // ENDS on the strong side — that's valid Flood Right even
+          // though the RB starts at x=-4. Surfaced 2026-05-02 when a
+          // Spread Doubles Flood Right with B running a strong-side
+          // swing was incorrectly rejected because B started left.
           if (result.concept.sameSideRequired) {
-            const matchedPositions = (json.players ?? [])
-              .filter((p) => result.usedPlayers.has(p.id) && typeof p.x === "number");
-            const left  = matchedPositions.filter((p) => p.x < 0).length;
-            const right = matchedPositions.filter((p) => p.x > 0).length;
+            const routesByCarrier = new Map<string, [number, number][]>();
+            for (const r of (json.routes ?? []) as Array<{ from?: unknown; path?: unknown }>) {
+              if (typeof r.from !== "string" || !Array.isArray(r.path)) continue;
+              if (!result.usedPlayers.has(r.from)) continue;
+              const path = r.path as [number, number][];
+              if (path.length === 0) continue;
+              routesByCarrier.set(r.from, path);
+            }
+            const endpointsByCarrier: Array<{ id: string; endX: number }> = [];
+            for (const [carrier, path] of routesByCarrier.entries()) {
+              const last = path[path.length - 1];
+              if (Array.isArray(last) && typeof last[0] === "number") {
+                endpointsByCarrier.push({ id: carrier, endX: last[0] });
+              }
+            }
+            const left  = endpointsByCarrier.filter((p) => p.endX < 0).length;
+            const right = endpointsByCarrier.filter((p) => p.endX > 0).length;
             if (left > 0 && right > 0) {
-              const sideSummary = matchedPositions
-                .map((p) => `@${p.id} at x=${p.x}`)
+              const sideSummary = endpointsByCarrier
+                .map((p) => `@${p.id} ends at x=${p.endX}`)
                 .join(", ");
               errors.push(
-                `${tag}Concept "${conceptName}" is a SIDE-FLOODING concept — every required route MUST be on the same side of the formation (all left or all right). ` +
-                `Matched players span both sides: ${sideSummary}. ` +
-                `Move the routes so all 3 stack on the same side: "${conceptName} Right" → all 3 to the right (x > 0); "${conceptName} Left" → all 3 to the left (x < 0). ` +
-                `Don't re-emit the same play with the same name unless the routes are all on the same side.`,
+                `${tag}Concept "${conceptName}" is a SIDE-FLOODING concept — every required route MUST END on the same side of the formation (all endpoints x > 0 or all x < 0). ` +
+                `Matched routes end on both sides: ${sideSummary}. ` +
+                `Adjust route waypoints so all 3 routes finish on the same side: "${conceptName} Right" → all endpoints x > 0; "${conceptName} Left" → all endpoints x < 0. ` +
+                `Don't re-emit the same play with the same name unless the route endpoints are all on the same side.`,
               );
             }
           }

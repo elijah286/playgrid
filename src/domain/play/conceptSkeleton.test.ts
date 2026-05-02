@@ -143,7 +143,11 @@ describe("generateConceptSkeleton — Flood Right tackle_11 doesn't trigger the 
   // Now: with the synthesizer clamp (|x| >= 6 for slots), the rendered
   // diagram should have S and H at distinct, non-OL-overlapping
   // positions.
-  it("rendered Flood Right has S and H at non-overlapping x positions, both clear of the OL row", () => {
+  it("rendered Flood Right (Spread Doubles): S and H end up on OPPOSITE sides at distinct, OL-clear positions", () => {
+    // 2026-05-02: Flood now uses Spread Doubles (not Trips), so H ends
+    // up on the LEFT (backside drag) and S on the RIGHT (strong-side
+    // curl). The diagram is structurally clean: S and H are on
+    // opposite sides → can't overlap each other; both clear of the OL.
     const result = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "right" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -152,16 +156,12 @@ describe("generateConceptSkeleton — Flood Right tackle_11 doesn't trigger the 
     const h = diagram.players.find((p) => p.id === "H");
     expect(s, "Flood Right: S not in rendered formation").toBeDefined();
     expect(h, "Flood Right: H not in rendered formation").toBeDefined();
-    // Distinct x positions.
-    expect(s!.x).not.toBe(h!.x);
-    // Both clear of the OL row by enough margin to pass the overlap
-    // resolver's normalized threshold (|x| >= 7 in tackle_11 — see
-    // clampSlotXAwayFromOL math comment).
+    // Strong-side slot (S) on the right; backside slot (H) on the left.
+    expect(s!.x).toBeGreaterThan(0);
+    expect(h!.x).toBeLessThan(0);
+    // Both clear of the OL row.
     expect(Math.abs(s!.x)).toBeGreaterThanOrEqual(7);
     expect(Math.abs(h!.x)).toBeGreaterThanOrEqual(7);
-    // Both on the same (right) side per Flood semantics.
-    expect(s!.x).toBeGreaterThan(0);
-    expect(h!.x).toBeGreaterThan(0);
   });
 });
 
