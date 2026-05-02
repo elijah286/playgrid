@@ -89,7 +89,7 @@ export function canUseAiFeatures(entitlement: Entitlement | null): boolean {
 
 export const TIER_LABEL: Record<SubscriptionTier, string> = {
   free: "Solo Coach",
-  coach: "Coach",
+  coach: "Team Coach",
   coach_ai: "Coach Pro",
 };
 

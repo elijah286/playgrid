@@ -2320,6 +2320,7 @@ function PlaybookDetailClientInner({
           currentSportVariant={sportVariant}
           target={copyTarget}
           toast={toast}
+          onPlayCapHit={showPlayCapUpgrade}
           onCopied={(result) => {
             if (result.playbookId === playbookId && result.playId) {
               // Local copy — jump to edit, matching old duplicate behavior.

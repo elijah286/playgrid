@@ -41,6 +41,7 @@ export function CopyToPlaybookDialog({
   target,
   onCopied,
   toast,
+  onPlayCapHit,
 }: {
   open: boolean;
   onClose: () => void;
@@ -59,6 +60,13 @@ export function CopyToPlaybookDialog({
     formationRenamed?: boolean;
   }) => void;
   toast?: (msg: string, kind?: "success" | "error") => void;
+  /** Routed when the copy fails because the destination playbook is at the
+   *  free-tier play cap. Lets the parent surface the same in-page upgrade
+   *  modal it uses for create-play, instead of a dead-end toast. The raw
+   *  server error is passed through so the parent can echo the configured
+   *  cap number (admin-tunable) without re-fetching it. If omitted, the
+   *  error falls back to a toast. */
+  onPlayCapHit?: (serverError: string) => void;
 }) {
   // Initial state seeded from props — the parent conditionally mounts this
   // dialog, so each open is a fresh instance (no effect-based reset needed).
@@ -203,7 +211,12 @@ export function CopyToPlaybookDialog({
         destinationFormationId: mode === "pick" ? destFormationId : undefined,
       });
       if (!res.ok) {
-        toast?.(res.error, "error");
+        if (onPlayCapHit && /Free tier|capped at/i.test(res.error)) {
+          onClose();
+          onPlayCapHit(res.error);
+        } else {
+          toast?.(res.error, "error");
+        }
         return;
       }
       const parts: string[] = [];

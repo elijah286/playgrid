@@ -1401,6 +1401,21 @@ function PlayEditorClientInner({
           currentPlaybookId={playbookId}
           target={copyTarget}
           toast={toast}
+          onPlayCapHit={(serverError) => {
+            // The server message embeds the admin-configured cap (e.g. "16
+            // plays per playbook"). Pull the number out so the modal
+            // headline matches whatever the site is currently set to,
+            // falling back to a generic title if the format ever changes.
+            const m = /capped at (\d+) plays/i.exec(serverError);
+            const cap = m ? m[1] : null;
+            setUpgradeNotice({
+              title: cap
+                ? `Free tier is capped at ${cap} plays per playbook`
+                : "You've hit the free-tier play cap",
+              message:
+                "Upgrade to Team Coach ($9/mo or $99/yr) to copy this play and add unlimited plays per playbook.",
+            });
+          }}
           onCopied={(result) => {
             if (result.playId) router.push(`/plays/${result.playId}/edit`);
           }}
