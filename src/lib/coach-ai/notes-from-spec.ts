@@ -32,11 +32,20 @@
 
 import type {
   AssignmentAction,
+  DefenderAction,
+  DefenderAssignment,
   PlaySpec,
   PlayerAssignment,
 } from "@/domain/play/spec";
 import { findTemplate } from "@/domain/play/routeTemplates";
 import { detectConcept } from "@/domain/play/conceptMatch";
+import {
+  alignmentWithAssignments,
+  findDefensiveAlignment,
+  zonesForStrength,
+  type DefenderAssignmentSpec,
+  type DefensiveAlignmentZone,
+} from "@/domain/play/defensiveAlignments";
 
 /** Render a PlaySpec into coaching notes. */
 export function projectSpecToNotes(spec: PlaySpec): string {
@@ -63,6 +72,16 @@ export function projectSpecToNotes(spec: PlaySpec): string {
     if (bullet) lines.push(`- ${bullet}`);
   }
 
+  // Defender bullets — one per defender (catalog default + spec deviations).
+  // For offense-focused plays we emit a compact "Defense:" header followed
+  // by the per-defender lines. Suppress when the spec has no defense ref.
+  const defenderLines = bulletsForDefense(spec);
+  if (defenderLines.length > 0) {
+    lines.push("");
+    lines.push("**Defense:**");
+    for (const dl of defenderLines) lines.push(`- ${dl}`);
+  }
+
   // Defensive note: if no assignments rendered, fall back to a one-line
   // formation+defense summary so the field isn't empty.
   if (lines.length === 0) {
@@ -71,6 +90,109 @@ export function projectSpecToNotes(spec: PlaySpec): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Build per-defender bullets from the spec's defense ref (catalog
+ * defaults) overlaid with `spec.defenderAssignments` (deviations). Each
+ * line names the defender + role + a short coaching cue from
+ * DEFENDER_CUES below.
+ */
+function bulletsForDefense(spec: PlaySpec): string[] {
+  if (!spec.defense) return [];
+  const { front, coverage, strength = "right" } = spec.defense;
+  const alignment = findDefensiveAlignment(spec.variant, front, coverage);
+  if (!alignment) return [];
+
+  const catalogPlayers = alignmentWithAssignments(alignment, strength);
+  const zones = zonesForStrength(alignment, strength);
+  const zoneById = new Map<string, DefensiveAlignmentZone>();
+  for (const z of zones) {
+    if (z.id) zoneById.set(z.id, z);
+  }
+
+  const overrides = new Map<string, DefenderAssignment>();
+  for (const da of spec.defenderAssignments ?? []) {
+    if (!overrides.has(da.defender)) overrides.set(da.defender, da);
+  }
+
+  const lines: string[] = [];
+  for (const cp of catalogPlayers) {
+    const ref = `@${cp.id}`;
+    const override = overrides.get(cp.id);
+    const action: DefenderAction = override
+      ? override.action
+      : defenderActionFromCatalog(cp.assignment);
+    const hedge =
+      override?.confidence === "low" ? "(unconfirmed) " : "";
+    const body = narrateDefender(ref, action, zoneById);
+    if (body) lines.push(`${hedge}${body}`);
+  }
+  return lines;
+}
+
+function defenderActionFromCatalog(c: DefenderAssignmentSpec): DefenderAction {
+  switch (c.kind) {
+    case "zone": return { kind: "zone_drop", zoneId: c.zoneId };
+    case "man":  return { kind: "man_match", target: c.target };
+    case "blitz": return { kind: "blitz", gap: c.gap };
+    case "spy":  return { kind: "spy", target: c.target };
+  }
+}
+
+function narrateDefender(
+  ref: string,
+  action: DefenderAction,
+  zoneById: Map<string, DefensiveAlignmentZone>,
+): string | null {
+  switch (action.kind) {
+    case "zone_drop": {
+      const zone = action.zoneId ? zoneById.get(action.zoneId) : null;
+      const label = zone?.label ?? action.zoneId ?? "zone";
+      const cue = DEFENDER_CUES.zone_drop;
+      return `${ref}: drops into ${label} — ${cue}.`;
+    }
+    case "man_match": {
+      const target = action.target ? `@${action.target}` : "his matched receiver";
+      const cue = DEFENDER_CUES.man_match;
+      return `${ref}: man on ${target} — ${cue}.`;
+    }
+    case "blitz": {
+      const gap = action.gap ?? "A";
+      const cue = DEFENDER_CUES.blitz;
+      return `${ref}: blitz ${gap}-gap — ${cue}.`;
+    }
+    case "spy": {
+      const target = action.target ? `@${action.target}` : "the QB";
+      const cue = DEFENDER_CUES.spy;
+      return `${ref}: spy ${target} — ${cue}.`;
+    }
+    case "read_and_react": {
+      const cue = DEFENDER_CUES[`react_${action.behavior}` as keyof typeof DEFENDER_CUES] ?? DEFENDER_CUES.read_and_react;
+      const trigger = `@${action.trigger.player}`;
+      return `${ref}: read ${trigger} — ${cue}.`;
+    }
+    case "custom_path":
+      return `${ref}: ${action.description}.`;
+  }
+}
+
+/**
+ * Per-kind coaching cues for defenders. Single line, no trailing period
+ * (caller adds it). New defender kinds added in spec.ts MUST add a cue
+ * here in the same commit (Rule 3 lockstep).
+ */
+const DEFENDER_CUES = {
+  zone_drop: "stay in the void, eyes on the QB",
+  man_match: "press the release, stay on the inside hip",
+  blitz: "win the half-man, get to the QB on the third step",
+  spy: "shadow the player, mirror lateral movement, fall to the LOS on a scramble",
+  read_and_react: "key the offensive player, react when they declare",
+  react_jump_route: "drive on the route once it breaks across",
+  react_carry_vertical: "carry the vertical until the deep defender takes it",
+  react_follow_to_flat: "follow the inside-out release into the flat",
+  react_wall_off: "wall off the crosser before they cross your face",
+  react_robber: "lurk for a crossing route at intermediate depth",
+} as const;
 
 function openerFor(spec: PlaySpec): string | null {
   const playType = spec.playType ?? "offense";

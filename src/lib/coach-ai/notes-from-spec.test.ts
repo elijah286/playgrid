@@ -260,3 +260,99 @@ describe("projectSpecToNotes — determinism", () => {
     expect(notes).toMatch(/Spread Doubles/);
   });
 });
+
+describe("projectSpecToNotes — defender bullets (Phase D6)", () => {
+  it("emits per-defender bullets when defense is set", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone" as const, coverage: "Cover 3" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    expect(notes).toContain("**Defense:**");
+    // Cover 3 has 3 deep defenders + 4 underneath = 7 defender bullets.
+    const defLines = notes.split("\n").filter((l) => l.match(/^- @(CB|FS|FL|FR|HL|HR)/));
+    expect(defLines.length, defLines.join(" | ")).toBeGreaterThanOrEqual(6);
+  });
+
+  it("describes Cover 1 FS as a deep-middle zone defender (the screenshot bug regression)", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Man" as const, coverage: "Cover 1" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const fsLine = notes.split("\n").find((l) => l.startsWith("- @FS"));
+    expect(fsLine, "FS line missing in Cover 1 notes").toBeDefined();
+    expect(fsLine).toMatch(/drops into.*[Dd]eep middle/);
+  });
+
+  it("describes Cover 1 corners as man defenders, not zones", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Man" as const, coverage: "Cover 1" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const cbLine = notes.split("\n").find((l) => l.startsWith("- @CB"));
+    expect(cbLine, "CB line missing").toBeDefined();
+    expect(cbLine).toMatch(/man on/);
+  });
+
+  it("override deviation surfaces in the bullet (ML zone → blitz)", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "4-3 Over" as const, coverage: "Cover 3" as const },
+      assignments: [
+        { player: "X", action: { kind: "route" as const, family: "Slant" } },
+      ],
+      defenderAssignments: [
+        { defender: "ML", action: { kind: "blitz" as const, gap: "A" as const } },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const mlLine = notes.split("\n").find((l) => l.startsWith("- @ML"));
+    expect(mlLine).toBeDefined();
+    expect(mlLine).toMatch(/blitz.*A/);
+  });
+
+  it("(unconfirmed) hedge surfaces for low-confidence defender overrides", async () => {
+    const { PLAY_SPEC_SCHEMA_VERSION } = await import("@/domain/play/spec");
+    const { projectSpecToNotes } = await import("./notes-from-spec");
+    const spec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7" as const,
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone" as const, coverage: "Cover 3" as const },
+      assignments: [],
+      defenderAssignments: [
+        { defender: "FS", action: { kind: "blitz" as const, gap: "A" as const }, confidence: "low" as const },
+      ],
+    };
+    const notes = projectSpecToNotes(spec);
+    const fsLine = notes.split("\n").find((l) => l.includes("@FS"));
+    expect(fsLine).toMatch(/\(unconfirmed\)/);
+  });
+});
