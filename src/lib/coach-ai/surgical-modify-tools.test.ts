@@ -146,6 +146,84 @@ describe("modify_play_route — preserves offense, changes only the targeted rou
     );
     expect(result.ok).toBe(false);
   });
+
+  // 2026-05-02 (fourth Flood-direction bug, surfaced by coach screenshot):
+  // Cal called modify_play_route on @B's flat in a Flood Left play to fix
+  // a small thing (depth/family). The recomputed path silently flipped @B
+  // to go RIGHT, away from the flood. Cal's prose then said "@B swings
+  // left into the flood" while the diagram showed the opposite.
+  //
+  // Root cause: modify_play_route's handler had its own duplicated copy
+  // of the xSign math from specRenderer/play-mutations, and that copy
+  // pre-dated the direction-override fix from f71bf44. It computed
+  // `xSign = carrierX >= 0 ? 1 : -1`, ignoring the route's `direction`
+  // field. B sits at x≈+2 in Spread Doubles regardless of strength side,
+  // so xSign always came out +1 — flat goes RIGHT.
+  //
+  // Fix: route modify_play_route through applyRouteMod (the single
+  // source of geometric truth per AGENTS.md Rule 10), which already
+  // honors `direction`.
+  it("preserves direction:'left' on @B's Flat across a depth-only edit (Flood Left regression)", async () => {
+    // Build a Flood LEFT fence — B's Flat has direction:"left" baked in.
+    const skeleton = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "left" });
+    if (!skeleton.ok) throw new Error("skeleton failed");
+    const { diagram } = playSpecToCoachDiagram(skeleton.spec);
+    const priorFence = {
+      title: "Flood Left",
+      variant: "tackle_11" as const,
+      focus: "O" as const,
+      ...diagram,
+    };
+    const priorB = priorFence.routes?.find((r: any) => r.from === "B");
+    expect(priorB, "Flood Left skeleton must produce a B route").toBeDefined();
+    if (!priorB) return;
+    // Sanity: prior B should already end on the LEFT (final x < 0).
+    const priorFinalX = priorB.path[priorB.path.length - 1][0];
+    expect(priorFinalX, "prior B final x should be negative (flood-left)").toBeLessThan(0);
+
+    const tool = loadTool("modify_play_route");
+    const result = await tool.handler(
+      { prior_play_fence: JSON.stringify(priorFence, null, 2), player: "B", set_depth_yds: 4 },
+      MIN_CTX,
+    );
+    expect(result.ok, !result.ok ? result.error : undefined).toBe(true);
+    if (!result.ok) return;
+    const match = (result.result as string).match(/```play\n([\s\S]+?)\n```/);
+    expect(match).not.toBeNull();
+    const newFence = JSON.parse(match![1]);
+    const newB = newFence.routes.find((r: any) => r.from === "B");
+    expect(newB, "B's route must still exist after modify").toBeDefined();
+    const newFinalX = newB.path[newB.path.length - 1][0];
+    expect(newFinalX, "modify_play_route must preserve B's leftward direction").toBeLessThan(0);
+  });
+
+  it("supports set_direction='right' to flip a route's lateral side", async () => {
+    // Build the same Flood LEFT fence. Coach asks Cal to flip B to the
+    // right (e.g. "actually run B to the right"). modify_play_route with
+    // set_direction:"right" should produce a path ending on the right.
+    const skeleton = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "left" });
+    if (!skeleton.ok) throw new Error("skeleton failed");
+    const { diagram } = playSpecToCoachDiagram(skeleton.spec);
+    const priorFence = {
+      title: "Flood Left",
+      variant: "tackle_11" as const,
+      focus: "O" as const,
+      ...diagram,
+    };
+    const tool = loadTool("modify_play_route");
+    const result = await tool.handler(
+      { prior_play_fence: JSON.stringify(priorFence, null, 2), player: "B", set_direction: "right" },
+      MIN_CTX,
+    );
+    expect(result.ok, !result.ok ? result.error : undefined).toBe(true);
+    if (!result.ok) return;
+    const match = (result.result as string).match(/```play\n([\s\S]+?)\n```/);
+    const newFence = JSON.parse(match![1]);
+    const newB = newFence.routes.find((r: any) => r.from === "B");
+    const newFinalX = newB.path[newB.path.length - 1][0];
+    expect(newFinalX, "set_direction:'right' must flip B to the right").toBeGreaterThan(0);
+    expect(newB.direction).toBe("right");
+  });
 });
 
 describe("add_defense_to_play — preserves offense, only adds defenders + zones", () => {

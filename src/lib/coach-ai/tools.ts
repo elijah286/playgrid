@@ -7,7 +7,6 @@ import type { ToolDef } from "./llm";
 // in this file use require() for lazy-loading; the surgical-modify
 // path is hot enough that eager-loading these is fine, and the import
 // form resolves cleanly under vitest's @/ alias (require's don't).
-import { findTemplate } from "@/domain/play/routeTemplates";
 import {
   findDefensiveAlignment,
   listDefensiveAlignments,
@@ -635,8 +634,8 @@ const modify_play_route: CoachAiTool = {
   def: {
     name: "modify_play_route",
     description:
-      "Surgically modify ONE route on an existing play diagram while preserving everything else (all other players, all other routes, formation, zones, defense). Use this for ANY single-route change — depth, family, motion, modifier — instead of re-authoring the diagram. " +
-      "Inputs: the prior play fence JSON (copied verbatim from the chat), the player whose route is changing, and ONE OR MORE of: set_family (swap to a different catalog route), set_depth_yds (adjust the route's depth), set_non_canonical (allow off-catalog depth per coach intent), or set_motion (add pre-snap motion waypoints). " +
+      "Surgically modify ONE route on an existing play diagram while preserving everything else (all other players, all other routes, formation, zones, defense). Use this for ANY single-route change — depth, family, lateral side, modifier — instead of re-authoring the diagram. " +
+      "Inputs: the prior play fence JSON (copied verbatim from the chat), the player whose route is changing, and ONE OR MORE of: set_family (swap to a different catalog route), set_depth_yds (adjust the route's depth), set_direction (force lateral side — use for backfield carriers whose flat/swing should go to a specific side regardless of starting x), or set_non_canonical (allow off-catalog depth per coach intent). " +
       "Returns the FULL updated play fence JSON ready to drop verbatim into the chat reply. The renderer-validated geometry replaces only the targeted route; nothing else changes. " +
       "**CONCEPT FIDELITY — preserve the spirit of the play.** When the play is a named catalog concept (Mesh, Smash, Curl-Flat, Stick, Snag, Flood/Sail, Drive, Levels, Y-Cross, Dagger, Four Verticals), pick the smallest change that keeps the concept name truthful. Mesh = two crossing drags at differentiated depths — \"make a mesh route deeper\" means deepen ONE drag (e.g. set_depth_yds: 6 on the over-drag), NOT swap a drag for a dig. Smash = hitch + corner — \"deepen the smash\" means tweak the corner depth, not turn the hitch into a curl. If the coach's request would BREAK the concept (e.g. \"replace the drag with a 20yd dig\" on a Mesh play), apply the literal change but the chat-time validator will reject it under assertConcept — better to push back: \"that would turn this into a Drive concept; want me to rebuild it as Drive, or keep it Mesh and deepen the over-drag instead?\". The point of the surgical tool is preserving the play's identity, not just its players[] array.",
     input_schema: {
@@ -662,6 +661,12 @@ const modify_play_route: CoachAiTool = {
           description:
             "Optional: scale the route's depth so its deepest waypoint lands at this many yards from the LOS. Honored regardless of family change. Out-of-catalog depths require set_non_canonical: true.",
         },
+        set_direction: {
+          type: "string",
+          enum: ["left", "right"],
+          description:
+            "Optional: force the route's lateral direction (left/right). Use for backfield carriers (RB) whose flat/swing should go to a specific side regardless of starting x — e.g. an RB flat to the flood side. The route's existing direction is preserved across depth/family edits when this is omitted.",
+        },
         set_non_canonical: {
           type: "boolean",
           description:
@@ -673,95 +678,55 @@ const modify_play_route: CoachAiTool = {
     },
   },
   async handler(input) {
+    // Delegate to applyRouteMods — the single source of geometric truth for
+    // route mutations (AGENTS.md Rule 10). This eliminates the duplicated
+    // xSign math that used to live here, which silently dropped the
+    // route's `direction` field and flipped Flood Left's @B flat to the
+    // right on any depth/family edit. Surfaced 2026-05-02 (fourth Flood
+    // direction bug). The single-mod shape mirrors `revise_play`'s array
+    // entry shape so both tools stay in lockstep.
     const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence.trim() : "";
     const player = typeof input.player === "string" ? input.player.trim() : "";
     if (!priorJson) return { ok: false, error: "prior_play_fence is required (copy the previous play fence verbatim)." };
     if (!player) return { ok: false, error: "player is required." };
 
-    let fence: Record<string, unknown>;
-    try {
-      fence = JSON.parse(priorJson);
-    } catch (e) {
-      return { ok: false, error: `Could not parse prior_play_fence as JSON: ${(e as Error).message}` };
-    }
-
-    const playersArr = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
-    const routesArr = Array.isArray(fence.routes) ? (fence.routes as Array<Record<string, unknown>>) : [];
-    const carrier = playersArr.find((p) => p.id === player);
-    if (!carrier) {
-      return { ok: false, error: `Player "${player}" not in prior_play_fence.players. Available: ${playersArr.map((p) => p.id).join(", ")}.` };
-    }
-    const routeIdx = routesArr.findIndex((r) => r.from === player);
-    if (routeIdx < 0) {
-      return { ok: false, error: `Player "${player}" has no existing route in prior_play_fence.routes (a "${player}" route must already be in the diagram for this tool to modify it).` };
-    }
-
     const setFamily = typeof input.set_family === "string" && input.set_family.trim() !== ""
       ? input.set_family.trim()
-      : null;
+      : undefined;
     const setDepth = typeof input.set_depth_yds === "number" && Number.isFinite(input.set_depth_yds)
       ? input.set_depth_yds
-      : null;
-    const setNonCanonical = typeof input.set_non_canonical === "boolean" ? input.set_non_canonical : null;
+      : undefined;
+    const setNonCanonical = typeof input.set_non_canonical === "boolean" ? input.set_non_canonical : undefined;
+    const setDirection = input.set_direction === "left" || input.set_direction === "right"
+      ? input.set_direction
+      : undefined;
 
-    if (!setFamily && setDepth === null && setNonCanonical === null) {
-      return { ok: false, error: "At least one of set_family / set_depth_yds / set_non_canonical must be provided." };
+    if (
+      setFamily === undefined &&
+      setDepth === undefined &&
+      setNonCanonical === undefined &&
+      setDirection === undefined
+    ) {
+      return { ok: false, error: "At least one of set_family / set_depth_yds / set_direction / set_non_canonical must be provided." };
     }
 
-    const variantStr = typeof fence.variant === "string" ? fence.variant : "flag_7v7";
+    const mod: RouteMod = { player };
+    if (setFamily !== undefined) mod.set_family = setFamily;
+    if (setDepth !== undefined) mod.set_depth_yds = setDepth;
+    if (setNonCanonical !== undefined) mod.set_non_canonical = setNonCanonical;
+    if (setDirection !== undefined) mod.set_direction = setDirection;
 
-    const oldRoute = routesArr[routeIdx];
-    const newRoute: Record<string, unknown> = { ...oldRoute };
-
-    // Resolve the family to use for path recomputation. If swapping family,
-    // use the new one; if only changing depth, keep the existing route_kind.
-    const resolvedFamily = setFamily ?? (typeof oldRoute.route_kind === "string" ? oldRoute.route_kind : null);
-    if ((setFamily || setDepth !== null) && resolvedFamily) {
-      const template = findTemplate(resolvedFamily);
-      if (!template) {
-        return { ok: false, error: `Unknown route family "${resolvedFamily}". Use a catalog name (Slant, Curl, Drag, Dig, etc.).` };
-      }
-      // Recompute path from template + carrier position + optional depth.
-      // Mirrors specRenderer.pathFromTemplate without the round-trip
-      // through PlaySpec.
-      const carrierX = typeof carrier.x === "number" ? carrier.x : 0;
-      const carrierY = typeof carrier.y === "number" ? carrier.y : 0;
-      const fieldWidthYds = variantStr === "tackle_11" ? 53 : variantStr === "flag_7v7" ? 30 : variantStr === "flag_5v5" ? 25 : 40;
-      const FIELD_LENGTH_YDS = 25;
-      const xSign = template.directional !== false ? (carrierX >= 0 ? 1 : -1) : 1;
-      const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
-      const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
-      const yScale = setDepth !== null && templateMaxYds > 0.5 ? setDepth / templateMaxYds : 1;
-      const waypoints = template.points[0]?.x === 0 && template.points[0]?.y === 0
-        ? template.points.slice(1)
-        : template.points;
-      const path = waypoints.map(({ x, y }) => {
-        const xYds = carrierX + x * fieldWidthYds * xSign;
-        const yYds = carrierY + y * yScale * FIELD_LENGTH_YDS;
-        return [Math.round(xYds * 10) / 10, Math.round(yYds * 10) / 10];
-      });
-      newRoute.path = path;
-      newRoute.route_kind = template.name;
-      newRoute.curve = (template.shapes ?? []).some((s) => s === "curve");
+    const r = applyRouteMods(priorJson, [mod]);
+    if (!r.ok) {
+      return { ok: false, error: r.errors.join("\n") };
     }
-
-    if (setNonCanonical !== null) {
-      if (setNonCanonical) {
-        newRoute.nonCanonical = true;
-      } else {
-        delete newRoute.nonCanonical;
-      }
-    }
-
-    const newRoutes = [...routesArr];
-    newRoutes[routeIdx] = newRoute;
-    const newFence = { ...fence, routes: newRoutes };
-    const fenceJson = JSON.stringify(newFence, null, 2);
+    const fenceJson = JSON.stringify(r.fence, null, 2);
 
     const changeSummary: string[] = [];
-    if (setFamily) changeSummary.push(`route family → "${setFamily}"`);
-    if (setDepth !== null) changeSummary.push(`depth → ${setDepth} yds`);
-    if (setNonCanonical !== null) changeSummary.push(`nonCanonical → ${setNonCanonical}`);
+    if (setFamily !== undefined) changeSummary.push(`route family → "${setFamily}"`);
+    if (setDepth !== undefined) changeSummary.push(`depth → ${setDepth} yds`);
+    if (setDirection !== undefined) changeSummary.push(`direction → ${setDirection}`);
+    if (setNonCanonical !== undefined) changeSummary.push(`nonCanonical → ${setNonCanonical}`);
 
     return {
       ok: true,

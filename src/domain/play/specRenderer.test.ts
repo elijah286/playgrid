@@ -378,4 +378,36 @@ describe("Renderer — direction override on route actions", () => {
     const finalX = bRoute.path[bRoute.path.length - 1][0];
     expect(finalX).toBeLessThan(0);
   });
+
+  // 2026-05-02 (fourth Flood-direction bug): the renderer was producing
+  // routes WITHOUT the direction field, so edit tools (modify_play_route)
+  // had no way to preserve the original side on a depth/family edit. The
+  // route's direction is part of its semantic identity (Rule 9) and must
+  // round-trip on the rendered fence.
+  it("preserves direction:'left' on the rendered route when the spec action specifies it", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "B", action: { kind: "route", family: "Flat", depthYds: 2, direction: "left" } },
+      ],
+    });
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    expect(bRoute?.direction).toBe("left");
+  });
+
+  it("omits direction on the rendered route when the spec action has no direction", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant", depthYds: 5 } },
+      ],
+    });
+    const xRoute = result.diagram.routes?.find((r) => r.from === "X");
+    expect(xRoute).toBeDefined();
+    expect((xRoute as { direction?: string }).direction).toBeUndefined();
+  });
 });

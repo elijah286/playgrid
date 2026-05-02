@@ -549,6 +549,15 @@ function routeFromAction(
         path: pathFromTemplate(template, carrier, variant, action.depthYds, action.direction),
         ...(hasCurveSegment(template) ? { curve: true } : {}),
         route_kind: template.name,
+        // Preserve `direction` on the rendered route so edit tools
+        // (modify_play_route / revise_play) can round-trip the
+        // override without re-deriving it from path geometry. Without
+        // this, a Flood Left @B's flat (which has direction:"left" on
+        // the spec but x≈+2 carrier) silently flips to the right on
+        // any depth/family edit (Rule 9 — identity preservation).
+        ...(action.direction === "left" || action.direction === "right"
+          ? { direction: action.direction }
+          : {}),
       };
     }
     case "custom": {
