@@ -36,10 +36,22 @@ import type {
   PlayerAssignment,
 } from "@/domain/play/spec";
 import { findTemplate } from "@/domain/play/routeTemplates";
+import { detectConcept } from "@/domain/play/conceptMatch";
 
 /** Render a PlaySpec into coaching notes. */
 export function projectSpecToNotes(spec: PlaySpec): string {
   const lines: string[] = [];
+
+  // Concept-name lead. If the spec satisfies a known concept (curl-flat,
+  // smash, mesh, stick, snag, four-verts), name it explicitly so the
+  // coach reads "Curl-Flat — high-low on the flat defender" instead of
+  // a generic "QB reads the safety". Concepts also encode depth/family
+  // invariants the spec already satisfies, so the prose can be more
+  // tactical without risking contradictions.
+  const conceptHit = detectConcept(spec);
+  if (conceptHit && conceptHit.ok) {
+    lines.push(`**${conceptHit.concept.name}** — ${conceptHit.concept.description}`);
+  }
 
   // Opener — depends on play type.
   const opener = openerFor(spec);

@@ -9,6 +9,11 @@
 // coach never sees the broken render.
 
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
+import {
+  assertConcept,
+  formatConceptViolations,
+  parseConceptsFromText,
+} from "@/domain/play/conceptMatch";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { lintProseAgainstSpec } from "./notes-lint";
 
@@ -389,6 +394,12 @@ export function validateDiagrams(opts: {
     // reference. Conservative — silent paraphrasing passes; only
     // "@X on the post" when X has Slant fails. Forces Cal to either
     // fix the prose or fix the diagram before the coach sees either.
+    //
+    // Also: when Cal NAMES a concept (curl-flat, smash, mesh, stick,
+    // snag, four-verts) in the title or prose, the spec must satisfy
+    // the concept's tighter depth/family requirements. Catches the
+    // "Curl/Flat with a 10yd curl" case from 2026-05-02 — the
+    // catalog Curl is 8-13yd but the curl-flat CONCEPT requires 4-7yd.
     if (Array.isArray(json.routes) && json.routes.length > 0) {
       try {
         const derived = coachDiagramToPlaySpec(json as CoachDiagram, {
@@ -401,6 +412,23 @@ export function validateDiagrams(opts: {
               `${tag}prose says @${issue.player} runs a "${issue.notesFamily}" but the diagram has @${issue.player} on a "${issue.expectedFamily}". ` +
               `Fix the prose to match the diagram (or fix the diagram + route_kind to match the prose). ` +
               `Sentence: ${JSON.stringify(issue.bullet.slice(0, 160))}`,
+            );
+          }
+        }
+
+        // Concept assertion. Scan the diagram title + prose for any
+        // catalog concept name; for each one found, the derived spec
+        // must satisfy that concept's required pattern. The narrowed
+        // depth ranges in concepts catch the "called it curl-flat
+        // but the curl is 10yd" failure mode the family-only lint
+        // can't see.
+        const conceptScanText = `${json.title ?? ""}\n${opts.text}`;
+        const claimedConcepts = parseConceptsFromText(conceptScanText);
+        for (const conceptName of claimedConcepts) {
+          const result = assertConcept(derived, conceptName);
+          if (!result.ok) {
+            errors.push(
+              `${tag}${formatConceptViolations(conceptName, result.violations)}`,
             );
           }
         }
