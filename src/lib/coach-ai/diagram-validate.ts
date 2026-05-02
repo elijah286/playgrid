@@ -16,6 +16,7 @@ import {
 } from "@/domain/play/conceptMatch";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { lintProseAgainstSpec } from "./notes-lint";
+import { validateRouteAssignments } from "./route-assignment-validate";
 
 const OFFENSE_LETTERS = new Set([
   // Skill positions
@@ -431,6 +432,66 @@ export function validateDiagrams(opts: {
               `${tag}${formatConceptViolations(conceptName, result.violations)}`,
             );
           }
+        }
+
+        // Geometry-vs-family validation. validateRouteAssignments
+        // checks that every route with a declared route_kind has
+        // depth + side consistent with the catalog template. Used
+        // to only run at SAVE time (recordPlayVersion); now also
+        // runs at chat-time so a "12-yard slant" route_kind="Slant"
+        // gets caught before the coach sees the broken diagram.
+        // 2026-05-02 surfaced: Cal's chat showed "X runs a slant" on
+        // a route with 12yd depth — the SAVE validator would have
+        // caught it if Cal saved, but the chat preview didn't.
+        const routeAssignmentLint = validateRouteAssignments(json as CoachDiagram);
+        if (!routeAssignmentLint.ok) {
+          for (const issue of routeAssignmentLint.errors) {
+            errors.push(
+              `${tag}@${issue.carrier}: declared route_kind="${issue.declaredKind}" — ${issue.message}`,
+            );
+          }
+        }
+
+        // Prose-completeness check. Every offensive player WITH A
+        // ROUTE in the diagram must be mentioned by @Label somewhere
+        // in the surrounding prose. Catches the "Cal forgot to
+        // describe @Z" failure mode (2026-05-02): the diagram
+        // shows Z running a vertical, but the prose narrates only
+        // X / B / H / S — Z's existence is invisible to a coach
+        // reading the play.
+        //
+        // Conservative: only fires when a player has a NON-block
+        // route in the spec (blockers don't need prose mention).
+        // Linemen (LT/LG/C/RG/RT) and the QB are exempt — their
+        // jobs are implied.
+        const proseRefs = new Set<string>();
+        const refRe = /@([A-Za-z][A-Za-z0-9]{0,3})\b/g;
+        let m: RegExpExecArray | null;
+        while ((m = refRe.exec(opts.text)) !== null) {
+          proseRefs.add(m[1].toUpperCase());
+        }
+        const defenderIds = new Set<string>();
+        for (const p of players) {
+          if (p.team === "D") defenderIds.add(p.id);
+        }
+        const skillRouteCarriers: string[] = [];
+        for (const r of json.routes ?? []) {
+          if (!r || typeof r.from !== "string") continue;
+          if (defenderIds.has(r.from)) continue;
+          // Skip linemen / QB — their routes are blocking + drop, not
+          // pass routes that need prose narration.
+          const u = r.from.toUpperCase();
+          if (["LT", "LG", "C", "RG", "RT", "T", "G", "OL"].includes(u)) continue;
+          if (u === "QB" || u === "Q") continue;
+          skillRouteCarriers.push(r.from);
+        }
+        const omitted = skillRouteCarriers.filter((id) => !proseRefs.has(id.toUpperCase()));
+        if (omitted.length > 0) {
+          errors.push(
+            `${tag}prose omits ${omitted.length} player(s) with routes: ${omitted.map((p) => `@${p}`).join(", ")}. ` +
+            `Every skill-position player whose route is on the diagram must be mentioned by @Label in the prose so the coach knows what they do. ` +
+            `Add a sentence describing each omitted player's role (e.g. "@${omitted[0]} clears out the deep zone", "@${omitted[0]} is the safety valve").`,
+          );
         }
       } catch {
         // Spec derivation can fail on edge cases (oddly-shaped diagrams);
