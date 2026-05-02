@@ -7,6 +7,7 @@
  *   y = yards from LOS    (negative = backfield, positive = upfield / downfield)
  */
 
+import { z } from "zod";
 import {
   createEmptyPlayDocument,
   sportProfileForVariant,
@@ -98,6 +99,62 @@ export type CoachDiagram = {
   routes?: CoachDiagramRoute[];
   zones?: CoachDiagramZone[];
 };
+
+// ── Runtime schema (strict) ────────────────────────────────────────────
+//
+// Used at the create_play / update_play tool input boundary to gate
+// what Cal can pass as a `diagram` payload. Anything outside this
+// hierarchy is invalid and rejected — a coach can't accidentally
+// smuggle in custom fields, and Cal can't hide bad geometry under
+// keys the converter doesn't recognize.
+
+const playerShapeSchema = z.enum(["circle", "square", "diamond", "triangle", "star"]);
+
+const coachDiagramPlayerSchema = z.object({
+  id: z.string(),
+  role: z.string().optional(),
+  x: z.number(),
+  y: z.number(),
+  team: z.enum(["O", "D"]).optional(),
+  shape: playerShapeSchema.optional(),
+  color: z.string().optional(),
+}).strict();
+
+const waypointSchema = z.tuple([z.number(), z.number()]);
+
+const coachDiagramRouteSchema = z.object({
+  from: z.string(),
+  path: z.array(waypointSchema),
+  curve: z.boolean().optional(),
+  tip: z.enum(["arrow", "t", "none"]).optional(),
+  motion: z.array(waypointSchema).optional(),
+  startDelaySec: z.number().optional(),
+  route_kind: z.string().optional(),
+}).strict();
+
+const coachDiagramZoneSchema = z.object({
+  kind: z.enum(["rectangle", "ellipse"]),
+  center: z.tuple([z.number(), z.number()]),
+  size: z.tuple([z.number(), z.number()]),
+  label: z.string(),
+  color: z.string().optional(),
+}).strict();
+
+export const coachDiagramSchema = z.object({
+  title: z.string().optional(),
+  variant: z.string().optional(),
+  focus: z.enum(["O", "D"]).optional(),
+  players: z.array(coachDiagramPlayerSchema),
+  routes: z.array(coachDiagramRouteSchema).optional(),
+  zones: z.array(coachDiagramZoneSchema).optional(),
+}).strict();
+
+/** Strict parse for the legacy `diagram` input on create_play / update_play.
+ *  Rejects unknown keys at any level — Cal can't author rendering
+ *  parameters the converter doesn't actually support. */
+export function parseCoachDiagram(data: unknown) {
+  return coachDiagramSchema.safeParse(data);
+}
 
 // ── Style palettes (mirror src/domain/play/factory.ts styleForRole) ───────
 //

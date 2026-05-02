@@ -33,6 +33,7 @@
  *     the `custom` action kind, which preserves waypoints.
  */
 
+import { z } from "zod";
 import type { SportVariant } from "./types";
 
 export const PLAY_SPEC_SCHEMA_VERSION = 1 as const;
@@ -197,4 +198,96 @@ export function isRouteAction(a: AssignmentAction): a is Extract<AssignmentActio
 }
 export function isCustomAction(a: AssignmentAction): a is Extract<AssignmentAction, { kind: "custom" }> {
   return a.kind === "custom";
+}
+
+// ── Runtime schema (strict) ────────────────────────────────────────────
+//
+// Used at SFPA tool input boundaries (create_play / update_play when
+// play_spec is provided). Anything outside this hierarchy is invalid
+// and rejected — see schema.ts header for the contract.
+
+const sportVariantSchema = z.enum(["flag_5v5", "flag_7v7", "tackle_11", "other"]);
+
+const formationRefSchema = z.object({
+  name: z.string(),
+  strength: z.enum(["left", "right", "balanced"]).optional(),
+  confidence: z.enum(["high", "med", "low"]).optional(),
+}).strict();
+
+const defenseRefSchema = z.object({
+  front: z.string(),
+  coverage: z.string(),
+  strength: z.enum(["left", "right"]).optional(),
+  confidence: z.enum(["high", "med", "low"]).optional(),
+}).strict();
+
+const routeModifierSchema = z.enum([
+  "hot", "sit_vs_zone", "option", "motion", "delayed", "rub", "alert",
+]);
+
+const waypointSchema = z.tuple([z.number(), z.number()]);
+
+const assignmentActionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("route"),
+    family: z.string(),
+    depthYds: z.number().optional(),
+    modifiers: z.array(routeModifierSchema).optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("block"),
+    target: z.string().optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("carry"),
+    runType: z.enum([
+      "inside_zone", "outside_zone", "power", "counter", "trap",
+      "draw", "sweep", "qb_keep", "scramble",
+    ]).optional(),
+    waypoints: z.array(waypointSchema).optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("motion"),
+    into: z.union([z.string(), z.object({ x: z.number(), y: z.number() }).strict()]).optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("custom"),
+    description: z.string(),
+    waypoints: z.array(waypointSchema).optional(),
+    curve: z.boolean().optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("unspecified"),
+  }).strict(),
+]);
+
+const playerAssignmentSchema = z.object({
+  player: z.string(),
+  action: assignmentActionSchema,
+  confidence: z.enum(["high", "med", "low"]).optional(),
+}).strict();
+
+const playContextSchema = z.object({
+  down: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
+  distanceYds: z.number().optional(),
+  fieldZone: z.enum(["backed_up", "open_field", "fringe", "red_zone", "goal_line"]).optional(),
+  tags: z.array(z.string()).optional(),
+}).strict();
+
+export const playSpecSchema = z.object({
+  schemaVersion: z.literal(PLAY_SPEC_SCHEMA_VERSION),
+  variant: sportVariantSchema,
+  title: z.string().optional(),
+  playType: z.enum(["offense", "defense", "special_teams"]).optional(),
+  formation: formationRefSchema,
+  defense: defenseRefSchema.optional(),
+  assignments: z.array(playerAssignmentSchema),
+  context: playContextSchema.optional(),
+  notes: z.string().optional(),
+}).strict();
+
+/** Strict parse of a PlaySpec. Used at the create_play / update_play
+ *  tool input boundary. */
+export function parsePlaySpec(data: unknown) {
+  return playSpecSchema.safeParse(data);
 }

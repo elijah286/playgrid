@@ -12,8 +12,10 @@ import { coachDiagramToPlayDocument, type CoachDiagram } from "@/features/coach-
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import type { PlayDocument, SportVariant } from "@/domain/play/types";
 import type { PlaySpec } from "@/domain/play/spec";
+import { parsePlaySpec } from "@/domain/play/spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { playSpecToCoachDiagram, type RenderWarning } from "@/domain/play/specRenderer";
+import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import type { CoachAiTool } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
@@ -312,35 +314,56 @@ function resolveDiagramAndSpec(
     playType?: "offense" | "defense" | "special_teams";
   } = {},
 ): ResolvedInput {
-  // Path 1: PlaySpec input. Validate shape, render, propagate warnings.
+  // SCHEMA TOOL-INPUT BOUNDARY (AGENTS.md Rule: strict at write).
+  // Both paths run their inputs through the canonical Zod schemas
+  // before any further processing. This blocks Cal from smuggling
+  // unknown fields, malformed nested shapes, or wrong-typed values
+  // into the converter chain — every byte of the diagram/spec
+  // matches the contract before it touches geometry math.
+
+  // Path 1: PlaySpec input.
   if (rawSpec && typeof rawSpec === "object") {
-    const spec = rawSpec as PlaySpec;
-    if (!spec.formation || typeof spec.formation.name !== "string") {
-      return { ok: false, error: "play_spec.formation.name is required (e.g. 'Spread', 'Trips Right')." };
+    // Inject the resolved variant BEFORE parse — the spec schema
+    // requires `variant`, and we want playbook-context to win over
+    // whatever the spec author set anyway.
+    const candidate = { ...(rawSpec as Record<string, unknown>), variant: resolvedVariant };
+    const parsed = parsePlaySpec(candidate);
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .slice(0, 6)
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ");
+      return {
+        ok: false,
+        error:
+          `play_spec failed schema validation. Fix the spec shape and re-emit. ` +
+          `Issues: ${issues}${parsed.error.issues.length > 6 ? `, +${parsed.error.issues.length - 6} more` : ""}.`,
+      };
     }
-    if (!Array.isArray(spec.assignments)) {
-      return { ok: false, error: "play_spec.assignments must be an array." };
-    }
-    // Variant: tools' resolved variant (from playbook + diagram hint) wins
-    // over whatever the spec author set, so a typo can't drift the play
-    // off its parent playbook's variant.
-    const specForRender: PlaySpec = { ...spec, variant: resolvedVariant };
-    const { diagram, warnings } = playSpecToCoachDiagram(specForRender);
+    const spec = parsed.data as PlaySpec;
+    const { diagram, warnings } = playSpecToCoachDiagram(spec);
     if (warnings.length > 0) {
       return { ok: false, error: formatSpecRenderWarnings(warnings) };
     }
-    return { ok: true, diagram, spec: specForRender };
+    return { ok: true, diagram, spec };
   }
 
   // Path 2: legacy CoachDiagram input.
   if (rawDiagram && typeof rawDiagram === "object") {
-    const diagram = rawDiagram as CoachDiagram;
-    if (!Array.isArray(diagram.players)) {
-      return { ok: false, error: "diagram.players must be an array." };
+    const parsed = parseCoachDiagram(rawDiagram);
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .slice(0, 6)
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ");
+      return {
+        ok: false,
+        error:
+          `diagram failed schema validation. ` +
+          `Issues: ${issues}${parsed.error.issues.length > 6 ? `, +${parsed.error.issues.length - 6} more` : ""}.`,
+      };
     }
-    // Best-effort spec derivation. The parser falls back to
-    // unspecified/custom for anything it can't classify, so this won't
-    // fabricate assignments.
+    const diagram = parsed.data as CoachDiagram;
     const derivedSpec = coachDiagramToPlaySpec(diagram, {
       variant: resolvedVariant,
       formation: options.formationName,

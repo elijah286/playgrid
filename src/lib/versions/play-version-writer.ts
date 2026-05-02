@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlayDocument } from "@/domain/play/types";
+import { parsePlayDocumentStrict } from "@/domain/play/schema";
 import { summarizePlayDiff } from "@/lib/versions/play-diff";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
@@ -35,6 +36,27 @@ export async function recordPlayVersion(args: RecordArgs): Promise<RecordResult>
     restoredFromVersionId,
     schemaVersion = 2,
   } = args;
+
+  // SCHEMA SAVE BOUNDARY (AGENTS.md Rule: strict at write).
+  // Validate the document against the canonical PlayDocument schema
+  // BEFORE persisting. Anything that fails here is a code bug — the
+  // converter or some upstream caller produced data that doesn't
+  // match the contract. Reject loudly with structured errors rather
+  // than committing corrupt rows that would later cause weird
+  // renderings (the LT-on-LG / blue-rectangle / H2-color class).
+  const validated = parsePlayDocumentStrict(document);
+  if (!validated.success) {
+    const issues = validated.error.issues
+      .slice(0, 6)
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    return {
+      ok: false,
+      error:
+        `PlayDocument failed schema validation — refusing to save corrupt data. ` +
+        `Issues: ${issues}${validated.error.issues.length > 6 ? `, +${validated.error.issues.length - 6} more` : ""}.`,
+    };
+  }
 
   let parentDoc: PlayDocument | null = null;
   if (parentVersionId) {
