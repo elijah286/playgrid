@@ -110,15 +110,31 @@ function bulletsForDefense(spec: PlaySpec): string[] {
     if (z.id) zoneById.set(z.id, z);
   }
 
-  const overrides = new Map<string, DefenderAssignment>();
+  // Mirror the renderer's id-uniquing: two DTs become DT + DT2, etc.
+  // Match against either the bare role or the suffixed id when looking
+  // up overrides so coaches can reference either form.
+  const seen = new Map<string, number>();
+  const uniqueIds = catalogPlayers.map((cp) => {
+    const count = (seen.get(cp.id) ?? 0) + 1;
+    seen.set(cp.id, count);
+    return count === 1 ? cp.id : `${cp.id}${count}`;
+  });
+
+  const overridesByUid = new Map<string, DefenderAssignment>();
   for (const da of spec.defenderAssignments ?? []) {
-    if (!overrides.has(da.defender)) overrides.set(da.defender, da);
+    const idxByUnique = uniqueIds.findIndex((id) => id === da.defender);
+    const idx = idxByUnique >= 0 ? idxByUnique : catalogPlayers.findIndex((p) => p.id === da.defender);
+    if (idx < 0) continue;
+    const key = uniqueIds[idx];
+    if (!overridesByUid.has(key)) overridesByUid.set(key, da);
   }
 
   const lines: string[] = [];
-  for (const cp of catalogPlayers) {
-    const ref = `@${cp.id}`;
-    const override = overrides.get(cp.id);
+  for (let i = 0; i < catalogPlayers.length; i++) {
+    const cp = catalogPlayers[i];
+    const uid = uniqueIds[i];
+    const ref = `@${uid}`;
+    const override = overridesByUid.get(uid);
     const action: DefenderAction = override
       ? override.action
       : defenderActionFromCatalog(cp.assignment);

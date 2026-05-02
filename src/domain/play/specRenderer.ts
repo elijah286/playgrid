@@ -212,22 +212,41 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
   // Resolve player positions + catalog assignments for this strength.
   const catalogPlayers = alignmentWithAssignments(alignment, strength);
 
-  // Index spec deviations by defender id (first match wins).
+  // Suffix duplicate role labels so every defender has a UNIQUE diagram
+  // id. The catalog uses positional labels (two DTs, two CBs in many
+  // alignments) which collide as ids; downstream validation rejects
+  // duplicates with "Duplicate player id" and the routes can't address
+  // the second of a pair. Convention matches the offense path
+  // (playDocumentToCoachDiagram): first occurrence keeps the bare label,
+  // second becomes "DT2", third "DT3", etc. The display `role` always
+  // stays the bare label so the diagram still shows "DT" inside both
+  // triangles.
+  const seen = new Map<string, number>();
+  const uniqueIds = catalogPlayers.map((cp) => {
+    const count = (seen.get(cp.id) ?? 0) + 1;
+    seen.set(cp.id, count);
+    return count === 1 ? cp.id : `${cp.id}${count}`;
+  });
+
+  // Index spec deviations by defender id. Coaches reference defenders
+  // by the SUFFIXED id (matching the rendered diagram); we also accept
+  // the bare label and apply it to the first occurrence as a
+  // convenience for single-defender coverages.
   const overrides = new Map<string, DefenderAction>();
   if (spec.defenderAssignments) {
     for (const da of spec.defenderAssignments) {
-      const exists = catalogPlayers.some((p) => p.id === da.defender);
-      if (!exists) {
+      const idxByUnique = uniqueIds.findIndex((id) => id === da.defender);
+      const idxByBare = idxByUnique >= 0 ? idxByUnique : catalogPlayers.findIndex((p) => p.id === da.defender);
+      if (idxByBare < 0) {
         warnings.push({
           code: "defender_assignment_player_missing",
-          message: `defenderAssignment for "${da.defender}" but no such defender in ${alignment.front}/${alignment.coverage}. Pick one of: ${catalogPlayers.map((p) => p.id).join(", ")}.`,
+          message: `defenderAssignment for "${da.defender}" but no such defender in ${alignment.front}/${alignment.coverage}. Pick one of: ${uniqueIds.join(", ")}.`,
         });
         continue;
       }
-      // Don't overwrite if a previous override won — the spec listed the
-      // same defender twice. First one wins is consistent with the way
-      // PlayerAssignment de-dup works downstream.
-      if (!overrides.has(da.defender)) overrides.set(da.defender, da.action);
+      const key = uniqueIds[idxByBare];
+      // First override wins — same dedup discipline as PlayerAssignment.
+      if (!overrides.has(key)) overrides.set(key, da.action);
     }
   }
 
@@ -235,9 +254,11 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
   const movement: Array<{ defender: CoachDiagramPlayer; action: DefenderAction }> = [];
   const usedZoneIds = new Set<string>();
 
-  for (const cp of catalogPlayers) {
+  for (let i = 0; i < catalogPlayers.length; i++) {
+    const cp = catalogPlayers[i];
+    const uid = uniqueIds[i];
     const player: CoachDiagramPlayer = {
-      id: cp.id,
+      id: uid,
       role: cp.id,
       x: cp.x,
       y: cp.y,
@@ -247,7 +268,7 @@ function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRende
 
     // Resolve the action: spec override → bridge to DefenderAction; else
     // promote the catalog assignment to the spec-shape DefenderAction.
-    const override = overrides.get(cp.id);
+    const override = overrides.get(uid);
     const action: DefenderAction = override ?? defenderActionFromCatalog(cp.assignment);
 
     // Zone drop: collect the referenced zone for emission below.

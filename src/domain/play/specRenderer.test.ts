@@ -94,6 +94,51 @@ describe("Renderer — defense zones (Phase D3)", () => {
   });
 });
 
+describe("Renderer — duplicate defender role labels get suffixed ids", () => {
+  it("4-3 Over Cover 3 (two DTs, two CBs) emits unique ids: DT, DT2, CB, CB2", () => {
+    const { diagram } = playSpecToCoachDiagram(
+      makeSpec({
+        variant: "tackle_11",
+        defense: { front: "4-3 Over", coverage: "Cover 3" },
+      } as Partial<PlaySpec>),
+    );
+    const defenderIds = diagram.players.filter((p) => p.team === "D").map((p) => p.id);
+    const dups = defenderIds.filter((id, i) => defenderIds.indexOf(id) !== i);
+    expect(dups, `duplicate defender ids: ${dups.join(",")}`).toEqual([]);
+    expect(defenderIds).toContain("DT");
+    expect(defenderIds).toContain("DT2");
+    expect(defenderIds).toContain("CB");
+    expect(defenderIds).toContain("CB2");
+  });
+
+  it("display role stays bare ('DT' not 'DT2') so the diagram still shows DT in both triangles", () => {
+    const { diagram } = playSpecToCoachDiagram(
+      makeSpec({
+        variant: "tackle_11",
+        defense: { front: "4-3 Over", coverage: "Cover 3" },
+      } as Partial<PlaySpec>),
+    );
+    const dt2 = diagram.players.find((p) => p.id === "DT2");
+    expect(dt2?.role).toBe("DT");
+  });
+
+  it("override targeting 'DT2' applies only to the second DT, not the first", () => {
+    const { diagram } = playSpecToCoachDiagram(
+      makeSpec({
+        variant: "tackle_11",
+        defense: { front: "4-3 Over", coverage: "Cover 3" },
+        defenderAssignments: [{ defender: "DT2", action: { kind: "spy", target: "QB" } }],
+      } as Partial<PlaySpec>),
+    );
+    const dt2Routes = (diagram.routes ?? []).filter((r) => r.from === "DT2");
+    expect(dt2Routes.length).toBe(1);
+    const dtRoutes = (diagram.routes ?? []).filter((r) => r.from === "DT");
+    // First DT keeps its catalog blitz, so it has a route too — but with
+    // path ending at LOS, not the spy hold-position.
+    expect(dtRoutes[0].path[0][1]).toBe(0);
+  });
+});
+
 describe("Renderer — defenderAssignments overrides (Phase D3)", () => {
   it("override changes a Cover 3 hook defender into a blitz", () => {
     const baseline = playSpecToCoachDiagram(

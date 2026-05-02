@@ -64,7 +64,19 @@ export function validateDefenderAssignments(spec: PlaySpec): DefenseValidationRe
   }
 
   const catalogPlayers = alignmentWithAssignments(alignment, strength);
-  const catalogIds = new Set(catalogPlayers.map((p) => p.id));
+  // Replicate the renderer's id-uniquing so a defenderAssignment for
+  // "DT2" (the second DT in a 4-3 front) is accepted. Bare labels
+  // (matching the first occurrence) are also accepted.
+  const seen = new Map<string, number>();
+  const uniqueIds: string[] = [];
+  const bareLabels = new Set<string>();
+  for (const cp of catalogPlayers) {
+    const count = (seen.get(cp.id) ?? 0) + 1;
+    seen.set(cp.id, count);
+    uniqueIds.push(count === 1 ? cp.id : `${cp.id}${count}`);
+    bareLabels.add(cp.id);
+  }
+  const catalogIds = new Set([...uniqueIds, ...bareLabels]);
   const zones = zonesForStrength(alignment, strength);
   const zoneIds = new Set(zones.map((z) => z.id).filter(Boolean) as string[]);
   const offensiveIds = new Set(spec.assignments.map((a) => a.player));
@@ -91,7 +103,7 @@ export function validateDefenderAssignments(spec: PlaySpec): DefenseValidationRe
       errors.push({
         defender: da.defender,
         kind: da.action.kind,
-        message: `Defender "${da.defender}" not in ${alignment.front}/${alignment.coverage} catalog. Available: ${[...catalogIds].join(", ")}.`,
+        message: `Defender "${da.defender}" not in ${alignment.front}/${alignment.coverage} catalog. Available: ${uniqueIds.join(", ")}.`,
       });
       continue;
     }

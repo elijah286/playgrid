@@ -814,12 +814,20 @@ const add_defense_to_play: CoachAiTool = {
     const playersArr = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
     const offenseOnly = playersArr.filter((p) => p.team !== "D");
 
-    const newDefenders = alignment.players.map((p) => ({
-      id: p.id,
-      x: p.x,
-      y: p.y,
-      team: "D" as const,
-    }));
+    // Suffix duplicate role labels (two DTs → DT, DT2; two CBs → CB, CB2)
+    // so every defender has a unique diagram id.
+    const seenDefIds = new Map<string, number>();
+    const newDefenders = alignment.players.map((p) => {
+      const count = (seenDefIds.get(p.id) ?? 0) + 1;
+      seenDefIds.set(p.id, count);
+      return {
+        id: count === 1 ? p.id : `${p.id}${count}`,
+        role: p.id,
+        x: p.x,
+        y: p.y,
+        team: "D" as const,
+      };
+    });
 
     const isMan = alignment.manCoverage;
     const newZones = isMan
@@ -1127,8 +1135,19 @@ const place_defense: CoachAiTool = {
     const alignment = computeDefenseAlignment(variant, front, coverage, strength);
     if (!alignment.ok) return alignment;
 
+    // Suffix duplicate role labels so every player has a unique diagram
+    // id (two DTs → DT, DT2; two CBs → CB, CB2). The diagram-level
+    // schema rejects duplicate ids; emitting them here produces the
+    // "Duplicate player id 'DT'" error coaches saw on Cover 3.
+    const seenIds = new Map<string, number>();
+    const uniquePlayers = alignment.players.map((p) => {
+      const count = (seenIds.get(p.id) ?? 0) + 1;
+      seenIds.set(p.id, count);
+      const id = count === 1 ? p.id : `${p.id}${count}`;
+      return { id, role: p.id, x: p.x, y: p.y };
+    });
     const playersJson = JSON.stringify(
-      alignment.players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" })),
+      uniquePlayers.map((p) => ({ id: p.id, role: p.role, x: p.x, y: p.y, team: "D" })),
     );
 
     const isMan = alignment.manCoverage;
@@ -1139,16 +1158,18 @@ const place_defense: CoachAiTool = {
     // each defender's role, not just position them. This is what lets
     // Cal answer "show their zones?" on Cover 1 with the correct
     // mixed-coverage answer (FS deep middle zone + everyone else man)
-    // instead of either "all zone" or "all man".
+    // instead of either "all zone" or "all man". Use the suffixed id
+    // (DT vs DT2) so the breakdown matches the players[] above.
     const assignmentBreakdown = alignment.players
-      .map((p) => {
+      .map((p, i) => {
+        const uid = uniquePlayers[i].id;
         const a = p.assignment;
-        if (!a) return `  ${p.id}: (catalog default — likely man)`;
+        if (!a) return `  ${uid}: (catalog default — likely man)`;
         switch (a.kind) {
-          case "zone":  return `  ${p.id}: zone drop → ${a.zoneId}`;
-          case "man":   return `  ${p.id}: man on ${a.target ?? "receiver (by leverage)"}`;
-          case "blitz": return `  ${p.id}: blitz ${a.gap ?? "A"}-gap`;
-          case "spy":   return `  ${p.id}: spy ${a.target ?? "QB"}`;
+          case "zone":  return `  ${uid}: zone drop → ${a.zoneId}`;
+          case "man":   return `  ${uid}: man on ${a.target ?? "receiver (by leverage)"}`;
+          case "blitz": return `  ${uid}: blitz ${a.gap ?? "A"}-gap`;
+          case "spy":   return `  ${uid}: spy ${a.target ?? "QB"}`;
         }
       })
       .join("\n");
