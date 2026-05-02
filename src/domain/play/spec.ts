@@ -171,6 +171,61 @@ export type PlayerAssignment = {
   confidence?: Confidence;
 };
 
+/**
+ * Per-defender action within a play. Parallels offense's
+ * `AssignmentAction` — the spec stores intent, the renderer derives
+ * geometry.
+ *
+ * The catalog (defensiveAlignments.ts) supplies a default assignment
+ * for every defender in every (front, coverage) entry. Specs only
+ * store DEVIATIONS from the catalog defaults: e.g. "Cover 3 base, but
+ * ML is on a green-dog blitz this rep." Anything the spec doesn't
+ * mention falls back to the catalog at render time.
+ *
+ * This is why the kinds parallel the catalog's DefenderAssignmentSpec
+ * 1:1 — and add `read_and_react` (Phase D7) for offense-conditional
+ * movement that catalogs can't express.
+ *
+ * Loss-of-information escape hatch: `custom_path` mirrors offense's
+ * `custom` route — preserves a hand-drawn defender path when a coach
+ * draws something off-catalog.
+ */
+export type DefenderAction =
+  /** Drops into a named zone. zoneId references the alignment's
+   *  catalog zones (or a renderer-emitted synthesized zone). */
+  | { kind: "zone_drop"; zoneId?: string }
+  /** Matched on a specific receiver. target is the offensive player id
+   *  (e.g. "X", "Z", "RB"). When unset, the renderer infers by
+   *  leverage. */
+  | { kind: "man_match"; target?: string }
+  /** Rushes the QB. gap is the rush lane (A/B/C/D/edge). */
+  | { kind: "blitz"; gap?: "A" | "B" | "C" | "D" | "edge" }
+  /** Mirrors a specific offensive player (usually QB on QB-runs, or
+   *  a dynamic back). */
+  | { kind: "spy"; target?: string }
+  /** Conditional movement — defender reacts to a specific offensive
+   *  action. Phase D7. trigger references an offensive player + their
+   *  action; behavior describes the reaction (jump/carry/follow). */
+  | {
+      kind: "read_and_react";
+      trigger: { player: string; on?: "release" | "break" | "snap" };
+      behavior: "jump_route" | "carry_vertical" | "follow_to_flat" | "wall_off" | "robber";
+    }
+  /** Hand-drawn defender path. waypoints in (x,y) yards, anchored from
+   *  the defender's catalog position. Use sparingly — prefer named
+   *  primitives. */
+  | { kind: "custom_path"; description: string; waypoints?: [number, number][]; curve?: boolean };
+
+export type DefenderAssignment = {
+  /** Catalog defender id (e.g. "FS", "ML", "CB"). Must match a player
+   *  the alignment places. The renderer mirrors x for strength=left,
+   *  but the id is stable. */
+  defender: string;
+  action: DefenderAction;
+  /** Confidence — "low" surfaces "(unconfirmed)" hedging in notes. */
+  confidence?: Confidence;
+};
+
 /** Optional play-level context. Used by the notes generator + KB lookup
  *  to ground prose in the situation ("3rd-and-7 in the red zone..."). */
 export type PlayContext = {
@@ -194,6 +249,18 @@ export type PlaySpec = {
   formation: FormationRef;
   defense?: DefenseRef;
   assignments: PlayerAssignment[];
+  /**
+   * Defensive assignments — DEVIATIONS from the catalog defaults
+   * supplied by `spec.defense`. A spec with no defense ref MUST have
+   * an empty array here (the renderer will throw if defenderAssignments
+   * are present without a defense). Anything not listed inherits its
+   * catalog assignment.
+   *
+   * Invariant: every `defender` MUST match a player id in the alignment
+   * resolved by `findDefensiveAlignment(variant, front, coverage)`.
+   * Validated at render time by Phase D4's defense validator.
+   */
+  defenderAssignments?: DefenderAssignment[];
   context?: PlayContext;
   /** Free-form coach annotations carried through from PlayMetadata.notes.
    *  When set, prose generators MAY use this as input but MUST NOT
@@ -278,6 +345,45 @@ const playerAssignmentSchema = z.object({
   confidence: z.enum(["high", "med", "low"]).optional(),
 }).strict();
 
+const defenderActionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("zone_drop"),
+    zoneId: z.string().optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("man_match"),
+    target: z.string().optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("blitz"),
+    gap: z.enum(["A", "B", "C", "D", "edge"]).optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("spy"),
+    target: z.string().optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("read_and_react"),
+    trigger: z.object({
+      player: z.string(),
+      on: z.enum(["release", "break", "snap"]).optional(),
+    }).strict(),
+    behavior: z.enum(["jump_route", "carry_vertical", "follow_to_flat", "wall_off", "robber"]),
+  }).strict(),
+  z.object({
+    kind: z.literal("custom_path"),
+    description: z.string(),
+    waypoints: z.array(waypointSchema).optional(),
+    curve: z.boolean().optional(),
+  }).strict(),
+]);
+
+const defenderAssignmentSchema = z.object({
+  defender: z.string(),
+  action: defenderActionSchema,
+  confidence: z.enum(["high", "med", "low"]).optional(),
+}).strict();
+
 const playContextSchema = z.object({
   down: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
   distanceYds: z.number().optional(),
@@ -293,6 +399,7 @@ export const playSpecSchema = z.object({
   formation: formationRefSchema,
   defense: defenseRefSchema.optional(),
   assignments: z.array(playerAssignmentSchema),
+  defenderAssignments: z.array(defenderAssignmentSchema).optional(),
   context: playContextSchema.optional(),
   notes: z.string().optional(),
 }).strict();

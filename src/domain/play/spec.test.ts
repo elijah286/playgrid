@@ -461,3 +461,75 @@ describe("PlaySpec round-trip (spec → diagram → spec)", () => {
     expect(result.ok, result.ok ? undefined : JSON.stringify(result.errors)).toBe(true);
   });
 });
+
+describe("PlaySpec defenderAssignments (Phase D2)", () => {
+  it("schema accepts a spec with zone_drop / man_match / blitz overrides", async () => {
+    const { parsePlaySpec, PLAY_SPEC_SCHEMA_VERSION } = await import("./spec");
+    const result = parsePlaySpec({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+      assignments: [],
+      defenderAssignments: [
+        { defender: "FS", action: { kind: "zone_drop", zoneId: "deep_third_m" } },
+        { defender: "CB", action: { kind: "man_match", target: "X" } },
+        { defender: "ML", action: { kind: "blitz", gap: "A" } },
+      ],
+    });
+    expect(result.success, !result.success ? JSON.stringify(result.error.issues) : undefined).toBe(true);
+  });
+
+  it("schema accepts read_and_react and custom_path", async () => {
+    const { parsePlaySpec, PLAY_SPEC_SCHEMA_VERSION } = await import("./spec");
+    const result = parsePlaySpec({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      formation: { name: "Spread Doubles" },
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+      assignments: [],
+      defenderAssignments: [
+        {
+          defender: "WL",
+          action: {
+            kind: "read_and_react",
+            trigger: { player: "S", on: "release" },
+            behavior: "jump_route",
+          },
+        },
+        {
+          defender: "SS",
+          action: { kind: "custom_path", description: "robber depth", waypoints: [[0, 8], [4, 6]] },
+        },
+      ],
+    });
+    expect(result.success, !result.success ? JSON.stringify(result.error.issues) : undefined).toBe(true);
+  });
+
+  it("schema rejects an unknown defender action kind", async () => {
+    const { parsePlaySpec, PLAY_SPEC_SCHEMA_VERSION } = await import("./spec");
+    const result = parsePlaySpec({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      formation: { name: "Spread Doubles" },
+      assignments: [],
+      defenderAssignments: [
+        { defender: "FS", action: { kind: "blitz_screen_pass" } },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("specs without defenderAssignments still parse (back-compat)", async () => {
+    const { parsePlaySpec, PLAY_SPEC_SCHEMA_VERSION } = await import("./spec");
+    const result = parsePlaySpec({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+});
