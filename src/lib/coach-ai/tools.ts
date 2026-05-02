@@ -387,6 +387,72 @@ const get_route_template: CoachAiTool = {
   },
 };
 
+const get_concept_skeleton: CoachAiTool = {
+  def: {
+    name: "get_concept_skeleton",
+    description:
+      "Get a near-complete PlaySpec for a NAMED concept (Mesh, Smash, Curl-Flat, Stick, Snag, Four Verticals, Flood/Sail, Drive, Levels, Y-Cross, Dagger). " +
+      "MANDATORY first call when the coach asks for a play built around a catalog concept — the catalog pre-picks player IDs, depths, formation, and complementary " +
+      "routes (clear-outs, blocks, flat outlets) so YOU don't have to design 11 player decisions from scratch. " +
+      "Returns: (1) `spec` — a complete PlaySpec ready to render, (2) `notes` — a one-line summary of player assignments, (3) `concept` — the canonical name (alias resolution included). " +
+      "After calling, optionally tweak 1-2 things (swap a player, adjust a depth via depthYds, add motion). " +
+      "If the coach didn't name a catalog concept, OR they want something genuinely off-catalog, skip this tool and author the play manually with named families and depthYds.",
+    input_schema: {
+      type: "object",
+      properties: {
+        concept: {
+          type: "string",
+          description:
+            "Concept name (case-insensitive, aliases supported). Examples: \"Mesh\", \"Flood\", \"Sail\" (alias for Flood), \"Curl-Flat\", \"Curl/Flat\", \"Smash\", \"Stick\", \"Snag\", \"Spot\" (alias for Snag), \"Four Verticals\", \"4 Verts\", \"Drive\", \"Levels\", \"Y-Cross\", \"Dagger\".",
+        },
+        strength: {
+          type: "string",
+          enum: ["left", "right"],
+          description:
+            "Strong side for side-flooding concepts (Flood, Sail, Curl-Flat, Smash, Stick, Snag). Defaults to \"right\". Other concepts (Mesh, 4 Verts, Drive, Levels, Y-Cross, Dagger) ignore this field.",
+        },
+      },
+      required: ["concept"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const concept = typeof input.concept === "string" ? input.concept.trim() : "";
+    if (!concept) return { ok: false, error: "concept is required." };
+    const strengthRaw = typeof input.strength === "string" ? input.strength.toLowerCase() : undefined;
+    const strength = strengthRaw === "left" || strengthRaw === "right" ? strengthRaw : undefined;
+
+    // Resolve variant from playbook context. Skeletons are variant-aware
+    // (OL only added for tackle_11; player ID conventions match
+    // synthesizer output for the requested variant).
+    const variant = (ctx.sportVariant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined) ?? "flag_7v7";
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { generateConceptSkeleton } = require("@/domain/play/conceptSkeleton") as typeof import("@/domain/play/conceptSkeleton");
+    const result = generateConceptSkeleton(concept, { variant, strength });
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error:
+          `${result.error}\n\nAvailable concept skeletons: ${result.availableConcepts.join(", ")}.\n` +
+          `If the coach didn't name a catalog concept, author the play manually instead of calling this tool.`,
+      };
+    }
+
+    const specJson = JSON.stringify(result.spec, null, 2);
+    return {
+      ok: true,
+      result:
+        `Skeleton for "${result.concept}" (${variant}${strength ? `, strength=${strength}` : ""}):\n\n` +
+        `**Summary:** ${result.notes}\n\n` +
+        `**PlaySpec — pass this to \`create_play\` (or render directly via the \`play\` fence after converting):**\n` +
+        `\`\`\`json\n${specJson}\n\`\`\`\n\n` +
+        `Customize before saving: swap player IDs if your formation differs, set \`depthYds\` to non-canonical values with \`nonCanonical: true\` if the coach asked for a specific depth, add motion / play-action / RPO tags as needed.`,
+    };
+  },
+};
+
 const place_defense: CoachAiTool = {
   def: {
     name: "place_defense",
@@ -1423,7 +1489,7 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, place_defense, place_offense, flag_outside_kb, flag_refusal];
+const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, place_defense, place_offense, flag_outside_kb, flag_refusal];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {
