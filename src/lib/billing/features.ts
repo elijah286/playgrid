@@ -58,8 +58,17 @@ export function canAddAnotherPlay(
   return currentPlayCount < limit;
 }
 
-export function canDuplicatePlaybook(entitlement: Entitlement | null): boolean {
-  return tierAtLeast(entitlement, "coach");
+/** Duplicating a playbook is allowed for free users *as long as* they have an
+ *  open playbook slot — the duplicate consumes the same one-playbook quota
+ *  as a fresh create or an example claim. Coach+ has no cap. Pass the
+ *  caller's current owned-count (excluding the default starter book and
+ *  archived/example tiles) so this stays the single source of truth. */
+export function canDuplicatePlaybook(
+  entitlement: Entitlement | null,
+  ownedCount: number,
+): boolean {
+  if (tierAtLeast(entitlement, "coach")) return true;
+  return ownedCount < FREE_MAX_PLAYBOOKS_OWNED;
 }
 
 /** Team features: invites, shared playbook membership, rosters. Coach+ only. */

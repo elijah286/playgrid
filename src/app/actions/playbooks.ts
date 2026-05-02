@@ -17,7 +17,7 @@ import {
   type PlaybookSettings,
 } from "@/domain/playbook/settings";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
-import { tierAtLeast } from "@/lib/billing/features";
+import { tierAtLeast, FREE_MAX_PLAYBOOKS_OWNED } from "@/lib/billing/features";
 import { assertNotLocked } from "@/lib/billing/downgrade-locks";
 import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import {
@@ -419,20 +419,42 @@ export async function duplicatePlaybookAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const entitlement = await getUserEntitlement(user.id);
-  if (!tierAtLeast(entitlement, "coach")) {
-    return {
-      ok: false as const,
-      error: "Duplicating playbooks is a Team Coach feature. Upgrade to unlock.",
-    };
-  }
-
   const { data: src, error: srcErr } = await supabase
     .from("playbooks")
     .select("id, team_id, name, sport_variant, custom_offense_count, color, logo_url, season, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication")
     .eq("id", playbookId)
     .single();
   if (srcErr || !src) return { ok: false as const, error: srcErr?.message ?? "Not found" };
+
+  // Free tier may duplicate as long as their one-playbook slot is open. The
+  // duplicate consumes the same quota as a fresh create or an example claim,
+  // so the gate has to be a count check, not a tier check. Surface the name
+  // of the existing owned playbook so the client can build a "delete it or
+  // upgrade" prompt instead of a dead-end paywall.
+  const entitlement = await getUserEntitlement(user.id);
+  if (!tierAtLeast(entitlement, "coach")) {
+    const { data: ownedRows } = await supabase
+      .from("playbook_members")
+      .select("playbook_id, playbooks!inner(id, name, is_default)")
+      .eq("user_id", user.id)
+      .eq("role", "owner")
+      .eq("playbooks.is_default", false);
+    const owned = (ownedRows ?? []).map((r) => {
+      const pb = r.playbooks as unknown as { id: string; name: string };
+      return { id: pb.id, name: pb.name };
+    });
+    if (owned.length >= FREE_MAX_PLAYBOOKS_OWNED) {
+      const existing = owned[0] ?? null;
+      return {
+        ok: false as const,
+        error: existing
+          ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot, or upgrade to Team Coach.`
+          : `Free accounts are limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Team Coach to duplicate this one.`,
+        needsUpgrade: true as const,
+        existingOwnedPlaybook: existing,
+      };
+    }
+  }
 
   const { data: membership } = await supabase
     .from("playbook_members")

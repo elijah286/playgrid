@@ -162,7 +162,12 @@ export function PlaybookHeader({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [sendCopyOpen, setSendCopyOpen] = useState(false);
-  const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
+  const [upgradeNotice, setUpgradeNotice] = useState<{
+    title: string;
+    message: string;
+    secondaryLabel?: string;
+    secondaryHref?: string;
+  } | null>(null);
 
   function openInvite() {
     if (!viewerIsCoach) {
@@ -176,13 +181,11 @@ export function PlaybookHeader({
   }
 
   function openDuplicate() {
-    if (!viewerIsCoach) {
-      setUpgradeNotice({
-        title: "Duplicating playbooks is a Team Coach feature",
-        message: "Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.",
-      });
-      return;
-    }
+    // Free users can duplicate as long as their one-playbook slot is open;
+    // the server runs the quota check and returns `needsUpgrade` if it isn't,
+    // so we don't pre-block here. Pre-blocking on tier alone was the bug —
+    // it prevented free users with an open slot from duplicating a shared
+    // playbook into their account.
     setDuplicateOpen(true);
   }
 
@@ -251,18 +254,36 @@ export function PlaybookHeader({
     copyKb: boolean;
   }) {
     setDuplicateOpen(false);
-    run(
-      () =>
-        duplicatePlaybookAction(playbookId, args.newName, {
-          copyGameResults: args.copyGameResults,
-          copyKb: args.copyKb,
-          color: args.color,
-          logoUrl: args.logoUrl,
-        }),
-      (res) => {
-        if (res.id) router.push(`/playbooks/${res.id}`);
-      },
-    );
+    duplicatePlaybookAction(playbookId, args.newName, {
+      copyGameResults: args.copyGameResults,
+      copyKb: args.copyKb,
+      color: args.color,
+      logoUrl: args.logoUrl,
+    }).then((res) => {
+      if (!res.ok) {
+        if ("needsUpgrade" in res && res.needsUpgrade) {
+          const existing =
+            "existingOwnedPlaybook" in res ? res.existingOwnedPlaybook : null;
+          setUpgradeNotice({
+            title: "Your free playbook slot is taken",
+            message: existing
+              ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot, or upgrade to Team Coach ($9/mo or $99/yr) for unlimited playbooks.`
+              : "Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.",
+            ...(existing
+              ? {
+                  secondaryLabel: "Open my playbook",
+                  secondaryHref: `/playbooks/${existing.id}`,
+                }
+              : {}),
+          });
+        } else {
+          toast(res.error ?? "Something went wrong.", "error");
+        }
+        return;
+      }
+      if (res.id) router.push(`/playbooks/${res.id}`);
+      router.refresh();
+    });
   }
 
   function handleToggleCoachDup() {
@@ -625,6 +646,8 @@ export function PlaybookHeader({
         onClose={() => setUpgradeNotice(null)}
         title={upgradeNotice?.title ?? ""}
         message={upgradeNotice?.message ?? ""}
+        secondaryLabel={upgradeNotice?.secondaryLabel}
+        secondaryHref={upgradeNotice?.secondaryHref}
       />
     </>
   );

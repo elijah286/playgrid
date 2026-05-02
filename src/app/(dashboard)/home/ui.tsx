@@ -1654,15 +1654,37 @@ export function DashboardClient({
           }}
           onDuplicate={(name, dupOpts) => {
             const tileId = duplicating.id;
-            handle(
-              () => duplicatePlaybookAction(tileId, name, { copyKb: dupOpts.copyKb }),
-              (res) => {
-                if (res.ok) {
+            startTransition(async () => {
+              const res = await duplicatePlaybookAction(tileId, name, {
+                copyKb: dupOpts.copyKb,
+              });
+              if (!res.ok) {
+                if ("needsUpgrade" in res && res.needsUpgrade) {
                   setDuplicating(null);
-                  toast("Playbook duplicated", "success");
+                  const existing =
+                    ("existingOwnedPlaybook" in res &&
+                      res.existingOwnedPlaybook) ||
+                    ownedAll[0] ||
+                    null;
+                  setUpgradeNotice({
+                    title: "Your free playbook slot is taken",
+                    message: existing
+                      ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot, or upgrade to Team Coach ($9/mo or $99/yr) for unlimited playbooks.`
+                      : "Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.",
+                    secondaryLabel: existing ? "Open my playbook" : undefined,
+                    secondaryHref: existing
+                      ? `/playbooks/${existing.id}`
+                      : undefined,
+                  });
+                } else {
+                  toast(res.error ?? "Something went wrong.", "error");
                 }
-              },
-            );
+                return;
+              }
+              setDuplicating(null);
+              toast("Playbook duplicated", "success");
+              refresh();
+            });
           }}
         />
       )}
