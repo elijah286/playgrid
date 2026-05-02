@@ -182,11 +182,23 @@ export function CoachAiChat({
       const newUrl = window.location.pathname + (params.size > 0 ? "?" + params.toString() : "");
       window.history.replaceState(null, "", newUrl);
       if (carried.length > 0) {
+        // Quote the user's last message so they can pick up where they
+        // left off without re-typing — e.g. "show me a new mesh concept play".
+        const lastUserMsg = [...carried].reverse().find((t) => t.role === "user")?.text ?? null;
+        const quoted = lastUserMsg
+          ? lastUserMsg.length > 120
+            ? `${lastUserMsg.slice(0, 117)}…`
+            : lastUserMsg
+          : null;
         const bridgeTurn: CoachAiTurn = {
           role: "assistant",
           text: teamName
-            ? `Got it — I'm now in your **${teamName}** playbook. What date and time do you want to schedule, and how long? (Recurrence is optional.)`
-            : "Got it — I'm now in this playbook. What date, time, and duration do you want to schedule?",
+            ? quoted
+              ? `Got it — I'm now in your **${teamName}** playbook. Re-ask "${quoted}" and I'll answer for the right format (variant, age tier, league).`
+              : `Got it — I'm now in your **${teamName}** playbook. What can I help with?`
+            : quoted
+            ? `Got it — I'm now in this playbook. Re-ask "${quoted}" and I'll answer for the right format.`
+            : "Got it — I'm now in this playbook. What can I help with?",
           toolCalls: [],
         };
         const merged = [...carried, bridgeTurn];
