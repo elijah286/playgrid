@@ -523,13 +523,7 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
   // Non-empty, looks complete, but failed to parse — that's a real authoring
   // bug. Show the diagnostic so we can tell when the model emitted bad JSON.
   if (!doc) {
-    return (
-      <details className="my-2 rounded-lg border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
-        <summary className="cursor-pointer font-semibold">Diagram failed to render — tap for details</summary>
-        <p className="mt-1 font-mono text-[11px]">{parsed.error ?? "unknown parse error"}</p>
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-amber-900/80 dark:text-amber-200/80">{trimmed}</pre>
-      </details>
-    );
+    return <DiagramFailureDetails error={parsed.error ?? "unknown parse error"} json={trimmed} />;
   }
 
   return <PlayDocRender doc={doc} />;
@@ -563,6 +557,65 @@ function PlayDocRender({ doc }: { doc: PlayDocument }) {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Failure box for diagram parse / render errors. Shows the error message
+ * and (when available) the raw JSON payload, with a copy button on each
+ * so the coach can paste the error into a bug report or share it with
+ * support without screenshotting. Surfaced 2026-05-02 — coach reported
+ * "I can't seem to copy this text out" when a Flood Right play hit an
+ * overlap-resolver failure.
+ */
+function DiagramFailureDetails({ error, json }: { error: string; json?: string }) {
+  const [copied, setCopied] = useState<"error" | "json" | "all" | null>(null);
+  const copyToClipboard = async (text: string, kind: "error" | "json" | "all") => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      // ignore — clipboard may be unavailable in some embeds
+    }
+  };
+  const both = json ? `${error}\n\n--- diagram JSON ---\n${json}` : error;
+  return (
+    <details className="my-2 rounded-lg border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
+      <summary className="cursor-pointer font-semibold">Diagram failed to render — tap for details</summary>
+      <div className="mt-1 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void copyToClipboard(both, "all")}
+          className="rounded border border-amber-400/60 bg-amber-100/60 px-1.5 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-900/40 dark:hover:bg-amber-900/60"
+          title="Copy error message + diagram JSON"
+        >
+          {copied === "all" ? "Copied" : "Copy all"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyToClipboard(error, "error")}
+          className="rounded border border-amber-400/60 bg-amber-100/60 px-1.5 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-900/40 dark:hover:bg-amber-900/60"
+          title="Copy just the error message"
+        >
+          {copied === "error" ? "Copied" : "Copy error"}
+        </button>
+        {json ? (
+          <button
+            type="button"
+            onClick={() => void copyToClipboard(json, "json")}
+            className="rounded border border-amber-400/60 bg-amber-100/60 px-1.5 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-900/40 dark:hover:bg-amber-900/60"
+            title="Copy just the diagram JSON"
+          >
+            {copied === "json" ? "Copied" : "Copy JSON"}
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 font-mono text-[11px] select-text">{error}</p>
+      {json ? (
+        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-amber-900/80 select-text dark:text-amber-200/80">{json}</pre>
+      ) : null}
+    </details>
   );
 }
 
@@ -619,12 +672,7 @@ export function PlayDiagramRef({ json }: { json: string }) {
 
   if (state.kind === "loading") return <DiagramSkeleton />;
   if (state.kind === "error") {
-    return (
-      <details className="my-2 rounded-lg border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200">
-        <summary className="cursor-pointer font-semibold">Couldn&rsquo;t load play — tap for details</summary>
-        <p className="mt-1 font-mono text-[11px]">{state.message}</p>
-      </details>
-    );
+    return <DiagramFailureDetails error={state.message} />;
   }
   return <PlayDocRender doc={state.doc} />;
 }
