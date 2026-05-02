@@ -168,6 +168,54 @@ describe("applyRouteMods — batched + identity-preservation", () => {
   });
 });
 
+describe("applyRouteMod — direction override (the Flood Left RB regression)", () => {
+  it("forces a Flat to the left when set_direction='left' even though carrier is on the right", () => {
+    // B at x=+2 in the backfield. Without direction override, Flat
+    // template's xSign = +1 (toward right sideline). With direction:
+    // 'left', xSign = -1 → flat goes left. This is the fix for Flood
+    // Left rendering B's flat to the wrong side.
+    const f = fence([{ from: "B", path: [[2, 0], [10, 2]], route_kind: "Flat" }], [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "B", x: 2, y: -5, team: "O" },
+    ]);
+    const r = applyRouteMod(f, { player: "B", set_direction: "left" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const newPath = (r.fence.routes as Array<{ path: [number, number][] }>)[0].path;
+    // Final waypoint should be on the LEFT side (x < 0).
+    const finalX = newPath[newPath.length - 1][0];
+    expect(finalX).toBeLessThan(0);
+  });
+
+  it("forces a Flat to the right when set_direction='right'", () => {
+    const f = fence([{ from: "B", path: [[-2, 0], [-10, 2]], route_kind: "Flat" }], [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "B", x: -2, y: -5, team: "O" },
+    ]);
+    const r = applyRouteMod(f, { player: "B", set_direction: "right" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const newPath = (r.fence.routes as Array<{ path: [number, number][] }>)[0].path;
+    const finalX = newPath[newPath.length - 1][0];
+    expect(finalX).toBeGreaterThan(0);
+  });
+
+  it("preserves direction across a depth-only edit", () => {
+    // Set direction once, then edit depth — direction should stick.
+    const f = fence([{ from: "B", path: [[2, 0]], route_kind: "Flat", direction: "left" }], [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "B", x: 2, y: -5, team: "O" },
+    ]);
+    const r = applyRouteMod(f, { player: "B", set_depth_yds: 3 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const newRoute = (r.fence.routes as Array<{ direction?: string; path: [number, number][] }>)[0];
+    expect(newRoute.direction).toBe("left");
+    const finalX = newRoute.path[newRoute.path.length - 1][0];
+    expect(finalX).toBeLessThan(0);
+  });
+});
+
 describe("applyRouteMods — sanitizer integration", () => {
   it("drops corrupt zones from the prior fence on the way through", () => {
     const f = JSON.stringify({

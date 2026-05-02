@@ -14,6 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { playSpecToCoachDiagram } from "./specRenderer";
+import { generateConceptSkeleton } from "./conceptSkeleton";
 import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "./spec";
 
 function makeSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
@@ -269,5 +270,61 @@ describe("Renderer — zones tagged with owner label for per-defender colors", (
     expect(deepL?.ownerLabel).toBe("CB");
     expect(deepM?.ownerLabel).toBe("FS");
     expect(deepR?.ownerLabel).toBe("CB");
+  });
+});
+
+describe("Renderer — direction override on route actions", () => {
+  // 2026-05-02: backfield carriers (RB) had their flat direction
+  // inferred from their natural x sign — but B sits at x≈+2 in
+  // Spread Doubles regardless of strength side, so Flood Left
+  // rendered B's flat going RIGHT. The `direction` field on the
+  // route action overrides the template's natural directionality so
+  // a Flood Left RB flat actually goes LEFT.
+
+  it("Flood Left: B's Flat with direction='left' renders to the LEFT side", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "B", action: { kind: "route", family: "Flat", depthYds: 2, direction: "left" } },
+      ],
+    });
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    expect(bRoute).toBeDefined();
+    if (!bRoute) return;
+    const finalX = bRoute.path[bRoute.path.length - 1][0];
+    expect(finalX).toBeLessThan(0);
+  });
+
+  it("Flood Right: B's Flat with direction='right' renders to the RIGHT side", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "B", action: { kind: "route", family: "Flat", depthYds: 2, direction: "right" } },
+      ],
+    });
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    if (!bRoute) return;
+    const finalX = bRoute.path[bRoute.path.length - 1][0];
+    expect(finalX).toBeGreaterThan(0);
+  });
+
+  it("Flood (full skeleton, Left): B's Flat ends on the LEFT side", () => {
+    // End-to-end: build the actual Flood Left skeleton via
+    // generateConceptSkeleton and verify the rendered diagram has B's
+    // flat ending on the flood (left) side. This is the closest
+    // regression test to the production failure.
+    const skel = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "left" });
+    expect(skel.ok).toBe(true);
+    if (!skel.ok) return;
+    const result = playSpecToCoachDiagram(skel.spec);
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    expect(bRoute).toBeDefined();
+    if (!bRoute) return;
+    const finalX = bRoute.path[bRoute.path.length - 1][0];
+    expect(finalX).toBeLessThan(0);
   });
 });

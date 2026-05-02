@@ -36,6 +36,12 @@ export type RouteMod = {
   set_family?: string;
   set_depth_yds?: number;
   set_non_canonical?: boolean;
+  /** Force the route's lateral direction. Use when the route's intended
+   *  side is logically decoupled from the carrier's natural x (e.g. RB's
+   *  flat to the flood side, regardless of whether the back lines up
+   *  left or right of the QB). Skip for receivers whose alignment
+   *  determines side. */
+  set_direction?: "left" | "right";
 };
 
 /** A play fence shape — same as CoachDiagram with a permissive index
@@ -89,9 +95,10 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     ? mod.set_depth_yds
     : null;
   const setNonCanonical = typeof mod.set_non_canonical === "boolean" ? mod.set_non_canonical : null;
+  const setDirection = mod.set_direction === "left" || mod.set_direction === "right" ? mod.set_direction : null;
 
-  if (!setFamily && setDepth === null && setNonCanonical === null) {
-    return { ok: false, error: `mod for @${mod.player} has no changes; specify at least one of set_family / set_depth_yds / set_non_canonical.` };
+  if (!setFamily && setDepth === null && setNonCanonical === null && setDirection === null) {
+    return { ok: false, error: `mod for @${mod.player} has no changes; specify at least one of set_family / set_depth_yds / set_non_canonical / set_direction.` };
   }
 
   const variantStr = typeof fence.variant === "string" ? fence.variant : "flag_7v7";
@@ -99,7 +106,13 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
   const newRoute: Record<string, unknown> = { ...oldRoute };
 
   const resolvedFamily = setFamily ?? (typeof oldRoute.route_kind === "string" ? oldRoute.route_kind : null);
-  if ((setFamily || setDepth !== null) && resolvedFamily) {
+  // Resolve direction: explicit mod override wins, else preserve the
+  // route's existing direction field (so depth-only edits don't lose
+  // it), else null (template default applies).
+  const resolvedDirection: "left" | "right" | null =
+    setDirection ?? (oldRoute.direction === "left" || oldRoute.direction === "right" ? oldRoute.direction : null);
+
+  if ((setFamily || setDepth !== null || setDirection !== null) && resolvedFamily) {
     const template = findTemplate(resolvedFamily);
     if (!template) {
       return { ok: false, error: `unknown route family "${resolvedFamily}" — use a catalog name (Slant, Curl, Drag, Dig, etc.).` };
@@ -107,7 +120,10 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     const carrierX = typeof carrier.x === "number" ? carrier.x : 0;
     const carrierY = typeof carrier.y === "number" ? carrier.y : 0;
     const fieldWidthYds = fieldWidthFor(variantStr);
-    const xSign = template.directional !== false ? (carrierX >= 0 ? 1 : -1) : 1;
+    const xSign = resolvedDirection === "left" ? -1
+      : resolvedDirection === "right" ? 1
+      : template.directional !== false ? (carrierX >= 0 ? 1 : -1)
+      : 1;
     const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
     const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
     const yScale = setDepth !== null && templateMaxYds > 0.5 ? setDepth / templateMaxYds : 1;
@@ -122,6 +138,7 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     newRoute.path = path;
     newRoute.route_kind = template.name;
     newRoute.curve = (template.shapes ?? []).some((s) => s === "curve");
+    if (resolvedDirection) newRoute.direction = resolvedDirection;
   }
   if (setNonCanonical !== null) {
     if (setNonCanonical) newRoute.nonCanonical = true;
@@ -134,6 +151,7 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
   if (setFamily) summary.push(`family→${setFamily}`);
   if (setDepth !== null) summary.push(`depth→${setDepth}yd`);
   if (setNonCanonical !== null) summary.push(`nonCanonical→${setNonCanonical}`);
+  if (setDirection !== null) summary.push(`direction→${setDirection}`);
 
   return {
     ok: true,

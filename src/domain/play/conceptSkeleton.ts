@@ -98,11 +98,18 @@ function midDepth(range: { min: number; max: number }): number {
 }
 
 /** Build a route assignment with a depthYds anchored at the concept's
- *  required depth midpoint. */
-function routeAt(player: string, family: string, depthYds: number): PlayerAssignment {
+ *  required depth midpoint. Optional `direction` forces lateral side
+ *  for backfield carriers whose natural x is fixed (RB swings/flats
+ *  to the flood side regardless of where the back lines up). */
+function routeAt(
+  player: string,
+  family: string,
+  depthYds: number,
+  direction?: "left" | "right",
+): PlayerAssignment {
   return {
     player,
-    action: { kind: "route", family, depthYds },
+    action: { kind: "route", family, depthYds, ...(direction ? { direction } : {}) },
   };
 }
 
@@ -310,17 +317,26 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   // players on the right (Z + 2 slots). The "backside drag" Cal's prose
   // describes ("@H runs shallow 3-yard cross left-to-right") only makes
   // geometric sense if H is on the LEFT at the snap. Doubles 2x2 has X+H
-  // left, Z+S right — H drags from left to right naturally. The
-  // strong-side flood routes (Corner from Z, Curl from S, Flat from B
-  // swinging strong) all end on the right side, satisfying Flood's
-  // sameSideRequired check (which uses route ENDPOINTS, not player
-  // starting positions, so the RB swing from backfield-left is fine).
+  // left, Z+S right — H drags from left to right naturally.
+  //
+  // 2026-05-02 fix (coach feedback):
+  //   • Slot's mid route was Curl 5; now Out 8. Real Flood has the
+  //     slot break OUT toward the sideline at the second level —
+  //     attacking the seam between the corner and flat defender.
+  //     Curl-Flat is a different concept (high-low on the flat
+  //     defender) and lives in its own catalog entry.
+  //   • RB now uses an explicit direction: side override on the
+  //     Flat. Previously the Flat template inferred direction from
+  //     the carrier's x sign, but B sits at x≈+2 in Spread Doubles
+  //     regardless of strength — so Flood Left rendered B's flat
+  //     going RIGHT (away from the flood). The override forces the
+  //     flat to flood-side every time.
   const assignments: PlayerAssignment[] = [
-    routeAt(outsideWR, "Corner", 14),  // strong-side outside, deep corner
-    routeAt(slot, "Curl", 5),          // strong-side slot, mid curl
-    routeAt("B", "Flat", 2),           // RB flat (swings strong-side)
-    routeAt(backsideWR, "Go", 18),     // backside outside, deep clear
-    routeAt(backsideSlot, "Drag", 3),  // backside slot, drags strong (across formation)
+    routeAt(outsideWR, "Corner", 14),       // strong-side outside, deep corner
+    routeAt(slot, "Out", 8),                // strong-side slot, second-level out
+    routeAt("B", "Flat", 2, side),          // RB flat to the flood side (explicit direction)
+    routeAt(backsideWR, "Go", 18),          // backside outside, deep clear
+    routeAt(backsideSlot, "Drag", 3, side), // backside slot drags toward flood (cross-formation)
     qbDropback(),
     ...lineBlocks(variant),
   ];
@@ -329,7 +345,7 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     concept: "Flood",
     spec: baseSpec(variant, `Flood ${cap(side)}`, "Spread Doubles", side, assignments),
     notes:
-      `Flood ${cap(side)}: ${outsideWR} corner @ 14yd (deep), ${slot} curl @ 5yd (mid), B flat @ 2yd (low — RB swings ${side}). ${backsideWR} go @ 18yd (backside clear), ${backsideSlot} drag @ 3yd (crosses ${side === "right" ? "left-to-right" : "right-to-left"} as outlet). Three strong-side levels stretch the cornerback and flat defender; backside drag gives the QB a hot read vs blitz.`,
+      `Flood ${cap(side)}: ${outsideWR} corner @ 14yd (deep), ${slot} out @ 8yd (mid — second level break to the sideline), B flat @ 2yd (low — RB swings ${side}). ${backsideWR} go @ 18yd (backside clear), ${backsideSlot} drag @ 3yd (crosses ${side === "right" ? "left-to-right" : "right-to-left"} toward the flood as outlet). Three strong-side levels stretch the cornerback and flat defender; backside drag gives the QB a hot read vs blitz.`,
   };
 }
 

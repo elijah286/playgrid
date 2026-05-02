@@ -147,7 +147,7 @@ describe("validateDiagrams — side enforcement (Flood / Sail)", () => {
   // "Flood Left" with Z and S on the right side of the formation).
 
   it("REJECTS a Flood when matched players span both sides of the formation", () => {
-    // Corner at depth 14 (in [12,18]), Curl at 5 (in [4,7]), Flat at 2
+    // Corner at depth 14 (in [12,18]), Out at 8 (in [7,10]), Flat at 2
     // (in [0,4]). Catalog-compliant geometries; concept matcher passes
     // family+depth — but the players span both sides, so the side
     // check rejects.
@@ -157,25 +157,25 @@ describe("validateDiagrams — side enforcement (Flood / Sail)", () => {
       players: [
         { id: "Q", x: 0,   y: -3, team: "O" },
         { id: "X", x: -22, y:  0, team: "O" }, // left  — Corner deep
-        { id: "S", x:  10, y:  0, team: "O" }, // RIGHT — Curl (wrong side!)
+        { id: "S", x:  10, y:  0, team: "O" }, // RIGHT — Out (wrong side!)
         { id: "B", x:  -3, y:  0, team: "O" }, // left  — Flat
       ],
       routes: [
         // X (left, x=-22) Corner breaks OUTSIDE = toward LEFT sideline → more negative x.
         { from: "X", path: [[-26, 14]],  route_kind: "Corner" },
-        // S (right, x=10) Curl settles toward QB → slightly inside (more negative x).
-        { from: "S", path: [[8,    5]],  route_kind: "Curl" },
+        // S (right, x=10) Out breaks toward sideline → more positive x.
+        { from: "S", path: [[14,    8]],  route_kind: "Out" },
         // B (left, x=-3) Flat releases toward LEFT sideline → more negative x.
         { from: "B", path: [[-12,  2]],  route_kind: "Flat" },
       ],
     });
     const result = validateDiagrams({
-      text: `${fence}\n@X runs a corner. @S runs a curl. @B runs a flat. Flood Left.`,
+      text: `${fence}\n@X runs a corner. @S runs an out. @B runs a flat. Flood Left.`,
       variant: "tackle_11",
       lastPlaceDefense: null,
       routeTemplates: [
         snapshot("Corner", -22, 0, [[-26, 14]]),
-        snapshot("Curl",    10, 0, [[8,    5]]),
+        snapshot("Out",     10, 0, [[14,    8]]),
         snapshot("Flat",    -3, 0, [[-12,  2]]),
       ],
     });
@@ -198,19 +198,19 @@ describe("validateDiagrams — side enforcement (Flood / Sail)", () => {
       routes: [
         // Z (right, x=22) Corner breaks OUTSIDE = toward RIGHT sideline → more positive x.
         { from: "Z", path: [[26, 14]], route_kind: "Corner" },
-        // S (right, x=10) Curl settles toward QB → slightly inside (more negative x).
-        { from: "S", path: [[8,   5]], route_kind: "Curl" },
+        // S (right, x=10) Out breaks toward right sideline → more positive x.
+        { from: "S", path: [[16,  8]], route_kind: "Out" },
         // B (right, x=3) Flat releases toward RIGHT sideline → more positive x.
         { from: "B", path: [[12,  2]], route_kind: "Flat" },
       ],
     });
     const result = validateDiagrams({
-      text: `${fence}\n@Z runs a corner. @S runs a curl. @B runs a flat. Flood Right.`,
+      text: `${fence}\n@Z runs a corner. @S runs an out. @B runs a flat. Flood Right.`,
       variant: "tackle_11",
       lastPlaceDefense: null,
       routeTemplates: [
         snapshot("Corner", 22, 0, [[26, 14]]),
-        snapshot("Curl",   10, 0, [[8,   5]]),
+        snapshot("Out",    10, 0, [[16,  8]]),
         snapshot("Flat",    3, 0, [[12,  2]]),
       ],
     });

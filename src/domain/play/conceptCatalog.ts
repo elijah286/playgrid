@@ -194,7 +194,7 @@ const FLOOD: ConceptEntry = {
   name: "Flood",
   aliases: ["Sail", "Flood Concept", "Sail Concept"],
   description:
-    "Three receivers stretching ONE SIDE of the field at THREE depths — Corner deep (12-18 yds), Curl mid (4-7 yds), Flat low (0-4 yds). All on the SAME SIDE so the cornerback (high-low) and the flat defender are both stretched. Forces a single underneath defender to pick one. Beats Cover 3 and most rotated zones. Erhardt-Perkins / pro-style staple.",
+    "Three receivers stretching ONE SIDE of the field at THREE depths — Corner deep (12-18 yds), Out at the second level (7-10 yds), Flat low (0-4 yds, typically the RB to the flood side). All on the SAME SIDE so the cornerback (high-low) and the flat defender are both stretched. Forces a single underneath defender to pick one. Beats Cover 3 and most rotated zones. Erhardt-Perkins / pro-style staple.",
   required: [
     // Family + depth slots. The chat-time validator additionally
     // enforces sameSideRequired: all 3 matched players must be on the
@@ -203,8 +203,15 @@ const FLOOD: ConceptEntry = {
     // and the matcher would still pass — which is what surfaced
     // 2026-05-02 ("Flood Left" with routes scattered across the
     // formation).
+    //
+    // Slot family changed 2026-05-02 (coach feedback): the slot's mid
+    // route is an OUT at the second level (7-10 yds), NOT a Curl.
+    // Curl/Flat is its own concept (high-low on the flat defender at
+    // a TIGHT depth). Flood's mid attacks the seam between the
+    // corner's deep drop and the flat defender's underneath
+    // responsibility — different defender stress, different concept.
     { role: "any", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
-    { role: "any", family: "Curl",   depthRangeYds: { min: 4,  max: 7  } },
+    { role: "any", family: "Out",    depthRangeYds: { min: 8,  max: 12 } },
     { role: "any", family: "Flat",   depthRangeYds: { min: 0,  max: 4  } },
   ],
   sameSideRequired: true,

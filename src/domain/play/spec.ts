@@ -124,6 +124,28 @@ export type AssignmentAction =
        *  The catalog enforcement still catches Cal-authored mistakes;
        *  this flag is the escape hatch for legitimate coach intent. */
       nonCanonical?: boolean;
+      /** OPTIONAL direction override for directional families (Flat,
+       *  Out, Drag, Wheel, Arrow, etc.). When set, the renderer routes
+       *  the path toward the named sideline regardless of the
+       *  carrier's natural x sign.
+       *
+       *  Why this exists: directional family templates default to
+       *  "toward the carrier's sideline" (carrier.x >= 0 → right;
+       *  x < 0 → left). For most receivers that's correct (an outside
+       *  WR's flat goes outside). For backfield carriers (RB, FB)
+       *  whose natural x is fixed by the formation synthesizer, this
+       *  produces the wrong direction half the time — surfaced
+       *  2026-05-02 with Flood Left rendering B's flat to the RIGHT
+       *  because B sits at x≈+2 in Spread Doubles regardless of the
+       *  play's strength side. Setting `direction: "left"` forces the
+       *  flat to flood-left.
+       *
+       *  Use this only when the route's intended side is logically
+       *  decoupled from the carrier's starting x (RB swings,
+       *  cross-formation drags). For receivers whose alignment
+       *  determines the side, leave it unset and let the template's
+       *  natural directionality apply. */
+      direction?: "left" | "right";
     }
   /** Pass blocker. target is one of: "edge" (DE/OLB), "interior" (DT/NT),
    *  "blitz" (read-and-pick), or a specific defender label like "ML". */
@@ -311,6 +333,7 @@ const assignmentActionSchema = z.discriminatedUnion("kind", [
     depthYds: z.number().optional(),
     modifiers: z.array(routeModifierSchema).optional(),
     nonCanonical: z.boolean().optional(),
+    direction: z.enum(["left", "right"]).optional(),
   }).strict(),
   z.object({
     kind: z.literal("block"),

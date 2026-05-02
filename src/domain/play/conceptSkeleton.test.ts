@@ -87,6 +87,54 @@ describe("generateConceptSkeleton — strength side", () => {
   });
 });
 
+describe("generateConceptSkeleton — Flood: slot is Out, RB flat goes to flood side", () => {
+  // 2026-05-02 coach feedback regressions, pinned together because
+  // they share a root cause (slot family + RB direction):
+  //   1. Flood's slot used to be Curl 5; coach surfaced that real
+  //      Flood is OUT at the second level (8yd). Pin Out + depth.
+  //   2. Flood Left used to render B's flat going RIGHT because
+  //      B's natural backfield x≈+2 in Spread Doubles. The skeleton
+  //      now sets `direction: "left"` so the flat goes flood-side
+  //      regardless of backfield position.
+
+  it("slot runs an Out at the second level (depth 8yd)", () => {
+    const result = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "right" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const slotAssignment = result.spec.assignments.find(
+      (a) => a.player === "S" && a.action.kind === "route",
+    );
+    expect(slotAssignment).toBeDefined();
+    if (!slotAssignment || slotAssignment.action.kind !== "route") return;
+    expect(slotAssignment.action.family).toBe("Out");
+    expect(slotAssignment.action.depthYds).toBe(8);
+  });
+
+  it("Flood Left: RB's Flat carries direction='left' so it renders to the flood side", () => {
+    const result = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "left" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const bAssignment = result.spec.assignments.find(
+      (a) => a.player === "B" && a.action.kind === "route",
+    );
+    expect(bAssignment).toBeDefined();
+    if (!bAssignment || bAssignment.action.kind !== "route") return;
+    expect(bAssignment.action.family).toBe("Flat");
+    expect(bAssignment.action.direction).toBe("left");
+  });
+
+  it("Flood Right: RB's Flat carries direction='right'", () => {
+    const result = generateConceptSkeleton("Flood", { variant: "tackle_11", strength: "right" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const bAssignment = result.spec.assignments.find(
+      (a) => a.player === "B" && a.action.kind === "route",
+    );
+    if (!bAssignment || bAssignment.action.kind !== "route") return;
+    expect(bAssignment.action.direction).toBe("right");
+  });
+});
+
 describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
   it("the two drags have different depthYds (one under, one over)", () => {
     const result = generateConceptSkeleton("Mesh", { variant: "tackle_11" });

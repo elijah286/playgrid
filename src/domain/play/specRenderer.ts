@@ -546,7 +546,7 @@ function routeFromAction(
       }
       return {
         from: carrier.id,
-        path: pathFromTemplate(template, carrier, variant, action.depthYds),
+        path: pathFromTemplate(template, carrier, variant, action.depthYds, action.direction),
         ...(hasCurveSegment(template) ? { curve: true } : {}),
         route_kind: template.name,
       };
@@ -605,14 +605,24 @@ function pathFromTemplate(
   carrier: CoachDiagramPlayer,
   variant: SportVariant,
   depthYds?: number,
+  direction?: "left" | "right",
 ): [number, number][] {
   const fieldWidthYds = sportProfileForVariant(variant).fieldWidthYds;
   // template.points are in normalized template coords (positive x = OUTSIDE).
-  // Decide xSign based on which side of the field the carrier is on.
-  // CoachDiagram uses yards from CENTER; carrier.x < 0 = left side.
-  const xSign = template.directional !== false
-    ? (carrier.x >= 0 ? 1 : -1)
-    : 1;
+  // Decide xSign:
+  //   1. Explicit `direction` override on the assignment wins — used when
+  //      the route's intended side is logically decoupled from the
+  //      carrier's starting x (e.g. RB's flat to the flood side; Flood
+  //      Left's B sits at x≈+2 in Spread Doubles but the flat must
+  //      go LEFT). Surfaced 2026-05-02.
+  //   2. Otherwise, directional templates (Flat, Out, Drag, etc.) point
+  //      toward the carrier's natural sideline (right when x ≥ 0).
+  //   3. Non-directional templates (Go, Seam) ignore xSign entirely.
+  const xSign = direction === "left" ? -1
+    : direction === "right" ? 1
+    : template.directional !== false
+      ? (carrier.x >= 0 ? 1 : -1)
+      : 1;
 
   // Per-assignment depth override: scale every y proportionally so the
   // template's deepest waypoint lands at depthYds. Only positive depths

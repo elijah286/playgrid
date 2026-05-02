@@ -231,11 +231,13 @@ describe("assertConcept — Phase 7b additions (Flood, Drive, Levels, Y-Cross, D
   // routes scattered around the formation. Each entry below adds a
   // permanent gate so the same prompt can't ship as a wrong play.
 
-  it("Flood: corner + curl + flat passes", () => {
+  it("Flood: corner + out + flat passes", () => {
+    // 2026-05-02 catalog change: slot's mid route is OUT at the
+    // second level (7-10yd), not Curl. Pinned via this test.
     const result = assertConcept(
       buildSpec([
         { player: "Z", action: { kind: "route", family: "Corner", depthYds: 14 } },
-        { player: "S", action: { kind: "route", family: "Curl",   depthYds: 5  } },
+        { player: "S", action: { kind: "route", family: "Out",    depthYds: 8  } },
         { player: "B", action: { kind: "route", family: "Flat",   depthYds: 2  } },
       ]),
       "Flood",
@@ -247,7 +249,7 @@ describe("assertConcept — Phase 7b additions (Flood, Drive, Levels, Y-Cross, D
     const result = assertConcept(
       buildSpec([
         { player: "Z", action: { kind: "route", family: "Corner", depthYds: 14 } },
-        { player: "S", action: { kind: "route", family: "Curl",   depthYds: 5  } },
+        { player: "S", action: { kind: "route", family: "Out",    depthYds: 8  } },
         { player: "B", action: { kind: "route", family: "Flat",   depthYds: 2  } },
       ]),
       "Sail",
@@ -255,7 +257,7 @@ describe("assertConcept — Phase 7b additions (Flood, Drive, Levels, Y-Cross, D
     expect(result.ok).toBe(true);
   });
 
-  it("Flood: REJECTS when the curl is missing (only 2 of 3 stretches)", () => {
+  it("Flood: REJECTS when the slot Out is missing (only 2 of 3 stretches)", () => {
     const result = assertConcept(
       buildSpec([
         { player: "Z", action: { kind: "route", family: "Corner", depthYds: 14 } },
