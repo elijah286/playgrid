@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { generateFeedbackClusters } from "@/lib/coach-ai/feedback-clusters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Hard-delete sweep for the 30-day trash. Removes plays and playbook_groups
-// whose deleted_at is older than the retention window. Cascades remove
-// dependent rows (play_versions, etc.).
+// Daily housekeeping cron — does two things:
+//   1) Hard-delete sweep for the 30-day trash (plays + playbook_groups whose
+//      deleted_at is past retention; cascades remove play_versions, etc.).
+//   2) Coach AI feedback clustering — groups recent failure signals into
+//      reviewable KB drafts. Runs after the purge; failures are non-fatal
+//      so a clustering hiccup never blocks the main purge response.
 //
 // Auth: header `Authorization: Bearer <CRON_SECRET>`. Recommended cadence:
 // once per day.
@@ -45,10 +49,19 @@ async function handle(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: groupsRes.error.message }, { status: 500 });
   }
 
+  let clusters: { signalsConsidered: number; clustersDrafted: number } | { error: string };
+  try {
+    const r = await generateFeedbackClusters(admin);
+    clusters = { signalsConsidered: r.signalsConsidered, clustersDrafted: r.clustersDrafted };
+  } catch (e) {
+    clusters = { error: e instanceof Error ? e.message : "cluster generation failed" };
+  }
+
   return NextResponse.json({
     ok: true,
     purgedPlays: playsRes.data?.length ?? 0,
     purgedGroups: groupsRes.data?.length ?? 0,
+    clusters,
   });
 }
 
