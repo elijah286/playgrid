@@ -12,6 +12,7 @@ import {
   logCoachAiPositiveFeedbackAction,
   logCoachAiNegativeFeedbackAction,
 } from "@/app/actions/coach-ai-feedback";
+import { getCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
 import { commitPlaybookNoteProposalAction } from "@/app/actions/coach-ai-playbook-notes";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
@@ -124,6 +125,7 @@ export function CoachAiChat({
   const [usageTick, setUsageTick] = useState(0);
   const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
   const [optInPending, setOptInPending] = useState(false);
+  const [upgradeBannerEnabled, setUpgradeBannerEnabled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Tracks whether the user is "stuck to bottom" (within a small tolerance).
   // We only auto-scroll while this is true. The instant the user scrolls up
@@ -145,6 +147,16 @@ export function CoachAiChat({
       const res = await getAiFeedbackOptInAction();
       if (cancelled) return;
       setFeedbackOptIn(res.ok ? res.status : "declined");
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await getCoachCalUpgradeBannerEnabledAction();
+      if (cancelled) return;
+      if (res.ok) setUpgradeBannerEnabled(res.enabled);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -416,6 +428,15 @@ export function CoachAiChat({
               </Button>
             </div>
           </div>
+        </div>
+      )}
+      {upgradeBannerEnabled && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          <p>
+            <span className="font-semibold">Coach Cal is being upgraded.</span>{" "}
+            He&rsquo;s still available, but you may notice unusual behavior
+            while improvements roll out. Thanks for your patience.
+          </p>
         </div>
       )}
       <div

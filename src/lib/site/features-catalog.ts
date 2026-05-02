@@ -680,6 +680,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Admin tools ────────────────────────────────────────────────
   {
+    id: "admin-coach-cal-upgrade-banner",
+    name: "Coach Cal upgrade banner toggle",
+    description:
+      "Site Admin → Site → Coach Cal upgrade banner switches a maintenance notice on/off at the top of the Coach Cal chat window so entitled users know Cal is being actively upgraded and may behave unusually.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-02",
+  },
+  {
     id: "admin-users",
     name: "User administration",
     description:

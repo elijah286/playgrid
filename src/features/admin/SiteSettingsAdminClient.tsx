@@ -8,6 +8,7 @@ import { setFreeMaxPlaysPerPlaybookAction } from "@/app/actions/admin-free-plays
 import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editing";
 import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
 import { setReferralConfigAction } from "@/app/actions/admin-referral";
+import { setCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
 import {
   setAppleSigninEnabledAction,
   setGoogleSigninEnabledAction,
@@ -23,6 +24,7 @@ export function SiteSettingsAdminClient({
   initialReferralConfig,
   initialAppleSigninEnabled,
   initialGoogleSigninEnabled,
+  initialCoachCalUpgradeBannerEnabled,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
@@ -32,6 +34,7 @@ export function SiteSettingsAdminClient({
   initialReferralConfig: ReferralConfig;
   initialAppleSigninEnabled: boolean;
   initialGoogleSigninEnabled: boolean;
+  initialCoachCalUpgradeBannerEnabled: boolean;
 }) {
   const { toast } = useToast();
 
@@ -51,6 +54,28 @@ export function SiteSettingsAdminClient({
   const [applePending, startAppleTransition] = useTransition();
   const [googleSigninEnabled, setGoogleSigninEnabled] = useState(initialGoogleSigninEnabled);
   const [googlePending, startGoogleTransition] = useTransition();
+
+  const [coachCalBannerEnabled, setCoachCalBannerEnabled] = useState(
+    initialCoachCalUpgradeBannerEnabled,
+  );
+  const [coachCalBannerPending, startCoachCalBannerTransition] = useTransition();
+
+  function toggleCoachCalBanner(next: boolean) {
+    const prev = coachCalBannerEnabled;
+    setCoachCalBannerEnabled(next);
+    startCoachCalBannerTransition(async () => {
+      const res = await setCoachCalUpgradeBannerEnabledAction(next);
+      if (!res.ok) {
+        setCoachCalBannerEnabled(prev);
+        toast(res.error, "error");
+        return;
+      }
+      toast(
+        next ? "Coach Cal upgrade banner is on." : "Coach Cal upgrade banner is off.",
+        "success",
+      );
+    });
+  }
 
   function toggleAppleSignin(next: boolean) {
     const prev = appleSigninEnabled;
@@ -233,6 +258,29 @@ export function SiteSettingsAdminClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Coach Cal upgrade banner
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            When on, entitled users see a maintenance notice at the top of
+            the Coach Cal chat window letting them know Cal is being
+            actively improved and may behave unusually.
+          </p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={coachCalBannerEnabled}
+            disabled={coachCalBannerPending}
+            onChange={(e) => toggleCoachCalBanner(e.target.checked)}
+          />
+          <span>{coachCalBannerEnabled ? "On" : "Off"}</span>
+        </label>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">
