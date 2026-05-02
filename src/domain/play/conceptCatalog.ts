@@ -177,6 +177,72 @@ const MESH: ConceptEntry = {
   ],
 };
 
+// ── Concept additions 2026-05-02 (Phase 7b) ────────────────────────────
+// The KB has 20+ concepts; the catalog had 6, leaving 14+ unenforced.
+// "Cal described Flood correctly in prose but the spec assigned routes
+// randomly — no validator caught it." Each concept added below becomes
+// a permanent chat-time gate via assertConcept.
+
+const FLOOD: ConceptEntry = {
+  name: "Flood",
+  aliases: ["Sail", "Flood Concept", "Sail Concept"],
+  description:
+    "Three receivers stretching ONE SIDE of the field at THREE depths — Corner deep (12-18 yds), Curl mid (4-7 yds), Flat low (0-4 yds). All on the SAME SIDE so the cornerback (high-low) and the flat defender are both stretched. Forces a single underneath defender to pick one. Beats Cover 3 and most rotated zones. Erhardt-Perkins / pro-style staple.",
+  required: [
+    // The matcher checks family + depth, not side. Cal must put all
+    // three on the same side per the agent prompt + KB; the catalog
+    // enforces only that the three correct families/depths are present.
+    { role: "any", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
+    { role: "any", family: "Curl",   depthRangeYds: { min: 4,  max: 7  } },
+    { role: "any", family: "Flat",   depthRangeYds: { min: 0,  max: 4  } },
+  ],
+};
+
+const DRIVE: ConceptEntry = {
+  name: "Drive",
+  aliases: ["Drive Concept"],
+  description:
+    "Two crossers attacking the middle at differentiated depths — Drag UNDER (2-4 yds) and Dig OVER (10-14 yds). The under-drag rubs through traffic; the dig settles in the void behind the LBs. Beats man (rub on releases) and zone (dig sits in the hole). Often paired with a backside clear.",
+  required: [
+    { role: "any", family: "Drag", depthRangeYds: { min: 2,  max: 4  } },
+    { role: "any", family: "Dig",  depthRangeYds: { min: 10, max: 14 } },
+  ],
+};
+
+const LEVELS: ConceptEntry = {
+  name: "Levels",
+  aliases: ["Levels Concept"],
+  description:
+    "Two crossing in-breaking routes at TWO LEVELS — low In at 6-8 yds and high Dig at 12-14 yds, both breaking inside on the same side. High-low stretches the underneath LB. LB sinks under the dig = throw the low In; LB drives short = throw the dig. Indianapolis Colts (Manning era) staple.",
+  required: [
+    { role: "any", family: "In",  depthRangeYds: { min: 6,  max: 8  } },
+    { role: "any", family: "Dig", depthRangeYds: { min: 10, max: 14 } },
+  ],
+};
+
+const Y_CROSS: ConceptEntry = {
+  name: "Y-Cross",
+  aliases: ["Y Cross", "Y-Cross Concept"],
+  description:
+    "TE/Y runs a DEEP crosser at 14-16 yds, paired with a deep clear-out (Post or Go) on top and a flat/drag underneath. Triangle stretch — high (clear), medium (deep cross), low (flat) on the same side. QB reads the safety, then the LB. Beats man and zone equally. Air Raid + West Coast staple.",
+  required: [
+    { role: "any", family: "Dig",  depthRangeYds: { min: 14, max: 16 } }, // the deep cross
+    { role: "any", family: "Post", depthRangeYds: { min: 12, max: 18 } }, // the clear (Post or Go acceptable; Post is canonical)
+    { role: "any", family: "Flat", depthRangeYds: { min: 0,  max: 4  } },
+  ],
+};
+
+const DAGGER: ConceptEntry = {
+  name: "Dagger",
+  aliases: ["Dagger Concept"],
+  description:
+    "Inside receiver runs a Seam (vertical clear, 14+ yds) to clear the deep safety; outside receiver runs a DEEP DIG at 14-16 yds in the void the seam created. Modern NFL shot play — the seam pulls the safety, the dig hits the soft spot behind the LB and in front of the safety's vacated zone. Best vs single-high coverage.",
+  required: [
+    { role: "any", family: "Seam", depthRangeYds: { min: 14, max: 25 } },
+    { role: "any", family: "Dig",  depthRangeYds: { min: 14, max: 16 } },
+  ],
+};
+
 export const CONCEPT_CATALOG: ConceptEntry[] = [
   CURL_FLAT,
   SMASH,
@@ -184,6 +250,11 @@ export const CONCEPT_CATALOG: ConceptEntry[] = [
   SNAG,
   FOUR_VERTS,
   MESH,
+  FLOOD,
+  DRIVE,
+  LEVELS,
+  Y_CROSS,
+  DAGGER,
 ];
 
 // ── Module-load invariants ──────────────────────────────────────────────

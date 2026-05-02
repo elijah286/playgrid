@@ -209,6 +209,141 @@ describe("assertConcept — Smash, Stick, Snag, Four Verts, Mesh", () => {
   });
 });
 
+describe("assertConcept — Phase 7b additions (Flood, Drive, Levels, Y-Cross, Dagger)", () => {
+  // These were the unenforced concepts that surfaced 2026-05-02 when a
+  // coach asked for a "Flood concept play" and Cal authored random
+  // routes scattered around the formation. Each entry below adds a
+  // permanent gate so the same prompt can't ship as a wrong play.
+
+  it("Flood: corner + curl + flat passes", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "Z", action: { kind: "route", family: "Corner", depthYds: 14 } },
+        { player: "S", action: { kind: "route", family: "Curl",   depthYds: 5  } },
+        { player: "B", action: { kind: "route", family: "Flat",   depthYds: 2  } },
+      ]),
+      "Flood",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Flood: matches alias 'Sail'", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "Z", action: { kind: "route", family: "Corner", depthYds: 14 } },
+        { player: "S", action: { kind: "route", family: "Curl",   depthYds: 5  } },
+        { player: "B", action: { kind: "route", family: "Flat",   depthYds: 2  } },
+      ]),
+      "Sail",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Flood: REJECTS when the curl is missing (only 2 of 3 stretches)", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "Z", action: { kind: "route", family: "Corner", depthYds: 14 } },
+        { player: "B", action: { kind: "route", family: "Flat",   depthYds: 2  } },
+      ]),
+      "Flood",
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("Drive: drag under + dig over passes", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 3  } },
+        { player: "X", action: { kind: "route", family: "Dig",  depthYds: 12 } },
+      ]),
+      "Drive",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Drive: REJECTS when both routes are at the same depth (no high-low)", () => {
+    // Drag at 4 fits the under slot, but a Dig at 4yd is way outside
+    // the family's [10, 16] range — fails as soon as the family is
+    // checked.
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "Drag", depthYds: 4 } },
+        { player: "X", action: { kind: "route", family: "Drag", depthYds: 4 } },
+      ]),
+      "Drive",
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("Levels: low In + high Dig passes", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "In",  depthYds: 7  } },
+        { player: "X", action: { kind: "route", family: "Dig", depthYds: 12 } },
+      ]),
+      "Levels",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Y-Cross: dig + post + flat passes", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "Y", action: { kind: "route", family: "Dig",  depthYds: 15 } },
+        { player: "X", action: { kind: "route", family: "Post", depthYds: 14 } },
+        { player: "B", action: { kind: "route", family: "Flat", depthYds: 2  } },
+      ]),
+      "Y-Cross",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Dagger: seam clear + deep dig passes", () => {
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "Seam", depthYds: 18 } },
+        { player: "X", action: { kind: "route", family: "Dig",  depthYds: 15 } },
+      ]),
+      "Dagger",
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Dagger: REJECTS when the dig is too shallow (e.g. 8yd dig)", () => {
+    // The whole point of Dagger is the dig in the void BEHIND the LBs
+    // — a shallow dig falls outside the deep-dig requirement [14, 16].
+    const result = assertConcept(
+      buildSpec([
+        { player: "H", action: { kind: "route", family: "Seam", depthYds: 18 } },
+        { player: "X", action: { kind: "route", family: "In",   depthYds: 8  } },
+      ]),
+      "Dagger",
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("parseConceptsFromText — finds Phase 7b additions", () => {
+  it("detects 'Flood' in prose", () => {
+    expect(parseConceptsFromText("Run a Flood right vs Cover 3.")).toContain("Flood");
+  });
+  it("detects alias 'Sail'", () => {
+    expect(parseConceptsFromText("Sail concept to the field.")).toContain("Flood");
+  });
+  it("detects 'Drive'", () => {
+    expect(parseConceptsFromText("Drive concept attacks the middle.")).toContain("Drive");
+  });
+  it("detects 'Levels'", () => {
+    expect(parseConceptsFromText("Levels is a high-low LB read.")).toContain("Levels");
+  });
+  it("detects 'Y-Cross'", () => {
+    expect(parseConceptsFromText("Y-Cross from a 12 personnel set.")).toContain("Y-Cross");
+  });
+  it("detects 'Dagger'", () => {
+    expect(parseConceptsFromText("Dagger off play-action.")).toContain("Dagger");
+  });
+});
+
 describe("assertConcept — unknown concept", () => {
   it("fails gracefully when the concept name doesn't exist", () => {
     const result = assertConcept(buildSpec([]), "Made-Up Concept");
