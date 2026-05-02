@@ -382,6 +382,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "coach-cal-defense-composition",
+    name: "Coach Cal defense composition framework",
+    description:
+      "Defensive plays now compose from per-defender assignments — every defender in the catalog is explicitly tagged as zone (drops into a named zone), man (matched on a receiver), blitz (rushes a gap), or spy (shadows a player). The old coverage-wide \"man or zone\" boolean is gone, so Cal correctly draws Cover 1 as man-with-FS-deep-middle (not all-man-no-zones) and shows assignment lines, blitz arrows, and zone shapes in the same diagram. Same structural-by-construction approach Cal already uses for offensive plays.",
+    category: "Coach AI",
+    status: "beta",
+    addedDate: "2026-05-02",
+  },
+  {
     id: "coach-cal-inline-playbook-note-chips",
     name: "Coach Cal inline \"Save to playbook notes\" chips",
     description:
