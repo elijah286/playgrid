@@ -8,6 +8,10 @@
 // loop uses them to feed the model a one-shot critique and re-emit, so the
 // coach never sees the broken render.
 
+import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
+import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
+import { lintProseAgainstSpec } from "./notes-lint";
+
 const OFFENSE_LETTERS = new Set([
   // Skill positions
   "QB", "C", "X", "Y", "Z", "H", "B", "F", "S", "TE",
@@ -368,6 +372,41 @@ export function validateDiagrams(opts: {
           `${tag}player id "${id}" appears ${n} times — every player needs a unique id. ` +
           `When two share a position letter (twins, two Zs in 4-wide, etc.), suffix the second one (e.g. "Z" and "Z2") and reference that exact id in routes.`,
         );
+      }
+    }
+
+    // ── Prose ↔ diagram-derived spec consistency ─────────────────
+    //
+    // Cal's free-form chat prose ("hit @X on the post, work @H2 on the
+    // curl") was previously unchecked — the lint pass only ran at
+    // update_play_notes save time, so the in-chat preview could
+    // describe a player's route as one family while the diagram showed
+    // another. Surfaced 2026-05-02: prose said "@H crossing
+    // underneath" but the diagram had @H going vertical.
+    //
+    // Now: derive a spec from the diagram fence, then lint the
+    // surrounding prose for ACTIVE family contradictions per @Player
+    // reference. Conservative — silent paraphrasing passes; only
+    // "@X on the post" when X has Slant fails. Forces Cal to either
+    // fix the prose or fix the diagram before the coach sees either.
+    if (Array.isArray(json.routes) && json.routes.length > 0) {
+      try {
+        const derived = coachDiagramToPlaySpec(json as CoachDiagram, {
+          variant: opts.variant as "tackle_11" | "flag_7v7" | "flag_5v5" | undefined,
+        });
+        const proseLint = lintProseAgainstSpec(opts.text, derived);
+        if (!proseLint.ok) {
+          for (const issue of proseLint.issues) {
+            errors.push(
+              `${tag}prose says @${issue.player} runs a "${issue.notesFamily}" but the diagram has @${issue.player} on a "${issue.expectedFamily}". ` +
+              `Fix the prose to match the diagram (or fix the diagram + route_kind to match the prose). ` +
+              `Sentence: ${JSON.stringify(issue.bullet.slice(0, 160))}`,
+            );
+          }
+        }
+      } catch {
+        // Spec derivation can fail on edge cases (oddly-shaped diagrams);
+        // a lint we can't run is preferable to a hard validation crash.
       }
     }
 

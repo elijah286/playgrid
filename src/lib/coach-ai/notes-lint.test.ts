@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { lintNotesAgainstSpec } from "./notes-lint";
+import { lintNotesAgainstSpec, lintProseAgainstSpec } from "./notes-lint";
 import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "@/domain/play/spec";
 
 function specWithRoutes(routes: Record<string, string>): PlaySpec {
@@ -189,6 +189,113 @@ describe("lintNotesAgainstSpec — case insensitivity", () => {
     const result = lintNotesAgainstSpec(
       `- @X: 5-yard SLANT inside.`,
       specWithRoutes({ X: "Slant" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("lintProseAgainstSpec — chat-style prose (no bullets)", () => {
+  // The chat-time variant of the lint. Catches contradictions in the
+  // free-form prose Cal writes around a play diagram, where the
+  // bullet-based notes lint can't help (no `- @X:` formatting).
+
+  it("PASSES when prose mentions same family as spec", () => {
+    const result = lintProseAgainstSpec(
+      `Hit @X on the slant for the quick 5-yard pickup.`,
+      specWithRoutes({ X: "Slant" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("PASSES when prose paraphrases without naming a family", () => {
+    const result = lintProseAgainstSpec(
+      `@X breaks inside at the inside hip — quick rhythm throw.`,
+      specWithRoutes({ X: "Slant" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("FAILS when prose names a different family ('@X on the post' when X is on Slant)", () => {
+    const result = lintProseAgainstSpec(
+      `Hit @X on the post for the over-the-top throw.`,
+      specWithRoutes({ X: "Slant" }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0].player).toBe("X");
+    expect(result.issues[0].expectedFamily).toBe("Slant");
+    expect(result.issues[0].notesFamily).toBe("Post");
+  });
+
+  it("FAILS when prose names a different family in a chat narrative", () => {
+    // Production-style chat prose pattern (2026-05-02). Prose
+    // describes @H as on a "shallow cross" but the spec assigns Go.
+    // "Shallow Cross" is a registered alias of Drag, so the
+    // contradiction surfaces (Drag ≠ Go).
+    const result = lintProseAgainstSpec(
+      `@H runs the shallow cross underneath as a middle-field outlet.`,
+      specWithRoutes({ H: "Go" }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0].player).toBe("H");
+    expect(result.issues[0].expectedFamily).toBe("Go");
+    expect(result.issues[0].notesFamily).toBe("Drag");
+  });
+
+  it("handles multiple players in one sentence (each checked independently)", () => {
+    const result = lintProseAgainstSpec(
+      `If FS bites, hit @X on the post or @Z on the go.`,
+      specWithRoutes({ X: "Post", Z: "Go" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("flags only the contradicting player when one is right and one is wrong", () => {
+    const result = lintProseAgainstSpec(
+      `If FS bites, hit @X on the slant or @Z on the go.`,
+      specWithRoutes({ X: "Post", Z: "Go" }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].player).toBe("X");
+  });
+
+  it("dedupes when the same contradiction appears in multiple sentences", () => {
+    const result = lintProseAgainstSpec(
+      `Hit @X on the post for the deep shot. The post route from @X beats single-high.`,
+      specWithRoutes({ X: "Slant" }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toHaveLength(1);
+  });
+
+  it("ignores @QB / @Q references (no route assignment)", () => {
+    const result = lintProseAgainstSpec(
+      `@QB reads the high safety: post over the top, slant underneath.`,
+      specWithRoutes({ X: "Post" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("handles multi-paragraph prose", () => {
+    const result = lintProseAgainstSpec(
+      `Spread Doubles vs Cover 3 — beats the deep third.
+
+@QB reads the FS: if middle, hit @X on the post.
+
+Cover 3 splits the field into thirds. The post beats this.`,
+      specWithRoutes({ X: "Post" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns ok when spec has no route assignments", () => {
+    const result = lintProseAgainstSpec(
+      `Pull and lead through the hole.`,
+      specWithRoutes({}),
     );
     expect(result.ok).toBe(true);
   });

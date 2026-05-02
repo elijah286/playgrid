@@ -173,6 +173,81 @@ function containsWord(haystack: string, needle: string): boolean {
 }
 
 /**
+ * Sentence-based prose lint. Use this for CHAT-time validation —
+ * Cal's free-form prose ("hit @X on the post, work @H2 on the curl")
+ * doesn't follow the strict "- @Label: …" bullet format that
+ * lintNotesAgainstSpec assumes, so this variant scans every sentence
+ * for @Label references and lints each independently.
+ *
+ * Algorithm:
+ *   - Split prose into sentences (on . ! ? newline boundaries)
+ *   - For each sentence, find every @Player reference
+ *   - For each reference whose player has a route assignment in the
+ *     spec: detect any catalog-family mention in that same sentence
+ *     and compare to the expected family
+ *   - Active contradictions fail; silent paraphrasing (sentence
+ *     mentions @X without naming a family) passes — same conservative
+ *     contract as the bullet-based lint
+ *
+ * Surfaced 2026-05-02: Cal said "hit @X on the post" while the
+ * diagram-derived spec had @X on a Slant. The bullet-based lint
+ * didn't fire because chat prose isn't bulleted. This catches it.
+ */
+export function lintProseAgainstSpec(prose: string, spec: PlaySpec): NotesLintResult {
+  if (!prose || !spec || !Array.isArray(spec.assignments)) return { ok: true };
+
+  const playerToFamily = new Map<string, string>();
+  for (const a of spec.assignments) {
+    if (a.action.kind !== "route") continue;
+    const template = findTemplate(a.action.family);
+    if (!template) continue;
+    playerToFamily.set(a.player.toUpperCase(), template.name);
+  }
+  if (playerToFamily.size === 0) return { ok: true };
+
+  // Sentence boundaries: end-of-sentence punctuation followed by
+  // whitespace, OR newline. Conservative — keeps "high-low: hit @X"
+  // as one sentence so the @X reference and any nearby family word
+  // stay in the same scope.
+  const sentences = prose.split(/(?<=[.!?])\s+|\n+/g);
+
+  const issues: NotesLintIssue[] = [];
+  // Dedupe — chat prose often mentions a player twice (e.g. once in
+  // the QB-read narrative and once in the per-player breakdown).
+  // A single contradiction surfaces once, not per-sentence.
+  const seen = new Set<string>();
+
+  for (const sentence of sentences) {
+    if (!sentence.trim()) continue;
+    const refs = [...sentence.matchAll(/@([A-Za-z][A-Za-z0-9]{0,3})\b/g)];
+    if (refs.length === 0) continue;
+
+    for (const m of refs) {
+      const player = m[1].toUpperCase();
+      const expected = playerToFamily.get(player);
+      if (!expected) continue;
+
+      const detected = detectRouteFamilyMention(sentence, expected);
+      if (!detected) continue;
+      if (detected.toLowerCase() === expected.toLowerCase()) continue;
+
+      const dedupeKey = `${player}|${detected}|${expected}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      issues.push({
+        player,
+        expectedFamily: expected,
+        notesFamily: detected,
+        bullet: sentence.trim(),
+      });
+    }
+  }
+
+  return issues.length === 0 ? { ok: true } : { ok: false, issues };
+}
+
+/**
  * Format issues into a single critique string for Cal's tool result.
  * Lists each contradiction by carrier + expected vs notes-asserted family
  * so Cal can re-emit with corrected prose.
