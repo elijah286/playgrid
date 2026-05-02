@@ -200,15 +200,18 @@ export function CoachAiFeedbackAdminClient({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-surface-raised p-4 ring-1 ring-black/5">
-        <h2 className="text-base font-semibold text-foreground">AI Feedback</h2>
-        <p className="mt-1 text-sm text-muted">
-          {isKbMiss
-            ? "Topics where Coach AI fell back to general knowledge instead of seeded KB content."
-            : "Requests that Coach AI couldn't fulfill due to missing context or permissions."}
-          {" "}Logged only for users who opted into feedback collection.
-        </p>
-      </div>
+      <p className="text-xs text-muted">
+        {isKbMiss
+          ? "Topics where Coach AI fell back to general knowledge instead of seeded KB content."
+          : isRefusal
+            ? "Requests that Coach AI couldn't fulfill due to missing context or permissions."
+            : isNegative
+              ? "Responses coaches marked thumbs-down."
+              : isPositive
+                ? "Responses coaches marked thumbs-up."
+                : "All raw signals — KB misses, refusals, and thumbs feedback."}
+        {" "}Logged only for users who opted into feedback collection.
+      </p>
 
       <div className="flex items-center gap-2">
         <div className="inline-flex rounded-lg bg-surface-inset p-0.5 text-xs">

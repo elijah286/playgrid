@@ -26,7 +26,7 @@ import { ResendSettingsClient } from "@/features/admin/ResendSettingsClient";
 import { GoogleMapsSettingsClient } from "@/features/admin/GoogleMapsSettingsClient";
 import { MaxMindSettingsClient } from "@/features/admin/MaxMindSettingsClient";
 import { FeedbackAdminClient } from "@/features/admin/FeedbackAdminClient";
-import { CoachAiFeedbackAdminClient } from "@/features/admin/CoachAiFeedbackAdminClient";
+import { CoachAiFeedbackTabs } from "@/features/admin/CoachAiFeedbackTabs";
 import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
@@ -497,8 +497,8 @@ export function SettingsClient({
       )}
 
       {tab === "ai_feedback" && (
-        <CoachAiFeedbackAdminClient
-          initialItems={initialCoachAiKbMisses}
+        <CoachAiFeedbackTabs
+          initialKbMisses={initialCoachAiKbMisses}
           initialError={coachAiKbMissesError}
         />
       )}

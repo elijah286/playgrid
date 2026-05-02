@@ -373,6 +373,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "site-admin-coach-ai-feedback-clusters",
+    name: "Site admin · AI Feedback sub-tabs (Inbox / Clusters / Trends / KB History)",
+    description:
+      "The Site admin → AI Feedback page is now organized into four sub-tabs. Inbox keeps the existing raw signal queue (KB misses, refusals, thumbs up/down). Clusters surfaces an LLM-drafted KB review queue: a nightly job (plus on-demand \"Refresh clusters\") groups recent failure signals by topic and proposes a candidate KB chunk per cluster, which the admin can edit, approve (publishes to global KB), or reject. Trends shows daily signal counts and top miss topics for a 7/30/90-day window. KB History lists every recent rag_documents revision with one-click revert to a prior snapshot. Closes the loop from \"coach asks something Cal can't answer\" to \"approved KB chunk\" without manual triage.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-02",
+  },
+  {
     id: "coach-cal-inline-playbook-note-chips",
     name: "Coach Cal inline \"Save to playbook notes\" chips",
     description:
