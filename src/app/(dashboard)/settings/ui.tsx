@@ -147,6 +147,7 @@ export function SettingsClient({
   initialCoachCalPack,
   initialReferralConfig,
   initialExcludedEmails,
+  initialCoachCalUpgradeBannerEnabled,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -192,6 +193,7 @@ export function SettingsClient({
   initialCoachCalPack: CoachCalPackConfig;
   initialReferralConfig: ReferralConfig;
   initialExcludedEmails: string[];
+  initialCoachCalUpgradeBannerEnabled: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
@@ -536,6 +538,7 @@ export function SettingsClient({
             initialReferralConfig={initialReferralConfig}
             initialAppleSigninEnabled={initialAppleSigninEnabled}
             initialGoogleSigninEnabled={initialGoogleSigninEnabled}
+            initialCoachCalUpgradeBannerEnabled={initialCoachCalUpgradeBannerEnabled}
           />
         </div>
       )}
