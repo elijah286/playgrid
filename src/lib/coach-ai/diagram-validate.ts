@@ -234,6 +234,66 @@ export function validateDiagrams(opts: {
     const offense = players.filter((p) => p.team !== "D");
     const defense = players.filter((p) => p.team === "D");
 
+    // OL-completeness AND OL-spacing check (tackle_11 FULL PLAYS only).
+    // Every tackle_11 full play must:
+    //   (a) include all 5 OL — LT, LG, C, RG, RT, AND
+    //   (b) place them at DISTINCT x positions (within a 0.5yd tolerance).
+    //
+    // Coach surfaced 2026-05-02 that Cal hand-authored an "I-Form Flood
+    // Right" and the linemen rendered STACKED (only LG and RT visible
+    // because LT/C/RG were on top of them). Cal authored all 11 IDs
+    // but at overlapping positions. The overlap resolver INTENTIONALLY
+    // skips OL-OL pairs (real OL splits are tight 1-2yd), so it didn't
+    // catch the hand-authored stack — only the synthesizer placement
+    // (-4, -2, 0, 2, 4) is reliable. The validator now rejects hand-
+    // authored OL with same x.
+    //
+    // Threshold: only fires when offense.length >= 7. Single-route
+    // demos (≤ 6 offensive players) are intentionally minimal per
+    // rule 9a — they're not "full plays" and don't need an OL row.
+    // Tackle_11 only — flag variants have no OL.
+    const variantStr = (typeof json.variant === "string" ? json.variant : opts.variant) ?? "";
+    if (variantStr === "tackle_11" && offense.length >= 7) {
+      const REQUIRED_OL = ["LT", "LG", "C", "RG", "RT"];
+      const olPlayers = offense.filter((p) => {
+        const id = typeof p.id === "string" ? p.id.toUpperCase() : "";
+        return REQUIRED_OL.includes(id);
+      });
+      const olIds = new Set(olPlayers.map((p) => (p.id as string).toUpperCase()));
+      const missing = REQUIRED_OL.filter((id) => !olIds.has(id));
+      if (missing.length > 0) {
+        errors.push(
+          `${tag}tackle_11 play is missing required offensive linemen: ${missing.join(", ")}. ` +
+          `Every tackle_11 full-play diagram MUST include all 5 OL (LT, LG, C, RG, RT). ` +
+          `Hand-authoring positions drops linemen — instead, call \`place_offense\` to get the canonical formation layout, then layer routes on top by player ID.`,
+        );
+      } else {
+        // All 5 OL present — verify they're at distinct x (no stacking).
+        const xByOl = new Map<string, number>();
+        for (const p of olPlayers) {
+          const id = (p.id as string).toUpperCase();
+          if (typeof p.x === "number") xByOl.set(id, Math.round(p.x * 2) / 2); // round to 0.5yd
+        }
+        const xCounts = new Map<number, string[]>();
+        for (const [id, x] of xByOl) {
+          const cur = xCounts.get(x) ?? [];
+          cur.push(id);
+          xCounts.set(x, cur);
+        }
+        const stackedGroups: string[] = [];
+        for (const [x, ids] of xCounts) {
+          if (ids.length > 1) stackedGroups.push(`{${ids.join(", ")}} at x=${x}`);
+        }
+        if (stackedGroups.length > 0) {
+          errors.push(
+            `${tag}tackle_11 OL is STACKED — multiple linemen at the same x: ${stackedGroups.join("; ")}. ` +
+            `Canonical OL spacing is x=-4, -2, 0, 2, 4 (LT/LG/C/RG/RT). The overlap resolver intentionally skips OL pairs (real splits are tight), so hand-authored stacks aren't auto-fixed. ` +
+            `Call \`place_offense({ formation: "<name>" })\` and copy its OL positions verbatim — never hand-author x for LT/LG/C/RG/RT. If a play has a non-default formation (I-Form, Pistol, Pro Set), \`place_offense\` still produces the correct OL row; the formation parameter only changes backs and receivers.`,
+          );
+        }
+      }
+    }
+
     // Formation-name vs layout consistency. If the diagram's title (or any
     // ## heading in the surrounding text) contains a formation keyword,
     // the offensive layout must satisfy that formation's structural rules.

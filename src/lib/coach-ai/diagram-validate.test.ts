@@ -218,6 +218,138 @@ describe("validateDiagrams — side enforcement (Flood / Sail)", () => {
   });
 });
 
+describe("validateDiagrams — tackle_11 OL-completeness", () => {
+  // 2026-05-02: coach reported an I-Form Flood Right where Cal
+  // hand-authored only 8 offensive players (LG + RT + Q + F + B + X +
+  // Y + Z) and dropped LT, C, RG. The pre-existing place_offense gate
+  // didn't fire because offense.length=8 < 11 (the gate triggers at
+  // ≥ variant count). This validator catches the missing-OL case
+  // regardless of total count.
+
+  it("REJECTS a tackle_11 full play missing LT, C, and RG", () => {
+    // Full play (7+ offensive players) so the OL-completeness check
+    // fires. Single-route demos with fewer players are exempt.
+    const fence = makeFence({
+      title: "Hand-authored play",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LG", x: -2, y:  0, team: "O" }, // present
+        { id: "RT", x:  4, y:  0, team: "O" }, // present
+        { id: "X",  x: -18, y: 0, team: "O" },
+        { id: "Z",  x:  18, y: 0, team: "O" },
+        { id: "Y",  x:   6, y: 0, team: "O" },
+        { id: "B",  x:  -4, y: -5, team: "O" },
+        { id: "F",  x:   4, y: -5, team: "O" },
+        // MISSING: LT, C, RG (still 8 offensive players >= 7 threshold)
+      ],
+      routes: [],
+    });
+    const result = validateDiagrams({
+      text: fence,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const olError = result.errors.find((e) => e.includes("missing required offensive linemen"));
+    expect(olError, `expected an OL-completeness error; got: ${result.errors.join(" | ")}`).toBeDefined();
+    expect(olError).toContain("LT");
+    expect(olError).toContain("C");
+    expect(olError).toContain("RG");
+  });
+
+  it("REJECTS a tackle_11 play with all 5 OL but STACKED at the same x", () => {
+    // The actual failure mode coach hit: Cal authored all 5 OL IDs but
+    // placed them at overlapping x positions. Overlap resolver skips
+    // OL-OL pairs (real splits are tight) so it doesn't separate them,
+    // and the IDs all exist so the missing-OL check above doesn't fire.
+    // This validator catches stacked OL specifically.
+    const fence = makeFence({
+      title: "I-Form Flood Right (broken)",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        // 5 OL IDs all present BUT 3 stacked on x=-2 and 2 stacked on x=4 (Cal's hand-authoring failure).
+        { id: "LT", x: -2, y:  0, team: "O" },
+        { id: "LG", x: -2, y:  0, team: "O" },
+        { id: "C",  x: -2, y:  0, team: "O" },
+        { id: "RG", x:  4, y:  0, team: "O" },
+        { id: "RT", x:  4, y:  0, team: "O" },
+        { id: "X",  x: -18, y: 0, team: "O" },
+        { id: "Z",  x:  18, y: 0, team: "O" },
+        { id: "Y",  x:   6, y: 0, team: "O" },
+        { id: "F",  x:   0, y: -3, team: "O" },
+        { id: "B",  x:   0, y: -6, team: "O" },
+      ],
+      routes: [],
+    });
+    const result = validateDiagrams({
+      text: fence,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const stackError = result.errors.find((e) => e.toLowerCase().includes("stacked"));
+    expect(stackError, `expected an OL-stacking error; got: ${result.errors.join(" | ")}`).toBeDefined();
+  });
+
+  it("ACCEPTS a tackle_11 play that has all 5 OL", () => {
+    const fence = makeFence({
+      title: "Complete play",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x:  0, y: -3, team: "O" },
+        { id: "LT", x: -4, y:  0, team: "O" },
+        { id: "LG", x: -2, y:  0, team: "O" },
+        { id: "C",  x:  0, y:  0, team: "O" },
+        { id: "RG", x:  2, y:  0, team: "O" },
+        { id: "RT", x:  4, y:  0, team: "O" },
+        { id: "X",  x: -18, y: 0, team: "O" },
+        { id: "Z",  x:  18, y: 0, team: "O" },
+        { id: "B",  x:  -4, y: -5, team: "O" },
+      ],
+      routes: [],
+    });
+    const result = validateDiagrams({
+      text: fence,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+    });
+    // No OL-completeness error specifically. Other validators may fire
+    // (e.g., place_offense gate if 11+ players hand-authored), but the
+    // OL-completeness check shouldn't.
+    if (!result.ok) {
+      const olError = result.errors.find((e) => e.includes("missing required offensive linemen"));
+      expect(olError, `unexpected OL-completeness error: ${result.errors.join(" | ")}`).toBeUndefined();
+    }
+  });
+
+  it("EXEMPTS flag variants from the OL-completeness check (no OL row in flag)", () => {
+    const fence = makeFence({
+      title: "Flag play",
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0,   y: -3, team: "O" },
+        { id: "C", x: 0,   y:  0, team: "O" },
+        { id: "X", x: -10, y:  0, team: "O" },
+      ],
+      routes: [],
+    });
+    const result = validateDiagrams({
+      text: fence,
+      variant: "flag_5v5",
+      lastPlaceDefense: null,
+    });
+    // No tackle_11 check. May fail other checks but NOT for "missing OL".
+    if (!result.ok) {
+      const olError = result.errors.find((e) => e.includes("missing required offensive linemen"));
+      expect(olError).toBeUndefined();
+    }
+  });
+});
+
 describe("validateDiagrams — bare prose-mention exemption", () => {
   it("EXEMPTS linemen and QB from the prose-mention requirement", () => {
     // Linemen running pass-protection / RB drop routes don't need
