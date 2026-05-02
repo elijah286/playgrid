@@ -8,6 +8,7 @@ import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, 
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
+import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import {
   createCustomOpponentAction,
   installDefenseVsPlayAction,
@@ -251,7 +252,6 @@ function PlayEditorClientInner({
   // between yard lines (more yards in the same pixels); removing yards
   // expands it. The reducer already rescales player/LOS positions to
   // preserve yards-from-LOS so the LOS stays on the same yard marker.
-  const VIEWPORT_LENGTH_YDS = 25;
   // Per-user preference: when off (default), wide-field variants (tackle 11,
   // six-man) clamp to roughly the 7v7 aspect so the canvas stays at a usable
   // size on a typical screen. Toggle on to see the full sideline-to-sideline
@@ -274,12 +274,14 @@ function PlayEditorClientInner({
       // ignore
     }
   }, []);
-  const naturalAspect = doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
-  const NARROW_ASPECT_CAP = 30 / (VIEWPORT_LENGTH_YDS * 0.75); // matches flag_7v7
+  // Aspect comes from the shared render-config helper (matches every other
+  // surface that draws a play field — chat embed, game mode, formation
+  // editor — so they all stay in lockstep).
+  const naturalAspect = fieldAspectFor(doc);
   const fieldAspect = fullFieldWidth
     ? naturalAspect
-    : Math.min(naturalAspect, NARROW_ASPECT_CAP);
-  const canExpandFieldWidth = naturalAspect > NARROW_ASPECT_CAP + 1e-3;
+    : Math.min(naturalAspect, NARROW_FIELD_ASPECT);
+  const canExpandFieldWidth = naturalAspect > NARROW_FIELD_ASPECT + 1e-3;
 
   // Stable set: changes only on phase transitions (not every RAF frame), so
   // EditorCanvas doesn't receive a new prop reference 60× per second and

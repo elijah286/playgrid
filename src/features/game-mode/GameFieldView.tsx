@@ -2,12 +2,12 @@
 
 import { useMemo } from "react";
 import type { PlayDocument } from "@/domain/play/types";
+import { fieldAspectFor } from "@/domain/play/render-config";
 import type { PlayAnimation } from "@/features/animation/usePlayAnimation";
 import { AnimationOverlay } from "@/features/animation/AnimationOverlay";
 import { EditorCanvas } from "@/features/editor/EditorCanvas";
 import { PlayThumbnail, type PlayThumbnailInput } from "@/features/editor/PlayThumbnail";
 
-const VIEWPORT_LENGTH_YDS = 25;
 const noop = () => {};
 
 /**
@@ -45,8 +45,7 @@ function GameFieldPlayback({
   document: PlayDocument;
   anim: PlayAnimation;
 }) {
-  const fieldAspect =
-    document.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+  const fieldAspect = fieldAspectFor(document);
 
   const animatingPlayerIds = useMemo(() => {
     if (anim.phase === "idle") return null;

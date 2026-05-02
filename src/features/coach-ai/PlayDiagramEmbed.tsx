@@ -16,35 +16,8 @@ import {
 import { routeToRenderedSegments } from "@/domain/play/geometry";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
+import { fieldAspectFor } from "@/domain/play/render-config";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
-
-// ── Field-aspect computation (matches PlayEditorClient + GameFieldView) ──────
-//
-// The chat embed used to compute an auto-zoomed viewBox to fit content with
-// a 16:10 target ratio, which produced visible distortion when player
-// positions weren't symmetric (the "stretched" look a coach surfaced
-// 2026-05-01). The editor renders the FULL field at the variant's natural
-// aspect ratio — we now do the same in chat so coaches see identical
-// proportions across both surfaces.
-//
-// VIEWPORT_LENGTH_YDS = 25 is the standard-display window length all four
-// renderers share (editor PlayEditorClient.tsx, GameFieldView, chat,
-// FormationEditor). The 0.75 multiplier matches the editor — it scales
-// the visible 25-yd window down so the field is wider than tall by default.
-
-const VIEWPORT_LENGTH_YDS = 25;
-
-/** Width-to-height ratio of the full field for a given variant. Matches
- *  PlayEditorClient.tsx's `naturalAspect` calculation verbatim. */
-function fieldAspectFor(doc: PlayDocument): number {
-  const widthYds = doc.sportProfile?.fieldWidthYds;
-  if (typeof widthYds !== "number" || !Number.isFinite(widthYds) || widthYds <= 0) {
-    // Defensive: should never happen post-schema-validation, but if it
-    // somehow does, fall back to 16:10 so we render *something* sane.
-    return 16 / 10;
-  }
-  return widthYds / (VIEWPORT_LENGTH_YDS * 0.75);
-}
 
 // ── Player token shape ───────────────────────────────────────────────────────
 

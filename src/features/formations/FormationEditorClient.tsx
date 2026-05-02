@@ -36,6 +36,7 @@ import {
   sportProfileForVariant,
 } from "@/domain/play/factory";
 import type { Player, SportVariant } from "@/domain/play/types";
+import { fieldAspectFor } from "@/domain/play/render-config";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 
 const SPORT_OPTIONS = (
@@ -205,9 +206,7 @@ export function FormationEditorClient(props: Props) {
     router.push(returnTo);
   }
 
-  const VIEWPORT_LENGTH_YDS = 25;
-  const fieldAspect =
-    doc.sportProfile.fieldWidthYds / (VIEWPORT_LENGTH_YDS * 0.75);
+  const fieldAspect = fieldAspectFor(doc);
 
   const returnRaw =
     (props.mode === "new" || props.mode === "edit") ? props.returnToPlaybook ?? "" : "";
