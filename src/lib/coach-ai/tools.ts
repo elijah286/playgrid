@@ -2,6 +2,19 @@ import { searchKb, type KbFilter } from "./retrieve";
 import { createClient } from "@/lib/supabase/server";
 import { logCoachAiRefusal, logCoachAiKbMiss } from "./feedback-log";
 import type { ToolDef } from "./llm";
+// Top-level imports for surgical-modify tools (modify_play_route,
+// add_defense_to_play, computeDefenseAlignment helper). Other tools
+// in this file use require() for lazy-loading; the surgical-modify
+// path is hot enough that eager-loading these is fine, and the import
+// form resolves cleanly under vitest's @/ alias (require's don't).
+import { findTemplate } from "@/domain/play/routeTemplates";
+import {
+  findDefensiveAlignment,
+  listDefensiveAlignments,
+  alignmentForStrength,
+  zonesForStrength,
+} from "@/domain/play/defensiveAlignments";
+import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 
 export type CoachAiMode = "normal" | "admin_training";
 
@@ -45,6 +58,98 @@ export type CoachAiTool = {
   def: ToolDef;
   handler: ToolHandler;
 };
+
+// ── Shared helper: compute defensive alignment ─────────────────────────────
+// Used by both place_defense and add_defense_to_play. Returns the catalog
+// (or synthesized) alignment data plus a flag indicating whether the result
+// came from the catalog or the synthesizer fallback. Encapsulating the
+// catalog-OR-synthesize-OR-error logic in one place keeps the two tools'
+// behavior consistent — fixing a defensive-alignment bug now fixes both
+// tools by construction.
+
+type DefenseAlignmentZone = {
+  kind: "rectangle" | "ellipse";
+  center: [number, number];
+  size: [number, number];
+  label: string;
+};
+
+type DefenseAlignmentResult =
+  | {
+      ok: true;
+      front: string;
+      coverage: string;
+      variant: string;
+      description: string;
+      players: Array<{ id: string; x: number; y: number }>;
+      zones: DefenseAlignmentZone[];
+      manCoverage: boolean;
+      synthesized: boolean;
+    }
+  | { ok: false; error: string };
+
+function computeDefenseAlignment(
+  variant: string,
+  front: string,
+  coverage: string,
+  strength: "left" | "right",
+): DefenseAlignmentResult {
+  const catalogMatch = findDefensiveAlignment(variant, front, coverage);
+  if (catalogMatch) {
+    return {
+      ok: true,
+      front: catalogMatch.front,
+      coverage: catalogMatch.coverage,
+      variant: catalogMatch.variant,
+      description: catalogMatch.description,
+      players: alignmentForStrength(catalogMatch, strength),
+      zones: zonesForStrength(catalogMatch, strength).map((z) => ({
+        kind: z.kind,
+        center: [z.center[0], z.center[1]] as [number, number],
+        size: [z.size[0], z.size[1]] as [number, number],
+        label: z.label,
+      })),
+      manCoverage: catalogMatch.manCoverage === true,
+      synthesized: false,
+    };
+  }
+  const synth = synthesizeAlignment(variant, front, coverage);
+  if (synth) {
+    const flip = strength === "left";
+    return {
+      ok: true,
+      front: synth.front,
+      coverage: synth.coverage,
+      variant: synth.variant,
+      description: synth.description,
+      players: synth.players.map((p) => ({ id: p.id, x: flip ? -p.x : p.x, y: p.y })),
+      zones: synth.zones.map((z) => ({
+        kind: z.kind,
+        center: [flip ? -z.center.x : z.center.x, z.center.y] as [number, number],
+        size: [z.size.x, z.size.y] as [number, number],
+        label: z.label,
+      })),
+      manCoverage: synth.manCoverage,
+      synthesized: true,
+    };
+  }
+  const available = listDefensiveAlignments(variant);
+  if (available.length === 0) {
+    return {
+      ok: false,
+      error:
+        `No canonical alignments seeded for variant "${variant}", and the front "${front}" couldn't be parsed as an N-M pattern (e.g., "6-2", "5-3 Stack"). ` +
+        `Place defense by hand using the prompt's defender placement rules.`,
+    };
+  }
+  const list = available.map((a) => `  - front: "${a.front}", coverage: "${a.coverage}"`).join("\n");
+  return {
+    ok: false,
+    error:
+      `No alignment for front="${front}", coverage="${coverage}" on ${variant}, and the front couldn't be parsed as an N-M pattern. ` +
+      `Available canonical combos:\n${list}\nCall again with one of these — or pass an N-M front (e.g., "6-2", "5-3") and the synthesizer will place players for you.`,
+  };
+}
 
 const search_kb: CoachAiTool = {
   def: {
@@ -488,6 +593,262 @@ const get_concept_skeleton: CoachAiTool = {
   },
 };
 
+const modify_play_route: CoachAiTool = {
+  def: {
+    name: "modify_play_route",
+    description:
+      "Surgically modify ONE route on an existing play diagram while preserving everything else (all other players, all other routes, formation, zones, defense). Use this for ANY single-route change — depth, family, motion, modifier — instead of re-authoring the diagram. " +
+      "Inputs: the prior play fence JSON (copied verbatim from the chat), the player whose route is changing, and ONE OR MORE of: set_family (swap to a different catalog route), set_depth_yds (adjust the route's depth), set_non_canonical (allow off-catalog depth per coach intent), or set_motion (add pre-snap motion waypoints). " +
+      "Returns the FULL updated play fence JSON ready to drop verbatim into the chat reply. The renderer-validated geometry replaces only the targeted route; nothing else changes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prior_play_fence: {
+          type: "string",
+          description:
+            "The previous diagram JSON, copied verbatim from the most recent ```play fence in the chat (between the opening ```play and closing ```). MUST include all players, routes, and any zones from that diagram. The tool parses this and applies the requested route change additively — every other player and route round-trips unchanged.",
+        },
+        player: {
+          type: "string",
+          description:
+            "The player ID whose route is being modified (e.g. \"H\", \"X\", \"S\"). Must match a route in prior_play_fence's routes[] array.",
+        },
+        set_family: {
+          type: "string",
+          description:
+            "Optional: change the route to a different catalog family (Slant, Curl, Drag, Dig, etc.). When set, the new path is computed from the catalog template — coach-canonical, no hand authoring. Aliases supported.",
+        },
+        set_depth_yds: {
+          type: "number",
+          description:
+            "Optional: scale the route's depth so its deepest waypoint lands at this many yards from the LOS. Honored regardless of family change. Out-of-catalog depths require set_non_canonical: true.",
+        },
+        set_non_canonical: {
+          type: "boolean",
+          description:
+            "Optional: set the nonCanonical flag on the route, bypassing the catalog depth-range validator. Use ONLY when the coach explicitly requested an unusual depth.",
+        },
+      },
+      required: ["prior_play_fence", "player"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input) {
+    const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence.trim() : "";
+    const player = typeof input.player === "string" ? input.player.trim() : "";
+    if (!priorJson) return { ok: false, error: "prior_play_fence is required (copy the previous play fence verbatim)." };
+    if (!player) return { ok: false, error: "player is required." };
+
+    let fence: Record<string, unknown>;
+    try {
+      fence = JSON.parse(priorJson);
+    } catch (e) {
+      return { ok: false, error: `Could not parse prior_play_fence as JSON: ${(e as Error).message}` };
+    }
+
+    const playersArr = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
+    const routesArr = Array.isArray(fence.routes) ? (fence.routes as Array<Record<string, unknown>>) : [];
+    const carrier = playersArr.find((p) => p.id === player);
+    if (!carrier) {
+      return { ok: false, error: `Player "${player}" not in prior_play_fence.players. Available: ${playersArr.map((p) => p.id).join(", ")}.` };
+    }
+    const routeIdx = routesArr.findIndex((r) => r.from === player);
+    if (routeIdx < 0) {
+      return { ok: false, error: `Player "${player}" has no existing route in prior_play_fence.routes (a "${player}" route must already be in the diagram for this tool to modify it).` };
+    }
+
+    const setFamily = typeof input.set_family === "string" && input.set_family.trim() !== ""
+      ? input.set_family.trim()
+      : null;
+    const setDepth = typeof input.set_depth_yds === "number" && Number.isFinite(input.set_depth_yds)
+      ? input.set_depth_yds
+      : null;
+    const setNonCanonical = typeof input.set_non_canonical === "boolean" ? input.set_non_canonical : null;
+
+    if (!setFamily && setDepth === null && setNonCanonical === null) {
+      return { ok: false, error: "At least one of set_family / set_depth_yds / set_non_canonical must be provided." };
+    }
+
+    const variantStr = typeof fence.variant === "string" ? fence.variant : "flag_7v7";
+
+    const oldRoute = routesArr[routeIdx];
+    const newRoute: Record<string, unknown> = { ...oldRoute };
+
+    // Resolve the family to use for path recomputation. If swapping family,
+    // use the new one; if only changing depth, keep the existing route_kind.
+    const resolvedFamily = setFamily ?? (typeof oldRoute.route_kind === "string" ? oldRoute.route_kind : null);
+    if ((setFamily || setDepth !== null) && resolvedFamily) {
+      const template = findTemplate(resolvedFamily);
+      if (!template) {
+        return { ok: false, error: `Unknown route family "${resolvedFamily}". Use a catalog name (Slant, Curl, Drag, Dig, etc.).` };
+      }
+      // Recompute path from template + carrier position + optional depth.
+      // Mirrors specRenderer.pathFromTemplate without the round-trip
+      // through PlaySpec.
+      const carrierX = typeof carrier.x === "number" ? carrier.x : 0;
+      const carrierY = typeof carrier.y === "number" ? carrier.y : 0;
+      const fieldWidthYds = variantStr === "tackle_11" ? 53 : variantStr === "flag_7v7" ? 30 : variantStr === "flag_5v5" ? 25 : 40;
+      const FIELD_LENGTH_YDS = 25;
+      const xSign = template.directional !== false ? (carrierX >= 0 ? 1 : -1) : 1;
+      const templateMaxYNorm = Math.max(...template.points.map((p) => p.y));
+      const templateMaxYds = templateMaxYNorm * FIELD_LENGTH_YDS;
+      const yScale = setDepth !== null && templateMaxYds > 0.5 ? setDepth / templateMaxYds : 1;
+      const waypoints = template.points[0]?.x === 0 && template.points[0]?.y === 0
+        ? template.points.slice(1)
+        : template.points;
+      const path = waypoints.map(({ x, y }) => {
+        const xYds = carrierX + x * fieldWidthYds * xSign;
+        const yYds = carrierY + y * yScale * FIELD_LENGTH_YDS;
+        return [Math.round(xYds * 10) / 10, Math.round(yYds * 10) / 10];
+      });
+      newRoute.path = path;
+      newRoute.route_kind = template.name;
+      newRoute.curve = (template.shapes ?? []).some((s) => s === "curve");
+    }
+
+    if (setNonCanonical !== null) {
+      if (setNonCanonical) {
+        newRoute.nonCanonical = true;
+      } else {
+        delete newRoute.nonCanonical;
+      }
+    }
+
+    const newRoutes = [...routesArr];
+    newRoutes[routeIdx] = newRoute;
+    const newFence = { ...fence, routes: newRoutes };
+    const fenceJson = JSON.stringify(newFence, null, 2);
+
+    const changeSummary: string[] = [];
+    if (setFamily) changeSummary.push(`route family → "${setFamily}"`);
+    if (setDepth !== null) changeSummary.push(`depth → ${setDepth} yds`);
+    if (setNonCanonical !== null) changeSummary.push(`nonCanonical → ${setNonCanonical}`);
+
+    return {
+      ok: true,
+      result:
+        `Modified @${player}'s route (${changeSummary.join(", ")}). All other players, routes, and zones preserved verbatim from the prior diagram.\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`. Do NOT re-author other parts of the diagram:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\``,
+    };
+  },
+};
+
+const add_defense_to_play: CoachAiTool = {
+  def: {
+    name: "add_defense_to_play",
+    description:
+      "Overlay a defensive scheme (front + coverage) onto an EXISTING play diagram while preserving ALL offense (players, routes, zones from offense) untouched. Use this for ANY \"show this play vs Cover X\" / \"add the defense to this play\" / \"how does Tampa 2 defend this\" request — instead of re-authoring the play with both sides, this tool overlays defense surgically. " +
+      "Inputs: the prior play fence JSON (copied verbatim) plus front + coverage + optional strength. Any existing defenders in the prior fence are STRIPPED and replaced with the new scheme; the offense is identical, byte-for-byte, in the output. " +
+      "Returns the FULL updated play fence JSON ready to drop verbatim.",
+    input_schema: {
+      type: "object",
+      properties: {
+        prior_play_fence: {
+          type: "string",
+          description:
+            "The previous diagram JSON, copied verbatim from the most recent ```play fence in the chat. Offense players + routes are preserved exactly; any defense (team:\"D\") in this input is replaced.",
+        },
+        front: {
+          type: "string",
+          description:
+            "Defensive front name. Examples: \"4-3 Over\", \"3-4\", \"Nickel (4-2-5)\", \"7v7 Zone\", \"5v5 Man\".",
+        },
+        coverage: {
+          type: "string",
+          description: "Coverage name. Examples: \"Cover 1\", \"Cover 2\", \"Cover 3\", \"Cover 4 (Quarters)\".",
+        },
+        strength: {
+          type: "string",
+          enum: ["left", "right"],
+          description:
+            "Side the offensive strength is on (defaults to right). The defense rotates toward strength.",
+        },
+      },
+      required: ["prior_play_fence", "front", "coverage"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence.trim() : "";
+    const front = typeof input.front === "string" ? input.front.trim() : "";
+    const coverage = typeof input.coverage === "string" ? input.coverage.trim() : "";
+    if (!priorJson) return { ok: false, error: "prior_play_fence is required." };
+    if (!front || !coverage) return { ok: false, error: "front and coverage are required." };
+    const strength: "left" | "right" = input.strength === "left" ? "left" : "right";
+
+    let fence: Record<string, unknown>;
+    try {
+      fence = JSON.parse(priorJson);
+    } catch (e) {
+      return { ok: false, error: `Could not parse prior_play_fence as JSON: ${(e as Error).message}` };
+    }
+
+    const variantStr = typeof fence.variant === "string" ? fence.variant : ctx.sportVariant ?? "flag_7v7";
+    const alignment = computeDefenseAlignment(variantStr, front, coverage, strength);
+    if (!alignment.ok) return alignment;
+
+    // Strip any existing defenders from the prior fence — the new scheme
+    // replaces them. Offense (team !== "D") and the rest of the fence are
+    // preserved unchanged.
+    const playersArr = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
+    const offenseOnly = playersArr.filter((p) => p.team !== "D");
+
+    const newDefenders = alignment.players.map((p) => ({
+      id: p.id,
+      x: p.x,
+      y: p.y,
+      team: "D" as const,
+    }));
+
+    const isMan = alignment.manCoverage;
+    const newZones = isMan
+      ? []
+      : alignment.zones.map((z) => ({
+          kind: z.kind,
+          center: z.center,
+          size: z.size,
+          label: z.label,
+        }));
+
+    // Compose new fence: offense unchanged + new defenders + new zones (or
+    // empty zones for man coverage). Preserve title/variant/focus/etc. from
+    // the prior fence so the chat header doesn't churn.
+    const newFence: Record<string, unknown> = {
+      ...fence,
+      players: [...offenseOnly, ...newDefenders],
+    };
+    if (isMan) {
+      // Man coverage: clear zones array (or leave it absent).
+      delete newFence.zones;
+    } else {
+      newFence.zones = newZones;
+    }
+
+    const fenceJson = JSON.stringify(newFence, null, 2);
+
+    const summaryLines: string[] = [
+      `Added "${alignment.front} / ${alignment.coverage}" defense (${alignment.variant}, strength=${strength}) to the existing play. Offense preserved verbatim — only defenders + zones changed.`,
+      alignment.description,
+    ];
+    if (isMan) {
+      summaryLines.push(
+        "",
+        "MAN COVERAGE: no zones drawn. If the coach wants assignment lines, " +
+        "use modify_play_route to add a route on each defender to their matched receiver.",
+      );
+    }
+
+    return {
+      ok: true,
+      result:
+        `${summaryLines.join("\n")}\n\n` +
+        `**PLAY FENCE — drop VERBATIM into your reply. Offense is byte-for-byte identical to the prior diagram; only defense changed:**\n` +
+        `\`\`\`play\n${fenceJson}\n\`\`\``,
+    };
+  },
+};
+
 const place_defense: CoachAiTool = {
   def: {
     name: "place_defense",
@@ -532,101 +893,9 @@ const place_defense: CoachAiTool = {
     const strength: "left" | "right" =
       input.strength === "left" ? "left" : "right";
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const {
-      findDefensiveAlignment,
-      listDefensiveAlignments,
-      alignmentForStrength,
-      zonesForStrength,
-    } = require("@/domain/play/defensiveAlignments") as typeof import("@/domain/play/defensiveAlignments");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { synthesizeAlignment } = require("@/domain/play/defensiveSynthesize") as typeof import("@/domain/play/defensiveSynthesize");
-
     const variant = ctx.sportVariant ?? "flag_7v7";
-    const catalogMatch = findDefensiveAlignment(variant, front, coverage);
-
-    // If the catalog has no exact match, try to synthesize one from the
-    // front + coverage names (parses "6-2", "5-3 Stack", etc. into a
-    // sensible alignment with the right total count). Only falls back to
-    // the "available combos" error when synthesis can't make sense of the
-    // request either.
-    // Normalize the two zone shapes (catalog uses [number, number] tuples,
-    // synthesizer uses {x, y} objects) into a single tuple shape that the
-    // diagram converter already understands downstream.
-    type ZoneOut = { kind: "rectangle" | "ellipse"; center: [number, number]; size: [number, number]; label: string };
-    type AlignmentLike = {
-      front: string;
-      coverage: string;
-      variant: string;
-      description: string;
-      players: Array<{ id: string; x: number; y: number }>;
-      zones: ZoneOut[];
-      manCoverage: boolean;
-    };
-
-    let alignment: AlignmentLike | null = null;
-    let synthesized = false;
-    if (catalogMatch) {
-      alignment = {
-        front: catalogMatch.front,
-        coverage: catalogMatch.coverage,
-        variant: catalogMatch.variant,
-        description: catalogMatch.description,
-        players: alignmentForStrength(catalogMatch, strength),
-        zones: zonesForStrength(catalogMatch, strength).map((z) => ({
-          kind: z.kind,
-          center: [z.center[0], z.center[1]] as [number, number],
-          size: [z.size[0], z.size[1]] as [number, number],
-          label: z.label,
-        })),
-        manCoverage: catalogMatch.manCoverage === true,
-      };
-    } else {
-      const synth = synthesizeAlignment(variant, front, coverage);
-      if (synth) {
-        const flip = strength === "left";
-        alignment = {
-          front: synth.front,
-          coverage: synth.coverage,
-          variant: synth.variant,
-          description: synth.description,
-          players: synth.players.map((p) => ({
-            id: p.id,
-            x: flip ? -p.x : p.x,
-            y: p.y,
-          })),
-          zones: synth.zones.map((z) => ({
-            kind: z.kind,
-            center: [flip ? -z.center.x : z.center.x, z.center.y] as [number, number],
-            size: [z.size.x, z.size.y] as [number, number],
-            label: z.label,
-          })),
-          manCoverage: synth.manCoverage,
-        };
-        synthesized = true;
-      }
-    }
-
-    if (!alignment) {
-      const available = listDefensiveAlignments(variant);
-      if (available.length === 0) {
-        return {
-          ok: false,
-          error:
-            `No canonical alignments seeded for variant "${variant}", and the front "${front}" couldn't be parsed as an N-M pattern (e.g., "6-2", "5-3 Stack"). ` +
-            `Place defense by hand using the prompt's defender placement rules.`,
-        };
-      }
-      const list = available
-        .map((a) => `  - front: "${a.front}", coverage: "${a.coverage}"`)
-        .join("\n");
-      return {
-        ok: false,
-        error:
-          `No alignment for front="${front}", coverage="${coverage}" on ${variant}, and the front couldn't be parsed as an N-M pattern. ` +
-          `Available canonical combos:\n${list}\nCall again with one of these — or pass an N-M front (e.g., "6-2", "5-3") and the synthesizer will place players for you.`,
-      };
-    }
+    const alignment = computeDefenseAlignment(variant, front, coverage, strength);
+    if (!alignment.ok) return alignment;
 
     const playersJson = JSON.stringify(
       alignment.players.map((p) => ({ id: p.id, x: p.x, y: p.y, team: "D" })),
@@ -637,7 +906,7 @@ const place_defense: CoachAiTool = {
     const zonesJson = JSON.stringify(zones);
 
     const lines: string[] = [
-      `${synthesized ? "Synthesized" : "Canonical"} "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):`,
+      `${alignment.synthesized ? "Synthesized" : "Canonical"} "${alignment.front} / ${alignment.coverage}" (${alignment.variant}, strength=${strength}):`,
       alignment.description,
       "",
       `Drop these players into your diagram (team:"D"):`,
@@ -1524,7 +1793,7 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
-const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, place_defense, place_offense, flag_outside_kb, flag_refusal];
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, place_defense, place_offense, modify_play_route, add_defense_to_play, flag_outside_kb, flag_refusal];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {

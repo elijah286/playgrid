@@ -272,9 +272,18 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
   const variant = opts.variant;
   // Inside slots run the differentiated drags (H under, S over). Outside
   // X/Z run a sit + clear over the top.
+  //
+  // Depth choice — 2 + 6 instead of 3 + 5: catalog ranges are [2, 3.5]
+  // (under) and [4.5, 6] (over). A 3 + 5 pick gives only ~2yd visual
+  // separation, which gets visually swallowed by the route token width
+  // (~3.4yd in tackle_11) — coaches reported "the drags look at the
+  // same yardage" 2026-05-02 even though the spec correctly recorded
+  // different depths. Picking the OUTER ENDS of the slot ranges yields
+  // 4yd visible separation, which renders as clearly distinct drags.
+  // Both still satisfy concept_mesh's slot constraints.
   const assignments: PlayerAssignment[] = [
-    routeAt("H", "Drag", 3),    // under-drag
-    routeAt("S", "Drag", 5),    // over-drag (passes ABOVE H)
+    routeAt("H", "Drag", 2),    // under-drag (low end of [2, 3.5])
+    routeAt("S", "Drag", 6),    // over-drag (top end of [4.5, 6])
     routeAt("X", "Sit", 8),     // over-the-top sit
     routeAt("Z", "Go", 18),     // single deep clear
     routeAt("B", "Flat", 2),    // outlet
@@ -286,7 +295,7 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
     concept: "Mesh",
     spec: baseSpec(variant, "Mesh", "Spread Doubles", undefined, assignments),
     notes:
-      `Mesh: H under-drag @ 3yd + S over-drag @ 5yd cross past each other. X sits @ 8yd over the top, Z clears with go @ 18yd, B is the flat outlet.`,
+      `Mesh: H under-drag @ 2yd + S over-drag @ 6yd — 4yd visual separation makes the cross unambiguous. X sits @ 8yd over the top, Z clears with go @ 18yd, B is the flat outlet.`,
   };
 }
 
