@@ -11,6 +11,7 @@ import { resolveEndDecoration, mkZone } from "@/domain/play/factory";
 import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import {
   createCustomOpponentAction,
+  createPlayAction,
   installDefenseVsPlayAction,
   promoteCustomOpponentAction,
   savePlayVersionAction,
@@ -654,6 +655,25 @@ function PlayEditorClientInner({
     });
   }, [playId, doc.metadata.coachName, doc.metadata.formationId, doc.metadata.formation, blockIfPreview]);
 
+  const newPlay = useCallback(async () => {
+    if (
+      blockIfPreview(
+        "Creating a play in an example playbook isn't persisted. Start your own playbook to save plays.",
+      )
+    ) {
+      return;
+    }
+    const res = await createPlayAction(playbookId, {
+      variant: doc.sportProfile.variant,
+      playerCount: playbookSettings?.maxPlayers,
+    });
+    if (!res.ok) {
+      toast(res.error, "error");
+      return;
+    }
+    router.push(`/plays/${res.playId}/edit`);
+  }, [blockIfPreview, playbookId, doc.sportProfile.variant, playbookSettings?.maxPlayers, router, toast]);
+
   /* ---------- Toolbar handlers ---------- */
 
   const handleShapeChange = useCallback(
@@ -1027,6 +1047,7 @@ function PlayEditorClientInner({
         initialNav={initialNav}
         initialGroups={initialGroups}
         onDuplicate={duplicate}
+        onNewPlay={newPlay}
         onNavigateToPlay={navigateToPlay}
         onSaveAsNewFormation={saveAsNewFormation}
         allFormations={allFormations}

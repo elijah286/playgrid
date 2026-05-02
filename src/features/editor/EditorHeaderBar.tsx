@@ -38,6 +38,7 @@ type Props = {
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
   onDuplicate: () => void;
+  onNewPlay: () => void;
   onNavigateToPlay: (playId: string) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
   allFormations?: SavedFormation[];
@@ -62,6 +63,7 @@ export function EditorHeaderBar({
   initialNav,
   initialGroups,
   onDuplicate,
+  onNewPlay,
   onNavigateToPlay,
   onSaveAsNewFormation,
   allFormations = [],
@@ -218,6 +220,15 @@ export function EditorHeaderBar({
               onClick={onDuplicate}
             >
               Copy
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              leftIcon={Plus}
+              onClick={onNewPlay}
+            >
+              New play
             </Button>
           </div>
         )}
