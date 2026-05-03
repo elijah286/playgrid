@@ -200,8 +200,11 @@ export function parseCoachDiagram(data: unknown) {
 // ── Style palettes (mirror src/domain/play/factory.ts styleForRole) ───────
 //
 // Field is green (#2D8B4E), so route stroke = player fill must contrast.
-// Defenders: red triangle. Offense: position-based color, falling back to a
-// rotating palette so multiple receivers get distinct colors.
+// Defenders: red triangle. Offense: role-keyed color (high-contrast
+// convention: QB white, C black, OTHER gray, RB purple, FB orange, TE
+// green, X red, Z blue, Y green, slot yellow). Two slots in the same
+// play (H + F-as-slot) share yellow by design — the no-shared-color
+// gate flags it and Cal recolors one with set_player_color.
 
 type PlayerStyle = { fill: string; stroke: string; labelColor: string };
 
@@ -210,14 +213,9 @@ const STYLE_C:    PlayerStyle = { fill: "#1C1C1E", stroke: "#0f172a", labelColor
 const STYLE_X:    PlayerStyle = { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
 const STYLE_Y:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
-const STYLE_S:    PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
-const STYLE_H:    PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
-// F is a slot/move position distinct from H (per the KB tackle_11
-// label convention X/Y/Z/H/F/T/Q). Previously F was routed to STYLE_H
-// and rendered as orange — visually indistinguishable from H, which a
-// coach correctly flagged 2026-05-02 as confusing in 2x2 doubles where
-// both slot players appeared on screen at the same time.
-const STYLE_F:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
+const STYLE_SLOT: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // S, A, H, F-as-WR
+const STYLE_RB:   PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" }; // halfback / primary back / role=RB
+const STYLE_FB:   PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // fullback (label "FB" with role=RB)
 const STYLE_DEF:         PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" }; // generic — fallback when label doesn't match a role
 // Defender role palette. Triangles already mark "defender"; the hue makes
 // the role legible (corners vs safeties vs hooks vs flats) so a coach can
@@ -237,7 +235,11 @@ const STYLE_LINEMAN: PlayerStyle = { fill: "#94A3B8", stroke: "#475569", labelCo
 // with the offense (and vice versa for defense-focused diagrams).
 const STYLE_NON_FOCUS: PlayerStyle = { fill: "#CBD5E1", stroke: "#94A3B8", labelColor: "#475569" };
 
-const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_S, STYLE_H];
+// Distinct hues for genuinely unknown skill labels — keeps the Nth unknown
+// receiver from collapsing to the same color as the (N-5)th. Order matches
+// the position-derivation priority so the first unknown looks like an X-
+// equivalent, the second a Y-equivalent, and so on.
+const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_SLOT, STYLE_RB, STYLE_FB];
 
 // Map a defender's id (as returned by place_defense or hand-authored by Cal)
 // to a role-coded style. Matches the catalog labels used in
@@ -289,7 +291,7 @@ const LINEMAN_LABELS = new Set([
 /** The semantic color group a player's label maps to. Two skill-position
  *  players in the SAME group render in the same hue — a readability bug. */
 export type DerivedColorGroup =
-  | "X" | "Y" | "Z" | "S" | "H" | "F"
+  | "X" | "Y" | "Z" | "SLOT" | "RB" | "FB"
   | "QB" | "C" | "LINEMAN" | "ROTATION";
 
 /** Canonical playbook palette — names a coach can reason about, mapped
@@ -316,30 +318,36 @@ export const PALETTE_NAMES: PaletteName[] = Object.keys(PLAYBOOK_PALETTE) as Pal
  *  EXACTLY — change them in lockstep. */
 export function derivedColorGroupForLabel(rawLabel: string, role?: string): DerivedColorGroup {
   const upper = (rawLabel ?? "").toUpperCase();
-  if (upper === "QB" || upper === "Q" || role === "QB") return "QB";
-  if (upper === "C" || role === "C") return "C";
+  const upperRole = (role ?? "").toUpperCase();
+  if (upper === "QB" || upper === "Q" || upperRole === "QB") return "QB";
+  if (upper === "C" || upperRole === "C") return "C";
   if (LINEMAN_LABELS.has(upper)) return "LINEMAN";
   const base = upper.replace(/\d+$/, "");
+  // Role-first for backs and TE — disambiguates label F (RB in 7v7 default,
+  // slot in 2x2 doubles) and label B/HB (always RB).
+  if (base === "FB") return "FB";
+  if (upperRole === "RB" || base === "B" || base === "HB" || base === "RB") return "RB";
+  if (upperRole === "TE" || base === "TE") return "Y";
   if (base === "X") return "X";
-  if (base === "Y" || base === "TE" || role === "TE") return "Y";
+  if (base === "Y") return "Y";
   if (base === "Z") return "Z";
-  if (base === "S" || base === "A") return "S";
-  if (base === "F") return "F";
-  if (base === "H" || base === "B" || base === "RB" || role === "RB") return "H";
+  // Slot family — S, A, H, F-as-WR all share yellow. The role===RB path
+  // above already claimed F-as-back, so F arriving here is a slot.
+  if (base === "S" || base === "A" || base === "H" || base === "F") return "SLOT";
   return "ROTATION";
 }
 
 /** The hex the auto-renderer produces for each skill-position group.
- *  Used by the validator's error message ("@H + @B both render orange"). */
+ *  Used by the validator's error message ("@H + @S both render yellow"). */
 export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "LINEMAN">, string> = {
-  X:  "#EF4444",
-  Y:  "#22C55E",
-  Z:  "#3B82F6",
-  S:  "#FACC15",
-  H:  "#F26522",
-  F:  "#A855F7",
-  QB: "#FFFFFF",
-  C:  "#1C1C1E",
+  X:    "#EF4444",
+  Y:    "#22C55E",
+  Z:    "#3B82F6",
+  SLOT: "#FACC15",
+  RB:   "#A855F7",
+  FB:   "#F26522",
+  QB:   "#FFFFFF",
+  C:    "#1C1C1E",
 };
 
 // Default zone style — matches `mkZone`, which is what coaches get
@@ -696,20 +704,33 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         // get STYLE_X (red) — visually indistinguishable from the X
         // receiver. Surfaced 2026-05-01 in production.
         const baseLabel = rawLabel.replace(/\d+$/, "");
-        if (baseLabel === "X") { style = STYLE_X; label = rawLabel.slice(0, 2); }
-        else if (baseLabel === "Y" || baseLabel === "TE" || role === "TE") { style = STYLE_Y; label = rawLabel === "TE" ? "Y" : rawLabel.slice(0, 2); }
-        else if (baseLabel === "Z") { style = STYLE_Z; label = rawLabel.slice(0, 2); }
-        else if (baseLabel === "S" || baseLabel === "A") { style = STYLE_S; label = rawLabel.slice(0, 2); }
-        // F gets its OWN color now — purple — so it renders distinct
-        // from H (orange) when both appear in the same play (e.g. spread
-        // doubles 2x2 has slot H on one side and slot F on the other).
-        else if (baseLabel === "F") {
-          style = STYLE_F;
+        // Role-first dispatch for backs and TE — disambiguates labels
+        // that mean different things in different formations (F is RB
+        // in 7v7 default but a slot in 2x2 doubles; role disambiguates).
+        if (baseLabel === "FB" || (role === "RB" && baseLabel === "FB")) {
+          // Explicit fullback — orange — so HB + FB pair contrasts in
+          // I-form / 21 personnel.
+          style = STYLE_FB;
           label = rawLabel.slice(0, 2);
         }
-        else if (baseLabel === "H" || baseLabel === "B" || baseLabel === "RB" || role === "RB") {
-          style = STYLE_H;
+        else if (role === "RB" || baseLabel === "B" || baseLabel === "HB" || baseLabel === "RB") {
+          // Halfback / single back — purple. The 7v7 "F" (role=RB)
+          // lands here too via role-match, keeping the lone back purple.
+          style = STYLE_RB;
           label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 2);
+        }
+        else if (role === "TE" || baseLabel === "TE") {
+          style = STYLE_Y;
+          label = rawLabel === "TE" ? "Y" : rawLabel.slice(0, 2);
+        }
+        else if (baseLabel === "X") { style = STYLE_X; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "Y") { style = STYLE_Y; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "Z") { style = STYLE_Z; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "S" || baseLabel === "A" || baseLabel === "H" || baseLabel === "F") {
+          // Slot family — yellow. F here is the WR-role slot (2x2
+          // doubles); the role===RB path above already claimed F-as-back.
+          style = STYLE_SLOT;
+          label = rawLabel.slice(0, 2);
         } else {
           // Genuinely unknown skill label (no recognizable base) —
           // rotate the palette so multiple unknown receivers get

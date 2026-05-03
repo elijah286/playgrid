@@ -640,25 +640,28 @@ export function validateDiagrams(opts: {
 
     // ── COLOR-CLASH GATE ─────────────────────────────────────────────
     // No two skill-position offensive players may render in the same
-    // color. Position labels carry color semantics (X red, Y green, Z
-    // blue, H orange, F purple, S yellow); two players in the same
-    // group (e.g. H + B both → orange, or X + X2 both → red) collide
-    // visually and a coach can't tell which dot is which on the
-    // diagram. Surfaced 2026-05-03 by a coach who flagged "two oranges
-    // and no purple or green" in a Cal-generated 5v5 play.
+    // color. Position roles + labels carry color semantics (QB white,
+    // C black, RB purple, FB orange, TE green, X red, Z blue, slot
+    // yellow); two players in the same group (e.g. H + S both →
+    // yellow, or X + X2 both → red) collide visually and a coach
+    // can't tell which dot is which on the diagram. Surfaced
+    // 2026-05-03 by a coach who flagged "two oranges and no purple
+    // or green" in a Cal-generated 5v5 play; convention later
+    // tightened to role-keyed defaults.
     //
     // The gate computes each player's EFFECTIVE color (explicit
-    // `player.color` override wins, else the label-derived hex) and
-    // groups by hex. Singleton groups (QB white, C black) and the
-    // lineman gray are exempt — the structural roles allow shared
-    // hue. The fix Cal should reach for: relabel a clashing player to
-    // an unused color group (F purple is the most common gap), or
+    // `player.color` override wins, else the role+label-derived hex)
+    // and groups by hex. Singleton groups (QB white, C black) and
+    // the lineman gray are exempt — the structural roles allow shared
+    // hue. The fix Cal should reach for: relabel one of the clashing
+    // players (e.g. swap a second slot to a different position), or
     // override one with `set_player_color` via revise_play.
     if (offense.length > 0) {
       const skillByHex = new Map<string, Array<{ id: string; group: string }>>();
-      for (const p of offense as Array<{ id?: unknown; color?: unknown }>) {
+      for (const p of offense as Array<{ id?: unknown; role?: unknown; color?: unknown }>) {
         if (typeof p.id !== "string") continue;
-        const group = derivedColorGroupForLabel(p.id);
+        const roleHint = typeof p.role === "string" ? p.role : undefined;
+        const group = derivedColorGroupForLabel(p.id, roleHint);
         if (group === "QB" || group === "C" || group === "LINEMAN" || group === "ROTATION") continue;
         const explicitColor = typeof p.color === "string" && p.color.trim() !== "" ? p.color.trim() : null;
         const hex = explicitColor ?? DERIVED_GROUP_HEX[group];
@@ -678,10 +681,10 @@ export function validateDiagrams(opts: {
         const colorName =
           (Object.entries(PLAYBOOK_PALETTE).find(([, h]) => h === hex)?.[0]) ?? hex;
         const suggestion = unusedNames.length > 0
-          ? `Pick one of ${ids.split(", ")[0]} or ${ids.split(", ")[1]} and either (a) relabel it so it derives a different color (e.g. swap H→F to get purple, swap H2→F to use the unused F slot), or (b) call revise_play with set_player_color: "${unusedNames[0]}" on one of them. Unused palette colors here: ${unusedNames.join(", ")}.`
+          ? `Pick one of ${ids.split(", ")[0]} or ${ids.split(", ")[1]} and either (a) relabel it so it derives a different color (e.g. swap a second slot @H to @F-with-role-RB for purple, or to FB for orange), or (b) call revise_play with set_player_color: "${unusedNames[0]}" on one of them. Unused palette colors here: ${unusedNames.join(", ")}.`
           : `Override one with revise_play set_player_color, or relabel for color variety. Every standard palette color is already in use.`;
         errors.push(
-          `${tag}color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from position labels (X red, Y green, Z blue, H orange, F purple, S yellow), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
+          `${tag}color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from role+label (QB white, C black, RB purple, FB orange, TE green, X red, Z blue, slot yellow), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
         );
       }
     }

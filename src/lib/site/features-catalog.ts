@@ -439,7 +439,16 @@ export const FEATURES: FeatureEntry[] = [
     id: "coach-cal-color-control",
     name: "Coach Cal token color control + no-clash gate",
     description:
-      "Coach Cal can now recolor any player's token on an existing play via revise_play / modify_play_route with a set_player_color mod (palette: red, orange, yellow, green, blue, purple, black, white, gray). Identity-preserving — works on offense or defense, with or without a route, and never touches the player's position. Combined with a chat-time validator gate that rejects any play where two skill-position players would render in the same color (the H + B both-orange clash that prompted the build) — Cal is steered toward the full palette (X red / Y green / Z blue / H orange / F purple / S yellow) and pushes back when a recolor request would create a new clash.",
+      "Coach Cal can now recolor any player's token on an existing play via revise_play / modify_play_route with a set_player_color mod (palette: red, orange, yellow, green, blue, purple, black, white, gray). Identity-preserving — works on offense or defense, with or without a route, and never touches the player's position. Combined with a chat-time validator gate that rejects any play where two skill-position players would render in the same color, Cal is steered toward the full role-keyed palette and pushes back when a recolor request would create a new clash.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
+    id: "coach-cal-role-keyed-default-colors",
+    name: "Role-keyed default token colors for high contrast",
+    description:
+      "Default offensive token colors are now role-keyed for maximum on-field contrast: QB white, C black, linemen gray, RB (B / HB / single back) purple, FB orange, TE green, X red, Z blue, Y green, slot family (S / A / H / F-as-WR) yellow. The 7v7 default formation now produces seven distinct hues out of the box (no more red + orange + orange clashes). HB + FB on the same play render distinctly (purple + orange) so I-form / 21-personnel reads cleanly. The chat-time no-shared-color gate stays in lockstep — two slots in one play (yellow + yellow) is still flagged so Cal recolors one with set_player_color. Coaches can override per play; the convention is the floor, not the ceiling.",
     category: "Coach AI",
     status: "ga",
     addedDate: "2026-05-03",

@@ -31,7 +31,7 @@ import {
   type CoachDiagram,
 } from "./coachDiagramConverter";
 
-function diagram(players: Array<{ id: string; x: number; y: number; team?: "O" | "D"; color?: string }>): CoachDiagram {
+function diagram(players: Array<{ id: string; x: number; y: number; team?: "O" | "D"; color?: string; role?: string }>): CoachDiagram {
   return {
     title: "Test",
     variant: "tackle_11",
@@ -170,52 +170,60 @@ describe("overlap resolver — non-OL pairs ARE resolved", () => {
   });
 });
 
-describe("player color routing — suffixed labels match base color", () => {
-  // Production bug 2026-05-01: H2 was rendered RED (X color) instead of
-  // ORANGE (H color) because the label-match used exact-equality
-  // (rawLabel === "H") and "H2" fell through to the generic-receiver
-  // rotation palette. Same potential issue for X2, Y2, Z2, F2, B2, S2.
+describe("player color routing — role-keyed convention", () => {
+  // Convention pinned 2026-05-03 by coach feedback: high-contrast
+  // role-first defaults — RB purple, FB orange, slot family (S/A/H/F)
+  // yellow. Backs separate from slots so a 7v7 default (Q/C/X/Y/Z/S/F-RB)
+  // gets six distinct hues without a clash.
 
-  function colorFor(label: string): string {
+  function colorFor(label: string, role?: string): string {
     const doc = coachDiagramToPlayDocument(diagram([
       { id: "C", x: 0, y: 0 },
       { id: "QB", x: 0, y: -5 },
-      { id: label, x: 5, y: 0 },
+      { id: label, x: 5, y: 0, ...(role ? { role } : {}) },
     ]));
-    return doc.layers.players.find((p) => p.label === label)?.style.fill ?? "";
+    // The third player is the one under test. Filter out C and Q since
+    // the converter rewrites some raw labels (e.g. "RB" → "B" for display).
+    const target = doc.layers.players.find((p) => p.label !== "Q" && p.label !== "C");
+    return target?.style.fill ?? "";
   }
 
-  it("H2 has the same color as H (orange #F26522)", () => {
-    expect(colorFor("H2")).toBe(colorFor("H"));
-    expect(colorFor("H2")).toBe("#F26522");
-  });
-
-  it("X2 has the same color as X (red #EF4444)", () => {
+  it("X / X2 → red (#EF4444)", () => {
+    expect(colorFor("X")).toBe("#EF4444");
     expect(colorFor("X2")).toBe(colorFor("X"));
-    expect(colorFor("X2")).toBe("#EF4444");
   });
 
-  it("Z2 has the same color as Z (blue #3B82F6)", () => {
+  it("Z / Z2 → blue (#3B82F6)", () => {
+    expect(colorFor("Z")).toBe("#3B82F6");
     expect(colorFor("Z2")).toBe(colorFor("Z"));
   });
 
-  it("F has its OWN color (purple, not orange) — distinct from H", () => {
-    // Per the KB tackle_11 convention (X / Y / Z / H / F / T / Q): F is
-    // a distinct slot/move position from H. Coaches need to tell them
-    // apart at a glance when both appear in the same play (spread
-    // doubles 2x2). 2026-05-02 surfaced as confusing when F + H both
-    // rendered orange.
-    expect(colorFor("F")).not.toBe(colorFor("H"));
-    expect(colorFor("F")).toBe("#A855F7"); // purple
+  it("Y → green (#22C55E)", () => {
+    expect(colorFor("Y")).toBe("#22C55E");
   });
 
-  it("F2 inherits F's purple (suffixed labels match base color)", () => {
-    expect(colorFor("F2")).toBe(colorFor("F"));
-    expect(colorFor("F2")).toBe("#A855F7");
+  it("slot family (S, A, H, F-as-WR) all → yellow (#FACC15)", () => {
+    expect(colorFor("S")).toBe("#FACC15");
+    expect(colorFor("A")).toBe("#FACC15");
+    expect(colorFor("H")).toBe("#FACC15");
+    expect(colorFor("H2")).toBe("#FACC15");
+    expect(colorFor("F")).toBe("#FACC15"); // F without role=RB is a slot
+    expect(colorFor("F2")).toBe("#FACC15");
   });
 
-  it("B2 still shares the H color (all orange backs — B is a back, not a slot)", () => {
-    expect(colorFor("B2")).toBe("#F26522");
+  it("F with role=RB → purple (lone back in 7v7 default formation)", () => {
+    expect(colorFor("F", "RB")).toBe("#A855F7");
+  });
+
+  it("B / B2 / RB / HB → purple (#A855F7) — primary back", () => {
+    expect(colorFor("B")).toBe("#A855F7");
+    expect(colorFor("B2")).toBe("#A855F7");
+    expect(colorFor("RB")).toBe("#A855F7");
+    expect(colorFor("HB")).toBe("#A855F7");
+  });
+
+  it("FB → orange (#F26522) — explicit fullback signal, contrasts with HB purple", () => {
+    expect(colorFor("FB")).toBe("#F26522");
   });
 
   it("preserves the FULL suffixed label for display (H2 not H)", () => {
@@ -235,16 +243,27 @@ describe("derivedColorGroupForLabel — semantic groups", () => {
     expect(derivedColorGroupForLabel("X")).toBe("X");
     expect(derivedColorGroupForLabel("Y")).toBe("Y");
     expect(derivedColorGroupForLabel("Z")).toBe("Z");
-    expect(derivedColorGroupForLabel("F")).toBe("F");
-    expect(derivedColorGroupForLabel("S")).toBe("S");
   });
 
-  it("collapses H, B, RB, and digit-suffixed variants into the H group (the orange clash source)", () => {
-    expect(derivedColorGroupForLabel("H")).toBe("H");
-    expect(derivedColorGroupForLabel("B")).toBe("H");
-    expect(derivedColorGroupForLabel("H2")).toBe("H");
-    expect(derivedColorGroupForLabel("B2")).toBe("H");
-    expect(derivedColorGroupForLabel("RB")).toBe("H");
+  it("collapses S, A, H, and F (no role) — plus digit-suffixed variants — into the SLOT group (yellow)", () => {
+    expect(derivedColorGroupForLabel("S")).toBe("SLOT");
+    expect(derivedColorGroupForLabel("A")).toBe("SLOT");
+    expect(derivedColorGroupForLabel("H")).toBe("SLOT");
+    expect(derivedColorGroupForLabel("H2")).toBe("SLOT");
+    expect(derivedColorGroupForLabel("F")).toBe("SLOT");
+    expect(derivedColorGroupForLabel("F2")).toBe("SLOT");
+  });
+
+  it("collapses B, HB, RB, and F-with-role-RB into the RB group (purple)", () => {
+    expect(derivedColorGroupForLabel("B")).toBe("RB");
+    expect(derivedColorGroupForLabel("B2")).toBe("RB");
+    expect(derivedColorGroupForLabel("HB")).toBe("RB");
+    expect(derivedColorGroupForLabel("RB")).toBe("RB");
+    expect(derivedColorGroupForLabel("F", "RB")).toBe("RB");
+  });
+
+  it("FB → its own group (orange) so HB+FB both display distinctly", () => {
+    expect(derivedColorGroupForLabel("FB")).toBe("FB");
   });
 
   it("treats QB, C, and linemen as their own exempt groups", () => {

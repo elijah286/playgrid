@@ -161,21 +161,30 @@ export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
 };
 
 /**
- * Position-aware default style. Keeps the offensive formation readable at
- * a glance: C (black) and Q (white) anchor the backfield; skill positions
- * are colored by label; OL defaults to gray so the 11-man front doesn't
- * drown the skill guys in identical circles.
+ * Position-aware default style. The convention is role-keyed for high
+ * contrast on a green field:
+ *   QB → white, C → black, OTHER (linemen) → gray   (structural roles)
+ *   RB → purple (halfback / single back); FB label → orange (fullback)
+ *   TE → green
+ *   WR by label: X → red (WR1), Z → blue (WR2), Y → green (TE-equivalent)
+ *   any other WR label (S, A, H, F-as-slot) → yellow (slot family)
+ * Coaches override per-play via set_player_color when a play needs to
+ * deviate (e.g. two slots in one formation).
  */
 function styleForRole(role: Player["role"], label: string): Player["style"] {
   if (role === "C") return { fill: "#1C1C1E", stroke: "#0f172a", labelColor: "#FFFFFF" };
   if (role === "OTHER") return { fill: "#94A3B8", stroke: "#0f172a", labelColor: "#1C1C1E" };
-  if (label === "Q") return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
+  if (role === "QB") return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
+  if (role === "RB") {
+    if (label === "FB") return { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
+    return { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
+  }
+  if (role === "TE") return { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
   if (label === "X") return { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
-  if (label === "Y" || role === "TE") return { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
   if (label === "Z") return { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
-  if (label === "S" || label === "A") return { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
-  if (label === "H" || label === "F" || label === "B") return { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
-  return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
+  if (label === "Y") return { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
+  if (label === "Q") return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
+  return { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
 }
 
 function mkPlayer(

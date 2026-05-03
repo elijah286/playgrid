@@ -1388,9 +1388,10 @@ describe("validateDiagrams — center eligibility (7v7 vs 5v5)", () => {
 });
 
 describe("validateDiagrams — color-clash gate (no two skill players share a derived color)", () => {
-  it("REJECTS a play with H + B both rendering orange", () => {
-    // Reproduces 2026-05-03 coach feedback: Cal generated 5v5 plays
-    // using H and B as the two slot carriers, both rendering orange.
+  it("REJECTS a play with two slot carriers (H + S both rendering yellow)", () => {
+    // Reproduces 2026-05-03 coach feedback (post-convention rewrite):
+    // slot family (S/A/H/F-as-WR) all derive yellow under the high-
+    // contrast role-keyed defaults, so two slots in one play clash.
     const fence = makeFence({
       title: "Trips Right Stick",
       variant: "flag_5v5",
@@ -1399,16 +1400,16 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
         { id: "C", x: 0, y: 0, team: "O" },
         { id: "X", x: -10, y: 0, team: "O" },
         { id: "H", x: -5, y: 0, team: "O" },
-        { id: "B", x: 6, y: 0, team: "O" },
+        { id: "S", x: 6, y: 0, team: "O" },
       ],
       routes: [
         { from: "X", path: [[-10, 5]], route_kind: "Hitch" },
         { from: "H", path: [[-2, 6]], route_kind: "Drag" },
-        { from: "B", path: [[10, 5]], route_kind: "Out" },
+        { from: "S", path: [[10, 5]], route_kind: "Out" },
       ],
     });
     const result = validateDiagrams({
-      text: `${fence}\n@X hitches, @H drags, @B runs the out.`,
+      text: `${fence}\n@X hitches, @H drags, @S runs the out.`,
       variant: "flag_5v5",
       lastPlaceDefense: null,
     });
@@ -1416,12 +1417,10 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
     if (result.ok) return;
     const clashError = result.errors.find((e) => /color clash/i.test(e));
     expect(clashError).toBeDefined();
-    expect(clashError).toMatch(/orange/);
-    // The error should suggest an unused palette color (purple is unused here).
-    expect(clashError).toMatch(/purple/);
+    expect(clashError).toMatch(/yellow/);
   });
 
-  it("REJECTS H + H2 (both derive to orange)", () => {
+  it("REJECTS H + H2 (both derive to yellow under the slot family)", () => {
     const fence = makeFence({
       title: "Empty Right",
       variant: "flag_5v5",
@@ -1448,7 +1447,8 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
     expect(result.errors.find((e) => /color clash/i.test(e))).toBeDefined();
   });
 
-  it("ACCEPTS a play that uses the full color palette (X, Y, Z, H, F)", () => {
+  it("ACCEPTS a play that uses five distinct hues (X, Y, Z, H, B)", () => {
+    // Convention-compliant 5-skill spread: WR1 + WR2 + TE-equiv + slot + back.
     const fence = makeFence({
       title: "Empty Doubles",
       variant: "flag_5v5",
@@ -1457,18 +1457,18 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
         { id: "C", x: 0, y: 0, team: "O" },
         { id: "X", x: -12, y: 0, team: "O" },
         { id: "Y", x: -5, y: 0, team: "O" },
-        { id: "F", x: 5, y: 0, team: "O" },
+        { id: "H", x: 5, y: 0, team: "O" },
         { id: "Z", x: 12, y: 0, team: "O" },
       ],
       routes: [
         { from: "X", path: [[-12, 5]], route_kind: "Hitch" },
         { from: "Y", path: [[-2, 6]], route_kind: "Drag" },
-        { from: "F", path: [[2, 6]], route_kind: "Drag" },
+        { from: "H", path: [[2, 6]], route_kind: "Drag" },
         { from: "Z", path: [[12, 5]], route_kind: "Hitch" },
       ],
     });
     const result = validateDiagrams({
-      text: `${fence}\n@X hitches, @Y drags, @F drags, @Z hitches.`,
+      text: `${fence}\n@X hitches, @Y drags, @H drags, @Z hitches.`,
       variant: "flag_5v5",
       lastPlaceDefense: null,
     });
@@ -1488,36 +1488,7 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
         { id: "C", x: 0, y: 0, team: "O" },
         { id: "X", x: -10, y: 0, team: "O" },
         { id: "H", x: -5, y: 0, team: "O", color: "#A855F7" }, // explicit purple
-        { id: "F", x: 5, y: 0, team: "O" },                     // derives purple
-      ],
-      routes: [
-        { from: "X", path: [[-10, 5]], route_kind: "Hitch" },
-        { from: "H", path: [[-2, 6]], route_kind: "Drag" },
-        { from: "F", path: [[10, 5]], route_kind: "Out" },
-      ],
-    });
-    const result = validateDiagrams({
-      text: `${fence}\n@X hitches, @H drags, @F runs the out.`,
-      variant: "flag_5v5",
-      lastPlaceDefense: null,
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.errors.find((e) => /color clash/i.test(e))).toBeDefined();
-  });
-
-  it("ACCEPTS a clash resolved by recoloring one of the players to an unused palette color", () => {
-    // H and B normally clash (both orange), but H is overridden to
-    // green (unused) and B keeps orange — distinct now.
-    const fence = makeFence({
-      title: "Test",
-      variant: "flag_5v5",
-      players: [
-        { id: "Q", x: 0, y: -3, team: "O" },
-        { id: "C", x: 0, y: 0, team: "O" },
-        { id: "X", x: -10, y: 0, team: "O" },
-        { id: "H", x: -5, y: 0, team: "O", color: "#22C55E" }, // recolored to green
-        { id: "B", x: 6, y: 0, team: "O" },                    // stays orange
+        { id: "B", x: 5, y: 0, team: "O" },                     // derives purple
       ],
       routes: [
         { from: "X", path: [[-10, 5]], route_kind: "Hitch" },
@@ -1530,6 +1501,35 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
       variant: "flag_5v5",
       lastPlaceDefense: null,
     });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.find((e) => /color clash/i.test(e))).toBeDefined();
+  });
+
+  it("ACCEPTS a clash resolved by recoloring one of the players to an unused palette color", () => {
+    // H and S would both derive yellow (slot family clash); recolor
+    // H to green so the two are distinct.
+    const fence = makeFence({
+      title: "Test",
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "H", x: -5, y: 0, team: "O", color: "#22C55E" }, // recolored to green
+        { id: "S", x: 6, y: 0, team: "O" },                    // stays yellow
+      ],
+      routes: [
+        { from: "X", path: [[-10, 5]], route_kind: "Hitch" },
+        { from: "H", path: [[-2, 6]], route_kind: "Drag" },
+        { from: "S", path: [[10, 5]], route_kind: "Out" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@X hitches, @H drags, @S runs the out.`,
+      variant: "flag_5v5",
+      lastPlaceDefense: null,
+    });
     if (!result.ok) {
       expect(result.errors.find((e) => /color clash/i.test(e))).toBeUndefined();
     }
@@ -1537,6 +1537,8 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
 
   it("does NOT flag the QB / C / linemen (their colors are exempt)", () => {
     // Multiple linemen all share gray — that's by design, not a clash.
+    // H and B are now distinct hues (yellow vs purple) under the new
+    // convention, so this play is fully clean.
     const fence = makeFence({
       title: "I-Form Iso",
       variant: "tackle_11",
@@ -1562,14 +1564,47 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
       variant: "tackle_11",
       lastPlaceDefense: null,
     });
-    // Linemen sharing gray must not trigger the gate; H + B sharing
-    // orange WILL trigger it (both are skill positions with the same
-    // derived hue) — that's the intended behavior.
+    // Linemen sharing gray must not trigger the gate. Under the new
+    // role-keyed convention H (yellow slot) + B (purple back) do NOT
+    // clash, so the only sharing on this play is the lineman gray —
+    // which is exempt. There should be no color-clash error at all.
     if (!result.ok) {
       const clashErrors = result.errors.filter((e) => /color clash/i.test(e));
-      // Exactly one clash error (H + B), nothing about linemen.
       const linemanClash = clashErrors.find((e) => /LT|LG|RG|RT/.test(e));
       expect(linemanClash).toBeUndefined();
+    }
+  });
+
+  it("ACCEPTS HB (B, purple) + FB (orange) on the same play — backs are distinct hues by design", () => {
+    // I-form / 21 personnel often has both a halfback and a fullback.
+    // Convention: B → purple, FB → orange. Distinct, no clash.
+    const fence = makeFence({
+      title: "I-Form Iso",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "LT", x: -3, y: 0, team: "O" },
+        { id: "LG", x: -1.5, y: 0, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "RG", x: 1.5, y: 0, team: "O" },
+        { id: "RT", x: 3, y: 0, team: "O" },
+        { id: "X", x: -12, y: 0, team: "O" },
+        { id: "Y", x: 4, y: 0, team: "O" },
+        { id: "Z", x: 12, y: 0, team: "O" },
+        { id: "FB", x: 0, y: -4, team: "O", role: "RB" },
+        { id: "B", x: 0, y: -7, team: "O", role: "RB" },
+      ],
+      routes: [
+        { from: "Y", path: [[4, 5]], route_kind: "Hitch" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@FB lead-blocks for @B on the iso.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+    });
+    if (!result.ok) {
+      expect(result.errors.find((e) => /color clash/i.test(e))).toBeUndefined();
     }
   });
 });
