@@ -27,15 +27,24 @@ export default async function PracticePlanPrintPage({
     .maybeSingle();
   const isAdmin = profile?.role === "admin";
 
+  const res = await getPracticePlanAction(planId);
+  if (!res.ok) notFound();
+
+  const { data: membership } = await sb
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", res.plan.playbook_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const memberRole = membership?.role as string | null;
+  const isCoachInPlaybook = memberRole === "owner" || memberRole === "editor";
+
   const beta = await getBetaFeatures();
   const allowed = isBetaFeatureAvailable(beta.practice_plans, {
     isAdmin,
-    isEntitled: false,
+    isEntitled: isCoachInPlaybook,
   });
   if (!allowed) notFound();
-
-  const res = await getPracticePlanAction(planId);
-  if (!res.ok) notFound();
 
   return (
     <PracticePlanPrintView
