@@ -20,6 +20,7 @@ import {
 } from "@/app/actions/practice-plans";
 import { formatOffset } from "@/domain/practice-plan/types";
 import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
+import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 
 export function PlaybookPracticePlansTab({
   playbookId,
@@ -146,14 +147,17 @@ function PlaybookPracticePlansTabInner({ playbookId }: { playbookId: string }) {
           </p>
         </div>
         {!showCreate ? (
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            New plan
-          </button>
+          <div className="flex items-center gap-2">
+            <CoachCalCTA entryPoint="playbook_generate_practice_plan" />
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              New plan
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -212,10 +216,14 @@ function PlaybookPracticePlansTabInner({ playbookId }: { playbookId: string }) {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : plans.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center">
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border px-4 py-12 text-center">
           <p className="text-sm text-muted">
             No practice plans yet. Create one to start building your practice templates.
           </p>
+          <CoachCalCTA
+            entryPoint="playbook_generate_practice_plan"
+            variant="primary"
+          />
         </div>
       ) : (
         <ul className="space-y-2">

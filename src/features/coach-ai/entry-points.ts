@@ -11,7 +11,8 @@ export type CoachCalEntryPointId =
   | "play_notes_regenerate"
   | "playbook_generate_play"
   | "play_suggest_counter"
-  | "playbook_generate_starter";
+  | "playbook_generate_starter"
+  | "playbook_generate_practice_plan";
 
 export type EntryPointContext = {
   /** Replacement values for ${name} tokens in the prompt template. */
@@ -100,6 +101,23 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ctaLabel: "Start 7-day free trial",
     },
     ctaLabel: "Generate a starter playbook with Coach Cal",
+  },
+  playbook_generate_practice_plan: {
+    id: "playbook_generate_practice_plan",
+    promptTemplate:
+      "Help me build a practice plan for this team. Ask me about the practice length, my team's age and skill level, what plays I want to install or refine, and any specific drills or focus areas. Then propose a timeline (warm-up / individual / team install / conditioning) — once I confirm, save it as a new practice plan in this playbook.",
+    preview: {
+      leadIn:
+        "Coach Cal can interview you about your practice goals — length, age tier, plays to install, focus areas — and build a structured timeline (warm-up, individual, team install, conditioning) that saves straight to your playbook.",
+      capabilities: [
+        "Build practice plans that install your playbook week by week",
+        "Generate plays tailored to your team's age, skill, and league rules",
+        "Suggest counters when a defense or offense is giving you trouble",
+        "Author per-play notes with QB reads, hot routes, and coaching points",
+      ],
+      ctaLabel: "Start 7-day free trial",
+    },
+    ctaLabel: "Generate a practice plan with Coach Cal",
   },
 };
 

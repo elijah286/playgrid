@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-in-app-cta-practice-plan",
+    name: "Generate a practice plan with Coach Cal — from the Practice Plans tab",
+    description:
+      "The Practice Plans tab now has a \"Generate a practice plan with Coach Cal\" CTA next to the manual \"New plan\" button (and a prominent version on the empty-state). One click opens Cal with a pre-written prompt that asks Cal to interview the coach about practice length, age tier, plays to install, and focus areas — then propose a structured timeline (warm-up / individual / team install / conditioning) and save it via create_practice_plan once confirmed. Coaches don't have to remember the right structure or block lengths; Cal proposes a sensible timeline grounded in age-tier guidance from the practice KB.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-in-app-cta-starter-playbook",
     name: "Generate a starter playbook with Coach Cal",
     description:
