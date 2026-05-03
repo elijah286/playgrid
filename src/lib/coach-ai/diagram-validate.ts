@@ -12,6 +12,10 @@ import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { SportVariant } from "@/domain/play/types";
 import {
+  defaultSettingsForVariant,
+  type PlaybookSettings,
+} from "@/domain/playbook/settings";
+import {
   assertConcept,
   formatConceptViolations,
   parseConceptsFromText,
@@ -116,6 +120,59 @@ export function expectedFullCount(variant: string | null | undefined): number {
     case "flag_7v7":  return 7;
     default:          return 7;
   }
+}
+
+/**
+ * Resolve the effective game-rule settings for a validation pass. Prefers
+ * the playbook's explicit settings (a coach can toggle blocking on for a
+ * 7v7 if their league allows it), falls back to variant defaults. Returns
+ * null when neither variant nor settings are known — the variant-rule
+ * gates skip in that case rather than firing false positives on plays
+ * Cal authors with no anchored playbook.
+ */
+function resolveSettings(
+  variant: string | null | undefined,
+  override: PlaybookSettings | null | undefined,
+): PlaybookSettings | null {
+  if (override) return override;
+  if (
+    variant === "flag_7v7" ||
+    variant === "flag_5v5" ||
+    variant === "tackle_11" ||
+    variant === "other"
+  ) {
+    return defaultSettingsForVariant(variant);
+  }
+  return null;
+}
+
+const BLOCKING_PROSE_PATTERNS: ReadonlyArray<RegExp> = [
+  // Action verbs — must look like a real play instruction, not a noun
+  // ("blocking scheme", "block-down" defense terminology). Anchored on
+  // word boundaries with a player @-tag or imperative subject nearby.
+  /@[A-Z][A-Z0-9]?\s+(?:will\s+)?(?:lead\s+)?blocks?\b/,
+  /@[A-Z][A-Z0-9]?\s+(?:is\s+a\s+)?(?:lead\s+)?blocker\b/,
+  /\blead[\s-]+block(?:s|ing|er|ers)?\b/i,
+  /\bpass[\s-]+pro(?:tect(?:s|ion|ing)?)?\b/i,
+  /\bstays?\s+in\s+to\s+block\b/i,
+  /\bcrack[\s-]+back\s+block\b/i,
+  /\bdown[\s-]+block(?:s|ing)?\b/i,
+];
+
+/**
+ * Detect prose that calls offense players blockers. Used by the
+ * blocking-legality gate when the playbook has blockingAllowed:false.
+ * Strips ```...``` fences first so JSON keys ("zones": ["block-down"])
+ * and defender labels inside the diagram don't trigger.
+ */
+function detectBlockingProse(text: string): string[] {
+  const stripped = text.replace(/```[\s\S]*?```/g, "");
+  const hits: string[] = [];
+  for (const re of BLOCKING_PROSE_PATTERNS) {
+    const m = re.exec(stripped);
+    if (m) hits.push(m[0]);
+  }
+  return hits;
 }
 
 /**
@@ -319,6 +376,12 @@ const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
 export function validateDiagrams(opts: {
   text: string;
   variant: string | null | undefined;
+  /** Per-playbook game-rule settings. When set, overrides the variant
+   *  defaults for blocking / center-eligibility / handoff / rushing
+   *  gates. When omitted, the variant defaults from
+   *  `defaultSettingsForVariant` are used (so 7v7 still rejects
+   *  blocking even when callers haven't plumbed settings yet). */
+  playbookSettings?: PlaybookSettings | null;
   /** Most recent place_defense return, if any. Used to catch the model
    *  silently repositioning, renaming, or dropping defenders. */
   lastPlaceDefense: PlaceDefenseSnapshot | null;
@@ -467,6 +530,30 @@ export function validateDiagrams(opts: {
   const errors: string[] = [...phantomErrors];
   errors.push(...checkProseUsesYards(opts.text));
   const expected = expectedFullCount(opts.variant);
+  const settings = resolveSettings(opts.variant, opts.playbookSettings);
+
+  // VARIANT-RULE GATE A — blocking prose. When the playbook has
+  // blockingAllowed:false (every flag variant by default), Cal cannot
+  // describe an offensive player as a blocker. Surfaced 2026-05-03: a
+  // 7v7 "bubble screen" labeled X/H/S/B as "lead blockers" — geometry
+  // was flat routes (legal) but the prose announced an illegal action.
+  // The fix lives here rather than in notes-lint because the fence may
+  // be empty and the action-kind gate (below, per-fence) only catches
+  // the structural variant.
+  if (settings && !settings.blockingAllowed) {
+    const blockingHits = detectBlockingProse(opts.text);
+    if (blockingHits.length > 0) {
+      errors.push(
+        `blocking is not allowed in this game type (${opts.variant ?? "flag"}) but your prose describes a blocking action — matched: ${blockingHits
+          .slice(0, 3)
+          .map((h) => JSON.stringify(h))
+          .join(", ")}. ` +
+          `Every offensive player except the QB is a receiver / decoy / route-runner — there is no legal blocking, no lead blockers, no pass protection, no crack-back blocks. ` +
+          `Re-emit the play with each player on a route, a decoy clear-out, or a check release. ` +
+          `If you want a screen with downfield support, the supporting receivers run FLAT or SHALLOW routes (not blocks) — describe them as "running flat to occupy the corner" or "shallow drag to pull the linebacker", never "lead blocker".`,
+      );
+    }
+  }
 
   // GATE B — modify-not-regenerate. When the prior assistant turn
   // already had a play fence and this turn emits a new fence without
@@ -545,6 +632,58 @@ export function validateDiagrams(opts: {
     const players = Array.isArray(json.players) ? json.players : [];
     const offense = players.filter((p) => p.team !== "D");
     const defense = players.filter((p) => p.team === "D");
+
+    // VARIANT-RULE GATE B — center eligibility. When the playbook has
+    // centerIsEligible:false (7v7, tackle_11), a route originating at
+    // @C is illegal — the center is a snapper, not a receiver. Surfaced
+    // alongside the blocking gate (2026-05-03): the same coach feedback
+    // pointed out that 7v7 has no eligible center.
+    //
+    // Skipped when offense is empty or settings unknown. The check uses
+    // the route carriers, not the spec, because route_kind is a
+    // diagram-level field and the parser doesn't always run cleanly
+    // (a malformed fence shouldn't suppress the gate).
+    if (settings && !settings.centerIsEligible && Array.isArray(json.routes)) {
+      const centerIds = new Set(
+        offense
+          .filter((p) => typeof p.id === "string" && p.id.toUpperCase() === "C")
+          .map((p) => p.id),
+      );
+      if (centerIds.size > 0) {
+        const offendingRoute = json.routes.find(
+          (r) => typeof r.from === "string" && centerIds.has(r.from),
+        );
+        if (offendingRoute) {
+          errors.push(
+            `${tag}@C has a route, but the center is not an eligible receiver in this game type (${opts.variant ?? "unknown"}). ` +
+              `The center snaps the ball and stays at the LOS — only the QB can hand off / pass to other players. ` +
+              `Drop the route on @C, or move the route to one of the eligible receivers (X / Y / Z / H / S / B / F).`,
+          );
+        }
+      }
+    }
+
+    // VARIANT-RULE GATE C — block-action structural check. When the
+    // diagram parses to a spec that includes any `kind: "block"`
+    // assignment (or any lineman label LT/LG/RG/RT in a non-tackle
+    // variant), the play is structurally illegal. The prose gate above
+    // catches the common case (Cal calling flat-route receivers
+    // "blockers"); this gate catches the path where a block action
+    // sneaks in via the parser's lineman inference or via a spec-form
+    // input from a future tool.
+    if (settings && !settings.blockingAllowed) {
+      const linemanIds = ["LT", "LG", "RG", "RT", "T", "G", "OL"];
+      const offendingLineman = offense.find(
+        (p) => typeof p.id === "string" && linemanIds.includes(p.id.toUpperCase()),
+      );
+      if (offendingLineman) {
+        errors.push(
+          `${tag}@${offendingLineman.id} is a lineman label, but blocking is not allowed in this game type (${opts.variant ?? "flag"}). ` +
+            `Flag variants don't have offensive linemen — every player on the field is a route-runner. ` +
+            `Use receiver labels (X / Y / Z / H / S) or back labels (B / F) instead, and assign each a route.`,
+        );
+      }
+    }
 
     // SURGICAL-EDIT IDENTITY GATE — when a prior assistant fence
     // exists and the user didn't ask for a fresh play, every entity

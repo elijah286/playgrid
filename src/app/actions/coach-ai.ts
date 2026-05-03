@@ -6,6 +6,7 @@ import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
+import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 
 export type PlaybookChip = { id: string; name: string; color: string | null; season: string | null };
 
@@ -85,6 +86,7 @@ async function loadToolContext(
       gameLevel: null,
       sanctioningBody: null,
       ageDivision: null,
+      playbookSettings: null,
       isAdmin,
       canEditPlaybook: false,
       mode,
@@ -99,18 +101,27 @@ async function loadToolContext(
   const [{ data }, { data: canEdit }] = await Promise.all([
     supabase
       .from("playbooks")
-      .select("name, sport_variant, game_level, sanctioning_body, age_division")
+      .select("name, sport_variant, game_level, sanctioning_body, age_division, settings, custom_offense_count")
       .eq("id", playbookId)
       .maybeSingle(),
     supabase.rpc("can_edit_playbook", { pb: playbookId }),
   ]);
+  const variant = (data?.sport_variant as string | null) ?? null;
+  const settings = variant
+    ? normalizePlaybookSettings(
+        data?.settings,
+        variant as Parameters<typeof normalizePlaybookSettings>[1],
+        (data?.custom_offense_count as number | null) ?? null,
+      )
+    : null;
   return {
     playbookId,
     playbookName: (data?.name as string | null) ?? null,
-    sportVariant: (data?.sport_variant as string | null) ?? null,
+    sportVariant: variant,
     gameLevel: (data?.game_level as string | null) ?? null,
     sanctioningBody: (data?.sanctioning_body as string | null) ?? null,
     ageDivision: (data?.age_division as string | null) ?? null,
+    playbookSettings: settings,
     isAdmin,
     canEditPlaybook: Boolean(canEdit),
     mode,

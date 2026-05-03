@@ -31,6 +31,7 @@ const MIN_CTX = {
   gameLevel: null,
   sanctioningBody: null,
   ageDivision: null,
+  playbookSettings: null,
   isAdmin: false,
   canEditPlaybook: false,
   mode: "normal" as const,

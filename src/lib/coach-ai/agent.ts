@@ -540,6 +540,38 @@ function contextBlock(ctx: ToolContext): string {
     lines.push(`- Sanctioning body: ${ctx.sanctioningBody ?? "unknown"}`);
     lines.push(`- Age division: ${ctx.ageDivision ?? "unknown"}`);
     lines.push(`- Coach can edit this playbook: ${ctx.canEditPlaybook ? "yes" : "no"}`);
+    if (ctx.playbookSettings) {
+      const s = ctx.playbookSettings;
+      lines.push("");
+      lines.push(
+        `**Game rules for this playbook (HARD CONSTRAINTS — every play and recommendation must respect these; the validator rejects violations):**`,
+      );
+      lines.push(`- Blocking allowed: ${s.blockingAllowed ? "yes" : "**NO**"}`);
+      lines.push(`- Handoffs allowed: ${s.handoffsAllowed ? "yes" : "**NO**"}`);
+      lines.push(
+        `- Rushing the QB allowed: ${s.rushingAllowed ? `yes (${s.rushingYards ?? 0}-yard minimum from LOS)` : "**NO**"}`,
+      );
+      lines.push(`- Center is an eligible receiver: ${s.centerIsEligible ? "yes" : "**NO**"}`);
+      lines.push(`- Players on the field per side: ${s.maxPlayers}`);
+      if (!s.blockingAllowed) {
+        lines.push("");
+        lines.push(
+          `**No blocking rule:** every offensive player except the QB is a route-runner / decoy / receiver. ` +
+          `Do NOT describe any player as a "blocker", "lead blocker", "lead block", "pass protector", ` +
+          `"crack-back block", or "down block" — those are illegal actions in this game type. ` +
+          `For screen / bubble plays, the supporting receivers run FLAT or SHALLOW routes (describe them ` +
+          `as "running flat to occupy the corner" or "shallow drag to pull the linebacker"), not as blockers. ` +
+          `Do NOT use lineman labels (LT, LG, RG, RT) — those positions don't exist here.`,
+        );
+      }
+      if (!s.centerIsEligible) {
+        lines.push("");
+        lines.push(
+          `**Ineligible center rule:** @C is the snapper and stays at the LOS. Do NOT assign @C a route. ` +
+          `Eligible receivers are X / Y / Z / H / S / B / F (and the QB, who throws).`,
+        );
+      }
+    }
     lines.push("");
     lines.push(
       `Use these values directly when building plays, scheduling events, drawing diagrams, ` +
@@ -869,6 +901,7 @@ export async function runAgent(
         const validation = validateDiagrams({
           text: bufferedText,
           variant: ctx.sportVariant,
+          playbookSettings: ctx.playbookSettings,
           lastPlaceDefense,
           lastPlaceOffense,
           routeTemplates: routeTemplateCalls,

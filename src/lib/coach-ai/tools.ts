@@ -2,6 +2,7 @@ import { searchKb, type KbFilter } from "./retrieve";
 import { createClient } from "@/lib/supabase/server";
 import { logCoachAiRefusal, logCoachAiKbMiss } from "./feedback-log";
 import type { ToolDef } from "./llm";
+import type { PlaybookSettings } from "@/domain/playbook/settings";
 // Top-level imports for surgical-modify tools (modify_play_route,
 // add_defense_to_play, computeDefenseAlignment helper). Other tools
 // in this file use require() for lazy-loading; the surgical-modify
@@ -33,6 +34,11 @@ export type ToolContext = {
   gameLevel: string | null;
   sanctioningBody: string | null;
   ageDivision: string | null;
+  /** Per-playbook game-rule settings (blockingAllowed, centerIsEligible,
+   *  handoffsAllowed, rushingAllowed, etc.). Null when no playbook is
+   *  anchored. The system prompt surfaces these so Cal won't suggest
+   *  illegal actions; the chat-time validators reject them anyway. */
+  playbookSettings: PlaybookSettings | null;
   /** True when caller is a site admin. Required for global KB write tools. */
   isAdmin: boolean;
   /** True when caller can edit the current playbook. Required for playbook KB write tools. */

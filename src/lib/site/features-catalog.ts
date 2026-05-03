@@ -409,6 +409,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-variant-rule-gates",
+    name: "Coach Cal respects per-playbook game rules (blocking, eligible center)",
+    description:
+      "Cal now reads each playbook's game-rule settings — blocking allowed, center eligible, handoffs allowed, rushing allowed, max players — and treats them as hard constraints. The system prompt header lists the rules so Cal won't propose illegal actions, and the chat-time validator rejects any prose that calls a player a \"lead blocker\" / \"pass protector\" / \"crack-back block\" when blocking is off, any route assigned to @C when the center isn't eligible, and any lineman label (LT/LG/RG/RT) in a flag variant. Defaults: 7v7 (no blocking, ineligible center), 5v5 (no blocking, eligible center), tackle 11 (blocking, ineligible center) — all overridable per-playbook from Site Admin → playbook settings.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-anchored-edit-auto-commit",
     name: "Coach Cal anchored-play edits commit reliably to the database",
     description:

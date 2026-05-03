@@ -1207,3 +1207,182 @@ describe("validateDiagrams — bare prose-mention exemption", () => {
     expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
   });
 });
+
+// ── Variant-rule gates (blocking, center eligibility) ────────────────────
+//
+// 7v7 / flag is a non-contact game type — `kind: "block"` is illegal and
+// any prose calling a player a "blocker" / "lead block" / "pass pro" is a
+// rules violation. The center is also NOT an eligible receiver in 7v7.
+// 5v5 flag: blocking still illegal but the center IS eligible.
+// Tackle 11: blocking allowed, center NOT eligible.
+//
+// Surfaced 2026-05-03: Cal generated a 7v7 "bubble screen" with X/H/S/B
+// labeled as "lead blockers" running flat routes. The geometry rendered
+// as flats (no `kind: "block"` in the spec), but the prose announced
+// blocking. The prose gate catches the production case; the action-kind
+// gate catches the structurally bad inputs that bypass prose checks.
+describe("validateDiagrams — blocking legality (7v7 / 5v5)", () => {
+  it("REJECTS prose that calls a player a 'lead blocker' in flag_7v7", () => {
+    const fence = makeFence({
+      title: "Bubble Screen",
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -16, y: 0, team: "O" },
+        { id: "H", x: -8, y: 0, team: "O" },
+        { id: "S", x: -4, y: 0, team: "O" },
+        { id: "Z", x: 16, y: 0, team: "O" },
+        { id: "B", x: 4, y: -3, team: "O" },
+      ],
+      routes: [
+        { from: "Z", path: [[16, 1], [20, 1]], route_kind: "Flat" },
+        { from: "X", path: [[-16, 1], [-20, 1]], route_kind: "Flat" },
+      ],
+    });
+    const result = validateDiagrams({
+      text:
+        `${fence}\n` +
+        "@Z catches the bubble. @X, @H, @S lead block on the perimeter. @B is a lead blocker.",
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const blockingError = result.errors.find((e) =>
+      /blocking is not allowed|no blocking/i.test(e),
+    );
+    expect(blockingError).toBeDefined();
+  });
+
+  it("ACCEPTS blocking prose in tackle_11", () => {
+    const fence = makeFence({
+      title: "Iso",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "LT", x: -4, y: 0, team: "O" },
+        { id: "LG", x: -2, y: 0, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "RG", x: 2, y: 0, team: "O" },
+        { id: "RT", x: 4, y: 0, team: "O" },
+        { id: "Y", x: 7, y: 0, team: "O" },
+        { id: "X", x: -13, y: 0, team: "O" },
+        { id: "Z", x: 13, y: 0, team: "O" },
+        { id: "B", x: 0, y: -5, team: "O" },
+        { id: "F", x: 0, y: -7, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-13, 3], [-7, 5.8]], route_kind: "Slant" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@F leads up through the hole and blocks the MIKE. @X runs a slant.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      routeTemplates: [snapshot("Slant", -13, 0, [[-13, 3], [-7, 5.8]])],
+    });
+    if (!result.ok) {
+      // Other gates can still fire on this stripped-down play; only
+      // assert the blocking gate did NOT.
+      expect(
+        result.errors.find((e) => /blocking is not allowed/i.test(e)),
+      ).toBeUndefined();
+    }
+  });
+
+  it("does not flag the word 'block' inside a defender label or zone name", () => {
+    // False-positive guard: words like "block-down", "blocker-free", or a
+    // defender labeled "Spy/Block" in the diagram zones shouldn't trip
+    // the gate. Only prose verbs about an offensive player should fire.
+    const fence = makeFence({
+      title: "Mesh",
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -16, y: 0, team: "O" },
+        { id: "H", x: -8, y: 0, team: "O" },
+        { id: "S", x: 4, y: 0, team: "O" },
+        { id: "Z", x: 16, y: 0, team: "O" },
+        { id: "B", x: -4, y: -3, team: "O" },
+      ],
+      routes: [
+        { from: "H", path: [[-8, 2], [8, 2]], route_kind: "Drag" },
+        { from: "S", path: [[4, 6], [-12, 6]], route_kind: "Drag" },
+      ],
+    });
+    const result = validateDiagrams({
+      text:
+        `${fence}\n` +
+        "@H and @S cross underneath. The defense is in a 2-deep shell — no blitz, the SAM is a spy.",
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+    });
+    if (!result.ok) {
+      expect(
+        result.errors.find((e) => /blocking is not allowed/i.test(e)),
+      ).toBeUndefined();
+    }
+  });
+});
+
+describe("validateDiagrams — center eligibility (7v7 vs 5v5)", () => {
+  it("REJECTS a route on @C in flag_7v7 (center is not eligible)", () => {
+    const fence = makeFence({
+      title: "Bad Snap Trick",
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -16, y: 0, team: "O" },
+        { id: "H", x: -8, y: 0, team: "O" },
+        { id: "S", x: 4, y: 0, team: "O" },
+        { id: "Z", x: 16, y: 0, team: "O" },
+        { id: "B", x: -4, y: -3, team: "O" },
+      ],
+      routes: [
+        // C cannot run a route in 7v7.
+        { from: "C", path: [[0, 3], [0, 8]], route_kind: "Hitch" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@C runs a hitch up the seam.`,
+      variant: "flag_7v7",
+      lastPlaceDefense: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const centerError = result.errors.find((e) =>
+      /center is not (?:an )?eligible|ineligible center/i.test(e),
+    );
+    expect(centerError).toBeDefined();
+  });
+
+  it("ACCEPTS a route on @C in flag_5v5 (center is eligible)", () => {
+    const fence = makeFence({
+      title: "Center Hitch",
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+        { id: "B", x: 4, y: -3, team: "O" },
+      ],
+      routes: [
+        { from: "C", path: [[0, 3], [0, 7]], route_kind: "Hitch" },
+      ],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@C runs a hitch up the seam.`,
+      variant: "flag_5v5",
+      lastPlaceDefense: null,
+    });
+    if (!result.ok) {
+      expect(
+        result.errors.find((e) => /center is not (?:an )?eligible/i.test(e)),
+      ).toBeUndefined();
+    }
+  });
+});
