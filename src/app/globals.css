@@ -150,7 +150,7 @@ body {
 
 /* Coach Cal docked mode — body shifts left so the fixed right panel has room */
 html.coach-docked body {
-  padding-right: 380px;
+  padding-right: var(--coach-dock-w, 380px);
   transition: padding-right 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (prefers-reduced-motion: reduce) {

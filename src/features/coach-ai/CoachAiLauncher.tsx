@@ -8,7 +8,6 @@ import {
   AppWindow,
   Check,
   ChevronDown,
-  ExternalLink,
   GraduationCap,
   Maximize2,
   Minimize2,
@@ -26,12 +25,14 @@ import { track } from "@/lib/analytics/track";
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
 const PLAY_ROUTE_RE    = /^\/plays\/([0-9a-f-]{8,})(?:\/|$)/i;
 
-const DEFAULT_W   = 420;
-const DEFAULT_H   = 640;
-const MIN_W       = 320;
-const MIN_H       = 400;
-const EDGE        = 16;
-const DOCK_W      = 380;
+const DEFAULT_W    = 420;
+const DEFAULT_H    = 640;
+const MIN_W        = 320;
+const MIN_H        = 400;
+const EDGE         = 16;
+const DEFAULT_DOCK_W = 380;
+const MIN_DOCK_W     = 280;
+const MAX_DOCK_W     = 680;
 
 const FONT_SIZES  = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const;
 type FontSize = (typeof FONT_SIZES)[number];
@@ -41,7 +42,7 @@ const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 const PROMO_REPULSE_MS = 14 * 24 * 60 * 60 * 1000;
 
 type WindowPos  = { top: number; left: number };
-type PanelMode  = "float" | "docked" | "fullscreen" | "popout";
+type PanelMode  = "float" | "docked" | "fullscreen";
 
 function readStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -138,9 +139,9 @@ export function CoachAiLauncher({
   });
   const promoRef    = useRef<HTMLDivElement>(null);
   const promoBtnRef = useRef<HTMLButtonElement>(null);
-  const popupRef    = useRef<Window | null>(null);
 
-  const [size,     setSize]     = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
+  const [size,       setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
+  const [dockedWidth, setDockedWidth] = useState(DEFAULT_DOCK_W);
   const [fontSize, setFontSize] = useState<FontSize>(14);
 
   const [contextOpen,    setContextOpen]    = useState(false);
@@ -192,6 +193,8 @@ export function CoachAiLauncher({
       if (FONT_SIZES.includes(savedFont as FontSize)) setFontSize(savedFont as FontSize);
       const savedMode = readStorage<string>("coach-ai:panel-mode", "float");
       if (savedMode === "float" || savedMode === "docked") setPanelMode(savedMode as PanelMode);
+      const savedDockW = readStorage<number>("coach-ai:dock-width", DEFAULT_DOCK_W);
+      if (savedDockW >= MIN_DOCK_W && savedDockW <= MAX_DOCK_W) setDockedWidth(savedDockW);
     } catch { /* ignore */ }
     hasRestored.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,6 +203,7 @@ export function CoachAiLauncher({
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",   adminMode ? "1" : "0"); }, [adminMode]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size", size); },                  [size]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:font-size",   fontSize); },              [fontSize]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:dock-width",  dockedWidth); },           [dockedWidth]);
   useEffect(() => {
     if (!hasRestored.current) return;
     if (panelMode === "float" || panelMode === "docked") {
@@ -210,18 +214,19 @@ export function CoachAiLauncher({
   const adminTrainingActive = isAdmin && adminMode;
   const mode: "normal" | "admin_training" = adminTrainingActive ? "admin_training" : "normal";
 
-  // ── Docked body class ──────────────────────────────────────────────────────
+  // ── Docked body class + CSS variable ──────────────────────────────────────
   // Adds padding-right to body so main content doesn't hide under the panel.
   // Only on viewports >= 1024px where docked mode is exposed.
   useEffect(() => {
     const shouldDock = open && panelMode === "docked" && typeof window !== "undefined" && window.innerWidth >= 1024;
+    document.documentElement.style.setProperty("--coach-dock-w", `${dockedWidth}px`);
     if (shouldDock) {
       document.documentElement.classList.add("coach-docked");
     } else {
       document.documentElement.classList.remove("coach-docked");
     }
     return () => { document.documentElement.classList.remove("coach-docked"); };
-  }, [open, panelMode]);
+  }, [open, panelMode, dockedWidth]);
 
   // ── Keyboard / scroll lock ─────────────────────────────────────────────────
   useEffect(() => {
@@ -336,10 +341,11 @@ export function CoachAiLauncher({
     });
     // Re-evaluate docked class after resize (may drop below 1024px threshold)
     const shouldDock = open && panelMode === "docked" && vw >= 1024;
+    document.documentElement.style.setProperty("--coach-dock-w", `${dockedWidth}px`);
     if (shouldDock) document.documentElement.classList.add("coach-docked");
     else            document.documentElement.classList.remove("coach-docked");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size, open, panelMode]);
+  }, [size, open, panelMode, dockedWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -401,25 +407,28 @@ export function CoachAiLauncher({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  // ── Popout ────────────────────────────────────────────────────────────────
-  function handlePopout() {
-    const url = `/coach-cal/chat${playbookId ? `?playbook=${playbookId}` : ""}`;
-    const existing = popupRef.current;
-    if (existing && !existing.closed) {
-      existing.focus();
-      setOpen(false);
-      return;
-    }
-    const popup = window.open(
-      url,
-      "coach-cal-chat",
-      `width=440,height=700,resizable=yes,menubar=no,toolbar=no,location=no,status=no`,
-    );
-    if (popup) {
-      popupRef.current = popup;
-      popup.focus();
-    }
-    setOpen(false);
+  // ── Dock divider drag ─────────────────────────────────────────────────────
+  const dividerRef = useRef<{ startX: number; origW: number } | null>(null);
+
+  function onDividerPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    dividerRef.current = { startX: e.clientX, origW: dockedWidth };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onDividerPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = dividerRef.current;
+    if (!d) return;
+    const delta = d.startX - e.clientX; // dragging left = wider
+    const newW = Math.max(MIN_DOCK_W, Math.min(MAX_DOCK_W, d.origW + delta));
+    setDockedWidth(newW);
+  }
+
+  function onDividerPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dividerRef.current) return;
+    dividerRef.current = null;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
   // ── Docked mode handler ───────────────────────────────────────────────────
@@ -556,7 +565,7 @@ export function CoachAiLauncher({
             aria-label="Coach Cal chat"
             style={{
               ...windowPosStyle,
-              ...(panelMode === "docked" ? { width: DOCK_W } : {}),
+              ...(panelMode === "docked" ? { width: dockedWidth } : {}),
             }}
             onPointerDown={onHeaderPointerDown}
             onPointerMove={onHeaderPointerMove}
@@ -582,6 +591,23 @@ export function CoachAiLauncher({
                     ].join(" "),
             )}
           >
+            {/* ── Dock divider (docked mode only) ────────────────────────── */}
+            {panelMode === "docked" && (
+              <div
+                data-no-drag
+                onPointerDown={onDividerPointerDown}
+                onPointerMove={onDividerPointerMove}
+                onPointerUp={onDividerPointerUp}
+                onPointerCancel={onDividerPointerUp}
+                className="absolute inset-y-0 -left-1 z-10 w-3 cursor-col-resize group flex items-stretch"
+                title="Drag to resize panel"
+                aria-hidden="true"
+              >
+                {/* 2px visible stripe centered in the 12px hit zone */}
+                <div className="mx-auto w-0.5 bg-border transition-colors group-hover:bg-primary/50 group-active:bg-primary" />
+              </div>
+            )}
+
             {/* ── Header ─────────────────────────────────────────────────── */}
             <header
               className={cn(
@@ -792,16 +818,6 @@ export function CoachAiLauncher({
                     {panelMode === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                   </button>
 
-                  {/* Popout — desktop only (lg+) */}
-                  <button
-                    type="button"
-                    onClick={handlePopout}
-                    title="Open in separate window"
-                    aria-label="Open in separate window"
-                    className="hidden lg:flex rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground transition"
-                  >
-                    <ExternalLink className="size-4" />
-                  </button>
                 </div>
 
                 <button
