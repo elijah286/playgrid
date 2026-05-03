@@ -24,15 +24,26 @@ export default async function PracticePlanEditPage({
     .maybeSingle();
   const isAdmin = profile?.role === "admin";
 
+  // Fetch plan first so we can check playbook membership for the beta gate,
+  // matching the same isEntitled logic as the playbook page's tab visibility.
+  const res = await getPracticePlanAction(planId);
+  if (!res.ok) notFound();
+
+  const { data: membership } = await sb
+    .from("playbook_members")
+    .select("role")
+    .eq("playbook_id", res.plan.playbook_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const memberRole = membership?.role as string | null;
+  const isCoachInPlaybook = memberRole === "owner" || memberRole === "editor";
+
   const beta = await getBetaFeatures();
   const allowed = isBetaFeatureAvailable(beta.practice_plans, {
     isAdmin,
-    isEntitled: false, // gate strictly via beta scope
+    isEntitled: isCoachInPlaybook,
   });
   if (!allowed) notFound();
-
-  const res = await getPracticePlanAction(planId);
-  if (!res.ok) notFound();
 
   return (
     <PracticePlanEditorClient
