@@ -382,6 +382,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "play-edit-overflow-action-menu",
+    name: "Unified per-play action menu on the play editor",
+    description:
+      "The play editor's top action bar is now a two-tier command bar: Copy and New play stay visible on desktop, while Notify team, View history, Archive/Restore, and Delete fold into a ⋮ overflow menu — the same menu component coaches see on each play card. On mobile the bar collapses further to just New play + ⋮ so it always fits one row. Adds Archive and Delete from the editor (previously only available from the play card list), with a confirm prompt on Delete.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-clickable-play-references",
     name: "Coach Cal clickable play and playbook references",
     description:

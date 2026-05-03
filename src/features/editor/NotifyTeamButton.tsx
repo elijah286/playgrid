@@ -11,12 +11,26 @@ export function NotifyTeamButton({
   playId,
   className,
   hideMobileLabel = false,
+  open: openProp,
+  onOpenChange,
+  triggerless = false,
 }: {
   playId: string;
   className?: string;
   hideMobileLabel?: boolean;
+  /** Controlled-open mode: parent drives the modal's visibility and the
+   *  inline trigger button is hidden. Used by EditorHeaderBar to surface
+   *  Notify from an overflow menu item without a duplicate trigger. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  triggerless?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openProp ?? openInternal;
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setOpenInternal(next);
+    onOpenChange?.(next);
+  };
   const [comment, setComment] = useState("");
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -44,19 +58,21 @@ export function NotifyTeamButton({
 
   return (
     <>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        leftIcon={Megaphone}
-        onClick={() => setOpen(true)}
-        className={className}
-        title="Notify team about updates to this play"
-      >
-        <span className={hideMobileLabel ? "hidden sm:inline" : undefined}>
-          Notify team
-        </span>
-      </Button>
+      {!triggerless && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          leftIcon={Megaphone}
+          onClick={() => setOpen(true)}
+          className={className}
+          title="Notify team about updates to this play"
+        >
+          <span className={hideMobileLabel ? "hidden sm:inline" : undefined}>
+            Notify team
+          </span>
+        </Button>
+      )}
       <Modal
         open={open}
         onClose={() => (pending ? null : setOpen(false))}

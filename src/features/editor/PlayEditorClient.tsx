@@ -10,8 +10,10 @@ import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone, zoneStyleFromColor } from "@/domain/play/factory";
 import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import {
+  archivePlayAction,
   createCustomOpponentAction,
   createPlayAction,
+  deletePlayAction,
   installDefenseVsPlayAction,
   promoteCustomOpponentAction,
   savePlayVersionAction,
@@ -680,6 +682,55 @@ function PlayEditorClientInner({
     router.push(`/plays/${res.playId}/edit`);
   }, [blockIfPreview, playbookId, doc.sportProfile.variant, playbookSettings?.maxPlayers, router, toast]);
 
+  const archive = useCallback(
+    async (archived: boolean) => {
+      if (
+        blockIfPreview(
+          "Archiving a play in an example playbook isn't persisted. Start your own playbook to manage plays.",
+        )
+      ) {
+        return;
+      }
+      const res = await archivePlayAction(playId, archived);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      toast(archived ? "Play archived." : "Play restored.", "success");
+      // Stay on the play — the editor still works on archived plays;
+      // surrounding state (sibling nav, list) refreshes from the server.
+      router.refresh();
+    },
+    [blockIfPreview, playId, router, toast],
+  );
+
+  const deletePlay = useCallback(() => {
+    if (
+      blockIfPreview(
+        "Deleting a play in an example playbook isn't persisted. Start your own playbook to manage plays.",
+      )
+    ) {
+      return;
+    }
+    // Inline confirm matches the playbook detail page's card-menu pattern
+    // (window.confirm at ui.tsx:1657). No dedicated ConfirmDialog primitive
+    // exists yet; promote later if more destructive actions show up.
+    const playName = doc.metadata.coachName?.trim() || "this play";
+    const ok = window.confirm(
+      `Delete "${playName}"? It will be moved to trash for 30 days, then permanently removed.`,
+    );
+    if (!ok) return;
+    void (async () => {
+      const res = await deletePlayAction(playId);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      toast("Play deleted.", "success");
+      router.push(`/playbooks/${playbookId}`);
+    })();
+  }, [blockIfPreview, playId, doc.metadata.coachName, playbookId, router, toast]);
+
   /* ---------- Toolbar handlers ---------- */
 
   const handleShapeChange = useCallback(
@@ -1056,6 +1107,9 @@ function PlayEditorClientInner({
         onNewPlay={newPlay}
         onNavigateToPlay={navigateToPlay}
         onSaveAsNewFormation={saveAsNewFormation}
+        onArchive={archive}
+        onDelete={deletePlay}
+        isArchived={isArchived}
         allFormations={allFormations}
         canEdit={canEdit}
         hideMobileNav={isTouchDevice && mode === "edit"}

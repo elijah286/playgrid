@@ -2,18 +2,23 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
+  History,
   LayoutGrid,
   Link2Off,
   List,
+  Megaphone,
   PencilLine,
   Pencil,
   Plus,
   Search,
+  Trash2,
 } from "lucide-react";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument } from "@/domain/play/types";
@@ -25,6 +30,7 @@ import {
 import type { SavedFormation } from "@/app/actions/formations";
 import type { PlaybookGroupRow, PlaybookPlayNavItem } from "@/domain/print/playbookPrint";
 import { Button, Input, SegmentedControl } from "@/components/ui";
+import { ActionMenu, type ActionMenuItem } from "@/components/ui/ActionMenu";
 import { PlaybookPlaySearchMenu } from "./PlaybookPlaySearchMenu";
 import { EditablePlayNumberBadge } from "./PlayNumberBadge";
 import { NotifyTeamButton } from "./NotifyTeamButton";
@@ -41,6 +47,13 @@ type Props = {
   onNewPlay: () => void;
   onNavigateToPlay: (playId: string) => void;
   onSaveAsNewFormation: (name: string) => void | Promise<void>;
+  /** Toggle the play's archived flag. Surfaced from the overflow menu. */
+  onArchive?: (archived: boolean) => void;
+  /** Soft-delete the play. Parent handles confirmation + redirect. */
+  onDelete?: () => void;
+  /** Current archived state — drives whether the menu shows
+   *  Archive vs Restore. */
+  isArchived?: boolean;
   allFormations?: SavedFormation[];
   canEdit?: boolean;
   /** When true, the sibling-play navigation (Previous/All plays/Next) and
@@ -66,6 +79,9 @@ export function EditorHeaderBar({
   onNewPlay,
   onNavigateToPlay,
   onSaveAsNewFormation,
+  onArchive,
+  onDelete,
+  isArchived = false,
   allFormations = [],
   canEdit = true,
   hideMobileNav = false,
@@ -75,6 +91,8 @@ export function EditorHeaderBar({
   const [nav, setNav] = useState(initialNav);
   const [groups, setGroups] = useState(initialGroups);
   const [editingName, setEditingName] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [, startTransition] = useTransition();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -188,9 +206,13 @@ export function EditorHeaderBar({
           </div>
         )}
 
-        {/* Copy stays pinned next to the play name so it never wraps to
-            its own row on mobile. Prev/All/Next live in a sibling cluster
-            that can wrap below on narrow viewports. */}
+        {/* Visible primary actions stay pinned next to the play name so
+            they never wrap. Secondary / destructive actions live in a ⋮
+            overflow menu — same component the play card uses, so coaches
+            learn one menu shape regardless of where they're acting on a
+            play. The hidden Notify + History components sit beside the
+            menu so their popover/modal portal anchors near the trigger
+            when the menu item flips them open. */}
         {canEdit && (
           <div className={`ml-auto flex items-center gap-1 ${hideMobileNav ? "hidden sm:flex" : ""}`}>
             {onToggleMode && (
@@ -210,14 +232,16 @@ export function EditorHeaderBar({
                 {mode === "edit" ? "Done" : "Edit"}
               </Button>
             )}
-            <NotifyTeamButton playId={playId} hideMobileLabel />
-            <PlayHistoryButton playId={playId} hideMobileLabel />
+            {/* Copy is visible on desktop only — on mobile it folds into
+                the overflow menu so the bar stays one row even with a
+                long play name. */}
             <Button
               type="button"
               size="sm"
               variant="ghost"
               leftIcon={Copy}
               onClick={onDuplicate}
+              className="hidden sm:inline-flex"
             >
               Copy
             </Button>
@@ -230,6 +254,44 @@ export function EditorHeaderBar({
             >
               New play
             </Button>
+            <NotifyTeamButton
+              playId={playId}
+              triggerless
+              open={notifyOpen}
+              onOpenChange={setNotifyOpen}
+            />
+            <PlayHistoryButton
+              playId={playId}
+              triggerless
+              open={historyOpen}
+              onOpenChange={setHistoryOpen}
+            />
+            <ActionMenu
+              label="More play actions"
+              items={(() => {
+                const items: ActionMenuItem[] = [
+                  // Mobile-only: Copy lives here so the bar fits in one row.
+                  // On desktop we hide it via Tailwind below — but ActionMenu
+                  // doesn't support per-item responsive hiding, so we
+                  // include Copy unconditionally and accept the duplicate
+                  // affordance on desktop. Cheap; one extra menu line.
+                  { label: "Copy", icon: Copy, onSelect: onDuplicate },
+                  { label: "Notify team", icon: Megaphone, onSelect: () => setNotifyOpen(true) },
+                  { label: "View history", icon: History, onSelect: () => setHistoryOpen(true) },
+                ];
+                if (onArchive) {
+                  items.push(
+                    isArchived
+                      ? { label: "Restore", icon: ArchiveRestore, onSelect: () => onArchive(false) }
+                      : { label: "Archive", icon: Archive, onSelect: () => onArchive(true) },
+                  );
+                }
+                if (onDelete) {
+                  items.push({ label: "Delete", icon: Trash2, danger: true, onSelect: onDelete });
+                }
+                return items;
+              })()}
+            />
           </div>
         )}
       </div>

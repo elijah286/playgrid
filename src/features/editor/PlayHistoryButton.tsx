@@ -17,10 +17,25 @@ type Props = {
   /** Hide the button label on small screens to save the same horizontal
    *  space as NotifyTeamButton does — keeps both icons-only on mobile. */
   hideMobileLabel?: boolean;
+  /** Controlled-open mode: when provided, the parent owns whether the
+   *  history popover is open and the visible Button trigger is hidden.
+   *  Used by EditorHeaderBar to drive History from an overflow menu item
+   *  without rendering a second visible trigger. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Hide the visible trigger button entirely (popover only). Use with
+   *  controlled `open` when the trigger lives elsewhere. */
+  triggerless?: boolean;
 };
 
-export function PlayHistoryButton({ playId, hideMobileLabel = false }: Props) {
-  const [open, setOpen] = useState(false);
+export function PlayHistoryButton({ playId, hideMobileLabel = false, open: openProp, onOpenChange, triggerless = false }: Props) {
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openProp ?? openInternal;
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const resolved = typeof next === "function" ? next(open) : next;
+    if (openProp === undefined) setOpenInternal(resolved);
+    onOpenChange?.(resolved);
+  };
   const [rows, setRows] = useState<PlayVersionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [compareIndex, setCompareIndex] = useState<number | null>(null);
@@ -71,18 +86,20 @@ export function PlayHistoryButton({ playId, hideMobileLabel = false }: Props) {
 
   return (
     <div ref={rootRef} className="relative">
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        leftIcon={History}
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="Play history"
-      >
-        <span className={hideMobileLabel ? "hidden sm:inline" : ""}>History</span>
-      </Button>
+      {!triggerless && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          leftIcon={History}
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="Play history"
+        >
+          <span className={hideMobileLabel ? "hidden sm:inline" : ""}>History</span>
+        </Button>
+      )}
 
       {open && (
         <div
