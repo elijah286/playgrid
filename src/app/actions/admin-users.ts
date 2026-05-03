@@ -29,6 +29,8 @@ export type AdminUserRowData = {
    *  TimeOnSiteTracker). Null when the column has never been written for
    *  this user (e.g. legacy admin-created accounts). */
   totalSecondsOnSite: number | null;
+  /** Distinct plays the user has authored at least one version of. */
+  playsCreated: number;
 };
 
 async function assertAdmin() {
@@ -62,17 +64,38 @@ export async function listUsersForAdminAction() {
   });
   if (authErr) return { ok: false as const, error: authErr.message, users: [] };
 
-  const [{ data: profiles }, { data: entitlements }] = await Promise.all([
-    admin
-      .from("profiles")
-      .select("id, display_name, role, created_at, total_seconds_on_site"),
-    admin
-      .from("user_entitlements")
-      .select("user_id, tier, source, expires_at, comp_grant_id, subscription_id"),
-  ]);
+  const [{ data: profiles }, { data: entitlements }, { data: versionRows }] =
+    await Promise.all([
+      admin
+        .from("profiles")
+        .select("id, display_name, role, created_at, total_seconds_on_site"),
+      admin
+        .from("user_entitlements")
+        .select(
+          "user_id, tier, source, expires_at, comp_grant_id, subscription_id",
+        ),
+      // Distinct (user, play) pairs — matches the per-user stats panel logic.
+      // play_versions is unbounded but rows are small (two uuids each); for
+      // an admin-only page this is acceptable. If it grows past ~100k rows
+      // we can replace this with an RPC that does the aggregation in SQL.
+      admin.from("play_versions").select("created_by, play_id"),
+    ]);
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   const entMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
+
+  const playsByUser = new Map<string, Set<string>>();
+  for (const r of versionRows ?? []) {
+    const uid = r.created_by as string | null;
+    const pid = r.play_id as string | null;
+    if (!uid || !pid) continue;
+    let set = playsByUser.get(uid);
+    if (!set) {
+      set = new Set();
+      playsByUser.set(uid, set);
+    }
+    set.add(pid);
+  }
 
   const users: AdminUserRowData[] = (authData.users ?? []).map((u) => {
     const pr = profileMap.get(u.id);
@@ -93,6 +116,7 @@ export async function listUsersForAdminAction() {
         typeof pr?.total_seconds_on_site === "number"
           ? (pr.total_seconds_on_site as number)
           : null,
+      playsCreated: playsByUser.get(u.id)?.size ?? 0,
     };
   });
 
@@ -247,12 +271,19 @@ export async function getAdminUserStatsAction(
 
   const admin = createServiceRoleClient();
 
+  // Match the free-tier gate's semantics: count only user-controlled
+  // playbooks, not the auto-created "Inbox" default and not archived
+  // (soft-deleted) ones. Without this filter the panel showed "2 owned"
+  // for any free user with one real playbook (Inbox + their playbook),
+  // which looked like the limit had been bypassed.
   const { data: ownedRows, error: ownedErr } = await admin
     .from("playbook_members")
-    .select("playbook_id")
+    .select("playbook_id, playbooks!inner(id, is_default, is_archived)")
     .eq("user_id", userId)
     .eq("role", "owner")
-    .eq("status", "active");
+    .eq("status", "active")
+    .eq("playbooks.is_default", false)
+    .eq("playbooks.is_archived", false);
   if (ownedErr) return { ok: false, error: ownedErr.message };
   const ownedIds = (ownedRows ?? []).map((r) => r.playbook_id as string);
 

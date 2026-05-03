@@ -55,12 +55,15 @@ export async function createPlaybookForUser(
 
   const entitlement = await getUserEntitlement(user.id);
   if (!tierAtLeast(entitlement, "coach")) {
+    // Archived playbooks shouldn't consume the free quota — they're
+    // invisible to the user and the admin panel ignores them too.
     const { count: ownedCount } = await supabase
       .from("playbook_members")
       .select("playbook_id, playbooks!inner(id)", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("role", "owner")
-      .eq("playbooks.is_default", false);
+      .eq("playbooks.is_default", false)
+      .eq("playbooks.is_archived", false);
     if ((ownedCount ?? 0) >= FREE_MAX_PLAYBOOKS_OWNED) {
       return {
         ok: false,

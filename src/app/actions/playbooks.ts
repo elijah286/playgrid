@@ -473,10 +473,11 @@ export async function duplicatePlaybookAction(
   if (!tierAtLeast(entitlement, "coach")) {
     const { data: ownedRows } = await supabase
       .from("playbook_members")
-      .select("playbook_id, playbooks!inner(id, name, is_default)")
+      .select("playbook_id, playbooks!inner(id, name, is_default, is_archived)")
       .eq("user_id", user.id)
       .eq("role", "owner")
-      .eq("playbooks.is_default", false);
+      .eq("playbooks.is_default", false)
+      .eq("playbooks.is_archived", false);
     const owned = (ownedRows ?? []).map((r) => {
       const pb = r.playbooks as unknown as { id: string; name: string };
       return { id: pb.id, name: pb.name };

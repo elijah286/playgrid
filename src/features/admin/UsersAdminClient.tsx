@@ -74,7 +74,12 @@ function formatTimeOnSite(seconds: number | null): string {
   return `${day}d`;
 }
 
-type SortKey = "lastSignIn" | "timeOnSite" | "createdAt" | null;
+type SortKey =
+  | "lastSignIn"
+  | "timeOnSite"
+  | "createdAt"
+  | "playsCreated"
+  | null;
 type SortDir = "asc" | "desc";
 
 function formatCreatedAt(iso: string | null): string {
@@ -101,6 +106,7 @@ export type AdminUserRow = {
   compGrantId: string | null;
   subscriptionId: string | null;
   totalSecondsOnSite: number | null;
+  playsCreated: number;
 };
 
 type Dialog =
@@ -186,6 +192,9 @@ export function UsersAdminClient({
         if (!bOk) return -1;
         return (av - bv) * sign;
       }
+      if (sortKey === "playsCreated") {
+        return (a.playsCreated - b.playsCreated) * sign;
+      }
       const av = a.totalSecondsOnSite ?? null;
       const bv = b.totalSecondsOnSite ?? null;
       if (av == null && bv == null) return 0;
@@ -254,6 +263,12 @@ export function UsersAdminClient({
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Plan</th>
               <SortableHeader
+                label="Plays"
+                active={sortKey === "playsCreated"}
+                dir={sortDir}
+                onClick={() => toggleSort("playsCreated")}
+              />
+              <SortableHeader
                 label="Created"
                 active={sortKey === "createdAt"}
                 dir={sortDir}
@@ -277,7 +292,7 @@ export function UsersAdminClient({
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -341,6 +356,16 @@ export function UsersAdminClient({
                         </span>
                       )}
                     </button>
+                  </td>
+                  <td
+                    className="px-4 py-3 align-middle text-xs text-foreground tabular-nums"
+                    title={`${u.playsCreated} distinct play${u.playsCreated === 1 ? "" : "s"} authored`}
+                  >
+                    {u.playsCreated > 0 ? (
+                      u.playsCreated
+                    ) : (
+                      <span className="text-muted-light">—</span>
+                    )}
                   </td>
                   <td
                     className="px-4 py-3 align-middle text-xs text-muted"
