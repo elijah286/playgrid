@@ -217,15 +217,30 @@ export function CoachAiLauncher({
   // ── Docked body class + CSS variable ──────────────────────────────────────
   // Adds padding-right to body so main content doesn't hide under the panel.
   // Only on viewports >= 1024px where docked mode is exposed.
+  //
+  // The launcher is mounted twice (global header + mobile-only PlaybookHeader).
+  // Both run this effect, so cleanup must only remove the class if THIS
+  // instance was the one that added it — otherwise unmounting the hidden
+  // mobile copy on navigation wipes the class while the desktop copy is still
+  // open, and the page renders flush under the dock until the next splitter
+  // drag re-fires the effect.
+  const addedDockClassRef = useRef(false);
   useEffect(() => {
     const shouldDock = open && panelMode === "docked" && typeof window !== "undefined" && window.innerWidth >= 1024;
     document.documentElement.style.setProperty("--coach-dock-w", `${dockedWidth}px`);
     if (shouldDock) {
       document.documentElement.classList.add("coach-docked");
-    } else {
+      addedDockClassRef.current = true;
+    } else if (addedDockClassRef.current) {
       document.documentElement.classList.remove("coach-docked");
+      addedDockClassRef.current = false;
     }
-    return () => { document.documentElement.classList.remove("coach-docked"); };
+    return () => {
+      if (addedDockClassRef.current) {
+        document.documentElement.classList.remove("coach-docked");
+        addedDockClassRef.current = false;
+      }
+    };
   }, [open, panelMode, dockedWidth]);
 
   // ── Keyboard / scroll lock ─────────────────────────────────────────────────
