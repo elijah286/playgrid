@@ -131,6 +131,80 @@ function escSvgText(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+const NOTE_TEXT_FONT = "Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif";
+const NOTE_TEXT_FILL = "#334155";
+
+type NotePlayerStyle = {
+  label: string;
+  fill: string;
+  stroke: string;
+  labelColor: string;
+};
+
+/**
+ * Build a case-sensitive lookup of player labels → render style for the
+ * visual-player-references option. Skips ambiguous one-character labels
+ * like "I" or "A" that would constantly false-positive in English prose.
+ */
+function buildPlayerLabelLookup(doc: PlayDocument): Map<string, NotePlayerStyle> {
+  const out = new Map<string, NotePlayerStyle>();
+  const ambiguous = new Set(["A", "I"]);
+  for (const p of doc.layers.players) {
+    const label = (p.label ?? "").trim();
+    if (!label || ambiguous.has(label)) continue;
+    if (out.has(label)) continue;
+    out.set(label, {
+      label,
+      fill: p.style.fill,
+      stroke: p.style.stroke,
+      labelColor: p.style.labelColor,
+    });
+  }
+  return out;
+}
+
+function renderNoteLine(
+  line: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  playerLookup: Map<string, NotePlayerStyle> | null,
+): string {
+  if (!playerLookup || playerLookup.size === 0) {
+    return `<text x="${x}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(line)}</text>`;
+  }
+  const labels = Array.from(playerLookup.keys()).sort((a, b) => b.length - a.length);
+  const escaped = labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`\\b(${escaped.join("|")})\\b`, "g");
+  const charW = fontSize * 0.48;
+  const markerR = fontSize * 0.7;
+  let cx = x;
+  let cursor = 0;
+  let out = "";
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > cursor) {
+      const seg = line.slice(cursor, m.index);
+      out += `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(seg)}</text>`;
+      cx += seg.length * charW;
+    }
+    const style = playerLookup.get(m[1]!)!;
+    const markerCx = cx + markerR;
+    const markerCy = y - fontSize * 0.3;
+    out += `<g>`;
+    out += `<circle cx="${markerCx}" cy="${markerCy}" r="${markerR}" fill="${style.fill}" stroke="${style.stroke}" stroke-width="0.2"/>`;
+    out += `<text x="${markerCx}" y="${markerCy + markerR * 0.4}" text-anchor="middle" font-size="${markerR * 1.05}" font-family="${NOTE_TEXT_FONT}" font-weight="bold" fill="${style.labelColor}">${escSvgText(style.label)}</text>`;
+    out += `</g>`;
+    cx += markerR * 2 + charW * 0.3;
+    cursor = re.lastIndex;
+  }
+  if (cursor < line.length) {
+    const tail = line.slice(cursor);
+    out += `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(tail)}</text>`;
+  }
+  return out;
+}
+
 function mergeTemplate(
   kind: PrintTemplateKind,
   patch?: Partial<PrintTemplateDefinition>,
@@ -358,6 +432,13 @@ export type PlaysheetOptions = PlayTileLookOptions & {
   pageBreak: PlaysheetPageBreak;
   showNotes: boolean;
   noteLines: PlaysheetNoteLines;
+  /** Notes font size multiplier (1 = default ~2.3mm). */
+  noteFontSize?: number;
+  /**
+   * When true, isolated player-label tokens (X, H, C, S, …) in notes render
+   * as the same colored circle + letter the diagram uses. Off = plain text.
+   */
+  noteVisualPlayers?: boolean;
   /** 0 = cells flush together with no internal padding, 1 = default. */
   cellPadding?: number;
   /** Vertical height multiplier for each play tile (1 = default). */
@@ -463,7 +544,10 @@ export function compilePlaysheetPdfPages(
   const innerW = w - margin * 2;
   const innerH = h - topOffset - bottomOffset;
   const cellW = innerW / opts.columns;
-  const notesH = opts.showNotes ? opts.noteLines * 3.2 + 3 : 0;
+  const noteFontMult = Math.max(0.5, Math.min(2.5, opts.noteFontSize ?? 1));
+  const noteLineH = 3.2 * noteFontMult;
+  const noteLines = Math.max(1, Math.round(opts.noteLines));
+  const notesH = opts.showNotes ? noteLines * noteLineH + 3 : 0;
   const heightScale = Math.max(0.3, Math.min(2, opts.cellHeightScale ?? 1));
   const cellH = cellW * 0.72 * heightScale + notesH;
   const rows = Math.max(1, Math.floor(innerH / cellH));
@@ -631,17 +715,22 @@ function renderPlaysheetCell(
   let notes = "";
   if (opts.showNotes && notesH > 0) {
     const ny = oy + tileH;
-    const lineH = 3.2;
-    const fontNote = 2.3;
+    const noteFontMult = Math.max(0.5, Math.min(2.5, opts.noteFontSize ?? 1));
+    const fontNote = 2.3 * noteFontMult;
+    const lineH = 3.2 * noteFontMult;
+    const noteLineCount = Math.max(1, Math.round(opts.noteLines));
     const raw = vis.showNotes ? (doc.metadata.notes ?? "").trim() : "";
     const innerW = cw - padX * 2;
     const charsPerLine = Math.max(10, Math.floor(innerW / (fontNote * 0.48)));
-    const wrapped = wrapText(raw, charsPerLine).slice(0, opts.noteLines);
+    const wrapped = wrapText(raw, charsPerLine).slice(0, noteLineCount);
     const clipId = `nc-${Math.random().toString(36).slice(2, 9)}`;
     notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
     notes += `<g clip-path="url(#${clipId})">`;
+    const visualPlayers = opts.noteVisualPlayers ?? false;
+    const playerLookup = visualPlayers ? buildPlayerLabelLookup(doc) : null;
     wrapped.forEach((line, i) => {
-      notes += `<text x="${ox + padX}" y="${ny + lineH * (i + 1)}" font-size="${fontNote}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" fill="#334155">${escSvgText(line)}</text>`;
+      const ly = ny + lineH * (i + 1);
+      notes += renderNoteLine(line, ox + padX, ly, fontNote, playerLookup);
     });
     notes += `</g>`;
     notes += `<line x1="${ox + padX}" y1="${ny + notesH - 0.5}" x2="${ox + cw - padX}" y2="${ny + notesH - 0.5}" stroke="#e5e7eb" stroke-width="0.2"/>`;

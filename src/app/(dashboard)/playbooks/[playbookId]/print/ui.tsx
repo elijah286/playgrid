@@ -310,6 +310,8 @@ export function PrintPlaybookClient({
       pageBreak: config.playsheetPageBreak,
       showNotes: config.playsheetShowNotes,
       noteLines: config.playsheetNoteLines,
+      noteFontSize: config.playsheetNoteFontSize,
+      noteVisualPlayers: config.playsheetNoteVisualPlayers,
       cellPadding: config.playsheetCellPadding,
       cellHeightScale: config.playsheetCellHeightScale,
       iconSize: config.playsheetIconSize,

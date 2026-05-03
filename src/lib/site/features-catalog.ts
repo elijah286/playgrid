@@ -748,6 +748,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Print & export ─────────────────────────────────────────────
   {
+    id: "print-playsheet-notes-controls",
+    name: "Roomy play notes on call sheets",
+    description:
+      "The Text tab on the playbook print tool now owns every notes-related control: show/hide, a slider that grows the notes area up to ~30 lines (as much as the page can hold), a font-size slider, and a \"Use visual player references\" toggle that swaps single-letter mentions like X, H, or Z for the same colored circle + letter the diagram uses. Coaches can pack a full game-plan blurb under each play instead of being capped at three lines.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "print-pdf",
     name: "Print plays to PDF",
     description:

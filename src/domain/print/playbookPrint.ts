@@ -10,7 +10,16 @@ export const PLAYSHEET_COLUMN_OPTIONS: readonly PlaysheetColumns[] = [1, 2, 3, 4
 
 export type PlaysheetPageBreak = "continuous" | "group";
 
-export type PlaysheetNoteLines = 1 | 2 | 3;
+/**
+ * How many lines of free-form notes render under each play tile. Stored as a
+ * plain number (1–30) so coaches can dial notes up to "as much as the page
+ * can hold". Legacy presets persisted as `1 | 2 | 3` continue to load
+ * unchanged.
+ */
+export type PlaysheetNoteLines = number;
+
+export const PLAYSHEET_NOTE_LINES_MIN = 1;
+export const PLAYSHEET_NOTE_LINES_MAX = 30;
 
 export type WristbandGridLayout = "12" | "10" | "8" | "6" | "4" | "4col" | "3";
 export type WristbandZoom = 50 | 75 | 100 | 125 | 150;
@@ -54,6 +63,14 @@ export type PlaybookPrintRunConfig = {
   /** Playsheet: fixed-height notes strip under each play. */
   playsheetShowNotes: boolean;
   playsheetNoteLines: PlaysheetNoteLines;
+  /** Notes font size multiplier (1 = default ~2.3mm, 0.5–2.5). */
+  playsheetNoteFontSize: number;
+  /**
+   * When true, single-letter player labels (X, H, C, S, Z, Q, B, …) found in
+   * notes are replaced with the same colored circle + letter rendered in the
+   * diagram. Off = plain text only.
+   */
+  playsheetNoteVisualPlayers: boolean;
   /** Playsheet: 0 = no padding (edge-to-edge), 1 = current spacing. */
   playsheetCellPadding: number;
   /** Playsheet: vertical height multiplier for each play tile (0.5–1.5, 1 = default). */
@@ -174,6 +191,8 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetPageBreak: "continuous",
   playsheetShowNotes: true,
   playsheetNoteLines: 2,
+  playsheetNoteFontSize: 1,
+  playsheetNoteVisualPlayers: true,
   playsheetCellPadding: 0.5,
   playsheetCellHeightScale: 1,
   wristbandCellPadding: 0.1,
