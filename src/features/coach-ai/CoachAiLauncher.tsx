@@ -670,7 +670,6 @@ export function CoachAiLauncher({
                     )}
                     {!loadingPlaybooks && playbookList?.map((pb) => {
                       const isCurrent = pb.id === playbookId;
-                      const tint = hexToRgba(pb.color ?? null, isCurrent ? 0.22 : 0.12);
                       return (
                         <Link
                           key={pb.id}
@@ -679,20 +678,25 @@ export function CoachAiLauncher({
                           role="option"
                           aria-selected={isCurrent}
                           className={cn(
-                            "flex items-center gap-2 border-l-[3px] px-2 py-1.5 text-[12px] hover:brightness-105",
-                            !pb.color && "border-l-transparent",
-                            !pb.color && (isCurrent ? "bg-surface-inset" : "hover:bg-surface-inset"),
+                            "flex items-center gap-2 mx-1 mb-0.5 rounded-md px-2 py-1.5 text-[12px] transition-colors",
+                            isCurrent
+                              ? "bg-surface-inset text-foreground"
+                              : "text-foreground hover:bg-surface-inset",
                           )}
-                          style={pb.color ? { backgroundColor: tint ?? undefined, borderLeftColor: pb.color } : undefined}
                         >
-                          <Check
-                            className={cn("size-3.5 shrink-0", isCurrent ? "text-primary" : "text-transparent")}
+                          {/* Color swatch — always present; neutral dot when no color */}
+                          <span
+                            className="size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: pb.color ?? "var(--color-muted-light)" }}
                             aria-hidden="true"
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="truncate font-medium text-foreground">{pb.name}</div>
+                            <div className="truncate font-medium">{pb.name}</div>
                             {pb.season && <div className="truncate text-[10px] text-muted">{pb.season}</div>}
                           </div>
+                          {isCurrent && (
+                            <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                          )}
                         </Link>
                       );
                     })}
