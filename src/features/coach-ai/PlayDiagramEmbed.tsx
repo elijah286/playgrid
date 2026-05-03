@@ -523,8 +523,16 @@ export function PlayDiagramEmbed({ json }: { json: string }) {
 }
 
 /** Render-from-doc primitive shared by PlayDiagramEmbed (model-supplied
- *  JSON) and PlayDiagramRef (saved play fetched by id). */
-function PlayDocRender({ doc }: { doc: PlayDocument }) {
+ *  JSON) and PlayDiagramRef (saved play fetched by id). When a saved
+ *  play is being shown, `linkTo` carries its name + id so the heading
+ *  above the diagram becomes a clickable shortcut into the play editor. */
+function PlayDocRender({
+  doc,
+  linkTo,
+}: {
+  doc: PlayDocument;
+  linkTo?: { id: string; name: string } | null;
+}) {
   const anim = usePlayAnimation(doc);
   const hasRoutes = doc.layers.routes.length > 0;
   const animPositions = anim.phase !== "idle" ? anim.playerPositions : null;
@@ -536,10 +544,30 @@ function PlayDocRender({ doc }: { doc: PlayDocument }) {
   const [fullFieldWidth, setFullFieldWidth] = useState<boolean>(false);
   return (
     <div className="my-3 space-y-1">
-      {doc.metadata.formation && (
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          {doc.metadata.formation}
-        </p>
+      {linkTo ? (
+        // Saved play: the name is the dominant cue (formation is secondary).
+        // Wrap it in a Next link so coaches can jump to the play editor with
+        // one click — every embedded play-ref is structurally clickable, no
+        // prompt-rule needed.
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <a
+            href={`/plays/${linkTo.id}/edit`}
+            className="inline-flex items-baseline gap-1 rounded-md px-1 -mx-1 text-sm font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+          >
+            {linkTo.name || "Untitled play"}
+          </a>
+          {doc.metadata.formation && (
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              {doc.metadata.formation}
+            </span>
+          )}
+        </div>
+      ) : (
+        doc.metadata.formation && (
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            {doc.metadata.formation}
+          </p>
+        )
       )}
       <DiagramCanvas doc={doc} animPositions={animPositions} fullFieldWidth={fullFieldWidth} />
       {hasRoutes && (
@@ -639,7 +667,7 @@ export function PlayDiagramRef({ json }: { json: string }) {
 
   const [state, setState] = useState<
     | { kind: "loading" }
-    | { kind: "ok"; doc: PlayDocument }
+    | { kind: "ok"; doc: PlayDocument; name: string; id: string }
     | { kind: "error"; message: string }
   >({ kind: "loading" });
 
@@ -656,7 +684,11 @@ export function PlayDiagramRef({ json }: { json: string }) {
         setState({ kind: "error", message: res.error });
         return;
       }
-      setState({ kind: "ok", doc: res.document });
+      const playName =
+        (res.play && typeof res.play.name === "string" ? res.play.name : null) ??
+        res.document.metadata.coachName ??
+        "Untitled play";
+      setState({ kind: "ok", doc: res.document, name: playName, id });
     });
     return () => {
       cancelled = true;
@@ -667,5 +699,5 @@ export function PlayDiagramRef({ json }: { json: string }) {
   if (state.kind === "error") {
     return <DiagramFailureDetails error={state.message} />;
   }
-  return <PlayDocRender doc={state.doc} />;
+  return <PlayDocRender doc={state.doc} linkTo={{ id: state.id, name: state.name }} />;
 }
