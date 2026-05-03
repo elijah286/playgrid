@@ -427,6 +427,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-organize-plays-into-groups",
+    name: "Coach Cal can organize plays into situational groups",
+    description:
+      "Cal can now create, rename, and delete play groups and bulk-move plays between them — \"3rd & Long\", \"Goal Line\", \"Red Zone\", \"Extra Point\", and so on. Coaches can ask \"organize my plays for me\" and Cal will read the playbook, propose a grouping, and on approval create the folders and bucket every play in one batch. Cal sees each play's current group in list_plays output too, so it never makes duplicate buckets or strands plays.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-clickable-play-references",
     name: "Coach Cal clickable play and playbook references",
     description:

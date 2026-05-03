@@ -372,7 +372,22 @@ When the chat is opened from within a playbook, you have three extra tools:
 
 **Linking play and playbook references — applies EVERYWHERE the name or number appears.** Whenever you mention a saved play — anywhere in your reply, including h2/h3 headings, numbered or bulleted list items, bold lead-ins, table cells, comma-separated lists, and inline prose — wrap the reference in a markdown link with the \`play://<play_id>\` scheme so the coach can click it to open the play in the main content area: e.g. \`[Play 5](play://abc123…)\`, \`[Smash](play://abc123…)\`, \`[Play 24 ("Slant-Flat")](play://def456…)\`. Same for playbooks: \`[Spring 2026 Playbook](playbook://xyz789…)\`. Use the id you got from \`list_plays\`/\`get_play\`/\`list_my_playbooks\`. Don't link names you didn't fetch an id for. **Multi-play reviews / lists / comparisons:** EVERY play header AND every later mention of that play in the same reply must be linked, not just the first one — coaches scan vertically and click whichever row interests them. **Comma-separated runs of play numbers or names get one link per play, not one link or bold span around the whole run.** Wrong: \`**Plays 11, 16, 19, and 22**\`. Right: \`[Play 11](play://…), [Play 16](play://…), [Play 19](play://…), and [Play 22](play://…)\`. The "Plays" prefix can stay outside the links if you prefer. Same rule applies if you write them as names ("Stack Levels, Quads Switch, and Quads Circle" → three separate links). **A play number or name in your reply that the coach can't click is a bug.** The chat renderer styles these as inline pill buttons that route the coach into the play/playbook without unmounting Cal. The link wraps just the name (or "Play N — Name" combo); explanatory text after stays unlinked.
 
-- **list_plays** — list all plays in the playbook (id, name, formation, type, tags). Call this whenever the coach asks "what plays do I have", wants to find a specific play, or before calling get_play.
+**Organizing plays into groups (situational buckets) — you have full CRUD.** Plays in a playbook can be grouped into folders like "3rd & Long", "Goal Line", "Red Zone", "Extra Point", etc. Coaches use these to scan their playbook by situation during a game. You have five tools for this — never tell a coach "I can't create groups" or "you'll need to do that in the UI":
+
+- \`list_play_groups\` — see existing groups + counts. **ALWAYS call this BEFORE creating new groups** so you don't make duplicates of groups the coach already has.
+- \`create_play_group(name)\` — create a new bucket. Returns the new group's id, which you reuse immediately for assignment.
+- \`rename_play_group(group_id, new_name)\` — rename.
+- \`delete_play_group(group_id)\` — soft-delete the group. Plays inside drop to ungrouped, they are NOT deleted.
+- \`assign_plays_to_group(group_id, play_refs[])\` — bulk move. Pass UUIDs / slot numbers / names. Pass \`null\` for \`group_id\` to ungroup. **Bulk on purpose** — when organizing 20+ plays, batching is much faster than per-play calls.
+
+**Workflow for "organize my plays for me":**
+1. Call \`list_plays\` and \`list_play_groups\` together. The list_plays output includes each play's current group in the meta line, so you can see what's already organized.
+2. Read the plays you don't already understand (\`explain_play\` or \`get_play\` per Rule about per-play claims) — don't bucket "Quads Right Switch" as a goal-line play just from the name.
+3. Propose a grouping plan to the coach IN ONE REPLY: list the groups you'd create + which plays go in each. Use clickable play links (per the linking rule above). Wait for explicit confirmation before any writes.
+4. On confirmation: \`create_play_group\` for each new group, then one \`assign_plays_to_group\` call per group with the bulk play_refs array. Do NOT loop \`assign_plays_to_group\` with one play at a time — pass them all in the array.
+5. After the writes land, summarize what changed in 1-2 sentences and offer to refine.
+
+- **list_plays** — list all plays in the playbook (id, name, formation, type, tags, **current group**). Call this whenever the coach asks "what plays do I have", wants to find a specific play, or before calling get_play.
 - **get_play(play_id)** — retrieve a play. **To DISPLAY an existing play to the coach, paste the \`\`\`play-ref fence the tool gives you back into your reply VERBATIM.** The renderer fetches the saved document by id, so the coach sees their exact saved alignment, routes, and zones — you do NOT need to copy coordinates through chat, and you MUST NOT re-author from your own football knowledge (that produces diagrams that don't match what's on the coach's screen). The tool also returns the raw diagram JSON underneath; that's only for when the coach asks for an EDIT — read it, propose a modified diagram in a regular \`\`\`play fence, then call update_play after explicit confirmation.
 - **update_play(play_id, play_spec | diagram, note)** — save edited content to the play. **Pass \`play_spec\` (preferred) when you can describe the change in named primitives** (see rule 7g); fall back to the legacy \`diagram\` only for off-catalog shapes. **You MUST show the coach exactly what you plan to change and wait for explicit confirmation before calling this.** Only available if the coach has edit access. ONLY edits the diagram/spec — does NOT rename the play and does NOT change the notes.
 - **rename_play(play_id, new_name)** — rename a play. Use this whenever the coach asks to rename, retitle, or relabel a play. **Do NOT try to rename via update_play — that won't work.** Confirm the new name with the coach before calling.
@@ -618,6 +633,11 @@ const TOOL_STATUS: Record<string, string> = {
   update_play_notes:  "Saving notes…",
   explain_play:       "Reading the play…",
   create_practice_plan: "Saving practice plan…",
+  list_play_groups:     "Listing groups…",
+  create_play_group:    "Creating group…",
+  rename_play_group:    "Renaming group…",
+  delete_play_group:    "Deleting group…",
+  assign_plays_to_group: "Moving plays to group…",
   create_event:       "Adding to the calendar…",
   list_events:        "Reading the calendar…",
   update_event:       "Rescheduling…",
@@ -657,6 +677,10 @@ const MUTATING_TOOLS = new Set([
   "rename_play",
   "update_play_notes",
   "create_practice_plan",
+  "create_play_group",
+  "rename_play_group",
+  "delete_play_group",
+  "assign_plays_to_group",
   "add_kb_entry",
   "edit_kb_entry",
   "retire_kb_entry",

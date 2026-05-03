@@ -445,6 +445,20 @@ const list_plays: CoachAiTool = {
         groupSortById.set(g.id as string, (g.sort_order as number) ?? 0);
       }
 
+      const groupNameById = new Map<string, string>();
+      // Pull group names alongside sort order so the listing shows which
+      // bucket each play already lives in. Without this, Cal can't tell
+      // "Play 4 is in Red Zone" vs "Play 4 is ungrouped" without a second
+      // tool call to list_play_groups.
+      const { data: groupNameRows } = await admin
+        .from("playbook_groups")
+        .select("id, name, deleted_at")
+        .eq("playbook_id", ctx.playbookId)
+        .is("deleted_at", null);
+      for (const g of groupNameRows ?? []) {
+        groupNameById.set(g.id as string, (g.name as string) ?? "");
+      }
+
       const allRows = (data as Array<{
         id: string;
         name: string;
@@ -479,8 +493,12 @@ const list_plays: CoachAiTool = {
       const lines = rows.map((r) => {
         const slot = slotById.get(r.id);
         const slotLabel = slot != null ? `Play ${slot}` : "Play ?";
+        const groupLabel = r.group_id
+          ? (groupNameById.get(r.group_id) ?? "(unknown group)")
+          : "(ungrouped)";
         const meta = [
           r.play_type ?? "offense",
+          `group: ${groupLabel}`,
           r.formation_name ? `formation: ${r.formation_name}` : null,
           r.tags && r.tags.length > 0 ? `tags: ${r.tags.join(", ")}` : null,
         ].filter(Boolean).join(" | ");
@@ -1477,6 +1495,352 @@ const explain_play: CoachAiTool = {
   },
 };
 
+// ── Play groups ────────────────────────────────────────────────────────────
+//
+// Coaches asked to have Cal organize plays into buckets like "3rd & long",
+// "goal line", "extra point", etc. The UI's Manage Groups modal already
+// surfaces create/rename/delete + per-play assign; these tools mirror those
+// flows so Cal can do the same end-to-end without falling back to
+// "click here in the sidebar."
+
+/** Resolve a group identifier (UUID or exact/fuzzy name) to a group id +
+ *  current name. Mirrors resolvePlayId so Cal can pass whichever it has. */
+async function resolveGroupId(
+  input: string,
+  playbookId: string,
+): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+  if (!input || !input.trim()) return { ok: false, error: "group_id is required." };
+  const admin = createServiceRoleClient();
+  const { data: groups, error } = await admin
+    .from("playbook_groups")
+    .select("id, name")
+    .eq("playbook_id", playbookId)
+    .is("deleted_at", null);
+  if (error) return { ok: false, error: error.message };
+  const list = (groups ?? []) as Array<{ id: string; name: string }>;
+  if (list.length === 0) return { ok: false, error: "This playbook has no groups yet." };
+
+  if (UUID_RE.test(input)) {
+    const hit = list.find((g) => g.id === input);
+    if (hit) return { ok: true, id: hit.id, name: hit.name };
+    return { ok: false, error: `No group with id ${input} in this playbook.` };
+  }
+
+  const lower = input.trim().toLowerCase();
+  const exact = list.filter((g) => g.name.toLowerCase() === lower);
+  if (exact.length === 1) return { ok: true, id: exact[0].id, name: exact[0].name };
+  if (exact.length > 1) {
+    return {
+      ok: false,
+      error: `Multiple groups named "${input}". Use the group's UUID to disambiguate.`,
+    };
+  }
+  const fuzzy = list.filter((g) => g.name.toLowerCase().includes(lower));
+  if (fuzzy.length === 1) return { ok: true, id: fuzzy[0].id, name: fuzzy[0].name };
+  if (fuzzy.length > 1) {
+    return {
+      ok: false,
+      error:
+        `"${input}" matched multiple groups. Use the exact name or UUID. Matches: ` +
+        fuzzy.slice(0, 5).map((g) => `"${g.name}"`).join(", "),
+    };
+  }
+  return { ok: false, error: `No group matched "${input}". Existing groups: ${list.map((g) => `"${g.name}"`).join(", ")}` };
+}
+
+const list_play_groups: CoachAiTool = {
+  def: {
+    name: "list_play_groups",
+    description:
+      "List the play groups (folders) in the current playbook with each group's id, " +
+      "name, sort order, and the count of plays inside. Call this before creating a " +
+      "new group so you don't make a duplicate, and before assigning plays so you " +
+      "use the right group_id. The plays themselves come from list_plays — each " +
+      "row's `group: …` metadata tells you which group it currently lives in.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  async handler(_input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    try {
+      const admin = createServiceRoleClient();
+      const [groupsRes, playsRes] = await Promise.all([
+        admin
+          .from("playbook_groups")
+          .select("id, name, sort_order")
+          .eq("playbook_id", ctx.playbookId)
+          .is("deleted_at", null)
+          .order("sort_order", { ascending: true }),
+        admin
+          .from("plays")
+          .select("group_id")
+          .eq("playbook_id", ctx.playbookId)
+          .eq("is_archived", false)
+          .is("deleted_at", null)
+          .is("attached_to_play_id", null),
+      ]);
+      if (groupsRes.error) return { ok: false, error: groupsRes.error.message };
+      const groups = (groupsRes.data ?? []) as Array<{ id: string; name: string; sort_order: number }>;
+      const counts = new Map<string | null, number>();
+      for (const p of (playsRes.data ?? []) as Array<{ group_id: string | null }>) {
+        counts.set(p.group_id, (counts.get(p.group_id) ?? 0) + 1);
+      }
+      if (groups.length === 0) {
+        const ungrouped = counts.get(null) ?? 0;
+        return {
+          ok: true,
+          result:
+            `No groups in this playbook yet. ${ungrouped} ungrouped active play(s). ` +
+            `Use create_play_group to add the first one (e.g. "Red Zone", "3rd & Long").`,
+        };
+      }
+      const lines = groups.map(
+        (g) => `• "${g.name}" [${g.id}] — ${counts.get(g.id) ?? 0} play(s)`,
+      );
+      const ungrouped = counts.get(null) ?? 0;
+      return {
+        ok: true,
+        result:
+          `${groups.length} group(s) in display order:\n${lines.join("\n")}\n\n` +
+          `${ungrouped} active play(s) currently ungrouped.`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "list_play_groups failed" };
+    }
+  },
+};
+
+const create_play_group: CoachAiTool = {
+  def: {
+    name: "create_play_group",
+    description:
+      "Create a new play group (folder) in the current playbook. Use this when " +
+      "the coach wants to organize plays into buckets (\"3rd & Long\", \"Goal Line\", " +
+      "\"Extra Point\", \"Red Zone\", etc.). Returns the new group's id, which you " +
+      "should keep so you can immediately assign plays to it via assign_plays_to_group. " +
+      "ALWAYS confirm the group name with the coach before calling — and call " +
+      "list_play_groups first to avoid creating a duplicate of an existing group. " +
+      "Requires edit access to the playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Group name (1-60 chars). Short situational labels work best.",
+        },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const name = typeof input.name === "string" ? input.name.trim() : "";
+    if (!name) return { ok: false, error: "name can't be empty." };
+    if (name.length > 60) return { ok: false, error: "name must be 60 characters or fewer." };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createPlaybookGroupAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+      const res = await createPlaybookGroupAction(ctx.playbookId, name);
+      if (!res.ok) return { ok: false, error: res.error };
+      return {
+        ok: true,
+        result: `Created group "${res.group.name}" [${res.group.id}]. Use this id when calling assign_plays_to_group.`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "create_play_group failed" };
+    }
+  },
+};
+
+const rename_play_group: CoachAiTool = {
+  def: {
+    name: "rename_play_group",
+    description:
+      "Rename an existing play group. ALWAYS confirm the new name with the coach " +
+      "before calling. Requires edit access to the playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        group_id: {
+          type: "string",
+          description: "UUID or exact name of the group to rename.",
+        },
+        new_name: { type: "string", description: "The new group name (1-60 chars)." },
+      },
+      required: ["group_id", "new_name"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const newName = typeof input.new_name === "string" ? input.new_name.trim() : "";
+    if (!newName) return { ok: false, error: "new_name can't be empty." };
+    if (newName.length > 60) return { ok: false, error: "new_name must be 60 characters or fewer." };
+    const resolved = await resolveGroupId(
+      typeof input.group_id === "string" ? input.group_id : "",
+      ctx.playbookId,
+    );
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (resolved.name === newName) {
+      return { ok: true, result: `Group is already named "${newName}" — no change.` };
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { renamePlaybookGroupAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+      const res = await renamePlaybookGroupAction(resolved.id, newName);
+      if (!res.ok) return { ok: false, error: res.error };
+      return { ok: true, result: `Renamed group "${resolved.name}" → "${newName}".` };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "rename_play_group failed" };
+    }
+  },
+};
+
+const delete_play_group: CoachAiTool = {
+  def: {
+    name: "delete_play_group",
+    description:
+      "Delete a play group. The plays inside the group are NOT deleted — they " +
+      "drop back to the ungrouped bucket and stay live. The group itself is " +
+      "soft-deleted (recoverable from trash for 30 days). ALWAYS confirm with " +
+      "the coach and remind them where the plays will end up. Requires edit access.",
+    input_schema: {
+      type: "object",
+      properties: {
+        group_id: {
+          type: "string",
+          description: "UUID or exact name of the group to delete.",
+        },
+      },
+      required: ["group_id"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const resolved = await resolveGroupId(
+      typeof input.group_id === "string" ? input.group_id : "",
+      ctx.playbookId,
+    );
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { deletePlaybookGroupAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+      const res = await deletePlaybookGroupAction(resolved.id);
+      if (!res.ok) return { ok: false, error: res.error };
+      return {
+        ok: true,
+        result:
+          `Deleted group "${resolved.name}". Any plays that were in it are now ungrouped and still live in the playbook.`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "delete_play_group failed" };
+    }
+  },
+};
+
+const assign_plays_to_group: CoachAiTool = {
+  def: {
+    name: "assign_plays_to_group",
+    description:
+      "Move one or more plays into a group (or out of any group). Pass `group_id` " +
+      "as the target group's UUID or exact name; pass `null` (or omit) to UNGROUP. " +
+      "`play_refs` accepts an array of UUIDs, slot numbers (\"4\"), and/or exact " +
+      "play names — same resolution rules as get_play. Bulk on purpose: when " +
+      "organizing 20+ plays, batching avoids 20 round trips. ALWAYS show the " +
+      "coach the proposed grouping and wait for explicit confirmation before " +
+      "calling. Requires edit access.",
+    input_schema: {
+      type: "object",
+      properties: {
+        group_id: {
+          type: "string",
+          description:
+            "Target group UUID or exact group name. Omit (or pass an empty string) to UNGROUP the plays.",
+        },
+        play_refs: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 100,
+          description:
+            "Array of play references — UUIDs, slot numbers (\"4\"), or exact names.",
+        },
+      },
+      required: ["play_refs"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+
+    const refs = Array.isArray(input.play_refs)
+      ? input.play_refs.filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+      : [];
+    if (refs.length === 0) return { ok: false, error: "play_refs must include at least one play." };
+
+    const groupRef = typeof input.group_id === "string" ? input.group_id.trim() : "";
+    let targetGroupId: string | null = null;
+    let targetGroupName = "(ungrouped)";
+    if (groupRef) {
+      const resolved = await resolveGroupId(groupRef, ctx.playbookId);
+      if (!resolved.ok) return { ok: false, error: resolved.error };
+      targetGroupId = resolved.id;
+      targetGroupName = resolved.name;
+    }
+
+    // Resolve each play ref. Collect failures so the model can fix them in a
+    // follow-up call without losing the rest of the batch.
+    const resolvedPlays: Array<{ id: string; name: string; ref: string }> = [];
+    const failures: string[] = [];
+    for (const ref of refs) {
+      const r = await resolvePlayId(ref, ctx.playbookId);
+      if (r.ok) resolvedPlays.push({ id: r.id, name: r.name, ref });
+      else failures.push(`"${ref}": ${r.error}`);
+    }
+    if (resolvedPlays.length === 0) {
+      return {
+        ok: false,
+        error: `No play_refs resolved. Issues:\n- ${failures.join("\n- ")}`,
+      };
+    }
+
+    // setPlayGroupAction is per-play; loop server-side. Track per-play
+    // success so partial failures still leave a useful summary.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { setPlayGroupAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+    const moved: string[] = [];
+    const errors: string[] = [];
+    for (const p of resolvedPlays) {
+      const res = await setPlayGroupAction(p.id, targetGroupId);
+      if (res.ok) moved.push(`"${p.name}"`);
+      else errors.push(`"${p.name}": ${res.error}`);
+    }
+
+    const lines: string[] = [];
+    lines.push(
+      `Moved ${moved.length} play(s) → ${targetGroupName}: ${moved.join(", ") || "(none)"}`,
+    );
+    if (failures.length > 0) {
+      lines.push(`Could not resolve ${failures.length} ref(s):\n- ${failures.join("\n- ")}`);
+    }
+    if (errors.length > 0) {
+      lines.push(`Failed to move ${errors.length} play(s):\n- ${errors.join("\n- ")}`);
+    }
+    // If nothing moved, treat as a hard failure so the model surfaces it
+    // clearly. Otherwise return ok with the partial breakdown so the coach
+    // sees what worked AND what didn't, in one reply.
+    if (moved.length === 0) {
+      return { ok: false, error: lines.join("\n\n") };
+    }
+    return { ok: true, result: lines.join("\n\n") };
+  },
+};
+
 export const PLAY_TOOLS: CoachAiTool[] = [
   list_plays,
   get_play,
@@ -1486,4 +1850,9 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   update_play_notes,
   explain_play,
   create_practice_plan,
+  list_play_groups,
+  create_play_group,
+  rename_play_group,
+  delete_play_group,
+  assign_plays_to_group,
 ];
