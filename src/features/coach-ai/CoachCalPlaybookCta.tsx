@@ -16,10 +16,23 @@ const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
  */
 export function CoachCalPlaybookCta({ show }: { show: boolean }) {
   const [visible, setVisible] = useState(false);
+  const [chatOpen, setChatOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(window.__coachCalChatOpen);
+  });
   // Ref instead of state — the impression latch doesn't need to drive a
   // re-render and putting it in state trips
   // react-hooks/set-state-in-effect.
   const impressionLoggedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onState(e: CustomEvent<{ open: boolean }>) {
+      setChatOpen(e.detail.open);
+    }
+    window.addEventListener("coach-cal:state-change", onState);
+    return () => window.removeEventListener("coach-cal:state-change", onState);
+  }, []);
 
   useEffect(() => {
     if (!show) return;
@@ -56,7 +69,7 @@ export function CoachCalPlaybookCta({ show }: { show: boolean }) {
     });
   }
 
-  if (!visible) return null;
+  if (!visible || chatOpen) return null;
 
   return (
     <div

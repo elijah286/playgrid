@@ -7,6 +7,10 @@ import { ENTRY_POINTS, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
+// Bold trial-CTA gradient — the brand pastel + white text reads as faded;
+// the trial button is the conversion target so it gets the full-saturation
+// blue/purple to match the playbook floating CTA.
+const TRIAL_GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
 
 /**
  * Read-only chat surface shown when a non-entitled user clicks an in-app
@@ -64,8 +68,8 @@ export function CoachAiPreviewChat({
                   },
                 })
               }
-              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
-              style={{ background: GRADIENT }}
+              className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
+              style={{ background: TRIAL_GRADIENT }}
             >
               {config.preview.ctaLabel}
             </Link>

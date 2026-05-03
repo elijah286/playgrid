@@ -427,6 +427,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-launcher-direct-open",
+    name: "Coach Cal opens straight into the chat panel",
+    description:
+      "The header sparkle icon now opens Coach Cal in the chat panel for everyone — entitled and non-entitled users alike — instead of showing a small marketing popover for non-subscribers. Non-subscribers land on a welcome surface inside the chat with the same path-aware lead, animated examples, and a more prominent \"Start 7-day free trial\" CTA (bold blue/purple gradient instead of the washed-out pastel that read as disabled). On wide viewports the panel now defaults to the right-side dock so it doesn't obscure the page the coach is working on, and the user's chosen panel mode (float vs. dock) persists across close/open. The bottom-left \"Meet Coach Cal\" toast hides itself while the chat is open so coaches don't see two redundant nudges at once.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-in-app-cta-practice-plan",
     name: "Generate a practice plan with Coach Cal — from the Practice Plans tab",
     description:

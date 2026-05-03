@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
+import { CoachAiHeaderPreview } from "./CoachAiHeaderPreview";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { CoachAiPreviewChat } from "./CoachAiPreviewChat";
 import type { CoachCalEntryPointId } from "./entry-points";
@@ -75,48 +76,6 @@ function hexToRgba(hex: string | null | undefined, alpha: number): string | null
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-type CoachCalDemo = { user: string; cal: string };
-
-const COACH_CAL_DEMOS: CoachCalDemo[] = [
-  {
-    user: "Draw me a curl-flat against Cover-3.",
-    cal: "Done — here's the diagram with reads. Want me to add it to your playbook?",
-  },
-  {
-    user: "What plays beat a 5-2 defense?",
-    cal: "Try Stick, Curl-Flat, and Slants — your QB has the most time on those fronts.",
-  },
-  {
-    user: "Build a 60-min practice for Tuesday.",
-    cal: "10 warm-up · 20 individual · 20 team install · 10 conditioning. Saved to Practice Plans.",
-  },
-  {
-    user: "Schedule our game vs Riverside, Sat 2 PM.",
-    cal: "Added to Calendar with a 24-hr reminder. RSVP link sent to roster.",
-  },
-  {
-    user: "Adjust this play for a younger team.",
-    cal: "Simplified routes and added a hot read. Want me to apply across the playbook?",
-  },
-];
-
-function leadForPath(pathname: string | null): string {
-  if (!pathname) return "help you build your playbook, plan practices, and more.";
-  if (/^\/plays\/[^/]+\/edit/.test(pathname)) {
-    return "draw this play, suggest counters, or tune it for your team.";
-  }
-  if (/^\/playbooks\/[^/]+\/print/.test(pathname)) {
-    return "design call sheets and wristbands you can print today.";
-  }
-  if (/^\/playbooks\/[^/]+/.test(pathname)) {
-    return "build out this playbook, plan practices, and schedule games.";
-  }
-  if (pathname === "/home" || pathname.startsWith("/home")) {
-    return "build playbooks, plan practices, and run your season.";
-  }
-  return "help you build your playbook, plan practices, and schedule games.";
-}
-
 export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
   isAdmin = false,
@@ -137,7 +96,6 @@ export function CoachAiLauncher({
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
   const [adminMode,     setAdminMode]     = useState(false);
-  const [promoOpen,     setPromoOpen]     = useState(false);
   const [pulseSeen,     setPulseSeen]     = useState(() => {
     if (typeof window === "undefined") return false;
     const raw = window.localStorage.getItem("coach-cal:promo-seen-at");
@@ -148,8 +106,6 @@ export function CoachAiLauncher({
     if (!Number.isFinite(ts)) return false;
     return Date.now() - ts < PROMO_REPULSE_MS;
   });
-  const promoRef    = useRef<HTMLDivElement>(null);
-  const promoBtnRef = useRef<HTMLButtonElement>(null);
 
   const [size,       setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
   const [dockedWidth, setDockedWidth] = useState(DEFAULT_DOCK_W);
@@ -214,14 +170,36 @@ export function CoachAiLauncher({
       }
       const savedFont = readStorage<number>("coach-ai:font-size", 14);
       if (FONT_SIZES.includes(savedFont as FontSize)) setFontSize(savedFont as FontSize);
-      const savedMode = readStorage<string>("coach-ai:panel-mode", "float");
-      if (savedMode === "float" || savedMode === "docked") setPanelMode(savedMode as PanelMode);
+      const savedMode = readStorage<string | null>("coach-ai:panel-mode", null);
+      const wide = window.innerWidth >= 1024;
+      if (savedMode === "docked" && wide) {
+        setPanelMode("docked");
+      } else if (savedMode === "float") {
+        setPanelMode("float");
+      } else if (!savedMode && wide) {
+        // Fresh user on a wide viewport — default to docked so the chat
+        // doesn't obscure the page they're working on.
+        setPanelMode("docked");
+      }
+      // else: leave float (initial) — narrow viewport, or saved=docked but
+      // we're on mobile (docked is hidden lg:flex; would render invisibly).
       const savedDockW = readStorage<number>("coach-ai:dock-width", DEFAULT_DOCK_W);
       if (savedDockW >= MIN_DOCK_W && savedDockW <= MAX_DOCK_W) setDockedWidth(savedDockW);
     } catch { /* ignore */ }
     hasRestored.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Broadcast open/closed state so sibling surfaces (e.g. the playbook
+  // floating CTA) can hide themselves while the chat is on screen — the toast
+  // is meant to nudge users *toward* Cal and is redundant once Cal is open.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.__coachCalChatOpen = open;
+    window.dispatchEvent(
+      new CustomEvent("coach-cal:state-change", { detail: { open } }),
+    );
+  }, [open]);
 
   // Subscribe to the global `coach-cal:open` event. Only the launcher with
   // acceptGlobalCommands handles it, so mounting two launchers (global +
@@ -248,7 +226,9 @@ export function CoachAiLauncher({
 
   function closeDialog() {
     setOpen(false);
-    setPanelMode("float");
+    // Only reset fullscreen — keep docked/float across close so the user's
+    // chosen panel mode persists into the next open.
+    setPanelMode((m) => (m === "fullscreen" ? "float" : m));
     setInjectedPrompt(null);
     setPreviewState(null);
   }
@@ -346,25 +326,6 @@ export function CoachAiLauncher({
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [contextOpen]);
-
-  useEffect(() => {
-    if (!promoOpen) return;
-    function onDown(e: MouseEvent) {
-      if (
-        promoRef.current    && !promoRef.current.contains(e.target as Node) &&
-        promoBtnRef.current && !promoBtnRef.current.contains(e.target as Node)
-      ) {
-        track({
-          event: "coach_cal_cta_dismiss",
-          target: "header_promo_popover",
-          metadata: { surface: "header_promo_popover", method: "outside_click" },
-        });
-        setPromoOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [promoOpen]);
 
   // ── Window position init ──────────────────────────────────────────────────
   const posInitialized = useRef(false);
@@ -518,102 +479,51 @@ export function CoachAiLauncher({
   return (
     <>
       {/* ── Launcher button ─────────────────────────────────────────────── */}
-      {!entitled ? (
-        <div className="relative">
-          <button
-            ref={promoBtnRef}
-            type="button"
-            onClick={() => {
-              setPromoOpen((v) => {
-                if (!v) {
-                  track({
-                    event: "coach_cal_cta_impression",
-                    target: "header_promo_popover",
-                    metadata: { surface: "header_promo_popover", path: pathname ?? null },
-                  });
-                }
-                return !v;
-              });
-              if (!pulseSeen) {
-                setPulseSeen(true);
-                try { window.localStorage.setItem("coach-cal:promo-seen-at", String(Date.now())); } catch { /* ignore */ }
-              }
-            }}
-            aria-label="Try Coach Cal — your AI coaching partner"
-            title="Try Coach Cal free for 7 days"
-            className="relative inline-flex size-9 items-center justify-center rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      {/* One button for both entitled and non-entitled users — clicking opens
+          the chat panel. Non-entitled users see the marketing preview surface
+          (CoachAiHeaderPreview) inside the chat instead of a real chat. */}
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          if (!entitled) {
+            if (!pulseSeen) {
+              setPulseSeen(true);
+              try { window.localStorage.setItem("coach-cal:promo-seen-at", String(Date.now())); } catch { /* ignore */ }
+            }
+            track({
+              event: "coach_cal_cta_impression",
+              target: "header_chat",
+              metadata: { surface: "header_chat", path: pathname ?? null },
+            });
+          }
+        }}
+        aria-label={entitled ? "Open Coach Cal" : "Try Coach Cal — your AI coaching partner"}
+        title={entitled ? "Coach Cal — your AI coaching partner" : "Try Coach Cal free for 7 days"}
+        className={cn(
+          "relative inline-flex size-9 items-center justify-center rounded-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          open && "hidden",
+        )}
+        style={{ background: GRADIENT }}
+      >
+        {!entitled && !pulseSeen && (
+          <span
+            className="absolute inset-0 rounded-lg animate-ping opacity-40"
             style={{ background: GRADIENT }}
+            aria-hidden="true"
+          />
+        )}
+        <CoachAiIcon className="relative size-6" />
+        {!entitled && !pulseSeen && (
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
           >
-            {!pulseSeen && (
-              <span
-                className="absolute inset-0 rounded-lg animate-ping opacity-40"
-                style={{ background: GRADIENT }}
-                aria-hidden="true"
-              />
-            )}
-            <CoachAiIcon className="relative size-6" />
-            {!pulseSeen && (
-              <span
-                aria-hidden="true"
-                className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-white text-primary shadow ring-1 ring-primary/20"
-              >
-                <Sparkles className="size-2.5" />
-              </span>
-            )}
-            <span className="sr-only">Try Coach Cal AI</span>
-          </button>
-
-          {promoOpen && (
-            <div
-              ref={promoRef}
-              className="absolute top-full right-0 z-50 mt-2 w-80 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
-            >
-              <div className="flex items-center gap-2.5">
-                <CoachAiIcon className="size-8 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-foreground">Meet Coach Cal</p>
-                  <p className="text-[11px] text-muted">Your AI coaching partner</p>
-                </div>
-              </div>
-              <p className="mt-3 text-[12px] leading-relaxed text-foreground">
-                Coach Cal can {leadForPath(pathname)}
-              </p>
-              <CoachCalDemoStrip />
-              <a
-                href="/pricing"
-                className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
-                style={{ background: GRADIENT }}
-                onClick={() => {
-                  track({
-                    event: "coach_cal_cta_click",
-                    target: "header_promo_popover",
-                    metadata: { surface: "header_promo_popover", action: "start_trial", path: pathname ?? null },
-                  });
-                  setPromoOpen(false);
-                }}
-              >
-                Start 7-day free trial
-              </a>
-              <p className="mt-1.5 text-center text-[10px] text-muted">No charge today · cancel anytime</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open Coach Cal"
-          title="Coach Cal — your AI coaching partner"
-          className={cn(
-            "relative inline-flex size-9 items-center justify-center rounded-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-            open && "hidden",
-          )}
-          style={{ background: GRADIENT }}
-        >
-          <CoachAiIcon className="relative size-6" />
-          <span className="sr-only">Coach Cal AI</span>
-        </button>
-      )}
+            <Sparkles className="size-2.5" />
+          </span>
+        )}
+        <span className="sr-only">{entitled ? "Coach Cal AI" : "Try Coach Cal AI"}</span>
+      </button>
 
       {open && typeof document !== "undefined" && createPortal(
         <>
@@ -910,6 +820,11 @@ export function CoachAiLauncher({
                   entryPoint={previewState.entryPoint}
                   prompt={previewState.prompt}
                 />
+              ) : !entitled ? (
+                // Non-entitled user opened from the header icon (or after
+                // closing a CTA-driven preview) — show the general welcome
+                // surface so the chat is never empty for them.
+                <CoachAiHeaderPreview />
               ) : (
                 <CoachAiChat
                   playbookId={playbookId}
@@ -947,40 +862,3 @@ export function CoachAiLauncher({
   );
 }
 
-/**
- * Animated chat preview shown to non-entitled users in the promo popover.
- */
-function CoachCalDemoStrip() {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => { setIdx((i) => (i + 1) % COACH_CAL_DEMOS.length); }, 3500);
-    return () => clearInterval(id);
-  }, []);
-  const demo = COACH_CAL_DEMOS[idx];
-  return (
-    <div
-      key={idx}
-      className="mt-3 space-y-1.5 rounded-xl bg-surface-inset/60 p-2.5 [animation:fadein_400ms_ease-out]"
-    >
-      <style>{`@keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }`}</style>
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-2.5 py-1.5 text-[11px] leading-snug text-white">
-          {demo.user}
-        </div>
-      </div>
-      <div className="flex items-end gap-1.5">
-        <div className="flex size-5 shrink-0 items-center justify-center rounded-lg" style={{ background: GRADIENT }}>
-          <CoachAiIcon className="size-3 text-primary" bare />
-        </div>
-        <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-foreground ring-1 ring-border">
-          {demo.cal}
-        </div>
-      </div>
-      <div className="flex justify-center gap-1 pt-0.5">
-        {COACH_CAL_DEMOS.map((_, i) => (
-          <span key={i} className={cn("size-1 rounded-full transition-colors", i === idx ? "bg-primary" : "bg-muted/30")} />
-        ))}
-      </div>
-    </div>
-  );
-}

@@ -4468,21 +4468,25 @@ function FirstPlayHero({
           rest of the playbook unlocks — formations, roster, sharing, print
           and Game Mode.
         </p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button
-            variant="primary"
-            size="lg"
-            leftIcon={Plus}
-            onClick={onCreate}
-            loading={loading}
-            className="px-8 py-4 text-base font-bold"
-          >
-            Draw your first play
-          </Button>
-          <span className="text-xs uppercase tracking-wide text-muted">or</span>
-          <CoachCalCTA entryPoint="playbook_generate_starter" variant="primary" />
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:items-start">
+          <div className="flex flex-col items-center">
+            <Button
+              variant="primary"
+              size="lg"
+              leftIcon={Plus}
+              onClick={onCreate}
+              loading={loading}
+              className="px-8 py-4 text-base font-bold"
+            >
+              Draw your first play
+            </Button>
+            <p className="mt-2 text-xs text-muted">Free — takes about a minute.</p>
+          </div>
+          <span className="mt-3 text-xs uppercase tracking-wide text-muted sm:mt-3">or</span>
+          <div className="sm:mt-1.5">
+            <CoachCalCTA entryPoint="playbook_generate_starter" variant="primary" />
+          </div>
         </div>
-        <p className="mt-3 text-xs text-muted">Free — takes about a minute.</p>
       </div>
     </section>
   );

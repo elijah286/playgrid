@@ -27,6 +27,10 @@ export type CoachCalOpenDetail = {
 declare global {
   interface WindowEventMap {
     "coach-cal:open": CustomEvent<CoachCalOpenDetail>;
+    "coach-cal:state-change": CustomEvent<{ open: boolean }>;
+  }
+  interface Window {
+    __coachCalChatOpen?: boolean;
   }
 }
 
