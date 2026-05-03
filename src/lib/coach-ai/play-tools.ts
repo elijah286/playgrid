@@ -28,6 +28,7 @@ import {
   formatSideAwarenessIssues,
 } from "./notes-lint";
 import { explainSpec } from "./explain-from-spec";
+import { applyPlayerStyleMod } from "./player-mutations";
 
 const LOS_Y = 0.4;
 
@@ -1298,6 +1299,149 @@ const update_play_notes: CoachAiTool = {
   },
 };
 
+const update_player: CoachAiTool = {
+  def: {
+    name: "update_player",
+    description:
+      "Change a single player's LABEL, FILL color, label/letter color, or shape on a saved play. " +
+      "Identity-preserving by construction: the player's id, position, and role are guaranteed unchanged — " +
+      "this is a recolor/relabel, NOT a re-formation. Routes owned by the player keep their shape; their " +
+      "stroke follows the new fill so the diagram still color-codes by player. @LABEL mentions in the play's " +
+      "notes are auto-rewritten when the label changes (e.g. \"@H runs the slant\" becomes \"@F runs the slant\").\n\n" +
+      "Use this when a coach asks to:\n" +
+      "  - Recolor a position (\"make H purple\", \"the back should be green\")\n" +
+      "  - Rename a position label (\"call the H player F instead\", \"rename B to RB\")\n" +
+      "  - Change a player marker's shape (\"the QB should be a square\")\n\n" +
+      "ALWAYS confirm the proposed change with the coach before calling. For batched recolors across many " +
+      "plays, call this tool once per (play, player) pair — there is no batch form. ALWAYS show the coach " +
+      "the proposed change and wait for explicit confirmation before calling. Requires edit access.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: {
+          type: "string",
+          description: "UUID, slot number (\"4\"), or exact name of the play to update.",
+        },
+        player: {
+          type: "string",
+          description:
+            "Selector for which player to update. Either the player's CURRENT label (e.g. \"H\", \"B\", \"X\") " +
+            "or the player's id (UUID). Label match is case-sensitive and must be unique within the play.",
+        },
+        label: {
+          type: "string",
+          description: "New label, 1-3 characters (e.g. \"F\", \"RB\", \"W1\"). Optional.",
+        },
+        fill: {
+          type: "string",
+          description:
+            "New fill color. Either a named color (white, slate, black, orange, blue, red, green, yellow, " +
+            "purple) or a 6-char hex code like \"#A855F7\". When fill changes, label_color auto-picks a " +
+            "contrasting white/black unless you also pass label_color explicitly. Optional.",
+        },
+        label_color: {
+          type: "string",
+          description:
+            "Override the letter color: \"white\", \"black\", or a hex code. Optional — auto-picked from " +
+            "fill when omitted.",
+        },
+        shape: {
+          type: "string",
+          description: "Marker shape — one of: circle, square, diamond, triangle, star. Optional.",
+        },
+        edit_note: {
+          type: "string",
+          description: "Short one-line note for version history. Default: 'Updated player via Coach Cal'.",
+        },
+      },
+      required: ["play_id", "player"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const rawPlayId = typeof input.play_id === "string" ? input.play_id : "";
+    const playerSelector = typeof input.player === "string" ? input.player : "";
+    if (!playerSelector.trim()) return { ok: false, error: "player selector is required." };
+
+    const resolved = await resolvePlayId(rawPlayId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
+
+    try {
+      const admin = createServiceRoleClient();
+      const { data: play, error } = await admin
+        .from("plays")
+        .select("id, name, playbook_id, current_version_id")
+        .eq("id", playId)
+        .eq("playbook_id", ctx.playbookId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) return { ok: false, error: error.message };
+      if (!play) return { ok: false, error: "Play not found or not in this playbook." };
+
+      const parentId = play.current_version_id as string | null;
+      if (!parentId) return { ok: false, error: "Play has no current version to update." };
+
+      const { data: parent, error: parentErr } = await admin
+        .from("play_versions")
+        .select("document")
+        .eq("id", parentId)
+        .maybeSingle();
+      if (parentErr) return { ok: false, error: parentErr.message };
+      const parentDoc = parent?.document as PlayDocument | null;
+      if (!parentDoc) return { ok: false, error: "Could not read current play document." };
+
+      const modResult = applyPlayerStyleMod(parentDoc, {
+        player_selector: playerSelector,
+        label: typeof input.label === "string" ? input.label : undefined,
+        fill: typeof input.fill === "string" ? input.fill : undefined,
+        label_color: typeof input.label_color === "string" ? input.label_color : undefined,
+        shape: typeof input.shape === "string" ? input.shape : undefined,
+      });
+      if (!modResult.ok) return { ok: false, error: modResult.error };
+
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { ok: false, error: "Not signed in." };
+
+      const editNote = typeof input.edit_note === "string" && input.edit_note.trim()
+        ? input.edit_note.trim()
+        : `Updated player ${modResult.player.label} via Coach Cal`;
+
+      const versionResult = await recordPlayVersion({
+        supabase: admin,
+        playId,
+        document: modResult.doc,
+        parentVersionId: parentId,
+        userId: user.id,
+        kind: "edit",
+        note: editNote,
+      });
+      if (!versionResult.ok) return { ok: false, error: versionResult.error };
+      if (versionResult.deduped) {
+        return { ok: true, result: `No change — player ${modResult.player.label} already matches.` };
+      }
+      const { error: upErr } = await admin
+        .from("plays")
+        .update({ current_version_id: versionResult.versionId, updated_at: new Date().toISOString() })
+        .eq("id", playId);
+      if (upErr) return { ok: false, error: upErr.message };
+
+      const changeSummary = modResult.changedFields.join(", ");
+      return {
+        ok: true,
+        result:
+          `Updated player ${modResult.player.label} on "${play.name}" — changed ${changeSummary} ` +
+          `(version ${versionResult.versionId.slice(0, 8)}).`,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "update_player failed" };
+    }
+  },
+};
+
 // ─────────────────────────────────────────────────────────────────────
 //  Practice plans
 // ─────────────────────────────────────────────────────────────────────
@@ -1904,6 +2048,7 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   update_play,
   rename_play,
   update_play_notes,
+  update_player,
   explain_play,
   create_practice_plan,
   list_play_groups,

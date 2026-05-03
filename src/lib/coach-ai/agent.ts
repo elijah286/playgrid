@@ -397,6 +397,7 @@ When the chat is opened from within a playbook, you have three extra tools:
 - **get_play(play_id)** — retrieve a play. **To DISPLAY an existing play to the coach, paste the \`\`\`play-ref fence the tool gives you back into your reply VERBATIM.** The renderer fetches the saved document by id, so the coach sees their exact saved alignment, routes, and zones — you do NOT need to copy coordinates through chat, and you MUST NOT re-author from your own football knowledge (that produces diagrams that don't match what's on the coach's screen). The tool also returns the raw diagram JSON underneath; that's only for when the coach asks for an EDIT — read it, propose a modified diagram in a regular \`\`\`play fence, then call update_play after explicit confirmation.
 - **update_play(play_id, play_spec | diagram, note)** — save edited content to the play. **Pass \`play_spec\` (preferred) when you can describe the change in named primitives** (see rule 7g); fall back to the legacy \`diagram\` only for off-catalog shapes. **You MUST show the coach exactly what you plan to change and wait for explicit confirmation before calling this.** Only available if the coach has edit access. ONLY edits the diagram/spec — does NOT rename the play and does NOT change the notes.
 - **rename_play(play_id, new_name)** — rename a play. Use this whenever the coach asks to rename, retitle, or relabel a play. **Do NOT try to rename via update_play — that won't work.** Confirm the new name with the coach before calling.
+- **update_player(play_id, player, label?, fill?, label_color?, shape?)** — surgical edit for one player's appearance: rename their on-field label (e.g. \"H\" → \"F\"), recolor them (\"make @H purple\", \"the back should be green\"), or change their marker shape. The player's id, position, and role are guaranteed unchanged — this is a recolor/relabel, NOT a re-formation, so don't reach for update_play just to swap a color. \`fill\` accepts named colors (white, slate, black, orange, blue, red, green, yellow, purple) or hex (#A855F7). When you change \`label\`, any \`@OldLabel\` mentions in the play's notes auto-rewrite to \`@NewLabel\`. **There is no batch form** — for cross-play recolors (e.g. \"make every H purple in the Recommended group\"), call update_player once per play after listing the affected plays. Confirm the proposed change before calling.
 - **explain_play(play_id)** — produce a deterministic, structural explanation of a saved play (formation → defense → per-player assignments → confidence). The server walks the play's saved PlaySpec and projects it; **no LLM synthesis happens server-side, so the output cannot fabricate or contradict the play**. Use this when the coach asks "why does this work", "walk me through Play 4", "what's @X's read", or before you suggest an edit and want to verify what the spec actually says. The result is markdown — quote it back or paraphrase tightly.
 - **update_play_notes(play_id, notes? | from_spec?, edit_note?)** — replace the notes attached to a play. Two modes: (a) pass explicit \`notes\` text (legacy / Cal-authored prose), or (b) pass \`from_spec: true\` (no \`notes\`) to regenerate notes deterministically from the play's saved PlaySpec via the canonical projection — same spec → same notes, no fabrication risk. Use \`from_spec: true\` after \`create_play\`/\`update_play\` to lock the words to the play. You can also pass BOTH (Cal-rephrased \`notes\` + the play has a saved spec) — the server lints the prose against the spec and rejects contradictions (e.g. notes saying @X runs a post when the spec says Slant). Confirm proposed notes with the coach before calling. **Notes style:**
   - Reference players by their on-field label using \`@Label\` (e.g. \`@Q\`, \`@F\`, \`@Y\`, \`@Z\`). The renderer auto-links these to player tokens.
@@ -669,6 +670,7 @@ const TOOL_STATUS: Record<string, string> = {
   update_play:        "Saving play…",
   rename_play:        "Renaming play…",
   update_play_notes:  "Saving notes…",
+  update_player:      "Updating player…",
   explain_play:       "Reading the play…",
   create_practice_plan: "Saving practice plan…",
   list_play_groups:     "Listing groups…",
@@ -714,6 +716,7 @@ const MUTATING_TOOLS = new Set([
   "update_play",
   "rename_play",
   "update_play_notes",
+  "update_player",
   "create_practice_plan",
   "create_play_group",
   "rename_play_group",

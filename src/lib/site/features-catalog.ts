@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-update-player",
+    name: "Coach Cal can rename and reshape players directly",
+    description:
+      "A dedicated update_player tool lets Cal surgically change one player's label, marker shape, or color on a saved play — without rebuilding the diagram. Coaches can say \"rename B to RB on every play in Recommended\" or \"make the QB a square\" and Cal applies the change in one tool call per play. Identity-preserving by construction (player id, position, and role are guaranteed unchanged), routes owned by the player keep their shape and re-stroke when the color changes, and any @OldLabel mentions in the play notes auto-rewrite to @NewLabel. Complements the broader set_player_color route mod by also handling label, label color, and shape edits.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-variant-rule-gates",
     name: "Coach Cal respects per-playbook game rules (blocking, eligible center)",
     description:
