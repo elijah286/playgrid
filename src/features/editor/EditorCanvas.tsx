@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
 import {
@@ -200,15 +201,15 @@ function readableLabelColor(fill: string, preferred?: string): string {
 }
 
 /**
- * Positions a floating context menu at (x, y) relative to `wrapperRef`, then
- * after mount measures its real size and clamps it so it stays fully inside
- * the wrapper's bounds — flipping to the left/above when it would overflow.
- * Prevents the mid-field right-click menu from being cut off near edges.
+ * Floating context menu portaled to `document.body` and positioned at viewport
+ * (clientX, clientY). After mount it measures its real size and clamps to the
+ * viewport with a 6px pad. Portaling escapes the field's `overflow-hidden`
+ * wrapper so menus can overlap toolbars/sidebars when the field itself is
+ * smaller than the menu (mobile).
  */
 function ClampedMenu({
   x,
   y,
-  wrapperRef,
   className,
   children,
   onPointerDown,
@@ -216,35 +217,40 @@ function ClampedMenu({
 }: {
   x: number;
   y: number;
-  wrapperRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
   children: React.ReactNode;
   onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
 } & React.HTMLAttributes<HTMLDivElement>) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   useLayoutEffect(() => {
     const el = ref.current;
-    const wrap = wrapperRef.current;
-    if (!el || !wrap) return;
-    const wr = wrap.getBoundingClientRect();
+    if (!el) return;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     const pad = 6;
-    const left = Math.max(pad, Math.min(x, wr.width - w - pad));
-    const top = Math.max(pad, Math.min(y, wr.height - h - pad));
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const left = Math.max(pad, Math.min(x, vw - w - pad));
+    const top = Math.max(pad, Math.min(y, vh - h - pad));
     setPos({ left, top });
-  }, [x, y, wrapperRef]);
-  return (
+  }, [x, y, mounted]);
+  if (!mounted) return null;
+  return createPortal(
     <div
       ref={ref}
       {...rest}
       className={className}
-      style={{ left: pos.left, top: pos.top }}
+      style={{ position: "fixed", left: pos.left, top: pos.top }}
       onPointerDown={onPointerDown}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -516,14 +522,11 @@ function EditorCanvasImpl({
       // Stop propagation so React's root contextmenu handler doesn't also fire.
       e.stopPropagation();
 
-      const rect = wrapper!.getBoundingClientRect();
-      const MENU_W = 180;
-      const MENU_H = 90;
-      const localX = e.clientX - rect.left;
-      const localY = e.clientY - rect.top;
+      // ClampedMenu is portaled to document.body and clamps to the viewport,
+      // so we just pass the raw clientX/clientY here.
       setPlayerMenu({
-        screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
-        screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+        screenX: e.clientX,
+        screenY: e.clientY,
         playerId: hitPlayer.id,
       });
       setPlayerMenuSub(null);
@@ -963,11 +966,6 @@ function EditorCanvasImpl({
         const startY = e.clientY;
         const capturedId = e.pointerId;
         const timer = setTimeout(() => {
-          const wrap = wrapperRef.current;
-          if (!wrap) return;
-          const rect = wrap.getBoundingClientRect();
-          const localX = Math.max(6, Math.min(startX - rect.left, rect.width - 186));
-          const localY = Math.max(6, Math.min(startY - rect.top, rect.height - 106));
           try {
             navigator.vibrate?.(18);
           } catch {
@@ -985,12 +983,12 @@ function EditorCanvasImpl({
           interactionRef.current = { type: "idle" };
 
           if (target.kind === "player") {
-            setPlayerMenu({ screenX: localX, screenY: localY, playerId: target.playerId });
+            setPlayerMenu({ screenX: startX, screenY: startY, playerId: target.playerId });
             setPlayerMenuSub(null);
           } else if (target.kind === "route_segment") {
             setSegmentMenu({
-              screenX: localX,
-              screenY: localY,
+              screenX: startX,
+              screenY: startY,
               routeId: target.routeId,
               segmentId: target.segmentId,
               position: origin,
@@ -1002,8 +1000,8 @@ function EditorCanvasImpl({
             onSelectPlayer(null);
           } else if (target.kind === "route_node") {
             setAnchorMenu({
-              screenX: localX,
-              screenY: localY,
+              screenX: startX,
+              screenY: startY,
               routeId: target.routeId,
               nodeId: target.nodeId,
             });
@@ -1317,21 +1315,11 @@ function EditorCanvasImpl({
     (routeId: string, segmentId: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const wrap = wrapperRef.current;
-      if (!wrap) return;
-      const rect = wrap.getBoundingClientRect();
       const p = toNorm(e as unknown as { clientX: number; clientY: number });
-      // Clamp the menu inside the wrapper so we never need to read the ref
-      // during render. ~180px wide, ~100px tall with a 6px safe margin.
-      const MENU_W = 180;
-      const MENU_H = 100;
-      const localX = e.clientX - rect.left;
-      const localY = e.clientY - rect.top;
-      const clampedX = Math.max(6, Math.min(localX, rect.width - MENU_W - 6));
-      const clampedY = Math.max(6, Math.min(localY, rect.height - MENU_H - 6));
+      // ClampedMenu is portaled and clamps to viewport — pass clientX/clientY.
       setSegmentMenu({
-        screenX: clampedX,
-        screenY: clampedY,
+        screenX: e.clientX,
+        screenY: e.clientY,
         routeId,
         segmentId,
         position: p,
@@ -1813,16 +1801,9 @@ function EditorCanvasImpl({
                 if (mode === "formation") return;
                 e.preventDefault();
                 e.stopPropagation();
-                const wrap = wrapperRef.current;
-                if (!wrap) return;
-                const rect = wrap.getBoundingClientRect();
-                const MENU_W = 220;
-                const MENU_H = 160;
-                const localX = e.clientX - rect.left;
-                const localY = e.clientY - rect.top;
                 setZoneMenu({
-                  screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
-                  screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                  screenX: e.clientX,
+                  screenY: e.clientY,
                   zoneId: z.id,
                 });
                 setPlayerMenu(null);
@@ -2381,15 +2362,9 @@ function EditorCanvasImpl({
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          const rect = wrapperRef.current?.getBoundingClientRect();
-                          if (!rect) return;
-                          const MENU_W = 160;
-                          const MENU_H = 40;
-                          const localX = e.clientX - rect.left;
-                          const localY = e.clientY - rect.top;
                           setAnchorMenu({
-                            screenX: Math.max(6, Math.min(localX, rect.width - MENU_W - 6)),
-                            screenY: Math.max(6, Math.min(localY, rect.height - MENU_H - 6)),
+                            screenX: e.clientX,
+                            screenY: e.clientY,
                             routeId: route.id,
                             nodeId: node.id,
                           });
@@ -2767,10 +2742,9 @@ function EditorCanvasImpl({
       {segmentMenu && (
         <ClampedMenu
           data-segment-menu
-          wrapperRef={wrapperRef}
           x={segmentMenu.screenX}
           y={segmentMenu.screenY}
-          className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          className="fixed z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -2932,10 +2906,9 @@ function EditorCanvasImpl({
       {anchorMenu && (
         <ClampedMenu
           data-segment-menu
-          wrapperRef={wrapperRef}
           x={anchorMenu.screenX}
           y={anchorMenu.screenY}
-          className="absolute z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          className="fixed z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -2978,10 +2951,9 @@ function EditorCanvasImpl({
         return (
           <ClampedMenu
             data-segment-menu
-            wrapperRef={wrapperRef}
             x={playerMenu.screenX}
             y={playerMenu.screenY}
-            className="absolute z-20 min-w-[200px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
+            className="fixed z-20 min-w-[200px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button
@@ -3133,10 +3105,9 @@ function EditorCanvasImpl({
         return (
           <ClampedMenu
             data-segment-menu
-            wrapperRef={wrapperRef}
             x={zoneMenu.screenX}
             y={zoneMenu.screenY}
-            className="absolute z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+            className="fixed z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button
