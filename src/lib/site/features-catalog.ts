@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-in-app-cta-suggest-counter",
+    name: "Suggest a counter with Coach Cal — from any play",
+    description:
+      "Every play card now has a \"Suggest a counter (Cal)\" item in its action menu, and the play editor has a prominent CTA next to the opponent overlay. One click opens Cal with a prompt that asks Cal to design a counter to that specific play — describe how the opposing scheme would line up and react, then offer to apply it on the field. For an offensive play Cal overlays the counter defense onto the play (changing player positions visibly via the custom-opponent path); for a defensive play Cal proposes a counter offense and adds it to the playbook. Non-Coach-Pro users get the same tailored upsell preview.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-in-app-cta-generate-play",
     name: "Generate plays with Coach Cal — entry points on every new-play surface",
     description:

@@ -1482,7 +1482,15 @@ function PlayEditorClientInner({
                 picker / vs-play card so coaches on phones can preview a
                 defense against an offense play. View mode only. */}
             {mode === "view" && !isExamplePreview && opponentCardNode && (
-              <div className="sm:hidden">{opponentCardNode}</div>
+              <div className="flex flex-col gap-2 sm:hidden">
+                {opponentCardNode}
+                <div className="flex justify-center">
+                  <CoachCalCTA
+                    entryPoint="play_suggest_counter"
+                    context={{ values: { playName: doc.metadata.coachName?.trim() || "this play" } }}
+                  />
+                </div>
+              </div>
             )}
 
             {/* Mobile edit mode: field-size controls live below the
@@ -1526,7 +1534,17 @@ function PlayEditorClientInner({
             {canEdit && !showToolbar && (
               <TagsCard doc={doc} dispatch={dispatch} linkedFormation={linkedFormation} />
             )}
-            {opponentCardNode}
+            {opponentCardNode && (
+              <div className="flex flex-col gap-2">
+                {opponentCardNode}
+                <div className="flex justify-center">
+                  <CoachCalCTA
+                    entryPoint="play_suggest_counter"
+                    context={{ values: { playName: doc.metadata.coachName?.trim() || "this play" } }}
+                  />
+                </div>
+              </div>
+            )}
             {!showToolbar && !isDefense && (
               <PlayResultsCard
                 playbookId={playbookId}

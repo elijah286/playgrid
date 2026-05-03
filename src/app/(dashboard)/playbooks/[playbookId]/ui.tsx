@@ -70,6 +70,7 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
+  Sparkles,
   StickyNote,
   Trash2,
   UserMinus,
@@ -160,6 +161,7 @@ import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
+import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
@@ -1659,6 +1661,19 @@ function PlaybookDetailClientInner({
           >
           {sections.map((section) => {
             const buildItems = (p: PlaybookDetailPlayRow): ActionMenuItem[] => [
+              {
+                label: "Suggest a counter",
+                icon: Sparkles,
+                trailing: (
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                    Cal
+                  </span>
+                ),
+                onSelect: () =>
+                  openCoachCal("play_suggest_counter", {
+                    values: { playName: p.name },
+                  }),
+              },
               {
                 label: "Rename",
                 icon: Pencil,

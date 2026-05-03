@@ -9,7 +9,8 @@
 
 export type CoachCalEntryPointId =
   | "play_notes_regenerate"
-  | "playbook_generate_play";
+  | "playbook_generate_play"
+  | "play_suggest_counter";
 
 export type EntryPointContext = {
   /** Replacement values for ${name} tokens in the prompt template. */
@@ -64,6 +65,23 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ctaLabel: "Start 7-day free trial",
     },
     ctaLabel: "Generate plays with Coach Cal",
+  },
+  play_suggest_counter: {
+    id: "play_suggest_counter",
+    promptTemplate:
+      "Suggest a counter to the play \"${playName}\". Describe how the opposing scheme would line up and react, with each player's job. Then ask me if I want to see it on the field — if I say yes, apply it (overlay the defense onto this play if it's an offense, or add a counter offense to my playbook if it's a defense).",
+    preview: {
+      leadIn:
+        "Coach Cal can read any play in your playbook, design a counter that fits your team's level, and apply it to the field — defense overlay for an offense play, new counter offense for a defense play.",
+      capabilities: [
+        "Suggest counters when a defense or offense is giving you trouble",
+        "Generate plays tailored to your team's age, skill, and league rules",
+        "Author per-play notes with QB reads, hot routes, and coaching points",
+        "Build practice plans that install your playbook week by week",
+      ],
+      ctaLabel: "Start 7-day free trial",
+    },
+    ctaLabel: "Suggest a counter with Coach Cal",
   },
 };
 
