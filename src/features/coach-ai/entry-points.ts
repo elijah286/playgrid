@@ -7,7 +7,9 @@
  * entryPoint="…"/> wherever the trigger lives in the UI.
  */
 
-export type CoachCalEntryPointId = "play_notes_regenerate";
+export type CoachCalEntryPointId =
+  | "play_notes_regenerate"
+  | "playbook_generate_play";
 
 export type EntryPointContext = {
   /** Replacement values for ${name} tokens in the prompt template. */
@@ -45,6 +47,23 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ctaLabel: "Start 7-day free trial",
     },
     ctaLabel: "Generate notes with Coach Cal",
+  },
+  playbook_generate_play: {
+    id: "playbook_generate_play",
+    promptTemplate:
+      "Help me generate a new play for this playbook. Ask me questions about my team's skills and experience so we identify what strategy and play type would be best.",
+    preview: {
+      leadIn:
+        "Coach Cal can interview you about your team's skills and experience and then design a play that fits — formation, routes, QB reads, and coaching notes — and add it to this playbook in one step.",
+      capabilities: [
+        "Generate plays tailored to your team's age, skill, and league rules",
+        "Build out an entire starter playbook based on a few questions",
+        "Suggest counters when a defense is giving your offense trouble",
+        "Author per-play notes with QB reads, hot routes, and coaching points",
+      ],
+      ctaLabel: "Start 7-day free trial",
+    },
+    ctaLabel: "Generate plays with Coach Cal",
   },
 };
 

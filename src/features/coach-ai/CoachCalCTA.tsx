@@ -28,6 +28,7 @@ export function CoachCalCTA({
   label,
   className,
   disabled,
+  afterClick,
 }: {
   entryPoint: CoachCalEntryPointId;
   context?: EntryPointContext;
@@ -35,6 +36,9 @@ export function CoachCalCTA({
   label?: string;
   className?: string;
   disabled?: boolean;
+  /** Runs after the open event fires — useful for closing the surrounding
+   *  modal or dropdown so Cal isn't covered by it. */
+  afterClick?: () => void;
 }) {
   const config = ENTRY_POINTS[entryPoint];
   const finalLabel = label ?? config.ctaLabel;
@@ -42,7 +46,10 @@ export function CoachCalCTA({
     <button
       type="button"
       disabled={disabled}
-      onClick={() => openCoachCal(entryPoint, context)}
+      onClick={() => {
+        openCoachCal(entryPoint, context);
+        afterClick?.();
+      }}
       title="Coach Cal can do this for you"
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed",

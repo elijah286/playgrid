@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-in-app-cta-generate-play",
+    name: "Generate plays with Coach Cal — entry points on every new-play surface",
+    description:
+      "The first-play hero (shown on a brand-new playbook) and the formation-picker modal (shown when starting a new play) both have a \"Generate plays with Coach Cal\" CTA next to the existing manual-create paths. One click opens Cal with a pre-written prompt that asks Cal to interview the coach about team skill and experience, then design a play that fits — formation, routes, QB reads, and notes — and add it to the playbook in one step. Coaches no longer have to know in advance what formation they want; Cal can recommend one. Non-Coach-Pro users get the same tailored upsell preview as the notes-regenerate CTA.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-in-app-cta-notes",
     name: "Generate notes with Coach Cal — one-click button on the play editor",
     description:

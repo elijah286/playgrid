@@ -159,6 +159,7 @@ import {
 import { PlaybookHeader, type PlaybookHeaderPlayActions } from "./PlaybookHeader";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
+import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
@@ -2148,8 +2149,8 @@ function PlaybookDetailClientInner({
             }}
           >
           <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
-            <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
-              <div>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-6 py-4">
+              <div className="min-w-0">
                 <h2 className="text-base font-bold text-foreground">
                   Start a new play
                 </h2>
@@ -2157,14 +2158,20 @@ function PlaybookDetailClientInner({
                   Choose a formation to begin with, or start blank.
                 </p>
               </div>
-              <button
-                type="button"
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground disabled:opacity-40"
-                onClick={() => setShowFormationPicker(false)}
-                disabled={creating}
-              >
-                <X className="size-5" />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <CoachCalCTA
+                  entryPoint="playbook_generate_play"
+                  afterClick={() => setShowFormationPicker(false)}
+                />
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-inset hover:text-foreground disabled:opacity-40"
+                  onClick={() => setShowFormationPicker(false)}
+                  disabled={creating}
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col p-4">
@@ -4446,7 +4453,7 @@ function FirstPlayHero({
           rest of the playbook unlocks — formations, roster, sharing, print
           and Game Mode.
         </p>
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button
             variant="primary"
             size="lg"
@@ -4457,6 +4464,8 @@ function FirstPlayHero({
           >
             Draw your first play
           </Button>
+          <span className="text-xs uppercase tracking-wide text-muted">or</span>
+          <CoachCalCTA entryPoint="playbook_generate_play" variant="primary" />
         </div>
         <p className="mt-3 text-xs text-muted">Free — takes about a minute.</p>
       </div>
