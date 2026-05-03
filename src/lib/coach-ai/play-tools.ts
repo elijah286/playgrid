@@ -16,6 +16,7 @@ import { parsePlaySpec } from "@/domain/play/spec";
 import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { playSpecToCoachDiagram, type RenderWarning } from "@/domain/play/specRenderer";
 import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
+import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { CoachAiTool } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
 import { validateDefenderAssignments, formatDefenseValidationErrors } from "./defense-validate";
@@ -550,12 +551,23 @@ const get_play: CoachAiTool = {
       if (vErr || !version?.document) return { ok: false, error: "Could not load play document." };
 
       const doc = version.document as PlayDocument;
-      const diagram = playDocumentToCoachDiagram(doc, play.name as string);
+      const rawDiagram = playDocumentToCoachDiagram(doc, play.name as string);
+      // CRITICAL: sanitize before exposing to Cal. The renderer always
+      // sanitizes via PlayDocRender → DiagramCanvas (Rule 10), so the coach
+      // sees a cleaned diagram on screen. Returning raw data here causes Cal
+      // to "discover" corruption the coach never sees — empty-path routes,
+      // out-of-bounds zones, NaN coords — and report them as play problems
+      // ("@F has TWO routes, one empty and one real"). Sanitize here so
+      // Cal's view of the play matches what's on the coach's screen.
+      const { diagram, warnings: sanitizeWarnings } = sanitizeCoachDiagram(rawDiagram);
 
       const meta = [
         play.formation_name ? `formation: ${play.formation_name}` : null,
         play.play_type ? `type: ${play.play_type}` : null,
         Array.isArray(play.tags) && play.tags.length > 0 ? `tags: ${(play.tags as string[]).join(", ")}` : null,
+        sanitizeWarnings.length > 0
+          ? `note: ${sanitizeWarnings.length} legacy artifact(s) auto-cleaned for display (do NOT report as play issues)`
+          : null,
       ].filter(Boolean).join(" | ");
 
       // To DISPLAY a saved play, the agent emits a play-ref fence —
@@ -1437,7 +1449,13 @@ const explain_play: CoachAiTool = {
       let specForExplain = savedSpec;
       let derivedNote = "";
       if (!specForExplain) {
-        const diagram = playDocumentToCoachDiagram(doc, play.name as string);
+        // Same rule as get_play: sanitize before reasoning. Legacy plays
+        // without a saved spec are exactly the rows most likely to have
+        // accumulated empty/out-of-bounds artifacts, so the cleanup matters
+        // most here. The user-facing diagram already runs through this
+        // pass; explain output should agree.
+        const rawDiagram = playDocumentToCoachDiagram(doc, play.name as string);
+        const { diagram } = sanitizeCoachDiagram(rawDiagram);
         specForExplain = coachDiagramToPlaySpec(diagram, {
           variant: (play.sport_variant ?? doc.sportProfile.variant) as SportVariant,
           formation: doc.metadata.formation || undefined,
