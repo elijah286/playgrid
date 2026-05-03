@@ -4,7 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Check, ChevronDown, GraduationCap, Maximize2, Minimize2, Sparkles, X } from "lucide-react";
+import {
+  AppWindow,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  GraduationCap,
+  Maximize2,
+  Minimize2,
+  PanelRight,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { usePlaybookAnchor } from "./playbook-anchor";
@@ -13,24 +24,24 @@ import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 
 const PLAYBOOK_ROUTE_RE = /^\/playbooks\/([0-9a-f-]{8,})(?:\/|$)/i;
-const PLAY_ROUTE_RE = /^\/plays\/([0-9a-f-]{8,})(?:\/|$)/i;
+const PLAY_ROUTE_RE    = /^\/plays\/([0-9a-f-]{8,})(?:\/|$)/i;
 
 const DEFAULT_W   = 420;
 const DEFAULT_H   = 640;
 const MIN_W       = 320;
 const MIN_H       = 400;
 const EDGE        = 16;
+const DOCK_W      = 380;
 
 const FONT_SIZES  = [10, 11, 12, 13, 14, 15, 16, 18, 20] as const;
 type FontSize = (typeof FONT_SIZES)[number];
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
 
-// Re-pulse the non-subscriber promo button after this long since the last
-// dismissal — keeps Coach Cal discoverable without being naggy.
 const PROMO_REPULSE_MS = 14 * 24 * 60 * 60 * 1000;
 
-type WindowPos = { top: number; left: number };
+type WindowPos  = { top: number; left: number };
+type PanelMode  = "float" | "docked" | "fullscreen" | "popout";
 
 function readStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -48,9 +59,6 @@ function writeStorage(key: string, value: unknown) {
   try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
 }
 
-/** Convert a `#rrggbb` (or `#rgb`) string to `rgba(...)` at the given alpha.
- *  Returns the input unchanged for any non-hex value so theme tokens like
- *  `var(--color-…)` pass through. */
 function hexToRgba(hex: string | null | undefined, alpha: number): string | null {
   if (!hex) return null;
   const h = hex.trim().replace(/^#/, "");
@@ -63,14 +71,6 @@ function hexToRgba(hex: string | null | undefined, alpha: number): string | null
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/**
- * Floating Coach AI launcher.
- *
- *   - Mobile  (<640):  bottom sheet, ~80vh tall (not draggable / resizable)
- *   - Desktop (≥640):  floating window — draggable by header,
- *                      resizable by bottom-right handle (top-left stays fixed),
- *                      font size A−/A+ in header toolbar
- */
 type CoachCalDemo = { user: string; cal: string };
 
 const COACH_CAL_DEMOS: CoachCalDemo[] = [
@@ -96,8 +96,6 @@ const COACH_CAL_DEMOS: CoachCalDemo[] = [
   },
 ];
 
-/** Path-aware lead — what Coach Cal can most usefully help with given where
- *  the user is right now. Returns a fragment that follows "Coach Cal can". */
 function leadForPath(pathname: string | null): string {
   if (!pathname) return "help you build your playbook, plan practices, and more.";
   if (/^\/plays\/[^/]+\/edit/.test(pathname)) {
@@ -125,43 +123,36 @@ export function CoachAiLauncher({
   entitled?: boolean;
 }) {
   const [open,          setOpen]          = useState(false);
-  const [fullscreen,    setFullscreen]    = useState(false);
+  const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
   const [adminMode,     setAdminMode]     = useState(false);
   const [promoOpen,     setPromoOpen]     = useState(false);
-  // Pulse stops once the user has clicked the button, then re-arms after
-  // PROMO_REPULSE_MS so users who dismissed once still get a nudge later.
   const [pulseSeen,     setPulseSeen]     = useState(() => {
     if (typeof window === "undefined") return false;
     const raw = window.localStorage.getItem("coach-cal:promo-seen-at");
     if (!raw) {
-      // Legacy "1" sentinel from earlier versions — treat as just-seen.
       return window.localStorage.getItem("coach-cal:promo-seen") === "1";
     }
     const ts = Number(raw);
     if (!Number.isFinite(ts)) return false;
     return Date.now() - ts < PROMO_REPULSE_MS;
   });
-  const promoRef = useRef<HTMLDivElement>(null);
+  const promoRef    = useRef<HTMLDivElement>(null);
   const promoBtnRef = useRef<HTMLButtonElement>(null);
+  const popupRef    = useRef<Window | null>(null);
 
-  const [size, setSize]       = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
+  const [size,     setSize]     = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H });
   const [fontSize, setFontSize] = useState<FontSize>(14);
 
-  // Context switcher (clickable header → popover with the user's playbooks).
-  const [contextOpen, setContextOpen] = useState(false);
-  const [playbookList, setPlaybookList] = useState<PlaybookRow[] | null>(null);
+  const [contextOpen,    setContextOpen]    = useState(false);
+  const [playbookList,   setPlaybookList]   = useState<PlaybookRow[] | null>(null);
   const [loadingPlaybooks, setLoadingPlaybooks] = useState(false);
   const contextPopoverRef = useRef<HTMLDivElement>(null);
-  const contextBtnRef = useRef<HTMLButtonElement>(null);
+  const contextBtnRef     = useRef<HTMLButtonElement>(null);
 
-  // Desktop window position (top-left anchor). Null = use Tailwind fallback (mobile / before init).
   const [windowPos, setWindowPos] = useState<WindowPos | null>(null);
 
-  const pathname   = usePathname();
-  // Anchor published by the current page (playbook detail page, play
-  // editor, etc). Lets us keep the playbook scope stable when the URL
-  // doesn't include the playbook id — e.g. on /plays/<playId>.
-  const anchor = usePlaybookAnchor();
+  const pathname = usePathname();
+  const anchor   = usePlaybookAnchor();
   const playbookId = useMemo<string | null>(() => {
     if (playbookIdProp) return playbookIdProp;
     const m = pathname?.match(PLAYBOOK_ROUTE_RE);
@@ -172,21 +163,12 @@ export function CoachAiLauncher({
     const m = pathname?.match(PLAY_ROUTE_RE);
     return m?.[1] ?? null;
   }, [pathname]);
-  // Display values for the chat header. Only show when we have an anchor
-  // for the same playbook the chat is currently scoped to.
+
   const anchorMatchesScope = !!anchor && !!playbookId && anchor.id === playbookId;
-  const anchoredName = anchorMatchesScope ? anchor!.name ?? null : null;
+  const anchoredName  = anchorMatchesScope ? anchor!.name  ?? null : null;
   const anchoredColor = anchorMatchesScope ? anchor!.color ?? null : null;
 
-  // Clamp a (w, h) pair to the current viewport, leaving an EDGE margin on
-  // both sides. Stays within [MIN, viewport - 2*EDGE]. Caller passes the
-  // current viewport so this can run during resize handlers without
-  // re-reading window each time.
-  function clampSize(
-    s: { w: number; h: number },
-    vw: number,
-    vh: number,
-  ): { w: number; h: number } {
+  function clampSize(s: { w: number; h: number }, vw: number, vh: number) {
     const maxW = Math.max(MIN_W, vw - 2 * EDGE);
     const maxH = Math.max(MIN_H, vh - 2 * EDGE);
     return {
@@ -200,29 +182,46 @@ export function CoachAiLauncher({
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      if (window.localStorage.getItem("coach-ai:adminMode")    === "1") setAdminMode(true);
-      // Legacy playbook-training-mode toggle has been removed; clean up the
-      // stale localStorage key so old browsers don't leave a phantom record.
+      if (window.localStorage.getItem("coach-ai:adminMode") === "1") setAdminMode(true);
       try { window.localStorage.removeItem("coach-ai:playbookMode"); } catch { /* ignore */ }
       const savedSize = readStorage<{ w: number; h: number } | null>("coach-ai:window-size", null);
-      // Clamp restored size: a window resized large on a bigger display must
-      // not render off-screen on a smaller viewport.
       if (savedSize?.w && savedSize?.h) {
         setSize(clampSize(savedSize, window.innerWidth, window.innerHeight));
       }
       const savedFont = readStorage<number>("coach-ai:font-size", 14);
       if (FONT_SIZES.includes(savedFont as FontSize)) setFontSize(savedFont as FontSize);
+      const savedMode = readStorage<string>("coach-ai:panel-mode", "float");
+      if (savedMode === "float" || savedMode === "docked") setPanelMode(savedMode as PanelMode);
     } catch { /* ignore */ }
     hasRestored.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",    adminMode ? "1" : "0"); },    [adminMode]);
-  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size",  size); },                     [size]);
-  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:font-size",    fontSize); },                 [fontSize]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",   adminMode ? "1" : "0"); }, [adminMode]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size", size); },                  [size]);
+  useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:font-size",   fontSize); },              [fontSize]);
+  useEffect(() => {
+    if (!hasRestored.current) return;
+    if (panelMode === "float" || panelMode === "docked") {
+      writeStorage("coach-ai:panel-mode", panelMode);
+    }
+  }, [panelMode]);
 
   const adminTrainingActive = isAdmin && adminMode;
-  const mode: "normal" | "admin_training" =
-    adminTrainingActive ? "admin_training" : "normal";
+  const mode: "normal" | "admin_training" = adminTrainingActive ? "admin_training" : "normal";
+
+  // ── Docked body class ──────────────────────────────────────────────────────
+  // Adds padding-right to body so main content doesn't hide under the panel.
+  // Only on viewports >= 1024px where docked mode is exposed.
+  useEffect(() => {
+    const shouldDock = open && panelMode === "docked" && typeof window !== "undefined" && window.innerWidth >= 1024;
+    if (shouldDock) {
+      document.documentElement.classList.add("coach-docked");
+    } else {
+      document.documentElement.classList.remove("coach-docked");
+    }
+    return () => { document.documentElement.classList.remove("coach-docked"); };
+  }, [open, panelMode]);
 
   // ── Keyboard / scroll lock ─────────────────────────────────────────────────
   useEffect(() => {
@@ -230,22 +229,23 @@ export function CoachAiLauncher({
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (contextOpen) { setContextOpen(false); return; }
-      if (fullscreen) setFullscreen(false);
+      if (panelMode === "fullscreen" || panelMode === "docked") setPanelMode("float");
       else setOpen(false);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, fullscreen, contextOpen]);
+  }, [open, panelMode, contextOpen]);
 
-  // Prefetch the user's playbooks once on mount so the context switcher
-  // opens with content already in hand — no spinner. Re-fetch each time
-  // the chat window opens so a freshly-created playbook shows up the next
-  // time the coach pops Cal back open.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    if (panelMode === "fullscreen") document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open, panelMode]);
+
   useEffect(() => {
     let cancelled = false;
     function load() {
-      // Show spinner only if we don't already have data — prevents a flash
-      // every time the window re-opens.
       if (playbookList === null) setLoadingPlaybooks(true);
       listPlaybooksAction().then((res) => {
         if (cancelled) return;
@@ -259,44 +259,28 @@ export function CoachAiLauncher({
     }
     load();
     return () => { cancelled = true; };
-  // Re-fire on `open` toggling true. playbookList intentionally excluded —
-  // we don't want every list update to schedule another fetch.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Close context popover on outside click.
   useEffect(() => {
     if (!contextOpen) return;
     function onDown(e: MouseEvent) {
       if (
         contextPopoverRef.current && !contextPopoverRef.current.contains(e.target as Node) &&
-        contextBtnRef.current && !contextBtnRef.current.contains(e.target as Node)
-      ) {
-        setContextOpen(false);
-      }
+        contextBtnRef.current    && !contextBtnRef.current.contains(e.target as Node)
+      ) { setContextOpen(false); }
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [contextOpen]);
 
   useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    if (fullscreen) document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [open, fullscreen]);
-
-  // ── Promo popover: close on outside click ─────────────────────────────────
-  useEffect(() => {
     if (!promoOpen) return;
     function onDown(e: MouseEvent) {
       if (
-        promoRef.current && !promoRef.current.contains(e.target as Node) &&
+        promoRef.current    && !promoRef.current.contains(e.target as Node) &&
         promoBtnRef.current && !promoBtnRef.current.contains(e.target as Node)
       ) {
-        // Outside click counts as a dismissal (the only other ways to
-        // close are toggling the button or clicking the trial CTA, both
-        // of which are tracked separately).
         track({
           event: "coach_cal_cta_dismiss",
           target: "header_promo_popover",
@@ -310,9 +294,16 @@ export function CoachAiLauncher({
   }, [promoOpen]);
 
   // ── Window position init ──────────────────────────────────────────────────
-  // Runs when the window opens on desktop. size is already loaded from localStorage
-  // by the restore effect (which runs on mount, before any click).
   const posInitialized = useRef(false);
+
+  // Clear position and reset init flag whenever we leave float mode so that
+  // switching back to float re-anchors to the bottom-right corner.
+  useEffect(() => {
+    if (panelMode !== "float") {
+      posInitialized.current = false;
+      setWindowPos(null);
+    }
+  }, [panelMode]);
 
   useEffect(() => {
     if (!open) {
@@ -320,32 +311,22 @@ export function CoachAiLauncher({
       setWindowPos(null);
       return;
     }
-    if (posInitialized.current || fullscreen) return;
+    if (posInitialized.current || panelMode !== "float") return;
     if (typeof window === "undefined" || window.innerWidth < 640) return;
     posInitialized.current = true;
-    // Use current size (may differ from DEFAULT if restored from storage)
     const s = size;
     setWindowPos({
       top:  Math.max(EDGE, window.innerHeight - EDGE - s.h),
       left: Math.max(EDGE, window.innerWidth  - EDGE - s.w),
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, fullscreen]); // intentionally excludes `size` — we read it at init time only
-
-  useEffect(() => {
-    if (fullscreen) setWindowPos(null);
-  }, [fullscreen]);
+  }, [open, panelMode]);
 
   // ── Clamp size + position on viewport resize ──────────────────────────────
-  // Size must clamp first (a viewport that shrunk below the saved size would
-  // otherwise leave the window protruding even after position clamping).
   const clampToViewport = useCallback(() => {
     const vw = window.innerWidth, vh = window.innerHeight;
     let nextSize = size;
-    setSize((s) => {
-      nextSize = clampSize(s, vw, vh);
-      return nextSize;
-    });
+    setSize((s) => { nextSize = clampSize(s, vw, vh); return nextSize; });
     setWindowPos((p) => {
       if (!p) return p;
       return {
@@ -353,7 +334,12 @@ export function CoachAiLauncher({
         left: Math.max(EDGE, Math.min(vw - EDGE - nextSize.w, p.left)),
       };
     });
-  }, [size]);
+    // Re-evaluate docked class after resize (may drop below 1024px threshold)
+    const shouldDock = open && panelMode === "docked" && vw >= 1024;
+    if (shouldDock) document.documentElement.classList.add("coach-docked");
+    else            document.documentElement.classList.remove("coach-docked");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size, open, panelMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -361,13 +347,11 @@ export function CoachAiLauncher({
     return () => window.removeEventListener("resize", clampToViewport);
   }, [open, clampToViewport]);
 
-  // ── Drag (header) — updates windowPos directly ────────────────────────────
+  // ── Drag (header) — float mode only ───────────────────────────────────────
   const dragRef = useRef<{ startX: number; startY: number; origPos: WindowPos } | null>(null);
 
   function onHeaderPointerDown(e: React.PointerEvent<HTMLElement>) {
-    if (fullscreen || window.innerWidth < 640 || !windowPos) return;
-    // Skip drag when the pointer lands on something interactive or inside the
-    // scrollable chat content; those areas need their own pointer behaviour.
+    if (panelMode !== "float" || window.innerWidth < 640 || !windowPos) return;
     const target = e.target as HTMLElement;
     if (target.closest("button, a, input, textarea, select, [role='button'], [data-no-drag]")) return;
     e.preventDefault();
@@ -391,7 +375,7 @@ export function CoachAiLauncher({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  // ── Resize (bottom-right handle) — top-left stays fixed ──────────────────
+  // ── Resize (bottom-right handle) — float mode only ───────────────────────
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
 
   function onResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -404,7 +388,6 @@ export function CoachAiLauncher({
   function onResizePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const r = resizeRef.current;
     if (!r || !windowPos) return;
-    // Max dimensions: don't let the window grow beyond the viewport edge
     const maxW = window.innerWidth  - EDGE - windowPos.left;
     const maxH = window.innerHeight - EDGE - windowPos.top;
     const newW = Math.max(MIN_W, Math.min(maxW, r.origW + (e.clientX - r.startX)));
@@ -418,30 +401,53 @@ export function CoachAiLauncher({
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }
 
-  // Inline style for the dialog window.
-  // On desktop with windowPos set: use top+left (top-left anchor so resize expands bottom-right).
-  // Fallback: let Tailwind classes handle mobile and the brief moment before windowPos initializes.
-  const windowPosStyle: React.CSSProperties = !fullscreen && windowPos
-    ? { top: windowPos.top, left: windowPos.left, right: "auto", bottom: "auto", width: size.w, height: size.h }
-    : !fullscreen
-      ? { width: size.w, height: size.h }
-      : {};
+  // ── Popout ────────────────────────────────────────────────────────────────
+  function handlePopout() {
+    const url = `/coach-cal/chat${playbookId ? `?playbook=${playbookId}` : ""}`;
+    const existing = popupRef.current;
+    if (existing && !existing.closed) {
+      existing.focus();
+      setOpen(false);
+      return;
+    }
+    const popup = window.open(
+      url,
+      "coach-cal-chat",
+      `width=440,height=700,resizable=yes,menubar=no,toolbar=no,location=no,status=no`,
+    );
+    if (popup) {
+      popupRef.current = popup;
+      popup.focus();
+    }
+    setOpen(false);
+  }
+
+  // ── Docked mode handler ───────────────────────────────────────────────────
+  function handleSetMode(next: PanelMode) {
+    if (next === "docked" && panelMode !== "docked") {
+      setWindowPos(null);
+    }
+    setPanelMode(next);
+  }
+
+  // ── Inline style for the dialog ──────────────────────────────────────────
+  const windowPosStyle: React.CSSProperties =
+    panelMode === "fullscreen" || panelMode === "docked"
+      ? {}
+      : windowPos
+        ? { top: windowPos.top, left: windowPos.left, right: "auto", bottom: "auto", width: size.w, height: size.h }
+        : { width: size.w, height: size.h };
 
   return (
     <>
       {/* ── Launcher button ─────────────────────────────────────────────── */}
       {!entitled ? (
-        // Non-subscriber: pulsing CTA button that opens promo popover
         <div className="relative">
           <button
             ref={promoBtnRef}
             type="button"
             onClick={() => {
               setPromoOpen((v) => {
-                // Treat "open" as the impression event for the popover
-                // — the pulsing button alone is ambient promo, but
-                // expanding the popover means they actually engaged
-                // enough to see the offer copy.
                 if (!v) {
                   track({
                     event: "coach_cal_cta_impression",
@@ -469,9 +475,6 @@ export function CoachAiLauncher({
               />
             )}
             <CoachAiIcon className="relative size-6" />
-            {/* The "+1" sparkle is a true notification cue — only show it
-                until the user has acknowledged the promo, then let the
-                button settle into the cluster like a normal action. */}
             {!pulseSeen && (
               <span
                 aria-hidden="true"
@@ -489,7 +492,6 @@ export function CoachAiLauncher({
               className="absolute top-full right-0 z-50 mt-2 w-80 rounded-2xl border border-border bg-surface-raised p-4 shadow-xl"
             >
               <div className="flex items-center gap-2.5">
-                {/* The icon now ships its own gradient tile — no wrapper. */}
                 <CoachAiIcon className="size-8 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-foreground">Meet Coach Cal</p>
@@ -508,11 +510,7 @@ export function CoachAiLauncher({
                   track({
                     event: "coach_cal_cta_click",
                     target: "header_promo_popover",
-                    metadata: {
-                      surface: "header_promo_popover",
-                      action: "start_trial",
-                      path: pathname ?? null,
-                    },
+                    metadata: { surface: "header_promo_popover", action: "start_trial", path: pathname ?? null },
                   });
                   setPromoOpen(false);
                 }}
@@ -542,12 +540,12 @@ export function CoachAiLauncher({
 
       {open && typeof document !== "undefined" && createPortal(
         <>
-          {/* Backdrop (fullscreen / mobile) */}
+          {/* Backdrop — fullscreen and mobile only */}
           <div
             onClick={() => setOpen(false)}
             className={cn(
               "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity",
-              fullscreen ? "block" : "block sm:hidden",
+              panelMode === "fullscreen" ? "block" : "block sm:hidden",
             )}
             aria-hidden="true"
           />
@@ -556,33 +554,39 @@ export function CoachAiLauncher({
           <div
             role="dialog"
             aria-label="Coach Cal chat"
-            style={windowPosStyle}
+            style={{
+              ...windowPosStyle,
+              ...(panelMode === "docked" ? { width: DOCK_W } : {}),
+            }}
             onPointerDown={onHeaderPointerDown}
             onPointerMove={onHeaderPointerMove}
             onPointerUp={onHeaderPointerUp}
             onPointerCancel={onHeaderPointerUp}
             className={cn(
-              "fixed z-50 flex flex-col overflow-hidden rounded-2xl bg-surface-raised text-foreground shadow-2xl ring-1 ring-black/10 select-none",
-              adminTrainingActive    && "ring-2 ring-amber-400",
-              fullscreen
+              "fixed z-50 flex flex-col overflow-hidden bg-surface-raised text-foreground shadow-2xl select-none",
+              // Ring / border
+              panelMode === "docked"
+                ? "border-l border-border"
+                : "rounded-2xl ring-1 ring-black/10",
+              adminTrainingActive && "ring-2 ring-amber-400",
+              // Position
+              panelMode === "fullscreen"
                 ? "inset-2 sm:inset-4"
-                : [
-                    // Mobile: bottom sheet
-                    "inset-x-2 bottom-2 top-auto h-[80vh]",
-                    // Desktop: position controlled by windowPosStyle inline style;
-                    // these classes serve as fallback before windowPos initializes
-                    "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
-                  ].join(" "),
+                : panelMode === "docked"
+                  ? "inset-y-0 right-0 hidden lg:flex"
+                  : [
+                      // Mobile: bottom sheet
+                      "inset-x-2 bottom-2 top-auto h-[80vh]",
+                      // Desktop: position controlled by windowPosStyle
+                      "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
+                    ].join(" "),
             )}
           >
             {/* ── Header ─────────────────────────────────────────────────── */}
-            {/* Drag handlers live on the dialog wrapper so the whole window
-                acts as a drag handle (excluding interactive controls and the
-                scrollable chat area, which carry data-no-drag). */}
             <header
               className={cn(
                 "flex items-center gap-2 border-b px-3 py-2",
-                !fullscreen && "sm:cursor-grab sm:active:cursor-grabbing",
+                panelMode === "float" && "sm:cursor-grab sm:active:cursor-grabbing",
                 adminTrainingActive
                   ? "border-amber-300 bg-amber-50/60 dark:bg-amber-950/30"
                   : "border-border",
@@ -596,7 +600,7 @@ export function CoachAiLauncher({
                   : undefined
               }
             >
-              {/* Icon container */}
+              {/* Icon */}
               <div
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-lg",
@@ -604,10 +608,10 @@ export function CoachAiLauncher({
                 )}
                 style={!adminTrainingActive ? { background: GRADIENT } : undefined}
               >
-                {/* Bare sparkle — wrapper provides the colored tile. */}
                 <CoachAiIcon className="size-5 text-primary" bare />
               </div>
 
+              {/* Title + context switcher */}
               <div className="min-w-0 flex-1 relative">
                 <div className="flex items-center gap-1">
                   <div
@@ -615,11 +619,7 @@ export function CoachAiLauncher({
                       "inline-block text-sm font-semibold leading-tight text-foreground",
                       anchoredName && "border-b-[2px] pb-0.5",
                     )}
-                    style={
-                      anchoredName && anchoredColor
-                        ? { borderBottomColor: anchoredColor }
-                        : undefined
-                    }
+                    style={anchoredName && anchoredColor ? { borderBottomColor: anchoredColor } : undefined}
                   >
                     Coach Cal
                     {adminTrainingActive && (
@@ -639,10 +639,7 @@ export function CoachAiLauncher({
                     className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-surface-inset hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <ChevronDown
-                      className={cn(
-                        "size-3.5 transition-transform",
-                        contextOpen && "rotate-180",
-                      )}
+                      className={cn("size-3.5 transition-transform", contextOpen && "rotate-180")}
                       aria-hidden="true"
                     />
                   </button>
@@ -686,27 +683,15 @@ export function CoachAiLauncher({
                             !pb.color && "border-l-transparent",
                             !pb.color && (isCurrent ? "bg-surface-inset" : "hover:bg-surface-inset"),
                           )}
-                          style={
-                            pb.color
-                              ? {
-                                  backgroundColor: tint ?? undefined,
-                                  borderLeftColor: pb.color,
-                                }
-                              : undefined
-                          }
+                          style={pb.color ? { backgroundColor: tint ?? undefined, borderLeftColor: pb.color } : undefined}
                         >
                           <Check
-                            className={cn(
-                              "size-3.5 shrink-0",
-                              isCurrent ? "text-primary" : "text-transparent",
-                            )}
+                            className={cn("size-3.5 shrink-0", isCurrent ? "text-primary" : "text-transparent")}
                             aria-hidden="true"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium text-foreground">{pb.name}</div>
-                            {pb.season && (
-                              <div className="truncate text-[10px] text-muted">{pb.season}</div>
-                            )}
+                            {pb.season && <div className="truncate text-[10px] text-muted">{pb.season}</div>}
                           </div>
                         </Link>
                       );
@@ -721,31 +706,19 @@ export function CoachAiLauncher({
                 <div className="mr-1 flex items-center rounded-md bg-surface-inset px-1 py-0.5">
                   <button
                     type="button"
-                    onClick={() => setFontSize((f) => {
-                      const idx = FONT_SIZES.indexOf(f);
-                      return idx > 0 ? FONT_SIZES[idx - 1] : f;
-                    })}
+                    onClick={() => setFontSize((f) => { const i = FONT_SIZES.indexOf(f); return i > 0 ? FONT_SIZES[i - 1] : f; })}
                     disabled={fontSize === FONT_SIZES[0]}
                     className="rounded px-1 py-0.5 text-[11px] font-semibold text-muted transition hover:text-foreground disabled:opacity-30"
-                    title="Decrease font size"
-                    aria-label="Decrease font size"
-                  >
-                    A−
-                  </button>
+                    title="Decrease font size" aria-label="Decrease font size"
+                  >A−</button>
                   <span className="mx-0.5 text-[10px] tabular-nums text-muted/50">{fontSize}</span>
                   <button
                     type="button"
-                    onClick={() => setFontSize((f) => {
-                      const idx = FONT_SIZES.indexOf(f);
-                      return idx < FONT_SIZES.length - 1 ? FONT_SIZES[idx + 1] : f;
-                    })}
+                    onClick={() => setFontSize((f) => { const i = FONT_SIZES.indexOf(f); return i < FONT_SIZES.length - 1 ? FONT_SIZES[i + 1] : f; })}
                     disabled={fontSize === FONT_SIZES[FONT_SIZES.length - 1]}
                     className="rounded px-1 py-0.5 text-[11px] font-semibold text-muted transition hover:text-foreground disabled:opacity-30"
-                    title="Increase font size"
-                    aria-label="Increase font size"
-                  >
-                    A+
-                  </button>
+                    title="Increase font size" aria-label="Increase font size"
+                  >A+</button>
                 </div>
 
                 {isAdmin && (
@@ -765,18 +738,71 @@ export function CoachAiLauncher({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setFullscreen((v) => !v)}
-                  className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-                  title={fullscreen ? "Exit full screen" : "Full screen"}
-                >
-                  {fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-                </button>
+                {/* ── Panel mode buttons ─────────────────────────────────── */}
+                <div className="flex items-center">
+                  {/* Float — always visible */}
+                  <button
+                    type="button"
+                    onClick={() => handleSetMode("float")}
+                    title="Floating window"
+                    aria-label="Floating window"
+                    className={cn(
+                      "rounded-md p-1.5 transition",
+                      panelMode === "float"
+                        ? "bg-surface-inset text-foreground"
+                        : "text-muted hover:bg-surface-inset hover:text-foreground",
+                    )}
+                  >
+                    <AppWindow className="size-4" />
+                  </button>
+
+                  {/* Docked — desktop only (lg+) */}
+                  <button
+                    type="button"
+                    onClick={() => handleSetMode(panelMode === "docked" ? "float" : "docked")}
+                    title="Dock to side"
+                    aria-label="Dock to side"
+                    className={cn(
+                      "hidden lg:flex rounded-md p-1.5 transition",
+                      panelMode === "docked"
+                        ? "bg-surface-inset text-foreground"
+                        : "text-muted hover:bg-surface-inset hover:text-foreground",
+                    )}
+                  >
+                    <PanelRight className="size-4" />
+                  </button>
+
+                  {/* Fullscreen */}
+                  <button
+                    type="button"
+                    onClick={() => handleSetMode(panelMode === "fullscreen" ? "float" : "fullscreen")}
+                    title={panelMode === "fullscreen" ? "Exit full screen" : "Full screen"}
+                    aria-label={panelMode === "fullscreen" ? "Exit full screen" : "Full screen"}
+                    className={cn(
+                      "rounded-md p-1.5 transition",
+                      panelMode === "fullscreen"
+                        ? "bg-surface-inset text-foreground"
+                        : "text-muted hover:bg-surface-inset hover:text-foreground",
+                    )}
+                  >
+                    {panelMode === "fullscreen" ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  </button>
+
+                  {/* Popout — desktop only (lg+) */}
+                  <button
+                    type="button"
+                    onClick={handlePopout}
+                    title="Open in separate window"
+                    aria-label="Open in separate window"
+                    className="hidden lg:flex rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground transition"
+                  >
+                    <ExternalLink className="size-4" />
+                  </button>
+                </div>
 
                 <button
                   type="button"
-                  onClick={() => { setFullscreen(false); setOpen(false); }}
+                  onClick={() => { setPanelMode("float"); setOpen(false); }}
                   className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
                   title="Close"
                 >
@@ -794,8 +820,8 @@ export function CoachAiLauncher({
               <CoachAiChat playbookId={playbookId} playId={playId} mode={mode} />
             </div>
 
-            {/* ── Resize handle (desktop, non-fullscreen) ──────────────── */}
-            {!fullscreen && (
+            {/* ── Resize handle (float mode, desktop only) ──────────────── */}
+            {panelMode === "float" && (
               <div
                 data-no-drag
                 onPointerDown={onResizePointerDown}
@@ -823,16 +849,11 @@ export function CoachAiLauncher({
 
 /**
  * Animated chat preview shown to non-entitled users in the promo popover.
- * Cycles through scripted user/assistant pairs every ~3.5s, fading between
- * them so the popover feels alive without being demanding. Pure decoration —
- * doesn't talk to the API.
  */
 function CoachCalDemoStrip() {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => {
-      setIdx((i) => (i + 1) % COACH_CAL_DEMOS.length);
-    }, 3500);
+    const id = setInterval(() => { setIdx((i) => (i + 1) % COACH_CAL_DEMOS.length); }, 3500);
     return () => clearInterval(id);
   }, []);
   const demo = COACH_CAL_DEMOS[idx];
@@ -840,9 +861,6 @@ function CoachCalDemoStrip() {
     <div
       key={idx}
       className="mt-3 space-y-1.5 rounded-xl bg-surface-inset/60 p-2.5 [animation:fadein_400ms_ease-out]"
-      style={{
-        // inline keyframe via style tag below — keep this self-contained
-      }}
     >
       <style>{`@keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }`}</style>
       <div className="flex justify-end">
@@ -851,10 +869,7 @@ function CoachCalDemoStrip() {
         </div>
       </div>
       <div className="flex items-end gap-1.5">
-        <div
-          className="flex size-5 shrink-0 items-center justify-center rounded-lg"
-          style={{ background: GRADIENT }}
-        >
+        <div className="flex size-5 shrink-0 items-center justify-center rounded-lg" style={{ background: GRADIENT }}>
           <CoachAiIcon className="size-3 text-primary" bare />
         </div>
         <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-surface-raised px-2.5 py-1.5 text-[11px] leading-snug text-foreground ring-1 ring-border">
@@ -863,13 +878,7 @@ function CoachCalDemoStrip() {
       </div>
       <div className="flex justify-center gap-1 pt-0.5">
         {COACH_CAL_DEMOS.map((_, i) => (
-          <span
-            key={i}
-            className={cn(
-              "size-1 rounded-full transition-colors",
-              i === idx ? "bg-primary" : "bg-muted/30",
-            )}
-          />
+          <span key={i} className={cn("size-1 rounded-full transition-colors", i === idx ? "bg-primary" : "bg-muted/30")} />
         ))}
       </div>
     </div>

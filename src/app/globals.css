@@ -136,6 +136,27 @@ body {
   }
 }
 
+/* Coach Cal — user message send animation (iMessage-style slide-up) */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.msg-in {
+  animation: msg-in 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg-in { animation: none; }
+}
+
+/* Coach Cal docked mode — body shifts left so the fixed right panel has room */
+html.coach-docked body {
+  padding-right: 380px;
+  transition: padding-right 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  html.coach-docked body { transition: none; }
+}
+
 /* iOS Safari zooms in on focus when an input's font-size is < 16px, which
  * expands the page horizontally and chops off the right side of layouts.
  * Force a 16px minimum on all text-entry controls on small viewports.

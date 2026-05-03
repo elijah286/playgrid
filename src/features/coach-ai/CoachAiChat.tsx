@@ -127,6 +127,9 @@ export function CoachAiChat({
   const [optInPending, setOptInPending] = useState(false);
   const [upgradeBannerEnabled, setUpgradeBannerEnabled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Index of the user turn added by the most recent send() call — receives
+  // the .msg-in animation. Null for history turns loaded from localStorage.
+  const nextFreshIdxRef = useRef<number | null>(null);
   // Tracks whether the user is "stuck to bottom" (within a small tolerance).
   // We only auto-scroll while this is true. The instant the user scrolls up
   // mid-stream to read something, this flips false and we stop dragging
@@ -279,6 +282,7 @@ export function CoachAiChat({
 
     const userTurn: CoachAiTurn = { role: "user", text };
     const prior = turns;
+    nextFreshIdxRef.current = turns.length;
     setTurns((cur) => [...cur, userTurn]);
     setDraft("");
     setStreaming(true);
@@ -479,7 +483,7 @@ export function CoachAiChat({
                     </div>
                   )}
                   {t.role === "user" ? (
-                    <UserMessageBubble text={t.text} />
+                    <UserMessageBubble text={t.text} animate={i === nextFreshIdxRef.current} />
                   ) : (
                     <div className="min-w-0 flex-1">
                       {t.role === "assistant" && t.playbookChips && t.playbookChips.length > 0 && (
@@ -670,7 +674,7 @@ export function CoachAiChat({
   );
 }
 
-function UserMessageBubble({ text }: { text: string }) {
+function UserMessageBubble({ text, animate }: { text: string; animate?: boolean }) {
   const [copied, setCopied] = useState(false);
   async function handleCopy() {
     try {
@@ -682,7 +686,7 @@ function UserMessageBubble({ text }: { text: string }) {
     }
   }
   return (
-    <div className="flex max-w-[82%] flex-col items-end gap-1">
+    <div className={`flex max-w-[82%] flex-col items-end gap-1${animate ? " msg-in" : ""}`}>
       <div className="rounded-2xl rounded-tr-sm bg-brand-green px-3.5 py-2 text-sm leading-relaxed text-white">
         {text}
       </div>
