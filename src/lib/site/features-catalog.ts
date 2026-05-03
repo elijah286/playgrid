@@ -391,6 +391,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "archived-play-read-only-editor",
+    name: "Archived plays open read-only with one-click restore",
+    description:
+      "Opening an archived play in the editor now surfaces a persistent amber banner (\"This play is archived\") and locks every edit affordance — canvas drawing, route toolbar, field-size controls, notes, tags, inspector, rename, formation picker, and play-number reorder. Coaches restore the play in one click via the banner's Restore button or the ⋮ menu, after which editing immediately becomes available without a page reload. Copy and New play stay reachable so the archived play can still seed a new one. Mirrors the existing archived-playbook treatment but scoped to a single play, replacing the previous behavior where archived plays were silently editable with no visual cue.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-marketing-marquee-rewrite",
     name: "Coach Cal landing page + home teaser rewrite",
     description:

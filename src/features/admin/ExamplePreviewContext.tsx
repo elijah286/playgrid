@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Archive, FlaskConical, X } from "lucide-react";
 import { archivePlaybookAction } from "@/app/actions/playbooks";
+import { archivePlayAction } from "@/app/actions/plays";
 
 /**
  * Shared "read-only" state for playbook detail pages. Covers two modes:
@@ -27,6 +28,8 @@ type Ctx = {
   isPreview: boolean;
   /** True when the playbook is archived. Editing is disabled in this state. */
   isArchived: boolean;
+  /** True when a single play is archived (but its playbook is active). */
+  isPlayArchived: boolean;
   /** Returns true when the caller must abort (any read-only mode is active). */
   blockIfPreview: (reason?: string) => boolean;
 };
@@ -34,23 +37,30 @@ type Ctx = {
 const ReadOnlyCtx = createContext<Ctx>({
   isPreview: false,
   isArchived: false,
+  isPlayArchived: false,
   blockIfPreview: () => false,
 });
 
 export function ExamplePreviewProvider({
   isPreview,
   isArchived = false,
+  isPlayArchived = false,
   playbookId,
+  playId,
   canUnarchive = false,
   children,
 }: {
   isPreview: boolean;
   isArchived?: boolean;
+  isPlayArchived?: boolean;
   playbookId?: string;
+  playId?: string;
   canUnarchive?: boolean;
   children: ReactNode;
 }) {
-  const [modal, setModal] = useState<{ kind: "example" | "archived"; reason: string } | null>(null);
+  const [modal, setModal] = useState<
+    { kind: "example" | "archived" | "play_archived"; reason: string } | null
+  >(null);
 
   const blockIfPreview = useCallback(
     (reason?: string) => {
@@ -63,6 +73,15 @@ export function ExamplePreviewProvider({
         });
         return true;
       }
+      if (isPlayArchived) {
+        setModal({
+          kind: "play_archived",
+          reason:
+            reason ??
+            "This play is archived and can't be edited. Restore it to make changes.",
+        });
+        return true;
+      }
       if (isPreview) {
         setModal({
           kind: "example",
@@ -72,12 +91,12 @@ export function ExamplePreviewProvider({
       }
       return false;
     },
-    [isPreview, isArchived],
+    [isPreview, isArchived, isPlayArchived],
   );
 
   const value = useMemo(
-    () => ({ isPreview, isArchived, blockIfPreview }),
-    [isPreview, isArchived, blockIfPreview],
+    () => ({ isPreview, isArchived, isPlayArchived, blockIfPreview }),
+    [isPreview, isArchived, isPlayArchived, blockIfPreview],
   );
 
   return (
@@ -93,6 +112,14 @@ export function ExamplePreviewProvider({
         <ArchivedPlaybookModal
           reason={modal.reason}
           playbookId={playbookId ?? null}
+          canUnarchive={canUnarchive}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.kind === "play_archived" && (
+        <ArchivedPlayModal
+          reason={modal.reason}
+          playId={playId ?? null}
           canUnarchive={canUnarchive}
           onClose={() => setModal(null)}
         />
@@ -162,6 +189,104 @@ function ExamplePreviewModal({
           >
             Create your playbook
           </Link>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+function ArchivedPlayModal({
+  reason,
+  playId,
+  canUnarchive,
+  onClose,
+}: {
+  reason: string;
+  playId: string | null;
+  canUnarchive: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function unarchive() {
+    if (!playId) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await archivePlayAction(playId, false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      onClose();
+      router.refresh();
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] overflow-y-auto bg-black/60"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3">
+          <div className="inline-flex items-center gap-2">
+            <Archive className="size-4 text-primary" />
+            <h2 className="text-base font-bold text-foreground">
+              Play archived
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="space-y-3 p-5 text-sm text-foreground">
+          <p>{reason}</p>
+          {canUnarchive ? (
+            <p className="text-muted">
+              Restore this play to edit it. It will return to the active
+              plays list.
+            </p>
+          ) : (
+            <p className="text-muted">
+              Ask the playbook owner to restore it if you need to make
+              changes.
+            </p>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            Close
+          </button>
+          {canUnarchive && playId && (
+            <button
+              type="button"
+              onClick={unarchive}
+              disabled={pending}
+              className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60"
+            >
+              {pending ? "Restoring…" : "Restore play"}
+            </button>
+          )}
         </div>
       </div>
       </div>

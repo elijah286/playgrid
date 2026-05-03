@@ -54,6 +54,10 @@ type Props = {
   /** Current archived state — drives whether the menu shows
    *  Archive vs Restore. */
   isArchived?: boolean;
+  /** When true, the play is archived: rename / formation picker / play-number
+   *  reorder all become read-only. The action menu (Copy, Restore, Delete)
+   *  stays available so coaches can recover from the archived state. */
+  isPlayArchived?: boolean;
   allFormations?: SavedFormation[];
   canEdit?: boolean;
   /** When true, the sibling-play navigation (Previous/All plays/Next) and
@@ -82,6 +86,7 @@ export function EditorHeaderBar({
   onArchive,
   onDelete,
   isArchived = false,
+  isPlayArchived = false,
   allFormations = [],
   canEdit = true,
   hideMobileNav = false,
@@ -109,6 +114,12 @@ export function EditorHeaderBar({
   const prevPlay = ix > 0 ? nav[ix - 1] : null;
   const nextPlay = ix >= 0 && ix < nav.length - 1 ? nav[ix + 1] : null;
 
+  // Metadata-editing affordances (rename, formation picker, play-number
+  // reorder) lock when the play is archived. The action menu and Copy /
+  // New play stay reachable via `canEdit` so the coach can still restore
+  // the play or duplicate it as a starting point.
+  const canEditMeta = canEdit && !isPlayArchived;
+
   const name = doc.metadata.coachName || "Untitled play";
   const formation = doc.metadata.formation?.trim();
   const formationId = doc.metadata.formationId;
@@ -134,7 +145,7 @@ export function EditorHeaderBar({
           <EditablePlayNumberBadge
             value={playNumber}
             max={nav.length}
-            disabled={!canEdit}
+            disabled={!canEditMeta}
             onChange={(target) => {
               const targetPlay = nav[target - 1];
               if (!targetPlay || targetPlay.id === playId) return;
@@ -173,7 +184,7 @@ export function EditorHeaderBar({
           <div className="flex min-w-0 flex-1 flex-col leading-tight">
             {(doc.metadata.playType ?? "offense") === "offense" && (
               <div className="flex min-w-0 items-center text-[11px] text-muted">
-                {canEdit ? (
+                {canEditMeta ? (
                   <FormationTitlePicker
                     currentId={formationId ?? null}
                     currentName={formation ?? ""}
@@ -187,7 +198,7 @@ export function EditorHeaderBar({
               </div>
             )}
             <h1 className="flex min-w-0 items-center text-base font-bold text-foreground">
-              {canEdit ? (
+              {canEditMeta ? (
                 <button
                   type="button"
                   onClick={() => setEditingName(true)}

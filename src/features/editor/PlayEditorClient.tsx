@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, FlaskConical } from "lucide-react";
+import { Archive as ArchiveIcon, ChevronLeft, FlaskConical } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -102,6 +102,10 @@ type Props = {
   /** Archived playbook: same treatment as example preview for edits, with a
    *  distinct CTA that offers to restore the playbook. */
   isArchived?: boolean;
+  /** Archived play (the playbook is active but THIS play is archived). The
+   *  editor stays mounted so the coach can review the play, but every edit
+   *  affordance is disabled and a banner surfaces a one-click Unarchive. */
+  isPlayArchived?: boolean;
   /** Site-admin kill switch. When false, mobile surfaces that enter edit
    *  mode (the "Edit play" button, the formation picker dropdown) are
    *  suppressed on small screens. Desktop is unaffected. */
@@ -126,7 +130,9 @@ export function PlayEditorClient(props: Props) {
     <ExamplePreviewProvider
       isPreview={props.isExamplePreview ?? false}
       isArchived={props.isArchived ?? false}
+      isPlayArchived={props.isPlayArchived ?? false}
       playbookId={props.playbookId}
+      playId={props.playId}
       canUnarchive={Boolean(props.canEdit) && !props.isExamplePreview}
     >
       <PlayEditorClientInner {...props} />
@@ -146,9 +152,10 @@ function PlayEditorClientInner({
   allFormations = [],
   opponentFormations,
   playbookSettings,
-  canEdit = true,
+  canEdit: roleCanEdit = true,
   isExamplePreview = false,
   isArchived = false,
+  isPlayArchived = false,
   mobileEditingEnabled = false,
   gameModeAvailable = false,
   canUseGameMode = false,
@@ -159,6 +166,15 @@ function PlayEditorClientInner({
   const { toast } = useToast();
   const { blockIfPreview } = useExamplePreview();
   const { doc, dispatch, undo, redo, replaceDocument, canUndo, canRedo } = usePlayEditor(initialDocument);
+
+  // `canEdit` gates every body-level edit affordance (canvas, toolbars,
+  // notes, tags, inspector, quick routes). When the play is archived, these
+  // surfaces go read-only — the coach must explicitly unarchive (banner CTA
+  // or ⋮ menu → Restore) before editing. The role-based original is kept on
+  // `roleCanEdit` and passed to the header bar so the action menu / Copy /
+  // New play remain reachable while archived; the header has its own
+  // gating for the rename + formation picker, see below.
+  const canEdit = roleCanEdit && !isPlayArchived;
 
   // When Coach Cal mutates this play (update_play, update_play_notes, etc.),
   // the chat triggers `router.refresh()` and the parent server component
@@ -684,7 +700,14 @@ function PlayEditorClientInner({
 
   const archive = useCallback(
     async (archived: boolean) => {
+      // Skip the read-only intercept when going from archived → active. The
+      // play-archived modal's whole point is to prompt this exact action, so
+      // bouncing the request would create a dead-end loop. The archived →
+      // archived (re-archive) and active → archived (initial archive)
+      // directions still go through the gate so example previews surface
+      // their CTA correctly.
       if (
+        archived &&
         blockIfPreview(
           "Archiving a play in an example playbook isn't persisted. Start your own playbook to manage plays.",
         )
@@ -1076,6 +1099,12 @@ function PlayEditorClientInner({
         </div>
       )}
       {isExamplePreview && <ExamplePreviewEditorBanner />}
+      {isPlayArchived && (
+        <ArchivedPlayEditorBanner
+          canUnarchive={roleCanEdit && !isExamplePreview}
+          onUnarchive={() => void archive(false)}
+        />
+      )}
       {/* Hide the full header bar on mobile while actively editing — the
           Done editing button moves to the very top so the field has as much
           vertical room as possible. Desktop always keeps the header. */}
@@ -1109,9 +1138,10 @@ function PlayEditorClientInner({
         onSaveAsNewFormation={saveAsNewFormation}
         onArchive={archive}
         onDelete={deletePlay}
-        isArchived={isArchived}
+        isArchived={isPlayArchived}
         allFormations={allFormations}
-        canEdit={canEdit}
+        canEdit={roleCanEdit}
+        isPlayArchived={isPlayArchived}
         hideMobileNav={isTouchDevice && mode === "edit"}
         mode={isTouchDevice ? mode : undefined}
         onToggleMode={isTouchDevice ? toggleMode : undefined}
@@ -1617,6 +1647,35 @@ function ExamplePreviewEditorBanner() {
       >
         Create your own playbook
       </Link>
+    </div>
+  );
+}
+
+function ArchivedPlayEditorBanner({
+  canUnarchive,
+  onUnarchive,
+}: {
+  canUnarchive: boolean;
+  onUnarchive: () => void;
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
+      <ArchiveIcon className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <strong>This play is archived.</strong>{" "}
+        {canUnarchive
+          ? "Editing is disabled — restore it to make changes."
+          : "Editing is disabled. Ask the playbook owner to restore it."}
+      </span>
+      {canUnarchive && (
+        <button
+          type="button"
+          onClick={onUnarchive}
+          className="shrink-0 rounded-md bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950 ring-1 ring-amber-300 transition-colors hover:bg-amber-200"
+        >
+          Restore play
+        </button>
+      )}
     </div>
   );
 }

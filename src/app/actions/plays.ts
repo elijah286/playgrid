@@ -348,7 +348,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: play, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden, is_archived",
     )
     .eq("id", playId)
     .single();

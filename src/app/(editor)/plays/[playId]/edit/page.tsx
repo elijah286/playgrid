@@ -111,6 +111,7 @@ export default async function PlayEditPage({ params }: Props) {
     !isMember && Boolean(book?.is_public_example || book?.is_example);
   if (isExamplePreview) canEdit = true;
   const isArchived = Boolean(book?.is_archived);
+  const isPlayArchived = Boolean((res.play as { is_archived?: boolean | null }).is_archived);
 
   const mobileEditingEnabled = await getMobileEditingEnabled();
 
@@ -159,6 +160,7 @@ export default async function PlayEditPage({ params }: Props) {
       canEdit={canEdit}
       isExamplePreview={isExamplePreview}
       isArchived={isArchived}
+      isPlayArchived={isPlayArchived}
       mobileEditingEnabled={mobileEditingEnabled}
       gameModeAvailable={gameModeAvailable}
       canUseGameMode={viewerCanUseGameMode}
