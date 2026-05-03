@@ -508,16 +508,24 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         if (a.team !== b.team) continue;
         // Skip OL-OL pairs — see "Lineman pairs are exempt" above.
         if (isOlRow(a) && isOlRow(b)) continue;
+        // Skip anchored-anchored pairs. The only realistic case is QB-on-C
+        // for under-center alignment (QB at (0, -1), C at (0, 0)) — that's
+        // 1 yd apart in y, normalized 0.04, which trips the 0.067 threshold
+        // even though the formation is correct football geometry. The QB is
+        // SUPPOSED to look stacked behind the C. Nudging the QB sideways
+        // breaks the under-center snap visually AND cascades into a
+        // QB-on-H collision that the throw block then surfaces as
+        // "Diagram failed to render" (Y-Cross / Singleback under-center).
+        // 2026-05-03 surfaced this in production via compose_play("Y-Cross").
+        if (isAnchored(a) && isAnchored(b)) continue;
         const aN = toNorm(a.x, a.y);
         const bN = toNorm(b.x, b.y);
         const dnx = aN.x - bN.x;
         const dny = aN.y - bN.y;
         if (Math.hypot(dnx, dny) < OVERLAP_THRESHOLD_NORM) {
           // Decide who moves. Anchored players (QB, C) never move; push the
-          // other one. If both are anchored (shouldn't happen — only one Q
-          // and one C per team) prefer pushing `a`.
+          // other one.
           const aAnchored = isAnchored(a);
-          const bAnchored = isAnchored(b);
           const moveA = !aAnchored;
           const mover = moveA ? a : b;
           const pivot = moveA ? b : a;
@@ -526,10 +534,6 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
             : Math.sign(mover.x - pivot.x);
           mover.x = pivot.x + dir * NUDGE_STEP_YDS_X;
           moved = true;
-          // If both were anchored, the loop won't converge — break out so
-          // we don't spin forever. (A diagram with two QBs is malformed
-          // anyway; we just don't want to hang the renderer.)
-          if (aAnchored && bAnchored) iter = MAX_ITERS;
         }
       }
     }
@@ -551,6 +555,10 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         const b = staged[j];
         if (a.team !== b.team) continue;
         if (isOlRow(a) && isOlRow(b)) continue;
+        // Same exemption as the resolver pass — anchored-anchored pairs
+        // (QB-on-C under center) are intentional football geometry, not
+        // a real overlap to fail on.
+        if (isAnchored(a) && isAnchored(b)) continue;
         const aN = toNorm(a.x, a.y);
         const bN = toNorm(b.x, b.y);
         if (Math.hypot(aN.x - bN.x, aN.y - bN.y) < OVERLAP_THRESHOLD_NORM) {

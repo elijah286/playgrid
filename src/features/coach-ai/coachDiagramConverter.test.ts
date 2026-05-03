@@ -115,6 +115,54 @@ describe("overlap resolver — non-OL pairs ARE resolved", () => {
     const qbXYds = (qb.position.x - 0.5) * fieldWidthYds;
     expect(qbXYds).toBeCloseTo(0, 1); // QB stayed at center
   });
+
+  it("regression: under-center QB on Singleback Y-Cross renders without throw", () => {
+    // Production failure 2026-05-03: compose_play({ concept: "Y-Cross" })
+    // emits Singleback formation with QB at (0, -1) directly behind C at
+    // (0, 0). On flag_7v7 (fieldLengthYds=25) the 1yd gap normalizes to
+    // 0.04, under the 0.067 overlap threshold. The resolver nudged the
+    // (anchored) QB sideways into H, then the convergence-check threw
+    // "Diagram failed to render". Anchored-anchored pairs must be exempt:
+    // QB-on-C is intentional football geometry.
+    expect(() =>
+      coachDiagramToPlayDocument({
+        title: "Y-Cross",
+        variant: "flag_7v7",
+        focus: "O",
+        players: [
+          { id: "C",  role: "C",  x: 0,   y: 0,  team: "O" },
+          { id: "QB", role: "QB", x: 0,   y: -1, team: "O" },
+          { id: "B",  role: "B",  x: 4,   y: -5, team: "O" },
+          { id: "X",  role: "X",  x: -12, y: 0,  team: "O" },
+          { id: "Y",  role: "Y",  x: 5,   y: 0,  team: "O" },
+          { id: "Z",  role: "Z",  x: 12,  y: 0,  team: "O" },
+          { id: "H",  role: "H",  x: 2,   y: -1, team: "O" },
+        ],
+        routes: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it("under-center QB stays at C.x after resolution (does not get nudged)", () => {
+    // Symmetric guarantee: even though the QB-C pair "appears" to overlap
+    // by the normalized threshold, the resolver must NOT move the QB.
+    // If it did, the under-center snap would render misaligned and any
+    // nearby skill player (H in slot, B in pistol) would collide with it.
+    const doc = coachDiagramToPlayDocument({
+      title: "Under-center",
+      variant: "flag_7v7",
+      focus: "O",
+      players: [
+        { id: "C",  role: "C",  x: 0, y: 0,  team: "O" },
+        { id: "QB", role: "QB", x: 0, y: -1, team: "O" },
+        { id: "H",  role: "H",  x: 2, y: -1, team: "O" }, // would collide with a nudged QB
+      ],
+      routes: [],
+    });
+    const qb = doc.layers.players.find((p) => p.label === "Q")!;
+    const fieldWidthYds = doc.sportProfile.fieldWidthYds;
+    expect((qb.position.x - 0.5) * fieldWidthYds).toBeCloseTo(0, 2);
+  });
 });
 
 describe("player color routing — suffixed labels match base color", () => {
