@@ -90,6 +90,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "play-editor-mobile-sticky",
+    name: "Mobile play editor: sticky field + always-visible notes",
+    description:
+      "On phones, the play diagram pins under the global header as you scroll, so the play stays visible while you read the notes, playback controls, and opponent below it. Notes now show in a collapsible card directly under the field in both view and edit modes — no need to enter edit mode just to read them.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "play-route-speed",
     name: "Per-route and per-segment speed",
     description:

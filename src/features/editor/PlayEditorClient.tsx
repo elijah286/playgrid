@@ -445,11 +445,6 @@ function PlayEditorClientInner({
   // canvas never silently create routes — the user must opt in via the pill.
   // Resets whenever the player selection clears so the gate doesn't linger
   // across unrelated edits.
-  // Mobile edit mode: the bottom area toggles between the field-size
-  // controls and the notes editor so the two compact surfaces never fight
-  // for the same limited vertical space. Desktop shows both side-by-side.
-  const [notesOpen, setNotesOpen] = useState(false);
-
   const [isNavPending, startNavTransition] = useTransition();
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
 
@@ -1351,7 +1346,13 @@ function PlayEditorClientInner({
               </div>
             )}
             <div
-              className={`field-viewport relative mx-auto w-full overflow-hidden ${
+              className={`field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky z-10 sm:static sm:top-auto sm:z-auto ${
+                // In edit mode the global site header is hidden (see
+                // `editor-hide-site-header` effect), so the field can pin
+                // flush at top: 0. In view mode the site header stays
+                // sticky on mobile, so the field tucks in just below it.
+                mode === "edit" ? "top-0" : "top-[var(--site-header-height,61px)]"
+              } ${
                 isExamplePreview ? "hidden sm:block" : ""
               } ${
                 !canEdit || (isTouchDevice && mode === "view")
@@ -1430,6 +1431,23 @@ function PlayEditorClientInner({
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
             </div>
 
+            {/* Mobile: notes card immediately below the (sticky) field, in
+                both view and edit modes. Desktop keeps its sidebar version
+                further down — see the `hidden sm:block` block. The card is
+                collapsible so coaches can scan a play without the notes
+                consuming half the viewport. */}
+            <div className="sm:hidden">
+              <PlayNotesCard
+                value={doc.metadata.notes ?? ""}
+                players={doc.layers.players}
+                routes={doc.layers.routes}
+                readOnly={!canEdit}
+                onChange={(notes) =>
+                  dispatch({ type: "document.setMetadata", patch: { notes } })
+                }
+              />
+            </div>
+
             {/* Route templates: surfaced directly under the field on small
                 screens when a player is selected. Desktop keeps the copy in
                 the sidebar Inspector where it already lives. Tapping a
@@ -1465,49 +1483,17 @@ function PlayEditorClientInner({
               <div className="sm:hidden">{opponentCardNode}</div>
             )}
 
-            {/* Mobile edit mode: swap field-size controls ⇄ notes editor.
-                Desktop renders both stacked. */}
-            {canEdit && mode === "edit" && !notesOpen && (
-              <div className="flex flex-col gap-2 sm:hidden">
+            {/* Mobile edit mode: field-size controls live below the
+                playback/opponent stack since notes are now a persistent
+                card directly under the field (see PlayNotesCard above). */}
+            {canEdit && mode === "edit" && (
+              <div className="sm:hidden">
                 <FieldSizeControls doc={doc} dispatch={dispatch} showFullFieldToggle={canExpandFieldWidth} fullFieldWidth={fullFieldWidth} onFullFieldWidthChange={setFullFieldWidthPersisted} />
-                <button
-                  type="button"
-                  onClick={() => setNotesOpen(true)}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised text-sm font-medium text-foreground hover:bg-surface"
-                >
-                  {(doc.metadata.notes ?? "").trim() ? "Edit notes" : "Add notes"}
-                </button>
               </div>
             )}
 
-            {canEdit && mode === "edit" && notesOpen && (
-              <div className="flex flex-col gap-2 sm:hidden">
-                <div className="rounded-xl border border-border bg-surface-raised p-3">
-                  <PlayerMentionEditor
-                    value={doc.metadata.notes ?? ""}
-                    onChange={(notes) =>
-                      dispatch({
-                        type: "document.setMetadata",
-                        patch: { notes },
-                      })
-                    }
-                    players={doc.layers.players}
-                    routes={doc.layers.routes}
-                    placeholder={'Type notes here. Use "@F", "@Q", or "@yellow" to link to a player.'}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setNotesOpen(false)}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-primary bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  Done with notes
-                </button>
-              </div>
-            )}
-
-            {/* Desktop keeps the classic stacked layout with both cards
-                always visible. Mobile uses the toggle above. */}
+            {/* Desktop keeps the classic stacked layout. Mobile renders
+                FieldSizeControls in the edit-only block above. */}
             {canEdit && (
               <div className="hidden sm:block">
                 <FieldSizeControls doc={doc} dispatch={dispatch} showFullFieldToggle={canExpandFieldWidth} fullFieldWidth={fullFieldWidth} onFullFieldWidthChange={setFullFieldWidthPersisted} />
@@ -1660,7 +1646,7 @@ function PlayNotesCard({
   // the card entirely so the sidebar stays uncluttered.
   if (readOnly && !value.trim()) return null;
   return (
-    <div className="mt-3 rounded-xl border border-border bg-surface-raised">
+    <div className="rounded-xl border border-border bg-surface-raised">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

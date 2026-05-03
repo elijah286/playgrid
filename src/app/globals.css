@@ -232,6 +232,13 @@ html.coach-docked body {
   }
 }
 
+/* SiteHeaderShell renders sticky `top-0` with `py-3` (24px) + `h-9` content
+ * (36px) + `border-b` (1px) ≈ 61px. Anything that wants to sticky-stack
+ * directly under the global header on mobile reads this var. */
+:root {
+  --site-header-height: 61px;
+}
+
 /* Field viewport cap on small screens. Without this, when the editor
  * column grows in edit mode the aspect-ratio field can end up taller than
  * the phone viewport. The cap binds both dimensions so the aspect ratio
