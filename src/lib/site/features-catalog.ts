@@ -382,6 +382,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "coach-cal-clickable-play-references",
+    name: "Coach Cal clickable play and playbook references",
+    description:
+      "When Cal mentions a saved play or playbook in a reply (\"Play 5\", \"Smash\", \"Spring 2026 Playbook\"), the name now renders as an inline pill the coach can click to pop that play or playbook into the main content area — without leaving the chat. Cal emits the references as `play://<id>` / `playbook://<id>` markdown links so the linkage is anchored to the actual record, not pattern-matched on text.",
+    category: "Coach AI",
+    status: "beta",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-compose-revise-architecture",
     name: "Coach Cal compose/revise architecture + defensive renderer",
     description:

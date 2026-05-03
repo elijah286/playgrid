@@ -173,7 +173,7 @@ function DetailsFade({ markdown }: { markdown: string }) {
         className={`relative overflow-hidden ${open ? "" : "max-h-[5.5em]"}`}
         aria-expanded={open}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={urlTransform}>
           {markdown}
         </ReactMarkdown>
         {!open && (
@@ -198,6 +198,20 @@ function isInternalHref(href: string): boolean {
   if (!href) return false;
   if (href.startsWith("/") && !href.startsWith("//")) return true;
   return false;
+}
+
+const PLAY_REF_RE     = /^play:\/\/([0-9a-f-]{8,})$/i;
+const PLAYBOOK_REF_RE = /^playbook:\/\/([0-9a-f-]{8,})$/i;
+
+/** Resolve Cal's `play://<id>` / `playbook://<id>` markdown links into the
+ *  in-app routes the rest of the renderer treats as internal. Returns null if
+ *  the href isn't a Cal-style ref. */
+function resolveCoachRef(href: string): { route: string; kind: "play" | "playbook" } | null {
+  const playMatch = PLAY_REF_RE.exec(href);
+  if (playMatch) return { route: `/plays/${playMatch[1]}/edit`, kind: "play" };
+  const pbMatch = PLAYBOOK_REF_RE.exec(href);
+  if (pbMatch) return { route: `/playbooks/${pbMatch[1]}`, kind: "playbook" };
+  return null;
 }
 
 
@@ -313,8 +327,25 @@ const components: Components = {
 
   // Use next/link for in-app paths so navigating doesn't full-page reload
   // (which would unmount the chat). External links keep default behavior.
+  // Also resolve Cal-emitted `play://<id>` / `playbook://<id>` shortcuts to
+  // their canonical routes — clicking pops the play/playbook into the main
+  // content area without leaving the chat.
   a: ({ href, children }) => {
     const url = typeof href === "string" ? href : "";
+    const coachRef = resolveCoachRef(url);
+    if (coachRef) {
+      return (
+        <Link
+          href={coachRef.route}
+          className={
+            "inline-flex items-center gap-0.5 rounded-md bg-primary/10 px-1.5 py-0.5 " +
+            "text-primary font-medium no-underline hover:bg-primary/20 transition-colors"
+          }
+        >
+          {children}
+        </Link>
+      );
+    }
     if (isInternalHref(url)) {
       return (
         <Link href={url} className="text-primary underline-offset-2 hover:underline">
@@ -351,6 +382,17 @@ const components: Components = {
   ),
 };
 
+// react-markdown's default url transform strips schemes outside of an
+// allowlist (http, https, mailto, tel, …). Cal's `play://<id>` and
+// `playbook://<id>` shortcuts get wiped silently without this override.
+function urlTransform(url: string): string {
+  if (PLAY_REF_RE.test(url) || PLAYBOOK_REF_RE.test(url)) return url;
+  // Default-ish behavior for everything else: only allow safe-looking
+  // protocols and same-origin paths through.
+  if (/^(https?:|mailto:|tel:|#|\/[^/])/i.test(url)) return url;
+  return "";
+}
+
 export function AssistantMessage({ text }: { text: string }) {
   const { preamble, details } = splitDetails(text);
   // Players parsed once per message and shared via context — both
@@ -361,7 +403,7 @@ export function AssistantMessage({ text }: { text: string }) {
   return (
     <ChatPlayersContext.Provider value={players}>
     <div className="text-sm text-foreground">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={urlTransform}>
         {preamble}
       </ReactMarkdown>
       {details && <DetailsFade markdown={details} />}
