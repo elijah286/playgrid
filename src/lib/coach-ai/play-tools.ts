@@ -21,7 +21,12 @@ import type { CoachAiTool } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
 import { validateDefenderAssignments, formatDefenseValidationErrors } from "./defense-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
-import { lintNotesAgainstSpec, formatNotesLintIssues } from "./notes-lint";
+import {
+  lintNotesAgainstSpec,
+  lintNotesSideAwareness,
+  formatNotesLintIssues,
+  formatSideAwarenessIssues,
+} from "./notes-lint";
 import { explainSpec } from "./explain-from-spec";
 
 const LOS_Y = 0.4;
@@ -1070,13 +1075,27 @@ const update_play_notes: CoachAiTool = {
       "Style rules:\n" +
       "- Reference players by their on-field label using @Label (e.g. @Q, @F, @Y, @Z). " +
       "  The renderer auto-links these to the player tokens in the diagram.\n" +
-      "- For OFFENSIVE plays: open with a one-line summary of the QB's reads " +
-      "  based on what the defense shows. Then list each skill player's job in " +
-      "  order. If any skill player has a decision (option route, choice route, " +
-      "  read on leverage, sit vs. continue), call it out explicitly.\n" +
-      "- For DEFENSIVE plays: open with what defenders should be watching for " +
-      "  from the offense (formation tells, motion, route distributions). Then " +
-      "  list each defender's read/key. Call out any pattern-match triggers.\n" +
+      "- **CHECK THE PLAY'S SIDE BEFORE WRITING.** The saved play has " +
+      "  `metadata.playType` = \"offense\" | \"defense\" | \"special_teams\". The notes " +
+      "  must be written from the perspective of the side actually running the play — " +
+      "  a server-side lint will reject offense-perspective prose on a defense play and " +
+      "  vice versa. The cases:\n" +
+      "  - For OFFENSIVE plays: open with a one-line summary of the QB's reads based " +
+      "    on what the defense shows. Then list each skill player's job in order. If any " +
+      "    skill player has a decision (option route, choice route, read on leverage, sit " +
+      "    vs. continue), call it out explicitly. ✓ \"@Q reads the safety…\", \"hit @X on " +
+      "    the slant\", \"the throw goes…\".\n" +
+      "  - For DEFENSIVE plays: the play IS the defense. Describe what defenders DO — not " +
+      "    how the offense beats them. Open with when to call this defense (down/distance/" +
+      "    formation tendency) and the primary key/trigger each defender reads. Then per-" +
+      "    defender assignments: zone drops with the void to protect, man matches with " +
+      "    leverage, blitz lanes, pattern-match rules. ✓ \"Best on 3rd-and-long vs trips. " +
+      "    @M keys #3 strong; if #2 goes vertical, @M carries; otherwise sink to the " +
+      "    hook.\" ✗ NEVER say \"@Q reads…\", \"the throw\", \"hit @X\", \"exploits Tampa " +
+      "    2\", \"the void between hooks and safeties\", \"why it works: the offense " +
+      "    attacks…\" — those frame the play as offense attacking the coverage, which " +
+      "    is the wrong play. If the coach asked you to save \"how to beat Tampa 2\", " +
+      "    that's an OFFENSE play, not a defense play; check what you actually saved.\n" +
       "- Keep it tight — 4-8 short bullets typically. Coaches will scan, not read.\n\n" +
       "OPTIONAL `from_spec: true` mode: if the play has a saved PlaySpec on " +
       "metadata.spec (created via play_spec on create_play/update_play), pass " +
@@ -1188,6 +1207,17 @@ const update_play_notes: CoachAiTool = {
         const lint = lintNotesAgainstSpec(notes, parentDoc.metadata.spec);
         if (!lint.ok) {
           return { ok: false, error: formatNotesLintIssues(lint.issues) };
+        }
+        // Side-awareness lint — defense plays must not be narrated from
+        // the offense's POV (and vice versa). The infrastructure (spec
+        // playType, projectSpecToNotes openers) has been side-aware
+        // since Phase 4; this is the gate that enforces it on Cal-
+        // authored prose. Surfaced 2026-05-03 (coach screenshot showed
+        // a defense play with offense-attack notes — "@Q reads", "the
+        // throw", "exploits Tampa 2"). See notes-lint.ts.
+        const sideLint = lintNotesSideAwareness(notes, parentDoc.metadata.spec);
+        if (!sideLint.ok) {
+          return { ok: false, error: formatSideAwarenessIssues(sideLint.issues) };
         }
       }
 

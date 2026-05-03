@@ -454,6 +454,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "coach-cal-side-aware-notes",
+    name: "Coach Cal side-aware play notes",
+    description:
+      "When Cal saves notes onto a play, the prose now matches the play's side. Defense plays get defender-perspective notes (when to call it, the primary key, per-defender assignments — zone drops with the void to protect, man matches with leverage, blitz lanes, pattern-match rules) instead of the old offense-attack vocabulary that leaked through (\"@Q reads…\", \"the throw\", \"exploits Tampa 2\"). The deterministic spec→notes projection now produces a defender-led layout for defense plays, and a server-side lint rejects offense-perspective vocabulary on a defense play (and vice versa) before notes are saved — same structural-gate approach already used for route-family contradictions.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-defense-composition",
     name: "Coach Cal defense composition framework",
     description:

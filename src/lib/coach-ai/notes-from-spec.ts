@@ -49,6 +49,14 @@ import {
 
 /** Render a PlaySpec into coaching notes. */
 export function projectSpecToNotes(spec: PlaySpec): string {
+  const playType = spec.playType ?? "offense";
+  if (playType === "defense") {
+    return projectDefenseSpec(spec);
+  }
+  return projectOffenseSpec(spec);
+}
+
+function projectOffenseSpec(spec: PlaySpec): string {
   const lines: string[] = [];
 
   // Concept-name lead. If the spec satisfies a known concept (curl-flat,
@@ -62,9 +70,8 @@ export function projectSpecToNotes(spec: PlaySpec): string {
     lines.push(`**${conceptHit.concept.name}** — ${conceptHit.concept.description}`);
   }
 
-  // Opener — depends on play type.
-  const opener = openerFor(spec);
-  if (opener) lines.push(opener);
+  // Opener — offense-perspective.
+  lines.push(openerForOffense(spec));
 
   // Per-assignment bullet. Skip `unspecified` — they add noise.
   for (const assignment of spec.assignments) {
@@ -82,9 +89,43 @@ export function projectSpecToNotes(spec: PlaySpec): string {
     for (const dl of defenderLines) lines.push(`- ${dl}`);
   }
 
-  // Defensive note: if no assignments rendered, fall back to a one-line
-  // formation+defense summary so the field isn't empty.
   if (lines.length === 0) {
+    lines.push(summaryLine(spec));
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Defense-side projection. The structural difference from offense:
+ *
+ *   - Lead with the defender perspective (the play IS the defense),
+ *     not the QB's reads. Defender bullets come FIRST.
+ *   - Suppress offense `assignments` bullets entirely. On a defense
+ *     play the offense is a hypothetical look the defense reacts to,
+ *     not the play being authored. Including bullets like "@X: 5-yard
+ *     slant" reads as "we've called the offense's routes for them" and
+ *     is exactly the offense-POV bug the side-aware path is fixing.
+ *   - Opener mirrors the offense pattern (when-to-call + primary key)
+ *     so the play card preview surfaces the same first-3-sentences
+ *     density coaches get on offense.
+ */
+function projectDefenseSpec(spec: PlaySpec): string {
+  const lines: string[] = [];
+  lines.push(openerForDefense(spec));
+
+  const defenderLines = bulletsForDefense(spec);
+  if (defenderLines.length > 0) {
+    lines.push("");
+    lines.push("**Assignments:**");
+    for (const dl of defenderLines) lines.push(`- ${dl}`);
+  }
+
+  if (lines.length <= 1) {
+    // Opener-only fallback when the catalog has no alignment for the
+    // (variant, front, coverage) tuple. Better than an empty notes
+    // field — the coach can edit from there.
+    lines.push("");
     lines.push(summaryLine(spec));
   }
 
@@ -210,17 +251,6 @@ const DEFENDER_CUES = {
   react_robber: "lurk for a crossing route at intermediate depth",
 } as const;
 
-function openerFor(spec: PlaySpec): string | null {
-  const playType = spec.playType ?? "offense";
-  if (playType === "offense") {
-    return openerForOffense(spec);
-  }
-  if (playType === "defense") {
-    return openerForDefense(spec);
-  }
-  return null;
-}
-
 function openerForOffense(spec: PlaySpec): string {
   const formationLabel = spec.formation.name || "the formation";
   const defenseLabel = spec.defense
@@ -237,7 +267,13 @@ function openerForDefense(spec: PlaySpec): string {
   const defenseLabel = spec.defense
     ? `${spec.defense.front === spec.defense.coverage ? spec.defense.coverage : `${spec.defense.front} ${spec.defense.coverage}`}`
     : "this defense";
-  return `Defense in ${defenseLabel}: read pre-snap formation and listen for motion calls before the snap.`;
+  // Mirror the offense opener pattern: lead with the defender's primary
+  // key, not a generic "read the formation" line. Coaches scan the first
+  // 1-3 sentences on the play card; pack the actionable trigger there.
+  return (
+    `Run **${defenseLabel}** — defenders read pre-snap formation and motion, ` +
+    `then play their assignment below. Primary key: alignment first, eyes to keys at the snap.`
+  );
 }
 
 function summaryLine(spec: PlaySpec): string {

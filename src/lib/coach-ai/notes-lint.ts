@@ -422,6 +422,183 @@ export function lintProseDepthAgainstSpec(prose: string, spec: PlaySpec): DepthL
 }
 
 /**
+ * Side-awareness lint: notes must be written from the perspective of the
+ * side actually running the play. A defense play describes what defenders
+ * do; an offense play describes what the offense does. Cal historically
+ * defaults to offense-attack vocabulary ("@Q reads", "the throw", "exploits
+ * Tampa 2") even when authoring a DEFENSE play, because the offense voice
+ * is the unmarked default in the system prompt and the route catalog.
+ *
+ * This lint is the structural backstop. Triggers on the saved spec's
+ * `playType`:
+ *
+ *   - DEFENSE play: reject prose that frames the play from the offense's
+ *     point of view. Concretely: "@Q reads", "QB's primary read", "the
+ *     throw", "throw to @<id>", "hit @<id>", "exploits", "attacks the
+ *     defense", "beats <coverage>", and similar offense-attack verbs that
+ *     read as "how to defeat this scheme" rather than "how defenders
+ *     execute this scheme".
+ *
+ *   - OFFENSE play: reject prose that frames the play as a defensive
+ *     call. The mirror is rarer in practice (Cal's default is offense)
+ *     but caught for symmetry: "drop into <zone>", "spy the QB", "blitz
+ *     <gap>" used as the *primary* opener (not as a per-defender bullet
+ *     under a Defense: section).
+ *
+ * Conservative by design — only flags HARD offense-attack vocabulary,
+ * not generic football words. "Routes", "coverage", "depth" stay legal
+ * on both sides because coaches genuinely use them either way.
+ */
+export type SideAwarenessIssue = {
+  /** "defense" or "offense" — the side the play is. */
+  expectedSide: "offense" | "defense";
+  /** The matched offense-/defense-perspective phrase. */
+  match: string;
+  /** The sentence the match appeared in. */
+  sentence: string;
+  /** Why this match indicates a side mismatch (for Cal's critique). */
+  reason: string;
+};
+
+export type SideAwarenessResult =
+  | { ok: true }
+  | { ok: false; issues: SideAwarenessIssue[] };
+
+/**
+ * Patterns that frame a play from the OFFENSE's point of view. Used to
+ * reject offense-perspective prose on a DEFENSE play. Each entry is a
+ * regex + a one-line reason explaining the structural problem.
+ *
+ * Word boundaries are used aggressively to avoid false positives — e.g.
+ * "throw" must be a verb in this position, not a substring of "throwback"
+ * or "throwing". The patterns intentionally err toward catching the
+ * coach-Cal-2026-05-03 case (the Spread Bender screenshot) and similar
+ * failures, not at exhaustively classifying English.
+ */
+const OFFENSE_POV_PATTERNS: ReadonlyArray<{ re: RegExp; reason: string }> = [
+  {
+    re: /@Q\s+(?:reads?|throws?|hits?|looks?|works?|finds?)\b/i,
+    reason: "frames the play as the QB executing reads, but this is a defense play — describe what defenders are reading, not what the QB is reading",
+  },
+  {
+    re: /\bQB(?:'s)?\s+(?:primary\s+)?read\b/i,
+    reason: "talks about the QB's read, but this is a defense play — describe the defenders' keys instead",
+  },
+  {
+    re: /\bprimary\s+read\b/i,
+    reason: "names a 'primary read' — that's an offense concept; on a defense play the analog is the defender's primary key",
+  },
+  {
+    re: /\b(?:throw|hit|target|fire)\s+(?:to\s+)?@[A-Za-z]/i,
+    reason: "uses an offensive throw verb directed at a player, but defense plays don't author throws",
+  },
+  {
+    re: /\b(?:exploits?|attacks?|beats?)\s+(?:the\s+|this\s+)?(?:tampa|cover\s*\d|cover-\d|defense|coverage|zone|man|safety|safeties|hook|flat)/i,
+    reason: "frames the play as attacking/exploiting the defense — that's the offensive POV; on a defense play, describe what defenders do, not how the offense beats them",
+  },
+  {
+    re: /\bvoid\s+between\b|\bsoft\s+spot\b/i,
+    reason: "describes the offense exploiting a coverage void — that's the offensive POV; on a defense play, describe how defenders close the void instead",
+  },
+  {
+    re: /\bWhy\s+it\s+works:.*(?:exploits?|attacks?|void|safeties?|coverage)/i,
+    reason: "the 'Why it works' framing here describes how the offense beats the defense; on a defense play, describe how the defense forces a bad result",
+  },
+];
+
+/**
+ * Patterns that frame a play from the DEFENSE's point of view as the
+ * primary action. Used (conservatively) to reject defense-perspective
+ * prose on an OFFENSE play. Per-defender bullets under a "Defense:"
+ * header are legal — those describe what the offense's spec assigns to
+ * the opponent, not the play itself. We only fail when defense-action
+ * verbs lead the play description.
+ */
+const DEFENSE_POV_LEAD_PATTERNS: ReadonlyArray<{ re: RegExp; reason: string }> = [
+  {
+    re: /^(?:Run\s+\*\*[^*]+\*\*\s+—\s+defenders\s+read|Defenders\s+(?:drop|key|read|carry|wall)\b)/im,
+    reason: "opens with defenders executing the play, but this is an offense play — open with the QB's read or the offensive concept",
+  },
+  {
+    re: /\b(?:we\s+(?:drop|blitz|spy)|defenders\s+(?:drop\s+into|carry\s+vertical|wall\s+off))\b.*\bprimary\b/i,
+    reason: "frames a defender as the primary actor, but this is an offense play — the primary actor is the QB or ballcarrier",
+  },
+];
+
+/**
+ * Lint notes against the saved spec's `playType`. Returns ok unless a
+ * hard offense-attack pattern appears on a defense play (or vice versa).
+ *
+ * Implementation note: scans the WHOLE notes string, not per-sentence —
+ * because the failure modes here (the 'Why it works' framing, the @Q
+ * reads opener) span sentences and a per-sentence scan misses the
+ * structural issue.
+ */
+export function lintNotesSideAwareness(
+  notes: string,
+  spec: PlaySpec,
+): SideAwarenessResult {
+  if (!notes || !spec) return { ok: true };
+  const playType = spec.playType ?? "offense";
+
+  if (playType === "defense") {
+    const issues = matchPatterns(notes, OFFENSE_POV_PATTERNS, "defense");
+    return issues.length === 0 ? { ok: true } : { ok: false, issues };
+  }
+  if (playType === "offense") {
+    const issues = matchPatterns(notes, DEFENSE_POV_LEAD_PATTERNS, "offense");
+    return issues.length === 0 ? { ok: true } : { ok: false, issues };
+  }
+  return { ok: true };
+}
+
+function matchPatterns(
+  notes: string,
+  patterns: ReadonlyArray<{ re: RegExp; reason: string }>,
+  expectedSide: "offense" | "defense",
+): SideAwarenessIssue[] {
+  const issues: SideAwarenessIssue[] = [];
+  const seenReasons = new Set<string>();
+  for (const { re, reason } of patterns) {
+    const m = notes.match(re);
+    if (!m) continue;
+    if (seenReasons.has(reason)) continue;
+    seenReasons.add(reason);
+    issues.push({
+      expectedSide,
+      match: m[0],
+      sentence: extractContext(notes, m.index ?? 0, m[0].length),
+      reason,
+    });
+  }
+  return issues;
+}
+
+function extractContext(notes: string, idx: number, len: number): string {
+  const start = Math.max(0, idx - 50);
+  const end = Math.min(notes.length, idx + len + 50);
+  return notes.slice(start, end).replace(/\s+/g, " ").trim();
+}
+
+export function formatSideAwarenessIssues(
+  issues: ReadonlyArray<SideAwarenessIssue>,
+): string {
+  const expected = issues[0]?.expectedSide ?? "defense";
+  const lead =
+    expected === "defense"
+      ? `Notes side-mismatch — this is a DEFENSE play, but the prose is written from the OFFENSE's perspective.`
+      : `Notes side-mismatch — this is an OFFENSE play, but the prose is written from the DEFENSE's perspective.`;
+  const orient =
+    expected === "defense"
+      ? `Re-author the notes from the DEFENDERS' perspective: open with when to call this defense, the primary key/trigger each defender reads, then per-defender assignments (zone drops, man matches, blitz lanes, pattern-match rules). Do NOT describe how the offense attacks this look — that's a different play.`
+      : `Re-author the notes from the OFFENSE's perspective: open with the QB's read and the play's situation, then per-skill-player jobs. Per-defender bullets are fine UNDER a "Defense:" section but should not lead the play description.`;
+  const lines = issues.map(
+    (i) => `  • Matched "${i.match}" — ${i.reason}. Context: ${JSON.stringify(i.sentence)}`,
+  );
+  return `${lead}\n\n${orient}\n\nIssues:\n${lines.join("\n")}\n\nNotes were NOT saved.`;
+}
+
+/**
  * Format issues into a single critique string for Cal's tool result.
  * Lists each contradiction by carrier + expected vs notes-asserted family
  * so Cal can re-emit with corrected prose.

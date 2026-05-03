@@ -13,7 +13,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { lintNotesAgainstSpec, lintProseAgainstSpec, lintProseDepthAgainstSpec } from "./notes-lint";
+import {
+  lintNotesAgainstSpec,
+  lintProseAgainstSpec,
+  lintProseDepthAgainstSpec,
+  lintNotesSideAwareness,
+} from "./notes-lint";
+import { projectSpecToNotes } from "./notes-from-spec";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { PLAY_SPEC_SCHEMA_VERSION, type PlaySpec } from "@/domain/play/spec";
 
@@ -359,6 +365,177 @@ describe("lintProseDepthAgainstSpec — clause-level scoping (the screenshot reg
           { player: "X", action: { kind: "route", family: "Dig", depthYds: 10 } },
         ],
       },
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+//  lintNotesSideAwareness
+// ─────────────────────────────────────────────────────────────────────
+
+function defenseSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
+  return {
+    schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+    variant: "flag_7v7",
+    title: "Tampa 2",
+    playType: "defense",
+    formation: { name: "Spread Doubles" },
+    defense: { front: "7v7 Zone", coverage: "Cover 2" },
+    assignments: [],
+    ...overrides,
+  };
+}
+
+function offenseSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
+  return {
+    schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+    variant: "flag_7v7",
+    title: "Spread Slant",
+    playType: "offense",
+    formation: { name: "Spread Doubles" },
+    assignments: [{ player: "X", action: { kind: "route", family: "Slant" } }],
+    ...overrides,
+  };
+}
+
+describe("lintNotesSideAwareness — defense plays reject offense POV", () => {
+  it("rejects '@Q reads' on a defense play", () => {
+    const result = lintNotesSideAwareness(
+      "@Q reads Tampa 2: hit @H on the bend if the hook squats.",
+      defenseSpec(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0].expectedSide).toBe("defense");
+    expect(result.issues[0].match).toMatch(/@Q\s+reads/i);
+  });
+
+  it("rejects 'QB's primary read' framing on a defense play", () => {
+    const result = lintNotesSideAwareness(
+      "**Tampa 2 exploits:** the QB's primary read is the bend at 9 yards.",
+      defenseSpec(),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects 'hit @H' / 'throw to @X' offense throw verbs on a defense play", () => {
+    const r1 = lintNotesSideAwareness(
+      "Hit @H on the bend, then throw to @X on the drag.",
+      defenseSpec(),
+    );
+    expect(r1.ok).toBe(false);
+  });
+
+  it("rejects 'exploits Tampa 2' attack-the-defense framing", () => {
+    const result = lintNotesSideAwareness(
+      "**Why it works:** the Bender exploits Tampa 2's vulnerable intermediate gap.",
+      defenseSpec(),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects 'soft spot' / 'void between' offensive-target framing", () => {
+    const result = lintNotesSideAwareness(
+      "Sit in the soft spot between the hooks and safeties.",
+      defenseSpec(),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects the canonical 2026-05-03 Tampa 2 regression case verbatim", () => {
+    // Real notes Cal saved on a Tampa 2 defense play (per coach screenshot).
+    const notes = [
+      "**Tampa 2 exploits:** Call when facing Cover 2 single-high looks that rotate to Tampa 2. @H's bend at 9 yards sits in the SOFT GRASS between the 5-yard hooks and 12-yard safeties — the biggest vulnerability in Tampa 2.",
+      "",
+      "**@Q's primary read:** @H on the bend. If the Hook LB (HL or HR on H's side) commits to the flat, the bend is wide open. If the hook stays home, check @B on the flat (3 yards) — the hook can't cover both.",
+      "",
+      "**Why it works:** Tampa 2's middle linebacker plays 6 yards deep (deeper than most hooks) to carry seam routes, but this creates a vulnerable intermediate gap at 8-10 yards. The Bender exploits exactly that void. Force the Mike LB to choose: cover the bend or protect the seam.",
+    ].join("\n");
+    const result = lintNotesSideAwareness(notes, defenseSpec());
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // Multiple distinct violations should surface — confirms the lint
+    // is catching structural pattern matches, not a one-off keyword.
+    expect(result.issues.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("passes legitimate defense-perspective notes", () => {
+    const notes = [
+      "Run **Tampa 2** — best on 3rd-and-long vs trips. Defenders read pre-snap formation and motion before the snap.",
+      "",
+      "**Assignments:**",
+      "- @M: drops into deep middle — open the hips, carry any vertical seam.",
+      "- @HL: drops into hook — eyes on #2, wall off any crosser.",
+      "- @CB1: drops into flat — squeeze the #1 vertical, sink under any out-cut.",
+    ].join("\n");
+    const result = lintNotesSideAwareness(notes, defenseSpec());
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes the deterministic projectSpecToNotes output for a defense play", () => {
+    // Round-trip safety check — whatever projectSpecToNotes emits for
+    // a defense play must pass the side-awareness lint by construction,
+    // otherwise the from_spec=true path would fail its own gate.
+    const spec = defenseSpec();
+    const projected = projectSpecToNotes(spec);
+    const result = lintNotesSideAwareness(projected, spec);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("lintNotesSideAwareness — offense plays pass offense POV", () => {
+  it("passes the canonical offense opener", () => {
+    const result = lintNotesSideAwareness(
+      "@Q reads the safety: hit @X on the slant inside if the corner stays outside.",
+      offenseSpec(),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes 'throw to @X' on an offense play", () => {
+    const result = lintNotesSideAwareness(
+      "Hit @X on the slant; if covered, throw to @H on the flat.",
+      offenseSpec(),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes 'exploits Cover 3' framing on an offense play (it's offense attacking defense — that's correct)", () => {
+    const result = lintNotesSideAwareness(
+      "Why it works: the slant-flat combo exploits Cover 3's hard corners.",
+      offenseSpec(),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects defense-action lead on an offense play", () => {
+    const result = lintNotesSideAwareness(
+      "Run **Cover 3** — defenders read pre-snap formation. Defenders drop into hooks.",
+      offenseSpec(),
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("lintNotesSideAwareness — edge cases", () => {
+  it("passes empty notes", () => {
+    const result = lintNotesSideAwareness("", defenseSpec());
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes when playType is unset (defaults to offense)", () => {
+    const result = lintNotesSideAwareness(
+      "@Q reads the safety: hit @X on the slant.",
+      { ...offenseSpec(), playType: undefined },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes special_teams plays (no enforcement yet)", () => {
+    const result = lintNotesSideAwareness(
+      "@Q reads the rush: hit @X on the swing.",
+      { ...offenseSpec(), playType: "special_teams" },
     );
     expect(result.ok).toBe(true);
   });

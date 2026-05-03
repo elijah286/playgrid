@@ -56,7 +56,46 @@ describe("projectSpecToNotes — opener", () => {
       playType: "defense",
       defense: { front: "7v7 Zone", coverage: "Cover 3" },
     }));
-    expect(notes).toMatch(/^Defense in/);
+    // Defense opener leads with "Run **<defense>**" (mirrors offense
+    // opener pattern — when-to-call + primary key in the first 1-3
+    // sentences, since coaches scan the play card preview).
+    expect(notes).toMatch(/^Run \*\*[^*]+\*\* — defenders read pre-snap formation/);
+  });
+
+  it("does not narrate defense plays from the offense's perspective", () => {
+    // Surfaced 2026-05-03: Cal saved a Tampa 2 defense play with notes
+    // like "@Q reads Tampa 2; hit @H on the bend at 9 yards…" — the
+    // notes were written as if the play was an offense-attack call. The
+    // projection must NEVER emit @Q-read prose on a defense play.
+    const notes = projectSpecToNotes(baseSpec({
+      playType: "defense",
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+      assignments: [
+        // Even if Cal accidentally drops offense assignments on a
+        // defense spec, the projection suppresses them.
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    expect(notes).not.toMatch(/@Q reads/);
+    expect(notes).not.toMatch(/@X:/); // offense assignment bullet suppressed
+    expect(notes).not.toMatch(/the throw/i);
+    expect(notes).not.toMatch(/exploits/i);
+  });
+
+  it("emits an Assignments header on defense plays (not Defense:)", () => {
+    // On a defense play the defenders ARE the play, so the per-defender
+    // bullets sit under "Assignments:" not "Defense:". The latter reads
+    // as "the opposing defense" which is offensive POV.
+    const notes = projectSpecToNotes(baseSpec({
+      playType: "defense",
+      defense: { front: "7v7 Zone", coverage: "Cover 3" },
+    }));
+    expect(notes).not.toMatch(/\*\*Defense:\*\*/);
+    if (notes.includes("- @")) {
+      // Only check the header if defender bullets actually rendered
+      // (depends on the catalog having an alignment for this combo).
+      expect(notes).toMatch(/\*\*Assignments:\*\*/);
+    }
   });
 });
 
