@@ -112,10 +112,18 @@ export function CoachAiChat({
   playbookId,
   playId,
   mode = "normal",
+  injectedPrompt = null,
 }: {
   playbookId?: string | null;
   playId?: string | null;
   mode?: "normal" | "admin_training";
+  /**
+   * When set (and `key` changes), populate the draft. If `autoSubmit` is
+   * true, fire the request immediately. Used by in-app CTAs that open Cal
+   * with a pre-written prompt. The `key` is what makes a *repeat* CTA
+   * click re-fire — the launcher bumps it on every dispatch.
+   */
+  injectedPrompt?: { text: string; autoSubmit: boolean; key: number } | null;
 }) {
   const storageKey = storageKeyFor(mode, playbookId ?? null);
   const [turns, setTurns] = useState<CoachAiTurn[]>([]);
@@ -302,8 +310,8 @@ export function CoachAiChat({
     }
   }
 
-  const send = useCallback(async () => {
-    const text = draft.trim();
+  const send = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? draft).trim();
     if (!text || streaming) return;
     setError(null);
     setOutOfMessages(null);
@@ -432,6 +440,21 @@ export function CoachAiChat({
       abortRef.current = null;
     }
   }, [draft, streaming, turns, playbookId, playId, mode, router]);
+
+  // Externally-injected prompt (in-app CTA). When the key changes, drop the
+  // text into the draft and — if the CTA wanted it sent — fire send() with
+  // the explicit text so we don't depend on a same-tick state update having
+  // landed. Includes the key in the deps so a *repeat* click of the same
+  // CTA re-injects (the openCoachCal helper bumps the key on every dispatch).
+  const injectedKey = injectedPrompt?.key ?? null;
+  useEffect(() => {
+    if (!injectedPrompt) return;
+    setDraft(injectedPrompt.text);
+    if (injectedPrompt.autoSubmit) {
+      void send(injectedPrompt.text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectedKey]);
 
   const buyMessagePack = useCallback(async () => {
     setPackCheckoutPending(true);

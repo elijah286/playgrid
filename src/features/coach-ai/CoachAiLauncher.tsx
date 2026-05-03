@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import { CoachAiChat } from "./CoachAiChat";
 import { CoachAiIcon } from "./CoachAiIcon";
+import { CoachAiPreviewChat } from "./CoachAiPreviewChat";
+import type { CoachCalEntryPointId } from "./entry-points";
+import type { CoachCalOpenDetail } from "./openCoachCal";
 import { usePlaybookAnchor } from "./playbook-anchor";
 import { listPlaybooksAction, type PlaybookRow } from "@/app/actions/playbooks";
 import { cn } from "@/lib/utils";
@@ -118,10 +121,18 @@ export function CoachAiLauncher({
   playbookId: playbookIdProp = null,
   isAdmin = false,
   entitled = true,
+  acceptGlobalCommands = false,
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
   entitled?: boolean;
+  /**
+   * When true, this launcher subscribes to the `coach-cal:open` window event
+   * dispatched by in-app CTAs. The launcher is mounted up to twice (global
+   * header + mobile playbook header); only one — the global one — should
+   * own programmatic opens so we don't render two stacked dialogs.
+   */
+  acceptGlobalCommands?: boolean;
 }) {
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
@@ -151,6 +162,18 @@ export function CoachAiLauncher({
   const contextBtnRef     = useRef<HTMLButtonElement>(null);
 
   const [windowPos, setWindowPos] = useState<WindowPos | null>(null);
+
+  // Programmatic-open state (driven by the `coach-cal:open` window event).
+  // For entitled users, the prompt is forwarded to the chat which auto-submits.
+  // For non-entitled users, we render a read-only preview chat with a tailored
+  // upsell — the chat input stays disabled and the only path forward is the
+  // trial CTA.
+  const [injectedPrompt, setInjectedPrompt] = useState<
+    { text: string; autoSubmit: boolean; key: number } | null
+  >(null);
+  const [previewState, setPreviewState] = useState<
+    { entryPoint: CoachCalEntryPointId; prompt: string; key: number } | null
+  >(null);
 
   const pathname = usePathname();
   const anchor   = usePlaybookAnchor();
@@ -199,6 +222,36 @@ export function CoachAiLauncher({
     hasRestored.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Subscribe to the global `coach-cal:open` event. Only the launcher with
+  // acceptGlobalCommands handles it, so mounting two launchers (global +
+  // mobile playbook header) doesn't produce duplicate dialogs.
+  useEffect(() => {
+    if (!acceptGlobalCommands) return;
+    function onOpen(e: CustomEvent<CoachCalOpenDetail>) {
+      const { entryPoint, prompt, key } = e.detail;
+      setOpen(true);
+      // Don't override panelMode — respect the user's saved preference
+      // (float vs docked) so opening from a CTA matches the way they've
+      // been working with Cal in this session.
+      if (entitled) {
+        setPreviewState(null);
+        setInjectedPrompt({ text: prompt, autoSubmit: true, key });
+      } else {
+        setInjectedPrompt(null);
+        setPreviewState({ entryPoint, prompt, key });
+      }
+    }
+    window.addEventListener("coach-cal:open", onOpen);
+    return () => window.removeEventListener("coach-cal:open", onOpen);
+  }, [acceptGlobalCommands, entitled]);
+
+  function closeDialog() {
+    setOpen(false);
+    setPanelMode("float");
+    setInjectedPrompt(null);
+    setPreviewState(null);
+  }
 
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",   adminMode ? "1" : "0"); }, [adminMode]);
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:window-size", size); },                  [size]);
@@ -250,7 +303,7 @@ export function CoachAiLauncher({
       if (e.key !== "Escape") return;
       if (contextOpen) { setContextOpen(false); return; }
       if (panelMode === "fullscreen" || panelMode === "docked") setPanelMode("float");
-      else setOpen(false);
+      else closeDialog();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -566,7 +619,7 @@ export function CoachAiLauncher({
         <>
           {/* Backdrop — fullscreen and mobile only */}
           <div
-            onClick={() => setOpen(false)}
+            onClick={closeDialog}
             className={cn(
               "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity",
               panelMode === "fullscreen" ? "block" : "block sm:hidden",
@@ -837,7 +890,7 @@ export function CoachAiLauncher({
 
                 <button
                   type="button"
-                  onClick={() => { setPanelMode("float"); setOpen(false); }}
+                  onClick={closeDialog}
                   className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
                   title="Close"
                 >
@@ -852,7 +905,19 @@ export function CoachAiLauncher({
               className="flex-1 min-h-0"
               style={{ fontSize: `${fontSize}px` }}
             >
-              <CoachAiChat playbookId={playbookId} playId={playId} mode={mode} />
+              {previewState ? (
+                <CoachAiPreviewChat
+                  entryPoint={previewState.entryPoint}
+                  prompt={previewState.prompt}
+                />
+              ) : (
+                <CoachAiChat
+                  playbookId={playbookId}
+                  playId={playId}
+                  mode={mode}
+                  injectedPrompt={injectedPrompt}
+                />
+              )}
             </div>
 
             {/* ── Resize handle (float mode, desktop only) ──────────────── */}

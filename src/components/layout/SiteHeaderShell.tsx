@@ -53,7 +53,11 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
         {user ? (
           <div className="flex items-center gap-2">
             {(coachAiAvailable || showCoachCalPromo) && (
-              <CoachAiLauncher isAdmin={isAdmin} entitled={coachAiAvailable ?? false} />
+              <CoachAiLauncher
+                isAdmin={isAdmin}
+                entitled={coachAiAvailable ?? false}
+                acceptGlobalCommands
+              />
             )}
             <ShareButton userId={user.id} />
             {/* Thin divider separates "things I can do" (Coach Cal,

@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-in-app-cta-notes",
+    name: "Generate notes with Coach Cal — one-click button on the play editor",
+    description:
+      "The play notes card now has a \"Generate notes with Coach Cal\" button next to Show/Hide. One click opens Coach Cal docked next to the play editor with a pre-written, auto-submitted prompt asking Cal to generate notes for that specific play — including when to call the play and the QB's reads/decisions. Cal asks any clarifying questions, proposes the notes, and writes them to the play (the editor refreshes in place). Non-Coach-Pro users see a tailored upsell preview chat showing what Cal would have done, with a 7-day free trial CTA — the input stays disabled so the only path forward is starting the trial. Implemented as a reusable foundation (openCoachCal helper + CoachCalCTA component + entry-point registry) so future entry points (generate plays, suggest counters, build practice plans) drop in with one config entry plus a button placement.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-archive-play",
     name: "Coach Cal can archive plays",
     description:

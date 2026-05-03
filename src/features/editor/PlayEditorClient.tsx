@@ -38,6 +38,7 @@ import {
   type MovePlayToGroupTarget,
 } from "@/features/playbooks/MovePlayToGroupDialog";
 import { TagsCard } from "./TagsCard";
+import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
@@ -1442,6 +1443,7 @@ function PlayEditorClientInner({
                 players={doc.layers.players}
                 routes={doc.layers.routes}
                 readOnly={!canEdit}
+                playName={doc.metadata.coachName}
                 onChange={(notes) =>
                   dispatch({ type: "document.setMetadata", patch: { notes } })
                 }
@@ -1505,6 +1507,7 @@ function PlayEditorClientInner({
                 players={doc.layers.players}
                 routes={doc.layers.routes}
                 readOnly={!canEdit}
+                playName={doc.metadata.coachName}
                 onChange={(notes) =>
                   dispatch({ type: "document.setMetadata", patch: { notes } })
                 }
@@ -1634,12 +1637,16 @@ function PlayNotesCard({
   routes,
   onChange,
   readOnly = false,
+  playName,
 }: {
   value: string;
   players: Player[];
   routes?: Route[];
   onChange: (next: string) => void;
   readOnly?: boolean;
+  /** Used by the "Generate notes with Coach Cal" CTA prompt. Falls back
+   *  to a placeholder if the play hasn't been named yet. */
+  playName?: string | null;
 }) {
   const [open, setOpen] = useState(value.length > 0);
   // Read-only viewers with no notes at all have nothing to show — collapse
@@ -1647,12 +1654,12 @@ function PlayNotesCard({
   if (readOnly && !value.trim()) return null;
   return (
     <div className="rounded-xl border border-border bg-surface-raised">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-      >
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
           <span className="text-sm font-semibold text-foreground">Play notes</span>
           {!open && value.trim() && (
             <span className="truncate text-xs text-muted">
@@ -1660,9 +1667,23 @@ function PlayNotesCard({
               {value.trim().length > 80 ? "…" : ""}
             </span>
           )}
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {!readOnly && (
+            <CoachCalCTA
+              entryPoint="play_notes_regenerate"
+              context={{ values: { playName: playName?.trim() || "this play" } }}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="text-xs text-muted hover:text-foreground"
+          >
+            {open ? "Hide" : "Show"}
+          </button>
         </div>
-        <span className="text-xs text-muted">{open ? "Hide" : "Show"}</span>
-      </button>
+      </div>
       {open && (
         <div className="border-t border-border px-4 py-3">
           {readOnly ? (
