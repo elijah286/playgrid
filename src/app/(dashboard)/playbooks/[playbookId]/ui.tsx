@@ -4480,7 +4480,7 @@ function FirstPlayHero({
             Draw your first play
           </Button>
           <span className="text-xs uppercase tracking-wide text-muted">or</span>
-          <CoachCalCTA entryPoint="playbook_generate_play" variant="primary" />
+          <CoachCalCTA entryPoint="playbook_generate_starter" variant="primary" />
         </div>
         <p className="mt-3 text-xs text-muted">Free — takes about a minute.</p>
       </div>

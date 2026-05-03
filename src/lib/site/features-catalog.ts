@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-in-app-cta-starter-playbook",
+    name: "Generate a starter playbook with Coach Cal",
+    description:
+      "On a brand-new playbook (zero plays), the first-play hero now offers \"Generate a starter playbook with Coach Cal\" alongside the manual \"Draw your first play\" CTA. Cal interviews the coach about team age, skill, and league rules, then proposes and adds a starter set of plays one at a time — narrating each call and waiting for confirmation before the next. Replaces the earlier single-play CTA on the same surface (which is still available via the formation picker for adding plays one at a time on established playbooks). Non-Coach-Pro users get the same tailored upsell preview.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-in-app-cta-suggest-counter",
     name: "Suggest a counter with Coach Cal — from any play",
     description:
