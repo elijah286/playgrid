@@ -965,6 +965,27 @@ const create_play: CoachAiTool = {
       // truth without re-deriving from the diagram.
       if (persistedSpec) newDoc.metadata.spec = persistedSpec;
 
+      // STRUCTURAL GUARANTEE: every spec-based play ships with notes from
+      // the first saved version. Coaches reported Cal creating plays in
+      // batch and skipping the per-play "ALWAYS write notes" prompt rule;
+      // a behavioral rule is too easy to miss. Project canonical notes
+      // from the spec deterministically here so a play is never noteless.
+      // Cal can still rephrase via update_play_notes afterwards if the
+      // canonical projection feels mechanical — but the play is born
+      // teach-ready. Legacy diagram-only creates (no spec) are the one
+      // case left where Cal must follow up — those should be rare.
+      if (persistedSpec) {
+        try {
+          const projected = projectSpecToNotes(persistedSpec);
+          if (projected.trim().length > 0) {
+            newDoc.metadata.notes = projected;
+          }
+        } catch {
+          // Don't block create on a notes-projection bug; the play still
+          // saves and Cal can call update_play_notes manually.
+        }
+      }
+
       const supabase = await createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { ok: false, error: "Not signed in." };
@@ -994,11 +1015,14 @@ const create_play: CoachAiTool = {
       const stripNote = strippedCount > 0
         ? ` (Dropped ${strippedCount} ${dropTeam === "D" ? "defender" : "offensive"} player(s) from the saved diagram — only ${playType === "offense" ? "offense" : playType === "defense" ? "defense" : "all sides"} is persisted on this play. Tell the coach if they want the opposing side saved as a reusable opponent overlay.)`
         : "";
+      const notesNote = persistedSpec
+        ? " Default notes were auto-generated from the spec (when-to-run + per-player jobs); call update_play_notes to rephrase or expand if you want to add coaching voice."
+        : " ⚠️ NO notes were auto-written (legacy diagram path, no spec). You MUST call update_play_notes for this play before ending the turn — every play needs notes.";
       return {
         ok: true,
         result:
           `Created play "${name}" in the current playbook. Tell the coach it's ready and link them: ` +
-          `[Open ${name}](${url}).${stripNote}` +
+          `[Open ${name}](${url}).${stripNote}${notesNote}` +
           summarizeConfidence(persistedSpec),
       };
     } catch (e) {
