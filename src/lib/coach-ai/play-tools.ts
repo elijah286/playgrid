@@ -2041,6 +2041,88 @@ const assign_plays_to_group: CoachAiTool = {
   },
 };
 
+const archive_play: CoachAiTool = {
+  def: {
+    name: "archive_play",
+    description:
+      "Archive one or more plays in the current playbook. Archived plays are " +
+      "hidden from the main playbook view and removed from rotation, but the " +
+      "underlying data is preserved (the coach can restore from the archive UI). " +
+      "Use this when the coach asks to archive, hide, retire, or shelve plays " +
+      "they no longer want active. NOT a delete — for permanent removal the " +
+      "coach must use the playbook UI directly. " +
+      "`play_refs` accepts an array of UUIDs, slot numbers (\"4\"), and/or " +
+      "exact play names — same resolution rules as get_play. Bulk on purpose: " +
+      "when archiving a group of legacy plays, batching avoids round trips. " +
+      "ALWAYS list the plays you intend to archive and wait for explicit " +
+      "coach confirmation before calling. Requires edit access. Will fail " +
+      "if the playbook has an active game session in progress.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_refs: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 100,
+          description:
+            "Array of play references — UUIDs, slot numbers (\"4\"), or exact names.",
+        },
+      },
+      required: ["play_refs"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+
+    const refs = Array.isArray(input.play_refs)
+      ? input.play_refs.filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+      : [];
+    if (refs.length === 0) return { ok: false, error: "play_refs must include at least one play." };
+
+    const resolvedPlays: Array<{ id: string; name: string; ref: string }> = [];
+    const failures: string[] = [];
+    for (const ref of refs) {
+      const r = await resolvePlayId(ref, ctx.playbookId);
+      if (r.ok) resolvedPlays.push({ id: r.id, name: r.name, ref });
+      else failures.push(`"${ref}": ${r.error}`);
+    }
+    if (resolvedPlays.length === 0) {
+      return {
+        ok: false,
+        error: `No play_refs resolved. Issues:\n- ${failures.join("\n- ")}`,
+      };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { archivePlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
+    const archived: string[] = [];
+    const errors: string[] = [];
+    for (const p of resolvedPlays) {
+      const res = await archivePlayAction(p.id, true);
+      if (res.ok) archived.push(`"${p.name}"`);
+      else errors.push(`"${p.name}": ${res.error}`);
+    }
+
+    const lines: string[] = [];
+    lines.push(
+      `Archived ${archived.length} play(s): ${archived.join(", ") || "(none)"}`,
+    );
+    if (failures.length > 0) {
+      lines.push(`Could not resolve ${failures.length} ref(s):\n- ${failures.join("\n- ")}`);
+    }
+    if (errors.length > 0) {
+      lines.push(`Failed to archive ${errors.length} play(s):\n- ${errors.join("\n- ")}`);
+    }
+    if (archived.length === 0) {
+      return { ok: false, error: lines.join("\n\n") };
+    }
+    return { ok: true, result: lines.join("\n\n") };
+  },
+};
+
 export const PLAY_TOOLS: CoachAiTool[] = [
   list_plays,
   get_play,
@@ -2056,4 +2138,5 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   rename_play_group,
   delete_play_group,
   assign_plays_to_group,
+  archive_play,
 ];

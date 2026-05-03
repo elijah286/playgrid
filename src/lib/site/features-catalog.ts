@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-archive-play",
+    name: "Coach Cal can archive plays",
+    description:
+      "An archive_play tool lets Cal hide plays from the active playbook in bulk. Coaches can say \"archive Snag, Dagger, and the legacy Bender play\" or \"archive these 8\" and Cal moves them out of rotation in one tool call — useful for retiring legacy plays before a rebuild, sidelining concepts that didn't work in scrimmage, or thinning a playbook before a tournament. Soft-delete by design: archived plays preserve their data and can be restored from the playbook UI. Edit-access gated and blocked while a game session is active so coaches can't accidentally archive a play mid-game.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-color-control",
     name: "Coach Cal token color control + no-clash gate",
     description:

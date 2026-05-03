@@ -2420,7 +2420,7 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
   if (ctx.playbookId) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PLAY_TOOLS } = require("./play-tools") as typeof import("./play-tools");
-    const writeNames = new Set(["update_play", "create_play", "rename_play", "update_play_notes"]);
+    const writeNames = new Set(["update_play", "create_play", "rename_play", "update_play_notes", "archive_play"]);
     const readTools = PLAY_TOOLS.filter((t) => !writeNames.has(t.def.name));
     tools.push(...readTools);
     // Reading the calendar is available to anyone with the playbook anchored.
