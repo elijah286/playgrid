@@ -433,9 +433,14 @@ function PlaybookDetailClientInner({
   // server state — no pre-hydration flash and no per-device drift. Search
   // query is intentionally ephemeral.
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"active" | "archived">(
-    initialPrefs?.view === "archived" ? "archived" : "active",
-  );
+  // Archive-view is intentionally NOT restored from saved prefs. Coaches
+  // almost always switch to "Archived" for a one-off "let me find that old
+  // play" task; persisting it across reloads creates the easy-to-miss
+  // failure mode where they come back later, see a near-empty list, and
+  // wonder where their plays went. Always boot in Active; the visible
+  // banner that appears when they toggle to Archived (below, near the play
+  // list) is the safety net while the filter is on.
+  const [view, setView] = useState<"active" | "archived">("active");
   const [typeFilter, setTypeFilter] = useState<PlayType | "all">(
     (initialPrefs?.typeFilter as PlayType | "all" | undefined) ?? "all",
   );
@@ -1571,6 +1576,33 @@ function PlaybookDetailClientInner({
             Showing the 2000 most-recent plays. Archive or delete older plays to see more.
           </p>
         )}
+        {/* Archived-only filter banner — loud, persistent, with a one-click
+            way back. Coaches who toggle to Archived for a one-off lookup
+            (the common case) need an obvious cue + reset; without it, the
+            archive view is easy to forget you're in. The banner wraps an
+            amber strip around the same Archive icon used in the filter
+            popover so the visual link to the filter is unmistakable. */}
+        {view === "archived" && (() => {
+          const activeCount = initialPlays.filter((p) => !p.is_archived).length;
+          const archivedCount = initialPlays.length - activeCount;
+          return (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
+              <Archive className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                Viewing <strong>archived plays only</strong> — {archivedCount}{" "}
+                archived, {activeCount} active{" "}
+                {activeCount === 1 ? "play" : "plays"} hidden.
+              </span>
+              <button
+                type="button"
+                onClick={() => setView("active")}
+                className="shrink-0 rounded-md bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950 ring-1 ring-amber-300 transition-colors hover:bg-amber-200"
+              >
+                Show active
+              </button>
+            </div>
+          );
+        })()}
         {/* Main area */}
         <div className="min-w-0">
       {filtered.length === 0 ? (
