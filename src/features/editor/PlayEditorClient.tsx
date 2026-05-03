@@ -33,6 +33,10 @@ import type {
 import { EditorHeaderBar } from "./EditorHeaderBar";
 import { ShareButton } from "@/components/share/ShareButton";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
+import {
+  MovePlayToGroupDialog,
+  type MovePlayToGroupTarget,
+} from "@/features/playbooks/MovePlayToGroupDialog";
 import { TagsCard } from "./TagsCard";
 import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
@@ -698,6 +702,22 @@ function PlayEditorClientInner({
     router.push(`/plays/${res.playId}/edit`);
   }, [blockIfPreview, playbookId, doc.sportProfile.variant, playbookSettings?.maxPlayers, router, toast]);
 
+  const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
+  const openMoveToGroup = useCallback(
+    (currentGroupId: string | null) => {
+      setMoveTarget({
+        playId,
+        playName: doc.metadata.coachName?.trim() || "Untitled play",
+        currentGroupId,
+      });
+    },
+    [playId, doc.metadata.coachName],
+  );
+  const currentGroupId = useMemo<string | null>(
+    () => initialNav.find((p) => p.id === playId)?.group_id ?? null,
+    [initialNav, playId],
+  );
+
   const archive = useCallback(
     async (archived: boolean) => {
       // Skip the read-only intercept when going from archived → active. The
@@ -1138,6 +1158,8 @@ function PlayEditorClientInner({
         onSaveAsNewFormation={saveAsNewFormation}
         onArchive={archive}
         onDelete={deletePlay}
+        onMoveToGroup={openMoveToGroup}
+        currentGroupId={currentGroupId}
         isArchived={isPlayArchived}
         allFormations={allFormations}
         canEdit={roleCanEdit}
@@ -1522,6 +1544,39 @@ function PlayEditorClientInner({
             )}
           </aside>
       </div>
+
+      <MovePlayToGroupDialog
+        target={moveTarget}
+        groups={initialNav.length > 0
+          ? // Build a unique, sort-ordered group list from the nav rows we
+            // already received. Each row has group_id + group_name when the
+            // play belongs to a group; aggregate into the canonical list
+            // without an extra fetch.
+            Array.from(
+              initialNav
+                .filter((p) => p.group_id && p.group_name)
+                .reduce((acc, p) => {
+                  if (p.group_id && !acc.has(p.group_id)) {
+                    acc.set(p.group_id, {
+                      id: p.group_id,
+                      name: p.group_name as string,
+                      sort_order: p.group_sort_order ?? 0,
+                    });
+                  }
+                  return acc;
+                }, new Map<string, { id: string; name: string; sort_order: number }>())
+                .values(),
+            ).sort((a, b) => a.sort_order - b.sort_order)
+          : []}
+        onClose={() => setMoveTarget(null)}
+        onMoved={() => {
+          // Refresh server data so the next list_plays / nav reflects the
+          // new group_id, and the editor's surrounding chrome updates.
+          router.refresh();
+          toast("Play moved.", "success");
+        }}
+        onError={(message) => toast(message, "error")}
+      />
 
       {copyTarget && (
         <CopyToPlaybookDialog

@@ -56,6 +56,7 @@ import {
   Copy,
   Crown,
   FileText,
+  FolderInput,
   Folders,
   Gamepad2,
   GripVertical,
@@ -94,6 +95,10 @@ import type { SavedFormation } from "@/app/actions/formations";
 import { PlaybookFormationsTab } from "./PlaybookFormationsTab";
 import { GameResultsPanel } from "@/features/game-results/GameResultsPanel";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
+import {
+  MovePlayToGroupDialog,
+  type MovePlayToGroupTarget,
+} from "@/features/playbooks/MovePlayToGroupDialog";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { PlaybookPracticePlansTab } from "@/features/practice-plans/PlaybookPracticePlansTab";
@@ -417,6 +422,7 @@ function PlaybookDetailClientInner({
   const { isPreview, isArchived, blockIfPreview } = useExamplePreview();
   const [pending, startTransition] = useTransition();
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
+  const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -1670,6 +1676,16 @@ function PlaybookDetailClientInner({
                   });
                 },
               },
+              {
+                label: "Move to group…",
+                icon: FolderInput,
+                onSelect: () =>
+                  setMoveTarget({
+                    playId: p.id,
+                    playName: p.name,
+                    currentGroupId: p.group_id ?? null,
+                  }),
+              },
               p.is_archived
                 ? {
                     label: "Restore",
@@ -2354,6 +2370,17 @@ function PlaybookDetailClientInner({
         open={trashOpen}
         onClose={() => setTrashOpen(false)}
         playbookId={playbookId}
+      />
+      <MovePlayToGroupDialog
+        target={moveTarget}
+        groups={initialGroups}
+        onClose={() => setMoveTarget(null)}
+        onMoved={() => {
+          // Server is source of truth — refresh so the card shows up in the
+          // new section and the play count per group updates.
+          router.refresh();
+        }}
+        onError={(message) => toast(message, "error")}
       />
       {copyTarget && (
         <CopyToPlaybookDialog

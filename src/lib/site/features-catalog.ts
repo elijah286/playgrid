@@ -382,6 +382,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-02",
   },
   {
+    id: "play-move-to-group-from-action-menu",
+    name: "Move a play between groups from the ⋮ menu",
+    description:
+      "Both the play card menu in the playbook list and the ⋮ menu in the play editor now have a \"Move to group…\" item. Clicking it opens a small picker dialog listing every group in the playbook with the play's current group highlighted, plus an \"Ungrouped\" option to remove it. Same dialog on both surfaces, so coaches learn the affordance once.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "play-edit-overflow-action-menu",
     name: "Unified per-play action menu on the play editor",
     description:

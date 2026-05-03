@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  FolderInput,
   History,
   LayoutGrid,
   Link2Off,
@@ -51,6 +52,12 @@ type Props = {
   onArchive?: (archived: boolean) => void;
   /** Soft-delete the play. Parent handles confirmation + redirect. */
   onDelete?: () => void;
+  /** Open the "Move to group" picker — parent owns the dialog so it can
+   *  invalidate / refresh playbook state after the move. The current
+   *  group's id (or null) is passed back so the dialog can highlight it. */
+  onMoveToGroup?: (currentGroupId: string | null) => void;
+  /** Current group id, surfaced so the menu can show the active group. */
+  currentGroupId?: string | null;
   /** Current archived state — drives whether the menu shows
    *  Archive vs Restore. */
   isArchived?: boolean;
@@ -85,6 +92,8 @@ export function EditorHeaderBar({
   onSaveAsNewFormation,
   onArchive,
   onDelete,
+  onMoveToGroup,
+  currentGroupId = null,
   isArchived = false,
   isPlayArchived = false,
   allFormations = [],
@@ -290,6 +299,13 @@ export function EditorHeaderBar({
                   { label: "Notify team", icon: Megaphone, onSelect: () => setNotifyOpen(true) },
                   { label: "View history", icon: History, onSelect: () => setHistoryOpen(true) },
                 ];
+                if (onMoveToGroup) {
+                  items.push({
+                    label: "Move to group…",
+                    icon: FolderInput,
+                    onSelect: () => onMoveToGroup(currentGroupId),
+                  });
+                }
                 if (onArchive) {
                   items.push(
                     isArchived
