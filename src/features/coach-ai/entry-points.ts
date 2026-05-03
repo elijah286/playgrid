@@ -12,7 +12,8 @@ export type CoachCalEntryPointId =
   | "playbook_generate_play"
   | "play_suggest_counter"
   | "playbook_generate_starter"
-  | "playbook_generate_practice_plan";
+  | "playbook_generate_practice_plan"
+  | "playbook_schedule_season";
 
 export type EntryPointContext = {
   /** Replacement values for ${name} tokens in the prompt template. */
@@ -118,6 +119,23 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ctaLabel: "Start 7-day free trial",
     },
     ctaLabel: "Generate a practice plan with Coach Cal",
+  },
+  playbook_schedule_season: {
+    id: "playbook_schedule_season",
+    promptTemplate:
+      "Help me schedule practices and games for the season. Ask me about my team's practice cadence (which days, what time, how long), our game schedule (opponents, dates, locations, kickoff times), and any holidays, blackouts, or key dates I need to plan around. Then propose a season-long calendar and add the events once I confirm.",
+    preview: {
+      leadIn:
+        "Coach Cal can lay out your whole season — recurring practices, game dates with opponents and locations, scrimmages, and tournament weekends — and add every event straight to your team calendar in one pass.",
+      capabilities: [
+        "Schedule practices and games for the whole season in one conversation",
+        "Build practice plans that install your playbook week by week",
+        "Generate plays tailored to your team's age, skill, and league rules",
+        "Suggest counters when a defense or offense is giving you trouble",
+      ],
+      ctaLabel: "Start 7-day free trial",
+    },
+    ctaLabel: "Schedule the season with Coach Cal",
   },
 };
 

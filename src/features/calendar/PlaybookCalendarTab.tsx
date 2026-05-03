@@ -28,6 +28,7 @@ import {
   type CalendarEventRow,
 } from "@/app/actions/calendar";
 import { SubscribeFeedModal } from "./SubscribeFeedModal";
+import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import { EventSheet, type EventSheetInitial } from "./EventSheet";
 import { EVENT_TYPE_META } from "./eventIcons";
 import { MonthGrid, ymd } from "./MonthGrid";
@@ -284,6 +285,9 @@ function PlaybookCalendarTabInner({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {viewerIsCoach && (
+            <CoachCalCTA entryPoint="playbook_schedule_season" />
+          )}
           <button
             type="button"
             onClick={() => setSubscribeOpen(true)}

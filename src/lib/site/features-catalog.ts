@@ -418,6 +418,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-in-app-cta-schedule-season",
+    name: "Schedule the season with Coach Cal — from the Calendar tab",
+    description:
+      "The Calendar tab now has a \"Schedule the season with Coach Cal\" CTA next to the Subscribe button (coach-only). One click opens Cal with a pre-written prompt that asks Cal to interview the coach about practice cadence (which days, what time, how long), the game schedule (opponents, dates, locations, kickoff times), and any holidays/blackouts. Cal then proposes a season-long calendar and adds the events via create_event once the coach confirms — saving the manual back-and-forth of typing 20+ events one at a time.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-in-app-cta-practice-plan",
     name: "Generate a practice plan with Coach Cal — from the Practice Plans tab",
     description:
