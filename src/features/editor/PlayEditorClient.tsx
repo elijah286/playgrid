@@ -234,6 +234,19 @@ function PlayEditorClientInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDocument]);
 
+  // Defense-in-depth refresh: when Coach Cal mutates a play, the chat
+  // already calls `router.refresh()` AND broadcasts a `coach-ai-mutated`
+  // window event. Listening here gives the editor a second hook so a
+  // missed refresh on the chat side (route-tree edge cases, mount
+  // mismatches) doesn't leave the diagram showing stale geometry.
+  useEffect(() => {
+    function onMutated() {
+      router.refresh();
+    }
+    window.addEventListener("coach-ai-mutated", onMutated);
+    return () => window.removeEventListener("coach-ai-mutated", onMutated);
+  }, [router]);
+
   // Bump a localStorage counter of distinct plays this user has opened. The
   // feedback widget gates itself on this to avoid showing for brand-new users.
   useEffect(() => {

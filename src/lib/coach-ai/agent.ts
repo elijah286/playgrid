@@ -771,6 +771,11 @@ export async function runAgent(
    *  Authoritative-tool-output rewriting closes the loop: Cal cannot
    *  corrupt the fence because Cal's fence is replaced. */
   let lastFenceFromTool: string | null = null;
+  /** Name of the tool that produced `lastFenceFromTool`. Used by the
+   *  end-of-turn auto-commit: only offense-side edit tools (revise_play,
+   *  compose_play, modify_play_route) are safe to auto-persist into the
+   *  anchored playId; defense overlays may target a different play. */
+  let lastFenceToolName: string | null = null;
   let lastPlaceDefense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let lastPlaceOffense: { players: Array<{ id: string; x: number; y: number }> } | null = null;
   let validatorRetried = false;
@@ -1020,7 +1025,10 @@ export async function runAgent(
       ]);
       if (r.ok && FENCE_PRODUCING_TOOLS.has(tu.name)) {
         const fenceMatch = /```play\s*\n([\s\S]*?)\n```/.exec(resultText);
-        if (fenceMatch) lastFenceFromTool = fenceMatch[1].trim();
+        if (fenceMatch) {
+          lastFenceFromTool = fenceMatch[1].trim();
+          lastFenceToolName = tu.name;
+        }
       }
       // Mark the run as mutating so the client refreshes surrounding UI.
       if (r.ok && MUTATING_TOOLS.has(tu.name)) mutated = true;
@@ -1164,6 +1172,52 @@ export async function runAgent(
       "\"now show the play vs <defense>\").";
     onEvent?.({ type: "text_delta", text: fallback });
     finalText = fallback;
+  }
+
+  // ── Auto-commit guard ────────────────────────────────────────────────
+  // When chat is anchored to a play and Cal ran an offense-side edit tool
+  // (revise_play / compose_play / modify_play_route) that produced a fence
+  // BUT didn't follow up with update_play, persist the fence ourselves.
+  // Without this, Cal can render "✅ Play Updated" + a new diagram in chat
+  // while the DB still holds the old version — the editor correctly shows
+  // the old state and the coach loses trust. We restrict to offense edits
+  // because defense overlays (compose_defense with on_play, add_defense_to_play,
+  // set_defender_assignment) target the DEFENSE play, not the anchored
+  // offense, and committing them here would write the overlay into the
+  // wrong row. create_play opens a new id and is also out of scope.
+  const AUTO_COMMIT_TOOLS = new Set([
+    "revise_play",
+    "compose_play",
+    "modify_play_route",
+  ]);
+  if (
+    ctx.playId &&
+    ctx.canEditPlaybook &&
+    lastFenceFromTool &&
+    lastFenceToolName &&
+    AUTO_COMMIT_TOOLS.has(lastFenceToolName) &&
+    !writeToolsCalledOk.includes("update_play") &&
+    !writeToolsCalledOk.includes("create_play")
+  ) {
+    try {
+      const parsed = JSON.parse(lastFenceFromTool) as Record<string, unknown>;
+      const commit = await runTool(
+        "update_play",
+        {
+          play_id: ctx.playId,
+          diagram: parsed,
+          note: `Auto-committed from ${lastFenceToolName}`,
+        },
+        ctx,
+      );
+      if (commit.ok) {
+        mutated = true;
+        toolCalls.push("update_play");
+      }
+    } catch {
+      // Fence wasn't valid JSON — leave the chat output alone and let the
+      // coach retry. We deliberately don't surface this to the LLM mid-turn.
+    }
   }
 
   return {

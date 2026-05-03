@@ -409,6 +409,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-anchored-edit-auto-commit",
+    name: "Coach Cal anchored-play edits commit reliably to the database",
+    description:
+      "When chat is opened from inside the play editor and Coach Cal makes an offense-side edit (revise_play, compose_play, modify_play_route), the agent now auto-commits the rendered fence to the anchored play if Cal didn't follow up with an explicit update_play call. Closes the silent-mismatch case where chat said \"✅ Play Updated\" but the database still held the old version, leaving the editor diagram stale. Defense overlays (compose_defense, set_defender_assignment) and create_play remain on their existing paths so the auto-commit never writes the wrong row. The play editor also now listens for Cal's mutation broadcast as a second refresh hook, so the diagram never lags behind chat even when the route tree's primary refresh hits an edge case.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-marketing-marquee-rewrite",
     name: "Coach Cal landing page + home teaser rewrite",
     description:
