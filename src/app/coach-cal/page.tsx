@@ -38,7 +38,7 @@ const OG_IMAGE = `${SITE_URL}/marketing/screens/hero-poster.png`;
 
 const PAGE_TITLE = "Coach Cal — AI Football Coach for Plays & Playbooks";
 const PAGE_DESCRIPTION =
-  "Coach Cal is an AI football coaching partner that generates plays, audits your playbook for weaknesses, plans practices, and answers coaching questions — built for youth, flag, 7v7, and tackle. Free for 7 days.";
+  "Coach Cal is an AI football coaching partner that generates plays and full playbooks, game-plans offense and defense, reviews last week's game, schedules your season, builds situational call sheets, and writes QB reads — built for youth, flag, 7v7, and tackle. Free for 7 days.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -56,6 +56,13 @@ export const metadata: Metadata = {
     "football coaching app AI",
     "AI practice plan",
     "playbook review AI",
+    "AI defensive coordinator",
+    "AI football defensive playbook",
+    "AI game review football",
+    "AI football schedule generator",
+    "red zone playbook AI",
+    "AI QB reads",
+    "AI football coaching notes",
   ],
   alternates: { canonical: PAGE_URL },
   openGraph: {
@@ -126,10 +133,15 @@ const STRUCTURED_DATA = [
     },
     featureList: [
       "AI play generation",
-      "AI playbook review and weakness audit",
-      "Strategy feedback vs. specific defenses",
+      "AI full-playbook generation",
+      "Offensive game-planning vs. specific defenses",
+      "Defensive game-planning vs. specific offenses",
+      "Post-game review and weekly playbook adjustments",
+      "Season-wide schedule generation (practices, games, RSVPs)",
+      "Playbook review for skill level and league fit",
+      "Situational play recommendations (red zone, 3rd-and-short, opening drive)",
+      "QB read and per-position coaching note generation",
       "Practice plan generation",
-      "Bulk formation edits",
       "Age-tier-aware coaching answers (8u flag through high school)",
       "Variant-aware (5v5 flag, 7v7, 11-man tackle)",
     ],
@@ -203,10 +215,11 @@ function Hero() {
             <span style={{ color: BRAND_GREEN }}>.</span>
           </h1>
           <p className="mt-6 max-w-xl text-lg text-foreground/80">
-            An AI football coaching partner that generates plays, audits your
-            playbook for weaknesses, plans practices, and answers the
-            questions you'd otherwise text another coach about. Built for
-            youth, flag, 7v7, and tackle — and free to try for 7 days.
+            The AI coaching partner that game-plans your offense{" "}
+            <em>and</em> defense, generates plays and full playbooks, reviews
+            last week&rsquo;s game, schedules your season, and writes the QB
+            reads you don&rsquo;t have time to. Built for youth, flag, 7v7,
+            and tackle — free to try for 7 days.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -242,19 +255,19 @@ function Hero() {
             <div className="mt-4 space-y-4 text-sm">
               <ChatBubble
                 role="user"
-                text="We don't have anything to beat Cover 3 from Trips Right. Add one."
+                text="We lost 28-6 last Saturday. They killed us with deep balls vs Cover 2."
               />
               <ChatBubble
                 role="cal"
-                text="Added “Trips Right Sail” — a 3-level flood concept that floods the boundary side: corner from the X, deep dig from the slot, flat from the H. Beats both Cover 3 and Cover 1 with rotation. Saved to your playbook."
+                text="Three plays in your book are vulnerable here — Slant-Flat, Stick, and Y-Stick all stay short on the third level. Want me to add a Smash and a Deep Over to attack the seam?"
               />
               <ChatBubble
                 role="user"
-                text="Now build a 60-min practice around it for 8u."
+                text="Yes. Then queue them in next practice."
               />
               <ChatBubble
                 role="cal"
-                text="Done. Skill block: route stems & catch. Group block: vs. air → vs. shell. Team block: 12 reps with 4 reads. Saved as Practice Plan #4."
+                text="Added both. Built Tuesday's practice around them — install block, vs. Cover 2 walkthrough, 12 team reps. Saved as Practice Plan #5."
               />
             </div>
           </div>
@@ -302,32 +315,50 @@ function Capabilities() {
     {
       icon: ClipboardList,
       color: BRAND_ORANGE,
-      title: "Draft a starter playbook",
+      title: "Build a complete playbook",
       body: "Tell Coach Cal your variant, age tier, and scheme philosophy. It builds a complete playbook — concepts, formations, tags — that you can refine instead of starting from a blank page.",
-    },
-    {
-      icon: Search,
-      color: BRAND_GREEN,
-      title: "Audit your playbook for weaknesses",
-      body: "“Look at my playbook and tell me what's missing.” Coach Cal flags gaps like “no counter to Cover 3,” “two short-yardage plays attacking the same gap,” or “no underneath option from this formation.”",
     },
     {
       icon: Target,
       color: BRAND_BLUE,
-      title: "Strategy vs. specific defenses",
-      body: "Paste a defense — or upload an opponent snapshot — and ask how to attack it. Coach Cal proposes specific plays from your playbook, with reads and adjustments.",
+      title: "Beat any defense",
+      body: "Tell Cal what front you're seeing — Cover 2, 5-2, Tampa-2 — and it proposes plays from your playbook with reads, motions, and adjustments. Drops in counters when your book is missing one.",
+    },
+    {
+      icon: ShieldCheck,
+      color: BRAND_GREEN,
+      title: "Defend any offense",
+      body: "Heavy-run team? Spread with a mobile QB? Coach Cal recommends a coverage shell, blitz package, and run fits — and explains the why so you can teach it on Tuesday.",
+    },
+    {
+      icon: Search,
+      color: BRAND_GREEN,
+      title: "Post-game review",
+      body: "Tell Cal what happened. It surfaces which plays bled yards, suggests playbook changes targeted at what beat you, and queues the new install in next practice.",
     },
     {
       icon: CalendarCheck,
       color: BRAND_ORANGE,
-      title: "Practice plans on demand",
-      body: "Generate a full practice plan with timed blocks, parallel skill / line / specialist activities, drill suggestions tied to your plays, and equipment lists. Saved as a Practice Plan inside your playbook.",
+      title: "Season scheduling in one prompt",
+      body: "“Two practices a week, Saturday games starting Sept 6.” Coach Cal builds the whole schedule, sends RSVPs, and reminds the roster — no per-event clicking.",
+    },
+    {
+      icon: Brain,
+      color: BRAND_BLUE,
+      title: "Playbook review for your level",
+      body: "Coach Cal reads every play and tells you what's too advanced for 8u, what's missing for a Cover-3 league, and which concept to install first so the rest build on it.",
     },
     {
       icon: Layers,
+      color: BRAND_ORANGE,
+      title: "Situational call sheets",
+      body: "Red zone? 3rd-and-short? Opening drive? Coach Cal builds the call sheet — concept, formation, and a backup if the look on the field changes.",
+    },
+    {
+      icon: BookOpen,
       color: BRAND_GREEN,
-      title: "Bulk edits across your playbook",
-      body: "“Convert every Trips formation to Empty.” “Tag every motion play.” “Re-color the slot routes blue.” Coach Cal applies sweeping changes in seconds without you clicking through every play.",
+      title: "QB reads & coaching notes",
+      body: "On any play, ask Coach Cal to write the QB progression, hot read, and per-position coaching points. Saves an hour of typing per playbook — and your wristbands print with the notes baked in.",
     },
   ];
   return (
@@ -583,21 +614,42 @@ function Pricing() {
                 className="mt-0.5 size-4 shrink-0"
                 style={{ color: BRAND_BLUE }}
               />
-              Generate plays and full playbooks with AI
+              Generate plays and full playbooks
             </li>
             <li className="flex gap-2">
               <Target
                 className="mt-0.5 size-4 shrink-0"
                 style={{ color: BRAND_BLUE }}
               />
-              Strategy feedback vs. specific defenses
+              Offensive <em>and</em> defensive game-planning vs. any scheme
+            </li>
+            <li className="flex gap-2">
+              <Search
+                className="mt-0.5 size-4 shrink-0"
+                style={{ color: BRAND_BLUE }}
+              />
+              Post-game review and weekly playbook adjustments
+            </li>
+            <li className="flex gap-2">
+              <CalendarCheck
+                className="mt-0.5 size-4 shrink-0"
+                style={{ color: BRAND_BLUE }}
+              />
+              Season scheduling — practices, games, RSVPs
             </li>
             <li className="flex gap-2">
               <Layers
                 className="mt-0.5 size-4 shrink-0"
                 style={{ color: BRAND_BLUE }}
               />
-              Bulk formation edits across your playbook
+              Situational call sheets (red zone, 3rd-and-short, opening drive)
+            </li>
+            <li className="flex gap-2">
+              <BookOpen
+                className="mt-0.5 size-4 shrink-0"
+                style={{ color: BRAND_BLUE }}
+              />
+              QB reads and per-position coaching notes written for you
             </li>
           </ul>
           <p className="mt-5 text-xs text-muted">

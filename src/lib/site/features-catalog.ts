@@ -391,6 +391,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-marketing-marquee-rewrite",
+    name: "Coach Cal landing page + home teaser rewrite",
+    description:
+      "The /coach-cal landing page and the home-page Coach Cal teaser now showcase Cal's full capability surface. Hero subhead leads with both directions of game-planning (offense and defense), post-game review, season scheduling, and QB-read generation — instead of the prior generate/audit/practice-plans triad. The capabilities grid expanded from 6 to 9 cards (Generate plays, Build a playbook, Beat any defense, Defend any offense, Post-game review, Season scheduling, Playbook review for level, Situational call sheets, QB reads & coaching notes). Pricing tier card now lists 8 specific bullets instead of 5 generic ones. Hero demo chat (and the home teaser's matching chat) swapped to a 4-bubble post-game-review scenario that traverses 3 capabilities (review → playbook adjustment → practice scheduling) — replacing the previous compose-play → compose-practice example that only showed one species of work. SEO description, keywords, and JSON-LD featureList updated to surface the previously-missing capabilities for ranking on \"AI defensive coordinator,\" \"AI game review football,\" \"AI football schedule generator,\" and similar high-intent queries.",
+    category: "Marketing site",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-out-of-beta",
     name: "Coach Cal generally available (no beta gate)",
     description:

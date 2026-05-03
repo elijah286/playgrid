@@ -120,10 +120,11 @@ export function CoachCalTeaser() {
               <span style={{ color: BRAND_GREEN }}>.</span>
             </h2>
             <p className="mt-5 max-w-xl text-lg text-muted">
-              An AI football coaching partner that generates plays, audits your
-              playbook for weaknesses, plans practices, and answers the
-              questions you&apos;d otherwise text another coach about. Built
-              for youth, flag, 7v7, and tackle.
+              The AI coaching partner that game-plans your offense{" "}
+              <em>and</em> defense, generates plays and full playbooks, reviews
+              last week&apos;s game, schedules your season, and writes the QB
+              reads you don&apos;t have time to. Built for youth, flag, 7v7,
+              and tackle.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Link
@@ -158,19 +159,19 @@ export function CoachCalTeaser() {
               <div className="mt-4 space-y-4 text-sm">
                 <ChatBubble
                   role="user"
-                  text="We don't have anything to beat Cover 3 from Trips Right. Add one."
+                  text="We lost 28-6 last Saturday. They killed us with deep balls vs Cover 2."
                 />
                 <ChatBubble
                   role="cal"
-                  text="Added “Trips Right Sail” — a 3-level flood concept. Beats both Cover 3 and Cover 1 with rotation. Saved to your playbook."
+                  text="Three plays in your book are vulnerable here. Want me to add a Smash and a Deep Over to attack the seam?"
                 />
                 <ChatBubble
                   role="user"
-                  text="Now build a 60-min practice around it for 8u."
+                  text="Yes. Then queue them in next practice."
                 />
                 <ChatBubble
                   role="cal"
-                  text="Done. Skill block, group block, team block — 12 reps with 4 reads. Saved as Practice Plan #4."
+                  text="Added both. Built Tuesday's practice around them — install block, vs. Cover 2 walkthrough, 12 team reps. Saved as Practice Plan #5."
                 />
               </div>
             </div>
