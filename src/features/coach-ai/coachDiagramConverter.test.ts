@@ -24,9 +24,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
+import {
+  coachDiagramToPlayDocument,
+  derivedColorGroupForLabel,
+  PLAYBOOK_PALETTE,
+  type CoachDiagram,
+} from "./coachDiagramConverter";
 
-function diagram(players: Array<{ id: string; x: number; y: number; team?: "O" | "D" }>): CoachDiagram {
+function diagram(players: Array<{ id: string; x: number; y: number; team?: "O" | "D"; color?: string }>): CoachDiagram {
   return {
     title: "Test",
     variant: "tackle_11",
@@ -219,6 +224,95 @@ describe("player color routing — suffixed labels match base color", () => {
       { id: "H2", x: 5, y: 0 },
     ]));
     expect(doc.layers.players.find((p) => p.label === "H2")).toBeDefined();
+  });
+});
+
+describe("derivedColorGroupForLabel — semantic groups", () => {
+  // The chat-time validator's no-shared-color gate consumes this
+  // helper. Pin the mapping so a tweak to the renderer's color
+  // routing also forces a deliberate update here.
+  it("maps standard receivers to their canonical groups", () => {
+    expect(derivedColorGroupForLabel("X")).toBe("X");
+    expect(derivedColorGroupForLabel("Y")).toBe("Y");
+    expect(derivedColorGroupForLabel("Z")).toBe("Z");
+    expect(derivedColorGroupForLabel("F")).toBe("F");
+    expect(derivedColorGroupForLabel("S")).toBe("S");
+  });
+
+  it("collapses H, B, RB, and digit-suffixed variants into the H group (the orange clash source)", () => {
+    expect(derivedColorGroupForLabel("H")).toBe("H");
+    expect(derivedColorGroupForLabel("B")).toBe("H");
+    expect(derivedColorGroupForLabel("H2")).toBe("H");
+    expect(derivedColorGroupForLabel("B2")).toBe("H");
+    expect(derivedColorGroupForLabel("RB")).toBe("H");
+  });
+
+  it("treats QB, C, and linemen as their own exempt groups", () => {
+    expect(derivedColorGroupForLabel("QB")).toBe("QB");
+    expect(derivedColorGroupForLabel("Q")).toBe("QB");
+    expect(derivedColorGroupForLabel("C")).toBe("C");
+    expect(derivedColorGroupForLabel("LT")).toBe("LINEMAN");
+    expect(derivedColorGroupForLabel("RG")).toBe("LINEMAN");
+  });
+
+  it("falls back to ROTATION for genuinely unknown labels", () => {
+    expect(derivedColorGroupForLabel("XYZ")).toBe("ROTATION");
+    expect(derivedColorGroupForLabel("WR1")).toBe("ROTATION");
+  });
+});
+
+describe("explicit color override — honored on either side of the diagram", () => {
+  // The override gate used to require isFocus === true (offense on an
+  // offense-focused diagram). Loosened 2026-05-03 so coaches can
+  // recolor any token via Cal's set_player_color mod — including
+  // defenders on an offense-focused play.
+  it("offense token honors player.color when offense-focused", () => {
+    const doc = coachDiagramToPlayDocument({
+      title: "Test",
+      variant: "tackle_11",
+      focus: "O",
+      players: [
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "QB", x: 0, y: -5, team: "O" },
+        { id: "H", x: 5, y: 0, team: "O", color: PLAYBOOK_PALETTE.purple },
+      ],
+      routes: [],
+    });
+    const h = doc.layers.players.find((p) => p.label === "H");
+    expect(h?.style.fill).toBe("#A855F7");
+  });
+
+  it("defender token now honors player.color on an offense-focused diagram (was: ignored)", () => {
+    const doc = coachDiagramToPlayDocument({
+      title: "Test",
+      variant: "tackle_11",
+      focus: "O",
+      players: [
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "QB", x: 0, y: -5, team: "O" },
+        { id: "M", x: 0, y: 4, team: "D", color: PLAYBOOK_PALETTE.green },
+      ],
+      routes: [],
+    });
+    const m = doc.layers.players.find((p) => p.label === "M");
+    expect(m?.style.fill).toBe("#22C55E");
+  });
+
+  it("non-overridden non-focus players keep the muted gray default", () => {
+    const doc = coachDiagramToPlayDocument({
+      title: "Test",
+      variant: "tackle_11",
+      focus: "O",
+      players: [
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "QB", x: 0, y: -5, team: "O" },
+        { id: "M", x: 0, y: 4, team: "D" },
+      ],
+      routes: [],
+    });
+    const m = doc.layers.players.find((p) => p.label === "M");
+    // STYLE_NON_FOCUS = #CBD5E1 — muted gray for non-focus side default.
+    expect(m?.style.fill).toBe("#CBD5E1");
   });
 });
 

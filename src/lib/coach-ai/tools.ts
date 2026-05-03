@@ -640,8 +640,8 @@ const modify_play_route: CoachAiTool = {
   def: {
     name: "modify_play_route",
     description:
-      "Surgically modify ONE route on an existing play diagram while preserving everything else (all other players, all other routes, formation, zones, defense). Use this for ANY single-route change — depth, family, lateral side, modifier — instead of re-authoring the diagram. " +
-      "Inputs: the prior play fence JSON (copied verbatim from the chat), the player whose route is changing, and ONE OR MORE of: set_family (swap to a different catalog route), set_depth_yds (adjust the route's depth), set_direction (force lateral side — use for backfield carriers whose flat/swing should go to a specific side regardless of starting x), or set_non_canonical (allow off-catalog depth per coach intent). " +
+      "Surgically modify ONE player on an existing play diagram while preserving everything else (all other players, all other routes, formation, zones, defense). Use this for ANY single-player change — route depth, family, lateral side, modifier, OR token color — instead of re-authoring the diagram. " +
+      "Inputs: the prior play fence JSON (copied verbatim from the chat), the player whose entry is changing, and ONE OR MORE of: set_family (swap to a different catalog route), set_depth_yds (adjust the route's depth), set_direction (force lateral side — use for backfield carriers whose flat/swing should go to a specific side regardless of starting x), set_non_canonical (allow off-catalog depth per coach intent), or set_player_color (recolor the player's token — palette name like 'purple' or 'green'). " +
       "Returns the FULL updated play fence JSON ready to drop verbatim into the chat reply. The renderer-validated geometry replaces only the targeted route; nothing else changes. " +
       "**CONCEPT FIDELITY — preserve the spirit of the play.** When the play is a named catalog concept (Mesh, Smash, Curl-Flat, Stick, Snag, Flood/Sail, Drive, Levels, Y-Cross, Dagger, Four Verticals), pick the smallest change that keeps the concept name truthful. Mesh = two crossing drags at differentiated depths — \"make a mesh route deeper\" means deepen ONE drag (e.g. set_depth_yds: 6 on the over-drag), NOT swap a drag for a dig. Smash = hitch + corner — \"deepen the smash\" means tweak the corner depth, not turn the hitch into a curl. If the coach's request would BREAK the concept (e.g. \"replace the drag with a 20yd dig\" on a Mesh play), apply the literal change but the chat-time validator will reject it under assertConcept — better to push back: \"that would turn this into a Drive concept; want me to rebuild it as Drive, or keep it Mesh and deepen the over-drag instead?\". The point of the surgical tool is preserving the play's identity, not just its players[] array.",
     input_schema: {
@@ -678,6 +678,12 @@ const modify_play_route: CoachAiTool = {
           description:
             "Optional: set the nonCanonical flag on the route, bypassing the catalog depth-range validator. Use ONLY when the coach explicitly requested an unusual depth.",
         },
+        set_player_color: {
+          type: "string",
+          enum: ["red", "orange", "yellow", "green", "blue", "purple", "black", "white", "gray"],
+          description:
+            "Optional: recolor this player's token to the named palette color. Identity-preserving (no position change). Works on any player, route or no route. Use when the coach asks for a recolor ('make @H purple', 'change the slot to green').",
+        },
       },
       required: ["prior_play_fence", "player"],
       additionalProperties: false,
@@ -706,14 +712,16 @@ const modify_play_route: CoachAiTool = {
     const setDirection = input.set_direction === "left" || input.set_direction === "right"
       ? input.set_direction
       : undefined;
+    const setPlayerColor = typeof input.set_player_color === "string" ? input.set_player_color : undefined;
 
     if (
       setFamily === undefined &&
       setDepth === undefined &&
       setNonCanonical === undefined &&
-      setDirection === undefined
+      setDirection === undefined &&
+      setPlayerColor === undefined
     ) {
-      return { ok: false, error: "At least one of set_family / set_depth_yds / set_direction / set_non_canonical must be provided." };
+      return { ok: false, error: "At least one of set_family / set_depth_yds / set_direction / set_non_canonical / set_player_color must be provided." };
     }
 
     const mod: RouteMod = { player };
@@ -721,6 +729,7 @@ const modify_play_route: CoachAiTool = {
     if (setDepth !== undefined) mod.set_depth_yds = setDepth;
     if (setNonCanonical !== undefined) mod.set_non_canonical = setNonCanonical;
     if (setDirection !== undefined) mod.set_direction = setDirection;
+    if (setPlayerColor !== undefined) mod.set_player_color = setPlayerColor as RouteMod["set_player_color"];
 
     const r = applyRouteMods(priorJson, [mod]);
     if (!r.ok) {
@@ -733,6 +742,7 @@ const modify_play_route: CoachAiTool = {
     if (setDepth !== undefined) changeSummary.push(`depth → ${setDepth} yds`);
     if (setDirection !== undefined) changeSummary.push(`direction → ${setDirection}`);
     if (setNonCanonical !== undefined) changeSummary.push(`nonCanonical → ${setNonCanonical}`);
+    if (setPlayerColor !== undefined) changeSummary.push(`color → ${setPlayerColor}`);
 
     return {
       ok: true,
@@ -999,12 +1009,13 @@ const revise_play: CoachAiTool = {
   def: {
     name: "revise_play",
     description:
-      "Apply a batch of intent-level route mods to an existing play diagram while PRESERVING every player position, ID, and team byte-for-byte. Use this for ANY edit to a play that already exists in the chat — single-route changes ('make the drag deeper'), multi-route changes ('change @Z to a Post AND deepen @X to 12 yards'), and concept-faithful tweaks (deepening one of two mesh drags, swapping a curl for a hitch in a curl-flat). " +
+      "Apply a batch of intent-level route mods to an existing play diagram while PRESERVING every player position, ID, and team byte-for-byte. Use this for ANY edit to a play that already exists in the chat — single-route changes ('make the drag deeper'), multi-route changes ('change @Z to a Post AND deepen @X to 12 yards'), concept-faithful tweaks (deepening one of two mesh drags), AND token recoloring ('make @H purple', 'change the slot to green'). " +
       "Inputs: " +
       "(1) `prior_play_fence` — the previous diagram JSON, copied verbatim from the chat. " +
-      "(2) `mods` — array of route changes; each item: { player, set_family?, set_depth_yds?, set_non_canonical? }. " +
+      "(2) `mods` — array of route changes; each item: { player, set_family?, set_depth_yds?, set_non_canonical?, set_direction?, set_player_color? }. " +
       "Returns: a SANITIZED full fence with the requested changes applied. The tool REJECTS any mod that would change player IDs, positions, or team — those edits go through different paths (place_offense for formation changes; the user explicitly asking for a 'new play'). " +
-      "**CONCEPT FIDELITY**: when the play is a named catalog concept (Mesh, Smash, etc.), pick mods that keep the concept truthful. Mesh = two crossing drags at differentiated depths — 'make a mesh route deeper' means deepen ONE drag (e.g. set_depth_yds: 6 on the over-drag), NOT swap a drag for a dig. The chat-time validator catches concept-breaking mods via assertConcept; better to push back than ship a mod that fails.",
+      "**CONCEPT FIDELITY**: when the play is a named catalog concept (Mesh, Smash, etc.), pick mods that keep the concept truthful. Mesh = two crossing drags at differentiated depths — 'make a mesh route deeper' means deepen ONE drag (e.g. set_depth_yds: 6 on the over-drag), NOT swap a drag for a dig. The chat-time validator catches concept-breaking mods via assertConcept; better to push back than ship a mod that fails. " +
+      "**RECOLORING**: when the coach asks to change a player's color, pass `set_player_color` with one of the palette names (red/orange/yellow/green/blue/purple/black/white/gray). Color mods are identity-preserving — they DO NOT require an existing route, so they work on defenders or any player without a route. Combine with route mods on the same player in a single mod entry (e.g. `{ player: 'H', set_depth_yds: 8, set_player_color: 'purple' }`).",
     input_schema: {
       type: "object",
       properties: {
@@ -1014,7 +1025,7 @@ const revise_play: CoachAiTool = {
         },
         mods: {
           type: "array",
-          description: "Array of intent-level route mods. Each item: { player: 'X', set_family?: 'Post', set_depth_yds?: 12, set_non_canonical?: true }. Multiple mods apply atomically — if any one is invalid, the whole batch rejects.",
+          description: "Array of intent-level mods. Each item: { player: 'X', set_family?: 'Post', set_depth_yds?: 12, set_non_canonical?: true, set_player_color?: 'purple' }. Multiple mods apply atomically — if any one is invalid, the whole batch rejects.",
           items: {
             type: "object",
             properties: {
@@ -1023,6 +1034,11 @@ const revise_play: CoachAiTool = {
               set_depth_yds: { type: "number" },
               set_non_canonical: { type: "boolean" },
               set_direction: { type: "string", enum: ["left", "right"], description: "Force the route's lateral direction (left/right). Use for backfield carriers (RB) whose flat/swing should go to a specific side regardless of starting x — e.g. an RB flat to the flood side." },
+              set_player_color: {
+                type: "string",
+                enum: ["red", "orange", "yellow", "green", "blue", "purple", "black", "white", "gray"],
+                description: "Recolor the player's token to a palette color. Use when the coach explicitly asks ('make @H purple', 'change the slot to green'). The mod is identity-preserving (no position change) and works on any player — defender or offense, with or without a route. Prefer this over hand-editing the fence's player.color field.",
+              },
             },
             required: ["player"],
             additionalProperties: false,

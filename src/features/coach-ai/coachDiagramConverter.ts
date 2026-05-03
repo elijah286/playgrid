@@ -279,6 +279,69 @@ const LINEMAN_LABELS = new Set([
   "LT1", "LG1", "RG1", "RT1",
 ]);
 
+// ── Derived-color exports for the chat-time validator + revise_play ──────
+//
+// The validator needs to detect "two players sharing the same auto-derived
+// color" without re-implementing the position→color mapping. The
+// `set_player_color` mod needs a fixed palette enum so Cal can't invent
+// invalid hex codes. Both paths share these exports.
+
+/** The semantic color group a player's label maps to. Two skill-position
+ *  players in the SAME group render in the same hue — a readability bug. */
+export type DerivedColorGroup =
+  | "X" | "Y" | "Z" | "S" | "H" | "F"
+  | "QB" | "C" | "LINEMAN" | "ROTATION";
+
+/** Canonical playbook palette — names a coach can reason about, mapped
+ *  to the same hex codes the position-derived styles use. The
+ *  `set_player_color` mod and validator messages reference these names. */
+export const PLAYBOOK_PALETTE = {
+  red:    "#EF4444",
+  orange: "#F26522",
+  yellow: "#FACC15",
+  green:  "#22C55E",
+  blue:   "#3B82F6",
+  purple: "#A855F7",
+  black:  "#1C1C1E",
+  white:  "#FFFFFF",
+  gray:   "#94A3B8",
+} as const;
+
+export type PaletteName = keyof typeof PLAYBOOK_PALETTE;
+export const PALETTE_NAMES: PaletteName[] = Object.keys(PLAYBOOK_PALETTE) as PaletteName[];
+
+/** Map a raw label (and optional role) to its derived color group. The
+ *  branches mirror the offense styling switch in coachDiagramToPlayDocument
+ *  so the validator's rejection criteria match the renderer's coloring
+ *  EXACTLY — change them in lockstep. */
+export function derivedColorGroupForLabel(rawLabel: string, role?: string): DerivedColorGroup {
+  const upper = (rawLabel ?? "").toUpperCase();
+  if (upper === "QB" || upper === "Q" || role === "QB") return "QB";
+  if (upper === "C" || role === "C") return "C";
+  if (LINEMAN_LABELS.has(upper)) return "LINEMAN";
+  const base = upper.replace(/\d+$/, "");
+  if (base === "X") return "X";
+  if (base === "Y" || base === "TE" || role === "TE") return "Y";
+  if (base === "Z") return "Z";
+  if (base === "S" || base === "A") return "S";
+  if (base === "F") return "F";
+  if (base === "H" || base === "B" || base === "RB" || role === "RB") return "H";
+  return "ROTATION";
+}
+
+/** The hex the auto-renderer produces for each skill-position group.
+ *  Used by the validator's error message ("@H + @B both render orange"). */
+export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "LINEMAN">, string> = {
+  X:  "#EF4444",
+  Y:  "#22C55E",
+  Z:  "#3B82F6",
+  S:  "#FACC15",
+  H:  "#F26522",
+  F:  "#A855F7",
+  QB: "#FFFFFF",
+  C:  "#1C1C1E",
+};
+
 // Default zone style — matches `mkZone`, which is what coaches get
 // when they drop a zone via the editor's rect/ellipse tools. Used as a
 // fallback when no `ownerLabel` is supplied (e.g. user hand-drawn
@@ -660,9 +723,14 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
       if (!isFocus) style = STYLE_NON_FOCUS;
     }
 
-    // Only honor the model's explicit `color` override on the focus side —
-    // non-focus side stays muted regardless of what the model emitted.
-    if (dp.color && isFocus) style = { ...style, fill: dp.color };
+    // Honor the model's explicit `color` override on EITHER side. The
+    // override is the escape hatch for coach-driven recoloring (Cal's
+    // `set_player_color` revise mod, or a hand-authored fence): when a
+    // coach asks "make @H purple", we want that to land on the offense
+    // token whether the diagram is offense-focused or defense-focused.
+    // Non-focus default styling (STYLE_NON_FOCUS) still applies when no
+    // explicit color is set — only the override path crosses the gate.
+    if (dp.color) style = { ...style, fill: dp.color };
 
     const player: Player = {
       id:       uid(),

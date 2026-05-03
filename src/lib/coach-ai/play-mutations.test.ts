@@ -235,3 +235,63 @@ describe("applyRouteMods — sanitizer integration", () => {
     expect(r.fence.zones).toHaveLength(0);
   });
 });
+
+describe("applyRouteMod — set_player_color", () => {
+  it("recolors a player without an existing route (defender path)", () => {
+    // Defender has no route — color-only mod must still apply.
+    const f = fence([], [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "X", x: -13, y: 0, team: "O" },
+      { id: "M", x: 0, y: 4, team: "D" },
+    ]);
+    const r = applyRouteMod(f, { player: "M", set_player_color: "purple" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const m = (r.fence.players as Array<{ id: string; color?: string }>).find((p) => p.id === "M");
+    expect(m?.color).toBe("#A855F7");
+  });
+
+  it("recolors a player while also editing their route", () => {
+    const f = fence([
+      { from: "H", path: [[-10, 8]], route_kind: "Slant" },
+    ]);
+    const r = applyRouteMod(f, { player: "H", set_depth_yds: 5, set_player_color: "purple", set_family: "Slant" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const h = (r.fence.players as Array<{ id: string; color?: string }>).find((p) => p.id === "H");
+    expect(h?.color).toBe("#A855F7");
+    const route = (r.fence.routes as Array<{ from: string; path: [number, number][] }>)[0];
+    expect(route.from).toBe("H");
+    expect(route.path.length).toBeGreaterThan(0);
+  });
+
+  it("rejects an invalid palette name", () => {
+    const f = fence([{ from: "X", path: [[-13, 5]], route_kind: "Slant" }]);
+    const r = applyRouteMod(f, { player: "X", set_player_color: "rainbow" as never });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/set_player_color/);
+  });
+
+  it("preserves identity (id, x, y, team) when batched through applyRouteMods", () => {
+    const f = JSON.stringify({
+      title: "Test",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -13, y: 0, team: "O" },
+        { id: "H", x: -10, y: -1, team: "O" },
+      ],
+      routes: [{ from: "H", path: [[-10, 5]], route_kind: "Slant" }],
+    });
+    const mods: RouteMod[] = [{ player: "H", set_player_color: "purple" }];
+    const r = applyRouteMods(f, mods);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const h = (r.fence.players as Array<{ id: string; x: number; y: number; team: string; color?: string }>).find((p) => p.id === "H");
+    expect(h?.x).toBe(-10);
+    expect(h?.y).toBe(-1);
+    expect(h?.team).toBe("O");
+    expect(h?.color).toBe("#A855F7");
+  });
+});

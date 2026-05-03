@@ -409,6 +409,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-color-control",
+    name: "Coach Cal token color control + no-clash gate",
+    description:
+      "Coach Cal can now recolor any player's token on an existing play via revise_play / modify_play_route with a set_player_color mod (palette: red, orange, yellow, green, blue, purple, black, white, gray). Identity-preserving — works on offense or defense, with or without a route, and never touches the player's position. Combined with a chat-time validator gate that rejects any play where two skill-position players would render in the same color (the H + B both-orange clash that prompted the build) — Cal is steered toward the full palette (X red / Y green / Z blue / H orange / F purple / S yellow) and pushes back when a recolor request would create a new clash.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-variant-rule-gates",
     name: "Coach Cal respects per-playbook game rules (blocking, eligible center)",
     description:

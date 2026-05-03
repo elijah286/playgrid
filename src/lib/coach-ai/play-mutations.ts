@@ -25,12 +25,19 @@
 
 import { findTemplate } from "@/domain/play/routeTemplates";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
-import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
+import {
+  PLAYBOOK_PALETTE,
+  type CoachDiagram,
+  type PaletteName,
+} from "@/features/coach-ai/coachDiagramConverter";
 import type { SportVariant } from "@/domain/play/types";
 
-/** A single intent-level route change. The shape mirrors
- *  `modify_play_route`'s input fields so existing call sites can
- *  migrate without rewriting their input shapes. */
+/** A single intent-level edit. The shape mirrors `modify_play_route`'s
+ *  input fields so existing call sites can migrate without rewriting
+ *  their input shapes. Most fields touch the carrier's ROUTE; the
+ *  `set_player_color` field is the one exception — it touches the
+ *  player's appearance only, and may be applied to a player without
+ *  any existing route (e.g. a defender). */
 export type RouteMod = {
   player: string;
   set_family?: string;
@@ -42,6 +49,13 @@ export type RouteMod = {
    *  left or right of the QB). Skip for receivers whose alignment
    *  determines side. */
   set_direction?: "left" | "right";
+  /** Recolor the player's token. Accepts a palette name from
+   *  PLAYBOOK_PALETTE — the renderer maps it to the canonical hex.
+   *  Identity-preserving: the player's id, x, y, and team don't change.
+   *  Coach-driven escape hatch when label-derived colors aren't right
+   *  for the diagram (e.g. a 4th receiver labeled `H2` would default
+   *  to orange — set_player_color: "purple" gives it a distinct hue). */
+  set_player_color?: PaletteName;
 };
 
 /** A play fence shape — same as CoachDiagram with a permissive index
@@ -71,20 +85,14 @@ function fieldWidthFor(variant: string): number {
 export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult {
   const playersArr = Array.isArray(fence.players) ? fence.players : [];
   const routesArr = Array.isArray(fence.routes) ? fence.routes : [];
-  const carrier = playersArr.find((p) => p && (p as { id?: unknown }).id === mod.player) as
-    | { x?: number; y?: number; id?: string }
-    | undefined;
+  const carrierIdx = playersArr.findIndex((p) => p && (p as { id?: unknown }).id === mod.player);
+  const carrier = carrierIdx >= 0
+    ? (playersArr[carrierIdx] as { x?: number; y?: number; id?: string })
+    : undefined;
   if (!carrier) {
     return {
       ok: false,
       error: `player "${mod.player}" not in fence.players (available: ${playersArr.map((p) => (p as { id?: string }).id).join(", ")}).`,
-    };
-  }
-  const routeIdx = routesArr.findIndex((r) => r && (r as { from?: unknown }).from === mod.player);
-  if (routeIdx < 0) {
-    return {
-      ok: false,
-      error: `player "${mod.player}" has no existing route in fence.routes (a route from @${mod.player} must already exist for this mod to apply).`,
     };
   }
 
@@ -96,9 +104,50 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
     : null;
   const setNonCanonical = typeof mod.set_non_canonical === "boolean" ? mod.set_non_canonical : null;
   const setDirection = mod.set_direction === "left" || mod.set_direction === "right" ? mod.set_direction : null;
+  const setPlayerColor = typeof mod.set_player_color === "string" && mod.set_player_color in PLAYBOOK_PALETTE
+    ? (mod.set_player_color as PaletteName)
+    : null;
+  if (mod.set_player_color !== undefined && setPlayerColor === null) {
+    return {
+      ok: false,
+      error: `mod for @${mod.player} has set_player_color="${mod.set_player_color}" — must be one of: ${Object.keys(PLAYBOOK_PALETTE).join(", ")}.`,
+    };
+  }
 
-  if (!setFamily && setDepth === null && setNonCanonical === null && setDirection === null) {
-    return { ok: false, error: `mod for @${mod.player} has no changes; specify at least one of set_family / set_depth_yds / set_non_canonical / set_direction.` };
+  const touchesRoute = setFamily || setDepth !== null || setNonCanonical !== null || setDirection !== null;
+
+  if (!touchesRoute && setPlayerColor === null) {
+    return { ok: false, error: `mod for @${mod.player} has no changes; specify at least one of set_family / set_depth_yds / set_non_canonical / set_direction / set_player_color.` };
+  }
+
+  // Apply color-only edits up front so they land regardless of whether
+  // the player has an existing route. Defenders typically don't carry
+  // a route, but coaches still want to recolor them sometimes.
+  let workingPlayers = playersArr;
+  if (setPlayerColor !== null) {
+    const recolored = { ...(playersArr[carrierIdx] as Record<string, unknown>), color: PLAYBOOK_PALETTE[setPlayerColor] };
+    workingPlayers = [...playersArr];
+    workingPlayers[carrierIdx] = recolored as unknown as typeof playersArr[number];
+  }
+
+  // Color-only mod (no route fields) — return early before the
+  // route-required guard. The carrier doesn't need an existing route
+  // for an appearance change to make sense.
+  if (!touchesRoute) {
+    const summary: string[] = [`color→${setPlayerColor}`];
+    return {
+      ok: true,
+      fence: { ...fence, players: workingPlayers as Fence["players"] },
+      appliedSummary: `@${mod.player}: ${summary.join(", ")}`,
+    };
+  }
+
+  const routeIdx = routesArr.findIndex((r) => r && (r as { from?: unknown }).from === mod.player);
+  if (routeIdx < 0) {
+    return {
+      ok: false,
+      error: `player "${mod.player}" has no existing route in fence.routes (a route from @${mod.player} must already exist for route mods. set_player_color works on any player — pass it alone if you only want to recolor).`,
+    };
   }
 
   const variantStr = typeof fence.variant === "string" ? fence.variant : "flag_7v7";
@@ -165,10 +214,15 @@ export function applyRouteMod(fence: Fence, mod: RouteMod): ApplyRouteModResult 
   if (setDepth !== null) summary.push(`depth→${setDepth}yd`);
   if (setNonCanonical !== null) summary.push(`nonCanonical→${setNonCanonical}`);
   if (setDirection !== null) summary.push(`direction→${setDirection}`);
+  if (setPlayerColor !== null) summary.push(`color→${setPlayerColor}`);
 
   return {
     ok: true,
-    fence: { ...fence, routes: newRoutes as Fence["routes"] },
+    fence: {
+      ...fence,
+      players: workingPlayers as Fence["players"],
+      routes: newRoutes as Fence["routes"],
+    },
     appliedSummary: `@${mod.player}: ${summary.join(", ")}`,
   };
 }
