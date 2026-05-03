@@ -672,7 +672,7 @@ const update_play: CoachAiTool = {
       const admin = createServiceRoleClient();
       const { data: play, error } = await admin
         .from("plays")
-        .select("id, name, playbook_id, current_version_id, sport_variant")
+        .select("id, name, playbook_id, current_version_id, play_type")
         .eq("id", playId)
         .eq("playbook_id", ctx.playbookId)
         .is("deleted_at", null)
@@ -682,10 +682,12 @@ const update_play: CoachAiTool = {
       if (error) return { ok: false, error: error.message };
       if (!play) return { ok: false, error: "Play not found or not in this playbook." };
 
-      // Resolve variant from playbook (authoritative) or input hint.
+      // Resolve variant from playbook (authoritative) or input hint. The
+      // variant lives on `playbooks`, not `plays`, so we rely on
+      // ctx.sportVariant (set from the anchored playbook) and input hints.
       const specHintVariant = (input.play_spec as { variant?: string } | null | undefined)?.variant;
       const diagramHintVariant = (input.diagram as { variant?: string } | null | undefined)?.variant;
-      const resolvedVariant = (ctx.sportVariant ?? play.sport_variant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
+      const resolvedVariant = (ctx.sportVariant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
 
       // Read the parent play's type — drives both spec parsing hints
       // and the cross-side strip below.
@@ -1493,7 +1495,7 @@ const explain_play: CoachAiTool = {
       const admin = createServiceRoleClient();
       const { data: play, error } = await admin
         .from("plays")
-        .select("id, name, current_version_id, sport_variant, play_type")
+        .select("id, name, current_version_id, play_type")
         .eq("id", playId)
         .eq("playbook_id", ctx.playbookId)
         .is("deleted_at", null)
@@ -1529,7 +1531,7 @@ const explain_play: CoachAiTool = {
         const rawDiagram = playDocumentToCoachDiagram(doc, play.name as string);
         const { diagram } = sanitizeCoachDiagram(rawDiagram);
         specForExplain = coachDiagramToPlaySpec(diagram, {
-          variant: (play.sport_variant ?? doc.sportProfile.variant) as SportVariant,
+          variant: doc.sportProfile.variant as SportVariant,
           formation: doc.metadata.formation || undefined,
           playType: (play.play_type as "offense" | "defense" | "special_teams" | undefined) ?? undefined,
         });
