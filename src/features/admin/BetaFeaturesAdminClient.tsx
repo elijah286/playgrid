@@ -24,12 +24,6 @@ type FeatureMeta = {
 
 const FEATURES: FeatureMeta[] = [
   {
-    key: "coach_ai",
-    label: "Coach AI",
-    description:
-      "AI assistant for coaches. When on for everyone, only entitled coaches see it.",
-  },
-  {
     key: "game_mode",
     label: "Game Mode",
     description:

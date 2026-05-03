@@ -230,21 +230,14 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
 
   const betaFeatures = await getBetaFeatures();
-  const showCoachCalCta =
-    betaFeatures.coach_ai === "all" &&
-    (viewerEntitlement?.tier ?? "free") !== "coach_ai" &&
-    user !== null &&
-    !isAdmin;
   // Mirror SiteHeader's logic so the in-playbook (mobile) launcher uses the
   // same entitlement gate as the global one — non-entitled users get the
   // marketing popover, entitled users get the chat.
   const coachAiEntitled = isAdmin || (viewerEntitlement?.tier ?? "free") === "coach_ai";
-  const coachAiAvailable = isBetaFeatureAvailable(betaFeatures.coach_ai, {
-    isAdmin,
-    isEntitled: coachAiEntitled,
-  });
-  const showCoachCalPromoInPlaybook =
-    betaFeatures.coach_ai === "all" && !coachAiAvailable && user !== null;
+  const coachAiAvailable = coachAiEntitled;
+  const showCoachCalCta =
+    !coachAiEntitled && user !== null && !isAdmin;
+  const showCoachCalPromoInPlaybook = !coachAiAvailable && user !== null;
   const referralConfig = await getReferralConfig();
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";

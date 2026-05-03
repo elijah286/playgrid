@@ -15,7 +15,6 @@ import {
 } from "@/lib/site/beta-features-config";
 
 const DEFAULTS: BetaFeatures = {
-  coach_ai: "off",
   game_mode: "off",
   game_results: "off",
   marketing_content: "off",

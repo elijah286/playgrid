@@ -132,7 +132,6 @@ export default async function PlayEditPage({ params }: Props) {
   const editorEntitlement = await getCurrentEntitlement();
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
   const showCoachCalCta =
-    betaFeatures.coach_ai === "all" &&
     (editorEntitlement?.tier ?? "free") !== "coach_ai" &&
     user !== null &&
     !isAdmin;

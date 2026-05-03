@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { BookOpen, Check, Copy, Send, Trash2, Wrench, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn, NoteProposalSavedState, PlaybookChip } from "@/app/actions/coach-ai";
+import {
+  pickStarterPrompts,
+  type PromptContext,
+  type SuggestedPrompt,
+} from "@/lib/llm/suggested-prompts";
 import Link from "next/link";
 import {
   getAiFeedbackOptInAction,
@@ -138,6 +143,32 @@ export function CoachAiChat({
   const abortRef = useRef<AbortController | null>(null);
   const prevStorageKeyRef = useRef<string | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Determine which context the chat is opened in, so the starter prompt
+  // sampler can weight current-view-relevant prompts higher than global ones.
+  const currentContext: PromptContext = useMemo(() => {
+    if (playId) return "play";
+    if (pathname?.startsWith("/calendar")) return "calendar";
+    if (pathname?.includes("/roster")) return "roster";
+    if (playbookId) return "playbook";
+    return "global";
+  }, [playId, playbookId, pathname]);
+
+  // Sample once per context change. Stable across re-renders within a context
+  // so the chips don't shuffle while the user is reading them, but refresh
+  // when the user navigates to a new view (a coach who clicks into a play
+  // sees play-relevant prompts; back out to playbook, sees playbook ones).
+  const starterPrompts = useMemo<SuggestedPrompt[]>(
+    () =>
+      pickStarterPrompts({
+        audience: "coach",
+        context: currentContext,
+        enabledFlags: new Set(),
+        count: 5,
+      }),
+    [currentContext],
+  );
 
   // Load the user's AI-feedback opt-in status once. NULL → show modal on
   // first chat use; true/false → never show again. Only entitled users
@@ -470,7 +501,7 @@ export function CoachAiChat({
         }}
       >
         {turns.length === 0 && !streaming ? (
-          <Empty />
+          <Empty prompts={starterPrompts} />
         ) : (
           <ul className="space-y-5">
             {turns.map((t, i) => {
@@ -703,37 +734,32 @@ function UserMessageBubble({ text, animate }: { text: string; animate?: boolean 
   );
 }
 
-function Empty() {
-  const suggestions = [
-    "What is the rush rule in NFL Flag 5v5?",
-    "Generate a 5-play red zone package for me.",
-    "How should I attack Cover 3 with a 7v7 offense?",
-  ];
+function Empty({ prompts }: { prompts: SuggestedPrompt[] }) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 text-center">
       {/* Standalone mark — icon ships its own gradient tile. */}
       <CoachAiIcon className="size-12" />
       <h3 className="mt-3 text-base font-semibold text-foreground">Coach Cal</h3>
       <p className="mt-1 max-w-sm text-sm text-muted">
-        Ask about rules, formations, or play concepts. Coach Cal grounds answers
-        in a curated knowledge base and asks before assuming your league.
+        Generate plays and playbooks, plan practices and seasons, review games,
+        and get strategy vs. any defense — all from a single chat.
       </p>
       <ul className="mt-4 flex w-full max-w-sm flex-col gap-1.5">
-        {suggestions.map((s) => (
-          <li key={s}>
+        {prompts.map((p) => (
+          <li key={p.id}>
             <button
               type="button"
               onClick={() => {
                 const ta = document.querySelector<HTMLTextAreaElement>("[data-coach-ai-input]");
                 if (ta) {
-                  ta.value = s;
+                  ta.value = p.text;
                   ta.dispatchEvent(new Event("input", { bubbles: true }));
                   ta.focus();
                 }
               }}
               className="w-full rounded-lg bg-surface-inset px-3 py-2 text-left text-xs text-foreground hover:bg-surface-inset/80"
             >
-              {s}
+              {p.text}
             </button>
           </li>
         ))}

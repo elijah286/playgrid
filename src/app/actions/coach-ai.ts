@@ -3,10 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { runAgent } from "@/lib/coach-ai/agent";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
-import {
-  getBetaFeatures,
-  isBetaFeatureAvailable,
-} from "@/lib/site/beta-features-config";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 
@@ -68,9 +65,9 @@ async function loadCallerInfo(): Promise<
     .eq("id", user.id)
     .single();
   const isAdmin = profile?.role === "admin";
-  const beta = await getBetaFeatures();
-  const available = isBetaFeatureAvailable(beta.coach_ai, { isAdmin, isEntitled: true });
-  if (!available) return { ok: false, error: "Coach AI is not enabled for your account." };
+  const entitlement = await getCurrentEntitlement();
+  const isEntitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
+  if (!isEntitled) return { ok: false, error: "Coach Cal requires a Coach Pro subscription." };
   return { ok: true, isAdmin };
 }
 

@@ -391,6 +391,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-out-of-beta",
+    name: "Coach Cal generally available (no beta gate)",
+    description:
+      "Coach Cal is no longer behind a Site Admin → Beta features toggle. Any user with a Coach Pro subscription (or a site admin) gets Cal automatically — same gate as every other Coach Pro feature. Removes the dual-control surface where the beta scope could be flipped \"off\" while subscriptions were already paying for it. The Site Admin row is gone; the entitlement check (tier === \"coach_ai\" or admin) is the single source of truth at every callsite (chat action, streaming endpoint, header launcher, in-playbook launcher, play-editor CTA).",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
+    id: "coach-cal-marquee-starter-prompts",
+    name: "Coach Cal marquee starter prompts (context-aware)",
+    description:
+      "The empty-state suggestion chips in the Coach Cal chat now showcase Cal's full capability surface — generate playbooks, defensive game-planning, post-game review, season-wide scheduling, situational call sheets (red zone, 3rd-and-short, opening drive), playbook skill-level review, and QB-read note updates — instead of the three rules/red-zone/Cover-3 examples the chat shipped with. Five chips are sampled randomly per chat-open, weighted toward the user's current view (a coach inside a play sees mostly play-specific suggestions; in the calendar, scheduling/post-game lead). Refreshes when the user navigates so the suggestions stay relevant without the coach manually rerolling.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-clickable-play-references",
     name: "Coach Cal clickable play and playbook references",
     description:

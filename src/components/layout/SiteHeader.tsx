@@ -3,7 +3,6 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
-import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 
 export async function SiteHeader() {
@@ -37,19 +36,12 @@ export async function SiteHeader() {
           /* best effort */
         }
         try {
-          const [betaFeatures, entitlement] = await Promise.all([
-            getBetaFeatures(),
-            getCurrentEntitlement(),
-          ]);
+          const entitlement = await getCurrentEntitlement();
           const isEntitled = isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
-          coachAiAvailable = isBetaFeatureAvailable(betaFeatures.coach_ai, {
-            isAdmin,
-            isEntitled,
-          });
-          // Show the promo launcher to all logged-in users when Coach Cal is
-          // launched globally (scope="all"), so they see the upgrade CTA.
-          const betaLaunched = betaFeatures.coach_ai === "all";
-          showCoachCalPromo = betaLaunched && !coachAiAvailable;
+          coachAiAvailable = isEntitled;
+          // Logged-in users without a Coach Pro subscription see the promo
+          // launcher (upgrade CTA) instead of the chat.
+          showCoachCalPromo = !coachAiAvailable;
         } catch {
           /* best effort */
         }

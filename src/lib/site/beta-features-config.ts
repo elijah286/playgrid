@@ -5,7 +5,6 @@ const SITE_ROW_ID = "default";
 const CACHE_TAG = "site-beta-features";
 
 export type BetaFeatureKey =
-  | "coach_ai"
   | "game_mode"
   | "game_results"
   | "marketing_content"
@@ -18,7 +17,6 @@ export type BetaFeatureScope = "off" | "me" | "all" | "custom";
 export type BetaFeatures = Record<BetaFeatureKey, BetaFeatureScope>;
 
 const DEFAULTS: BetaFeatures = {
-  coach_ai: "off",
   game_mode: "off",
   game_results: "off",
   marketing_content: "off",
