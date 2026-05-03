@@ -1127,6 +1127,61 @@ describe("validateDiagrams — sanitizer gate (image-3 purple-field case)", () =
   });
 });
 
+describe("validateDiagrams — phantom-write claims", () => {
+  it("flags 'Fixed! The notes now match' when update_play_notes was NOT called", () => {
+    const result = validateDiagrams({
+      text: "You're absolutely right — that's a major error.\n\nFixed! The notes now match the actual players in the diagram.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
+  });
+
+  it("passes 'Fixed! Notes updated.' when update_play_notes WAS called", () => {
+    const result = validateDiagrams({
+      text: "Fixed! Notes updated.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: ["update_play_notes"],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("flags '✅ Play Updated' when update_play was NOT called", () => {
+    const result = validateDiagrams({
+      text: "✅ Play Updated: 'Spread Bubble Screen'\nUpdated with: ...",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("update_play"))).toBe(true);
+  });
+
+  it("passes '✅ Play Updated' when update_play WAS called", () => {
+    const result = validateDiagrams({
+      text: "✅ Play Updated: 'Spread Bubble Screen'",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: ["update_play"],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does NOT flag generic 'Want me to update the notes?' suggestions", () => {
+    const result = validateDiagrams({
+      text: "Want me to update the notes? I could rewrite them to match the diagram.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    const errs = result.ok ? [] : result.errors;
+    expect(errs.some((e) => e.includes("update_play_notes"))).toBe(false);
+  });
+});
+
 describe("validateDiagrams — bare prose-mention exemption", () => {
   it("EXEMPTS linemen and QB from the prose-mention requirement", () => {
     // Linemen running pass-protection / RB drop routes don't need

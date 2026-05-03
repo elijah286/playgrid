@@ -282,6 +282,38 @@ const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
       /\bevent\s+(?:created|added|scheduled)\b/i,
     ],
   },
+  {
+    // Cal saying "Fixed!" / "Updated the notes" / "Notes saved" without
+    // calling update_play_notes. Surfaced from a coach screenshot where
+    // Cal noticed the diagram's @Y didn't exist, said "Fixed! The notes
+    // now match the actual players" with a revised block, but never
+    // actually called the tool — DB notes stayed wrong, refresh didn't
+    // help. Patterns target the explicit success-claim phrasings, not
+    // generic "I'd update the notes if you'd like" suggestions.
+    tool: "update_play_notes",
+    patterns: [
+      /\bnotes\s+(?:are\s+|have\s+been\s+|now\s+)?(?:fixed|updated|saved|corrected|rewritten)\b/i,
+      /\b(?:fixed|updated|saved|wrote|rewrote|corrected)\s+(?:the\s+|your\s+)?notes\b/i,
+      /\b(?:fixed|updated|saved|corrected)!\s*(?:the\s+)?notes\b/i,
+      /\bI('?ve|'?ll)?\s+(?:just\s+|now\s+)?(?:fixed|updated|saved|rewrote|wrote|corrected)\s+(?:the\s+|your\s+)?notes\b/i,
+      /\bnotes\s+now\s+match\b/i,
+    ],
+  },
+  {
+    // Cal claiming a play diagram was persisted without calling
+    // update_play. The auto-commit guard in agent.ts catches the most
+    // common case (revise_play / compose_play / modify_play_route ran),
+    // but a phantom claim with NO fence-producing tool at all still
+    // slips through — this catches that residual.
+    tool: "update_play",
+    patterns: [
+      /✅\s*play\s+updated\b/i,
+      /\bplay\s+(?:has\s+been\s+|was\s+)?updated\s+successfully\b/i,
+      /\bsuccessfully\s+updated\s+(?:the\s+|your\s+)?play\b/i,
+      /\bupdated\s+(?:the\s+|your\s+)?play\s+in\s+(?:the\s+)?(?:database|playbook)\b/i,
+      /\bsaved\s+(?:the\s+|your\s+)?(?:updated\s+)?play\s+(?:to|in)\s+(?:the\s+)?(?:database|playbook)\b/i,
+    ],
+  },
 ];
 
 export function validateDiagrams(opts: {
