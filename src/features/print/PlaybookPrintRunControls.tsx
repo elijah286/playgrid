@@ -298,6 +298,15 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                     className="accent-primary"
                   />
                 </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={config.showOpponents}
+                    onChange={(e) => patch({ showOpponents: e.target.checked })}
+                  />
+                  Show opponents if available
+                </label>
               </div>
             </>
           )}
@@ -682,6 +691,15 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                   }
                   className="accent-primary"
                 />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.showOpponents}
+                  onChange={(e) => patch({ showOpponents: e.target.checked })}
+                />
+                Show opponents if available
               </label>
             </>
           )}

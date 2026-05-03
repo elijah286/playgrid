@@ -298,6 +298,7 @@ export function PrintPlaybookClient({
       borderThickness: config.wristbandBorderThickness,
       showPlayerLabels: config.wristbandShowPlayerLabels,
       playerOutline: config.wristbandPlayerOutline,
+      showOpponents: config.showOpponents,
       cellPadding: config.wristbandCellPadding,
     }),
     [config],
@@ -332,6 +333,7 @@ export function PrintPlaybookClient({
       borderThickness: config.playsheetBorderThickness,
       showPlayerLabels: config.playsheetShowPlayerLabels,
       playerOutline: config.playsheetPlayerOutline,
+      showOpponents: config.showOpponents,
     }),
     [config],
   );

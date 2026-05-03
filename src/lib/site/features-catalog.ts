@@ -766,6 +766,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Print & export ─────────────────────────────────────────────
   {
+    id: "print-hide-opponents-default",
+    name: "Hide opponents on print by default",
+    description:
+      "Printed playsheets and wristbands now show only the coach's own players by default — the frozen opposing-side snapshot used in the editor canvas is omitted unless the coach turns on \"Show opponents if available\" under the Layout tab. Keeps call sheets focused on what the coach's players need to see.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "print-playsheet-notes-controls",
     name: "Roomy play notes on call sheets",
     description:

@@ -113,6 +113,12 @@ export type PlaybookPrintRunConfig = {
   playsheetBorderThickness: number;
   playsheetShowPlayerLabels: boolean;
   playsheetPlayerOutline: boolean;
+  /**
+   * When true, the frozen opposing-side snapshot (defenders for an offensive
+   * play, or offense for a defensive play) is rendered on each tile. Off by
+   * default so call sheets focus on the user's own side.
+   */
+  showOpponents: boolean;
   /** Visual emphasis only for now (feeds print compiler) */
   backfieldYards: number;
   downfieldYards: number;
@@ -217,6 +223,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetBorderThickness: 1,
   playsheetShowPlayerLabels: true,
   playsheetPlayerOutline: false,
+  showOpponents: false,
   backfieldYards: 10,
   downfieldYards: 15,
   wristbandWidthIn: 4,

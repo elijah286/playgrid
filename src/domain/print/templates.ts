@@ -26,8 +26,9 @@ import { resolveRouteStroke } from "../play/factory";
 /** Merge the frozen opposing-side snapshot (defense plays installed against a
  *  specific offense) into the doc's players/routes so print tiles show both
  *  sides, matching the editor canvas. Returns the original doc when no
- *  snapshot exists. */
-function mergeVsSnapshot(doc: PlayDocument): PlayDocument {
+ *  snapshot exists or when the caller asked to suppress opponents. */
+function mergeVsSnapshot(doc: PlayDocument, includeOpponents: boolean): PlayDocument {
+  if (!includeOpponents) return doc;
   const snap = doc.metadata.vsPlaySnapshot;
   if (!snap) return doc;
   return {
@@ -386,6 +387,8 @@ export type PlayTileLookOptions = {
   borderThickness: number;
   showPlayerLabels: boolean;
   playerOutline: boolean;
+  /** When true, the frozen opposing-side snapshot is rendered alongside the play. */
+  showOpponents: boolean;
 };
 
 function arrowSizeScale(size: ArrowSize): number {
@@ -765,7 +768,7 @@ function renderFieldContents(
   fieldH: number,
   look: PlayTileLookOptions,
 ): string {
-  doc = mergeVsSnapshot(doc);
+  doc = mergeVsSnapshot(doc, look.showOpponents);
   const vis = doc.printProfile.visibility;
   const fieldMin = Math.min(fieldW, fieldH);
   const pr = iconRadiusProportional(look.iconSize, fieldMin);
@@ -954,6 +957,8 @@ export type WristbandGridOptions = {
   borderThickness: number;
   showPlayerLabels: boolean;
   playerOutline: boolean;
+  /** When true, the frozen opposing-side snapshot is rendered alongside the play. */
+  showOpponents: boolean;
   /** 0 = tiles flush together with no internal padding, 1 = default. */
   cellPadding?: number;
 };
@@ -1405,7 +1410,7 @@ function renderWristbandTile(
   opts: WristbandGridOptions,
   watermark?: Watermark | null,
 ): string {
-  doc = mergeVsSnapshot(doc);
+  doc = mergeVsSnapshot(doc, opts.showOpponents);
   const vis = doc.printProfile.visibility;
   const zoom = opts.zoom / 100;
   const toggles: PrintLabelToggles = {
