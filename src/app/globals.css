@@ -201,12 +201,16 @@ html.coach-docked body {
  * so global @media print rules here only affect the main dashboard document —
  * not the real print popup. If a user hits Cmd+P on any app page, hide the UI
  * and show a short hint pointing them at the "Print playbook" button.
+ *
+ * Pages that ARE designed for direct browser printing (e.g. the practice plan
+ * print view) opt out by rendering a `.print-allow` container. The :has()
+ * checks below skip the global block when such a container is present.
  */
 @media print {
-  body > * {
+  body:not(:has(.print-allow)) > * {
     display: none !important;
   }
-  body::before {
+  body:not(:has(.print-allow))::before {
     content: "To print, use the \201CPrint playbook\201D button inside the app.";
     display: block;
     padding: 2rem;

@@ -27,7 +27,7 @@ export function PracticePlanPrintView({
   }, [autoPrint]);
 
   return (
-    <div className="practice-plan-print mx-auto max-w-[7.5in] bg-white p-6 text-black">
+    <div className="practice-plan-print print-allow mx-auto max-w-[7.5in] bg-white p-6 text-black">
       <style>{PRINT_CSS}</style>
 
       {/* Screen-only toolbar */}
