@@ -267,12 +267,20 @@ function stripDedupSuffix(label: string): string {
  *
  * Skips defense plays (offense roster empty), special-teams plays
  * (mixed sides), and the "other" variant (custom rosters).
+ *
+ * `enforceCount` defaults to `true` (save-time semantics: a saved
+ * play must have the variant's full roster). Chat-time callers pass
+ * `false` because Cal sometimes emits minimal example fences mid-turn
+ * (a 2-player demo of a slant route, etc.) that aren't yet saved
+ * plays — labels still must be canonical, but a partial fence isn't a
+ * count violation. The save path always uses the strict `true` form.
  */
 export function validateOffensiveRoster(
   diagram: CoachDiagram,
   variant: string | null | undefined,
   _settings: PlaybookSettings | null | undefined,
   playType?: "offense" | "defense" | "special_teams",
+  enforceCount: boolean = true,
 ): string[] {
   if (playType === "defense" || playType === "special_teams") return [];
   const variantStr = (variant ?? diagram.variant ?? "").trim();
@@ -292,7 +300,9 @@ export function validateOffensiveRoster(
 
   // 1) Exact count check. Off-by-one is by far the common failure
   //    mode (Cal grabbed a tackle skeleton + center for 5v5 → 6).
-  if (offense.length !== profile.count) {
+  //    Only enforced at save-time; chat-time skips so partial example
+  //    fences don't trip on count alone.
+  if (enforceCount && offense.length !== profile.count) {
     errors.push(
       `Offensive roster has ${offense.length} player(s) but ${variantStr} expects exactly ${profile.count}. ` +
         `Canonical roster: ${profile.display}. ` +

@@ -27,6 +27,7 @@ import { lintProseAgainstSpec, lintProseDepthAgainstSpec } from "./notes-lint";
 import { validateRouteAssignments } from "./route-assignment-validate";
 import {
   validateColorClash,
+  validateOffensiveRoster,
   validateCenterEligibility,
   validateOffensiveCoverage,
 } from "./play-content-validate";
@@ -652,6 +653,15 @@ export function validateDiagrams(opts: {
     // a route or motion. Chat-time AND save-time. Catches "Cal's prose
     // describes @B motion + @Z carry, but the diagram has neither."
     for (const msg of validateOffensiveCoverage(json as CoachDiagram, opts.variant, settings)) {
+      errors.push(`${tag}${msg}`);
+    }
+    // Offensive-roster gate: canonical labels per variant. flag_5v5 →
+    // {Q/QB, C, X, Y, Z}; flag_7v7 → {Q/QB, C, X, Y, Z, H, S, B, F};
+    // tackle_11 → broad label set. Catches "Cal hand-authored a
+    // flag_5v5 play with @H or @B labels copied from a tackle_11
+    // skeleton" before save. Count check is save-time-only (chat-time
+    // fences are sometimes partial demos), so we pass enforceCount=false.
+    for (const msg of validateOffensiveRoster(json as CoachDiagram, opts.variant, settings, undefined, false)) {
       errors.push(`${tag}${msg}`);
     }
 
