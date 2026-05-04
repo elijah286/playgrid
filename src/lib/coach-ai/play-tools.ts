@@ -770,13 +770,21 @@ const update_play: CoachAiTool = {
       void updateStripped;
       const diagramWithVariant: CoachDiagram = cleanDiagram;
 
+      // Load playbook settings up-front so the depth gate can fall back
+      // to the persistent maxThrowDepthYds setting when the call didn't
+      // include max_throw_depth_yds (Cal frequently forgets to propagate
+      // it across a series of update_play calls — surfaced 2026-05-04).
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+      const effectiveMaxRouteDepthYds =
+        maxRouteDepthYds ?? playbookSettings.maxThrowDepthYds ?? undefined;
+
       // SFPA Layer 2 gate: every route that declared route_kind must satisfy
       // the catalog's constraints (depth, side). Catches "12-yard slant"
       // and "post breaking outside" before they persist. Plus the variant-
       // aware QB-flag rule and the coach-stated max-throw-depth cap.
       const assignmentCheck = validateRouteAssignments(diagramWithVariant, {
         variant: resolvedVariant,
-        maxRouteDepthYds,
+        maxRouteDepthYds: effectiveMaxRouteDepthYds,
       });
       if (!assignmentCheck.ok) {
         return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
@@ -787,7 +795,6 @@ const update_play: CoachAiTool = {
       // an action) — historically only enforced at chat-time, now also
       // at save-time so a `create_play`/`update_play` JSON that bypasses
       // chat cannot persist either. See play-content-validate.ts.
-      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
       const contentCheck = validatePlayContent(
         diagramWithVariant,
         resolvedVariant,
@@ -1023,13 +1030,24 @@ const create_play: CoachAiTool = {
     // residue.
     const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
 
+    // Load the playbook's persistent settings up-front so the depth gate
+    // can use settings.maxThrowDepthYds as a fallback when the call
+    // didn't include max_throw_depth_yds. Surfaced 2026-05-04: Cal
+    // generated 7 plays with 13.8-yard verticals despite the coach
+    // stating "less than 15 yards" — Cal forgot to propagate
+    // max_throw_depth_yds on the create_play calls. The persistent
+    // playbook setting closes the gap so the cap can't be lost.
+    const playbookSettingsPreCreate = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+    const effectiveMaxRouteDepthYds =
+      maxRouteDepthYds ?? playbookSettingsPreCreate.maxThrowDepthYds ?? undefined;
+
     // SFPA Layer 2 gate: every route that declared route_kind must satisfy
     // the catalog's constraints (depth, side). Catches "12-yard slant"
     // and "post breaking outside" before they persist. Plus the variant-
     // aware QB-flag rule and the coach-stated max-throw-depth cap.
     const assignmentCheck = validateRouteAssignments(diagramWithVariant, {
       variant: resolvedVariant,
-      maxRouteDepthYds,
+      maxRouteDepthYds: effectiveMaxRouteDepthYds,
     });
     if (!assignmentCheck.ok) {
       return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
@@ -1037,7 +1055,6 @@ const create_play: CoachAiTool = {
 
     // SFPA Layer 4 gate: content coherence. Color clashes, center
     // eligibility, and offensive-coverage (every non-QB has an action).
-    const playbookSettingsPreCreate = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
     const contentCheckPreCreate = validatePlayContent(
       diagramWithVariant,
       resolvedVariant,

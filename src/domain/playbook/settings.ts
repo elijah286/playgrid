@@ -19,6 +19,22 @@ export type PlaybookSettings = {
    */
   centerIsEligible: boolean;
   maxPlayers: number;
+  /**
+   * Maximum legal forward throw depth in yards for plays in this playbook.
+   * When set, the save-time route validator rejects any forward route
+   * whose deepest waypoint exceeds this depth (unless the route is
+   * marked nonCanonical: true as an explicit coach override).
+   *
+   * Persistent so a coach with a young/inexperienced team can set the
+   * cap once on the playbook and Cal can never violate it on a save —
+   * the prior approach (Cal propagating max_throw_depth_yds on every
+   * create_play call) failed when Cal forgot to include it.
+   *
+   * Default null = no cap. When the coach surfaces a cap in chat
+   * ("under 12 yards"), Cal should also persist it via the playbook
+   * settings UI so it doesn't drift across sessions.
+   */
+  maxThrowDepthYds: number | null;
 };
 
 /** Label used in UI + warnings. */
@@ -48,6 +64,7 @@ export function defaultSettingsForVariant(
         blockingAllowed: false,
         centerIsEligible: false,
         maxPlayers: 7,
+        maxThrowDepthYds: null,
       };
     case "flag_5v5":
       return {
@@ -57,6 +74,7 @@ export function defaultSettingsForVariant(
         blockingAllowed: false,
         centerIsEligible: true,
         maxPlayers: 5,
+        maxThrowDepthYds: null,
       };
     case "tackle_11":
       return {
@@ -66,6 +84,7 @@ export function defaultSettingsForVariant(
         blockingAllowed: true,
         centerIsEligible: false,
         maxPlayers: 11,
+        maxThrowDepthYds: null,
       };
     case "other":
       return {
@@ -75,6 +94,7 @@ export function defaultSettingsForVariant(
         blockingAllowed: true,
         centerIsEligible: false,
         maxPlayers: Math.max(4, Math.min(11, customPlayers ?? 7)),
+        maxThrowDepthYds: null,
       };
   }
 }
@@ -108,5 +128,9 @@ export function normalizePlaybookSettings(
       typeof r.maxPlayers === "number" && r.maxPlayers > 0
         ? Math.round(r.maxPlayers)
         : defaults.maxPlayers,
+    maxThrowDepthYds:
+      typeof r.maxThrowDepthYds === "number" && Number.isFinite(r.maxThrowDepthYds) && r.maxThrowDepthYds > 0
+        ? r.maxThrowDepthYds
+        : defaults.maxThrowDepthYds,
   };
 }

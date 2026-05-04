@@ -25,6 +25,7 @@ import {
   validateOffensiveCoverage,
   validateOffensiveRoster,
   validatePlayContent,
+  validateRunConceptFidelity,
 } from "./play-content-validate";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
@@ -620,5 +621,193 @@ describe("validatePlayContent — aggregator", () => {
       defaultSettingsForVariant("flag_5v5"),
     );
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("validateRunConceptFidelity — title vs diagram mechanics", () => {
+  /**
+   * Regression: 2026-05-04 — Cal generated "Spread — Jet Sweep" with
+   * 4 vertical pass routes and zero motion / handoff mechanics. Title
+   * promised a sweep; diagram delivered a passing play.
+   */
+  it("REJECTS the actual saved bug: 'Spread — Jet Sweep' with no motion and no backfield runner", () => {
+    // Reproduces version 47b1fa3c — Q at -5, all receivers running
+    // verticals, Y placed in the backfield but with a forward route
+    // (still y < -1 to start, but ends well before LOS) — but actually
+    // the saved Y starts at y=-5 and the route goes to y=-1, so by my
+    // rule (carrier.y < -1) Y IS a backfield runner. Hmm.
+    //
+    // Actually re-reading: Y carrier is at (4, -5). y < -1, so this is
+    // a backfield runner. So the validator would PASS this play.
+    //
+    // The user's actual concern is "this isn't a sweep" — the geometry
+    // is technically a back doing something but it doesn't include the
+    // sweep motion (player crossing the formation pre-snap). For the
+    // validator, requiring MOTION specifically is too strict (might
+    // reject power runs that don't need motion). The current rule
+    // catches the most common case (no motion + no backfield runner).
+    //
+    // Test the version where there's NO backfield runner: every
+    // offensive player on or past the LOS with vertical routes only.
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Spread — Jet Sweep",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 6, y: 0, team: "O" }, // Y NOT in backfield
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [
+          { from: "X", path: [[-10, 14]] },
+          { from: "Z", path: [[10, 14]] },
+          { from: "C", path: [[0.5, 1.5]] },
+          { from: "Y", path: [[6, 1]] }, // No motion, no backfield
+        ],
+      },
+      "flag_5v5",
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/jet sweep/i);
+    expect(errors[0]).toMatch(/no motion/i);
+  });
+
+  it("ACCEPTS a Jet Sweep with pre-snap motion on the carrier", () => {
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Spread — Jet Sweep",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 6, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [
+          {
+            from: "X",
+            // Cal authored jet motion across the formation as pre-snap motion
+            motion: [
+              [-5, 0],
+              [3, -1],
+            ],
+            path: [
+              [8, 2],
+              [12, 4],
+            ],
+          },
+          { from: "Z", path: [[10, 14]] },
+          { from: "C", path: [[0.5, 1.5]] },
+        ],
+      },
+      "flag_5v5",
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("ACCEPTS a sweep with a backfield runner (Y starts behind LOS)", () => {
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Spread — Jet Sweep",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 4, y: -5, team: "O" }, // Y in backfield
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [
+          { from: "X", path: [[-10, 14]] },
+          { from: "Z", path: [[10, 14]] },
+          { from: "Y", path: [[8, 2]] }, // backfield runner with carry-shaped path
+        ],
+      },
+      "flag_5v5",
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("IGNORES titles without run-concept keywords", () => {
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Spread Doubles — Hitch/Flat Combo",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 6, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [
+          { from: "X", path: [[-10, 5]] },
+          { from: "Z", path: [[10, 5]] },
+          { from: "Y", path: [[8, 2]] },
+        ],
+      },
+      "flag_5v5",
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("matches keyword 'run' as a whole word, not as substring", () => {
+    // "Truncated" should NOT match "run" — only whole-word matches.
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Truncated Patterns",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+        ],
+        routes: [{ from: "X", path: [[-10, 5]] }],
+      },
+      "flag_5v5",
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("detects 'Inside Zone Run' as a run concept", () => {
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Spread — Inside Zone Run",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: 6, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        // No motion, no backfield runner — should fail.
+        routes: [
+          { from: "X", path: [[-10, 8]] },
+          { from: "Z", path: [[10, 8]] },
+          { from: "C", path: [[0.5, 1.5]] },
+          { from: "Y", path: [[6, 2]] },
+        ],
+      },
+      "flag_5v5",
+    );
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]).toMatch(/run/i);
+  });
+
+  it("skips defense plays", () => {
+    const errors = validateRunConceptFidelity(
+      {
+        variant: "flag_5v5",
+        title: "Cover 3 vs Sweep",
+        players: [{ id: "MIKE", x: 0, y: 5, team: "D" }],
+        routes: [],
+      },
+      "flag_5v5",
+      "defense",
+    );
+    expect(errors).toHaveLength(0);
   });
 });

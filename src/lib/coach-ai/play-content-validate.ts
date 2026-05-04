@@ -340,6 +340,105 @@ export function validateOffensiveRoster(
   return errors;
 }
 
+/**
+ * Title-concept fidelity check for run/sweep concepts.
+ *
+ * When a coach (or Cal) names a play with a run-concept keyword (Jet,
+ * Sweep, Run, Draw, Trap, Counter, Dive, Power), the diagram MUST have
+ * geometric evidence that the play actually executes that concept:
+ *   - At least one player has a non-empty `motion` field (jet motion,
+ *     fly sweep window-dressing), OR
+ *   - At least one route starts in the offensive backfield (carrier.y < 0
+ *     and the route extends — i.e., a back/QB taking the ball).
+ *
+ * Without this gate, Cal can title a play "Jet Sweep" while authoring 4
+ * vertical pass routes and zero handoff/motion mechanics — surfaced
+ * 2026-05-04 by a coach whose "Spread — Jet Sweep" rendered as 2 verticals
+ * + 2 short routes with no sweep motion at all.
+ *
+ * The gate is intentionally narrow: only checks for run-concept titles,
+ * doesn't try to verify the exact mechanics. A bigger fix is adding
+ * "Jet Sweep" to the concept catalog so `compose_play` builds it
+ * structurally — until then this catches the most common Cal failure.
+ */
+const RUN_CONCEPT_TITLE_KEYWORDS = [
+  "jet",
+  "sweep",
+  "run",
+  "draw",
+  "trap",
+  "counter",
+  "dive",
+  "power",
+  "rush",
+];
+
+export function validateRunConceptFidelity(
+  diagram: CoachDiagram,
+  variant: string | null | undefined,
+  playType?: "offense" | "defense" | "special_teams",
+): string[] {
+  if (playType === "defense" || playType === "special_teams") return [];
+  const variantStr = (variant ?? diagram.variant ?? "").trim();
+  if (!FLAG_VARIANTS.has(variantStr) && variantStr !== "tackle_11") return [];
+
+  const title = typeof diagram.title === "string" ? diagram.title.toLowerCase() : "";
+  if (!title) return [];
+
+  // Match whole words to avoid false positives (e.g., "Cross Country" → no match).
+  const matchedKeyword = RUN_CONCEPT_TITLE_KEYWORDS.find((kw) =>
+    new RegExp(`\\b${kw}\\b`, "i").test(title),
+  );
+  if (!matchedKeyword) return [];
+
+  // Look for evidence of the run concept in the diagram.
+  const players = Array.isArray(diagram.players) ? diagram.players : [];
+  const offense = players.filter(
+    (p) => (p as { team?: string }).team !== "D",
+  );
+  const playerById = new Map<string, { id: string; x: number; y: number }>();
+  for (const p of offense) {
+    const id = typeof (p as { id?: unknown }).id === "string" ? (p as { id: string }).id : null;
+    if (!id) continue;
+    playerById.set(id, {
+      id,
+      x: typeof (p as { x?: unknown }).x === "number" ? (p as { x: number }).x : 0,
+      y: typeof (p as { y?: unknown }).y === "number" ? (p as { y: number }).y : 0,
+    });
+  }
+
+  const routes = Array.isArray(diagram.routes) ? diagram.routes : [];
+
+  // Evidence type 1: any route has pre-snap motion.
+  const hasMotion = routes.some((r) => {
+    const m = (r as { motion?: unknown }).motion;
+    return Array.isArray(m) && m.length > 0;
+  });
+
+  // Evidence type 2: any non-QB offensive route's carrier starts in the
+  // offensive backfield (y < -1, i.e. clearly behind the LOS), suggesting
+  // a back / handoff-target. The QB by itself doesn't count — every
+  // shotgun snap puts the QB at y=-5.
+  const hasBackfieldRunner = routes.some((r) => {
+    const from = typeof r.from === "string" ? r.from : null;
+    if (!from) return false;
+    const carrier = playerById.get(from);
+    if (!carrier) return false;
+    const label = from.toUpperCase().replace(/\d+$/, "");
+    if (QB_LABELS.has(label)) return false; // QB-only doesn't prove a sweep
+    return carrier.y < -1;
+  });
+
+  if (hasMotion || hasBackfieldRunner) return [];
+
+  return [
+    `Play title "${diagram.title}" claims a "${matchedKeyword}" run concept but the diagram has no motion AND no backfield runner — it's a passing play with a misleading title. ` +
+      `Run concepts (Jet Sweep, Sweep, Counter, Draw, etc.) require either pre-snap motion (set \`motion\` on the carrier's route entry — e.g. jet motion across the formation) OR a backfield player with a route/carry (RB taking the handoff). ` +
+      `Either retitle the play to match what's actually happening, or re-emit the diagram with a motion path on the carrier and/or a backfield runner. ` +
+      `For Jet Sweep specifically: the motion player should sweep across to the strong side BEFORE the snap, then take a quick handoff and run laterally to the edge.`,
+  ];
+}
+
 export type PlayContentValidation =
   | { ok: true }
   | { ok: false; errors: string[] };
@@ -360,6 +459,7 @@ export function validatePlayContent(
     ...validateCenterEligibility(diagram, settings, variant),
     ...validateOffensiveCoverage(diagram, variant, settings, playType),
     ...validateOffensiveRoster(diagram, variant, settings, playType),
+    ...validateRunConceptFidelity(diagram, variant, playType),
   ];
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
