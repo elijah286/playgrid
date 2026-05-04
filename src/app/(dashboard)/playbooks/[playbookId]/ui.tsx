@@ -53,6 +53,7 @@ import {
   ArrowUpDown,
   Check,
   CheckSquare,
+  ClipboardCopy,
   Copy,
   Crown,
   FileText,
@@ -83,6 +84,7 @@ import {
   createPlaybookGroupAction,
   deletePlayAction,
   deletePlaybookGroupAction,
+  getPlayForEditorAction,
   renamePlayAction,
   renamePlaybookGroupAction,
   reorderPlaybookGroupsAction,
@@ -1725,6 +1727,32 @@ function PlaybookDetailClientInner({
                     icon: Archive,
                     onSelect: () => handle(() => archivePlayAction(p.id, true)),
                   },
+              ...(isAdmin
+                ? [
+                    {
+                      label: "Copy play JSON (admin)",
+                      icon: ClipboardCopy,
+                      onSelect: async () => {
+                        const res = await getPlayForEditorAction(p.id);
+                        if (!res.ok) {
+                          toast(res.error ?? "Could not load play.", "error");
+                          return;
+                        }
+                        const json = JSON.stringify(
+                          { play: res.play, document: res.document },
+                          null,
+                          2,
+                        );
+                        try {
+                          await navigator.clipboard.writeText(json);
+                          toast("Play JSON copied to clipboard.", "success");
+                        } catch {
+                          toast("Clipboard unavailable in this context.", "error");
+                        }
+                      },
+                    } satisfies ActionMenuItem,
+                  ]
+                : []),
               {
                 label: "Delete",
                 icon: Trash2,
