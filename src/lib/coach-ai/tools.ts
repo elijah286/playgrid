@@ -1276,7 +1276,7 @@ const set_defender_assignment: CoachAiTool = {
         const exists = zonesArr.some((z) => z.label === zoneLabel);
         newZones = exists
           ? zonesArr
-          : [...zonesArr, { kind: "rectangle", center, size, label: zoneLabel }];
+          : [...zonesArr, { kind: "ellipse", center, size, label: zoneLabel, ownerLabel: defender }];
         summary = `${defender} drops into ${zoneLabel}`;
         break;
       }

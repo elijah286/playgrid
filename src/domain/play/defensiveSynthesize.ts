@@ -207,19 +207,19 @@ function placeTackle11Secondary(
         players,
         zones: [
           // Two deep halves
-          { kind: "rectangle", center: { x: -10, y: 17 }, size: { x: 14, y: 16 }, label: "Deep 1/2 L" },
-          { kind: "rectangle", center: { x:  10, y: 17 }, size: { x: 14, y: 16 }, label: "Deep 1/2 R" },
+          { kind: "ellipse", center: { x: -10, y: 17 }, size: { x: 14, y: 16 }, label: "Deep 1/2 L" },
+          { kind: "ellipse", center: { x:  10, y: 17 }, size: { x: 14, y: 16 }, label: "Deep 1/2 R" },
           // 5 underneath, non-overlapping spans:
           //   Flat L  : -18 .. -10  (size 8, center -14)
           //   Hook L  : -10 ..  -3  (size 7, center -6.5)
           //   Mid Hole:  -3 ..   3  (size 6, center 0)
           //   Hook R  :   3 ..  10  (size 7, center 6.5)
           //   Flat R  :  10 ..  18  (size 8, center 14)
-          { kind: "rectangle", center: { x: -14,  y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
-          { kind: "rectangle", center: { x:  -6.5,y: 5 }, size: { x: 7, y: 8 }, label: "Hook L" },
-          { kind: "rectangle", center: { x:   0,  y: 5 }, size: { x: 6, y: 8 }, label: "Mid" },
-          { kind: "rectangle", center: { x:   6.5,y: 5 }, size: { x: 7, y: 8 }, label: "Hook R" },
-          { kind: "rectangle", center: { x:  14,  y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
+          { kind: "ellipse", center: { x: -14,  y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
+          { kind: "ellipse", center: { x:  -6.5,y: 5 }, size: { x: 7, y: 8 }, label: "Hook L" },
+          { kind: "ellipse", center: { x:   0,  y: 5 }, size: { x: 6, y: 8 }, label: "Mid" },
+          { kind: "ellipse", center: { x:   6.5,y: 5 }, size: { x: 7, y: 8 }, label: "Hook R" },
+          { kind: "ellipse", center: { x:  14,  y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
         ],
         manCoverage: false,
       };
@@ -231,9 +231,9 @@ function placeTackle11Secondary(
         ...c2,
         zones: [
           ...c2.zones.filter((z) => !z.label.startsWith("Deep") && !z.label.startsWith("Hook M")),
-          { kind: "rectangle", center: { x: -10, y: 17 }, size: { x: 12, y: 16 }, label: "Deep 1/2 L" },
-          { kind: "rectangle", center: { x:   0, y: 17 }, size: { x:  8, y: 16 }, label: "Deep M (MLB)" },
-          { kind: "rectangle", center: { x:  10, y: 17 }, size: { x: 12, y: 16 }, label: "Deep 1/2 R" },
+          { kind: "ellipse", center: { x: -10, y: 17 }, size: { x: 12, y: 16 }, label: "Deep 1/2 L" },
+          { kind: "ellipse", center: { x:   0, y: 17 }, size: { x:  8, y: 16 }, label: "Deep M (MLB)" },
+          { kind: "ellipse", center: { x:  10, y: 17 }, size: { x: 12, y: 16 }, label: "Deep 1/2 R" },
         ],
       };
     }
@@ -257,13 +257,13 @@ function placeTackle11Secondary(
       return {
         players,
         zones: [
-          { kind: "rectangle", center: { x: -11, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 L" },
-          { kind: "rectangle", center: { x:   0, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 M" },
-          { kind: "rectangle", center: { x:  11, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 R" },
-          { kind: "rectangle", center: { x: -14, y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
-          { kind: "rectangle", center: { x:  -5, y: 5 }, size: { x: 10, y: 8 }, label: "Hook L" },
-          { kind: "rectangle", center: { x:   5, y: 5 }, size: { x: 10, y: 8 }, label: "Hook R" },
-          { kind: "rectangle", center: { x:  14, y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
+          { kind: "ellipse", center: { x: -11, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 L" },
+          { kind: "ellipse", center: { x:   0, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 M" },
+          { kind: "ellipse", center: { x:  11, y: 17 }, size: { x: 11, y: 16 }, label: "Deep 1/3 R" },
+          { kind: "ellipse", center: { x: -14, y: 4 }, size: { x: 8, y: 8 }, label: "Flat L" },
+          { kind: "ellipse", center: { x:  -5, y: 5 }, size: { x: 10, y: 8 }, label: "Hook L" },
+          { kind: "ellipse", center: { x:   5, y: 5 }, size: { x: 10, y: 8 }, label: "Hook R" },
+          { kind: "ellipse", center: { x:  14, y: 4 }, size: { x: 8, y: 8 }, label: "Flat R" },
         ],
         manCoverage: false,
       };
@@ -284,13 +284,13 @@ function placeTackle11Secondary(
       return {
         players,
         zones: [
-          { kind: "rectangle", center: { x: -13.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 L" },
-          { kind: "rectangle", center: { x:  -4.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 ML" },
-          { kind: "rectangle", center: { x:   4.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 MR" },
-          { kind: "rectangle", center: { x:  13.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 R" },
-          { kind: "rectangle", center: { x: -12, y: 4 }, size: { x: 12, y: 8 }, label: "Flat L" },
-          { kind: "rectangle", center: { x:   0, y: 5 }, size: { x: 12, y: 8 }, label: "Mid" },
-          { kind: "rectangle", center: { x:  12, y: 4 }, size: { x: 12, y: 8 }, label: "Flat R" },
+          { kind: "ellipse", center: { x: -13.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 L" },
+          { kind: "ellipse", center: { x:  -4.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 ML" },
+          { kind: "ellipse", center: { x:   4.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 MR" },
+          { kind: "ellipse", center: { x:  13.5, y: 17 }, size: { x: 9, y: 16 }, label: "Deep 1/4 R" },
+          { kind: "ellipse", center: { x: -12, y: 4 }, size: { x: 12, y: 8 }, label: "Flat L" },
+          { kind: "ellipse", center: { x:   0, y: 5 }, size: { x: 12, y: 8 }, label: "Mid" },
+          { kind: "ellipse", center: { x:  12, y: 4 }, size: { x: 12, y: 8 }, label: "Flat R" },
         ],
         manCoverage: false,
       };

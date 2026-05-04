@@ -131,13 +131,13 @@ const T11_43_OVER_COVER_3: DefensiveAlignment = {
     { id: "SS", x:  6,  y: 9,   assignment: { kind: "zone", zoneId: "flat_l" } },
   ],
   zones: [
-    { id: "deep_third_l", kind: "rectangle", center: [-11, 17], size: [11, 16], label: "Deep 1/3 L" },
-    { id: "deep_third_m", kind: "rectangle", center: [  0, 17], size: [11, 16], label: "Deep 1/3 M" },
-    { id: "deep_third_r", kind: "rectangle", center: [ 11, 17], size: [11, 16], label: "Deep 1/3 R" },
-    { id: "flat_l",  kind: "rectangle", center: [-14, 4], size: [8,  8], label: "Flat L" },
-    { id: "hook_l",  kind: "rectangle", center: [ -5, 5], size: [10, 8], label: "Hook L" },
-    { id: "hook_m",  kind: "rectangle", center: [  0, 5], size: [6,  8], label: "Hook M" },
-    { id: "flat_r",  kind: "rectangle", center: [ 14, 4], size: [8,  8], label: "Flat R" },
+    { id: "deep_third_l", kind: "ellipse", center: [-11, 17], size: [11, 16], label: "Deep 1/3 L" },
+    { id: "deep_third_m", kind: "ellipse", center: [  0, 17], size: [11, 16], label: "Deep 1/3 M" },
+    { id: "deep_third_r", kind: "ellipse", center: [ 11, 17], size: [11, 16], label: "Deep 1/3 R" },
+    { id: "flat_l",  kind: "ellipse", center: [-14, 4], size: [8,  8], label: "Flat L" },
+    { id: "hook_l",  kind: "ellipse", center: [ -5, 5], size: [10, 8], label: "Hook L" },
+    { id: "hook_m",  kind: "ellipse", center: [  0, 5], size: [6,  8], label: "Hook M" },
+    { id: "flat_r",  kind: "ellipse", center: [ 14, 4], size: [8,  8], label: "Flat R" },
   ],
 };
 
@@ -162,13 +162,13 @@ const T11_43_OVER_COVER_2: DefensiveAlignment = {
     { id: "SS", x:  8,  y: 13,  assignment: { kind: "zone", zoneId: "deep_half_r" } },
   ],
   zones: [
-    { id: "deep_half_l", kind: "rectangle", center: [-8, 17], size: [16, 16], label: "Deep 1/2 L" },
-    { id: "deep_half_r", kind: "rectangle", center: [ 8, 17], size: [16, 16], label: "Deep 1/2 R" },
-    { id: "flat_l",  kind: "rectangle", center: [-14, 4], size: [8, 8], label: "Flat L" },
-    { id: "hook_l",  kind: "rectangle", center: [ -6, 5], size: [7, 8], label: "Hook L" },
-    { id: "hook_m",  kind: "rectangle", center: [  0, 5], size: [6, 8], label: "Hook M" },
-    { id: "hook_r",  kind: "rectangle", center: [  6, 5], size: [7, 8], label: "Hook R" },
-    { id: "flat_r",  kind: "rectangle", center: [ 14, 4], size: [8, 8], label: "Flat R" },
+    { id: "deep_half_l", kind: "ellipse", center: [-8, 17], size: [16, 16], label: "Deep 1/2 L" },
+    { id: "deep_half_r", kind: "ellipse", center: [ 8, 17], size: [16, 16], label: "Deep 1/2 R" },
+    { id: "flat_l",  kind: "ellipse", center: [-14, 4], size: [8, 8], label: "Flat L" },
+    { id: "hook_l",  kind: "ellipse", center: [ -6, 5], size: [7, 8], label: "Hook L" },
+    { id: "hook_m",  kind: "ellipse", center: [  0, 5], size: [6, 8], label: "Hook M" },
+    { id: "hook_r",  kind: "ellipse", center: [  6, 5], size: [7, 8], label: "Hook R" },
+    { id: "flat_r",  kind: "ellipse", center: [ 14, 4], size: [8, 8], label: "Flat R" },
   ],
 };
 
@@ -194,7 +194,7 @@ const T11_34_COVER_1: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 13,  assignment: { kind: "zone", zoneId: "deep_middle" } },
   ],
   zones: [
-    { id: "deep_middle", kind: "rectangle", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+    { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
   ],
 };
 
@@ -219,13 +219,13 @@ const T11_NICKEL_425_COVER_4: DefensiveAlignment = {
     { id: "SS", x:  7,  y: 11,  assignment: { kind: "zone", zoneId: "deep_quarter_3" } },
   ],
   zones: [
-    { id: "deep_quarter_1", kind: "rectangle", center: [-13.5, 17], size: [9, 16], label: "Deep 1/4" },
-    { id: "deep_quarter_2", kind: "rectangle", center: [ -4.5, 17], size: [9, 16], label: "Deep 1/4" },
-    { id: "deep_quarter_3", kind: "rectangle", center: [  4.5, 17], size: [9, 16], label: "Deep 1/4" },
-    { id: "deep_quarter_4", kind: "rectangle", center: [ 13.5, 17], size: [9, 16], label: "Deep 1/4" },
-    { id: "hook_l",  kind: "rectangle", center: [-5, 5], size: [10, 8], label: "Hook L" },
-    { id: "hook_m",  kind: "rectangle", center: [ 0, 5], size: [8,  8], label: "Hook M" },
-    { id: "flat_r",  kind: "rectangle", center: [12, 4], size: [12, 8], label: "Flat R" },
+    { id: "deep_quarter_1", kind: "ellipse", center: [-13.5, 17], size: [9, 16], label: "Deep 1/4" },
+    { id: "deep_quarter_2", kind: "ellipse", center: [ -4.5, 17], size: [9, 16], label: "Deep 1/4" },
+    { id: "deep_quarter_3", kind: "ellipse", center: [  4.5, 17], size: [9, 16], label: "Deep 1/4" },
+    { id: "deep_quarter_4", kind: "ellipse", center: [ 13.5, 17], size: [9, 16], label: "Deep 1/4" },
+    { id: "hook_l",  kind: "ellipse", center: [-5, 5], size: [10, 8], label: "Hook L" },
+    { id: "hook_m",  kind: "ellipse", center: [ 0, 5], size: [8,  8], label: "Hook M" },
+    { id: "flat_r",  kind: "ellipse", center: [12, 4], size: [12, 8], label: "Flat R" },
   ],
 };
 
@@ -252,13 +252,13 @@ const T11_44_STACK_COVER_3: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 13, assignment: { kind: "zone", zoneId: "deep_third_m" } },
   ],
   zones: [
-    { id: "deep_third_l", kind: "rectangle", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
-    { id: "deep_third_m", kind: "rectangle", center: [  0, 17], size: [10, 16], label: "Deep 1/3 M" },
-    { id: "deep_third_r", kind: "rectangle", center: [ 10, 17], size: [10, 16], label: "Deep 1/3 R" },
-    { id: "flat_l", kind: "rectangle", center: [-11, 5], size: [8, 8], label: "Flat L" },
-    { id: "hook_l", kind: "rectangle", center: [ -4, 5], size: [6, 8], label: "Hook L" },
-    { id: "hook_r", kind: "rectangle", center: [  4, 5], size: [6, 8], label: "Hook R" },
-    { id: "flat_r", kind: "rectangle", center: [ 11, 5], size: [8, 8], label: "Flat R" },
+    { id: "deep_third_l", kind: "ellipse", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
+    { id: "deep_third_m", kind: "ellipse", center: [  0, 17], size: [10, 16], label: "Deep 1/3 M" },
+    { id: "deep_third_r", kind: "ellipse", center: [ 10, 17], size: [10, 16], label: "Deep 1/3 R" },
+    { id: "flat_l", kind: "ellipse", center: [-11, 5], size: [8, 8], label: "Flat L" },
+    { id: "hook_l", kind: "ellipse", center: [ -4, 5], size: [6, 8], label: "Hook L" },
+    { id: "hook_r", kind: "ellipse", center: [  4, 5], size: [6, 8], label: "Hook R" },
+    { id: "flat_r", kind: "ellipse", center: [ 11, 5], size: [8, 8], label: "Flat R" },
   ],
 };
 
@@ -285,7 +285,7 @@ const T11_44_STACK_COVER_1: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 13, assignment: { kind: "zone", zoneId: "deep_middle" } },
   ],
   zones: [
-    { id: "deep_middle", kind: "rectangle", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+    { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
   ],
 };
 
@@ -311,7 +311,7 @@ const T11_46_BEAR_COVER_1: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 13,  assignment: { kind: "zone", zoneId: "deep_middle" } },
   ],
   zones: [
-    { id: "deep_middle", kind: "rectangle", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+    { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
   ],
 };
 
@@ -336,13 +336,13 @@ const F7_COVER_3: DefensiveAlignment = {
     { id: "CB", x: 12,  y: 11, assignment: { kind: "zone", zoneId: "deep_third_r" } },
   ],
   zones: [
-    { id: "flat_l",       kind: "rectangle", center: [-11, 5], size: [8,  8], label: "Flat L" },
-    { id: "hook_l",       kind: "rectangle", center: [-4,  5], size: [6,  8], label: "Hook L" },
-    { id: "hook_r",       kind: "rectangle", center: [ 4,  5], size: [6,  8], label: "Hook R" },
-    { id: "flat_r",       kind: "rectangle", center: [11,  5], size: [8,  8], label: "Flat R" },
-    { id: "deep_third_l", kind: "rectangle", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
-    { id: "deep_third_m", kind: "rectangle", center: [ 0,  17], size: [10, 16], label: "Deep 1/3 M" },
-    { id: "deep_third_r", kind: "rectangle", center: [10,  17], size: [10, 16], label: "Deep 1/3 R" },
+    { id: "flat_l",       kind: "ellipse", center: [-11, 5], size: [8,  8], label: "Flat L" },
+    { id: "hook_l",       kind: "ellipse", center: [-4,  5], size: [6,  8], label: "Hook L" },
+    { id: "hook_r",       kind: "ellipse", center: [ 4,  5], size: [6,  8], label: "Hook R" },
+    { id: "flat_r",       kind: "ellipse", center: [11,  5], size: [8,  8], label: "Flat R" },
+    { id: "deep_third_l", kind: "ellipse", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
+    { id: "deep_third_m", kind: "ellipse", center: [ 0,  17], size: [10, 16], label: "Deep 1/3 M" },
+    { id: "deep_third_r", kind: "ellipse", center: [10,  17], size: [10, 16], label: "Deep 1/3 R" },
   ],
 };
 
@@ -362,13 +362,13 @@ const F7_COVER_2: DefensiveAlignment = {
     { id: "SS", x:  7,  y: 12, assignment: { kind: "zone", zoneId: "deep_half_r" } },
   ],
   zones: [
-    { id: "flat_l", kind: "rectangle", center: [-12, 5], size: [6, 8], label: "Flat L" },
-    { id: "hook_l", kind: "rectangle", center: [-5,  5], size: [6, 8], label: "Hook L" },
-    { id: "hook_m", kind: "rectangle", center: [ 0,  5], size: [6, 8], label: "Hook M" },
-    { id: "hook_r", kind: "rectangle", center: [ 5,  5], size: [6, 8], label: "Hook R" },
-    { id: "flat_r", kind: "rectangle", center: [12,  5], size: [6, 8], label: "Flat R" },
-    { id: "deep_half_l", kind: "rectangle", center: [-7.5, 17], size: [15, 16], label: "Deep 1/2 L" },
-    { id: "deep_half_r", kind: "rectangle", center: [ 7.5, 17], size: [15, 16], label: "Deep 1/2 R" },
+    { id: "flat_l", kind: "ellipse", center: [-12, 5], size: [6, 8], label: "Flat L" },
+    { id: "hook_l", kind: "ellipse", center: [-5,  5], size: [6, 8], label: "Hook L" },
+    { id: "hook_m", kind: "ellipse", center: [ 0,  5], size: [6, 8], label: "Hook M" },
+    { id: "hook_r", kind: "ellipse", center: [ 5,  5], size: [6, 8], label: "Hook R" },
+    { id: "flat_r", kind: "ellipse", center: [12,  5], size: [6, 8], label: "Flat R" },
+    { id: "deep_half_l", kind: "ellipse", center: [-7.5, 17], size: [15, 16], label: "Deep 1/2 L" },
+    { id: "deep_half_r", kind: "ellipse", center: [ 7.5, 17], size: [15, 16], label: "Deep 1/2 R" },
   ],
 };
 
@@ -389,13 +389,13 @@ const F7_TAMPA_2: DefensiveAlignment = {
     { id: "SS", x:  7,  y: 12, assignment: { kind: "zone", zoneId: "deep_half_r" } },
   ],
   zones: [
-    { id: "flat_l", kind: "rectangle", center: [-12, 5], size: [6, 8], label: "Flat L" },
-    { id: "hook_l", kind: "rectangle", center: [-5,  5], size: [6, 8], label: "Hook L" },
-    { id: "hook_r", kind: "rectangle", center: [ 5,  5], size: [6, 8], label: "Hook R" },
-    { id: "flat_r", kind: "rectangle", center: [12,  5], size: [6, 8], label: "Flat R" },
-    { id: "deep_half_l", kind: "rectangle", center: [-9, 17], size: [12, 16], label: "Deep 1/2 L" },
-    { id: "deep_middle", kind: "rectangle", center: [ 0, 17], size: [6,  16], label: "Deep mid (M)" },
-    { id: "deep_half_r", kind: "rectangle", center: [ 9, 17], size: [12, 16], label: "Deep 1/2 R" },
+    { id: "flat_l", kind: "ellipse", center: [-12, 5], size: [6, 8], label: "Flat L" },
+    { id: "hook_l", kind: "ellipse", center: [-5,  5], size: [6, 8], label: "Hook L" },
+    { id: "hook_r", kind: "ellipse", center: [ 5,  5], size: [6, 8], label: "Hook R" },
+    { id: "flat_r", kind: "ellipse", center: [12,  5], size: [6, 8], label: "Flat R" },
+    { id: "deep_half_l", kind: "ellipse", center: [-9, 17], size: [12, 16], label: "Deep 1/2 L" },
+    { id: "deep_middle", kind: "ellipse", center: [ 0, 17], size: [6,  16], label: "Deep mid (M)" },
+    { id: "deep_half_r", kind: "ellipse", center: [ 9, 17], size: [12, 16], label: "Deep 1/2 R" },
   ],
 };
 
@@ -416,13 +416,13 @@ const F7_COVER_4: DefensiveAlignment = {
     { id: "CB", x:  13, y: 11, assignment: { kind: "zone", zoneId: "deep_quarter_4" } },
   ],
   zones: [
-    { id: "curl_flat_l", kind: "rectangle", center: [-10, 5], size: [10, 8], label: "Curl/Flat L" },
-    { id: "hook_m",      kind: "rectangle", center: [  0, 5], size: [8,  8], label: "Hook M" },
-    { id: "curl_flat_r", kind: "rectangle", center: [ 10, 5], size: [10, 8], label: "Curl/Flat R" },
-    { id: "deep_quarter_1", kind: "rectangle", center: [-11, 17], size: [8, 16], label: "Deep 1/4" },
-    { id: "deep_quarter_2", kind: "rectangle", center: [ -4, 17], size: [6, 16], label: "Deep 1/4" },
-    { id: "deep_quarter_3", kind: "rectangle", center: [  4, 17], size: [6, 16], label: "Deep 1/4" },
-    { id: "deep_quarter_4", kind: "rectangle", center: [ 11, 17], size: [8, 16], label: "Deep 1/4" },
+    { id: "curl_flat_l", kind: "ellipse", center: [-10, 5], size: [10, 8], label: "Curl/Flat L" },
+    { id: "hook_m",      kind: "ellipse", center: [  0, 5], size: [8,  8], label: "Hook M" },
+    { id: "curl_flat_r", kind: "ellipse", center: [ 10, 5], size: [10, 8], label: "Curl/Flat R" },
+    { id: "deep_quarter_1", kind: "ellipse", center: [-11, 17], size: [8, 16], label: "Deep 1/4" },
+    { id: "deep_quarter_2", kind: "ellipse", center: [ -4, 17], size: [6, 16], label: "Deep 1/4" },
+    { id: "deep_quarter_3", kind: "ellipse", center: [  4, 17], size: [6, 16], label: "Deep 1/4" },
+    { id: "deep_quarter_4", kind: "ellipse", center: [ 11, 17], size: [8, 16], label: "Deep 1/4" },
   ],
 };
 
@@ -443,7 +443,7 @@ const F7_COVER_1: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 13, assignment: { kind: "zone", zoneId: "deep_middle" } },
   ],
   zones: [
-    { id: "deep_middle", kind: "rectangle", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+    { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
   ],
 };
 
@@ -482,11 +482,11 @@ const F5_COVER_3: DefensiveAlignment = {
     { id: "CB", x: 10,  y: 10, assignment: { kind: "zone", zoneId: "deep_third_r" } },
   ],
   zones: [
-    { id: "flat_l", kind: "rectangle", center: [-8, 4], size: [10, 8], label: "Flat L" },
-    { id: "flat_r", kind: "rectangle", center: [ 8, 4], size: [10, 8], label: "Flat R" },
-    { id: "deep_third_l", kind: "rectangle", center: [-9, 17], size: [9, 16], label: "Deep 1/3 L" },
-    { id: "deep_third_m", kind: "rectangle", center: [ 0, 17], size: [9, 16], label: "Deep 1/3 M" },
-    { id: "deep_third_r", kind: "rectangle", center: [ 9, 17], size: [9, 16], label: "Deep 1/3 R" },
+    { id: "flat_l", kind: "ellipse", center: [-8, 4], size: [10, 8], label: "Flat L" },
+    { id: "flat_r", kind: "ellipse", center: [ 8, 4], size: [10, 8], label: "Flat R" },
+    { id: "deep_third_l", kind: "ellipse", center: [-9, 17], size: [9, 16], label: "Deep 1/3 L" },
+    { id: "deep_third_m", kind: "ellipse", center: [ 0, 17], size: [9, 16], label: "Deep 1/3 M" },
+    { id: "deep_third_r", kind: "ellipse", center: [ 9, 17], size: [9, 16], label: "Deep 1/3 R" },
   ],
 };
 
@@ -505,7 +505,7 @@ const F5_COVER_1: DefensiveAlignment = {
     { id: "FS", x:  0,  y: 12, assignment: { kind: "zone", zoneId: "deep_middle" } },
   ],
   zones: [
-    { id: "deep_middle", kind: "rectangle", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+    { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
   ],
 };
 
