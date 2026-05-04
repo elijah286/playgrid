@@ -4468,7 +4468,7 @@ function FirstPlayHero({
           rest of the playbook unlocks — formations, roster, sharing, print
           and Game Mode.
         </p>
-        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:items-start">
+        <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
           <div className="flex flex-col items-center">
             <Button
               variant="primary"
@@ -4476,18 +4476,19 @@ function FirstPlayHero({
               leftIcon={Plus}
               onClick={onCreate}
               loading={loading}
-              className="px-8 py-4 text-base font-bold"
+              className="h-12 w-full min-w-[260px] whitespace-nowrap rounded-full px-6 text-sm font-bold sm:w-auto"
             >
               Draw your first play
             </Button>
             <p className="mt-2 text-xs text-muted">Free — takes about a minute.</p>
           </div>
-          <span className="mt-4 text-xs uppercase tracking-wide text-muted sm:mt-5">or</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted sm:self-center sm:pb-7">or</span>
           <div className="flex flex-col items-center">
             <CoachCalCTA
               entryPoint="playbook_generate_starter"
               variant="primary"
-              className="px-6 py-4 text-base font-bold"
+              label="Generate with Coach Cal"
+              className="h-12 w-full min-w-[260px] justify-center whitespace-nowrap rounded-full px-6 text-sm font-bold sm:w-auto"
             />
             <p className="mt-2 text-xs text-muted">Coach Pro — done in seconds.</p>
           </div>
