@@ -109,6 +109,7 @@ function routeAt(
 ): PlayerAssignment {
   return {
     player,
+    confidence: "high",
     action: { kind: "route", family, depthYds, ...(direction ? { direction } : {}) },
   };
 }
@@ -119,6 +120,7 @@ function lineBlocks(variant: SportVariant): PlayerAssignment[] {
   if (variant !== "tackle_11") return [];
   return ["LT", "LG", "C", "RG", "RT"].map((id) => ({
     player: id,
+    confidence: "high",
     action: { kind: "block" } as AssignmentAction,
   }));
 }
@@ -126,7 +128,7 @@ function lineBlocks(variant: SportVariant): PlayerAssignment[] {
 /** QB drops back — we model as "unspecified" because the QB's job
  *  is to read and throw, not run a route. */
 function qbDropback(): PlayerAssignment {
-  return { player: "Q", action: { kind: "unspecified" } };
+  return { player: "Q", confidence: "high", action: { kind: "unspecified" } };
 }
 
 /** Standard PlaySpec scaffolding shared by every builder. */

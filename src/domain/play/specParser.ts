@@ -284,7 +284,13 @@ function actionFromRoute(
       curve: route.curve,
     };
   }
-  // No route_kind — preserve as custom so the geometry isn't lost.
+  // No route_kind — try to infer the route concept from geometry.
+  // If inference succeeds, treat it as a regular route. Otherwise,
+  // preserve as custom so the geometry isn't lost.
+  const inferred = tryInferRouteFamily(route, carrier);
+  if (inferred) {
+    return inferred;
+  }
   return {
     kind: "custom",
     description: "Hand-authored route",
@@ -292,3 +298,47 @@ function actionFromRoute(
     curve: route.curve,
   };
 }
+
+/** Try to infer a route family from the path geometry. Returns a route
+ *  action if a likely match is found; null otherwise. */
+function tryInferRouteFamily(
+  route: CoachDiagramRoute,
+  carrier?: { x: number; y: number },
+): Extract<AssignmentAction, { kind: "route" }> | null {
+  if (!route.path || route.path.length < 2) return null;
+  if (!carrier) return null;
+
+  const waypoints = route.path;
+  const start = waypoints[0];
+  const end = waypoints[waypoints.length - 1];
+
+  const dx = Math.abs(end.x - start.x);
+  const dy = Math.abs(end.y - start.y);
+  const depthYds = carrier ? computeDeepestDepth(route.path, carrier) : undefined;
+
+  // Try to match common route families based on direction and depth.
+  // This is heuristic-based; exact matches require route_kind.
+  const matchTemplates = [
+    { name: "Go", predicate: () => dy > dx && depthYds && depthYds > 15 },
+    { name: "Post", predicate: () => dy > dx && dx > 2 && depthYds && depthYds >= 10 && depthYds <= 15 },
+    { name: "Corner", predicate: () => dy > dx && dx > 3 && depthYds && depthYds >= 10 && depthYds <= 15 },
+    { name: "Dig", predicate: () => dy > 5 && dx > 5 && depthYds && depthYds >= 8 && depthYds <= 12 },
+    { name: "In", predicate: () => dx > dy && dx > 3 && depthYds && depthYds >= 5 && depthYds <= 10 },
+    { name: "Out", predicate: () => dx > dy && dx > 3 && depthYds && depthYds >= 3 && depthYds <= 8 },
+    { name: "Slant", predicate: () => dx > 0 && dy > 0 && dx > dy * 0.5 && depthYds && depthYds >= 3 && depthYds <= 7 },
+    { name: "Flat", predicate: () => dy < 2 && dx > 3 && depthYds && depthYds < 3 },
+    { name: "Hitch", predicate: () => dy > 0 && dy < 6 && dx < 2 && depthYds && depthYds >= 3 && depthYds <= 6 },
+  ];
+
+  for (const match of matchTemplates) {
+    const template = findTemplate(match.name);
+    if (template && match.predicate()) {
+      const action: AssignmentAction = { kind: "route", family: template.name };
+      if (depthYds !== undefined && Number.isFinite(depthYds)) {
+        return { ...action, depthYds: Math.round(depthYds * 10) / 10 } as Extract<AssignmentAction, { kind: "route" }>;
+      }
+      return action as Extract<AssignmentAction, { kind: "route" }>;
+    }
+  }
+
+  return null;
