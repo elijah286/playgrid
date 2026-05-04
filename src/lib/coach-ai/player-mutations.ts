@@ -100,26 +100,55 @@ export type PlayerStyleModResult =
   | { ok: true; doc: PlayDocument; player: Player; changedFields: string[] }
   | { ok: false; error: string };
 
-/** Resolve a selector to exactly one player. Label matches are
- *  case-sensitive and must be unique within the play (a play with two
- *  H's would force the coach to disambiguate by id). */
+/** Resolve a selector to exactly one player.
+ *
+ *  Three resolution paths, in order:
+ *    1. UUID — exact match against `player.id`.
+ *    2. Display-id (mirrors `playDocumentToCoachDiagram`'s suffix scheme):
+ *       when a play has two players sharing label "Z", they're exposed to
+ *       Cal as `Z` (first) and `Z2` (second). The selector accepts the
+ *       same form, so Cal can disambiguate using the IDs it actually sees
+ *       in `get_play` output without the coach handing over UUIDs.
+ *    3. Literal label — case-sensitive. Must be unique unless step 2
+ *       already resolved it.
+ */
 function resolvePlayer(doc: PlayDocument, selector: string): { ok: true; player: Player } | { ok: false; error: string } {
   const sel = selector.trim();
   if (!sel) return { ok: false, error: "player_selector is required." };
+
   const byId = doc.layers.players.find((p) => p.id === sel);
   if (byId) return { ok: true, player: byId };
+
+  // Build the same display-id map the renderer uses, so Cal can pass `Z`
+  // for the first Z and `Z2` for the second (matching what get_play shows).
+  const displayIdToPlayer = new Map<string, Player>();
+  const seen = new Map<string, number>();
+  for (const p of doc.layers.players) {
+    const base = p.label || p.id;
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    const displayId = count === 1 ? base : `${base}${count}`;
+    displayIdToPlayer.set(displayId, p);
+  }
+  const byDisplay = displayIdToPlayer.get(sel);
+  if (byDisplay) return { ok: true, player: byDisplay };
+
   const byLabel = doc.layers.players.filter((p) => p.label === sel);
   if (byLabel.length === 1) return { ok: true, player: byLabel[0]! };
   if (byLabel.length === 0) {
-    const labels = doc.layers.players.map((p) => p.label).join(", ");
+    const displayIds = Array.from(displayIdToPlayer.keys()).join(", ");
     return {
       ok: false,
-      error: `No player with label or id "${sel}". Players in this play: ${labels || "(none)"}.`,
+      error: `No player with selector "${sel}". Players in this play: ${displayIds || "(none)"}.`,
     };
   }
+  // Ambiguous literal label — should be unreachable because the display-id
+  // map already covers the unique-first-occurrence case. Kept as a guard so
+  // a future change to the display scheme doesn't silently mis-route.
+  const suffixed = byLabel.map((_p, i) => (i === 0 ? sel : `${sel}${i + 1}`)).join(", ");
   return {
     ok: false,
-    error: `Label "${sel}" is ambiguous — ${byLabel.length} players share it. Pass the player id instead.`,
+    error: `Label "${sel}" is ambiguous — ${byLabel.length} players share it. Use the suffixed id (${suffixed}) or the player UUID.`,
   };
 }
 

@@ -72,14 +72,68 @@ describe("applyPlayerStyleMod — selector resolution", () => {
     if (!r.ok) expect(r.error).toContain("H");
   });
 
-  it("rejects an ambiguous label match", () => {
+  it("resolves duplicate-label first occurrence via the bare label (matches display-id scheme)", () => {
+    // playDocumentToCoachDiagram exposes the first H as `H` and the second
+    // as `H2`. The resolver mirrors that — so a `Z`/`Z2` play with the same
+    // duplicates Cal sees in get_play resolves cleanly via either id.
     const doc = makeDoc([
       makePlayer({ id: "p_h1", label: "H" }),
       makePlayer({ id: "p_h2", label: "H" }),
     ]);
     const r = applyPlayerStyleMod(doc, { player_selector: "H", fill: "purple" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.player.id).toBe("p_h1");
+  });
+
+  it("resolves the second duplicate via the suffixed display id (H2)", () => {
+    const doc = makeDoc([
+      makePlayer({ id: "p_h1", label: "H" }),
+      makePlayer({ id: "p_h2", label: "H" }),
+    ]);
+    const r = applyPlayerStyleMod(doc, { player_selector: "H2", label: "F" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.player.id).toBe("p_h2");
+      expect(r.player.label).toBe("F");
+    }
+  });
+
+  it("resolves the third duplicate via H3", () => {
+    const doc = makeDoc([
+      makePlayer({ id: "p_h1", label: "H" }),
+      makePlayer({ id: "p_h2", label: "H" }),
+      makePlayer({ id: "p_h3", label: "H" }),
+    ]);
+    const r = applyPlayerStyleMod(doc, { player_selector: "H3", label: "Y" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.player.id).toBe("p_h3");
+  });
+
+  it("error message lists the display ids the coach can use", () => {
+    const doc = makeDoc([
+      makePlayer({ id: "p_z1", label: "Z" }),
+      makePlayer({ id: "p_z2", label: "Z" }),
+      makePlayer({ id: "p_q", label: "Q" }),
+    ]);
+    const r = applyPlayerStyleMod(doc, { player_selector: "X", fill: "red" });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/ambiguous/i);
+    if (!r.ok) {
+      expect(r.error).toContain("Z");
+      expect(r.error).toContain("Z2");
+      expect(r.error).toContain("Q");
+    }
+  });
+
+  it("prefers literal label over suffix scheme when both could match", () => {
+    // If a coach really named a player "H2" (literal), that should win
+    // over the implicit "second H" interpretation.
+    const doc = makeDoc([
+      makePlayer({ id: "p_real_h2", label: "H2" }),
+      makePlayer({ id: "p_h1", label: "H" }),
+    ]);
+    const r = applyPlayerStyleMod(doc, { player_selector: "H2", fill: "purple" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.player.id).toBe("p_real_h2");
   });
 });
 

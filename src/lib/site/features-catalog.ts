@@ -517,6 +517,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-rename-duplicate-players",
+    name: "Coach Cal can fix duplicate-labeled players across plays",
+    description:
+      "When a play accidentally has two players sharing the same label (e.g. two Z's after a copy-paste or a formation swap that reused a token), Cal can now disambiguate and rename either one. Cal sees them in get_play exactly the way the renderer presents them — the first as Z, the second as Z2, the third as Z3 — and update_player accepts those same suffixed ids as the player selector. Combined with a new label-audit workflow in Cal's prompt, coaches can hand Cal a label↔color convention (\"Y=green, F=purple, S=yellow, X=red, Z=blue\") and ask Cal to scrub the playbook: Cal walks each play, compares each token's color to the convention, proposes a per-play rename diff, and on confirmation issues one update_player call per fix. No more pushing the analysis back on the coach with \"tell me which player is wrong on which play.\"",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-03",
+  },
+  {
     id: "coach-cal-variant-rule-gates",
     name: "Coach Cal respects per-playbook game rules (blocking, eligible center)",
     description:

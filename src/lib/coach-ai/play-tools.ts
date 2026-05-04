@@ -1325,8 +1325,12 @@ const update_player: CoachAiTool = {
         player: {
           type: "string",
           description:
-            "Selector for which player to update. Either the player's CURRENT label (e.g. \"H\", \"B\", \"X\") " +
-            "or the player's id (UUID). Label match is case-sensitive and must be unique within the play.",
+            "Selector for which player to update — use the SAME id you see in get_play's diagram JSON. " +
+            "When labels are unique within the play, that's just the label (e.g. \"H\", \"B\", \"X\"). " +
+            "When two or more players share a label (e.g. a play with two Z's), get_play disambiguates " +
+            "them by suffix: the first is `Z`, the second is `Z2`, the third is `Z3`. Pass that exact " +
+            "suffixed id here to target the duplicate. The player's UUID also works if you have it. " +
+            "Case-sensitive.",
         },
         label: {
           type: "string",
