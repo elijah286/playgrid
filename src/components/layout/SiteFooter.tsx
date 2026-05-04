@@ -8,7 +8,7 @@ export function SiteFooter() {
         <p className="font-medium">
           © {year} XO Gridmaker · Cedar Park, TX
         </p>
-        <nav className="flex items-center gap-5">
+        <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <Link href="/#tour" className="hover:text-foreground transition-colors">
             Tour
           </Link>

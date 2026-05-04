@@ -99,7 +99,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             </Link>
             <Link
               href="/login?mode=signup"
-              className="rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
+              className="hidden rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover sm:inline-flex"
             >
               Get started
             </Link>
