@@ -314,6 +314,12 @@ export async function updatePlaybookSettingsAction(
     blockingAllowed: !!settings.blockingAllowed,
     centerIsEligible: !!settings.centerIsEligible,
     maxPlayers: Math.round(settings.maxPlayers),
+    maxThrowDepthYds:
+      typeof settings.maxThrowDepthYds === "number" &&
+      Number.isFinite(settings.maxThrowDepthYds) &&
+      settings.maxThrowDepthYds > 0
+        ? settings.maxThrowDepthYds
+        : null,
   };
 
   const { error } = await supabase
