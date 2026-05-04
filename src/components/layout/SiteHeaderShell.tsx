@@ -93,7 +93,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             </div>
             <Link
               href="/login"
-              className="hidden text-sm font-semibold text-foreground hover:text-primary transition-colors sm:inline"
+              className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
             >
               Sign in
             </Link>

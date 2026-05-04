@@ -1172,11 +1172,11 @@ function PlaybookDetailClientInner({
           onGoTo={(t) => setTab(t)}
         />
 
-        {!headerProps.canManage && !isPreview && (
+        {(!headerProps.canManage || isPreview) && (
           <BuildYourOwnBanner
             playbookId={playbookId}
             ownerName={headerProps.ownerDisplayName}
-            isExample={headerProps.exampleStatus !== null}
+            isExample={isPreview || headerProps.exampleStatus !== null}
           />
         )}
 
@@ -4594,9 +4594,9 @@ function BuildYourOwnBanner({
     setHidden(true);
   }
   const ctaHref = isExample ? `/copy/example/${playbookId}` : "/home?create=1";
-  const ctaLabel = isExample ? "Make this mine" : "Build my playbook";
+  const ctaLabel = isExample ? "Make it mine" : "Build my playbook";
   const message = isExample
-    ? `Want your own copy of this example? Claim it as your starting point — keep collaborating here too.`
+    ? `Like this example? Claim a copy as your starting point and customize it however you want.`
     : `Like what ${ownerName ?? "this coach"} built? You can build your own playbook for free — keep collaborating here too.`;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2">

@@ -103,7 +103,7 @@ export default async function HomePage() {
               </Link>
               <Link
                 href="#tour"
-                className="inline-flex items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+                className="hidden items-center gap-2 rounded-lg px-6 py-3.5 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:inline-flex"
                 style={{ background: BRAND_NAVY }}
               >
                 Take the tour

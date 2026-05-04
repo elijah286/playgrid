@@ -41,7 +41,7 @@ export default async function DashboardLayout({
     ]);
 
   return (
-    <div className="min-h-full">
+    <div className="min-h-full overflow-x-hidden">
       {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
       <NameCapturePrompt needed={nameCaptureNeeded} />
