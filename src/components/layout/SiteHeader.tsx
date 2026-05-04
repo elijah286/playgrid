@@ -4,6 +4,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCachedUserRole } from "@/lib/auth/profile-cache";
 import { SiteHeaderShell } from "@/components/layout/SiteHeaderShell";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 
 export async function SiteHeader() {
   let user: { id: string; email: string | null } | null = null;
@@ -12,6 +13,7 @@ export async function SiteHeader() {
   let avatarUrl: string | null = null;
   let coachAiAvailable = false;
   let showCoachCalPromo = false; // logged-in user without Coach Pro sees the CTA
+  const coachAiEvalDays = await getCoachAiEvalDays();
 
   if (hasSupabaseEnv()) {
     try {
@@ -59,6 +61,7 @@ export async function SiteHeader() {
       avatarUrl={avatarUrl}
       coachAiAvailable={coachAiAvailable}
       showCoachCalPromo={showCoachCalPromo}
+      coachAiEvalDays={coachAiEvalDays}
     />
   );
 }

@@ -28,7 +28,12 @@ export type EntryPointConfig = {
   preview: {
     leadIn: string;
     capabilities: string[];
-    ctaLabel: string;
+    /**
+     * Trial CTA label with `${evalDays}` token. The token is filled in by
+     * `previewCtaLabel(config, evalDays)` so the admin-configured eval
+     * window length stays the single source of truth.
+     */
+    ctaLabelTemplate: string;
   };
   /** Default label for the CTA button. */
   ctaLabel: string;
@@ -48,7 +53,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
         "Build practice plans that install your playbook week by week",
         "Generate starter playbooks scoped to your league and your team",
       ],
-      ctaLabel: "Start 7-day free trial",
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Generate notes with Coach Cal",
   },
@@ -65,7 +70,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
         "Suggest counters when a defense is giving your offense trouble",
         "Author per-play notes with QB reads, hot routes, and coaching points",
       ],
-      ctaLabel: "Start 7-day free trial",
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Generate plays with Coach Cal",
   },
@@ -82,7 +87,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
         "Author per-play notes with QB reads, hot routes, and coaching points",
         "Build practice plans that install your playbook week by week",
       ],
-      ctaLabel: "Start 7-day free trial",
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Suggest a counter with Coach Cal",
   },
@@ -99,7 +104,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
         "Suggest counters when a defense or offense is giving you trouble",
         "Author per-play notes with QB reads, hot routes, and coaching points",
       ],
-      ctaLabel: "Start 7-day free trial",
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Generate a starter playbook with Coach Cal",
   },
@@ -116,7 +121,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
         "Suggest counters when a defense or offense is giving you trouble",
         "Author per-play notes with QB reads, hot routes, and coaching points",
       ],
-      ctaLabel: "Start 7-day free trial",
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Generate a practice plan with Coach Cal",
   },
@@ -133,7 +138,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
         "Generate plays tailored to your team's age, skill, and league rules",
         "Suggest counters when a defense or offense is giving you trouble",
       ],
-      ctaLabel: "Start 7-day free trial",
+      ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
     ctaLabel: "Schedule the season with Coach Cal",
   },
@@ -144,4 +149,13 @@ export function renderPromptTemplate(
   values: Record<string, string> = {},
 ): string {
   return template.replace(/\$\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
+}
+
+export function previewCtaLabel(
+  config: EntryPointConfig,
+  evalDays: number,
+): string {
+  return renderPromptTemplate(config.preview.ctaLabelTemplate, {
+    evalDays: String(evalDays),
+  });
 }

@@ -7,6 +7,7 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { PricingClient } from "./ui";
 
@@ -45,10 +46,11 @@ export default async function PricingPage() {
     }
   }
 
-  const [coachAiEnabled, freeMaxPlays, seatDefaults] = await Promise.all([
+  const [coachAiEnabled, freeMaxPlays, seatDefaults, coachAiEvalDays] = await Promise.all([
     getCoachAiTierEnabled(),
     getFreeMaxPlaysPerPlaybook(),
     getSeatDefaults(),
+    getCoachAiEvalDays(),
   ]);
   const isAuthed = user !== null;
 
@@ -105,6 +107,7 @@ export default async function PricingPage() {
           isAuthed={isAuthed}
           freeMaxPlays={freeMaxPlays}
           seatDefaults={seatDefaults}
+          coachAiEvalDays={coachAiEvalDays}
         />
       </div>
     </div>

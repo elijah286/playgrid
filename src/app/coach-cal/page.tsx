@@ -20,6 +20,7 @@ import {
   MESSAGE_PACK_PRICE_USD_PER_MONTH,
   MESSAGE_PACK_SIZE,
 } from "@/lib/billing/seats-config";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 
 /* -------------------------------------------------------------------------
    SEO. Target keywords (in order of intent strength):
@@ -37,13 +38,17 @@ const PAGE_URL = `${SITE_URL}/coach-cal`;
 const OG_IMAGE = `${SITE_URL}/marketing/screens/hero-poster.png`;
 
 const PAGE_TITLE = "Coach Cal — AI Football Coach for Plays & Playbooks";
-const PAGE_DESCRIPTION =
-  "Coach Cal is an AI football coaching partner that generates plays and full playbooks, game-plans offense and defense, reviews last week's game, schedules your season, builds situational call sheets, and writes QB reads — built for youth, flag, 7v7, and tackle. Free for 7 days.";
+function buildPageDescription(evalDays: number): string {
+  return `Coach Cal is an AI football coaching partner that generates plays and full playbooks, game-plans offense and defense, reviews last week's game, schedules your season, builds situational call sheets, and writes QB reads — built for youth, flag, 7v7, and tackle. Free for ${evalDays} days.`;
+}
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: PAGE_TITLE,
-  description: PAGE_DESCRIPTION,
+export async function generateMetadata(): Promise<Metadata> {
+  const evalDays = await getCoachAiEvalDays();
+  const description = buildPageDescription(evalDays);
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: PAGE_TITLE,
+    description,
   keywords: [
     "Coach Cal",
     "AI football coach",
@@ -70,7 +75,7 @@ export const metadata: Metadata = {
     url: PAGE_URL,
     siteName: "XO Gridmaker",
     title: PAGE_TITLE,
-    description: PAGE_DESCRIPTION,
+    description,
     images: [
       {
         url: OG_IMAGE,
@@ -83,7 +88,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: PAGE_TITLE,
-    description: PAGE_DESCRIPTION,
+    description,
     images: [OG_IMAGE],
   },
   robots: {
@@ -96,12 +101,15 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-};
+  };
+}
 
 /* JSON-LD: SoftwareApplication entity for Coach Cal specifically (so
    Google can associate the URL with the AI feature) + a Service entity
    for category targeting + BreadcrumbList. */
-const STRUCTURED_DATA = [
+function buildStructuredData(evalDays: number) {
+  const description = buildPageDescription(evalDays);
+  return [
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -111,7 +119,7 @@ const STRUCTURED_DATA = [
     applicationSubCategory: "AI Coaching Assistant",
     operatingSystem: "Web (any modern browser), iOS, Android",
     url: PAGE_URL,
-    description: PAGE_DESCRIPTION,
+    description,
     image: OG_IMAGE,
     isPartOf: {
       "@type": "SoftwareApplication",
@@ -160,35 +168,37 @@ const STRUCTURED_DATA = [
       { "@type": "ListItem", position: 2, name: "Coach Cal", item: PAGE_URL },
     ],
   },
-];
+  ];
+}
 
 const BRAND_BLUE = "#1769FF";
 const BRAND_GREEN = "#95CC1F";
 const BRAND_NAVY = "#0F1E3D";
 const BRAND_ORANGE = "#F26522";
 
-export default function CoachCalPage() {
+export default async function CoachCalPage() {
+  const evalDays = await getCoachAiEvalDays();
   return (
     <div className="bg-surface text-foreground">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildStructuredData(evalDays)) }}
       />
-      <Hero />
+      <Hero evalDays={evalDays} />
       <Capabilities />
       <KnowsYourTeam />
       <BuiltForLevel />
       <Privacy />
-      <Pricing />
+      <Pricing evalDays={evalDays} />
       <FaqShortcut />
-      <FinalCta />
+      <FinalCta evalDays={evalDays} />
     </div>
   );
 }
 
 /* ---------- Hero ---------- */
 
-function Hero() {
+function Hero({ evalDays }: { evalDays: number }) {
   return (
     <section className="relative overflow-hidden">
       <div
@@ -219,7 +229,7 @@ function Hero() {
             <em>and</em> defense, generates plays and full playbooks, reviews
             last week&rsquo;s game, schedules your season, and writes the QB
             reads you don&rsquo;t have time to. Built for youth, flag, 7v7,
-            and tackle — free to try for 7 days.
+            and tackle — free to try for {evalDays} days.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -227,7 +237,7 @@ function Hero() {
               className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
               style={{ background: BRAND_BLUE }}
             >
-              Start 7-day free trial
+              Start {evalDays}-day free trial
               <ArrowRight className="size-4" />
             </Link>
             <Link
@@ -565,7 +575,7 @@ function Privacy() {
 
 /* ---------- Pricing ---------- */
 
-function Pricing() {
+function Pricing({ evalDays }: { evalDays: number }) {
   return (
     <section className="bg-surface-inset py-20">
       <div className="mx-auto max-w-3xl px-6 text-center">
@@ -591,7 +601,7 @@ function Pricing() {
               className="rounded-full px-3 py-1 text-xs font-semibold"
               style={{ background: `${BRAND_GREEN}22`, color: "#5d8d12" }}
             >
-              7-day free trial
+              {evalDays}-day free trial
             </span>
           </div>
           <ul className="mt-6 space-y-2 text-sm text-foreground">
@@ -663,7 +673,7 @@ function Pricing() {
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-5 py-3 text-base font-bold text-white shadow-md transition-transform hover:-translate-y-0.5"
               style={{ background: BRAND_BLUE }}
             >
-              Start 7-day free trial
+              Start {evalDays}-day free trial
               <ArrowRight className="size-4" />
             </Link>
             <Link
@@ -713,12 +723,12 @@ function FaqShortcut() {
 
 /* ---------- Final CTA ---------- */
 
-function FinalCta() {
+function FinalCta({ evalDays }: { evalDays: number }) {
   return (
     <section className="py-20">
       <div className="mx-auto max-w-4xl px-6 text-center">
         <h2 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-          Try Coach Cal free for 7 days.
+          Try Coach Cal free for {evalDays} days.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-base text-muted">
           No credit card to start. Build your first playbook on the free

@@ -59,7 +59,7 @@ function leadForPath(pathname: string | null): string {
  * preview shell — Cal greeting bubble, demo strip, trial CTA, disabled
  * input — but with general path-aware copy instead of a tailored upsell.
  */
-export function CoachAiHeaderPreview() {
+export function CoachAiHeaderPreview({ evalDays }: { evalDays: number }) {
   const pathname = usePathname();
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -92,7 +92,7 @@ export function CoachAiHeaderPreview() {
               className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
               style={{ background: TRIAL_GRADIENT }}
             >
-              Start 7-day free trial
+              Start {evalDays}-day free trial
             </Link>
             <p className="mt-1.5 text-center text-[10px] text-muted">
               No charge today · cancel anytime
@@ -114,7 +114,7 @@ export function CoachAiHeaderPreview() {
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-muted">
-          Get the full Coach Cal experience with a 7-day free trial — no charge today.
+          Get the full Coach Cal experience with a {evalDays}-day free trial — no charge today.
         </p>
       </div>
     </div>

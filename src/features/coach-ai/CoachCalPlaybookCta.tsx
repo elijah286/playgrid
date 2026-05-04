@@ -14,7 +14,13 @@ const GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
  *
  * `show` is computed server-side: coach_ai beta is "all" AND user lacks the tier.
  */
-export function CoachCalPlaybookCta({ show }: { show: boolean }) {
+export function CoachCalPlaybookCta({
+  show,
+  evalDays,
+}: {
+  show: boolean;
+  evalDays: number;
+}) {
   const [visible, setVisible] = useState(false);
   const [chatOpen, setChatOpen] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -129,7 +135,7 @@ export function CoachCalPlaybookCta({ show }: { show: boolean }) {
           className="mt-3 flex w-full items-center justify-center rounded-xl py-2 text-sm font-semibold text-white shadow transition hover:opacity-90"
           style={{ background: GRADIENT }}
         >
-          Start 7-day free trial
+          Start {evalDays}-day free trial
         </a>
         <p className="mt-1.5 text-center text-[10px] text-muted">
           No charge today · cancel anytime

@@ -118,6 +118,7 @@ export function PlaybookHeader({
   onOpenTrash,
   coachAiAvailable,
   showCoachCalPromo,
+  coachAiEvalDays,
   isAdmin,
   referralConfig,
 }: {
@@ -154,6 +155,8 @@ export function PlaybookHeader({
   /** When true, render the launcher even though the user isn't entitled —
    *  it'll show the marketing popover. Mirrors SiteHeader's logic. */
   showCoachCalPromo?: boolean;
+  /** Coach AI eval window length in days (admin-configurable). */
+  coachAiEvalDays: number;
   isAdmin?: boolean;
   /** When set and enabled, the Share dialog surfaces a referral-credit promo. */
   referralConfig?: import("@/lib/site/referral-config").ReferralConfig | null;
@@ -527,6 +530,7 @@ export function PlaybookHeader({
                   isAdmin={isAdmin ?? false}
                   entitled={coachAiAvailable ?? false}
                   playbookId={playbookId}
+                  evalDays={coachAiEvalDays}
                 />
               </div>
             )}

@@ -14,6 +14,7 @@ type Props = {
   avatarUrl: string | null;
   coachAiAvailable?: boolean;
   showCoachCalPromo?: boolean;
+  coachAiEvalDays: number;
 };
 
 // Routes where the playbook banner takes over the top of the screen on
@@ -21,7 +22,7 @@ type Props = {
 // stacked headers. Desktop always shows both.
 const PLAYBOOK_DETAIL_RE = /^\/playbooks\/[^/]+(?:\/.*)?$/;
 
-export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo }: Props) {
+export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAiAvailable, showCoachCalPromo, coachAiEvalDays }: Props) {
   const pathname = usePathname();
   const hideOnMobile = PLAYBOOK_DETAIL_RE.test(pathname);
   // Pricing link is a landing-page-only nav affordance. Everywhere else
@@ -57,6 +58,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
                 isAdmin={isAdmin}
                 entitled={coachAiAvailable ?? false}
                 acceptGlobalCommands
+                evalDays={coachAiEvalDays}
               />
             )}
             <ShareButton userId={user.id} />

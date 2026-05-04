@@ -30,7 +30,11 @@ type TierDef = {
   cta: string;
 };
 
-function buildTiers(freeMaxPlays: number, seatDefaults: SeatDefaults): TierDef[] {
+function buildTiers(
+  freeMaxPlays: number,
+  seatDefaults: SeatDefaults,
+  evalDays: number,
+): TierDef[] {
   return [
   {
     id: "free",
@@ -83,7 +87,7 @@ function buildTiers(freeMaxPlays: number, seatDefaults: SeatDefaults): TierDef[]
       "200 Coach Cal messages per month",
     ],
     addOns: `Scale up: +$${SEAT_PRICE_USD_PER_MONTH}/seat/mo · +$${MESSAGE_PACK_PRICE_USD_PER_MONTH}/mo per ${MESSAGE_PACK_SIZE} extra messages`,
-    cta: "Start 7-day free trial",
+    cta: `Start ${evalDays}-day free trial`,
   },
   ];
 }
@@ -112,14 +116,16 @@ export function PricingClient({
   isAuthed = true,
   freeMaxPlays,
   seatDefaults,
+  coachAiEvalDays,
 }: {
   entitlement: Entitlement | null;
   showCoachAi: boolean;
   isAuthed?: boolean;
   freeMaxPlays: number;
   seatDefaults: SeatDefaults;
+  coachAiEvalDays: number;
 }) {
-  const allTiers = buildTiers(freeMaxPlays, seatDefaults);
+  const allTiers = buildTiers(freeMaxPlays, seatDefaults, coachAiEvalDays);
   const tiers = showCoachAi ? allTiers : allTiers.filter((t) => t.id !== "coach_ai");
   const [interval, setInterval] = useState<Interval>("month");
   const [pending, startTransition] = useTransition();
@@ -304,7 +310,7 @@ export function PricingClient({
                       </button>
                       {isProTier && (
                         <p className="mt-1.5 text-center text-[11px] text-muted">
-                          7-day free trial · no charge today
+                          {coachAiEvalDays}-day free trial · no charge today
                         </p>
                       )}
                     </>

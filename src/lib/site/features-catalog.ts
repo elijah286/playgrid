@@ -346,6 +346,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-29",
   },
   {
+    id: "coach-ai-eval-window-configurable",
+    name: "Configurable Coach Cal trial window",
+    description:
+      "The Coach Pro free-trial length is now an admin setting (Site admin → Site → \"Coach Cal eval window\") instead of a hardcoded 7. The single value drives Stripe checkout's trial_period_days for new subscriptions and every trial-mention on marketing surfaces — the pricing page card + footnote, the FAQ answers, the /coach-cal landing hero/pricing card/final CTA, the header chat preview, the per-CTA upsell preview shown when a non-entitled coach clicks an in-app Coach Cal trigger, and the floating playbook upgrade card. Changing the value never shrinks an existing trial: Stripe stamps current_period_end at checkout, so the change only applies to new sign-ups going forward.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-05-04",
+  },
+  {
     id: "playbook-share-flow-unified",
     name: "Unified share flow on mobile and desktop",
     description:

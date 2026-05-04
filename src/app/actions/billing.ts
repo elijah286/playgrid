@@ -8,6 +8,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
 import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 
 async function siteOrigin(): Promise<string> {
   const h = await headers();
@@ -59,13 +60,15 @@ export async function createCheckoutSessionAction(input: {
     const customerId = await getCustomerIdForUser(user.id, user.email ?? "");
     const origin = await siteOrigin();
 
-    // Coach Pro gets a 7-day free trial — but only the first time. Pricing
+    // Coach Pro gets a free trial — but only the first time. Pricing
     // copy promises "no charge today" for new subscribers; we don't want a
     // user to cancel and re-sub repeatedly to keep the trial. Look up any
     // historical coach_ai subscription row for this user; if present, no
     // trial. The subscriptions table includes terminal states
     // (canceled / incomplete_expired / unpaid), so a single row is
-    // disqualifying regardless of current status.
+    // disqualifying regardless of current status. The window length is
+    // configurable in Site admin; Stripe stamps current_period_end at
+    // checkout so changing the value never shrinks an existing trial.
     let trialPeriodDays: number | undefined;
     if (input.tier === "coach_ai") {
       const admin = createServiceRoleClient();
@@ -76,7 +79,7 @@ export async function createCheckoutSessionAction(input: {
         .eq("tier", "coach_ai")
         .limit(1)
         .maybeSingle();
-      if (!priorCoachAi) trialPeriodDays = 7;
+      if (!priorCoachAi) trialPeriodDays = await getCoachAiEvalDays();
     }
 
     const session = await stripe.checkout.sessions.create({

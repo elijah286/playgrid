@@ -31,6 +31,7 @@ import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
 import { getAuthProvidersConfig } from "@/lib/site/auth-providers-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { getCoachCalUpgradeBannerEnabled } from "@/lib/site/coach-cal-banner-config";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
 import { getActivationSummaryAction } from "@/app/actions/admin-activation";
@@ -92,6 +93,7 @@ export default async function SettingsPage() {
     authProviders,
     analyticsExcludedEmails,
     coachCalUpgradeBannerEnabled,
+    coachAiEvalDays,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -126,6 +128,7 @@ export default async function SettingsPage() {
     getAuthProvidersConfig(),
     getAnalyticsExcludedEmails(),
     getCoachCalUpgradeBannerEnabled(),
+    getCoachAiEvalDays(),
   ]);
 
   return (
@@ -269,6 +272,7 @@ export default async function SettingsPage() {
         initialAppleSigninEnabled={authProviders.apple}
         initialGoogleSigninEnabled={authProviders.google}
         initialCoachCalUpgradeBannerEnabled={coachCalUpgradeBannerEnabled}
+        initialCoachAiEvalDays={coachAiEvalDays}
         initialCoachAiKbMisses={coachAiKbMissesRes.ok ? coachAiKbMissesRes.items : []}
         coachAiKbMissesError={coachAiKbMissesRes.ok ? null : coachAiKbMissesRes.error}
         initialOpexServices={opexServicesRes.ok ? opexServicesRes.services : []}

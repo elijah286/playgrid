@@ -81,6 +81,7 @@ export function CoachAiLauncher({
   isAdmin = false,
   entitled = true,
   acceptGlobalCommands = false,
+  evalDays,
 }: {
   playbookId?: string | null;
   isAdmin?: boolean;
@@ -92,6 +93,8 @@ export function CoachAiLauncher({
    * own programmatic opens so we don't render two stacked dialogs.
    */
   acceptGlobalCommands?: boolean;
+  /** Coach AI eval window length in days (admin-configurable). */
+  evalDays: number;
 }) {
   const [open,          setOpen]          = useState(false);
   const [panelMode,     setPanelMode]     = useState<PanelMode>("float");
@@ -499,7 +502,7 @@ export function CoachAiLauncher({
           }
         }}
         aria-label={entitled ? "Open Coach Cal" : "Try Coach Cal — your AI coaching partner"}
-        title={entitled ? "Coach Cal — your AI coaching partner" : "Try Coach Cal free for 7 days"}
+        title={entitled ? "Coach Cal — your AI coaching partner" : `Try Coach Cal free for ${evalDays} days`}
         className={cn(
           "relative inline-flex size-9 items-center justify-center rounded-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           open && "hidden",
@@ -819,12 +822,13 @@ export function CoachAiLauncher({
                 <CoachAiPreviewChat
                   entryPoint={previewState.entryPoint}
                   prompt={previewState.prompt}
+                  evalDays={evalDays}
                 />
               ) : !entitled ? (
                 // Non-entitled user opened from the header icon (or after
                 // closing a CTA-driven preview) — show the general welcome
                 // surface so the chat is never empty for them.
-                <CoachAiHeaderPreview />
+                <CoachAiHeaderPreview evalDays={evalDays} />
               ) : (
                 <CoachAiChat
                   playbookId={playbookId}

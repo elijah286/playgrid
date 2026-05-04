@@ -371,6 +371,8 @@ function PlaybookDetailClientInner({
     /** True when Coach Cal is launched globally and this user lacks it —
      *  mobile launcher button shows the marketing flow instead of the chat. */
     showCoachCalPromo: boolean;
+    /** Coach AI eval window length in days (admin-configurable). */
+    coachAiEvalDays: number;
     /** Surfaces the referral promo on the Share dialog when enabled. */
     referralConfig: ReferralConfig;
   };
@@ -1162,6 +1164,7 @@ function PlaybookDetailClientInner({
           }
           coachAiAvailable={headerProps.coachAiAvailable}
           showCoachCalPromo={headerProps.showCoachCalPromo}
+          coachAiEvalDays={headerProps.coachAiEvalDays}
           isAdmin={isAdmin}
           referralConfig={headerProps.referralConfig}
         />

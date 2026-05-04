@@ -23,6 +23,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { defaultClaimedPlaybookName } from "@/lib/playbook/default-name";
 import { PlaybookDetailClient } from "./ui";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
@@ -239,6 +240,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
     !coachAiEntitled && user !== null && !isAdmin;
   const showCoachCalPromoInPlaybook = !coachAiAvailable && user !== null;
   const referralConfig = await getReferralConfig();
+  const coachAiEvalDays = await getCoachAiEvalDays();
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
   // Examples always expose Game Mode so visitors can experience the full
@@ -332,7 +334,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   return (
     <>
-      <CoachCalPlaybookCta show={showCoachCalCta} />
+      <CoachCalPlaybookCta show={showCoachCalCta} evalDays={coachAiEvalDays} />
       {publicExampleJsonLd?.map((ld, i) => (
         <script
           key={i}
@@ -402,6 +404,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
           isExamplePreview,
           coachAiAvailable,
           showCoachCalPromo: showCoachCalPromoInPlaybook,
+          coachAiEvalDays,
           referralConfig,
         }}
       />

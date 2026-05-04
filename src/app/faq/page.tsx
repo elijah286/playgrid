@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import {
   SEAT_PRICE_USD_PER_MONTH,
   MESSAGE_PACK_PRICE_USD_PER_MONTH,
@@ -34,7 +35,10 @@ type Section = { id: string; title: string; intro?: string; faqs: Faq[] };
 function buildSections(
   freeMaxPlays: number,
   coachSeats: number,
+  evalDays: number,
 ): Section[] {
+  const evalLabel = `${evalDays}-day`;
+  const evalLabelPlural = `${evalDays} day${evalDays === 1 ? "" : "s"}`;
   return [
     {
       id: "general",
@@ -68,7 +72,7 @@ function buildSections(
         },
         {
           q: "What's the difference between Team Coach and Coach Pro?",
-          a: "Team Coach is the full collaboration suite — unlimited playbooks, Game Mode, team invites, printing. Coach Pro is everything in Team Coach plus Coach Cal, the AI coaching partner: 200 messages/month, AI play and playbook generation, strategy feedback vs. specific defenses, and bulk formation edits. Coach Pro starts with a 7-day free trial.",
+          a: `Team Coach is the full collaboration suite — unlimited playbooks, Game Mode, team invites, printing. Coach Pro is everything in Team Coach plus Coach Cal, the AI coaching partner: 200 messages/month, AI play and playbook generation, strategy feedback vs. specific defenses, and bulk formation edits. Coach Pro starts with a ${evalLabel} free trial.`,
         },
       ],
     },
@@ -140,7 +144,7 @@ function buildSections(
         },
         {
           q: "How much does Coach Cal cost?",
-          a: "Coach Cal is included with Coach Pro at $25/month (or $250/year). New Coach Pro users get a 7-day free trial — no credit card required to try the chat. After the trial, the plan includes 200 messages per month.",
+          a: `Coach Cal is included with Coach Pro at $25/month (or $250/year). New Coach Pro users get a ${evalLabel} free trial — no credit card required to try the chat. After the trial, the plan includes 200 messages per month.`,
         },
         {
           q: "What happens if I use up my 200 messages?",
@@ -170,7 +174,7 @@ function buildSections(
       faqs: [
         {
           q: "How do I get started?",
-          a: "Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. To try Coach Cal, upgrade to Coach Pro — the first 7 days are free.",
+          a: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. To try Coach Cal, upgrade to Coach Pro — the first ${evalLabelPlural} are free.`,
         },
       ],
     },
@@ -178,11 +182,12 @@ function buildSections(
 }
 
 export default async function FaqPage() {
-  const [freeMaxPlays, seatDefaults] = await Promise.all([
+  const [freeMaxPlays, seatDefaults, evalDays] = await Promise.all([
     getFreeMaxPlaysPerPlaybook(),
     getSeatDefaults(),
+    getCoachAiEvalDays(),
   ]);
-  const sections = buildSections(freeMaxPlays, seatDefaults.coach);
+  const sections = buildSections(freeMaxPlays, seatDefaults.coach, evalDays);
   const allFaqs = sections.flatMap((s) => s.faqs);
 
   // Single FAQPage entity covering every Q&A in the page — Google

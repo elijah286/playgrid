@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { CoachAiIcon } from "./CoachAiIcon";
-import { ENTRY_POINTS, type CoachCalEntryPointId } from "./entry-points";
+import { ENTRY_POINTS, previewCtaLabel, type CoachCalEntryPointId } from "./entry-points";
 import { track } from "@/lib/analytics/track";
 
 const GRADIENT = "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)";
@@ -24,11 +24,14 @@ const TRIAL_GRADIENT = "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)";
 export function CoachAiPreviewChat({
   entryPoint,
   prompt,
+  evalDays,
 }: {
   entryPoint: CoachCalEntryPointId;
   prompt: string;
+  evalDays: number;
 }) {
   const config = ENTRY_POINTS[entryPoint];
+  const ctaLabel = previewCtaLabel(config, evalDays);
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
@@ -71,7 +74,7 @@ export function CoachAiPreviewChat({
               className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
               style={{ background: TRIAL_GRADIENT }}
             >
-              {config.preview.ctaLabel}
+              {ctaLabel}
             </Link>
             <p className="mt-1.5 text-center text-[10px] text-muted">
               No charge today · cancel anytime
@@ -93,7 +96,7 @@ export function CoachAiPreviewChat({
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-muted">
-          Get the full Coach Cal experience with a 7-day free trial — no charge today.
+          Get the full Coach Cal experience with a {evalDays}-day free trial — no charge today.
         </p>
       </div>
     </div>

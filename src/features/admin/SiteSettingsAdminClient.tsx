@@ -9,6 +9,11 @@ import { setMobileEditingEnabledAction } from "@/app/actions/admin-mobile-editin
 import { setHideOwnerInfoAboutAction } from "@/app/actions/admin-about";
 import { setReferralConfigAction } from "@/app/actions/admin-referral";
 import { setCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
+import { setCoachAiEvalDaysAction } from "@/app/actions/admin-coach-ai-eval";
+import {
+  COACH_AI_EVAL_DAYS_MIN,
+  COACH_AI_EVAL_DAYS_MAX,
+} from "@/lib/site/coach-ai-eval-config";
 import {
   setAppleSigninEnabledAction,
   setGoogleSigninEnabledAction,
@@ -25,6 +30,7 @@ export function SiteSettingsAdminClient({
   initialAppleSigninEnabled,
   initialGoogleSigninEnabled,
   initialCoachCalUpgradeBannerEnabled,
+  initialCoachAiEvalDays,
 }: {
   initialHideLobbyAnimation: boolean;
   initialExamplesPageEnabled: boolean;
@@ -35,6 +41,7 @@ export function SiteSettingsAdminClient({
   initialAppleSigninEnabled: boolean;
   initialGoogleSigninEnabled: boolean;
   initialCoachCalUpgradeBannerEnabled: boolean;
+  initialCoachAiEvalDays: number;
 }) {
   const { toast } = useToast();
 
@@ -59,6 +66,42 @@ export function SiteSettingsAdminClient({
     initialCoachCalUpgradeBannerEnabled,
   );
   const [coachCalBannerPending, startCoachCalBannerTransition] = useTransition();
+
+  const [savedEvalDays, setSavedEvalDays] = useState(initialCoachAiEvalDays);
+  const [evalDaysInput, setEvalDaysInput] = useState(String(initialCoachAiEvalDays));
+  const [evalDaysPending, startEvalDaysTransition] = useTransition();
+
+  function saveEvalDays() {
+    const next = Number(evalDaysInput);
+    if (
+      !Number.isFinite(next) ||
+      next < COACH_AI_EVAL_DAYS_MIN ||
+      next > COACH_AI_EVAL_DAYS_MAX
+    ) {
+      toast(
+        `Enter a number between ${COACH_AI_EVAL_DAYS_MIN} and ${COACH_AI_EVAL_DAYS_MAX}.`,
+        "error",
+      );
+      setEvalDaysInput(String(savedEvalDays));
+      return;
+    }
+    const rounded = Math.floor(next);
+    if (rounded === savedEvalDays) return;
+    startEvalDaysTransition(async () => {
+      const res = await setCoachAiEvalDaysAction(rounded);
+      if (!res.ok) {
+        toast(res.error, "error");
+        setEvalDaysInput(String(savedEvalDays));
+        return;
+      }
+      setSavedEvalDays(res.value);
+      setEvalDaysInput(String(res.value));
+      toast(
+        `Coach Cal eval window set to ${res.value} day${res.value === 1 ? "" : "s"}. Existing evaluators keep the window they signed up with.`,
+        "success",
+      );
+    });
+  }
 
   function toggleCoachCalBanner(next: boolean) {
     const prev = coachCalBannerEnabled;
@@ -279,6 +322,50 @@ export function SiteSettingsAdminClient({
           />
           <span>{coachCalBannerEnabled ? "On" : "Off"}</span>
         </label>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            Coach Cal eval window
+          </p>
+          <p className="mt-0.5 text-xs text-muted">
+            Length of the free trial offered to new Coach Pro subscribers,
+            in days. Drives the Stripe checkout trial and every marketing
+            surface that mentions the trial (pricing, coach-cal landing,
+            FAQ, header preview, in-app upsells). Default is 7. Existing
+            evaluators are unaffected — Stripe locks in their end date at
+            sign-up.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={COACH_AI_EVAL_DAYS_MIN}
+            max={COACH_AI_EVAL_DAYS_MAX}
+            step={1}
+            className="w-20 rounded-md bg-surface px-3 py-1.5 text-sm ring-1 ring-border"
+            value={evalDaysInput}
+            disabled={evalDaysPending}
+            onChange={(e) => setEvalDaysInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEvalDays();
+            }}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={evalDaysPending}
+            disabled={
+              evalDaysPending ||
+              evalDaysInput.trim() === "" ||
+              Number(evalDaysInput) === savedEvalDays
+            }
+            onClick={saveEvalDays}
+          >
+            Save
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised p-4">

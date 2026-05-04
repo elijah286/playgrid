@@ -7,6 +7,7 @@ import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { getMobileEditingEnabled } from "@/lib/site/mobile-editing-config";
+import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { canUseGameMode } from "@/lib/billing/features";
 import {
@@ -136,6 +137,7 @@ export default async function PlayEditPage({ params }: Props) {
     (editorEntitlement?.tier ?? "free") !== "coach_ai" &&
     user !== null &&
     !isAdmin;
+  const coachAiEvalDays = await getCoachAiEvalDays();
 
   return (
     <>
@@ -144,7 +146,7 @@ export default async function PlayEditPage({ params }: Props) {
         playbookName={(book?.name as string | null) ?? null}
         playbookColor={(book?.color as string | null) ?? null}
       />
-      <CoachCalPlaybookCta show={showCoachCalCta} />
+      <CoachCalPlaybookCta show={showCoachCalCta} evalDays={coachAiEvalDays} />
       <PlayEditorClient
       playId={res.play.id}
       playbookId={res.play.playbook_id}
