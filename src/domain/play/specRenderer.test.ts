@@ -32,6 +32,35 @@ function makeSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
   };
 }
 
+describe("Renderer — unknown/unknown defense is structurally equivalent to no defense", () => {
+  it("does NOT warn when defense.front and coverage are both 'unknown' (2026-05-04)", () => {
+    // Production failure: Cal recreated 7 plays after the OL fix; 6 silently
+    // failed because their specs contained `defense: { front: "unknown",
+    // coverage: "unknown" }` (the placeholder emitted by inferDefense /
+    // coachDiagramToPlaySpec when defenders are present but no scheme is
+    // known). The spec path promoted defense_unknown to a hard error,
+    // blocking the save. unknown/unknown is the no-opponent default and
+    // must not block — Cal should still be able to spec a real defense
+    // and have catalog misses surface as errors.
+    const { diagram, warnings } = playSpecToCoachDiagram(
+      makeSpec({ defense: { front: "unknown", coverage: "unknown", confidence: "low" } }),
+    );
+    expect(warnings.filter((w) => w.code === "defense_unknown")).toHaveLength(0);
+    expect(diagram.players.filter((p) => p.team === "D")).toHaveLength(0);
+    expect(diagram.zones ?? []).toHaveLength(0);
+  });
+
+  it("DOES still warn when a SPECIFIC defense doesn't match the catalog", () => {
+    // Cal asked for a real scheme that the catalog can't honor — that's
+    // a hard error (the play would silently render with no defenders
+    // when the coach asked for a 4-3 Tampa-2 look).
+    const { warnings } = playSpecToCoachDiagram(
+      makeSpec({ defense: { front: "4-3", coverage: "Tampa-2", confidence: "high" } }),
+    );
+    expect(warnings.filter((w) => w.code === "defense_unknown").length).toBeGreaterThan(0);
+  });
+});
+
 describe("Renderer — defense zones (Phase D3)", () => {
   it("Cover 3 emits exactly 3 deep-third zones plus underneath zones", () => {
     const { diagram, warnings } = playSpecToCoachDiagram(

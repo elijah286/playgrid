@@ -213,6 +213,17 @@ type DefenderRenderResult = {
 function renderDefense(spec: PlaySpec, warnings: RenderWarning[]): DefenderRenderResult {
   if (!spec.defense) return { players: [], zones: [], movement: [] };
   const { front, coverage, strength = "right" } = spec.defense;
+  // `defense: { front: "unknown", coverage: "unknown" }` is the canonical
+  // "no opponent specified" placeholder — emitted by inferDefense when a
+  // diagram has no defenders, and a reasonable default for a fresh
+  // offensive play. Treat it as structurally equivalent to omitting the
+  // defense field entirely: render no defenders, no warning. A SPECIFIC
+  // defense that misses the catalog (e.g. "4-3" / "Tampa-2") still
+  // promotes to defense_unknown — that's Cal asking for something we
+  // can't deliver, which IS a real error.
+  if (front === "unknown" && coverage === "unknown") {
+    return { players: [], zones: [], movement: [] };
+  }
   const alignment = findDefensiveAlignment(spec.variant, front, coverage);
   if (!alignment) {
     warnings.push({
