@@ -215,10 +215,27 @@ export function CoachAiChat({
   // false (via the onScroll handler on the scroll container) and we stop
   // forcing them back down. The next user submit re-pins to bottom (see
   // the submit handler).
+  //
+  // Two scroll modes:
+  //   - SMOOTH on discrete events (new turn appended, stream just ended)
+  //     so a coach has a beat to track that something landed instead of
+  //     experiencing a jump-cut.
+  //   - INSTANT on streaming token growth — smooth-scroll on every token
+  //     update would coalesce into visible jank at 30+ fps. The diffs
+  //     between tokens are small enough that instant is imperceptible.
+  const prevTurnsLenRef = useRef(turns.length);
+  const prevStreamingRef = useRef(streaming);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (stuckToBottomRef.current) {
+    const turnsGrew = turns.length > prevTurnsLenRef.current;
+    const streamingEnded = prevStreamingRef.current && !streaming;
+    prevTurnsLenRef.current = turns.length;
+    prevStreamingRef.current = streaming;
+    if (!stuckToBottomRef.current) return;
+    if (turnsGrew || streamingEnded) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
       el.scrollTop = el.scrollHeight;
     }
   }, [turns, streaming, partialText, statusText]);

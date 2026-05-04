@@ -137,28 +137,37 @@ body {
 }
 
 /* Coach Cal — user message send animation (iMessage-style lift from
- * composer). The bubble lands directly above the input bar, so we
- * approximate "traveled from the composer" by starting it ~36px below
- * its final spot at 0.86 scale and 0 opacity, then settling. The
- * cubic-bezier overshoots slightly at the end so the bubble feels like
- * it snaps into place rather than easing in flat.
+ * composer). Three-stage keyframe so the bubble reads as: emerging
+ * from the input area (down + tiny), swooping up past its final spot
+ * with a slight scale overshoot, then settling. Single-stage with a
+ * bezier overshoot is too subtle to read on a chat that's already
+ * pinned to the bottom of the scroll area.
  *
- * Transform-origin bottom-right matches the bubble's anchor (right-aligned
- * user messages) so the scale-up reads as growing out of the input area
- * rather than centered. */
+ * Transform-origin bottom-right matches the user-bubble's right-aligned
+ * anchor so the scale reads as growing from the input. */
 @keyframes msg-in {
-  from { opacity: 0; transform: translateY(36px) scale(0.86); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  0%   { opacity: 0; transform: translateY(56px) scale(0.72); }
+  55%  { opacity: 1; transform: translateY(-6px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 .msg-in {
-  animation: msg-in 280ms cubic-bezier(0.22, 1.2, 0.36, 1) both;
+  animation: msg-in 380ms cubic-bezier(0.22, 1.2, 0.36, 1) both;
   transform-origin: bottom right;
   /* Hint to the compositor — keeps the animation on the GPU and avoids
    * any text-shaping flicker mid-animation. */
   will-change: transform, opacity;
 }
+/* Reduce-motion users still get a quick fade so the bubble doesn't pop in
+ * with no transition at all — but no movement or scale. */
 @media (prefers-reduced-motion: reduce) {
-  .msg-in { animation: none; }
+  @keyframes msg-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .msg-in {
+    animation: msg-in 140ms ease-out both;
+    transform-origin: bottom right;
+  }
 }
 
 /* Coach Cal docked mode — body shifts left so the fixed right panel has room */
