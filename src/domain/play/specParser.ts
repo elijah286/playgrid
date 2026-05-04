@@ -308,12 +308,18 @@ function tryInferRouteFamily(
   if (!route.path || route.path.length < 2) return null;
   if (!carrier) return null;
 
+  // route.path is `[number, number][]` — index [0] = x yards, [1] = y yards.
+  // Prior to this fix the function read .x / .y as object properties, which
+  // returned undefined on every tuple, made every predicate NaN, and made the
+  // entire inference path dead code. Surfaced 2026-05-04: every hand-authored
+  // catalog route was being persisted as `kind: "custom"` / "Hand-authored
+  // route" instead of the inferred catalog family.
   const waypoints = route.path;
   const start = waypoints[0];
   const end = waypoints[waypoints.length - 1];
 
-  const dx = Math.abs(end.x - start.x);
-  const dy = Math.abs(end.y - start.y);
+  const dx = Math.abs(end[0] - start[0]);
+  const dy = Math.abs(end[1] - start[1]);
   const depthYds = carrier ? computeDeepestDepth(route.path, carrier) : undefined;
 
   // Try to match common route families based on direction and depth.

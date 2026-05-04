@@ -288,6 +288,33 @@ describe("CoachDiagram → PlaySpec (parser)", () => {
     expect(xAssignment.action.waypoints).toHaveLength(3);
   });
 
+  it("INFERS catalog family from geometry when route_kind is missing (regression: tuple .x bug)", () => {
+    // 2026-05-04 — tryInferRouteFamily was reading .x / .y as object
+    // properties on `[number, number]` tuples, which returned undefined
+    // and made every predicate NaN. Result: every hand-authored route
+    // got persisted as `kind: "custom"` / "Hand-authored route" instead
+    // of the inferred catalog family. Surfaced when a coach noticed that
+    // Cal-generated plays had every receiver labeled "Hand-authored route"
+    // in the play notes even when the geometry was a clean Hitch / Slant.
+    //
+    // After the fix, a clean catalog-shape route gets inferred and stored
+    // as `kind: "route", family: <Name>` with confidence: "high".
+    const spec = coachDiagramToPlaySpec({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "Z", x: 13, y: 0, team: "O" },
+      ],
+      // Clean Hitch shape (the same Z route from the saved Hitch/Flat
+      // bug — forward to 5yd, settle back to 4yd):
+      routes: [{ from: "Z", path: [[13, 5], [12.5, 4]] }],
+    });
+    const zAssignment = spec.assignments.find((a) => a.player === "Z");
+    expect(zAssignment?.action.kind).toBe("route");
+    if (zAssignment?.action.kind !== "route") return;
+    expect(zAssignment.action.family).toBe("Hitch");
+  });
+
   it("treats linemen without routes as blockers", () => {
     const spec = coachDiagramToPlaySpec({
       variant: "flag_7v7",
@@ -369,15 +396,23 @@ describe("CoachDiagram → PlaySpec — confidence inference", () => {
   });
 
   it("attaches low-confidence to custom (freehand) assignments", () => {
+    // Use a deliberately off-catalog zigzag path so geometry inference
+    // (tryInferRouteFamily) returns null and the assignment falls back
+    // to `kind: "custom"` with confidence "low". A path that resembles
+    // a catalog route (e.g. a clean in-route) would now be inferred and
+    // get `confidence: "high"` — the post-2026-05-04 fix to the
+    // tuple-vs-object bug means inference actually works.
     const spec = coachDiagramToPlaySpec({
       variant: "flag_7v7",
       players: [
         { id: "Q", x: 0, y: -3, team: "O" },
         { id: "X", x: -13, y: 0, team: "O" },
       ],
-      routes: [{ from: "X", path: [[-13, 5], [-3, 10]] }], // no route_kind
+      // Zigzag: out-then-back-in-then-deep — doesn't match any catalog family.
+      routes: [{ from: "X", path: [[-3, 5], [-15, 8], [-1, 12]] }],
     });
     const x = spec.assignments.find((a) => a.player === "X");
+    expect(x?.action.kind).toBe("custom");
     expect(x?.confidence).toBe("low");
   });
 
