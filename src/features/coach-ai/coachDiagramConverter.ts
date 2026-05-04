@@ -212,12 +212,10 @@ export function parseCoachDiagram(data: unknown) {
 type PlayerStyle = { fill: string; stroke: string; labelColor: string };
 
 const STYLE_QB:   PlayerStyle = { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
-// 2026-05-04: @C moved from black (#1C1C1E) to purple (#A855F7) so the
-// default flag_5v5 5-player set (Q, C, X, Y, Z) renders in five distinct
-// hues. Black previously blended into the dark field background.
-const STYLE_C:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
+// 2026-05-04: flag_5v5 5-player set (Q, C, X, Y, Z) colors: Q=white, C=green, X=red, Y=yellow, Z=blue
+const STYLE_C:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
 const STYLE_X:    PlayerStyle = { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
-const STYLE_Y:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
+const STYLE_Y:    PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
 const STYLE_SLOT: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // S, A, H, F-as-WR
 // 2026-05-04: @B (RB) moved from purple to orange — purple now belongs
@@ -350,24 +348,19 @@ export function derivedColorGroupForLabel(rawLabel: string, role?: string): Deri
 /** The hex the auto-renderer produces for each skill-position group.
  *  Used by the validator's error message ("@H + @S both render yellow").
  *
- *  2026-05-04: convention update — @C is now PURPLE (was black) so the
- *  five default flag_5v5 players (Q, C, X, Y, Z) each get a distinct
- *  recognizable hue (white / purple / red / green / blue). Black was
- *  visually muddy against the dark field background and made @C blend
- *  in with the LOS shading. The RB group moved off purple to ORANGE
- *  (was purple) to keep B and C distinct when both appear in 7v7 +
- *  tackle. FB stays orange too — coaches with both B + FB (rare in
- *  flag, occasional in tackle) need to relabel one or override via
- *  set_player_color. */
+ *  2026-05-04: flag_5v5 defaults are Q=white, C=green, X=red, Y=yellow, Z=blue.
+ *  RB moved from purple to orange to keep B and C distinct when both appear in 7v7 +
+ *  tackle. FB stays orange too — coaches with both B + FB (rare in flag, occasional
+ *  in tackle) need to relabel one or override via set_player_color. */
 export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "LINEMAN">, string> = {
   X:    "#EF4444",
-  Y:    "#22C55E",
+  Y:    "#FACC15",
   Z:    "#3B82F6",
   SLOT: "#FACC15",
   RB:   "#F26522",
   FB:   "#F26522",
   QB:   "#FFFFFF",
-  C:    "#A855F7",
+  C:    "#22C55E",
 };
 
 // Default zone style — matches `mkZone`, which is what coaches get
