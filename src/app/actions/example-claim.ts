@@ -31,6 +31,8 @@ export async function previewExamplePlaybookAction(
       "id, name, season, sport_variant, logo_url, color, is_public_example, example_author_label, plays(count)",
     )
     .eq("id", playbookId)
+    .is("plays.deleted_at", null)
+    .eq("plays.is_archived", false)
     .maybeSingle();
   if (error || !book) return { ok: false, error: "Example not found." };
   if (!book.is_public_example) {

@@ -67,6 +67,7 @@ export async function copyPlaybookContents(
     )
     .eq("playbook_id", sourcePlaybookId)
     .eq("is_archived", false)
+    .is("deleted_at", null)
     .is("attached_to_play_id", null)
     .order("sort_order", { ascending: true });
 
@@ -476,11 +477,13 @@ async function buildSourceToTargetPlayMap(
     client
       .from("plays")
       .select("id, name")
-      .eq("playbook_id", sourcePlaybookId),
+      .eq("playbook_id", sourcePlaybookId)
+      .is("deleted_at", null),
     client
       .from("plays")
       .select("id, name")
-      .eq("playbook_id", targetPlaybookId),
+      .eq("playbook_id", targetPlaybookId)
+      .is("deleted_at", null),
   ]);
   const tgtByName = new Map<string, string>();
   for (const t of tgt ?? []) {

@@ -57,7 +57,8 @@ async function loadExamplePlaybooksFiltered({
       "id, name, season, logo_url, color, updated_at, example_author_label, plays(count)",
     )
     .eq("is_public_example", true)
-    .eq("is_archived", false);
+    .eq("is_archived", false)
+    .is("plays.deleted_at", null);
   if (heroOnly) q = q.eq("is_hero_marketing_example", true);
   const { data: books } = await q.order("updated_at", { ascending: false });
 
@@ -81,6 +82,7 @@ async function loadExamplePlaybooksFiltered({
     .select("id, playbook_id, current_version_id, updated_at")
     .in("playbook_id", ids)
     .eq("is_archived", false)
+    .is("deleted_at", null)
     .is("attached_to_play_id", null)
     .eq("play_type", "offense")
     .order("updated_at", { ascending: false });

@@ -49,6 +49,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       )
       .eq("id", playbookId)
       .eq("is_archived", false)
+      .is("plays.deleted_at", null)
+      .eq("plays.is_archived", false)
       .maybeSingle();
 
     if (!book || !book.is_public_example) return noIndex;

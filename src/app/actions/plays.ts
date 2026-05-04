@@ -1358,7 +1358,8 @@ export async function getDashboardSummaryAction(): Promise<
       "role, playbooks!inner(id, name, is_default, is_archived, updated_at, logo_url, color, season, sport_variant, settings, custom_offense_count, allow_coach_duplication, allow_player_duplication, is_example, is_public_example, is_hero_marketing_example, plays(count))",
     )
     .eq("user_id", user.id)
-    .eq("playbooks.plays.is_archived", false);
+    .eq("playbooks.plays.is_archived", false)
+    .is("playbooks.plays.deleted_at", null);
 
   if (memErr) return { ok: false, error: memErr.message };
 

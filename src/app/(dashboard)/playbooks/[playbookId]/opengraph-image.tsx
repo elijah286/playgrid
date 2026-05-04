@@ -62,6 +62,8 @@ export default async function PlaybookOgImage({ params }: Props) {
       )
       .eq("id", playbookId)
       .eq("is_archived", false)
+      .is("plays.deleted_at", null)
+      .eq("plays.is_archived", false)
       .maybeSingle();
     book = (data as BookRow | null) ?? null;
   } catch {
