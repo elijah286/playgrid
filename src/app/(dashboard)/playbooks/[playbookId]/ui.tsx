@@ -4482,9 +4482,14 @@ function FirstPlayHero({
             </Button>
             <p className="mt-2 text-xs text-muted">Free — takes about a minute.</p>
           </div>
-          <span className="mt-3 text-xs uppercase tracking-wide text-muted sm:mt-3">or</span>
-          <div className="sm:mt-1.5">
-            <CoachCalCTA entryPoint="playbook_generate_starter" variant="primary" />
+          <span className="mt-4 text-xs uppercase tracking-wide text-muted sm:mt-5">or</span>
+          <div className="flex flex-col items-center">
+            <CoachCalCTA
+              entryPoint="playbook_generate_starter"
+              variant="primary"
+              className="px-6 py-4 text-base font-bold"
+            />
+            <p className="mt-2 text-xs text-muted">Coach Pro — done in seconds.</p>
           </div>
         </div>
       </div>
