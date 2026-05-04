@@ -53,6 +53,7 @@ import { PlayResultsCard } from "./PlayResultsCard";
 import { QuickRoutes } from "./QuickRoutes";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
+import { NotesMarkdown } from "./NotesMarkdown";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import {
   ExamplePreviewProvider,
@@ -1655,6 +1656,12 @@ function PlayNotesCard({
   playName?: string | null;
 }) {
   const [open, setOpen] = useState(value.length > 0);
+  // Edit / view toggle — coaches see the rendered markdown by default
+  // (bold, lists, headings, @-mention chips). Click "Edit" to drop into
+  // the raw-markdown editor; "Done" swaps back to the rendered view.
+  // Empty notes auto-open in edit mode so the field doesn't render as a
+  // blank card with no obvious affordance.
+  const [editing, setEditing] = useState(!readOnly && value.trim().length === 0);
   // Read-only viewers with no notes at all have nothing to show — collapse
   // the card entirely so the sidebar stays uncluttered.
   if (readOnly && !value.trim()) return null;
@@ -1675,6 +1682,15 @@ function PlayNotesCard({
           )}
         </button>
         <div className="flex shrink-0 items-center gap-2">
+          {!readOnly && open && (
+            <button
+              type="button"
+              onClick={() => setEditing((e) => !e)}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {editing ? "Done" : "Edit"}
+            </button>
+          )}
           {!readOnly && (
             <CoachCalCTA
               entryPoint="play_notes_regenerate"
@@ -1692,15 +1708,15 @@ function PlayNotesCard({
       </div>
       {open && (
         <div className="border-t border-border px-4 py-3">
-          {readOnly ? (
-            <p className="whitespace-pre-wrap text-sm text-foreground">{value}</p>
+          {readOnly || !editing ? (
+            <NotesMarkdown value={value} players={players} />
           ) : (
             <PlayerMentionEditor
               value={value}
               onChange={onChange}
               players={players}
               routes={routes}
-              placeholder={'Type notes for players here. Try "@F", "@Q", or "@yellow" to link notes to a player.'}
+              placeholder={'Type notes for players here. Try "@F", "@Q", or "@yellow" to link notes to a player. Markdown like **bold**, *italic*, and "- bullet" formats when you tap Done.'}
             />
           )}
         </div>
