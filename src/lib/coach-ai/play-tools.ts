@@ -267,11 +267,36 @@ function formatRouteAssignmentErrors(errors: RouteAssignmentError[]): string {
 }
 
 /**
- * Format renderer warnings (from playSpecToCoachDiagram) into a critique.
- * When the input was a PlaySpec, every warning becomes a hard error —
- * the spec is the source of truth, and any silent substitution
- * (formation fallback, unknown defense, missing player) means Cal
- * authored something the catalog can't honor verbatim.
+ * Render warnings split into "hard" (block save) and "soft" (save anyway,
+ * surface to Cal). Hard warnings indicate the saved play would be a
+ * silent substitution of what Cal asked for — formation fallback, route
+ * template not in the catalog, sanitizer dropping geometry, a specific
+ * defense missing from the catalog (note: unknown/unknown is short-circuited
+ * upstream and never emits the warning). Soft warnings indicate "Cal
+ * referenced something we couldn't place; we dropped it but the rest
+ * of the play is honored verbatim" — assignment_player_missing,
+ * defender_*_missing, defender_zone_unknown. Soft warnings match the
+ * legacy diagram path's behavior (which silently dropped routes whose
+ * carrier wasn't on the field) so Cal isn't penalized for label
+ * mismatches that don't corrupt the diagram.
+ */
+export const HARD_RENDER_WARNINGS: ReadonlySet<RenderWarning["code"]> = new Set([
+  "formation_fallback",
+  "formation_player_count_mismatch",
+  "defense_unknown",
+  "route_template_missing",
+  "sanitizer_dropped",
+]);
+
+export function isHardWarning(w: RenderWarning): boolean {
+  return HARD_RENDER_WARNINGS.has(w.code);
+}
+
+/**
+ * Format renderer warnings (from playSpecToCoachDiagram) into a critique
+ * shown when at least one HARD warning fires. Soft warnings are formatted
+ * separately by formatSpecRenderSoftWarnings for inclusion in success
+ * responses.
  */
 function formatSpecRenderWarnings(warnings: ReadonlyArray<RenderWarning>): string {
   const lines = warnings.map((w) => `  • [${w.code}] ${w.message}`);
@@ -280,6 +305,18 @@ function formatSpecRenderWarnings(warnings: ReadonlyArray<RenderWarning>): strin
     `Fix the spec (or change to a catalog formation/defense/route family) and re-emit.\n` +
     lines.join("\n")
   );
+}
+
+/**
+ * Format soft warnings as a non-fatal "by the way" note appended to a
+ * successful save, so Cal can mention to the coach which assignments
+ * were dropped (e.g. "You asked Y to run a route, but Trips Right's
+ * roster is X/Z/H/S — Y wasn't drawn").
+ */
+function formatSpecRenderSoftWarnings(warnings: ReadonlyArray<RenderWarning>): string {
+  if (warnings.length === 0) return "";
+  const lines = warnings.map((w) => `  • [${w.code}] ${w.message}`);
+  return `\nNote — ${warnings.length} assignment(s) couldn't be placed and were skipped:\n${lines.join("\n")}`;
 }
 
 /**
@@ -323,7 +360,7 @@ function summarizeConfidence(spec: PlaySpec | null): string {
  * PlayDocument.metadata.spec for downstream notes generation.
  */
 type ResolvedInput =
-  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null }
+  | { ok: true; diagram: CoachDiagram; spec: PlaySpec | null; softWarnings: ReadonlyArray<RenderWarning> }
   | { ok: false; error: string };
 
 /**
@@ -388,10 +425,12 @@ function resolveDiagramAndSpec(
       return { ok: false, error: formatDefenseValidationErrors(defenseValidation.errors) };
     }
     const { diagram, warnings } = playSpecToCoachDiagram(spec);
-    if (warnings.length > 0) {
-      return { ok: false, error: formatSpecRenderWarnings(warnings) };
+    const hardWarnings = warnings.filter(isHardWarning);
+    if (hardWarnings.length > 0) {
+      return { ok: false, error: formatSpecRenderWarnings(hardWarnings) };
     }
-    return { ok: true, diagram, spec };
+    const softWarnings = warnings.filter((w) => !isHardWarning(w));
+    return { ok: true, diagram, spec, softWarnings };
   }
 
   // Path 2: legacy CoachDiagram input.
@@ -415,7 +454,7 @@ function resolveDiagramAndSpec(
       formation: options.formationName,
       playType: options.playType,
     });
-    return { ok: true, diagram, spec: derivedSpec };
+    return { ok: true, diagram, spec: derivedSpec, softWarnings: [] };
   }
 
   return {
@@ -746,6 +785,7 @@ const update_play: CoachAiTool = {
       if (!inputResolved.ok) return { ok: false, error: inputResolved.error };
       const diagram = inputResolved.diagram;
       const persistedSpec = inputResolved.spec;
+      const updateSoftWarnings = inputResolved.softWarnings;
 
       // Strip cross-side players before persisting. Without this, an
       // update that included defenders for visualization would save
@@ -879,7 +919,8 @@ const update_play: CoachAiTool = {
           `Saved diagram: ${playerCount} player(s), ${routeCount} route(s)` +
           (routeSummary ? ` (carriers: ${routeSummary})` : "") +
           `. Recap to the coach which specific changes you just shipped (not just "done") so they can verify the edit matches their request.` +
-          summarizeConfidence(persistedSpec),
+          summarizeConfidence(persistedSpec) +
+          formatSpecRenderSoftWarnings(updateSoftWarnings),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "update_play failed" };
@@ -980,6 +1021,7 @@ const create_play: CoachAiTool = {
     if (!resolved.ok) return { ok: false, error: resolved.error };
     let diagram = resolved.diagram;
     const persistedSpec = resolved.spec;
+    const softWarnings = resolved.softWarnings;
 
     // ── Strip cross-side players before persisting ──────────────────
     // Cal sometimes ships a chat diagram that includes BOTH offense + defense
@@ -1144,7 +1186,8 @@ const create_play: CoachAiTool = {
         result:
           `Created play "${name}" in the current playbook. Tell the coach it's ready and link them: ` +
           `[Open ${name}](${url}).${stripNote}${notesNote}` +
-          summarizeConfidence(persistedSpec),
+          summarizeConfidence(persistedSpec) +
+          formatSpecRenderSoftWarnings(softWarnings),
       };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "create_play failed" };
