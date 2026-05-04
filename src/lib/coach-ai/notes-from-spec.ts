@@ -59,18 +59,25 @@ export function projectSpecToNotes(spec: PlaySpec): string {
 function projectOffenseSpec(spec: PlaySpec): string {
   const lines: string[] = [];
 
-  // Concept-name lead. If the spec satisfies a known concept (curl-flat,
-  // smash, mesh, stick, snag, four-verts), name it explicitly so the
-  // coach reads "Curl-Flat — high-low on the flat defender" instead of
-  // a generic "QB reads the safety". Concepts also encode depth/family
-  // invariants the spec already satisfies, so the prose can be more
-  // tactical without risking contradictions.
+  // **When-to-use lead.** Every play opens with a one-line situational
+  // cue — a coach scanning the play card / playsheet must know "when do
+  // I call this?" within the first sentence. Surfaced 2026-05-04: the
+  // prior projector skipped straight to "@Q reads ..." which described
+  // mechanics, not situations.
+  //
+  // Source order:
+  //   1. Concept hit → use the concept's tactical description (it
+  //      already names the coverage families and stress points).
+  //   2. Feature-based fallback → derive from depth profile / run vs
+  //      pass / route mix.
   const conceptHit = detectConcept(spec);
   if (conceptHit && conceptHit.ok) {
     lines.push(`**${conceptHit.concept.name}** — ${conceptHit.concept.description}`);
+  } else {
+    lines.push(`**Use when:** ${whenToUseForOffense(spec)}`);
   }
 
-  // Opener — offense-perspective.
+  // Opener — offense-perspective (the @Q read summary).
   lines.push(openerForOffense(spec));
 
   // Per-assignment bullet. Skip `unspecified` — they add noise.
@@ -112,6 +119,8 @@ function projectOffenseSpec(spec: PlaySpec): string {
  */
 function projectDefenseSpec(spec: PlaySpec): string {
   const lines: string[] = [];
+  // When-to-call lead — same intent as offense's when-to-use line.
+  lines.push(`**Use when:** ${whenToUseForDefense(spec)}`);
   lines.push(openerForDefense(spec));
 
   const defenderLines = bulletsForDefense(spec);
@@ -250,6 +259,86 @@ const DEFENDER_CUES = {
   react_wall_off: "wall off the crosser before they cross your face",
   react_robber: "lurk for a crossing route at intermediate depth",
 } as const;
+
+/**
+ * Feature-based when-to-use line for offense plays where no named concept
+ * was matched. Derives a one-sentence situational cue from depth profile,
+ * run/pass mix, and route families. The phrasing is intentionally generic
+ * — Cal is expected to rephrase notes after `create_play` with a more
+ * specific opener; this is the structural fallback so even un-rephrased
+ * notes give the coach a "when do I call this?" answer at a glance.
+ */
+function whenToUseForOffense(spec: PlaySpec): string {
+  const routeAssignments = spec.assignments.filter(
+    (a): a is PlayerAssignment & { action: Extract<AssignmentAction, { kind: "route" }> } =>
+      a.action.kind === "route",
+  );
+  const hasCarry = spec.assignments.some((a) => a.action.kind === "carry");
+  const hasMotion = spec.assignments.some((a) => a.action.kind === "motion");
+
+  // Resolve effective depth for each route — explicit depthYds wins,
+  // else the catalog midpoint.
+  const depths = routeAssignments
+    .map((a) => {
+      if (typeof a.action.depthYds === "number") return a.action.depthYds;
+      const t = findTemplate(a.action.family);
+      if (!t) return null;
+      return (t.constraints.depthRangeYds.min + t.constraints.depthRangeYds.max) / 2;
+    })
+    .filter((d): d is number => typeof d === "number");
+
+  const maxDepth = depths.length ? Math.max(...depths) : 0;
+  const allShallow = depths.length > 0 && depths.every((d) => d <= 6);
+  const hasDeepShot = maxDepth >= 14;
+
+  if (hasCarry && routeAssignments.length === 0) {
+    return "Ground call — set the run game on early downs or short-yardage.";
+  }
+  if (hasCarry) {
+    return "Run-pass mix — early-down call to keep the defense honest.";
+  }
+  if (allShallow) {
+    return "Quick-game answer — best vs pressure or on rhythm throws (1st/2nd & short).";
+  }
+  if (hasDeepShot) {
+    return "Shot play — best when the defense is sitting on the underneath, or when you need a chunk gain.";
+  }
+  if (hasMotion) {
+    return "Best when you want pre-snap motion to declare coverage and shift leverage.";
+  }
+  return "Best on early downs to attack the called coverage with a balanced progression.";
+}
+
+/**
+ * Feature-based when-to-call line for defense plays. Mirrors the offense
+ * helper — situational cue surfaced in the first sentence so the play
+ * card preview tells the coach "when do I dial this up?".
+ */
+function whenToUseForDefense(spec: PlaySpec): string {
+  const coverage = spec.defense?.coverage?.toLowerCase() ?? "";
+  const front = spec.defense?.front?.toLowerCase() ?? "";
+  const hasBlitz = (spec.defenderAssignments ?? []).some((d) => d.action.kind === "blitz");
+
+  if (hasBlitz) {
+    return "Pressure call — best on obvious passing downs (3rd-and-long) when you need to disrupt the QB.";
+  }
+  if (coverage.includes("man")) {
+    return "Best when you have matchups you trust — challenge releases, take away the quick game.";
+  }
+  if (coverage.includes("cover 0") || coverage.includes("cover 1")) {
+    return "Tight-coverage call — best in known passing situations with an extra rusher.";
+  }
+  if (coverage.includes("cover 2")) {
+    return "Best on early downs when you want to take away deep halves and keep things in front.";
+  }
+  if (coverage.includes("cover 3") || coverage.includes("zone")) {
+    return "Best when you want help over the top — keep the ball in front and rally to tackle.";
+  }
+  if (front.includes("nickel") || front.includes("dime")) {
+    return "Sub-package call — best on long-yardage / spread looks.";
+  }
+  return "Base call — best on early downs against balanced personnel.";
+}
 
 function openerForOffense(spec: PlaySpec): string {
   const formationLabel = spec.formation.name || "the formation";

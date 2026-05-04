@@ -28,11 +28,18 @@ function baseSpec(overrides: Partial<PlaySpec> = {}): PlaySpec {
 }
 
 describe("projectSpecToNotes — opener", () => {
-  it("opens with @Q reads ... for offense", () => {
+  it("opens with a when-to-use line for offense, then the @Q-reads opener", () => {
+    // Coaches scanning the play card / playsheet need "WHEN do I call
+    // this?" in the first sentence. Surfaced 2026-05-04: prior projector
+    // jumped straight to "@Q reads ..." (mechanics, not situation). Now
+    // line 1 is "**Use when:** ..." (or the concept name+description if
+    // a concept matched), and the @Q read line follows.
     const notes = projectSpecToNotes(baseSpec({
       assignments: [{ player: "X", action: { kind: "route", family: "Slant" } }],
     }));
-    expect(notes.split("\n")[0]).toMatch(/^@Q reads/);
+    const lines = notes.split("\n");
+    expect(lines[0]).toMatch(/^\*\*Use when:\*\*/);
+    expect(lines[1]).toMatch(/^@Q reads/);
   });
 
   it("includes the formation name in the opener", () => {
@@ -51,15 +58,60 @@ describe("projectSpecToNotes — opener", () => {
     expect(notes).toMatch(/Cover 3/);
   });
 
-  it("uses defense-style opener for defensive plays", () => {
+  it("uses defense-style opener for defensive plays, after the when-to-call line", () => {
     const notes = projectSpecToNotes(baseSpec({
       playType: "defense",
       defense: { front: "7v7 Zone", coverage: "Cover 3" },
     }));
-    // Defense opener leads with "Run **<defense>**" (mirrors offense
-    // opener pattern — when-to-call + primary key in the first 1-3
-    // sentences, since coaches scan the play card preview).
-    expect(notes).toMatch(/^Run \*\*[^*]+\*\* — defenders read pre-snap formation/);
+    // Line 1 is the situational when-to-call cue; line 2 is the
+    // primary-key opener ("Run **<defense>** — defenders read..."). Same
+    // first-3-sentences density as offense, with situation up top.
+    const lines = notes.split("\n");
+    expect(lines[0]).toMatch(/^\*\*Use when:\*\*/);
+    expect(lines[1]).toMatch(/^Run \*\*[^*]+\*\* — defenders read pre-snap formation/);
+  });
+
+  it("derives a feature-based when-to-use line for non-concept plays", () => {
+    // Quick-game profile (all routes ≤ 6yd) → "Quick-game answer ...".
+    const quick = projectSpecToNotes(baseSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+        { player: "Z", action: { kind: "route", family: "Hitch" } },
+      ],
+    }));
+    expect(quick).toMatch(/Quick-game answer/);
+
+    // Shot-play profile (any route ≥ 14yd) → "Shot play ...".
+    const shot = projectSpecToNotes(baseSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Go", depthYds: 18 } },
+        { player: "Z", action: { kind: "route", family: "Slant" } },
+      ],
+    }));
+    expect(shot).toMatch(/Shot play/);
+
+    // Ground call (carry only) → "Ground call ...".
+    const run = projectSpecToNotes(baseSpec({
+      assignments: [{ player: "B", action: { kind: "carry", runType: "inside_zone" } }],
+    }));
+    expect(run).toMatch(/Ground call/);
+  });
+
+  it("uses the concept description as the when-to-use lead when a concept is detected", () => {
+    // Concept descriptions already encode the situational stress (what
+    // coverage they beat, the high-low/triangle structure). When matched,
+    // the lead is "**ConceptName** — description" instead of the generic
+    // "**Use when:** ..." fallback.
+    const notes = projectSpecToNotes(baseSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Curl", depthYds: 5 } },
+        { player: "H", action: { kind: "route", family: "Flat", depthYds: 2 } },
+      ],
+    }));
+    const lines = notes.split("\n");
+    expect(lines[0]).toMatch(/^\*\*Curl-Flat\*\* —/);
+    // No duplicate "Use when:" line when concept is the lead.
+    expect(notes).not.toMatch(/\*\*Use when:\*\*/);
   });
 
   it("does not narrate defense plays from the offense's perspective", () => {
