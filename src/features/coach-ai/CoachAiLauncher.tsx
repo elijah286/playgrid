@@ -565,8 +565,12 @@ export function CoachAiLauncher({
                 : panelMode === "docked"
                   ? "inset-y-0 right-0 hidden lg:flex"
                   : [
-                      // Mobile: bottom sheet
-                      "inset-x-2 bottom-2 top-auto h-[80vh]",
+                      // Mobile: bottom sheet sized so the page behind stays
+                      // partially visible — coaches can see what Cal is
+                      // referencing and tap a CTA that lands them on the
+                      // page underneath. Use the Maximize button in the
+                      // header to toggle to fullscreen for sustained chat.
+                      "inset-x-2 bottom-2 top-auto h-[65vh]",
                       // Desktop: position controlled by windowPosStyle
                       "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
                     ].join(" "),
@@ -823,12 +827,13 @@ export function CoachAiLauncher({
                   entryPoint={previewState.entryPoint}
                   prompt={previewState.prompt}
                   evalDays={evalDays}
+                  onCtaClick={() => setOpen(false)}
                 />
               ) : !entitled ? (
                 // Non-entitled user opened from the header icon (or after
                 // closing a CTA-driven preview) — show the general welcome
                 // surface so the chat is never empty for them.
-                <CoachAiHeaderPreview evalDays={evalDays} />
+                <CoachAiHeaderPreview evalDays={evalDays} onCtaClick={() => setOpen(false)} />
               ) : (
                 <CoachAiChat
                   playbookId={playbookId}

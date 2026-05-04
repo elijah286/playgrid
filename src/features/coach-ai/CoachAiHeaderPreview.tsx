@@ -59,7 +59,7 @@ function leadForPath(pathname: string | null): string {
  * preview shell — Cal greeting bubble, demo strip, trial CTA, disabled
  * input — but with general path-aware copy instead of a tailored upsell.
  */
-export function CoachAiHeaderPreview({ evalDays }: { evalDays: number }) {
+export function CoachAiHeaderPreview({ evalDays, onCtaClick }: { evalDays: number; onCtaClick?: () => void }) {
   const pathname = usePathname();
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -78,7 +78,7 @@ export function CoachAiHeaderPreview({ evalDays }: { evalDays: number }) {
 
             <Link
               href="/pricing"
-              onClick={() =>
+              onClick={() => {
                 track({
                   event: "coach_cal_cta_click",
                   target: "header_chat_trial",
@@ -87,8 +87,9 @@ export function CoachAiHeaderPreview({ evalDays }: { evalDays: number }) {
                     action: "start_trial",
                     path: pathname ?? null,
                   },
-                })
-              }
+                });
+                onCtaClick?.();
+              }}
               className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
               style={{ background: TRIAL_GRADIENT }}
             >

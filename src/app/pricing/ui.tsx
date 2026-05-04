@@ -261,14 +261,21 @@ export function PricingClient({
                   // Unauthed: always "Get started" (orange) → signup.
                   if (!isAuthed) {
                     return (
-                      <button
-                        type="button"
-                        onClick={() => choose(t)}
-                        disabled={pending}
-                        className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-                      >
-                        Get started
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => choose(t)}
+                          disabled={pending}
+                          className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                        >
+                          Get started
+                        </button>
+                        {isProTier && (
+                          <p className="mt-1.5 text-center text-[11px] text-muted">
+                            {coachAiEvalDays}-day free trial · no charge today
+                          </p>
+                        )}
+                      </>
                     );
                   }
                   // Authed, viewing current plan.

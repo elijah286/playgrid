@@ -25,10 +25,12 @@ export function CoachAiPreviewChat({
   entryPoint,
   prompt,
   evalDays,
+  onCtaClick,
 }: {
   entryPoint: CoachCalEntryPointId;
   prompt: string;
   evalDays: number;
+  onCtaClick?: () => void;
 }) {
   const config = ENTRY_POINTS[entryPoint];
   const ctaLabel = previewCtaLabel(config, evalDays);
@@ -60,7 +62,7 @@ export function CoachAiPreviewChat({
             </ul>
             <Link
               href="/pricing"
-              onClick={() =>
+              onClick={() => {
                 track({
                   event: "coach_cal_cta_click",
                   target: "preview_chat_trial",
@@ -69,8 +71,9 @@ export function CoachAiPreviewChat({
                     entry_point: entryPoint,
                     action: "start_trial",
                   },
-                })
-              }
+                });
+                onCtaClick?.();
+              }}
               className="mt-3 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90"
               style={{ background: TRIAL_GRADIENT }}
             >
