@@ -275,8 +275,13 @@ export function ExampleBookTile({
                 className="pointer-events-none absolute inset-y-0 -left-full right-0 z-30 flex items-center justify-center transition-opacity duration-300"
                 style={{ opacity: hover ? 1 : 0 }}
               >
-                <div className="rounded-full border-2 border-slate-900 bg-white px-6 py-3 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-900 shadow-lg">
-                  Explore a sample playbook
+                <div className="flex flex-col items-center gap-2">
+                  <div className="rounded-full border-2 border-slate-900 bg-white px-5 py-2.5 text-center text-sm font-semibold text-slate-900 shadow-lg">
+                    {tile.name}
+                  </div>
+                  <div className="text-xs font-medium text-slate-900/70">
+                    {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+                  </div>
                 </div>
               </div>
             )}
