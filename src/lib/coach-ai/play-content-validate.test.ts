@@ -23,6 +23,7 @@ import {
   validateColorClash,
   validateCenterEligibility,
   validateOffensiveCoverage,
+  validateOffensiveRoster,
   validatePlayContent,
 } from "./play-content-validate";
 import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
@@ -299,6 +300,248 @@ describe("validateOffensiveCoverage", () => {
       "flag_5v5",
       defaultSettingsForVariant("flag_5v5"),
       "defense",
+    );
+    expect(errors).toHaveLength(0);
+  });
+});
+
+describe("validateOffensiveRoster", () => {
+  // Reproduces the 2026-05-04 bug: Cal hand-authored a flag_5v5 play with
+  // 6 offensive players (X, C, Z, H, B, Q) using tackle_11 / 7v7 labels.
+  // The play saved through every existing gate; the editor caught it
+  // post-save with a red banner. This validator makes the bug class
+  // structurally impossible at save-time.
+  it("rejects flag_5v5 with 6 players + non-canonical H + B labels", () => {
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+          { id: "H", x: 5, y: -1, team: "O" },
+          { id: "B", x: 3, y: -5, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_5v5",
+      settings,
+    );
+    // Two errors: count mismatch AND non-canonical labels.
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    const joined = errors.join(" | ");
+    expect(joined).toMatch(/6.*expects.*5|5.*players|count/i);
+    expect(joined).toMatch(/@H|@B/);
+    expect(joined).toMatch(/Q.*C.*X.*Y.*Z|canonical|allowed/i);
+  });
+
+  it("rejects flag_5v5 with 5 players but non-canonical labels (H instead of Y)", () => {
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+          { id: "H", x: 5, y: -1, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors.join(" | ")).toMatch(/@H/);
+  });
+
+  it("ACCEPTS canonical flag_5v5 roster {Q, C, X, Y, Z}", () => {
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: -5, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("ACCEPTS @QB as a synonym for @Q", () => {
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "QB", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Y", x: -5, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("rejects flag_5v5 with only 4 players (missing one)", () => {
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors.join(" | ")).toMatch(/4.*5|count|too few/i);
+  });
+
+  it("ACCEPTS flag_7v7 canonical roster {Q, C, X, Y, Z, H, B}", () => {
+    const settings = defaultSettingsForVariant("flag_7v7");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_7v7",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -12, y: 0, team: "O" },
+          { id: "Y", x: -6, y: 0, team: "O" },
+          { id: "Z", x: 12, y: 0, team: "O" },
+          { id: "H", x: 6, y: 0, team: "O" },
+          { id: "B", x: 3, y: -3, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_7v7",
+      settings,
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("rejects flag_7v7 with wrong count (8 players)", () => {
+    const settings = defaultSettingsForVariant("flag_7v7");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_7v7",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -12, y: 0, team: "O" },
+          { id: "Y", x: -6, y: 0, team: "O" },
+          { id: "Z", x: 12, y: 0, team: "O" },
+          { id: "H", x: 6, y: 0, team: "O" },
+          { id: "S", x: 4, y: -1, team: "O" },
+          { id: "B", x: 3, y: -3, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_7v7",
+      settings,
+    );
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors.join(" | ")).toMatch(/8.*7|count/i);
+  });
+
+  it("ACCEPTS dedup-suffixed labels (X + X2)", () => {
+    // The synthesizer suffixes duplicate role labels (e.g. two slots
+    // both labeled S → S + S2). The validator must tolerate the suffix.
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -10, y: 0, team: "O" },
+          { id: "X2", x: -5, y: 0, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [],
+      },
+      "flag_5v5",
+      settings,
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("does NOT fire on tackle_11 (broad label set, count 11)", () => {
+    const settings = defaultSettingsForVariant("tackle_11");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "tackle_11",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "LT", x: -4, y: 0, team: "O" },
+          { id: "LG", x: -2, y: 0, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "RG", x: 2, y: 0, team: "O" },
+          { id: "RT", x: 4, y: 0, team: "O" },
+          { id: "X", x: -18, y: 0, team: "O" },
+          { id: "Y", x: 6, y: 0, team: "O" },
+          { id: "Z", x: 18, y: 0, team: "O" },
+          { id: "H", x: -10, y: -1, team: "O" },
+          { id: "B", x: 0, y: -7, team: "O" },
+        ],
+        routes: [],
+      },
+      "tackle_11",
+      settings,
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("skips defense plays (empty offense, no error)", () => {
+    const settings = defaultSettingsForVariant("flag_5v5");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "FS", x: 0, y: 12, team: "D" },
+          { id: "CB", x: -10, y: 5, team: "D" },
+        ],
+      },
+      "flag_5v5",
+      settings,
+      "defense",
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it("skips when variant is 'other' (custom rosters)", () => {
+    const settings = defaultSettingsForVariant("other");
+    const errors = validateOffensiveRoster(
+      {
+        variant: "other",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "WR1", x: -10, y: 0, team: "O" },
+          { id: "WR2", x: 10, y: 0, team: "O" },
+        ],
+      } as unknown as CoachDiagram,
+      "other",
+      settings,
     );
     expect(errors).toHaveLength(0);
   });

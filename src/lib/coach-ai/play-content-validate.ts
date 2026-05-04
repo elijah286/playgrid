@@ -197,13 +197,139 @@ export function validateOffensiveCoverage(
   ];
 }
 
+/**
+ * Per-variant canonical offensive roster. The save-time validator
+ * rejects plays whose offensive player count or label set falls
+ * outside these expectations.
+ *
+ * Surfaced 2026-05-04 by a Flag 5v5 starter playbook where Cal
+ * hand-authored "Spread — Quick Slant" with 6 offensive players
+ * (X, C, Z, H, B, Q) using tackle_11 / 7v7 labels. The play saved
+ * through every existing gate; the editor caught it post-save with
+ * "6 players on the field — this playbook allows only 5". This gate
+ * makes that bug class structurally impossible at save-time.
+ *
+ * The agent prompt also teaches Cal to draw flag_5v5 plays with
+ * {Q, C, X, Y, Z, B} — 6 players. The validator overrides the prompt
+ * (Rule 5: validators are the last word), and the prompt fix lands
+ * alongside this gate so Cal stops generating wrong rosters in the
+ * first place.
+ *
+ * Variants:
+ *   - flag_5v5  → exactly 5 offense, labels in {Q/QB, C, X, Y, Z}
+ *   - flag_7v7  → exactly 7 offense, labels in {Q/QB, C, X, Y, Z, H, S, B, F}
+ *   - tackle_11 → exactly 11 offense, broad label set (linemen + skill)
+ *   - other     → no enforcement (custom variant, custom roster)
+ *
+ * Dedup-suffix tolerance: the synthesizer suffixes duplicate role
+ * labels (two slots both labeled S → S + S2). The validator strips a
+ * trailing `\d+` before checking against the canonical set, so X2 is
+ * accepted wherever X is. Coaches reading the diagram still see the
+ * suffix; the underlying role is what matters for the gate.
+ */
+type VariantRoster = {
+  count: number;
+  /** UPPERCASE labels (post-suffix-strip). */
+  allowed: ReadonlySet<string>;
+  /** Human-readable list shown in the error message. */
+  display: string;
+};
+
+const VARIANT_ROSTER: Record<string, VariantRoster> = {
+  flag_5v5: {
+    count: 5,
+    allowed: new Set(["Q", "QB", "C", "X", "Y", "Z"]),
+    display: "Q (or QB), C, X, Y, Z",
+  },
+  flag_7v7: {
+    count: 7,
+    allowed: new Set(["Q", "QB", "C", "X", "Y", "Z", "H", "S", "B", "F"]),
+    display: "Q (or QB), C, X, Y, Z, H, S, B, F",
+  },
+  tackle_11: {
+    count: 11,
+    allowed: new Set([
+      "Q", "QB",
+      "LT", "LG", "C", "RG", "RT", "T", "G", "OL",
+      "X", "Y", "Z", "H", "S", "B", "F", "TE",
+    ]),
+    display: "QB + 5 OL (LT/LG/C/RG/RT) + 5 skill (X/Y/Z/H/S/B/F/TE)",
+  },
+};
+
+/** Strip a trailing run of digits so X2 → X for canonical-set matching. */
+function stripDedupSuffix(label: string): string {
+  return label.replace(/\d+$/, "");
+}
+
+/**
+ * Roster validation: exact count + canonical label set per variant.
+ *
+ * Skips defense plays (offense roster empty), special-teams plays
+ * (mixed sides), and the "other" variant (custom rosters).
+ */
+export function validateOffensiveRoster(
+  diagram: CoachDiagram,
+  variant: string | null | undefined,
+  _settings: PlaybookSettings | null | undefined,
+  playType?: "offense" | "defense" | "special_teams",
+): string[] {
+  if (playType === "defense" || playType === "special_teams") return [];
+  const variantStr = (variant ?? diagram.variant ?? "").trim();
+  const profile = VARIANT_ROSTER[variantStr];
+  if (!profile) return []; // "other" or unknown — no enforcement.
+
+  const players = Array.isArray(diagram.players) ? diagram.players : [];
+  const offense = players
+    .filter((p) => (p as { team?: string }).team !== "D")
+    .filter((p) => typeof (p as { id?: unknown }).id === "string");
+  // Defense-only plays end up with empty offense after filtering — let
+  // them pass (the play_type was offense but the diagram is empty for
+  // some reason; other validators handle that).
+  if (offense.length === 0) return [];
+
+  const errors: string[] = [];
+
+  // 1) Exact count check. Off-by-one is by far the common failure
+  //    mode (Cal grabbed a tackle skeleton + center for 5v5 → 6).
+  if (offense.length !== profile.count) {
+    errors.push(
+      `Offensive roster has ${offense.length} player(s) but ${variantStr} expects exactly ${profile.count}. ` +
+        `Canonical roster: ${profile.display}. ` +
+        `Re-emit the diagram with the right count — do not author a tackle_11 / 7v7 skeleton in a 5v5 playbook.`,
+    );
+  }
+
+  // 2) Canonical-label check. Even at the right count, Cal may use
+  //    non-canonical labels (Q + C + X + Y + Z + missing a player and
+  //    using H instead). Flag every offending label so the re-emit
+  //    fixes them all at once.
+  const offending: string[] = [];
+  for (const p of offense) {
+    const id = (p as { id: string }).id;
+    const stripped = stripDedupSuffix(id).toUpperCase();
+    if (!profile.allowed.has(stripped)) {
+      offending.push(`@${id}`);
+    }
+  }
+  if (offending.length > 0) {
+    errors.push(
+      `Offensive roster uses non-canonical label(s) for ${variantStr}: ${offending.join(", ")}. ` +
+        `Allowed labels: ${profile.display}. ` +
+        `Relabel each offending player to a canonical id (don't keep a tackle/7v7 label like @H or @B in a 5v5 play — those colors and roles aren't part of the 5v5 set).`,
+    );
+  }
+
+  return errors;
+}
+
 export type PlayContentValidation =
   | { ok: true }
   | { ok: false; errors: string[] };
 
 /**
- * Aggregator used at save-time. Runs all three gates and returns a
- * single rejection if any fire. Chat-time validation calls each gate
+ * Aggregator used at save-time. Runs all gates and returns a single
+ * rejection if any fire. Chat-time validation calls each gate
  * individually (so it can format errors with the chat-tag prefix).
  */
 export function validatePlayContent(
@@ -216,6 +342,7 @@ export function validatePlayContent(
     ...validateColorClash(diagram),
     ...validateCenterEligibility(diagram, settings, variant),
     ...validateOffensiveCoverage(diagram, variant, settings, playType),
+    ...validateOffensiveRoster(diagram, variant, settings, playType),
   ];
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }
