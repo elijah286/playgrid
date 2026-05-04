@@ -635,6 +635,18 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         if (a.team !== b.team) continue;
         // Skip OL-OL pairs — see "Lineman pairs are exempt" above.
         if (isOlRow(a) && isOlRow(b)) continue;
+        // Skip OL-row vs anchored (QB or C). C is already OL-row via
+        // isLineman, so this rule effectively means "OL vs QB". Under
+        // center, the QB sits 1yd behind the C — that's hypot(0, 1/25) =
+        // 0.04 to C, but ALSO hypot(2/53, 1/25) ≈ 0.055 to LG/RG, both
+        // under the 0.067 threshold. Without this exemption the resolver
+        // pushes LG/RG outward by NUDGE_STEP_YDS_X (3.55yd) and they land
+        // ON TOP of LT/RT — the LT-on-LG visual stack the OL exemption
+        // was supposed to prevent. The OL/QB stack is intentional
+        // football geometry; the resolver must leave it alone.
+        // 2026-05-04 surfaced this in production via Cal-generated tackle
+        // playbook (Pro I, Singleback, Pro Set, Goal Line variants).
+        if ((isOlRow(a) && isAnchored(b)) || (isAnchored(a) && isOlRow(b))) continue;
         // Skip anchored-anchored pairs. The only realistic case is QB-on-C
         // for under-center alignment (QB at (0, -1), C at (0, 0)) — that's
         // 1 yd apart in y, normalized 0.04, which trips the 0.067 threshold
@@ -682,9 +694,10 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
         const b = staged[j];
         if (a.team !== b.team) continue;
         if (isOlRow(a) && isOlRow(b)) continue;
-        // Same exemption as the resolver pass — anchored-anchored pairs
-        // (QB-on-C under center) are intentional football geometry, not
-        // a real overlap to fail on.
+        // Same exemptions as the resolver pass — OL-vs-anchored (QB
+        // under center) and anchored-anchored (QB-on-C) are intentional
+        // football geometry, not real overlaps to fail on.
+        if ((isOlRow(a) && isAnchored(b)) || (isAnchored(a) && isOlRow(b))) continue;
         if (isAnchored(a) && isAnchored(b)) continue;
         const aN = toNorm(a.x, a.y);
         const bN = toNorm(b.x, b.y);

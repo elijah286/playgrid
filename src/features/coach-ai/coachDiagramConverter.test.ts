@@ -84,6 +84,34 @@ describe("overlap resolver — OL-OL exemption", () => {
     const dxNorm = Math.abs(lt.position.x - lg.position.x);
     expect(dxNorm).toBeGreaterThan(1 / 53);
   });
+
+  it("regression: under-center QB does NOT nudge LG/RG outward (2026-05-04)", () => {
+    // Production failure mode: Cal generates a Pro I / Singleback / Pro Set
+    // play with QB at (0, -1) under center. The OL-OL exemption skips
+    // OL-vs-OL pairs, but the OL-vs-QB pair is treated as a non-OL collision
+    // because QB is "anchored" not "OL-row". On tackle_11, the threshold of
+    // 0.067 normalized triggers against LG at (-2, 0): hypot(2/53, 1/25) ≈
+    // 0.055 < 0.067. The resolver pushes LG to -3.56, which lands on top
+    // of LT at -4, producing the LT/LG visual stack the user reported.
+    // RG mirrors the same to +3.56 on top of RT.
+    const doc = coachDiagramToPlayDocument(
+      diagram([
+        { id: "LT", x: -4, y: 0 },
+        { id: "LG", x: -2, y: 0 },
+        { id: "C",  x:  0, y: 0 },
+        { id: "RG", x:  2, y: 0 },
+        { id: "RT", x:  4, y: 0 },
+        { id: "QB", x:  0, y: -1 }, // UNDER CENTER — within threshold of LG/RG
+      ]),
+    );
+    const fieldWidthYds = doc.sportProfile.fieldWidthYds;
+    const xYds = (norm: number) => (norm - 0.5) * fieldWidthYds;
+    const byLabel = new Map(doc.layers.players.map((p) => [p.label, p]));
+    expect(xYds(byLabel.get("LG")!.position.x)).toBeCloseTo(-2, 1);
+    expect(xYds(byLabel.get("RG")!.position.x)).toBeCloseTo(2, 1);
+    expect(xYds(byLabel.get("LT")!.position.x)).toBeCloseTo(-4, 1);
+    expect(xYds(byLabel.get("RT")!.position.x)).toBeCloseTo(4, 1);
+  });
 });
 
 describe("overlap resolver — non-OL pairs ARE resolved", () => {
