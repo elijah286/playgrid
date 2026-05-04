@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui";
 import {
   getActivationSummaryAction,
   type MonetizationSummary,
+  type MonetizationWindow,
   type SportVariantTrend,
 } from "@/app/actions/admin-activation";
+
+const WINDOW_OPTIONS: Array<{ value: MonetizationWindow; label: string }> = [
+  { value: "all", label: "All time" },
+  { value: "month", label: "This month" },
+  { value: "week", label: "This week" },
+  { value: "today", label: "Today" },
+];
 
 function formatInt(n: number): string {
   return n.toLocaleString("en-US");
@@ -111,19 +119,32 @@ export function ActivationAdminClient({
   const [summary, setSummary] = useState<MonetizationSummary | null>(initialSummary);
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
+  const [window, setWindow] = useState<MonetizationWindow>(
+    initialSummary?.window ?? "all",
+  );
 
-  async function refresh() {
+  async function load(nextWindow: MonetizationWindow, announce: boolean) {
     setLoading(true);
-    const res = await getActivationSummaryAction();
+    const res = await getActivationSummaryAction(nextWindow);
     if (res.ok) {
       setSummary(res.summary);
       setError(null);
-      toast("Monetization data updated.", "success");
+      if (announce) toast("Monetization data updated.", "success");
     } else {
       setError(res.error);
       toast(res.error, "error");
     }
     setLoading(false);
+  }
+
+  async function refresh() {
+    await load(window, true);
+  }
+
+  async function changeWindow(next: MonetizationWindow) {
+    if (next === window) return;
+    setWindow(next);
+    await load(next, false);
   }
 
   if (error) {
@@ -154,21 +175,50 @@ export function ActivationAdminClient({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Monetization Health</h2>
           <p className="mt-1 text-sm text-muted">
             Track activation signals and monetization funnel
           </p>
         </div>
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-raised disabled:opacity-50"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="tablist"
+            aria-label="Time window"
+            className="inline-flex rounded-lg border border-border bg-surface p-1 text-sm"
+          >
+            {WINDOW_OPTIONS.map((opt) => {
+              const active = opt.value === window;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  disabled={loading}
+                  onClick={() => changeWindow(opt.value)}
+                  className={
+                    "rounded-md px-3 py-1.5 font-medium transition-colors disabled:opacity-50 " +
+                    (active
+                      ? "bg-surface-raised text-foreground"
+                      : "text-muted hover:text-foreground")
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-surface-raised disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Activation Funnel */}
