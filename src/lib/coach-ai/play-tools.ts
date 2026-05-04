@@ -19,6 +19,8 @@ import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { CoachAiTool } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
+import { validatePlayContent, formatPlayContentErrors } from "./play-content-validate";
+import { defaultSettingsForVariant, normalizePlaybookSettings } from "@/domain/playbook/settings";
 import { validateDefenderAssignments, formatDefenseValidationErrors } from "./defense-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
 import {
@@ -33,6 +35,34 @@ import { applyPlayerStyleMod } from "./player-mutations";
 const LOS_Y = 0.4;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Read a playbook's normalized settings (centerIsEligible, blocking
+ * rules, etc.) for the save-time content validators. Falls back to
+ * variant defaults when the column is missing or the row can't be
+ * read (don't block a save on a settings query failure — the gate
+ * will use defaults that match the variant convention).
+ */
+async function loadPlaybookSettings(
+  playbookId: string,
+  variant: SportVariant,
+) {
+  try {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from("playbooks")
+      .select("settings, player_count")
+      .eq("id", playbookId)
+      .maybeSingle();
+    return normalizePlaybookSettings(
+      data?.settings ?? null,
+      variant,
+      (data as { player_count?: number | null } | null)?.player_count ?? null,
+    );
+  } catch {
+    return defaultSettingsForVariant(variant);
+  }
+}
 
 /**
  * Resolve a play_id input to a canonical UUID.
@@ -752,6 +782,22 @@ const update_play: CoachAiTool = {
         return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
       }
 
+      // SFPA Layer 4 gate: content coherence. Color clashes, center
+      // eligibility, and offensive-coverage (every non-QB player has
+      // an action) — historically only enforced at chat-time, now also
+      // at save-time so a `create_play`/`update_play` JSON that bypasses
+      // chat cannot persist either. See play-content-validate.ts.
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+      const contentCheck = validatePlayContent(
+        diagramWithVariant,
+        resolvedVariant,
+        playbookSettings,
+        playType,
+      );
+      if (!contentCheck.ok) {
+        return { ok: false, error: formatPlayContentErrors(contentCheck.errors) };
+      }
+
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
 
       // Carry over existing metadata (notes, coachName) from the parent version
@@ -993,6 +1039,22 @@ const create_play: CoachAiTool = {
       });
       if (!assignmentCheck.ok) {
         return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
+      }
+
+      // SFPA Layer 4 gate: content coherence. Color clashes, center
+      // eligibility, and offensive-coverage (every non-QB player has
+      // an action) — historically only enforced at chat-time, now also
+      // at save-time so a `create_play`/`update_play` JSON that bypasses
+      // chat cannot persist either. See play-content-validate.ts.
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+      const contentCheck = validatePlayContent(
+        diagramWithVariant,
+        resolvedVariant,
+        playbookSettings,
+        playType,
+      );
+      if (!contentCheck.ok) {
+        return { ok: false, error: formatPlayContentErrors(contentCheck.errors) };
       }
 
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);

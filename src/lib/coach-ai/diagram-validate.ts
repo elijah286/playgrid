@@ -21,13 +21,15 @@ import {
   parseConceptsFromText,
 } from "@/domain/play/conceptMatch";
 import {
-  derivedColorGroupForLabel,
-  DERIVED_GROUP_HEX,
-  PLAYBOOK_PALETTE,
   type CoachDiagram,
 } from "@/features/coach-ai/coachDiagramConverter";
 import { lintProseAgainstSpec, lintProseDepthAgainstSpec } from "./notes-lint";
 import { validateRouteAssignments } from "./route-assignment-validate";
+import {
+  validateColorClash,
+  validateCenterEligibility,
+  validateOffensiveCoverage,
+} from "./play-content-validate";
 
 const OFFENSE_LETTERS = new Set([
   // Skill positions
@@ -640,83 +642,23 @@ export function validateDiagrams(opts: {
 
     // ── COLOR-CLASH GATE ─────────────────────────────────────────────
     // No two skill-position offensive players may render in the same
-    // color. Position roles + labels carry color semantics (QB white,
-    // C black, RB purple, FB orange, TE green, X red, Z blue, slot
-    // yellow); two players in the same group (e.g. H + S both →
-    // yellow, or X + X2 both → red) collide visually and a coach
-    // can't tell which dot is which on the diagram. Surfaced
-    // 2026-05-03 by a coach who flagged "two oranges and no purple
-    // or green" in a Cal-generated 5v5 play; convention later
-    // tightened to role-keyed defaults.
-    //
-    // The gate computes each player's EFFECTIVE color (explicit
-    // `player.color` override wins, else the role+label-derived hex)
-    // and groups by hex. Singleton groups (QB white, C black) and
-    // the lineman gray are exempt — the structural roles allow shared
-    // hue. The fix Cal should reach for: relabel one of the clashing
-    // players (e.g. swap a second slot to a different position), or
-    // override one with `set_player_color` via revise_play.
-    if (offense.length > 0) {
-      const skillByHex = new Map<string, Array<{ id: string; group: string }>>();
-      for (const p of offense as Array<{ id?: unknown; role?: unknown; color?: unknown }>) {
-        if (typeof p.id !== "string") continue;
-        const roleHint = typeof p.role === "string" ? p.role : undefined;
-        const group = derivedColorGroupForLabel(p.id, roleHint);
-        if (group === "QB" || group === "C" || group === "LINEMAN" || group === "ROTATION") continue;
-        const explicitColor = typeof p.color === "string" && p.color.trim() !== "" ? p.color.trim() : null;
-        const hex = explicitColor ?? DERIVED_GROUP_HEX[group];
-        const list = skillByHex.get(hex) ?? [];
-        list.push({ id: p.id, group });
-        skillByHex.set(hex, list);
-      }
-      const usedHexSet = new Set(skillByHex.keys());
-      const unusedNames: string[] = [];
-      for (const [name, hex] of Object.entries(PLAYBOOK_PALETTE)) {
-        if (name === "white" || name === "black" || name === "gray") continue;
-        if (!usedHexSet.has(hex)) unusedNames.push(name);
-      }
-      for (const [hex, list] of skillByHex.entries()) {
-        if (list.length < 2) continue;
-        const ids = list.map((p) => `@${p.id}`).join(", ");
-        const colorName =
-          (Object.entries(PLAYBOOK_PALETTE).find(([, h]) => h === hex)?.[0]) ?? hex;
-        const suggestion = unusedNames.length > 0
-          ? `Pick one of ${ids.split(", ")[0]} or ${ids.split(", ")[1]} and either (a) relabel it so it derives a different color (e.g. swap a second slot @H to @F-with-role-RB for purple, or to FB for orange), or (b) call revise_play with set_player_color: "${unusedNames[0]}" on one of them. Unused palette colors here: ${unusedNames.join(", ")}.`
-          : `Override one with revise_play set_player_color, or relabel for color variety. Every standard palette color is already in use.`;
-        errors.push(
-          `${tag}color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from role+label (QB white, C black, RB purple, FB orange, TE green, X red, Z blue, slot yellow), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
-        );
-      }
+    // color. Delegated to validateColorClash so the same rule fires
+    // at save-time on every create_play / update_play. See
+    // play-content-validate.ts for the full rule text + history.
+    for (const msg of validateColorClash(json as CoachDiagram)) {
+      errors.push(`${tag}${msg}`);
+    }
+    // Offensive-coverage gate: in flag, every non-QB player must have
+    // a route or motion. Chat-time AND save-time. Catches "Cal's prose
+    // describes @B motion + @Z carry, but the diagram has neither."
+    for (const msg of validateOffensiveCoverage(json as CoachDiagram, opts.variant, settings)) {
+      errors.push(`${tag}${msg}`);
     }
 
-    // VARIANT-RULE GATE B — center eligibility. When the playbook has
-    // centerIsEligible:false (7v7, tackle_11), a route originating at
-    // @C is illegal — the center is a snapper, not a receiver. Surfaced
-    // alongside the blocking gate (2026-05-03): the same coach feedback
-    // pointed out that 7v7 has no eligible center.
-    //
-    // Skipped when offense is empty or settings unknown. The check uses
-    // the route carriers, not the spec, because route_kind is a
-    // diagram-level field and the parser doesn't always run cleanly
-    // (a malformed fence shouldn't suppress the gate).
-    if (settings && !settings.centerIsEligible && Array.isArray(json.routes)) {
-      const centerIds = new Set(
-        offense
-          .filter((p) => typeof p.id === "string" && p.id.toUpperCase() === "C")
-          .map((p) => p.id),
-      );
-      if (centerIds.size > 0) {
-        const offendingRoute = json.routes.find(
-          (r) => typeof r.from === "string" && centerIds.has(r.from),
-        );
-        if (offendingRoute) {
-          errors.push(
-            `${tag}@C has a route, but the center is not an eligible receiver in this game type (${opts.variant ?? "unknown"}). ` +
-              `The center snaps the ball and stays at the LOS — only the QB can hand off / pass to other players. ` +
-              `Drop the route on @C, or move the route to one of the eligible receivers (X / Y / Z / H / S / B / F).`,
-          );
-        }
-      }
+    // VARIANT-RULE GATE B — center eligibility. Delegated to
+    // validateCenterEligibility so the same rule fires at save-time.
+    for (const msg of validateCenterEligibility(json as CoachDiagram, settings, opts.variant)) {
+      errors.push(`${tag}${msg}`);
     }
 
     // VARIANT-RULE GATE C — block-action structural check. When the
