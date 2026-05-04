@@ -211,19 +211,32 @@ describe("player color routing — role-keyed convention", () => {
     expect(colorFor("F2")).toBe("#FACC15");
   });
 
-  it("F with role=RB → purple (lone back in 7v7 default formation)", () => {
-    expect(colorFor("F", "RB")).toBe("#A855F7");
+  it("F with role=RB → orange (lone back in 7v7 default formation)", () => {
+    // 2026-05-04: backs moved from purple to orange so @C (now purple)
+    // and @B/@HB stay distinct.
+    expect(colorFor("F", "RB")).toBe("#F26522");
   });
 
-  it("B / B2 / RB / HB → purple (#A855F7) — primary back", () => {
-    expect(colorFor("B")).toBe("#A855F7");
-    expect(colorFor("B2")).toBe("#A855F7");
-    expect(colorFor("RB")).toBe("#A855F7");
-    expect(colorFor("HB")).toBe("#A855F7");
+  it("B / B2 / RB / HB → orange (#F26522) — primary back", () => {
+    expect(colorFor("B")).toBe("#F26522");
+    expect(colorFor("B2")).toBe("#F26522");
+    expect(colorFor("RB")).toBe("#F26522");
+    expect(colorFor("HB")).toBe("#F26522");
   });
 
-  it("FB → orange (#F26522) — explicit fullback signal, contrasts with HB purple", () => {
+  it("FB → orange (#F26522) — explicit fullback shares orange with primary back; relabel one when both on the field", () => {
     expect(colorFor("FB")).toBe("#F26522");
+  });
+
+  it("C → purple (#A855F7) — distinct from QB white", () => {
+    // colorFor's fixture already contains a @C, so build a custom diagram
+    // for this case.
+    const doc = coachDiagramToPlayDocument(diagram([
+      { id: "QB", x: 0, y: -5 },
+      { id: "C", x: 0, y: 0 },
+    ]));
+    const c = doc.layers.players.find((p) => p.label === "C");
+    expect(c?.style.fill).toBe("#A855F7");
   });
 
   it("preserves the FULL suffixed label for display (H2 not H)", () => {

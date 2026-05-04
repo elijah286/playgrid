@@ -411,3 +411,59 @@ describe("Renderer — direction override on route actions", () => {
     expect((xRoute as { direction?: string }).direction).toBeUndefined();
   });
 });
+
+// 2026-05-04: surfaced by a Trips Right Jet Sweep where Cal authored
+// `{ player: "B", action: { kind: "carry" } }` (no waypoints) and the
+// renderer returned null, leaving the runner with no diagram entry. The
+// renderer now synthesizes a default forward path from the carry's
+// runType so the ballcarrier is always visible.
+describe("Renderer — carry actions synthesize a path when waypoints are absent", () => {
+  it("kind:'carry' with no waypoints produces a forward path (default — 4yd straight)", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_5v5",
+      formation: { name: "Trips Right" },
+      assignments: [
+        { player: "B", action: { kind: "carry" } },
+      ],
+    });
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    expect(bRoute).toBeDefined();
+    expect(bRoute!.path.length).toBeGreaterThan(0);
+    // forward path — last waypoint should be downfield from the carrier
+    const carrier = result.diagram.players.find((p) => p.id === "B")!;
+    const lastY = bRoute!.path[bRoute!.path.length - 1][1];
+    expect(lastY).toBeGreaterThan(carrier.y);
+  });
+
+  it("kind:'carry' with runType:'sweep' produces a wide arc to the carrier's side", () => {
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_5v5",
+      formation: { name: "Trips Right" },
+      assignments: [
+        { player: "B", action: { kind: "carry", runType: "sweep" } },
+      ],
+    });
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    expect(bRoute).toBeDefined();
+    // Sweep should commit laterally — ≥ 3 yards of x change from start.
+    const carrier = result.diagram.players.find((p) => p.id === "B")!;
+    const lastWp = bRoute!.path[bRoute!.path.length - 1];
+    expect(Math.abs(lastWp[0] - carrier.x)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("explicit waypoints win over the synthesized default", () => {
+    const customWaypoints: [number, number][] = [[0, 1], [4, 6]];
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_5v5",
+      formation: { name: "Trips Right" },
+      assignments: [
+        { player: "B", action: { kind: "carry", waypoints: customWaypoints } },
+      ],
+    });
+    const bRoute = result.diagram.routes?.find((r) => r.from === "B");
+    expect(bRoute!.path).toEqual(customWaypoints);
+  });
+});

@@ -41,7 +41,7 @@ const LINEMAN_LABELS = new Set(["LT", "LG", "C", "RG", "RT", "T", "G", "OL"]);
 /**
  * No two offensive skill-position players may share their effective
  * token color (explicit `player.color` override wins, else the
- * role+label-derived hex). Singleton roles (QB white, C black,
+ * role+label-derived hex). Singleton roles (QB white, C purple,
  * lineman gray) are exempt.
  */
 export function validateColorClash(diagram: CoachDiagram): string[] {
@@ -76,10 +76,10 @@ export function validateColorClash(diagram: CoachDiagram): string[] {
     const colorName =
       (Object.entries(PLAYBOOK_PALETTE).find(([, h]) => h === hex)?.[0]) ?? hex;
     const suggestion = unusedNames.length > 0
-      ? `Pick one of ${ids.split(", ")[0]} or ${ids.split(", ")[1]} and either (a) relabel it so it derives a different color (e.g. swap a second slot @H to @F-with-role-RB for purple, or to FB for orange), or (b) call revise_play with set_player_color: "${unusedNames[0]}" on one of them. Unused palette colors here: ${unusedNames.join(", ")}.`
+      ? `Pick one of ${ids.split(", ")[0]} or ${ids.split(", ")[1]} and either (a) relabel it so it derives a different color (e.g. swap a second slot @H to a distinct skill label like @Y for green, or use a back label like @B / @HB for orange), or (b) call revise_play with set_player_color: "${unusedNames[0]}" on one of them. Unused palette colors here: ${unusedNames.join(", ")}.`
       : `Override one with revise_play set_player_color, or relabel for color variety. Every standard palette color is already in use.`;
     errors.push(
-      `color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from role+label (QB white, C black, RB purple, FB orange, TE green, X red, Z blue, slot yellow), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
+      `color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from role+label (QB white, C purple, RB/FB orange, TE green, X red, Z blue, Y green, slot yellow), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
     );
   }
   return errors;

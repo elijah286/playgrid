@@ -201,20 +201,30 @@ export function parseCoachDiagram(data: unknown) {
 //
 // Field is green (#2D8B4E), so route stroke = player fill must contrast.
 // Defenders: red triangle. Offense: role-keyed color (high-contrast
-// convention: QB white, C black, OTHER gray, RB purple, FB orange, TE
+// convention: QB white, C purple, OTHER gray, RB orange, FB orange, TE
 // green, X red, Z blue, Y green, slot yellow). Two slots in the same
 // play (H + F-as-slot) share yellow by design — the no-shared-color
 // gate flags it and Cal recolors one with set_player_color.
+// 2026-05-04: @C moved from black to purple, @B/RB moved from purple
+// to orange so the default flag_5v5 set (Q white, C purple, X red,
+// Y green, Z blue) is five distinct hues.
 
 type PlayerStyle = { fill: string; stroke: string; labelColor: string };
 
 const STYLE_QB:   PlayerStyle = { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
-const STYLE_C:    PlayerStyle = { fill: "#1C1C1E", stroke: "#0f172a", labelColor: "#FFFFFF" };
+// 2026-05-04: @C moved from black (#1C1C1E) to purple (#A855F7) so the
+// default flag_5v5 5-player set (Q, C, X, Y, Z) renders in five distinct
+// hues. Black previously blended into the dark field background.
+const STYLE_C:    PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
 const STYLE_X:    PlayerStyle = { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
 const STYLE_Y:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
 const STYLE_SLOT: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // S, A, H, F-as-WR
-const STYLE_RB:   PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" }; // halfback / primary back / role=RB
+// 2026-05-04: @B (RB) moved from purple to orange — purple now belongs
+// to @C, and the 7v7 / tackle pairing of B + C needs distinct hues.
+// FB stays orange too; coaches with both B + FB on the field need to
+// relabel one or override via set_player_color.
+const STYLE_RB:   PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // halfback / primary back / role=RB
 const STYLE_FB:   PlayerStyle = { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" }; // fullback (label "FB" with role=RB)
 const STYLE_DEF:         PlayerStyle = { fill: "#EF4444", stroke: "#991b1b", labelColor: "#FFFFFF" }; // generic — fallback when label doesn't match a role
 // Defender role palette. Triangles already mark "defender"; the hue makes
@@ -338,16 +348,26 @@ export function derivedColorGroupForLabel(rawLabel: string, role?: string): Deri
 }
 
 /** The hex the auto-renderer produces for each skill-position group.
- *  Used by the validator's error message ("@H + @S both render yellow"). */
+ *  Used by the validator's error message ("@H + @S both render yellow").
+ *
+ *  2026-05-04: convention update — @C is now PURPLE (was black) so the
+ *  five default flag_5v5 players (Q, C, X, Y, Z) each get a distinct
+ *  recognizable hue (white / purple / red / green / blue). Black was
+ *  visually muddy against the dark field background and made @C blend
+ *  in with the LOS shading. The RB group moved off purple to ORANGE
+ *  (was purple) to keep B and C distinct when both appear in 7v7 +
+ *  tackle. FB stays orange too — coaches with both B + FB (rare in
+ *  flag, occasional in tackle) need to relabel one or override via
+ *  set_player_color. */
 export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "LINEMAN">, string> = {
   X:    "#EF4444",
   Y:    "#22C55E",
   Z:    "#3B82F6",
   SLOT: "#FACC15",
-  RB:   "#A855F7",
+  RB:   "#F26522",
   FB:   "#F26522",
   QB:   "#FFFFFF",
-  C:    "#1C1C1E",
+  C:    "#A855F7",
 };
 
 // Default zone style — matches `mkZone`, which is what coaches get

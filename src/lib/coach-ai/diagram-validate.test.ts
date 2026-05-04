@@ -1479,7 +1479,9 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
 
   it("REJECTS even when one of the clashing players has an explicit override to the SAME color", () => {
     // Coach explicitly setting two players to the same hue is still
-    // visually broken — push back rather than ship it.
+    // visually broken — push back rather than ship it. (Under the
+    // 2026-05-04 convention @B/RB derives orange; setting @H to
+    // explicit orange creates the clash.)
     const fence = makeFence({
       title: "Test",
       variant: "flag_5v5",
@@ -1487,8 +1489,8 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
         { id: "Q", x: 0, y: -3, team: "O" },
         { id: "C", x: 0, y: 0, team: "O" },
         { id: "X", x: -10, y: 0, team: "O" },
-        { id: "H", x: -5, y: 0, team: "O", color: "#A855F7" }, // explicit purple
-        { id: "B", x: 5, y: 0, team: "O" },                     // derives purple
+        { id: "H", x: -5, y: 0, team: "O", color: "#F26522" }, // explicit orange
+        { id: "B", x: 5, y: 0, team: "O" },                     // derives orange
       ],
       routes: [
         { from: "X", path: [[-10, 5]], route_kind: "Hitch" },
@@ -1575,9 +1577,12 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
     }
   });
 
-  it("ACCEPTS HB (B, purple) + FB (orange) on the same play — backs are distinct hues by design", () => {
-    // I-form / 21 personnel often has both a halfback and a fullback.
-    // Convention: B → purple, FB → orange. Distinct, no clash.
+  it("REJECTS HB (B, orange) + FB (orange) on the same play — both backs share orange under 2026-05-04 convention", () => {
+    // I-form / 21 personnel has both a halfback and a fullback. After
+    // the 2026-05-04 color move (B: purple → orange so @C can claim
+    // purple), HB and FB now share orange and the gate fires. Coaches
+    // who need both on the field must relabel one or call set_player_color
+    // — which is exactly what the gate's suggestion text says.
     const fence = makeFence({
       title: "I-Form Iso",
       variant: "tackle_11",
@@ -1603,8 +1608,8 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
       variant: "tackle_11",
       lastPlaceDefense: null,
     });
-    if (!result.ok) {
-      expect(result.errors.find((e) => /color clash/i.test(e))).toBeUndefined();
-    }
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.find((e) => /color clash/i.test(e) && /B|FB/.test(e))).toBeDefined();
   });
 });

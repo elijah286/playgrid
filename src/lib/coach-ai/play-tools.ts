@@ -1013,9 +1013,43 @@ const create_play: CoachAiTool = {
       }
     }
 
+    // Validate FIRST, then create the play row. Prior to 2026-05-04 we
+    // called createPlayAction before validating; when a gate later
+    // rejected the diagram, the play row was already in the DB at v0
+    // with the variant default formation and no routes. The coach
+    // would see a phantom "Doubles Dig-Flat" with no actions on it
+    // even though the tool returned ok:false. Run all gates against
+    // the inbound diagram BEFORE create, so a failing save leaves no
+    // residue.
+    const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
+
+    // SFPA Layer 2 gate: every route that declared route_kind must satisfy
+    // the catalog's constraints (depth, side). Catches "12-yard slant"
+    // and "post breaking outside" before they persist. Plus the variant-
+    // aware QB-flag rule and the coach-stated max-throw-depth cap.
+    const assignmentCheck = validateRouteAssignments(diagramWithVariant, {
+      variant: resolvedVariant,
+      maxRouteDepthYds,
+    });
+    if (!assignmentCheck.ok) {
+      return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
+    }
+
+    // SFPA Layer 4 gate: content coherence. Color clashes, center
+    // eligibility, and offensive-coverage (every non-QB has an action).
+    const playbookSettingsPreCreate = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+    const contentCheckPreCreate = validatePlayContent(
+      diagramWithVariant,
+      resolvedVariant,
+      playbookSettingsPreCreate,
+      playType,
+    );
+    if (!contentCheckPreCreate.ok) {
+      return { ok: false, error: formatPlayContentErrors(contentCheckPreCreate.errors) };
+    }
+
     try {
-      // Create the play (empty, with default players for the variant — we'll
-      // overwrite with the diagram in the next step).
+      // All gates passed — now create the play row.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createPlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
       const createRes = await createPlayAction(ctx.playbookId, {
@@ -1025,37 +1059,6 @@ const create_play: CoachAiTool = {
         variant: resolvedVariant,
       });
       if (!createRes.ok) return { ok: false, error: createRes.error };
-
-      // Now save the diagram as a new version on the freshly created play.
-      const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
-
-      // SFPA Layer 2 gate: every route that declared route_kind must satisfy
-      // the catalog's constraints (depth, side). Catches "12-yard slant"
-      // and "post breaking outside" before they persist. Plus the variant-
-      // aware QB-flag rule and the coach-stated max-throw-depth cap.
-      const assignmentCheck = validateRouteAssignments(diagramWithVariant, {
-        variant: resolvedVariant,
-        maxRouteDepthYds,
-      });
-      if (!assignmentCheck.ok) {
-        return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
-      }
-
-      // SFPA Layer 4 gate: content coherence. Color clashes, center
-      // eligibility, and offensive-coverage (every non-QB player has
-      // an action) — historically only enforced at chat-time, now also
-      // at save-time so a `create_play`/`update_play` JSON that bypasses
-      // chat cannot persist either. See play-content-validate.ts.
-      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
-      const contentCheck = validatePlayContent(
-        diagramWithVariant,
-        resolvedVariant,
-        playbookSettings,
-        playType,
-      );
-      if (!contentCheck.ok) {
-        return { ok: false, error: formatPlayContentErrors(contentCheck.errors) };
-      }
 
       const newDoc = coachDiagramToPlayDocument(diagramWithVariant);
       newDoc.metadata.coachName = name;

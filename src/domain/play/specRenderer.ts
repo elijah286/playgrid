@@ -569,12 +569,24 @@ function routeFromAction(
       };
     }
     case "carry": {
-      if (!action.waypoints || action.waypoints.length === 0) return null;
+      // Cal frequently authors a carry assignment by intent only —
+      // `{ kind: "carry", runType: "sweep" }` with no waypoints — and
+      // expects the renderer to draw a sensible forward path. Before
+      // 2026-05-04 the renderer returned null in this case and B (or
+      // whoever the carrier was) silently disappeared from the diagram.
+      // Surfaced by a Trips Right Jet Sweep where @B's spec was
+      // `{ kind: "carry" }` and the rendered diagram had no entry for
+      // B at all. Synthesize a default track from `runType` so the
+      // ballcarrier is always visible. Coach-authored waypoints still
+      // win when supplied.
+      const path =
+        action.waypoints && action.waypoints.length > 0
+          ? action.waypoints
+          : synthesizeCarryPath(carrier, variant, action.runType);
       return {
         from: carrier.id,
-        path: action.waypoints,
+        path,
         // ballcarrier paths render as solid lines without a route_kind.
-        ...(action.runType ? {} : {}),
       };
     }
     case "motion":
@@ -583,6 +595,73 @@ function routeFromAction(
       // No visual route. Phase 3 will render motion arrows + block markers.
       return null;
   }
+}
+
+/**
+ * Synthesize a default forward path for a `carry` assignment that has
+ * no explicit waypoints. The runType picks the gap shape:
+ *   - sweep / outside_zone — wide arc to the strong side, 6 yards
+ *   - draw / qb_keep / scramble — straight ahead, 5 yards
+ *   - power / counter / inside_zone / trap — between the tackles,
+ *     4 yards
+ *   - default — straight ahead, 4 yards
+ *
+ * The lateral direction defaults to the carrier's side of the field
+ * (positive carrier.x → right). Coaches who want the opposite
+ * direction author waypoints explicitly. The runner ALWAYS gets a
+ * visible forward path so they can't disappear from the diagram.
+ */
+function synthesizeCarryPath(
+  carrier: CoachDiagramPlayer,
+  variant: SportVariant,
+  runType?: string,
+): [number, number][] {
+  const fieldWidthYds = sportProfileForVariant(variant).fieldWidthYds;
+  const sideSign = carrier.x >= 0 ? 1 : -1;
+  const startY = carrier.y;
+  const startX = carrier.x;
+
+  const wide = (depthYds: number, lateralYds: number): [number, number][] => {
+    const targetX = clamp(startX + sideSign * lateralYds, -(fieldWidthYds - 2), fieldWidthYds - 2);
+    return [
+      [startX + sideSign * 0.5, startY + 0.5],
+      [targetX, startY + depthYds * 0.4],
+      [targetX, startY + depthYds],
+    ];
+  };
+  const straight = (depthYds: number): [number, number][] => [
+    [startX, startY + depthYds],
+  ];
+  const between = (depthYds: number): [number, number][] => {
+    // Slight lateral kick toward the playside gap so the path doesn't
+    // sit on top of the QB's vertical column.
+    const kickX = startX + sideSign * 1.5;
+    return [
+      [kickX, startY + 1],
+      [kickX, startY + depthYds],
+    ];
+  };
+
+  switch (runType) {
+    case "sweep":
+    case "outside_zone":
+      return wide(6, 8);
+    case "power":
+    case "counter":
+    case "trap":
+    case "inside_zone":
+      return between(4);
+    case "draw":
+    case "qb_keep":
+    case "scramble":
+      return straight(5);
+    default:
+      return straight(4);
+  }
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
 }
 
 /**

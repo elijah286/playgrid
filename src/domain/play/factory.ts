@@ -172,12 +172,17 @@ export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
  * deviate (e.g. two slots in one formation).
  */
 function styleForRole(role: Player["role"], label: string): Player["style"] {
-  if (role === "C") return { fill: "#1C1C1E", stroke: "#0f172a", labelColor: "#FFFFFF" };
+  // 2026-05-04: @C moved from black to purple; @B/RB moved from purple
+  // to orange. The default flag_5v5 set (Q white, C purple, X red, Y
+  // green, Z blue) now reads as five distinct hues. Mirror in
+  // coachDiagramConverter.ts STYLE_* constants in lockstep.
+  if (role === "C") return { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
   if (role === "OTHER") return { fill: "#94A3B8", stroke: "#0f172a", labelColor: "#1C1C1E" };
   if (role === "QB") return { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
   if (role === "RB") {
-    if (label === "FB") return { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
-    return { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" };
+    // FB and primary RB both render orange; coaches with both on the
+    // field need to relabel one or override via set_player_color.
+    return { fill: "#F26522", stroke: "#7c2d12", labelColor: "#FFFFFF" };
   }
   if (role === "TE") return { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
   if (label === "X") return { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
