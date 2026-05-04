@@ -103,7 +103,7 @@ export function validateCenterEligibility(
   const centerIds = new Set(
     players
       .filter((p) => (p as { team?: string }).team !== "D")
-      .filter((p): p is { id: string } => typeof (p as { id?: unknown }).id === "string")
+      .filter((p) => typeof (p as { id?: unknown }).id === "string")
       .filter((p) => p.id.toUpperCase() === "C")
       .map((p) => p.id),
   );
@@ -153,7 +153,7 @@ export function validateOffensiveCoverage(
   const players = Array.isArray(diagram.players) ? diagram.players : [];
   const offense = players
     .filter((p) => (p as { team?: string }).team !== "D")
-    .filter((p): p is { id: string; role?: string } => typeof (p as { id?: unknown }).id === "string");
+    .filter((p) => typeof (p as { id?: unknown }).id === "string");
   if (offense.length === 0) return [];
 
   const centerEligible = settings?.centerIsEligible ?? (variantStr === "flag_5v5");
