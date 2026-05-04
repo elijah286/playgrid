@@ -22,7 +22,6 @@ import {
 } from "@/app/actions/plays";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
-import { PlayThumbnail } from "./PlayThumbnail";
 import { RouteToolbar } from "./RouteToolbar";
 import { FieldSizeControls } from "./FieldSizeControls";
 import { Inspector } from "./Inspector";
@@ -470,7 +469,10 @@ function PlayEditorClientInner({
   // full editor: `effectiveMode` short-circuits to "edit" on those devices
   // regardless of what `mode` happens to be set to (it's never user-flippable
   // outside of touch).
-  const [mode, setMode] = useState<"view" | "edit">("view");
+  // Example previews open in edit mode on touch so visitors can drag a player
+  // and feel the editor immediately — the whole point of the demo. Regular
+  // playbooks default to view so a stray finger tap can't move things.
+  const [mode, setMode] = useState<"view" | "edit">(isExamplePreview ? "edit" : "view");
   const effectiveMode = isTouchDevice ? mode : "edit";
 
   // Toggle wired to both the mobile Edit/Done button and the desktop
@@ -1327,25 +1329,6 @@ function PlayEditorClientInner({
             </div>
             )}
 
-            {isExamplePreview && (
-              // Mobile lacks a cursor, so the animation playback UI doesn't
-              // really work for visitors browsing example playbooks on a
-              // phone. Swap in the static playsheet-style thumbnail instead.
-              <div className="mx-auto w-full overflow-hidden rounded-xl bg-white ring-1 ring-border sm:hidden">
-                <PlayThumbnail
-                  preview={{
-                    players: doc.layers.players,
-                    routes: doc.layers.routes,
-                    zones: doc.layers.zones,
-                    lineOfScrimmageY:
-                      typeof doc.lineOfScrimmageY === "number"
-                        ? doc.lineOfScrimmageY
-                        : 0.4,
-                  }}
-                  light
-                />
-              </div>
-            )}
             <div
               className={`field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky z-10 sm:static sm:top-auto sm:z-auto ${
                 // In edit mode the global site header is hidden (see
@@ -1353,8 +1336,6 @@ function PlayEditorClientInner({
                 // flush at top: 0. In view mode the site header stays
                 // sticky on mobile, so the field tucks in just below it.
                 mode === "edit" ? "top-0" : "top-[var(--site-header-height,61px)]"
-              } ${
-                isExamplePreview ? "hidden sm:block" : ""
               } ${
                 !canEdit || (isTouchDevice && mode === "view")
                   ? "pointer-events-none select-none"
