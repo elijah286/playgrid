@@ -36,6 +36,33 @@ const VERTICAL_TOLERANCE_YDS = 1.5;
  *  in error messages, not the rejection rule. */
 const LATERAL_COMMIT_MIN_YDS = 1.5;
 
+/** Player ids/labels that the diagram converter treats as the QB.
+ *  Mirrors specParser's QB_IDS so the rule is identity-consistent
+ *  across both surfaces. */
+const QB_IDS = new Set(["Q", "QB"]);
+
+/** Variants where the QB never runs a route — flag football. In tackle,
+ *  QB sneak / scramble / draw are legal carry actions and should not be
+ *  blocked by this validator. */
+const FLAG_VARIANTS = new Set(["flag_5v5", "flag_7v7"]);
+
+/**
+ * Optional context for validation. Both fields are opt-in: legacy
+ * callers that don't pass anything keep their prior behavior, and
+ * variant can also be sourced from `diagram.variant` (handy for the
+ * write-tool path which already stamps it).
+ */
+export type RouteAssignmentContext = {
+  /** Sport variant for variant-specific rules (currently the QB-flag
+   *  gate). When unset, falls back to `diagram.variant`. */
+  variant?: string;
+  /** Coach-stated maximum forward throw depth in yards. When set, every
+   *  route's deepest forward waypoint must be ≤ this (within tolerance)
+   *  unless the route has `nonCanonical: true`. Catches the "coach said
+   *  max 10yds, Cal generated 18yd routes" failure mode. */
+  maxRouteDepthYds?: number;
+};
+
 export type RouteAssignmentError = {
   /** Player id the route is attached to (e.g. "X", "Z2"). */
   carrier: string;
@@ -50,12 +77,26 @@ export type RouteAssignmentValidation =
   | { ok: false; errors: RouteAssignmentError[] };
 
 /**
- * Validate every route on the diagram that declares a `route_kind`.
+ * Validate every route on the diagram against three layers of rules:
  *
- * Routes without `route_kind` are skipped — they're either freehand
- * (custom) or covered by the existing snapshot check.
+ *  1. **Variant-level rules** — fire regardless of route_kind. Currently
+ *     the flag-football QB gate: in flag_5v5 / flag_7v7 the QB never
+ *     runs a route. Catches hand-authored `create_play` diagrams that
+ *     bypass `compose_play`'s `qbDropback()` skeleton.
+ *
+ *  2. **Coach-stated max throw depth** — when the coach has surfaced a
+ *     cap (e.g. "10-year-olds, max 10 yards reliably"), every route's
+ *     deepest forward waypoint must respect it. `nonCanonical: true` is
+ *     the explicit-override escape hatch.
+ *
+ *  3. **Catalog route_kind constraints** — for routes with `route_kind`
+ *     set, the path's depth + side must match the named family. Routes
+ *     without `route_kind` skip this layer (custom shapes).
  */
-export function validateRouteAssignments(diagram: CoachDiagram): RouteAssignmentValidation {
+export function validateRouteAssignments(
+  diagram: CoachDiagram,
+  context?: RouteAssignmentContext,
+): RouteAssignmentValidation {
   const routes = diagram.routes ?? [];
   if (routes.length === 0) return { ok: true };
 
@@ -63,8 +104,46 @@ export function validateRouteAssignments(diagram: CoachDiagram): RouteAssignment
   for (const p of diagram.players) playerById.set(p.id, p);
 
   const errors: RouteAssignmentError[] = [];
+  const variant = (context?.variant ?? diagram.variant ?? "").trim();
+  const isFlag = FLAG_VARIANTS.has(variant);
+  const maxDepth = context?.maxRouteDepthYds;
 
   for (const route of routes) {
+    const carrier = playerById.get(route.from);
+    if (!carrier) {
+      // Unknown carrier — the existing diagram validator will already
+      // catch this. Skip every check (no anchor to measure from).
+      continue;
+    }
+
+    // ── Layer 1: variant-level rules ────────────────────────────────
+    if (isFlag && isQbCarrier(carrier)) {
+      errors.push({
+        carrier: route.from,
+        declaredKind: (route.route_kind ?? "").trim() || "(no route_kind)",
+        message:
+          `In ${variant}, the QB cannot have a route — quarterbacks throw or hand off, they don't run pass routes. ` +
+          `Drop the route from @${route.from} (use compose_play, which leaves QB unspecified) or, if the coach explicitly asked for a designed QB run, model it as a carry on a different player and have @${route.from} stay put.`,
+      });
+      continue;
+    }
+
+    // ── Layer 2: coach-stated max throw depth ───────────────────────
+    if (typeof maxDepth === "number" && Number.isFinite(maxDepth) && route.nonCanonical !== true) {
+      const deepestForward = computeDeepestForwardDepth(route, carrier);
+      if (deepestForward > maxDepth + DEPTH_TOLERANCE_YDS) {
+        errors.push({
+          carrier: route.from,
+          declaredKind: (route.route_kind ?? "").trim() || "(no route_kind)",
+          message:
+            `Route depth ${formatYds(deepestForward)} yds exceeds the coach-stated max throw depth of ${formatYds(maxDepth)} yds. ` +
+            `Either shorten the path so it finishes ≤ ${formatYds(maxDepth)} yds past @${route.from}'s start, swap to a catalog family that fits the cap, or — if the coach explicitly asked for a deeper shot on this play — set \`nonCanonical: true\` on this route to bypass the cap.`,
+        });
+        continue;
+      }
+    }
+
+    // ── Layer 3: catalog route_kind constraints ─────────────────────
     const declared = (route.route_kind ?? "").trim();
     if (!declared) continue;
 
@@ -81,18 +160,30 @@ export function validateRouteAssignments(diagram: CoachDiagram): RouteAssignment
       continue;
     }
 
-    const carrier = playerById.get(route.from);
-    if (!carrier) {
-      // Unknown carrier — the existing diagram validator will already
-      // catch this. Skip the constraint check (no anchor to measure from).
-      continue;
-    }
-
     const error = checkRouteAgainstTemplate(route, template, carrier);
     if (error) errors.push(error);
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
+}
+
+function isQbCarrier(player: CoachDiagramPlayer): boolean {
+  const label = (player.role ?? player.id).toUpperCase().replace(/\d+$/, "");
+  return QB_IDS.has(label);
+}
+
+function computeDeepestForwardDepth(
+  route: CoachDiagramRoute,
+  carrier: CoachDiagramPlayer,
+): number {
+  const path = Array.isArray(route.path) ? route.path : [];
+  let deepest = 0;
+  for (const wp of path) {
+    if (!Array.isArray(wp) || wp.length < 2) continue;
+    const dy = wp[1] - carrier.y;
+    if (dy > deepest) deepest = dy;
+  }
+  return deepest;
 }
 
 function checkRouteAgainstTemplate(

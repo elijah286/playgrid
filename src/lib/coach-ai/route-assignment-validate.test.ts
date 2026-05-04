@@ -244,3 +244,199 @@ describe("validateRouteAssignments — multiple routes", () => {
     expect(result.errors[0].carrier).toBe("Z");
   });
 });
+
+// 2026-05-03 regression: a coach told Cal "this is 5v5 NFL flag" and Cal
+// generated multiple plays with the QB running an 18-yard go route. The
+// existing validator only checked routes with route_kind set, and never
+// looked at *who* the carrier was — so a QB-as-carrier route slipped
+// through. Both screenshots showed the QB at y=-3 with a path waypoint at
+// (0, 12.8) — a 15.8-yard "go" the catalog should never have allowed.
+//
+// Per AGENTS.md Rule 5 (make impossible, then validate), the right place
+// for this gate is the validator: every write path (create_play,
+// update_play, revise_play, compose_play overrides) and the chat-time
+// validator route through validateRouteAssignments, so one rule covers
+// every surface.
+describe("validateRouteAssignments — flag QB rule", () => {
+  it("rejects a QB go route in flag_5v5 (the screenshot bug)", () => {
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+      ],
+      routes: [{ from: "Q", path: [[0, 12.8]], route_kind: "go" }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0].carrier).toBe("Q");
+    expect(result.errors[0].message).toMatch(/QB|quarterback/i);
+  });
+
+  it("rejects a QB downfield route in flag_5v5 even without route_kind set", () => {
+    // Cal sometimes omits route_kind. The rule must fire on the carrier
+    // identity + path, not on the declared kind.
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [{ id: "Q", x: 0, y: -3, team: "O" }, { id: "C", x: 0, y: 0, team: "O" }],
+      routes: [{ from: "Q", path: [[0, 12.8]] }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0].carrier).toBe("Q");
+  });
+
+  it("rejects a QB go route in flag_7v7", () => {
+    const result = validateRouteAssignments({
+      variant: "flag_7v7",
+      players: [{ id: "Q", x: 0, y: -5, team: "O" }, { id: "C", x: 0, y: 0, team: "O" }],
+      routes: [{ from: "Q", path: [[0, 15]], route_kind: "go" }],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("recognizes 'QB' label too, not just 'Q'", () => {
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [{ id: "QB", x: 0, y: -3, team: "O" }, { id: "C", x: 0, y: 0, team: "O" }],
+      routes: [{ from: "QB", path: [[0, 12]] }],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("ALLOWS a QB route in tackle_11 (QB sneak / draw is legal in tackle)", () => {
+    const result = validateRouteAssignments({
+      variant: "tackle_11",
+      players: [{ id: "Q", x: 0, y: -5, team: "O" }, { id: "C", x: 0, y: 0, team: "O" }],
+      routes: [{ from: "Q", path: [[0, 1]] }],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("ALLOWS a non-QB downfield route in flag_5v5 (the QB rule is QB-specific)", () => {
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+      ],
+      routes: [{ from: "Z", path: [[10, 5], [10, 15]], route_kind: "go" }],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("falls through to OK when variant is unset (legacy diagrams without variant pass)", () => {
+    // Some legacy tool calls don't tag variant on the diagram. We don't
+    // want to reject those across the board — variant context is a
+    // precondition for the flag rule.
+    const result = validateRouteAssignments({
+      players: [{ id: "Q", x: 0, y: -3, team: "O" }, { id: "C", x: 0, y: 0, team: "O" }],
+      routes: [{ from: "Q", path: [[0, 12]] }],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("respects context.variant override (chat-time path passes variant separately)", () => {
+    // The chat-time validator passes variant via context, not via diagram.variant.
+    const result = validateRouteAssignments(
+      {
+        players: [{ id: "Q", x: 0, y: -3, team: "O" }, { id: "C", x: 0, y: 0, team: "O" }],
+        routes: [{ from: "Q", path: [[0, 12]] }],
+      },
+      { variant: "flag_5v5" },
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+// 2026-05-03 second regression on the same screenshot: the coach told Cal
+// "10 year old, can't throw more than 10 yards reliably" and Cal's prose
+// said "all plays stay under your 10-yard max-throw window" — but the
+// generated diagrams had 18-yard go routes for C, Z, and F. When the
+// coach surfaces a max throw depth for the session, the validator should
+// gate against it on every write so the prose can't drift from the
+// geometry. Cal opts in by passing maxRouteDepthYds; coaches still get
+// the QB rule above for free regardless.
+describe("validateRouteAssignments — coach-stated max throw depth", () => {
+  it("rejects a route deeper than the coach-stated max throw depth", () => {
+    const result = validateRouteAssignments(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [{ from: "Z", path: [[10, 5], [10, 18]], route_kind: "go" }],
+      },
+      { maxRouteDepthYds: 10 },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0].carrier).toBe("Z");
+    expect(result.errors[0].message).toMatch(/max.*throw|10\s*yd|10-yard/i);
+  });
+
+  it("accepts a route at or below the coach-stated max", () => {
+    const result = validateRouteAssignments(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        // 10-yard go is at the cap (within tolerance).
+        routes: [{ from: "Z", path: [[10, 5], [10, 10]], route_kind: "go" }],
+      },
+      { maxRouteDepthYds: 10 },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("respects nonCanonical: true as the explicit-coach-override escape hatch", () => {
+    // When the coach later says "actually throw the corner 14yds on this
+    // one", Cal sets nonCanonical: true on that one route. Same escape
+    // hatch the depth-range catalog check uses.
+    const result = validateRouteAssignments(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        routes: [{ from: "Z", path: [[10, 14]], nonCanonical: true }],
+      },
+      { maxRouteDepthYds: 10 },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("doesn't apply the max-depth gate when maxRouteDepthYds is unset", () => {
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+      ],
+      // 18yd post is fine in the catalog; no max-depth context = no extra gate.
+      routes: [{ from: "Z", path: [[10, 18]], route_kind: "post" }],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("max-depth gate ignores BEHIND-LOS movement (bubble screens go negative)", () => {
+    const result = validateRouteAssignments(
+      {
+        variant: "flag_5v5",
+        players: [
+          { id: "Q", x: 0, y: -3, team: "O" },
+          { id: "Z", x: 10, y: 0, team: "O" },
+        ],
+        // Negative depth (bubble) — well outside the cap if you take abs(),
+        // but max throw depth is about FORWARD distance.
+        routes: [{ from: "Z", path: [[15, -2]] }],
+      },
+      { maxRouteDepthYds: 5 },
+    );
+    expect(result.ok).toBe(true);
+  });
+});

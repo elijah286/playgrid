@@ -650,6 +650,16 @@ const update_play: CoachAiTool = {
             "`route_kind: \"<family>\"` on the route — the server validates depth + side " +
             "against the catalog. A 12-yard slant is rejected here before persistence.",
         },
+        max_throw_depth_yds: {
+          type: "number",
+          description:
+            "Optional — coach-stated maximum forward throw depth in yards. Pass this whenever " +
+            "the coach has set a cap (e.g. \"10-year-olds, max 10 yards reliably\", \"keep " +
+            "everything under 12\", \"short throws only\"). The validator will reject any route " +
+            "deeper than the cap unless `nonCanonical: true` is set on that specific route. " +
+            "Once a coach states a cap in the conversation, propagate it on every subsequent " +
+            "create_play / update_play call until they explicitly raise it.",
+        },
         note: {
           type: "string",
           description: "Short edit note for the version history (1-2 sentences).",
@@ -668,6 +678,10 @@ const update_play: CoachAiTool = {
     const resolved = await resolvePlayId(rawId, ctx.playbookId);
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
+    const maxRouteDepthYds =
+      typeof input.max_throw_depth_yds === "number" && Number.isFinite(input.max_throw_depth_yds)
+        ? input.max_throw_depth_yds
+        : undefined;
 
     try {
       const admin = createServiceRoleClient();
@@ -728,8 +742,12 @@ const update_play: CoachAiTool = {
 
       // SFPA Layer 2 gate: every route that declared route_kind must satisfy
       // the catalog's constraints (depth, side). Catches "12-yard slant"
-      // and "post breaking outside" before they persist.
-      const assignmentCheck = validateRouteAssignments(diagramWithVariant);
+      // and "post breaking outside" before they persist. Plus the variant-
+      // aware QB-flag rule and the coach-stated max-throw-depth cap.
+      const assignmentCheck = validateRouteAssignments(diagramWithVariant, {
+        variant: resolvedVariant,
+        maxRouteDepthYds,
+      });
       if (!assignmentCheck.ok) {
         return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
       }
@@ -860,6 +878,16 @@ const create_play: CoachAiTool = {
           enum: ["offense", "defense", "special_teams"],
           description: "Play type. Defaults to \"offense\".",
         },
+        max_throw_depth_yds: {
+          type: "number",
+          description:
+            "Optional — coach-stated maximum forward throw depth in yards. Pass this whenever " +
+            "the coach has set a cap (e.g. \"10-year-olds, max 10 yards reliably\", \"keep " +
+            "everything under 12\", \"short throws only\"). The validator will reject any route " +
+            "deeper than the cap unless `nonCanonical: true` is set on that specific route. " +
+            "Once a coach states a cap in the conversation, propagate it on every subsequent " +
+            "create_play / update_play call until they explicitly raise it.",
+        },
         note: {
           type: "string",
           description: "Optional short note recorded on the initial version (1-2 sentences).",
@@ -877,6 +905,10 @@ const create_play: CoachAiTool = {
 
     const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
     if (!name) return { ok: false, error: "Play name is required." };
+    const maxRouteDepthYds =
+      typeof input.max_throw_depth_yds === "number" && Number.isFinite(input.max_throw_depth_yds)
+        ? input.max_throw_depth_yds
+        : undefined;
 
     const playType = (typeof input.play_type === "string" && ["offense", "defense", "special_teams"].includes(input.play_type)
       ? input.play_type
@@ -953,8 +985,12 @@ const create_play: CoachAiTool = {
 
       // SFPA Layer 2 gate: every route that declared route_kind must satisfy
       // the catalog's constraints (depth, side). Catches "12-yard slant"
-      // and "post breaking outside" before they persist.
-      const assignmentCheck = validateRouteAssignments(diagramWithVariant);
+      // and "post breaking outside" before they persist. Plus the variant-
+      // aware QB-flag rule and the coach-stated max-throw-depth cap.
+      const assignmentCheck = validateRouteAssignments(diagramWithVariant, {
+        variant: resolvedVariant,
+        maxRouteDepthYds,
+      });
       if (!assignmentCheck.ok) {
         return { ok: false, error: formatRouteAssignmentErrors(assignmentCheck.errors) };
       }

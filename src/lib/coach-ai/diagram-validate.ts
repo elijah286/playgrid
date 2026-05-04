@@ -1192,7 +1192,13 @@ export function validateDiagrams(opts: {
         // 2026-05-02 surfaced: Cal's chat showed "X runs a slant" on
         // a route with 12yd depth — the SAVE validator would have
         // caught it if Cal saved, but the chat preview didn't.
-        const routeAssignmentLint = validateRouteAssignments(json as CoachDiagram);
+        // 2026-05-03: pass variant context so the QB-flag rule fires
+        // here too (a flag-football QB-as-route-carrier is rejected
+        // at chat-time, not just at save-time).
+        const routeAssignmentLint = validateRouteAssignments(
+          json as CoachDiagram,
+          { variant: opts.variant ?? undefined },
+        );
         if (!routeAssignmentLint.ok) {
           for (const issue of routeAssignmentLint.errors) {
             errors.push(
