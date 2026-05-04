@@ -1631,9 +1631,18 @@ function PlaybookDetailClientInner({
             }
             action={
               isViewer ? undefined : (
-                <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
-                  New play
-                </Button>
+                <div className="flex flex-col items-center gap-3 sm:flex-row">
+                  <Button variant="primary" leftIcon={Plus} onClick={openFormationPicker} loading={creating}>
+                    New play
+                  </Button>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted">or</span>
+                  <CoachCalCTA
+                    entryPoint="playbook_generate_starter"
+                    variant="primary"
+                    label="Generate with Coach Cal"
+                    className="whitespace-nowrap"
+                  />
+                </div>
               )
             }
           />
