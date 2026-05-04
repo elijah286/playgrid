@@ -1330,7 +1330,14 @@ function PlayEditorClientInner({
             )}
 
             <div
-              className={`field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky z-10 sm:static sm:top-auto sm:z-auto ${
+              // sm:relative (not sm:static) on desktop: keep this div a
+              // positioned ancestor so AnimationOverlay's `absolute inset-0`
+              // anchors HERE, not to whatever happens to be the next
+              // positioned ancestor up the tree. With sm:static, animation
+              // dots ended up rendered against the nearest positioned
+              // ancestor (often a much larger container), throwing them
+              // far outside the field — surfaced 2026-05-04.
+              className={`field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky z-10 sm:relative sm:top-auto sm:z-auto ${
                 // In edit mode the global site header is hidden (see
                 // `editor-hide-site-header` effect), so the field can pin
                 // flush at top: 0. In view mode the site header stays
