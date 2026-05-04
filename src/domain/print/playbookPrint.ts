@@ -1,12 +1,26 @@
 import type { PlayDocument, Player, Route, Zone } from "@/domain/play/types";
 
-export type PrintProductKind = "playsheet" | "wristband";
+/**
+ * Product variants the print page can produce.
+ *
+ * - `playsheet` — the classic call-sheet grid (1–5 columns).
+ * - `wristband` — the single-strip wrist coach.
+ * - `playbook` — same rendering pipeline as `playsheet`, but constrained to
+ *   1–2 plays per page so coaches can hand a player a "diagram per page"
+ *   playbook. Inherits every playsheet field; the only extras are
+ *   `playbookPlaysPerPage` and `playbookNotesPosition`.
+ */
+export type PrintProductKind = "playsheet" | "wristband" | "playbook";
 
 export type PlaysheetGrouping = "manual" | "formation" | "name" | "number" | "group";
 
 export type PlaysheetColumns = 1 | 2 | 3 | 4 | 5;
 
 export const PLAYSHEET_COLUMN_OPTIONS: readonly PlaysheetColumns[] = [1, 2, 3, 4, 5] as const;
+
+/** Playbook product is intentionally limited to 1–3 columns; cell height
+ *  determines how many fit per page just like the call sheet. */
+export const PLAYBOOK_COLUMN_OPTIONS: readonly PlaysheetColumns[] = [1, 2, 3] as const;
 
 export type PlaysheetPageBreak = "continuous" | "group";
 

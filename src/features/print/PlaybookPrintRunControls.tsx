@@ -5,6 +5,7 @@ import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
   defaultPlaybookPrintRunConfig,
+  PLAYBOOK_COLUMN_OPTIONS,
   PLAYSHEET_COLUMN_OPTIONS,
   PLAYSHEET_NOTE_LINES_MAX,
   PLAYSHEET_NOTE_LINES_MIN,
@@ -40,6 +41,12 @@ type Props = {
   section?: "layout" | "visuals" | "text" | "all";
   /** When false, render the Wristband segment with a lock indicator. */
   canUseWristbands?: boolean;
+  /**
+   * When true, the redesigned print page provides its own format picker, so
+   * we suppress the legacy "Output type" segment + reset button inside Layout
+   * to avoid duplicating that control. Default false (legacy behavior).
+   */
+  hideProductPicker?: boolean;
 };
 
 function LabelToggles({
@@ -163,7 +170,7 @@ function LabelSettings({
   );
 }
 
-export function PlaybookPrintRunControls({ config, onChange, section = "all", canUseWristbands = true }: Props) {
+export function PlaybookPrintRunControls({ config, onChange, section = "all", canUseWristbands = true, hideProductPicker = false }: Props) {
   function patch(partial: Partial<PlaybookPrintRunConfig>) {
     onChange({ ...config, ...partial });
   }
@@ -174,7 +181,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
 
   return (
     <div className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
-      {showLayout && (
+      {showLayout && !hideProductPicker && (
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
             Output type
@@ -188,7 +195,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                 icon: canUseWristbands ? undefined : Lock,
               },
             ]}
-            value={config.product}
+            value={config.product === "playbook" ? "playsheet" : config.product}
             onChange={(product) => patch({ product })}
           />
           <button
@@ -203,7 +210,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
         </div>
       )}
 
-      {config.product === "playsheet" && (
+      {(config.product === "playsheet" || config.product === "playbook") && (
         <div className="space-y-4">
           {showLayout && (
             <>
@@ -211,7 +218,10 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                 label="Columns"
                 value={config.playsheetColumns}
                 onChange={(v) => patch({ playsheetColumns: v as PlaysheetColumns })}
-                options={PLAYSHEET_COLUMN_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+                options={(config.product === "playbook"
+                  ? PLAYBOOK_COLUMN_OPTIONS
+                  : PLAYSHEET_COLUMN_OPTIONS
+                ).map((n) => ({ value: n, label: String(n) }))}
               />
 
               <PillGroup

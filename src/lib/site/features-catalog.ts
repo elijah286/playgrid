@@ -715,6 +715,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "print-redesign-format-presets",
+    name: "Print page format picker + system presets",
+    description:
+      "The print playbook page replaces tabbed low-level controls with a stepped flow: pick plays, pick a format (Call sheet, Playbook, or Wrist coach), apply a preset, and only open Customize for advanced options. New Playbook format prints 1 or 2 plays per page. Site admins can promote any saved preset into a system preset (with a thumbnail captured from the live preview and a tooltip description) so every coach starts from a curated baseline.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-05-04",
+  },
+  {
     id: "wristbands-locked-segment",
     name: "Wristbands lock affordance",
     description:

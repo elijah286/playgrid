@@ -58,13 +58,15 @@ export default async function PlaybookPrintPage({ params }: Props) {
   const pack = await loadPlaybookPrintPackAction(playbookId);
 
   let coachName: string | null = null;
+  let isSiteAdmin = false;
   if (currentUser) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("display_name")
+      .select("display_name, role")
       .eq("id", currentUser.id)
       .maybeSingle();
     coachName = (profile?.display_name as string | null) || currentUser.email || null;
+    isSiteAdmin = (profile as { role?: string } | null)?.role === "admin";
   }
 
   const variantLabel =
@@ -113,6 +115,7 @@ export default async function PlaybookPrintPage({ params }: Props) {
               )
         }
         isExamplePreview={isExamplePreview}
+        isSiteAdmin={isSiteAdmin}
       />
       {isExamplePreview && (
         <StickyExampleCta
