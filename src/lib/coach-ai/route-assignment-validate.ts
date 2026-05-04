@@ -27,6 +27,19 @@ import type { CoachDiagram, CoachDiagramPlayer, CoachDiagramRoute } from "@/feat
  *  bounds would reject a 7.1-yard slant against a [3, 7] range. */
 const DEPTH_TOLERANCE_YDS = 0.5;
 
+/** Layer 4 threshold: the deepest forward waypoint of any offensive route
+ *  must reach at least this y position (in yards from the LOS). The
+ *  typical legitimate bubble screen catches at y=-1 (1 yard behind LOS),
+ *  so a -3 yard threshold accepts every legitimate bubble (and even
+ *  generously-scaled ones) while rejecting the "Cal mirrored a Hitch
+ *  and accidentally negated y too" case (X's bug had waypoints at
+ *  -4.5 and -3.5, well past this threshold).
+ *
+ *  Routes that legitimately need to catch deeper than 3 yards behind
+ *  the LOS can opt out via `nonCanonical: true` — the coach explicitly
+ *  accepted an off-catalog shape (e.g. a deep RB dump). */
+const BACKWARDS_ROUTE_THRESHOLD_YDS = -3;
+
 /** Tolerance applied when checking the route's side. A vertical-ish route
  *  may end with |x| up to this much without violating side="vertical". */
 const VERTICAL_TOLERANCE_YDS = 1.5;
@@ -77,7 +90,7 @@ export type RouteAssignmentValidation =
   | { ok: false; errors: RouteAssignmentError[] };
 
 /**
- * Validate every route on the diagram against three layers of rules:
+ * Validate every route on the diagram against four layers of rules:
  *
  *  1. **Variant-level rules** — fire regardless of route_kind. Currently
  *     the flag-football QB gate: in flag_5v5 / flag_7v7 the QB never
@@ -92,6 +105,16 @@ export type RouteAssignmentValidation =
  *  3. **Catalog route_kind constraints** — for routes with `route_kind`
  *     set, the path's depth + side must match the named family. Routes
  *     without `route_kind` skip this layer (custom shapes).
+ *
+ *  4. **Forward-pass legality** — fires for ALL offensive routes (with
+ *     or without route_kind). A receiver running a route whose deepest
+ *     forward waypoint is significantly behind the LOS (more than the
+ *     bubble-screen tolerance) cannot legally be the target of a forward
+ *     pass. Catches the "Cal hand-authored a backwards route" failure
+ *     mode surfaced 2026-05-04: a Hitch on @X (outside receiver) was
+ *     authored with negative y-deltas (sign error when mirroring from
+ *     the right side), placing the catch point 3.5 yards behind the LOS.
+ *     A forward pass to that route is illegal in NFL flag football.
  */
 export function validateRouteAssignments(
   diagram: CoachDiagram,
@@ -143,6 +166,36 @@ export function validateRouteAssignments(
       }
     }
 
+    // ── Layer 4: forward-pass legality ──────────────────────────────
+    //
+    // Catch routes whose deepest forward waypoint is significantly
+    // BEHIND the LOS — a forward pass to that catch point is illegal
+    // in flag football (the catch must happen at or past the LOS,
+    // unless the pass is intended as a backwards/lateral).
+    //
+    // Tolerance: -4 yards (matches the catalog's deepest legitimate
+    // bubble screen). Routes deeper than this are either Cal's sign
+    // errors (the original 2026-05-04 bug) or genuinely off-the-rails
+    // hand-authored paths.
+    //
+    // Skip when nonCanonical: true is set — the coach explicitly
+    // accepted an off-catalog shape.
+    if (route.nonCanonical !== true) {
+      const deepestForwardY = computeDeepestForwardWaypointY(route);
+      if (deepestForwardY !== null && deepestForwardY < BACKWARDS_ROUTE_THRESHOLD_YDS) {
+        errors.push({
+          carrier: route.from,
+          declaredKind: (route.route_kind ?? "").trim() || "(no route_kind)",
+          message:
+            `Route from @${route.from} has its deepest forward waypoint at ${formatYds(deepestForwardY)} yds (behind the LOS). ` +
+            `A forward pass to this catch point would be illegal in flag football — receivers must catch a forward pass at or past the LOS. ` +
+            `If this is a catalog route (Hitch, Slant, Curl, Out, etc.), call \`get_route_template\` and copy its path verbatim; do NOT hand-author waypoints — Cal's freelance geometry has produced wrong-direction routes (sign errors when mirroring across formations). ` +
+            `If this is a genuine backwards/lateral pass play (bubble screen, swing, dump), set \`nonCanonical: true\` on this route to acknowledge the off-catalog shape AND make sure the prose describes it as a screen/lateral.`,
+        });
+        continue;
+      }
+    }
+
     // ── Layer 3: catalog route_kind constraints ─────────────────────
     const declared = (route.route_kind ?? "").trim();
     if (!declared) continue;
@@ -184,6 +237,28 @@ function computeDeepestForwardDepth(
     if (dy > deepest) deepest = dy;
   }
   return deepest;
+}
+
+/**
+ * Return the absolute y position (yards from LOS) of the route's
+ * FURTHEST FORWARD waypoint — i.e. the largest y in the path. Used by
+ * Layer 4 to detect routes whose entire path is deep in the offensive
+ * backfield (a sign-error pattern Cal hits when mirroring routes
+ * across formations).
+ *
+ * Returns null when the route has no path (motion-only or empty).
+ */
+function computeDeepestForwardWaypointY(route: CoachDiagramRoute): number | null {
+  const path = Array.isArray(route.path) ? route.path : [];
+  if (path.length === 0) return null;
+  let maxY: number | null = null;
+  for (const wp of path) {
+    if (!Array.isArray(wp) || wp.length < 2) continue;
+    const y = wp[1];
+    if (!Number.isFinite(y)) continue;
+    if (maxY === null || y > maxY) maxY = y;
+  }
+  return maxY;
 }
 
 function checkRouteAgainstTemplate(

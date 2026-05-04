@@ -440,3 +440,146 @@ describe("validateRouteAssignments — coach-stated max throw depth", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe("validateRouteAssignments — Layer 4: forward-pass legality (illegal backwards routes)", () => {
+  /**
+   * Regression: 2026-05-04 — Coach Cal generated "Spread Doubles —
+   * Hitch/Flat Combo" for flag_5v5 via `create_play` with HAND-AUTHORED
+   * custom waypoints. When mirroring the Hitch from the right side (Z)
+   * to the left side (X), Cal correctly negated x but ALSO negated y,
+   * placing X's "catch point" at y=-4.5 — 4.5 yards BEHIND the LOS.
+   *
+   * The save-time validators didn't catch it because:
+   * - Layer 3 (catalog route_kind) only fires when route_kind is set,
+   *   and Cal's hand-authored routes have no route_kind.
+   * - Layer 2 (max throw depth) is about how DEEP forward, not how
+   *   deep backward.
+   *
+   * Layer 4 closes this gap: any offensive route whose deepest forward
+   * waypoint is more than 4 yards behind the LOS gets rejected. The
+   * threshold (-4) matches the catalog's most aggressive bubble screen,
+   * so legitimate bubbles still pass.
+   */
+  it("REJECTS the actual saved bug: X's hand-authored route at y=-4.5, -3.5", () => {
+    // X starts at the verified saved position (yard space): x=-10, y=-1
+    // (slightly behind LOS in 5v5 doubles formation).
+    // The saved waypoints are Cal's sign error: both behind start.
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "X", x: -10, y: -1, team: "O" },
+      ],
+      routes: [
+        {
+          from: "X",
+          path: [
+            [-9.5, -4.5],
+            [-13.5, -3.5],
+          ],
+          curve: true,
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].carrier).toBe("X");
+    expect(result.errors[0].message).toMatch(/behind the LOS/i);
+  });
+
+  it("ACCEPTS a legitimate bubble screen (catch ~1yd behind LOS)", () => {
+    // Bubble template: receiver retreats 2-3yds for the apex, arcs
+    // forward to catch ~1yd behind the LOS. Last waypoint y=-1 is
+    // well inside the -4 threshold.
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+      ],
+      routes: [
+        {
+          from: "Z",
+          path: [
+            [10.5, -2.5],
+            [12, -1],
+          ],
+          curve: true,
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("ACCEPTS a forward route (Hitch settling at 4yds upfield)", () => {
+    // Z's correct Hitch from the same play (the one that rendered
+    // properly). max y = 5 — well past the LOS.
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+      ],
+      routes: [
+        {
+          from: "Z",
+          path: [
+            [10, 5],
+            [9.5, 4],
+          ],
+          curve: true,
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("ALLOWS a backwards route when nonCanonical: true is set (coach-acknowledged screen)", () => {
+    // Same geometry as the X bug, but the coach explicitly opted in.
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "X", x: -10, y: -1, team: "O" },
+      ],
+      routes: [
+        {
+          from: "X",
+          path: [
+            [-9.5, -4.5],
+            [-13.5, -3.5],
+          ],
+          curve: true,
+          nonCanonical: true,
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("REJECTS a deeply backwards route even with route_kind set (e.g. Cal labels it 'hitch' but draws it backward)", () => {
+    // The bug surfaces even when Cal sets route_kind correctly —
+    // Layer 3 rejects on depth/side mismatch BUT only for route_kind=
+    // routes. Layer 4 catches the geometry regardless.
+    const result = validateRouteAssignments({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "X", x: -10, y: -1, team: "O" },
+      ],
+      routes: [
+        {
+          from: "X",
+          path: [
+            [-9.5, -4.5],
+            [-13.5, -3.5],
+          ],
+          curve: true,
+          route_kind: "hitch",
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+  });
+});
