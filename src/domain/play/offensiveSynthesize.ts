@@ -550,13 +550,23 @@ function fitReceiversToVariant(
   const recAvailable = skillAvailable - backsCount;
   const recRequested = rec.left + rec.right + rec.te;
   if (recRequested <= recAvailable) return rec;
-  // Trim: prefer dropping TE first, then weak-side receivers, then strong
-  // until we fit.
+  // Trim: drop the TE first (it's a tackle/7v7 concept), then drop from
+  // whichever side has more receivers (preserving weak-side ties for the
+  // play's strength). Surfaced 2026-05-04: Spread Doubles {2,2} in
+  // flag_5v5 trimmed to {0, 2} (all weak-side receivers stripped),
+  // emitting only one-side receivers and dropping @X. Balanced trim
+  // keeps {1, 1} so canonical {Q, C, X, Y, Z} comes through.
   const out = { ...rec };
   let drop = recRequested - recAvailable;
   if (drop > 0 && out.te === 1) { out.te = 0; drop -= 1; }
-  while (drop > 0 && out.left > 0) { out.left -= 1; drop -= 1; }
-  while (drop > 0 && out.right > 0) { out.right -= 1; drop -= 1; }
+  while (drop > 0 && (out.left > 0 || out.right > 0)) {
+    if (out.left >= out.right && out.left > 0) {
+      out.left -= 1;
+    } else {
+      out.right -= 1;
+    }
+    drop -= 1;
+  }
   return out;
 }
 
@@ -592,8 +602,28 @@ function synthesizeForVariant(
     }
   }
 
+  // flag_5v5 canonical roster pass: 5v5 leagues use exactly {Q, C, X, Y, Z}
+  // (5 distinct hues, 5 distinct labels). The shared placeBacks /
+  // placeReceivers helpers emit tackle/7v7 labels (B for backs, H/S/F
+  // for slots) which match the validator's allowed set in flag_7v7 +
+  // tackle_11 but FAIL the validator in flag_5v5 (and produce a
+  // 6-player roster when both a back AND a slot label slip through).
+  // Remap any non-canonical id to Y so saved 5v5 plays match the
+  // league convention. Dedup follows below — Y collisions become
+  // Y, Y2, ... (which the validator's roster gate tolerates via
+  // suffix-strip; the color-clash gate then surfaces the duplicate-yellow
+  // problem, which is the correct signal for "this formation can't fit
+  // in 5v5's roster").
+  if (variant === "flag_5v5") {
+    const CANONICAL_5V5 = new Set(["Q", "QB", "C", "X", "Z"]);
+    for (const p of players) {
+      if (!CANONICAL_5V5.has(p.id)) p.id = "Y";
+    }
+  }
+
   // De-dupe ids: if two players ended up with the same letter (e.g. two
-  // H's on the same side), append a digit to the second.
+  // H's on the same side, or two Y's after the 5v5 remap), append a
+  // digit to the second.
   const seen = new Map<string, number>();
   for (const p of players) {
     const cur = seen.get(p.id);

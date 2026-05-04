@@ -45,7 +45,12 @@ const FORMATION_CASES: Array<{
   { variant: "flag_7v7", name: "Pro Set", mustHave: ["X", "Y", "Z"] },
   { variant: "flag_7v7", name: "Spread Doubles" },
   { variant: "flag_7v7", name: "Trips Right" },
-  { variant: "flag_5v5", name: "Spread" },
+  // flag_5v5 canonical roster: {QB, C, X, Y, Z} — five distinct labels,
+  // no tackle/7v7 carryover (B, H, S, F all get remapped to Y). The
+  // synthesizer emits "QB" not "Q" for the QB id; the validator
+  // accepts either as canonical.
+  { variant: "flag_5v5", name: "Spread", mustHave: ["QB", "C", "X", "Y", "Z"] },
+  { variant: "flag_5v5", name: "Spread Doubles", mustHave: ["QB", "C", "X", "Y", "Z"] },
 ];
 
 describe("synthesizeOffense — variant-correct player counts", () => {
@@ -189,6 +194,51 @@ describe("synthesizeOffense — slots clear the OL row in tackle_11 (regression:
     const slots = (synth?.players ?? []).filter((p) => p.y < 0 && !["LT","LG","C","RG","RT","QB"].includes(p.id));
     for (const slot of slots) {
       expect(Math.abs(slot.x)).toBeGreaterThanOrEqual(7);
+    }
+  });
+});
+
+describe("synthesizeOffense — flag_5v5 canonical roster {Q, C, X, Y, Z}", () => {
+  // Surfaced 2026-05-04: the synthesizer reused tackle/7v7 helpers for
+  // flag_5v5 and emitted "B" (back) instead of canonical "Y". Combined
+  // with Cal hand-authoring tackle_11 skeletons in 5v5 chats, plays
+  // saved with H/B labels that don't exist in 5v5 leagues. The
+  // synthesizer now remaps any non-canonical label to Y in flag_5v5,
+  // so place_offense's output matches the validator and the league
+  // convention.
+  const NON_CANONICAL_5V5 = ["B", "H", "S", "F"] as const;
+
+  it("Spread Doubles 5v5: produces exactly {QB, C, X, Y, Z}", () => {
+    const synth = synthesizeOffense("flag_5v5", "Spread Doubles");
+    expect(synth).not.toBeNull();
+    const ids = (synth?.players ?? []).map((p) => p.id);
+    // QB id is "QB" (the synthesizer's full label); validator accepts
+    // either Q or QB as canonical, but the synthesizer always emits QB.
+    expect(ids).toContain("QB");
+    expect(ids).toContain("C");
+    expect(ids).toContain("X");
+    expect(ids).toContain("Y");
+    expect(ids).toContain("Z");
+    expect(ids).toHaveLength(5);
+    for (const bad of NON_CANONICAL_5V5) {
+      expect(ids, `flag_5v5 emitted non-canonical label "${bad}"`).not.toContain(bad);
+    }
+  });
+
+  it("Trips 5v5: every label is in the canonical set (suffix-tolerant)", () => {
+    // Trips can't really fit in 5v5 (3 receivers + back > 3 skill slots),
+    // but whatever the synthesizer emits MUST use canonical labels.
+    // Y2 is allowed (the validator's roster gate strips suffixes); a
+    // bare H/B/S/F is not.
+    const synth = synthesizeOffense("flag_5v5", "Trips Right");
+    expect(synth).not.toBeNull();
+    const allowed = new Set(["Q", "QB", "C", "X", "Y", "Z"]);
+    for (const p of synth?.players ?? []) {
+      const stripped = p.id.replace(/\d+$/, "");
+      expect(
+        allowed.has(stripped),
+        `flag_5v5 Trips Right produced non-canonical label "${p.id}"`,
+      ).toBe(true);
     }
   });
 });

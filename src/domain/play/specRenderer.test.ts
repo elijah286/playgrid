@@ -417,11 +417,16 @@ describe("Renderer — direction override on route actions", () => {
 // renderer returned null, leaving the runner with no diagram entry. The
 // renderer now synthesizes a default forward path from the carry's
 // runType so the ballcarrier is always visible.
+//
+// Tests use flag_7v7 because the carrier id in flag_5v5 is now @Y after
+// the canonical-roster remap (the back has no @B label in 5v5). The
+// behavior under test is variant-independent — any flag variant
+// exercises the same carry-action path.
 describe("Renderer — carry actions synthesize a path when waypoints are absent", () => {
   it("kind:'carry' with no waypoints produces a forward path (default — 4yd straight)", () => {
     const result = playSpecToCoachDiagram({
       schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
-      variant: "flag_5v5",
+      variant: "flag_7v7",
       formation: { name: "Trips Right" },
       assignments: [
         { player: "B", action: { kind: "carry" } },
@@ -439,7 +444,7 @@ describe("Renderer — carry actions synthesize a path when waypoints are absent
   it("kind:'carry' with runType:'sweep' produces a wide arc to the carrier's side", () => {
     const result = playSpecToCoachDiagram({
       schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
-      variant: "flag_5v5",
+      variant: "flag_7v7",
       formation: { name: "Trips Right" },
       assignments: [
         { player: "B", action: { kind: "carry", runType: "sweep" } },
@@ -457,7 +462,7 @@ describe("Renderer — carry actions synthesize a path when waypoints are absent
     const customWaypoints: [number, number][] = [[0, 1], [4, 6]];
     const result = playSpecToCoachDiagram({
       schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
-      variant: "flag_5v5",
+      variant: "flag_7v7",
       formation: { name: "Trips Right" },
       assignments: [
         { player: "B", action: { kind: "carry", waypoints: customWaypoints } },
@@ -465,5 +470,23 @@ describe("Renderer — carry actions synthesize a path when waypoints are absent
     });
     const bRoute = result.diagram.routes?.find((r) => r.from === "B");
     expect(bRoute!.path).toEqual(customWaypoints);
+  });
+
+  it("flag_5v5: carry on @Y produces the same synthesized path (5v5 canonical roster)", () => {
+    // Sanity check: the same behavior applies in flag_5v5 with the
+    // canonical-roster carrier id (@Y, not @B). Verifies the renderer
+    // doesn't gate on a specific letter — only on the assignment matching
+    // a placed player.
+    const result = playSpecToCoachDiagram({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_5v5",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "Y", action: { kind: "carry" } },
+      ],
+    });
+    const yRoute = result.diagram.routes?.find((r) => r.from === "Y");
+    expect(yRoute).toBeDefined();
+    expect(yRoute!.path.length).toBeGreaterThan(0);
   });
 });
