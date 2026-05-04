@@ -52,16 +52,17 @@ export function CoachCalCTA({
       }}
       title="Coach Cal can do this for you"
       className={cn(
-        // The gradient background is always light (lavender/blue) regardless
-        // of theme, so the text color must be fixed dark — `text-foreground`
-        // would render white in dark mode and disappear on the gradient.
-        "inline-flex items-center gap-1.5 rounded-full font-medium text-slate-900 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed",
+        "inline-flex items-center gap-1.5 rounded-full font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed",
         variant === "primary"
           ? "px-3.5 py-2 text-sm shadow-sm hover:shadow"
           : "px-2.5 py-1 text-xs ring-1 ring-inset ring-slate-900/10 hover:ring-primary/30",
         className,
       )}
-      style={{ background: GRADIENT }}
+      // The gradient background is always light (lavender/blue) regardless
+      // of theme, so the text color must be fixed dark. Inline style
+      // guarantees nothing in caller-provided className can flip it back to
+      // a theme-aware color that goes white in dark mode.
+      style={{ background: GRADIENT, color: "#0f172a" }}
     >
       <CoachAiIcon className={variant === "primary" ? "size-5" : "size-4"} />
       <span>{finalLabel}</span>
