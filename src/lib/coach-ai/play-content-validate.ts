@@ -28,7 +28,7 @@
 
 import {
   derivedColorGroupForLabel,
-  DERIVED_GROUP_HEX,
+  derivedHexFor,
   PLAYBOOK_PALETTE,
   type CoachDiagram,
 } from "@/features/coach-ai/coachDiagramConverter";
@@ -41,14 +41,21 @@ const LINEMAN_LABELS = new Set(["LT", "LG", "C", "RG", "RT", "T", "G", "OL"]);
 /**
  * No two offensive skill-position players may share their effective
  * token color (explicit `player.color` override wins, else the
- * role+label-derived hex). Singleton roles (QB white, C purple,
+ * role+label-derived hex). Singleton roles (QB white, C green,
  * lineman gray) are exempt.
+ *
+ * Variant-aware: @Y derives YELLOW in flag_5v5 (canonical 5-player set
+ * has no separate slot label), but GREEN in flag_7v7 / tackle_11 (TE
+ * convention). The validator must look up hex via derivedHexFor(group,
+ * variant) so a 7v7 play with @Y (green) + @H (yellow) is correctly
+ * accepted as two distinct hues.
  */
 export function validateColorClash(diagram: CoachDiagram): string[] {
   const players = Array.isArray(diagram.players) ? diagram.players : [];
   const offense = players.filter((p) => (p as { team?: string }).team !== "D");
   if (offense.length === 0) return [];
 
+  const variant = typeof diagram.variant === "string" ? diagram.variant : undefined;
   const skillByHex = new Map<string, Array<{ id: string; group: string }>>();
   for (const p of offense as Array<{ id?: unknown; role?: unknown; color?: unknown }>) {
     if (typeof p.id !== "string") continue;
@@ -56,7 +63,7 @@ export function validateColorClash(diagram: CoachDiagram): string[] {
     const group = derivedColorGroupForLabel(p.id, roleHint);
     if (group === "QB" || group === "C" || group === "LINEMAN" || group === "ROTATION") continue;
     const explicitColor = typeof p.color === "string" && p.color.trim() !== "" ? p.color.trim() : null;
-    const hex = explicitColor ?? DERIVED_GROUP_HEX[group];
+    const hex = explicitColor ?? derivedHexFor(group, variant);
     const list = skillByHex.get(hex) ?? [];
     list.push({ id: p.id, group });
     skillByHex.set(hex, list);

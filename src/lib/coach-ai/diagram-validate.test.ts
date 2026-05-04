@@ -1447,11 +1447,16 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
     expect(result.errors.find((e) => /color clash/i.test(e))).toBeDefined();
   });
 
-  it("ACCEPTS a play that uses five distinct hues (X, Y, Z, H, B)", () => {
-    // Convention-compliant 5-skill spread: WR1 + WR2 + TE-equiv + slot + back.
+  it("ACCEPTS a flag_7v7 play that uses five distinct hues (X red, Y green, Z blue, H yellow, B orange)", () => {
+    // Convention-compliant 5-skill spread: WR1 + TE + WR2 + slot + back.
+    // flag_7v7 (not 5v5) because @Y is variant-aware: yellow in 5v5
+    // (canonical roster has no separate slot label) → would clash with
+    // @H (yellow); green in 7v7/tackle_11 (TE convention) → distinct
+    // from @H. The test pins the 7v7/tackle invariant: five distinct
+    // skill positions get five distinct hues.
     const fence = makeFence({
-      title: "Empty Doubles",
-      variant: "flag_5v5",
+      title: "7v7 Spread Doubles",
+      variant: "flag_7v7",
       players: [
         { id: "Q", x: 0, y: -3, team: "O" },
         { id: "C", x: 0, y: 0, team: "O" },
@@ -1459,17 +1464,19 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
         { id: "Y", x: -5, y: 0, team: "O" },
         { id: "H", x: 5, y: 0, team: "O" },
         { id: "Z", x: 12, y: 0, team: "O" },
+        { id: "B", x: 3, y: -3, team: "O" },
       ],
       routes: [
         { from: "X", path: [[-12, 5]], route_kind: "Hitch" },
         { from: "Y", path: [[-2, 6]], route_kind: "Drag" },
         { from: "H", path: [[2, 6]], route_kind: "Drag" },
         { from: "Z", path: [[12, 5]], route_kind: "Hitch" },
+        { from: "B", path: [[2, 1]] },
       ],
     });
     const result = validateDiagrams({
-      text: `${fence}\n@X hitches, @Y drags, @H drags, @Z hitches.`,
-      variant: "flag_5v5",
+      text: `${fence}\n@X hitches, @Y drags, @H drags, @Z hitches, @B checkdowns.`,
+      variant: "flag_7v7",
       lastPlaceDefense: null,
     });
     if (!result.ok) {

@@ -213,11 +213,33 @@ type PlayerStyle = { fill: string; stroke: string; labelColor: string };
 
 const STYLE_QB:   PlayerStyle = { fill: "#FFFFFF", stroke: "#0f172a", labelColor: "#1C1C1E" };
 // 2026-05-04: flag_5v5 5-player set (Q, C, X, Y, Z) colors: Q=white, C=green, X=red, Y=yellow, Z=blue
+// 2026-05-04 (later): @Y is variant-aware. In flag_5v5, @Y is the slot
+// equivalent (the canonical roster has no separate slot label) and
+// renders YELLOW. In flag_7v7 / tackle_11, @Y is the tight end and
+// renders GREEN (the conventional TE color), preserving the historic
+// Y-vs-H distinction. Two styles below; the renderer picks one based
+// on diagram.variant via styleForY().
 const STYLE_C:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" };
 const STYLE_X:    PlayerStyle = { fill: "#EF4444", stroke: "#7f1d1d", labelColor: "#FFFFFF" };
-const STYLE_Y:    PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" };
+const STYLE_Y_FLAG5: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // @Y in flag_5v5 — yellow (slot-equivalent)
+const STYLE_Y_TE:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" }; // @Y in flag_7v7 / tackle_11 — green (TE)
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
 const STYLE_SLOT: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // S, A, H, F-as-WR
+
+/** Pick @Y's style by variant. flag_5v5 → yellow (the canonical 5-player
+ *  set has no second slot label, so @Y stands in as the slot/back-equivalent
+ *  receiver and yellow keeps the 5-distinct-hue palette). flag_7v7 /
+ *  tackle_11 → green (TE convention; @H stays yellow, so Y + H are
+ *  visually distinct). */
+function styleForY(variant: string | undefined | null): PlayerStyle {
+  return variant === "flag_5v5" ? STYLE_Y_FLAG5 : STYLE_Y_TE;
+}
+/** Hex for @Y by variant — used by the validator's color-clash gate
+ *  (which compares hex codes rather than style objects). Mirror of
+ *  styleForY().fill — change in lockstep. */
+function hexForY(variant: string | undefined | null): string {
+  return variant === "flag_5v5" ? STYLE_Y_FLAG5.fill : STYLE_Y_TE.fill;
+}
 // 2026-05-04: @B (RB) moved from purple to orange — purple now belongs
 // to @C, and the 7v7 / tackle pairing of B + C needs distinct hues.
 // FB stays orange too; coaches with both B + FB on the field need to
@@ -247,7 +269,11 @@ const STYLE_NON_FOCUS: PlayerStyle = { fill: "#CBD5E1", stroke: "#94A3B8", label
 // receiver from collapsing to the same color as the (N-5)th. Order matches
 // the position-derivation priority so the first unknown looks like an X-
 // equivalent, the second a Y-equivalent, and so on.
-const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y, STYLE_Z, STYLE_SLOT, STYLE_RB, STYLE_FB];
+// Fallback rotation for genuinely unknown skill labels. Uses STYLE_Y_TE
+// (green) for the "Y-equivalent" slot since unknowns are most likely to
+// appear in 7v7/tackle plays — the canonical 5v5 roster rejects unknown
+// labels via the save-time roster validator.
+const RECEIVER_ROTATION: PlayerStyle[] = [STYLE_X, STYLE_Y_TE, STYLE_Z, STYLE_SLOT, STYLE_RB, STYLE_FB];
 
 // Map a defender's id (as returned by place_defense or hand-authored by Cal)
 // to a role-coded style. Matches the catalog labels used in
@@ -354,6 +380,10 @@ export function derivedColorGroupForLabel(rawLabel: string, role?: string): Deri
  *  in tackle) need to relabel one or override via set_player_color. */
 export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "LINEMAN">, string> = {
   X:    "#EF4444",
+  // Y entry is the flag_5v5 default. Use derivedHexFor(group, variant)
+  // when you need the variant-aware value (yellow in 5v5, green in
+  // 7v7 / tackle_11). Direct DERIVED_GROUP_HEX[Y] reads the 5v5 value;
+  // callers that don't care about variant get the historical default.
   Y:    "#FACC15",
   Z:    "#3B82F6",
   SLOT: "#FACC15",
@@ -362,6 +392,19 @@ export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "
   QB:   "#FFFFFF",
   C:    "#22C55E",
 };
+
+/** Variant-aware hex lookup. The only group that varies by variant is
+ *  `Y`: yellow in flag_5v5 (canonical 5-player roster), green elsewhere
+ *  (TE convention). Validators must use this — comparing hex codes via
+ *  the static map mis-classifies 7v7/tackle_11 plays where @Y (green)
+ *  and @H (yellow) are correctly distinct. */
+export function derivedHexFor(
+  group: Exclude<DerivedColorGroup, "ROTATION" | "LINEMAN">,
+  variant: string | null | undefined,
+): string {
+  if (group === "Y") return hexForY(variant);
+  return DERIVED_GROUP_HEX[group];
+}
 
 // Default zone style — matches `mkZone`, which is what coaches get
 // when they drop a zone via the editor's rect/ellipse tools. Used as a
@@ -733,11 +776,13 @@ export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument 
           label = rawLabel === "RB" ? "B" : rawLabel.slice(0, 2);
         }
         else if (role === "TE" || baseLabel === "TE") {
-          style = STYLE_Y;
+          // TE — always green (TE convention; the "TE" label only
+          // appears in 7v7 / tackle_11, never in flag_5v5).
+          style = STYLE_Y_TE;
           label = rawLabel === "TE" ? "Y" : rawLabel.slice(0, 2);
         }
         else if (baseLabel === "X") { style = STYLE_X; label = rawLabel.slice(0, 2); }
-        else if (baseLabel === "Y") { style = STYLE_Y; label = rawLabel.slice(0, 2); }
+        else if (baseLabel === "Y") { style = styleForY(diagram.variant); label = rawLabel.slice(0, 2); }
         else if (baseLabel === "Z") { style = STYLE_Z; label = rawLabel.slice(0, 2); }
         else if (baseLabel === "S" || baseLabel === "A" || baseLabel === "H" || baseLabel === "F") {
           // Slot family — yellow. F here is the WR-role slot (2x2

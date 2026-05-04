@@ -60,8 +60,14 @@ describe("validateColorClash", () => {
     expect(errors[0]).toMatch(/red/i);
   });
 
-  it("ALLOWS distinct skill labels (X + Y + Z + H + B)", () => {
+  it("ALLOWS distinct skill labels in 7v7 (X red + Y green + Z blue + H yellow + B orange)", () => {
+    // Variant-aware @Y: GREEN in flag_7v7 / tackle_11 (TE convention),
+    // distinct from @H (yellow). Without setting variant: "flag_7v7",
+    // the validator would default to 5v5 hex (Y=yellow) and incorrectly
+    // flag a clash with @H. Pinning the variant is what surfaces the
+    // 7v7 behavior.
     const errors = validateColorClash({
+      variant: "flag_7v7",
       players: [
         { id: "Q", x: 0, y: -3, team: "O" },
         { id: "X", x: -10, y: 0, team: "O" },
@@ -72,6 +78,26 @@ describe("validateColorClash", () => {
       ],
     });
     expect(errors).toHaveLength(0);
+  });
+
+  it("flag_5v5: @Y + @H clash (both yellow) — even though 7v7 accepts the same labels", () => {
+    // Pins the variant-awareness from the OTHER side: in 5v5, @Y is
+    // yellow (canonical roster's slot-equivalent), so adding @H
+    // (also yellow, non-canonical for 5v5 anyway) produces a clash.
+    // The 5v5 roster validator also rejects @H as non-canonical, but
+    // this test focuses just on the color-clash rule.
+    const errors = validateColorClash({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "Y", x: 5, y: 0, team: "O" },
+        { id: "H", x: 7, y: -1, team: "O" },
+      ],
+    });
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors.join(" | ")).toMatch(/yellow/i);
   });
 
   it("ALLOWS QB + C sharing structural defaults (white/black)", () => {
