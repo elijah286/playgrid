@@ -79,6 +79,32 @@ function saveTurns(key: string, turns: CoachAiTurn[]): void {
   } catch { /* quota or disabled */ }
 }
 
+// Sidecar: tracks which play (if any) the persisted chat history was last
+// anchored to, so that re-opening Cal on a different play can insert a
+// context-switch bridge instead of letting prior turns about Play A pollute
+// a new conversation about Play B.
+function lastPlayKeyFor(storageKey: string): string {
+  return `${storageKey}:last-play`;
+}
+
+function loadLastPlayId(storageKey: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(lastPlayKeyFor(storageKey));
+    return raw && raw.length > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastPlayId(storageKey: string, playId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (playId) window.localStorage.setItem(lastPlayKeyFor(storageKey), playId);
+    else        window.localStorage.removeItem(lastPlayKeyFor(storageKey));
+  } catch { /* ignore */ }
+}
+
 /** Minimal SSE parser — handles `event: foo\ndata: {...}\n\n` frames. */
 async function* parseSse(body: ReadableStream<Uint8Array>) {
   const dec = new TextDecoder();
@@ -150,6 +176,13 @@ export function CoachAiChat({
   const stuckToBottomRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const prevStorageKeyRef = useRef<string | null>(null);
+  // Tracks the playId in scope when the chat last loaded/bridged. We compare
+  // against the current playId to detect navigation between plays in the same
+  // playbook, which the storageKey-keyed effect can't see (the key doesn't
+  // include playId so cross-play navigation within a playbook is invisible to
+  // it). Without this, Cal's prior responses about Play A leak into a
+  // conversation about Play B and the model conflates their personnel.
+  const prevPlayIdInScopeRef = useRef<{ storageKey: string; playId: string | null } | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -277,21 +310,41 @@ export function CoachAiChat({
         saveTurns(storageKey, merged);
         setError(null);
         prevStorageKeyRef.current = storageKey;
+        prevPlayIdInScopeRef.current = { storageKey, playId: playId ?? null };
+        saveLastPlayId(storageKey, playId ?? null);
         return;
       }
     }
     const loaded = loadTurns(storageKey);
-    // Anchor switched mid-session (e.g. tackle playbook → flag playbook). Insert
-    // a visible bridge turn so both the user and the model see the switch — the
-    // model otherwise carries over assumptions from the previous scope's turns.
     const prev = prevStorageKeyRef.current;
-    if (prev && prev !== storageKey && loaded.length > 0) {
-      const bridgeTurn: CoachAiTurn = {
+    const playbookSwitched = prev != null && prev !== storageKey;
+    // Cross-play reopen: storageKey is the same as before, but the persisted
+    // history was last anchored to a different play. Without this check, a
+    // coach who closed Cal on Play A and re-opens on Play B sees Cal still
+    // referencing Play A's player names from history.
+    const lastPlayId = loadLastPlayId(storageKey);
+    const playSwitchedAcrossSession =
+      !playbookSwitched && lastPlayId !== (playId ?? null) && loaded.length > 0;
+
+    let bridgeTurn: CoachAiTurn | null = null;
+    if (playbookSwitched && loaded.length > 0) {
+      bridgeTurn = {
         role: "assistant",
         text:
           "_[Context switch] You've moved to a different playbook. Earlier turns in this thread may have been about another team — verify rules and personnel against the current playbook before applying prior advice._",
         toolCalls: [],
       };
+    } else if (playSwitchedAcrossSession) {
+      bridgeTurn = {
+        role: "assistant",
+        text: playId
+          ? "_[Context switch] You're now viewing a different play. Earlier turns in this thread were about a different play — use the diagram in the system prompt for the current play as the source of truth for personnel, routes, and player names._"
+          : "_[Context switch] You've navigated away from the play view. Earlier turns in this thread were about a specific play — re-state the play if you need advice about it._",
+        toolCalls: [],
+      };
+    }
+
+    if (bridgeTurn) {
       const merged = [...loaded, bridgeTurn];
       setTurns(merged);
       saveTurns(storageKey, merged);
@@ -300,7 +353,46 @@ export function CoachAiChat({
     }
     setError(null);
     prevStorageKeyRef.current = storageKey;
+    prevPlayIdInScopeRef.current = { storageKey, playId: playId ?? null };
+    saveLastPlayId(storageKey, playId ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
+
+  // Detect mid-session navigation between plays in the SAME playbook.
+  // The storageKey effect above won't see this because the storage key only
+  // includes the playbook (not the play id). Without this bridge, prior
+  // assistant turns about Play A leak into a conversation about Play B and
+  // Cal mixes their personnel/routes (surfaced 2026-05-04: a coach saw Cal
+  // reference renamed players from a different play in the same playbook).
+  useEffect(() => {
+    const prev = prevPlayIdInScopeRef.current;
+    prevPlayIdInScopeRef.current = { storageKey, playId: playId ?? null };
+    saveLastPlayId(storageKey, playId ?? null);
+    // First fire after mount (or after the storageKey effect just ran) — the
+    // storageKey effect already handled the cross-scope bridge if needed.
+    if (!prev) return;
+    if (prev.storageKey !== storageKey) return;
+    if (prev.playId === (playId ?? null)) return;
+
+    // Same playbook, different play. Append a bridge turn to the live state
+    // (don't reload from storage — a stream may be in flight).
+    setTurns((cur) => {
+      if (cur.length === 0) return cur;
+      const last = cur[cur.length - 1];
+      // Avoid double-bridge if a context-switch is already the last turn.
+      if (last?.role === "assistant" && last.text.includes("[Context switch]")) return cur;
+      const bridge: CoachAiTurn = {
+        role: "assistant",
+        text: playId
+          ? "_[Context switch] You're now viewing a different play. Earlier turns in this thread were about a different play — use the diagram in the system prompt for the current play as the source of truth for personnel, routes, and player names._"
+          : "_[Context switch] You've navigated away from the play view. Earlier turns in this thread were about a specific play — re-state the play if you need advice about it._",
+        toolCalls: [],
+      };
+      const merged = [...cur, bridge];
+      saveTurns(storageKey, merged);
+      return merged;
+    });
+  }, [playId, storageKey]);
 
   useEffect(() => {
     saveTurns(storageKey, turns);
@@ -324,6 +416,7 @@ export function CoachAiChat({
     setError(null);
     if (typeof window !== "undefined") {
       try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
+      saveLastPlayId(storageKey, playId ?? null);
     }
   }
 

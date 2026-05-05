@@ -630,6 +630,15 @@ function contextBlock(ctx: ToolContext): string {
         `substitute a generic 11-personnel example. You only need to call \`get_play\` if you ` +
         `need fresher data (e.g. after an edit was just made).`,
       );
+      lines.push("");
+      lines.push(
+        `**The diagram above is authoritative.** If earlier turns in this conversation ` +
+        `referenced different player labels or routes, those turns were about a different play ` +
+        `(the coach navigated) or a previous version (the coach renamed/edited players). Use ` +
+        `ONLY the labels and routes shown in the diagram above for this play — do not blend ` +
+        `them with names from prior turns, and do not say "@X (now @Y)" or "previously @Z" ` +
+        `in your response. Treat the current diagram as the only truth about this play.`,
+      );
     } else {
       lines.push(`Use \`get_play\` with the anchored play id when you need its diagram details.`);
     }
