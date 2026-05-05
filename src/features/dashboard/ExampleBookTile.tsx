@@ -80,6 +80,20 @@ export function ExampleBookTile({
   const [shiftX, setShiftX] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // Touch devices fire synthetic mouseenter on tap, which would briefly
+  // play the open-book animation before navigation — distracting and
+  // pointless when there's no hover. Gate the handlers so a tap is just
+  // a click straight to the playbook.
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from matchMedia
+    setIsTouch(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   function handleEnter() {
     const el = wrapperRef.current;
     if (el) {
@@ -117,8 +131,8 @@ export function ExampleBookTile({
   return (
     <div
       ref={wrapperRef}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
+      onMouseEnter={isTouch ? undefined : handleEnter}
+      onMouseLeave={isTouch ? undefined : handleLeave}
       className="group relative z-0"
       style={{ zIndex: hover ? 20 : 0 }}
     >
