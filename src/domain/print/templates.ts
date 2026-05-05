@@ -914,6 +914,16 @@ function renderPlaysheetCell(
     : "";
   const field = renderFieldContents(doc, fieldX, fieldY, fieldW, fieldH, opts);
 
+  // Resolve the outer-border color up front so the field/notes divider
+  // can match it (so the field is framed by the same hard line that
+  // wraps the rest of the cell).
+  const bt = Math.max(0, Math.min(2, opts.borderThickness ?? 1));
+  const darkness = Math.max(0, Math.min(100, opts.borderDarkness ?? 100));
+  const outerGray = Math.round(226 * (1 - darkness / 100));
+  const outerHex = `rgb(${outerGray}, ${outerGray}, ${outerGray})`;
+  const outerStroke = bt === 0 ? "none" : outerHex;
+  const outerW = bt === 0 ? 0 : padScale > 0 ? 0.3 * bt : 0.15 * bt;
+
   let notes = "";
   if (opts.showNotes && notesH > 0) {
     const ny = oy + tileH;
@@ -922,9 +932,12 @@ function renderPlaysheetCell(
     const lineH = 3.2 * noteFontMult;
     const noteLineCount = Math.max(1, Math.round(opts.noteLines));
     const raw = vis.showNotes ? (doc.metadata.notes ?? "").trim() : "";
-    // Reserve a small right-edge gutter so anti-aliased glyphs and chip
-    // markers don't kiss the cell border at low-DPI print resolution.
-    const innerW = Math.max(1, cw - padX * 2 - 1);
+    // Notes get a slightly larger horizontal inset than the field so glyphs
+    // don't kiss the cell border at low-DPI print resolution. The 1.4mm
+    // extra on top of `padX` lands at ~2.4mm total inset with the default
+    // padScale (0.5), enough that descenders/ascenders read cleanly.
+    const noteEdgeInset = padX + 1.4;
+    const innerW = Math.max(1, cw - noteEdgeInset * 2);
     const visualPlayers = opts.noteVisualPlayers ?? false;
     const playerLookup = visualPlayers ? buildPlayerLabelLookup(doc) : null;
     // Width-aware wrap: account for @-token player chips taking ~3× the
@@ -937,36 +950,29 @@ function renderPlaysheetCell(
       playerLookup,
     ).slice(0, noteLineCount);
     const clipId = `nc-${Math.random().toString(36).slice(2, 9)}`;
-    notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
+    notes += `<defs><clipPath id="${clipId}"><rect x="${ox + noteEdgeInset}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
     notes += `<g clip-path="url(#${clipId})">`;
     wrapped.forEach((line, i) => {
       const ly = ny + lineH * (i + 1);
-      notes += renderNoteLine(line, ox + padX, ly, fontNote, playerLookup);
+      notes += renderNoteLine(line, ox + noteEdgeInset, ly, fontNote, playerLookup);
     });
     notes += `</g>`;
-    notes += `<line x1="${ox + padX}" y1="${ny + notesH - 0.5}" x2="${ox + cw - padX}" y2="${ny + notesH - 0.5}" stroke="#e5e7eb" stroke-width="0.2"/>`;
   }
 
-  const bt = Math.max(0, Math.min(2, opts.borderThickness ?? 1));
-  // Map borderDarkness 0..100 to a gray channel value: 100 → black,
-  // 0 → the legacy slate-200 (#e2e8f0). Default to black so each play has
-  // a clearly visible outline out of the box.
-  const darkness = Math.max(0, Math.min(100, opts.borderDarkness ?? 100));
-  const outerGray = Math.round(226 * (1 - darkness / 100));
-  const outerHex = `rgb(${outerGray}, ${outerGray}, ${outerGray})`;
-  const outerStroke = bt === 0 ? "none" : outerHex;
-  const outerW = bt === 0 ? 0 : padScale > 0 ? 0.3 * bt : 0.15 * bt;
+  // The hard frame wraps the field + notes as one card. The title (play
+  // number / formation / name) sits above the card on the page surface so
+  // the box reads as the play diagram itself, not a wrapper around
+  // everything in the cell.
+  const boxTop = fieldY;
+  const boxH = ch - (boxTop - oy);
   const outerBorder =
     padScale > 0
-      ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
-      : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
-  // The outer cell border alone provides the visual frame. A separate inner
-  // stroke around the field rect produced a "double border" effect where the
-  // field area looked broken/lighter compared to the notes section.
+      ? `<rect x="${ox + 0.5}" y="${boxTop + 0.5}" width="${cw - 1}" height="${boxH - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
+      : `<rect x="${ox}" y="${boxTop}" width="${cw}" height="${boxH}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
   return `
   <g>
-    ${outerBorder}
     ${header}
+    ${outerBorder}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="none"/>
     ${fieldWm}
     ${field}
