@@ -132,13 +132,32 @@ function wrapText(text: string, maxChars: number): string[] {
  * char-count wrapping overflows the cell, so this estimates true rendered
  * width per word and breaks accordingly.
  */
+/**
+ * Approximate the rendered character count of a chunk of source text. The
+ * print renderer parses markdown emphasis (`**bold**`, `*italic*`) and
+ * leading bullets (`- ` / `* `) — those markers consume source characters
+ * but don't take horizontal space when rendered. Subtracting them here
+ * keeps the wrap from prematurely breaking lines that look long in source
+ * but are actually short on the page.
+ */
+function visibleSourceLength(s: string): number {
+  let out = s;
+  // Drop a leading bullet marker (rendered as a single `• `, similar width).
+  out = out.replace(/^(\s*)[-*]\s+/, "$1• ");
+  // Drop ** and * markdown emphasis markers — the inner text still counts.
+  out = out.replace(/\*+/g, "");
+  return out.length;
+}
+
 function noteLineRenderedWidth(
   line: string,
   fontSize: number,
   playerLookup: Map<string, NotePlayerStyle> | null,
 ): number {
   const charW = fontSize * 0.52; // slightly conservative vs. renderNoteLine's 0.48
-  if (!playerLookup || playerLookup.size === 0) return line.length * charW;
+  if (!playerLookup || playerLookup.size === 0) {
+    return visibleSourceLength(line) * charW;
+  }
   const labels = Array.from(playerLookup.keys()).sort((a, b) => b.length - a.length);
   const escaped = labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   // Mirror the renderer: optional leading "@" gets absorbed into the chip.
@@ -149,11 +168,11 @@ function noteLineRenderedWidth(
   let cursor = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(line)) !== null) {
-    cx += (m.index - cursor) * charW;
+    cx += visibleSourceLength(line.slice(cursor, m.index)) * charW;
     cx += chipW;
     cursor = re.lastIndex;
   }
-  cx += (line.length - cursor) * charW;
+  cx += visibleSourceLength(line.slice(cursor)) * charW;
   return cx;
 }
 
@@ -225,6 +244,81 @@ function buildPlayerLabelLookup(doc: PlayDocument): Map<string, NotePlayerStyle>
   return out;
 }
 
+/**
+ * Render a plain-text segment (no chip markers) with inline markdown:
+ * - `**bold**` → font-weight: bold
+ * - `*italic*` → font-style: italic
+ * - leading `- ` (or `* `) on the line → unicode bullet
+ *
+ * Returns the SVG fragment plus the horizontal advance so the caller can
+ * keep its cursor in sync with the next chip / segment. Asterisks consumed
+ * as markdown markers don't render and don't take horizontal space.
+ */
+function renderMarkdownTextSegment(
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  charW: number,
+): { svg: string; advance: number } {
+  let svg = "";
+  let cx = x;
+  let i = 0;
+  const emitText = (
+    s: string,
+    weight: "normal" | "bold",
+    style: "normal" | "italic",
+  ): number => {
+    if (s.length === 0) return 0;
+    const widthMul = weight === "bold" ? 1.05 : 1.0;
+    svg +=
+      `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}"` +
+      (weight === "bold" ? ` font-weight="bold"` : "") +
+      (style === "italic" ? ` font-style="italic"` : "") +
+      `>${escSvgText(s)}</text>`;
+    const adv = s.length * charW * widthMul;
+    cx += adv;
+    return adv;
+  };
+
+  while (i < text.length) {
+    // **bold** — match a balanced pair on the same segment.
+    if (text[i] === "*" && text[i + 1] === "*") {
+      const end = text.indexOf("**", i + 2);
+      if (end !== -1) {
+        const inner = text.slice(i + 2, end);
+        emitText(inner, "bold", "normal");
+        i = end + 2;
+        continue;
+      }
+    }
+    // *italic* — single `*` not followed by another. Require a non-space
+    // character right after the opening so we don't match dialog asterisks
+    // or emphasis-on-empty cases like `* `.
+    if (text[i] === "*" && text[i + 1] !== "*" && text[i + 1] !== " ") {
+      const end = text.indexOf("*", i + 1);
+      if (end !== -1 && text[end - 1] !== " " && end - i - 1 > 0) {
+        const inner = text.slice(i + 1, end);
+        emitText(inner, "normal", "italic");
+        i = end + 1;
+        continue;
+      }
+    }
+    // Plain run until the next `*` (or end of segment).
+    const next = text.indexOf("*", i);
+    const segEnd = next === -1 ? text.length : next;
+    emitText(text.slice(i, segEnd), "normal", "normal");
+    i = segEnd;
+  }
+  return { svg, advance: cx - x };
+}
+
+/**
+ * Render a single wrapped note line. Handles three things in concert:
+ *   1. Player-label chips (e.g. `@Q` → colored Q circle)
+ *   2. Inline markdown (`**bold**`, `*italic*`)
+ *   3. Line-leading bullet markers (`- ` or `* `) → unicode `• `
+ */
 function renderNoteLine(
   line: string,
   x: number,
@@ -232,28 +326,54 @@ function renderNoteLine(
   fontSize: number,
   playerLookup: Map<string, NotePlayerStyle> | null,
 ): string {
-  if (!playerLookup || playerLookup.size === 0) {
-    return `<text x="${x}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(line)}</text>`;
+  const charW = fontSize * 0.48;
+  const markerR = fontSize * 0.7;
+
+  // Replace a leading bullet marker with a unicode bullet so list items in
+  // the source markdown render as bullets in the printed sheet rather than
+  // as a literal hyphen or asterisk.
+  let working = line;
+  let leadingBullet = "";
+  const bulletMatch = /^(\s*)([-*])\s+/.exec(working);
+  if (bulletMatch) {
+    const indent = bulletMatch[1] ?? "";
+    leadingBullet = `${indent}• `;
+    working = working.slice(bulletMatch[0].length);
   }
+
+  let out = "";
+  let cx = x;
+
+  if (leadingBullet) {
+    out += `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(leadingBullet)}</text>`;
+    cx += leadingBullet.length * charW;
+  }
+
+  // No chip lookup → render the whole line as markdown text and stop.
+  if (!playerLookup || playerLookup.size === 0) {
+    const seg = renderMarkdownTextSegment(working, cx, y, fontSize, charW);
+    return out + seg.svg;
+  }
+
   const labels = Array.from(playerLookup.keys()).sort((a, b) => b.length - a.length);
   const escaped = labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   // Match an optional leading "@" so it gets absorbed into the chip instead
   // of leaking out as stray punctuation in the rendered note.
   const re = new RegExp(`(?:^|\\b|(?<=[^A-Za-z0-9_]))@?(${escaped.join("|")})\\b`, "g");
-  const charW = fontSize * 0.48;
-  const markerR = fontSize * 0.7;
-  let cx = x;
   let cursor = 0;
-  let out = "";
   let m: RegExpExecArray | null;
-  while ((m = re.exec(line)) !== null) {
-    // Determine the actual span of the source text we're consuming —
-    // includes the optional "@" prefix that we're collapsing into the chip.
+  while ((m = re.exec(working)) !== null) {
     const matchStart = m.index;
     if (matchStart > cursor) {
-      const seg = line.slice(cursor, matchStart);
-      out += `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(seg)}</text>`;
-      cx += seg.length * charW;
+      const seg = renderMarkdownTextSegment(
+        working.slice(cursor, matchStart),
+        cx,
+        y,
+        fontSize,
+        charW,
+      );
+      out += seg.svg;
+      cx += seg.advance;
     }
     const style = playerLookup.get(m[1]!)!;
     const markerCx = cx + markerR;
@@ -265,9 +385,9 @@ function renderNoteLine(
     cx += markerR * 2 + charW * 0.3;
     cursor = re.lastIndex;
   }
-  if (cursor < line.length) {
-    const tail = line.slice(cursor);
-    out += `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(tail)}</text>`;
+  if (cursor < working.length) {
+    const seg = renderMarkdownTextSegment(working.slice(cursor), cx, y, fontSize, charW);
+    out += seg.svg;
   }
   return out;
 }
