@@ -919,6 +919,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "print-number-chip-on-header-line",
+    name: "Play number chip on the header line",
+    description:
+      "Setting the play-number chip to \"Top left\" or \"Top right\" now rests it on the same line as the formation/name labels instead of dropping it onto the field. With Number, Formation, and Name all toggled on the top row, a play card reads cleanly as \"01  Pro Right · Vertigo\" — no more wasted vertical space and no chip overlapping the diagram. Added a new \"Top right\" position to mirror \"Top left\" for coaches who prefer the chip on the right edge.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-05-05",
+  },
+  {
     id: "print-playsheet-notes-controls",
     name: "Roomy play notes on call sheets",
     description:

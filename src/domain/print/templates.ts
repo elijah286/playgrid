@@ -873,6 +873,8 @@ function renderPlaysheetCell(
     fontScale: opts.headerFontSize,
     innerW,
     labelWrap: opts.labelWrap,
+    numberPosition: opts.numberPosition,
+    numberSize: opts.numberSize,
   });
   const headerH = topHeaderHeight(topMetrics);
   const fieldX = ox + padX;
@@ -958,12 +960,14 @@ function renderPlaysheetCell(
     padScale > 0
       ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
       : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
-  const innerStroke = bt === 0 ? "none" : "#e5e7eb";
+  // The outer cell border alone provides the visual frame. A separate inner
+  // stroke around the field rect produced a "double border" effect where the
+  // field area looked broken/lighter compared to the notes section.
   return `
   <g>
     ${outerBorder}
     ${header}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="${innerStroke}" stroke-width="${0.25 * bt}"/>
+    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="none"/>
     ${fieldWm}
     ${field}
     ${overlay}
@@ -1291,10 +1295,18 @@ type TopHeaderMetrics = {
   hasTopName: boolean;
   formationLines: string[];
   nameLines: string[];
+  /** Chip height when the number chip occupies the top header line. 0 otherwise. */
+  chipH: number;
+  /** Chip width when the number chip occupies the top header line. 0 otherwise. */
+  chipW: number;
 };
 
 function isTopPos(p: PrintTextPosition): boolean {
   return p === "top-left" || p === "top-center";
+}
+
+function isHeaderLineNumberPos(p: PrintNumberPosition): boolean {
+  return p === "top-left" || p === "top-right";
 }
 
 function computeTopHeaderMetrics(args: {
@@ -1308,6 +1320,8 @@ function computeTopHeaderMetrics(args: {
   fontScale: number;
   innerW: number;
   labelWrap: boolean;
+  numberPosition: PrintNumberPosition;
+  numberSize: number;
 }): TopHeaderMetrics {
   const formationFont = args.baseTitle * args.fontScale * Math.max(0.3, args.formationSize);
   const nameFont = args.baseTitle * args.fontScale * Math.max(0.3, args.nameSize);
@@ -1323,6 +1337,22 @@ function computeTopHeaderMetrics(args: {
     if (!args.labelWrap || text.length <= chars) return [text];
     return wrapText(text, chars).slice(0, 2);
   };
+  // When the number chip lives on the top header line, reserve enough vertical
+  // space for it even if no formation/name labels are toggled on.
+  const code = (args.doc.metadata.wristbandCode || "").trim();
+  const wantsHeaderChip =
+    args.toggles.showNumber &&
+    isHeaderLineNumberPos(args.numberPosition) &&
+    code.length > 0;
+  let chipH = 0;
+  let chipW = 0;
+  if (wantsHeaderChip) {
+    const chipFont = args.baseTitle * args.fontScale * 1.05 * Math.max(0.3, args.numberSize);
+    chipH = Math.max(3.2 * args.numberSize, chipFont * 1.3);
+    const chipPad = 0.8;
+    const approxCharW = chipFont * 0.66;
+    chipW = Math.max(chipH * 0.9, code.length * approxCharW + chipPad * 2);
+  }
   const base = {
     lineFont,
     formationFont,
@@ -1333,9 +1363,18 @@ function computeTopHeaderMetrics(args: {
     hasTopName,
     formationLines: [] as string[],
     nameLines: [] as string[],
+    chipH,
+    chipW,
   };
   if (!hasTopFormation && !hasTopName) {
-    return { ...base, lines: 0, combined: false };
+    // Even without text labels, reserve the header band when the chip needs to
+    // live there. `lines: 1` makes downstream height/baseline math line up with
+    // the chip; the renderer simply won't emit any text.
+    return {
+      ...base,
+      lines: wantsHeaderChip ? 1 : 0,
+      combined: false,
+    };
   }
   if (hasTopFormation && hasTopName && args.formationPosition === args.namePosition) {
     const combinedText = `${formation}  ·  ${name}`;
@@ -1365,7 +1404,13 @@ function computeTopHeaderMetrics(args: {
 
 function topHeaderHeight(m: TopHeaderMetrics): number {
   if (m.lines === 0) return 0;
-  return m.lineFont * 0.3 + m.lineFont * 1.15 * m.lines;
+  const textH = m.lineFont * 0.3 + m.lineFont * 1.15 * m.lines;
+  // When a chip lives on the header line, ensure the band is tall enough to
+  // contain it (chip is typically slightly taller than a single line of text).
+  if (m.chipH > 0) {
+    return Math.max(textH, m.chipH + m.lineFont * 0.3);
+  }
+  return textH;
 }
 
 function renderTileTextHeader(params: {
@@ -1432,11 +1477,21 @@ function renderTileTextHeader(params: {
     fontScale,
     innerW,
     labelWrap,
+    numberPosition,
+    numberSize,
   });
   const { formation, name, hasTopFormation, hasTopName, combined, formationFont, nameFont, lineFont, formationLines, nameLines } = metrics;
   const headerH = topHeaderHeight(metrics);
   const lineH = lineFont * 1.15;
-  const topBaselineY = oy + padTop + lineFont * 0.95;
+  // When the chip lives on the header line and is taller than the text, the
+  // band gets bumped up. Push the text baseline down so it stays vertically
+  // centered with the chip instead of clinging to the top of the band.
+  const bandTop = oy + padTop;
+  const headerCenterY = bandTop + headerH / 2;
+  const topBaselineY =
+    metrics.chipH > 0 && metrics.lines > 0
+      ? headerCenterY + lineFont * 0.35
+      : bandTop + lineFont * 0.95;
   const fontWeight = colorCoding ? "600" : "500";
   // Name/formation text is always rendered in black for maximum readability,
   // independent of the tag color-coding (which only drives the number chip
@@ -1444,8 +1499,27 @@ function renderTileTextHeader(params: {
   void labelColor;
   const textFill = "#111827";
 
+  // Chip nudge: when the number chip lives on the header line, push
+  // left-anchored labels past it (or stop right-anchored labels before it) so
+  // the chip and labels never overlap.
+  const chipGap = 1.2;
+  const leftChipNudge =
+    metrics.chipW > 0 && numberPosition === "top-left"
+      ? metrics.chipW + chipGap
+      : 0;
+  const rightChipNudge =
+    metrics.chipW > 0 && numberPosition === "top-right"
+      ? metrics.chipW + chipGap
+      : 0;
   function textAttrs(pos: PrintTextPosition): { x: number; anchor: string } {
-    if (pos === "top-left") return { x: ox + padX, anchor: "start" };
+    if (pos === "top-left") return { x: ox + padX + leftChipNudge, anchor: "start" };
+    if (pos === "top-center") {
+      // Re-center the text within the space remaining after the chip claims
+      // its edge — keeps "01  Pro Right · Vertigo" visually balanced.
+      const left = ox + padX + leftChipNudge;
+      const right = ox + cw - padX - rightChipNudge;
+      return { x: (left + right) / 2, anchor: "middle" };
+    }
     return { x: ox + cw / 2, anchor: "middle" };
   }
 
@@ -1520,8 +1594,14 @@ function renderTileTextHeader(params: {
       let bx = fieldX;
       let by = fieldY;
       if (numberPosition === "top-left") {
-        bx = fieldX;
-        by = fieldY;
+        // Sit on the header line at the left edge of the cell, vertically
+        // centered with the formation/name text.
+        bx = ox + padX;
+        by = bandTop + Math.max(0, (headerH - boxH) / 2);
+      } else if (numberPosition === "top-right") {
+        // Mirror of top-left on the right edge of the cell.
+        bx = ox + cw - padX - boxW;
+        by = bandTop + Math.max(0, (headerH - boxH) / 2);
       } else if (numberPosition === "bottom-left") {
         bx = fieldX;
         by = fieldY + fieldH - boxH;
@@ -1647,6 +1727,8 @@ function renderWristbandTile(
     fontScale: opts.headerFontSize,
     innerW,
     labelWrap: opts.labelWrap,
+    numberPosition: opts.numberPosition,
+    numberSize: opts.numberSize,
   });
   const headerH = topHeaderHeight(topMetrics);
   const fieldPadTop = headerH;
