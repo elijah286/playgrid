@@ -48,7 +48,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             width={200}
             height={36}
             priority
-            className="h-9 w-auto"
+            className="h-8 w-auto sm:h-9"
           />
         </Link>
         {user ? (
@@ -74,18 +74,16 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             />
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            {/* Mobile collapses to just logo + Get started. Desktop shows
-                a lightweight nav: Pricing, Share, Sign in. Tour was removed
-                because it just anchors down to a section on the same page —
-                the page scroll already exposes it, and dropping it lets
-                "Get started" hold more visual weight against secondary
-                items. */}
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Mobile shows Pricing + Sign in (no Share, no Get started).
+                Pricing is muted-weight so Sign in remains the primary CTA,
+                but visible enough that pricing isn't hidden behind a menu.
+                Desktop adds Share and the Get started button. */}
             {showPricingLink && (
               <Link
                 href="/pricing"
                 data-web-only
-                className="hidden text-sm text-muted hover:text-foreground transition-colors sm:inline"
+                className="whitespace-nowrap text-sm text-muted hover:text-foreground transition-colors"
               >
                 Pricing
               </Link>
@@ -95,7 +93,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
             </div>
             <Link
               href="/login"
-              className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
+              className="whitespace-nowrap text-sm font-semibold text-foreground hover:text-primary transition-colors"
             >
               Sign in
             </Link>
