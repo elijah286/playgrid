@@ -153,7 +153,7 @@ export function CoachAiUsageMeter({ refreshTick }: { refreshTick: number }) {
           {/* CTA when at/near limit */}
           {warn && (
             <a
-              href="/settings/billing"
+              href="/pricing"
               className={`mt-3 flex items-center justify-between gap-1 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
                 danger
                   ? "bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300"

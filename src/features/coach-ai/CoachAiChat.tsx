@@ -661,10 +661,10 @@ export function CoachAiChat({
             Resets {formatResetDate(outOfMessages.resetDate)}.
             {outOfMessages.pack.priceConfigured
               ? ` Or buy ${outOfMessages.pack.messageCount} more for ${formatPackPriceCents(outOfMessages.pack.priceUsdCents)} — they expire at month-end.`
-              : " Need more before then? Contact support."}
+              : " Need more before then? Upgrade or buy a message pack on the pricing page."}
           </p>
-          {outOfMessages.pack.priceConfigured && (
-            <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2">
+            {outOfMessages.pack.priceConfigured ? (
               <Button
                 variant="primary"
                 size="sm"
@@ -674,15 +674,22 @@ export function CoachAiChat({
               >
                 Buy {outOfMessages.pack.messageCount} more for {formatPackPriceCents(outOfMessages.pack.priceUsdCents)}
               </Button>
-              <button
-                type="button"
-                onClick={() => setOutOfMessages(null)}
-                className="text-xs font-medium text-amber-900/70 hover:underline dark:text-amber-100/70"
+            ) : (
+              <Link
+                href="/pricing"
+                className="inline-flex items-center rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-950 dark:bg-amber-100 dark:text-amber-950 dark:hover:bg-amber-200"
               >
-                I&rsquo;ll wait
-              </button>
-            </div>
-          )}
+                View pricing
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setOutOfMessages(null)}
+              className="text-xs font-medium text-amber-900/70 hover:underline dark:text-amber-100/70"
+            >
+              I&rsquo;ll wait
+            </button>
+          </div>
         </div>
       )}
 
