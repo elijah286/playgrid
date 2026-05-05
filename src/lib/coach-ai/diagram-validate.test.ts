@@ -1180,6 +1180,62 @@ describe("validateDiagrams — phantom-write claims", () => {
     const errs = result.ok ? [] : result.errors;
     expect(errs.some((e) => e.includes("update_play_notes"))).toBe(false);
   });
+
+  // 2026-05-05: Cal evaded the original verb list with creative phrasings
+  // — coach hit two examples in a row (Spread Bender, Skiddadle) where
+  // Cal opened with "Saved to <Play>." and described notes that were never
+  // actually persisted. Broadened the regex set; these regressions lock
+  // it in.
+  it("flags 'Saved to Spread Bender. Notes now frame it as...' when update_play_notes was NOT called", () => {
+    const result = validateDiagrams({
+      text:
+        "Saved to Spread Bender. Notes now frame it as a mesh concept where @H bender beats aggressive OLB coverage — @Q reads the OLB depth pre-snap and post-snap.\n\n" +
+        "- OLB sitting: hit @H immediately as he rounds behind him\n" +
+        "- OLB crashing on @Y: @H is already open behind him\n\n" +
+        "Play is ready.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
+  });
+
+  it("flags 'Saved to Skiddadle. Notes now break down the progression' when update_play_notes was NOT called", () => {
+    const result = validateDiagrams({
+      text:
+        "Saved to Skiddadle. Notes now break down the progression by situation:\n\n" +
+        "- vs Cover 2: @Y dig is primary…\n- 3rd & long: @Z shallow is primary…\n\nPlay is ready to go.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
+  });
+
+  it("flags 'Notes now reflect/describe/cover/explain/capture' family", () => {
+    for (const verb of ["reflect", "describe", "cover", "explain", "capture", "reference", "outline", "spell out", "walk through"]) {
+      const result = validateDiagrams({
+        text: `Done. Notes now ${verb} the new progression.`,
+        variant: "tackle_11",
+        lastPlaceDefense: null,
+        writeToolsCalledOk: [],
+      });
+      expect(result.ok, `verb="${verb}" should flag`).toBe(false);
+      expect(result.errors.some((e) => e.includes("update_play_notes")), `verb="${verb}" should reference update_play_notes`).toBe(true);
+    }
+  });
+
+  it("passes the same broadened phrasings when update_play_notes WAS called", () => {
+    const result = validateDiagrams({
+      text: "Saved to Spread Bender. Notes now frame it as a mesh concept.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: ["update_play_notes"],
+    });
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("validateDiagrams — bare prose-mention exemption", () => {

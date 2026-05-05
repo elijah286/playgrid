@@ -355,6 +355,14 @@ const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
     // actually called the tool — DB notes stayed wrong, refresh didn't
     // help. Patterns target the explicit success-claim phrasings, not
     // generic "I'd update the notes if you'd like" suggestions.
+    //
+    // 2026-05-05: Cal evaded the original regex set by leading with
+    // "Saved to <PlayName>." and using verbs not in the list ("Notes
+    // now frame...", "Notes now break down..."). Coach surfaced two
+    // examples (Spread Bender, Skiddadle) where the chat said save
+    // succeeded but the play.notes column still had pre-edit text.
+    // Broadened the verb list and added a "Saved to X. Notes..."
+    // preamble pattern.
     tool: "update_play_notes",
     patterns: [
       /\bnotes\s+(?:are\s+|have\s+been\s+|now\s+)?(?:fixed|updated|saved|corrected|rewritten)\b/i,
@@ -362,6 +370,9 @@ const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
       /\b(?:fixed|updated|saved|corrected)!\s*(?:the\s+)?notes\b/i,
       /\bI('?ve|'?ll)?\s+(?:just\s+|now\s+)?(?:fixed|updated|saved|rewrote|wrote|corrected)\s+(?:the\s+|your\s+)?notes\b/i,
       /\bnotes\s+now\s+match\b/i,
+      /\bnotes\s+now\s+(?:frame|reflect|describe|break\s+down|cover|explain|capture|specify|list|spell\s+out|outline|reference|present|map\s+out|read|walk\s+through|lay\s+out|address|characterize|articulate|communicate|spell\s+it\s+out)\b/i,
+      /\bsaved\s+to\s+\*{0,2}["']?[A-Z][\w'\s-]{1,40}["']?\*{0,2}\.\s*\n?\s*\*{0,2}(?:Notes|The\s+(?:play\s+)?notes|Updated\s+notes|New\s+notes)\b/i,
+      /\b(?:I'?ve\s+|I\s+)?(?:locked\s+in|finalized|saved\s+down|put\s+in|committed)\s+(?:the\s+|your\s+)?(?:new\s+|updated\s+|fixed\s+|rewritten\s+)?notes\b/i,
     ],
   },
   {
