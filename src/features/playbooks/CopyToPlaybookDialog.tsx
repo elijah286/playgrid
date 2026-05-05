@@ -20,6 +20,11 @@ export type CopyTarget =
       sourceFormationName: string | null;
     }
   | {
+      kind: "plays";
+      playIds: string[];
+      anyHasFormation: boolean;
+    }
+  | {
       kind: "formation";
       formationId: string;
       formationName: string;
@@ -129,7 +134,7 @@ export function CopyToPlaybookDialog({
   // while in "pick" mode). `loadingDestFormations` is derived — true whenever
   // we need a fetch but `destFormationsFor` hasn't caught up yet.
   const needsDestFormationFetch =
-    target.kind === "play" &&
+    (target.kind === "play" || target.kind === "plays") &&
     !destinationIsCurrent &&
     formationMode === "pick" &&
     destFormationsFor !== destinationId;
@@ -200,54 +205,108 @@ export function CopyToPlaybookDialog({
         return;
       }
 
-      // Play
+      // Play(s)
       // Same playbook: link to the existing formation (no deep-clone).
-      // Cross-playbook: user picks copy/unlink/pick in the dialog.
+      // Cross-playbook: user picks copy/unlink/pick in the dialog. Bulk
+      // applies the same formation mode to every selected play and loops
+      // — failures abort early so a play-cap miss doesn't half-finish.
       const mode: CopyPlayFormationMode = destinationIsCurrent ? "link" : formationMode;
-      const res = await copyPlayAction({
-        playId: target.playId,
-        destinationPlaybookId: destinationId,
-        formationMode: mode,
-        destinationFormationId: mode === "pick" ? destFormationId : undefined,
-      });
-      if (!res.ok) {
-        if (onPlayCapHit && /Free tier|capped at/i.test(res.error)) {
+      const playIds = target.kind === "plays" ? target.playIds : [target.playId];
+      let copiedCount = 0;
+      let totalDropped = 0;
+      let anyFormationRenamed = false;
+      let lastFormationNewName: string | null = null;
+      let lastNewPlayId: string | undefined;
+      let failError: string | null = null;
+      for (const pid of playIds) {
+        const res = await copyPlayAction({
+          playId: pid,
+          destinationPlaybookId: destinationId,
+          formationMode: mode,
+          destinationFormationId: mode === "pick" ? destFormationId : undefined,
+        });
+        if (!res.ok) {
+          failError = res.error;
+          break;
+        }
+        copiedCount++;
+        totalDropped += res.droppedRouteCount;
+        if (res.formationRenamed) {
+          anyFormationRenamed = true;
+          if (res.formationNewName) lastFormationNewName = res.formationNewName;
+        }
+        lastNewPlayId = res.playId;
+      }
+      if (failError) {
+        if (onPlayCapHit && /Free tier|capped at/i.test(failError)) {
           onClose();
-          onPlayCapHit(res.error);
+          onPlayCapHit(failError);
         } else {
-          toast?.(res.error, "error");
+          toast?.(
+            copiedCount > 0
+              ? `Copied ${copiedCount} of ${playIds.length}, then stopped: ${failError}`
+              : failError,
+            "error",
+          );
         }
         return;
       }
+      const isBulk = target.kind === "plays";
       const parts: string[] = [];
-      if (destinationIsCurrent) parts.push("Play duplicated.");
-      else parts.push(`Copied to "${destinationPlaybook?.name}".`);
-      if (res.droppedRouteCount > 0) {
-        parts.push(`${res.droppedRouteCount} route${res.droppedRouteCount === 1 ? "" : "s"} dropped (no matching label in destination formation).`);
+      if (destinationIsCurrent) {
+        parts.push(
+          isBulk
+            ? `${copiedCount} ${copiedCount === 1 ? "play" : "plays"} duplicated.`
+            : "Play duplicated.",
+        );
+      } else {
+        parts.push(
+          isBulk
+            ? `Copied ${copiedCount} ${copiedCount === 1 ? "play" : "plays"} to "${destinationPlaybook?.name}".`
+            : `Copied to "${destinationPlaybook?.name}".`,
+        );
       }
-      if (res.formationRenamed && res.formationNewName) {
-        parts.push(`Formation saved as "${res.formationNewName}" (name already existed).`);
+      if (totalDropped > 0) {
+        parts.push(`${totalDropped} route${totalDropped === 1 ? "" : "s"} dropped (no matching label in destination formation).`);
+      }
+      if (anyFormationRenamed && lastFormationNewName) {
+        parts.push(
+          isBulk
+            ? `Some formations were saved with a numeric suffix (names already existed).`
+            : `Formation saved as "${lastFormationNewName}" (name already existed).`,
+        );
       }
       toast?.(parts.join(" "), "success");
       onCopied({
-        playbookId: res.playbookId,
-        playId: res.playId,
-        droppedRouteCount: res.droppedRouteCount,
-        formationRenamed: res.formationRenamed,
+        playbookId: destinationId,
+        // Single-play: hand back the new id so the parent can jump to /edit.
+        // Bulk: omit so the parent refreshes the list instead.
+        playId: isBulk ? undefined : lastNewPlayId,
+        droppedRouteCount: totalDropped,
+        formationRenamed: anyFormationRenamed,
       });
       onClose();
     });
   }
 
   const showFormationMode =
-    target.kind === "play" && !destinationIsCurrent && target.hasFormation;
+    !destinationIsCurrent &&
+    ((target.kind === "play" && target.hasFormation) ||
+      (target.kind === "plays" && target.anyHasFormation));
 
   const pickDisabledReason =
-    target.kind === "play" && formationMode === "pick" && !destFormationId
+    (target.kind === "play" || target.kind === "plays") &&
+    formationMode === "pick" &&
+    !destFormationId
       ? "Pick a destination formation."
       : null;
 
-  const title = target.kind === "play" ? "Copy play" : "Copy formation";
+  const title =
+    target.kind === "formation"
+      ? "Copy formation"
+      : target.kind === "plays"
+        ? `Copy ${target.playIds.length} ${target.playIds.length === 1 ? "play" : "plays"}`
+        : "Copy play";
 
   return (
     <Modal
@@ -271,11 +330,23 @@ export function CopyToPlaybookDialog({
     >
       <div className="flex flex-col gap-3 text-sm">
         <div className="text-muted">
-          Copying{" "}
-          <span className="font-medium text-foreground">
-            {target.kind === "play" ? target.playName : target.formationName}
-          </span>
-          .
+          {target.kind === "plays" ? (
+            <>
+              Copying{" "}
+              <span className="font-medium text-foreground">
+                {target.playIds.length} {target.playIds.length === 1 ? "play" : "plays"}
+              </span>
+              .
+            </>
+          ) : (
+            <>
+              Copying{" "}
+              <span className="font-medium text-foreground">
+                {target.kind === "play" ? target.playName : target.formationName}
+              </span>
+              .
+            </>
+          )}
         </div>
 
         <fieldset className="flex flex-col gap-1.5">
@@ -365,12 +436,23 @@ export function CopyToPlaybookDialog({
               <span className="flex flex-col">
                 <span className="text-sm text-foreground">Copy formation</span>
                 <span className="text-xs text-muted">
-                  Deep-clones{" "}
-                  <span className="font-medium text-foreground">
-                    {target.kind === "play" ? target.sourceFormationName ?? "the formation" : ""}
-                  </span>{" "}
-                  into the destination. If a formation with that name already
-                  exists, the copy is saved with a numeric suffix.
+                  {target.kind === "plays" ? (
+                    <>
+                      Deep-clones each play&rsquo;s source formation into the
+                      destination. Duplicates are saved with a numeric suffix.
+                    </>
+                  ) : (
+                    <>
+                      Deep-clones{" "}
+                      <span className="font-medium text-foreground">
+                        {target.kind === "play"
+                          ? target.sourceFormationName ?? "the formation"
+                          : ""}
+                      </span>{" "}
+                      into the destination. If a formation with that name
+                      already exists, the copy is saved with a numeric suffix.
+                    </>
+                  )}
                 </span>
               </span>
             </label>

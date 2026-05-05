@@ -2137,110 +2137,200 @@ function PlaybookDetailClientInner({
 
       {selectionMode && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-border bg-surface-raised px-4 py-2 shadow-elevated sm:gap-3 sm:rounded-full">
-            <span className="text-sm font-medium text-foreground">
-              {selectedPlayIds.size} selected
-            </span>
-            <button
-              type="button"
-              className="text-xs font-medium text-primary hover:underline"
-              onClick={() => {
-                const allVisible = new Set(filtered.map((p) => p.id));
-                const allOn = filtered.every((p) => selectedPlayIds.has(p.id));
-                setSelectedPlayIds((prev) => {
-                  const next = new Set(prev);
-                  if (allOn) {
-                    for (const id of allVisible) next.delete(id);
-                  } else {
-                    for (const id of allVisible) next.add(id);
-                  }
-                  return next;
-                });
-              }}
-            >
-              {filtered.every((p) => selectedPlayIds.has(p.id)) && filtered.length > 0
-                ? "Clear visible"
-                : "Select all visible"}
-            </button>
-            <button
-              type="button"
-              className="text-xs font-medium text-muted hover:text-foreground"
-              onClick={() => {
-                setSelectionMode(false);
-                setSelectedPlayIds(new Set());
-              }}
-            >
-              Cancel
-            </button>
-            {!isViewer && (
+          {/*
+            The pill grows as the action set grows. Layout strategy:
+              - Mobile (< sm): stack into two rows. Top = status / select-all
+                / cancel; bottom = action buttons (icon-only secondary
+                actions, full-text Print). Square pill (rounded-2xl).
+              - Desktop (sm+): single row with a vertical separator between
+                status and actions. Full labels return on every button.
+                Capsule pill (rounded-full).
+            Either row may flex-wrap if the viewport is narrower than its
+            content — the outer container's max-w-full + flex-wrap at every
+            level keeps content from overflowing the screen edge.
+          */}
+          <div className="pointer-events-auto flex max-w-full flex-col items-stretch gap-2 rounded-2xl border border-border bg-surface-raised px-4 py-2 shadow-elevated sm:flex-row sm:items-center sm:gap-3 sm:rounded-full">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span className="text-sm font-medium text-foreground">
+                {selectedPlayIds.size} selected
+              </span>
+              <button
+                type="button"
+                className="text-xs font-medium text-primary hover:underline"
+                onClick={() => {
+                  const allVisible = new Set(filtered.map((p) => p.id));
+                  const allOn = filtered.every((p) => selectedPlayIds.has(p.id));
+                  setSelectedPlayIds((prev) => {
+                    const next = new Set(prev);
+                    if (allOn) {
+                      for (const id of allVisible) next.delete(id);
+                    } else {
+                      for (const id of allVisible) next.add(id);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {filtered.every((p) => selectedPlayIds.has(p.id)) && filtered.length > 0
+                  ? "Clear visible"
+                  : "Select all visible"}
+              </button>
+              <button
+                type="button"
+                className="text-xs font-medium text-muted hover:text-foreground"
+                onClick={() => {
+                  setSelectionMode(false);
+                  setSelectedPlayIds(new Set());
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            <span aria-hidden className="hidden h-6 w-px shrink-0 bg-border sm:block" />
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+              {!isViewer && (
+                <Button
+                  variant="ghost"
+                  leftIcon={view === "archived" ? ArchiveRestore : Archive}
+                  aria-label={view === "archived" ? "Restore" : "Archive"}
+                  title={view === "archived" ? "Restore" : "Archive"}
+                  disabled={selectedPlayIds.size === 0}
+                  onClick={() => {
+                    const ids = Array.from(selectedPlayIds);
+                    const archiving = view !== "archived";
+                    handle(
+                      async () => {
+                        for (const id of ids) {
+                          const res = await archivePlayAction(id, archiving);
+                          if (!res.ok) return res;
+                        }
+                        return { ok: true as const };
+                      },
+                      () => {
+                        toast(
+                          `${ids.length} ${ids.length === 1 ? "play" : "plays"} ${archiving ? "archived" : "restored"}.`,
+                          "success",
+                        );
+                        setSelectionMode(false);
+                        setSelectedPlayIds(new Set());
+                      },
+                    );
+                  }}
+                >
+                  <span className="hidden sm:inline">
+                    {view === "archived" ? "Restore" : "Archive"}
+                  </span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
-                leftIcon={view === "archived" ? ArchiveRestore : Archive}
+                leftIcon={Copy}
+                aria-label="Copy"
+                title="Copy"
                 disabled={selectedPlayIds.size === 0}
                 onClick={() => {
                   const ids = Array.from(selectedPlayIds);
-                  const archiving = view !== "archived";
-                  handle(
-                    async () => {
-                      for (const id of ids) {
-                        const res = await archivePlayAction(id, archiving);
-                        if (!res.ok) return res;
+                  // For a single play, fall back to the play-specific copy
+                  // dialog so the destination heading and formation copy
+                  // still name the play instead of saying "1 play".
+                  if (ids.length === 1) {
+                    const p = localPlays.find((pp) => pp.id === ids[0]);
+                    if (p) {
+                      setCopyTarget({
+                        kind: "play",
+                        playId: p.id,
+                        playName: p.name,
+                        hasFormation: !!p.formation_name,
+                        sourceFormationName: p.formation_name,
+                      });
+                      return;
+                    }
+                  }
+                  const idSet = new Set(ids);
+                  const anyHasFormation = localPlays.some(
+                    (p) => idSet.has(p.id) && !!p.formation_name,
+                  );
+                  setCopyTarget({
+                    kind: "plays",
+                    playIds: ids,
+                    anyHasFormation,
+                  });
+                }}
+              >
+                <span className="hidden sm:inline">Copy</span>
+              </Button>
+              {!isViewer && (
+                <Button
+                  variant="ghost"
+                  leftIcon={FolderInput}
+                  aria-label="Move to group"
+                  title="Move to group"
+                  disabled={selectedPlayIds.size === 0}
+                  onClick={() => {
+                    const ids = Array.from(selectedPlayIds);
+                    if (ids.length === 1) {
+                      const p = localPlays.find((pp) => pp.id === ids[0]);
+                      if (p) {
+                        setMoveTarget({
+                          playId: p.id,
+                          playName: p.name,
+                          currentGroupId: p.group_id ?? null,
+                        });
+                        return;
                       }
-                      return { ok: true as const };
-                    },
-                    () => {
+                    }
+                    setMoveTarget({ kind: "bulk", playIds: ids });
+                  }}
+                >
+                  <span className="hidden sm:inline">Move</span>
+                </Button>
+              )}
+              {!isViewer && (
+                <Button
+                  variant="ghost"
+                  leftIcon={Trash2}
+                  aria-label="Delete"
+                  title="Delete"
+                  disabled={selectedPlayIds.size === 0}
+                  onClick={() => {
+                    const ids = Array.from(selectedPlayIds);
+                    const n = ids.length;
+                    if (
+                      !window.confirm(
+                        `Delete ${n} ${n === 1 ? "play" : "plays"}? This can't be undone.`,
+                      )
+                    )
+                      return;
+                    handleDeletePlays(ids, () => {
                       toast(
-                        `${ids.length} ${ids.length === 1 ? "play" : "plays"} ${archiving ? "archived" : "restored"}.`,
+                        `${n} ${n === 1 ? "play" : "plays"} deleted.`,
                         "success",
                       );
                       setSelectionMode(false);
                       setSelectedPlayIds(new Set());
-                    },
-                  );
-                }}
-              >
-                {view === "archived" ? "Restore" : "Archive"}
-              </Button>
-            )}
-            {!isViewer && (
+                    });
+                  }}
+                  className="text-danger hover:text-danger"
+                >
+                  <span className="hidden sm:inline">Delete</span>
+                </Button>
+              )}
               <Button
-                variant="ghost"
-                leftIcon={Trash2}
+                variant="primary"
+                leftIcon={Printer}
                 disabled={selectedPlayIds.size === 0}
                 onClick={() => {
-                  const ids = Array.from(selectedPlayIds);
-                  const n = ids.length;
-                  if (
-                    !window.confirm(
-                      `Delete ${n} ${n === 1 ? "play" : "plays"}? This can't be undone.`,
-                    )
-                  )
-                    return;
-                  handleDeletePlays(ids, () => {
-                    toast(
-                      `${n} ${n === 1 ? "play" : "plays"} deleted.`,
-                      "success",
-                    );
-                    setSelectionMode(false);
-                    setSelectedPlayIds(new Set());
-                  });
+                  const ids = Array.from(selectedPlayIds).join(",");
+                  router.push(`/playbooks/${playbookId}/print?plays=${ids}`);
                 }}
-                className="text-danger hover:text-danger"
               >
-                Delete
+                Print {selectedPlayIds.size}
+                <span className="hidden sm:inline">
+                  {" "}
+                  {selectedPlayIds.size === 1 ? "play" : "plays"}
+                </span>
               </Button>
-            )}
-            <Button
-              variant="primary"
-              leftIcon={Printer}
-              disabled={selectedPlayIds.size === 0}
-              onClick={() => {
-                const ids = Array.from(selectedPlayIds).join(",");
-                router.push(`/playbooks/${playbookId}/print?plays=${ids}`);
-              }}
-            >
-              Print {selectedPlayIds.size} {selectedPlayIds.size === 1 ? "play" : "plays"}
-            </Button>
+            </div>
           </div>
         </div>
       )}

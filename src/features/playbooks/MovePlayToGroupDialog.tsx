@@ -5,21 +5,28 @@ import { Check, FolderInput, Inbox } from "lucide-react";
 import { Modal } from "@/components/ui";
 import { setPlayGroupAction } from "@/app/actions/plays";
 
-export type MovePlayToGroupTarget = {
-  playId: string;
-  playName: string;
-  currentGroupId: string | null;
-};
+export type MovePlayToGroupTarget =
+  | {
+      kind?: "single";
+      playId: string;
+      playName: string;
+      currentGroupId: string | null;
+    }
+  | {
+      kind: "bulk";
+      playIds: string[];
+    };
 
 /**
- * Picker dialog used by the play card menu (playbook detail) and the play
- * editor's overflow menu to move a play between groups. Same component on
- * both surfaces so the affordance reads identically. The caller passes the
- * full group list it already has in state — no extra fetch.
+ * Picker dialog used by the play card menu (playbook detail), the play
+ * editor's overflow menu, and the playbook bulk-selection toolbar to move
+ * plays between groups. Same component on every surface so the affordance
+ * reads identically. The caller passes the full group list it already has
+ * in state — no extra fetch.
  *
- * On confirmation, calls setPlayGroupAction and invokes onMoved with the
- * resolved group id (or null for ungrouped) so the parent can refresh its
- * own state without a roundtrip.
+ * On confirmation, runs setPlayGroupAction (looped for the bulk variant)
+ * and invokes onMoved with the resolved group id (or null for ungrouped)
+ * so the parent can refresh its own state without a roundtrip.
  */
 export function MovePlayToGroupDialog({
   target,
@@ -38,19 +45,32 @@ export function MovePlayToGroupDialog({
 
   if (!target) return null;
 
+  const isBulk = target.kind === "bulk";
+  const playIds = isBulk ? target.playIds : [target.playId];
+  const currentGroupId = isBulk ? null : target.currentGroupId;
+  const title = isBulk
+    ? `Move ${playIds.length} ${playIds.length === 1 ? "play" : "plays"} to group`
+    : `Move "${target.playName}" to group`;
+  const ungroupedHint = isBulk
+    ? "Remove the selected plays from any group"
+    : "Remove this play from any group";
+
   async function pick(groupId: string | null) {
     if (!target) return;
-    if (groupId === target.currentGroupId) {
+    if (!isBulk && groupId === currentGroupId) {
       onClose();
       return;
     }
     setPendingId(groupId ?? "__none__");
-    const res = await setPlayGroupAction(target.playId, groupId);
-    setPendingId(null);
-    if (!res.ok) {
-      onError?.(res.error);
-      return;
+    for (const id of playIds) {
+      const res = await setPlayGroupAction(id, groupId);
+      if (!res.ok) {
+        setPendingId(null);
+        onError?.(res.error);
+        return;
+      }
     }
+    setPendingId(null);
     onMoved(groupId);
     onClose();
   }
@@ -58,7 +78,7 @@ export function MovePlayToGroupDialog({
   const empty = groups.length === 0;
 
   return (
-    <Modal open onClose={onClose} title={`Move "${target.playName}" to group`}>
+    <Modal open onClose={onClose} title={title}>
       {empty ? (
         <p className="text-sm text-muted">
           This playbook doesn&rsquo;t have any groups yet. Create one from the
@@ -70,8 +90,8 @@ export function MovePlayToGroupDialog({
             <GroupRow
               icon={Inbox}
               label="Ungrouped"
-              hint="Remove this play from any group"
-              selected={target.currentGroupId === null}
+              hint={ungroupedHint}
+              selected={!isBulk && currentGroupId === null}
               pending={pendingId === "__none__"}
               onSelect={() => void pick(null)}
             />
@@ -82,7 +102,7 @@ export function MovePlayToGroupDialog({
               <GroupRow
                 icon={FolderInput}
                 label={g.name}
-                selected={target.currentGroupId === g.id}
+                selected={!isBulk && currentGroupId === g.id}
                 pending={pendingId === g.id}
                 onSelect={() => void pick(g.id)}
               />

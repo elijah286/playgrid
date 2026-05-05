@@ -96,6 +96,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-04",
   },
+  {
+    id: "playbook-bulk-copy-and-move",
+    name: "Bulk copy and move-to-group from the playbook",
+    description:
+      "The bulk-selection toolbar now has Copy and Move alongside Archive, Delete, and Print. Copy reuses the same dialog as the single-play action — including cross-playbook copy with formation handling (deep-clone, drop, or pick a destination formation) — and runs once per selected play. Move-to-group reassigns every selected play to the chosen group (or Ungrouped) in one pass. On phones, the secondary actions collapse to icon-only buttons inside a two-row pill so all five actions still fit comfortably; full labels return on tablet and desktop.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-05-05",
+  },
 
   // ── Plays & formations ──────────────────────────────────────────
   {
