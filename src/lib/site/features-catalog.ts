@@ -87,6 +87,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-01",
   },
+  {
+    id: "playbook-bulk-select-group-and-shift",
+    name: "Group select-all and shift-click range in the play list",
+    description:
+      "When a coach taps Select on the playbook, every group header (e.g. \"Mesh Split\", \"Ungrouped\", \"Offense\") now shows its own checkbox that bulk-toggles every play under that header — empty/partial/all states with an indeterminate dash for partial. Shift-click on a play card or list-row checkbox extends the selection from the last-clicked play through the clicked one in visual order, mirroring Finder/Explorer behavior. Cuts the click count for common bulk actions (print a group, archive a section, delete legacy plays) from one-per-play to one-per-group.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-05-04",
+  },
 
   // ── Plays & formations ──────────────────────────────────────────
   {

@@ -65,6 +65,7 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Minus,
   Pencil,
   Plus,
   Printer,
@@ -488,6 +489,10 @@ function PlaybookDetailClientInner({
   const [selectedPlayIds, setSelectedPlayIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Anchor for shift-click range selection. Set on every plain click; a
+  // subsequent shift-click selects the full range from this anchor to the
+  // clicked play (in visual order across sections).
+  const lastClickedPlayIdRef = useRef<string | null>(null);
   // Transient UX for typed-number renumber: lock interaction while tiles
   // glide to their new positions, then flash a ring on the moved play so
   // the user can see what changed. Drag reorders skip this — the drag
@@ -635,6 +640,63 @@ function PlaybookDetailClientInner({
     }
     return m;
   }, [sections]);
+
+  // Flat, in-render-order list of all visible play ids. Drives shift-click
+  // range selection — the range follows what the user sees on screen, not
+  // the underlying play sort_order.
+  const orderedVisiblePlayIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const s of sections) for (const p of s.plays) ids.push(p.id);
+    return ids;
+  }, [sections]);
+
+  function togglePlaySelection(playId: string, shiftKey: boolean) {
+    setSelectedPlayIds((prev) => {
+      const next = new Set(prev);
+      const anchor = lastClickedPlayIdRef.current;
+      if (shiftKey && anchor && anchor !== playId) {
+        const i = orderedVisiblePlayIds.indexOf(anchor);
+        const j = orderedVisiblePlayIds.indexOf(playId);
+        if (i !== -1 && j !== -1) {
+          const [start, end] = i < j ? [i, j] : [j, i];
+          // Range-select adds; it never deselects. Matches Finder/Explorer.
+          for (let k = start; k <= end; k++) next.add(orderedVisiblePlayIds[k]);
+          lastClickedPlayIdRef.current = playId;
+          return next;
+        }
+      }
+      if (next.has(playId)) next.delete(playId);
+      else next.add(playId);
+      lastClickedPlayIdRef.current = playId;
+      return next;
+    });
+  }
+
+  function toggleSectionSelection(section: Section) {
+    if (section.plays.length === 0) return;
+    const ids = section.plays.map((p) => p.id);
+    const allOn = ids.every((id) => selectedPlayIds.has(id));
+    setSelectedPlayIds((prev) => {
+      const next = new Set(prev);
+      if (allOn) for (const id of ids) next.delete(id);
+      else for (const id of ids) next.add(id);
+      return next;
+    });
+    // Anchor the next shift-click on the section's first play so users can
+    // extend a section selection in the natural direction.
+    lastClickedPlayIdRef.current = ids[0] ?? null;
+  }
+
+  function sectionSelectionState(
+    section: Section,
+  ): "none" | "partial" | "all" {
+    if (section.plays.length === 0) return "none";
+    let on = 0;
+    for (const p of section.plays) if (selectedPlayIds.has(p.id)) on++;
+    if (on === 0) return "none";
+    if (on === section.plays.length) return "all";
+    return "partial";
+  }
 
   // Close the filters popover on outside click or Escape.
   useEffect(() => {
@@ -1786,6 +1848,25 @@ function PlaybookDetailClientInner({
                 } ${reorderMode && isOver && isDropTarget ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
               >
                 <div className="flex items-center gap-2 border-b border-border pb-2">
+                  {selectionMode && section.plays.length > 0 && (() => {
+                    const state = sectionSelectionState(section);
+                    const label =
+                      state === "all"
+                        ? `Deselect all in ${section.label}`
+                        : `Select all in ${section.label}`;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => toggleSectionSelection(section)}
+                        aria-label={label}
+                        title={label}
+                        className="flex size-5 shrink-0 items-center justify-center rounded border-2 border-primary bg-surface-raised hover:bg-primary/10"
+                      >
+                        {state === "all" && <Check className="size-3.5 text-primary" />}
+                        {state === "partial" && <Minus className="size-3.5 text-primary" />}
+                      </button>
+                    );
+                  })()}
                   <h2 className="truncate text-base font-bold text-foreground">{section.label}</h2>
                   <Badge variant="default">{section.plays.length}</Badge>
                 </div>
@@ -1815,12 +1896,7 @@ function PlaybookDetailClientInner({
                           selectionMode
                             ? (e) => {
                                 e.preventDefault();
-                                setSelectedPlayIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(p.id)) next.delete(p.id);
-                                  else next.add(p.id);
-                                  return next;
-                                });
+                                togglePlaySelection(p.id, e.shiftKey);
                               }
                             : undefined
                         }
@@ -1936,14 +2012,7 @@ function PlaybookDetailClientInner({
                           <button
                             type="button"
                             className="flex size-5 items-center justify-center rounded border-2 border-primary bg-surface-raised"
-                            onClick={() =>
-                              setSelectedPlayIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(p.id)) next.delete(p.id);
-                                else next.add(p.id);
-                                return next;
-                              })
-                            }
+                            onClick={(e) => togglePlaySelection(p.id, e.shiftKey)}
                             aria-label={isSelected ? "Deselect" : "Select"}
                           >
                             {isSelected && <Check className="size-3.5 text-primary" />}
