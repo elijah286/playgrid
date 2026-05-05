@@ -34,11 +34,15 @@ type Props = {
   config: PlaybookPrintRunConfig;
   onChange: (next: PlaybookPrintRunConfig) => void;
   /**
-   * Which subset of controls to render. "layout" = structural (product,
-   * columns, orientation, grouping, sizes). "visuals" = look (icons, route
-   * weight, labels, colors, LOS/yard markers). "all" (default) = everything.
+   * Which subset of controls to render.
+   * - "layout"  = page-level structure: columns, orientation, header/footer.
+   * - "visuals" = appearance of each play tile: icons, routes, borders.
+   * - "labels"  = on-tile labels (number/formation/name) + label sizes.
+   * - "notes"   = the per-play notes block (visibility, line count, font).
+   * - "text"    = "labels" + "notes" combined (legacy alias).
+   * - "all"     = everything (legacy alias).
    */
-  section?: "layout" | "visuals" | "text" | "all";
+  section?: "layout" | "visuals" | "labels" | "notes" | "text" | "all";
   /** When false, render the Wristband segment with a lock indicator. */
   canUseWristbands?: boolean;
   /**
@@ -47,6 +51,12 @@ type Props = {
    * to avoid duplicating that control. Default false (legacy behavior).
    */
   hideProductPicker?: boolean;
+  /**
+   * When true, the panel doesn't render its own Card-style chrome (border /
+   * background / padding). Used by the redesigned Customize panel which
+   * already wraps each section in a <details> collapsible.
+   */
+  embedded?: boolean;
 };
 
 function LabelToggles({
@@ -170,17 +180,22 @@ function LabelSettings({
   );
 }
 
-export function PlaybookPrintRunControls({ config, onChange, section = "all", canUseWristbands = true, hideProductPicker = false }: Props) {
+export function PlaybookPrintRunControls({ config, onChange, section = "all", canUseWristbands = true, hideProductPicker = false, embedded = false }: Props) {
   function patch(partial: Partial<PlaybookPrintRunConfig>) {
     onChange({ ...config, ...partial });
   }
 
   const showLayout = section === "all" || section === "layout";
   const showVisuals = section === "all" || section === "visuals";
-  const showText = section === "all" || section === "text";
+  const showLabels = section === "all" || section === "text" || section === "labels";
+  const showNotes = section === "all" || section === "text" || section === "notes";
+
+  const wrapperClass = embedded
+    ? "space-y-4"
+    : "space-y-4 rounded-xl border border-border bg-surface-raised p-4";
 
   return (
-    <div className="space-y-4 rounded-xl border border-border bg-surface-raised p-4">
+    <div className={wrapperClass}>
       {showLayout && !hideProductPicker && (
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -471,7 +486,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
             </>
           )}
 
-          {showText && (
+          {showLabels && (
             <div className="space-y-3">
               <LabelToggles
                 value={config.playsheetLabels}
@@ -563,66 +578,65 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                 />
                 Show player letters
               </label>
+            </div>
+          )}
 
-              <div className="space-y-2 rounded-md border border-border/60 p-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                  Play notes
-                </p>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={config.playsheetShowNotes}
-                    onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
-                  />
-                  Show notes under plays
-                </label>
-                {config.playsheetShowNotes && (
-                  <>
-                    <label className="flex flex-col gap-1 text-sm">
-                      <span className="text-muted">
-                        Notes area · {Math.round(config.playsheetNoteLines)} {Math.round(config.playsheetNoteLines) === 1 ? "line" : "lines"}
-                      </span>
-                      <input
-                        type="range"
-                        min={PLAYSHEET_NOTE_LINES_MIN}
-                        max={PLAYSHEET_NOTE_LINES_MAX}
-                        step={1}
-                        value={Math.round(config.playsheetNoteLines)}
-                        onChange={(e) =>
-                          patch({ playsheetNoteLines: Number(e.target.value) })
-                        }
-                        className="accent-primary"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1 text-sm">
-                      <span className="text-muted">
-                        Notes font size · {Math.round(config.playsheetNoteFontSize * 100)}%
-                      </span>
-                      <input
-                        type="range"
-                        min={50}
-                        max={250}
-                        step={5}
-                        value={Math.round(config.playsheetNoteFontSize * 100)}
-                        onChange={(e) =>
-                          patch({ playsheetNoteFontSize: Number(e.target.value) / 100 })
-                        }
-                        className="accent-primary"
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-primary"
-                        checked={config.playsheetNoteVisualPlayers}
-                        onChange={(e) => patch({ playsheetNoteVisualPlayers: e.target.checked })}
-                      />
-                      Use visual player references
-                    </label>
-                  </>
-                )}
-              </div>
+          {showNotes && (
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={config.playsheetShowNotes}
+                  onChange={(e) => patch({ playsheetShowNotes: e.target.checked })}
+                />
+                Show notes under plays
+              </label>
+              {config.playsheetShowNotes && (
+                <>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-muted">
+                      Notes area · {Math.round(config.playsheetNoteLines)} {Math.round(config.playsheetNoteLines) === 1 ? "line" : "lines"}
+                    </span>
+                    <input
+                      type="range"
+                      min={PLAYSHEET_NOTE_LINES_MIN}
+                      max={PLAYSHEET_NOTE_LINES_MAX}
+                      step={1}
+                      value={Math.round(config.playsheetNoteLines)}
+                      onChange={(e) =>
+                        patch({ playsheetNoteLines: Number(e.target.value) })
+                      }
+                      className="accent-primary"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-muted">
+                      Notes font size · {Math.round(config.playsheetNoteFontSize * 100)}%
+                    </span>
+                    <input
+                      type="range"
+                      min={50}
+                      max={250}
+                      step={5}
+                      value={Math.round(config.playsheetNoteFontSize * 100)}
+                      onChange={(e) =>
+                        patch({ playsheetNoteFontSize: Number(e.target.value) / 100 })
+                      }
+                      className="accent-primary"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={config.playsheetNoteVisualPlayers}
+                      onChange={(e) => patch({ playsheetNoteVisualPlayers: e.target.checked })}
+                    />
+                    Use visual player references
+                  </label>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -846,7 +860,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
             </>
           )}
 
-          {showText && (
+          {showLabels && (
             <div className="space-y-3">
               <LabelToggles
                 value={config.wristbandLabels}

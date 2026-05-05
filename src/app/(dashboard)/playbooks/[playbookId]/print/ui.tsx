@@ -1683,6 +1683,35 @@ function PresetRow({
 
 // ── Customize panel ──────────────────────────────────────────────────
 
+/**
+ * Renders one collapsible group inside the Customize panel. Visually a thin
+ * row with a chevron-style summary; the children render below when open.
+ * Native `<details>` keeps state in the DOM with no React re-renders, which
+ * keeps this panel cheap even with 25+ controls hiding behind it.
+ */
+function CustomizeGroup({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group rounded-lg border border-border bg-surface-raised [&[open]>summary>svg]:rotate-90"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground hover:bg-surface-inset">
+        <ChevronRight className="size-3.5 text-muted transition-transform" aria-hidden />
+        {title}
+      </summary>
+      <div className="space-y-3 border-t border-border px-3 py-3">{children}</div>
+    </details>
+  );
+}
+
 function CustomizePanel({
   config,
   setConfig,
@@ -1697,25 +1726,54 @@ function CustomizePanel({
   logoUrl: string | null;
 }) {
   return (
-    <div className="space-y-4">
-      <PlaybookPrintRunControls
-        config={config}
-        onChange={setConfig}
-        section="layout"
-        canUseWristbands={canUseWristbands}
-        hideProductPicker
-      />
-      <PlaybookPrintRunControls
-        config={config}
-        onChange={setConfig}
-        section="visuals"
-        canUseWristbands={canUseWristbands}
-        hideProductPicker
-      />
-      <Card className="space-y-3 p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Watermark
-        </p>
+    <div className="space-y-2">
+      <CustomizeGroup title="Page setup" defaultOpen>
+        <PlaybookPrintRunControls
+          config={config}
+          onChange={setConfig}
+          section="layout"
+          canUseWristbands={canUseWristbands}
+          hideProductPicker
+          embedded
+        />
+      </CustomizeGroup>
+
+      <CustomizeGroup title="Style">
+        <PlaybookPrintRunControls
+          config={config}
+          onChange={setConfig}
+          section="visuals"
+          canUseWristbands={canUseWristbands}
+          hideProductPicker
+          embedded
+        />
+      </CustomizeGroup>
+
+      <CustomizeGroup title="Labels">
+        <PlaybookPrintRunControls
+          config={config}
+          onChange={setConfig}
+          section="labels"
+          canUseWristbands={canUseWristbands}
+          hideProductPicker
+          embedded
+        />
+      </CustomizeGroup>
+
+      {(config.product === "playsheet" || config.product === "playbook") && (
+        <CustomizeGroup title="Notes">
+          <PlaybookPrintRunControls
+            config={config}
+            onChange={setConfig}
+            section="notes"
+            canUseWristbands={canUseWristbands}
+            hideProductPicker
+            embedded
+          />
+        </CustomizeGroup>
+      )}
+
+      <CustomizeGroup title="Watermark">
         {!canRemovePlaysheetWatermark ? (
           <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-foreground">
@@ -1731,7 +1789,7 @@ function CustomizePanel({
             </Link>
           </div>
         ) : (
-          <>
+          <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -1783,16 +1841,9 @@ function CustomizePanel({
                 />
               </div>
             )}
-          </>
+          </div>
         )}
-      </Card>
-      <PlaybookPrintRunControls
-        config={config}
-        onChange={setConfig}
-        section="text"
-        canUseWristbands={canUseWristbands}
-        hideProductPicker
-      />
+      </CustomizeGroup>
     </div>
   );
 }
