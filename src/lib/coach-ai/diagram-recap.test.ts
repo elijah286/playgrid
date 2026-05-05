@@ -13,7 +13,7 @@ function diagram(overrides: Partial<CoachDiagram> = {}): CoachDiagram {
 }
 
 describe("recapCoachDiagram", () => {
-  it("emits one line per player with alignment", () => {
+  it("emits one line per player with alignment described in yards", () => {
     const out = recapCoachDiagram(
       diagram({
         players: [
@@ -22,8 +22,41 @@ describe("recapCoachDiagram", () => {
         ],
       }),
     );
-    expect(out).toMatch(/@Q .*offense.*x=0\.0, y=-4\.5/);
-    expect(out).toMatch(/@X .*offense.*x=5\.2, y=-4\.5/);
+    expect(out).toMatch(/@Q .*offense.*over the ball, 4\.5 yds in the backfield/);
+    expect(out).toMatch(/@X .*offense.*5\.2 yds right of center, 4\.5 yds in the backfield/);
+  });
+
+  it("never leaks raw x=/y= coordinate pairs into the recap", () => {
+    const out = recapCoachDiagram(
+      diagram({
+        players: [
+          { id: "Q", x: 0, y: -4.5, team: "O" },
+          { id: "X", x: 5.2, y: -4.5, team: "O" },
+          { id: "CB", x: -10, y: 1, team: "D" },
+        ],
+        routes: [{ from: "X", path: [[5, 12]], route_kind: "go" }],
+        zones: [{
+          kind: "rectangle",
+          center: [-5, 6],
+          size: [8, 6],
+          label: "hook",
+          ownerLabel: "WL",
+        }],
+      }),
+    );
+    // The recap is the source of leaked debug-style coords — it must not
+    // contain raw x=/y= notation anywhere. Cal mirrors what it sees.
+    expect(out).not.toMatch(/\bx\s*=/);
+    expect(out).not.toMatch(/\by\s*=/);
+  });
+
+  it("uses 'on the LOS' for y≈0 and 'over the ball' for x≈0", () => {
+    const out = recapCoachDiagram(
+      diagram({
+        players: [{ id: "C", x: 0, y: 0, team: "O" }],
+      }),
+    );
+    expect(out).toContain("over the ball, on the LOS");
   });
 
   it("flags players with no route assigned", () => {
@@ -43,7 +76,7 @@ describe("recapCoachDiagram", () => {
       }),
     );
     expect(out).toContain('route_kind="go"');
-    expect(out).toContain("path ends at x=5.0, y=12.0");
+    expect(out).toContain("path ends 5.0 yds right of center, 12.0 yds downfield");
   });
 
   it("explicitly notes when route_kind is missing — so Cal can't infer one from prior turns", () => {
@@ -54,7 +87,7 @@ describe("recapCoachDiagram", () => {
       }),
     );
     expect(out).toContain("no route_kind declared");
-    expect(out).toContain("path ends at x=5.0, y=10.8");
+    expect(out).toContain("path ends 5.0 yds right of center, 10.8 yds downfield");
   });
 
   it("annotates curved paths", () => {
@@ -68,7 +101,7 @@ describe("recapCoachDiagram", () => {
     expect(out).toContain("(2 waypoints)");
   });
 
-  it("captures pre-snap motion endpoint", () => {
+  it("captures pre-snap motion endpoint in yards-prose", () => {
     const out = recapCoachDiagram(
       diagram({
         players: [{ id: "H", x: 12, y: 0, team: "O" }],
@@ -80,7 +113,7 @@ describe("recapCoachDiagram", () => {
         }],
       }),
     );
-    expect(out).toContain("pre-snap motion ends at x=5.0, y=-1.0");
+    expect(out).toContain("pre-snap motion ends 5.0 yds right of center, 1.0 yds in the backfield");
   });
 
   it("flags routes with no post-snap path (motion-only)", () => {
@@ -93,7 +126,7 @@ describe("recapCoachDiagram", () => {
     expect(out).toContain("no post-snap path");
   });
 
-  it("renders coverage zones with label, kind, center, size", () => {
+  it("renders coverage zones with label, kind, center in yards, and size", () => {
     const out = recapCoachDiagram(
       diagram({
         players: [{ id: "FS", x: 0, y: 12, team: "D" }],
@@ -110,8 +143,8 @@ describe("recapCoachDiagram", () => {
     expect(out).toContain("Coverage zones:");
     expect(out).toContain('"hook"');
     expect(out).toContain("(rectangle owned by @WL)");
-    expect(out).toContain("centered at x=-5.0, y=6.0");
-    expect(out).toContain("size 8.0 × 6.0 yds");
+    expect(out).toContain("centered 5.0 yds left of center, 6.0 yds downfield");
+    expect(out).toContain("8.0 yds wide × 6.0 yds deep");
   });
 
   it("includes role in parens when distinct from id (post-suffix duplicates)", () => {
