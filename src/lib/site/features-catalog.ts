@@ -928,6 +928,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-05",
   },
   {
+    id: "print-playsheet-notes-compact",
+    name: "Compact note text on call sheets",
+    description:
+      "New \"Compact text\" toggle in the print tool's Text section flattens line breaks in the play notes into a single packed paragraph so coaches can fit a full game-plan blurb (primary read, secondary, tertiary, outlet, vs Cover 2 notes) into a tight call-sheet cell. Bullet markers (`-` / `*`) at the start of a line are preserved as visible `•` separators, so the structure still reads even when there's no vertical break.",
+    category: "Print & export",
+    status: "ga",
+    addedDate: "2026-05-05",
+  },
+  {
     id: "print-playsheet-notes-controls",
     name: "Roomy play notes on call sheets",
     description:

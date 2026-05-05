@@ -395,6 +395,7 @@ export function PrintPlaybookClient({
       noteLines: config.playsheetNoteLines,
       noteFontSize: config.playsheetNoteFontSize,
       noteVisualPlayers: config.playsheetNoteVisualPlayers,
+      noteCompact: config.playsheetNoteCompact,
       cellPadding: config.playsheetCellPadding,
       cellHeightScale: config.playsheetCellHeightScale,
       iconSize: config.playsheetIconSize,

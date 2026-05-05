@@ -636,6 +636,15 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                     />
                     Use visual player references
                   </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={config.playsheetNoteCompact}
+                      onChange={(e) => patch({ playsheetNoteCompact: e.target.checked })}
+                    />
+                    Compact text (fit more per play)
+                  </label>
                 </>
               )}
             </div>

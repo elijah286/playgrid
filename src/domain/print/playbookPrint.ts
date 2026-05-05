@@ -86,6 +86,13 @@ export type PlaybookPrintRunConfig = {
    * diagram. Off = plain text only.
    */
   playsheetNoteVisualPlayers: boolean;
+  /**
+   * When true, line breaks in note source are flattened to single spaces so
+   * the renderer can pack as much prose as possible into the available
+   * notes strip. Bullet markers (`- ` / `* `) at the start of a line are
+   * preserved as visual `•` separators so the structure still reads.
+   */
+  playsheetNoteCompact: boolean;
   /** Playsheet: 0 = no padding (edge-to-edge), 1 = current spacing. */
   playsheetCellPadding: number;
   /** Playsheet: vertical height multiplier for each play tile (0.5–1.5, 1 = default). */
@@ -219,6 +226,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetNoteLines: 2,
   playsheetNoteFontSize: 1,
   playsheetNoteVisualPlayers: true,
+  playsheetNoteCompact: false,
   playsheetCellPadding: 0.5,
   playsheetCellHeightScale: 1,
   wristbandCellPadding: 0.1,

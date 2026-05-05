@@ -271,18 +271,28 @@ function renderMarkdownTextSegment(
   ): number => {
     if (s.length === 0) return 0;
     const widthMul = weight === "bold" ? 1.05 : 1.0;
-    // xml:space="preserve" stops SVG from collapsing leading/trailing
-    // whitespace inside the segment. Without it, the space that lives
-    // right after a `**bold**` close (e.g. `**Use when:** attacking`)
-    // gets dropped when rendered, so notes print as "Use whenattacking".
-    svg +=
-      `<text x="${cx}" y="${y}" xml:space="preserve" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}"` +
-      (weight === "bold" ? ` font-weight="bold"` : "") +
-      (style === "italic" ? ` font-style="italic"` : "") +
-      `>${escSvgText(s)}</text>`;
-    const adv = s.length * charW * widthMul;
-    cx += adv;
-    return adv;
+    // SVG <text> collapses leading/trailing whitespace and even
+    // xml:space="preserve" doesn't survive every PDF/print pipeline. So
+    // we move whitespace OUT of the rendered text and into the cursor:
+    // count leading + trailing spaces, advance cx by their width, and
+    // only emit the trimmed middle. Net result: " attacking" after a
+    // bold close prints as " attacking" — no more "Use whenattacking".
+    let leading = 0;
+    while (leading < s.length && s.charCodeAt(leading) === 32) leading++;
+    let trailing = 0;
+    while (trailing < s.length - leading && s.charCodeAt(s.length - 1 - trailing) === 32) trailing++;
+    const inner = s.slice(leading, s.length - trailing);
+    cx += leading * charW;
+    if (inner.length > 0) {
+      svg +=
+        `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}"` +
+        (weight === "bold" ? ` font-weight="bold"` : "") +
+        (style === "italic" ? ` font-style="italic"` : "") +
+        `>${escSvgText(inner)}</text>`;
+    }
+    const innerAdv = inner.length * charW * widthMul;
+    cx += innerAdv + trailing * charW;
+    return leading * charW + innerAdv + trailing * charW;
   };
 
   while (i < text.length) {
@@ -643,6 +653,13 @@ export type PlaysheetOptions = PlayTileLookOptions & {
    * as the same colored circle + letter the diagram uses. Off = plain text.
    */
   noteVisualPlayers?: boolean;
+  /**
+   * When true, newlines in note source are flattened to single spaces so
+   * the renderer packs as much prose as possible into the strip. Leading
+   * bullet markers (`- ` / `* `) on flattened lines are preserved as
+   * visible `•` separators to keep the structure readable.
+   */
+  noteCompact?: boolean;
   /** 0 = cells flush together with no internal padding, 1 = default. */
   cellPadding?: number;
   /** Vertical height multiplier for each play tile (1 = default). */
@@ -935,7 +952,19 @@ function renderPlaysheetCell(
     const fontNote = 2.3 * noteFontMult;
     const lineH = 3.2 * noteFontMult;
     const noteLineCount = Math.max(1, Math.round(opts.noteLines));
-    const raw = vis.showNotes ? (doc.metadata.notes ?? "").trim() : "";
+    const rawSource = vis.showNotes ? (doc.metadata.notes ?? "").trim() : "";
+    // Compact mode: flatten newlines into single spaces so the wrap engine
+    // can fill every line edge-to-edge. Bullet markers at the start of a
+    // flattened line become inline `•` separators so the structure still
+    // reads (e.g. "- Primary: dig\n- Secondary: curl" → "• Primary: dig
+    // • Secondary: curl"). Multiple consecutive blank lines collapse to a
+    // single space.
+    const raw = opts.noteCompact
+      ? rawSource
+          .replace(/\r?\n[ \t]*[-*][ \t]+/g, " • ")
+          .replace(/\r?\n+/g, " ")
+          .replace(/[ \t]{2,}/g, " ")
+      : rawSource;
     // Notes get a slightly larger horizontal inset than the field so glyphs
     // don't kiss the cell border at low-DPI print resolution. The 1.4mm
     // extra on top of `padX` lands at ~2.4mm total inset with the default
