@@ -966,11 +966,14 @@ function renderPlaysheetCell(
     padScale > 0
       ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
       : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
+  // No separate inner field rect: the outer border is already
+  // white-filled, so a redundant white rect inset by `padX` was
+  // visually masking the dark stroke alongside the field at typical
+  // print resolutions ("the field is on top of the border" — coach).
   return `
   <g>
     ${outerBorder}
     ${header}
-    <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="none"/>
     ${fieldWm}
     ${field}
     ${overlay}
