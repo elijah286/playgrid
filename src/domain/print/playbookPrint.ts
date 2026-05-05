@@ -47,6 +47,7 @@ export type PrintLabelToggles = {
 };
 export type PrintNumberPosition =
   | "top-left"
+  | "top-right"
   | "bottom-left"
   | "bottom-center"
   | "below-name";

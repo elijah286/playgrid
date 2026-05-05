@@ -552,6 +552,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                     value={config.playsheetNumberPosition}
                     options={[
                       { value: "top-left", label: "Top left" },
+                      { value: "top-right", label: "Top right" },
                       { value: "bottom-left", label: "Bottom left" },
                       { value: "bottom-center", label: "Bottom middle" },
                       { value: "below-name", label: "Below name" },
@@ -926,6 +927,7 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                     value={config.wristbandNumberPosition}
                     options={[
                       { value: "top-left", label: "Top left" },
+                      { value: "top-right", label: "Top right" },
                       { value: "bottom-left", label: "Bottom left" },
                       { value: "bottom-center", label: "Bottom middle" },
                       { value: "below-name", label: "Below name" },
