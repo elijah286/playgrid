@@ -27,6 +27,7 @@ import type {
 import { PLAY_SPEC_SCHEMA_VERSION } from "./spec";
 import type { SportVariant } from "./types";
 import { findTemplate } from "./routeTemplates";
+import { inferRouteFamily } from "./routeInference";
 
 const DEFENDER_LABELS = new Set([
   "CB", "LC", "RC", "LCB", "RCB",
@@ -73,7 +74,7 @@ export function coachDiagramToPlaySpec(
 
   const formation = inferFormation(diagram, hints);
   const defense = inferDefense(diagram, hints);
-  const assignments = buildAssignments(diagram);
+  const assignments = buildAssignments(diagram, variant);
 
   return {
     schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
@@ -145,7 +146,10 @@ function isDefenderLabel(id: string, role?: string): boolean {
 /** Build a PlayerAssignment[] from the diagram's players + routes. Every
  *  offensive player gets exactly one assignment. Defenders are NOT
  *  assigned actions — their behavior is implied by the defense ref. */
-function buildAssignments(diagram: CoachDiagram): PlayerAssignment[] {
+function buildAssignments(
+  diagram: CoachDiagram,
+  variant: SportVariant,
+): PlayerAssignment[] {
   const routesByCarrier = new Map<string, CoachDiagramRoute>();
   for (const r of diagram.routes ?? []) {
     routesByCarrier.set(r.from, r);
@@ -164,7 +168,7 @@ function buildAssignments(diagram: CoachDiagram): PlayerAssignment[] {
     if (p.team !== "O" && isDefenderLabel(p.id, p.role)) continue;
 
     const route = routesByCarrier.get(p.id);
-    const action = inferAction(p.id, p.role, route, { x: p.x, y: p.y });
+    const action = inferAction(p.id, p.role, route, { x: p.x, y: p.y }, variant);
     assignments.push({
       player: p.id,
       action,
@@ -205,14 +209,15 @@ function inferAction(
   id: string,
   role: string | undefined,
   route: CoachDiagramRoute | undefined,
-  carrier?: { x: number; y: number },
+  carrier: { x: number; y: number } | undefined,
+  variant: SportVariant,
 ): AssignmentAction {
   const uid = (role ?? id).toUpperCase();
   // Strip numeric suffix for category lookup ("Z2" → "Z").
   const baseLabel = uid.replace(/\d+$/, "");
 
   // Route present → that's the assignment.
-  if (route) return actionFromRoute(route, carrier);
+  if (route) return actionFromRoute(route, carrier, variant);
 
   // No route. Infer from position label.
   if (LINEMAN_IDS.has(baseLabel)) return { kind: "block" };
@@ -253,7 +258,8 @@ function computeDeepestDepth(
 
 function actionFromRoute(
   route: CoachDiagramRoute,
-  carrier?: { x: number; y: number },
+  carrier: { x: number; y: number } | undefined,
+  variant: SportVariant,
 ): AssignmentAction {
   const kind = (route.route_kind ?? "").trim();
   if (kind) {
@@ -284,12 +290,18 @@ function actionFromRoute(
       curve: route.curve,
     };
   }
-  // No route_kind — try to infer the route concept from geometry.
-  // If inference succeeds, treat it as a regular route. Otherwise,
-  // preserve as custom so the geometry isn't lost.
-  const inferred = tryInferRouteFamily(route, carrier);
-  if (inferred) {
-    return inferred;
+  // No route_kind — try to infer the route concept from geometry by
+  // scoring against every catalog template (see routeInference.ts).
+  // The legacy hand-rolled predicate list was replaced 2026-05-04
+  // because it silently knew about 9 of 26 templates and matched in
+  // declaration order; coaches' hand-drawn out-and-ups got reported
+  // as "deep post at 13 yards" because Post fired before any
+  // out-and-up predicate could exist.
+  if (carrier && route.path && route.path.length >= 2) {
+    const inferred = inferRouteFamily(route.path, carrier, variant);
+    if (inferred) {
+      return { kind: "route", family: inferred.family, depthYds: inferred.depthYds };
+    }
   }
   return {
     kind: "custom",
@@ -297,55 +309,4 @@ function actionFromRoute(
     waypoints: route.path,
     curve: route.curve,
   };
-}
-
-/** Try to infer a route family from the path geometry. Returns a route
- *  action if a likely match is found; null otherwise. */
-function tryInferRouteFamily(
-  route: CoachDiagramRoute,
-  carrier?: { x: number; y: number },
-): Extract<AssignmentAction, { kind: "route" }> | null {
-  if (!route.path || route.path.length < 2) return null;
-  if (!carrier) return null;
-
-  // route.path is `[number, number][]` — index [0] = x yards, [1] = y yards.
-  // Prior to this fix the function read .x / .y as object properties, which
-  // returned undefined on every tuple, made every predicate NaN, and made the
-  // entire inference path dead code. Surfaced 2026-05-04: every hand-authored
-  // catalog route was being persisted as `kind: "custom"` / "Hand-authored
-  // route" instead of the inferred catalog family.
-  const waypoints = route.path;
-  const start = waypoints[0];
-  const end = waypoints[waypoints.length - 1];
-
-  const dx = Math.abs(end[0] - start[0]);
-  const dy = Math.abs(end[1] - start[1]);
-  const depthYds = carrier ? computeDeepestDepth(route.path, carrier) : undefined;
-
-  // Try to match common route families based on direction and depth.
-  // This is heuristic-based; exact matches require route_kind.
-  const matchTemplates = [
-    { name: "Go", predicate: () => dy > dx && depthYds && depthYds > 15 },
-    { name: "Post", predicate: () => dy > dx && dx > 2 && depthYds && depthYds >= 10 && depthYds <= 15 },
-    { name: "Corner", predicate: () => dy > dx && dx > 3 && depthYds && depthYds >= 10 && depthYds <= 15 },
-    { name: "Dig", predicate: () => dy > 5 && dx > 5 && depthYds && depthYds >= 8 && depthYds <= 12 },
-    { name: "In", predicate: () => dx > dy && dx > 3 && depthYds && depthYds >= 5 && depthYds <= 10 },
-    { name: "Out", predicate: () => dx > dy && dx > 3 && depthYds && depthYds >= 3 && depthYds <= 8 },
-    { name: "Slant", predicate: () => dx > 0 && dy > 0 && dx > dy * 0.5 && depthYds && depthYds >= 3 && depthYds <= 7 },
-    { name: "Flat", predicate: () => dy < 2 && dx > 3 && depthYds && depthYds < 3 },
-    { name: "Hitch", predicate: () => dy > 0 && dy < 6 && dx < 2 && depthYds && depthYds >= 3 && depthYds <= 6 },
-  ];
-
-  for (const match of matchTemplates) {
-    const template = findTemplate(match.name);
-    if (template && match.predicate()) {
-      const action: AssignmentAction = { kind: "route", family: template.name };
-      if (depthYds !== undefined && Number.isFinite(depthYds)) {
-        return { ...action, depthYds: Math.round(depthYds * 10) / 10 } as Extract<AssignmentAction, { kind: "route" }>;
-      }
-      return action as Extract<AssignmentAction, { kind: "route" }>;
-    }
-  }
-
-  return null;
 }
