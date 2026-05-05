@@ -959,20 +959,17 @@ function renderPlaysheetCell(
     notes += `</g>`;
   }
 
-  // The hard frame wraps the field + notes as one card. The title (play
-  // number / formation / name) sits above the card on the page surface so
-  // the box reads as the play diagram itself, not a wrapper around
-  // everything in the cell.
-  const boxTop = fieldY;
-  const boxH = ch - (boxTop - oy);
+  // Hard frame wraps the entire card — title (play number / formation /
+  // name) at the top, field in the middle, notes at the bottom — so the
+  // dark outline visibly encloses all three as one unified box.
   const outerBorder =
     padScale > 0
-      ? `<rect x="${ox + 0.5}" y="${boxTop + 0.5}" width="${cw - 1}" height="${boxH - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
-      : `<rect x="${ox}" y="${boxTop}" width="${cw}" height="${boxH}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
+      ? `<rect x="${ox + 0.5}" y="${oy + 0.5}" width="${cw - 1}" height="${ch - 1}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}" rx="1.2"/>`
+      : `<rect x="${ox}" y="${oy}" width="${cw}" height="${ch}" fill="#ffffff" stroke="${outerStroke}" stroke-width="${outerW}"/>`;
   return `
   <g>
-    ${header}
     ${outerBorder}
+    ${header}
     <rect x="${fieldX}" y="${fieldY}" width="${fieldW}" height="${fieldH}" fill="#ffffff" stroke="none"/>
     ${fieldWm}
     ${field}
