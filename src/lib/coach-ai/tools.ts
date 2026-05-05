@@ -58,6 +58,12 @@ export type ToolContext = {
    *  system prompt so Cal answers questions about the visible play without having
    *  to call get_play (and without inventing a generic example diagram). */
   playDiagramText: string | null;
+  /** Plain-English per-player recap of the same diagram. Sits beside the JSON in
+   *  the system prompt so the per-route facts (route_kind, end-of-path waypoint,
+   *  curve/motion flags) are easier for Cal to anchor on than the raw JSON dump.
+   *  Surfaced 2026-05-05 to combat Cal carrying hallucinated route descriptions
+   *  from earlier turns over the JSON in the current system prompt. */
+  playDiagramRecap: string | null;
 };
 
 export type ToolHandler = (

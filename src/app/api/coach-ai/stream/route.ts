@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { runAgent, type AgentStreamEvent } from "@/lib/coach-ai/agent";
 import { playDocumentToCoachDiagram } from "@/lib/coach-ai/play-tools";
+import { recapCoachDiagram } from "@/lib/coach-ai/diagram-recap";
 import type { PlayDocument } from "@/domain/play/types";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
@@ -73,6 +74,7 @@ async function loadToolContext(
   // us its parent playbook, which we then anchor to like normal.
   let resolvedPlay: { id: string; name: string | null; formation: string | null; playbookId: string | null } | null = null;
   let playDiagramText: string | null = null;
+  let playDiagramRecap: string | null = null;
   if (playId) {
     const { data: playRow } = await supabase
       .from("plays")
@@ -106,6 +108,7 @@ async function loadToolContext(
         try {
           const diagram = playDocumentToCoachDiagram(doc, resolvedPlay.name ?? "play");
           playDiagramText = JSON.stringify(diagram);
+          playDiagramRecap = recapCoachDiagram(diagram);
         } catch { /* malformed doc — fall back to no diagram, model can still call get_play */ }
       }
     }
@@ -123,6 +126,7 @@ async function loadToolContext(
       playName: resolvedPlay?.name ?? null,
       playFormation: resolvedPlay?.formation ?? null,
       playDiagramText,
+      playDiagramRecap,
     };
   }
   const [{ data }, { data: canEdit }] = await Promise.all([
@@ -155,6 +159,7 @@ async function loadToolContext(
     playName: resolvedPlay?.name ?? null,
     playFormation: resolvedPlay?.formation ?? null,
     playDiagramText,
+    playDiagramRecap,
   };
 }
 

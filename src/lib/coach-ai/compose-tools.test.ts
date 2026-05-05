@@ -47,6 +47,7 @@ const TACKLE_CTX = {
   playName: null,
   playFormation: null,
   playDiagramText: null,
+  playDiagramRecap: null,
 };
 
 function extractFence(resultText: string): Record<string, unknown> {

@@ -40,6 +40,7 @@ const MIN_CTX = {
   playName: null,
   playFormation: null,
   playDiagramText: null,
+  playDiagramRecap: null,
 };
 
 /** Build a real play fence from the Flood Right skeleton — same path

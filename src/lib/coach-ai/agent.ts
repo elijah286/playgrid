@@ -624,6 +624,14 @@ function contextBlock(ctx: ToolContext): string {
       lines.push("```json");
       lines.push(ctx.playDiagramText);
       lines.push("```");
+      if (ctx.playDiagramRecap) {
+        lines.push("");
+        lines.push(
+          `**Per-player recap of the diagram above (plain-English translation of the same JSON; ` +
+          `use this for quick scanning of who runs what — both describe the same play):**`,
+        );
+        lines.push(ctx.playDiagramRecap);
+      }
       lines.push("");
       lines.push(
         `Use this diagram as ground truth for personnel, formation, and routes. When asked ` +
@@ -635,10 +643,13 @@ function contextBlock(ctx: ToolContext): string {
       lines.push(
         `**The diagram above is authoritative.** If earlier turns in this conversation ` +
         `referenced different player labels or routes, those turns were about a different play ` +
-        `(the coach navigated) or a previous version (the coach renamed/edited players). Use ` +
-        `ONLY the labels and routes shown in the diagram above for this play — do not blend ` +
-        `them with names from prior turns, and do not say "@X (now @Y)" or "previously @Z" ` +
-        `in your response. Treat the current diagram as the only truth about this play.`,
+        `(the coach navigated) or a previous version (the coach renamed/edited players), OR a ` +
+        `prior turn this same conversation got a route wrong. In every case, use ONLY the ` +
+        `labels, routes, and route_kinds shown in the diagram + recap above for this play — ` +
+        `do not blend them with names from prior turns, do not say "@X (now @Y)" or ` +
+        `"previously @Z" in your response, and do not preserve a route description from an ` +
+        `earlier turn if it disagrees with the current recap. Treat the current diagram as ` +
+        `the only truth about this play.`,
       );
     } else {
       lines.push(`Use \`get_play\` with the anchored play id when you need its diagram details.`);
