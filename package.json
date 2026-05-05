@@ -9,6 +9,7 @@
     "build:analyze": "next experimental-analyze",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:link": "supabase link --project-ref hxbjkezyecahhieymbxn",
     "db:push": "supabase db push",
