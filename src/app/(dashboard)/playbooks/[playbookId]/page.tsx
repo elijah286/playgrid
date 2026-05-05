@@ -25,6 +25,7 @@ import {
 import { getReferralConfig } from "@/lib/site/referral-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { defaultClaimedPlaybookName } from "@/lib/playbook/default-name";
+import { timed } from "@/lib/perf/timed";
 import { PlaybookDetailClient } from "./ui";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 import {
@@ -103,27 +104,47 @@ export default async function PlaybookDetailPage({ params }: Props) {
   }
 
   const supabase = await createClient();
-  const { data: book, error } = await supabase
-    .from("playbooks")
-    .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication, is_example, is_public_example, example_author_label, is_archived")
-    .eq("id", playbookId)
-    .single();
+  const { data: book, error } = await timed(
+    `playbook-page:books-select pb=${playbookId}`,
+    () =>
+      supabase
+        .from("playbooks")
+        .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication, is_example, is_public_example, example_author_label, is_archived")
+        .eq("id", playbookId)
+        .single(),
+  );
 
   if (error || !book) notFound();
 
   const [listed, rosterRes, invitesRes, formationsRes, prefsRes, claimsRes] =
-    await Promise.all([
-      listPlaysAction(playbookId, { includeArchived: true }),
-      listPlaybookRosterAction(playbookId),
-      listInvitesAction(playbookId),
-      listFormationsForPlaybookAction(playbookId),
-      getPlaybookViewPrefsAction(playbookId),
-      listPendingRosterClaimsAction(playbookId),
-    ]);
+    await timed(`playbook-page:promise-all pb=${playbookId}`, () =>
+      Promise.all([
+        timed(`playbook-page:listPlays pb=${playbookId}`, () =>
+          listPlaysAction(playbookId, { includeArchived: true }),
+        ),
+        timed(`playbook-page:listRoster pb=${playbookId}`, () =>
+          listPlaybookRosterAction(playbookId),
+        ),
+        timed(`playbook-page:listInvites pb=${playbookId}`, () =>
+          listInvitesAction(playbookId),
+        ),
+        timed(`playbook-page:listFormations pb=${playbookId}`, () =>
+          listFormationsForPlaybookAction(playbookId),
+        ),
+        timed(`playbook-page:getViewPrefs pb=${playbookId}`, () =>
+          getPlaybookViewPrefsAction(playbookId),
+        ),
+        timed(`playbook-page:listClaims pb=${playbookId}`, () =>
+          listPendingRosterClaimsAction(playbookId),
+        ),
+      ]),
+    );
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await timed(`playbook-page:auth-getUser pb=${playbookId}`, () =>
+    supabase.auth.getUser(),
+  );
 
   const sportVariant = (book.sport_variant as SportVariant) ?? "flag_7v7";
   const variantLabel = SPORT_VARIANT_LABELS[sportVariant] ?? (book.sport_variant as string) ?? "";
@@ -142,41 +163,43 @@ export default async function PlaybookDetailPage({ params }: Props) {
   let isMember = false;
   let ownerDisplayName: string | null = null;
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name")
-      .eq("id", user.id)
-      .maybeSingle();
-    viewerDisplayName = (profile?.display_name as string | null) ?? null;
-    senderName = viewerDisplayName || user.email || null;
-
-    const { data: membership } = await supabase
-      .from("playbook_members")
-      .select("role")
-      .eq("playbook_id", playbookId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    viewerRole = (membership?.role as typeof viewerRole) ?? null;
-    isMember = viewerRole != null;
-
-    if (viewerRole && viewerRole !== "owner") {
-      const { data: ownerRow } = await supabase
-        .from("playbook_members")
-        .select("user_id")
-        .eq("playbook_id", playbookId)
-        .eq("role", "owner")
-        .limit(1)
+    await timed(`playbook-page:viewer-block pb=${playbookId}`, async () => {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
         .maybeSingle();
-      const ownerId = (ownerRow?.user_id as string | null) ?? null;
-      if (ownerId) {
-        const { data: ownerProfile } = await supabase
-          .from("profiles")
-          .select("display_name")
-          .eq("id", ownerId)
+      viewerDisplayName = (profile?.display_name as string | null) ?? null;
+      senderName = viewerDisplayName || user.email || null;
+
+      const { data: membership } = await supabase
+        .from("playbook_members")
+        .select("role")
+        .eq("playbook_id", playbookId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      viewerRole = (membership?.role as typeof viewerRole) ?? null;
+      isMember = viewerRole != null;
+
+      if (viewerRole && viewerRole !== "owner") {
+        const { data: ownerRow } = await supabase
+          .from("playbook_members")
+          .select("user_id")
+          .eq("playbook_id", playbookId)
+          .eq("role", "owner")
+          .limit(1)
           .maybeSingle();
-        ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
+        const ownerId = (ownerRow?.user_id as string | null) ?? null;
+        if (ownerId) {
+          const { data: ownerProfile } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", ownerId)
+            .maybeSingle();
+          ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
+        }
       }
-    }
+    });
   }
 
   // Non-members viewing a published example get a synthesized viewer
@@ -195,7 +218,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
   // read-only header.
   const canManage = effectiveRole === "owner";
   const canShare = effectiveRole === "owner" || effectiveRole === "editor";
-  const viewerEntitlement = await getCurrentEntitlement();
+  const viewerEntitlement = await timed(
+    `playbook-page:getEntitlement pb=${playbookId}`,
+    () => getCurrentEntitlement(),
+  );
   const viewerIsCoach = tierAtLeast(viewerEntitlement, "coach");
   const viewerCanUseGameMode = canUseGameMode(viewerEntitlement);
   const viewerCanUseTeamFeatures = tierAtLeast(viewerEntitlement, "coach");
@@ -221,18 +247,26 @@ export default async function PlaybookDetailPage({ params }: Props) {
 
   let isAdmin = false;
   if (user) {
-    const { data: selfRoleRow } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    isAdmin = (selfRoleRow?.role as string | null) === "admin";
+    await timed(`playbook-page:isAdmin-select pb=${playbookId}`, async () => {
+      const { data: selfRoleRow } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+      isAdmin = (selfRoleRow?.role as string | null) === "admin";
+    });
   }
   const canManageExample = isAdmin && (effectiveRole === "owner" || effectiveRole === "editor");
 
-  const freeMaxPlays = await getFreeMaxPlaysPerPlaybook();
+  const freeMaxPlays = await timed(
+    `playbook-page:freeMaxPlays pb=${playbookId}`,
+    () => getFreeMaxPlaysPerPlaybook(),
+  );
 
-  const betaFeatures = await getBetaFeatures();
+  const betaFeatures = await timed(
+    `playbook-page:betaFeatures pb=${playbookId}`,
+    () => getBetaFeatures(),
+  );
   // Mirror SiteHeader's logic so the in-playbook (mobile) launcher uses the
   // same entitlement gate as the global one — non-entitled users get the
   // marketing popover, entitled users get the chat.
@@ -241,8 +275,14 @@ export default async function PlaybookDetailPage({ params }: Props) {
   const showCoachCalCta =
     !coachAiEntitled && user !== null && !isAdmin;
   const showCoachCalPromoInPlaybook = !coachAiAvailable && user !== null;
-  const referralConfig = await getReferralConfig();
-  const coachAiEvalDays = await getCoachAiEvalDays();
+  const referralConfig = await timed(
+    `playbook-page:referralConfig pb=${playbookId}`,
+    () => getReferralConfig(),
+  );
+  const coachAiEvalDays = await timed(
+    `playbook-page:coachAiEvalDays pb=${playbookId}`,
+    () => getCoachAiEvalDays(),
+  );
   const isCoachInPlaybook =
     effectiveRole === "owner" || effectiveRole === "editor";
   // Examples always expose Game Mode so visitors can experience the full

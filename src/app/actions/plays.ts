@@ -23,6 +23,7 @@ import {
 import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
+import { timed } from "@/lib/perf/timed";
 
 async function assertPlayCap(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -141,15 +142,21 @@ export async function listPlaysAction(
 
   if (!opts?.includeArchived) playsQ = playsQ.eq("is_archived", false);
 
-  const [playsRes, groupsRes] = await Promise.all([
-    playsQ,
-    supabase
-      .from("playbook_groups")
-      .select("id, name, sort_order")
-      .eq("playbook_id", playbookId)
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true }),
-  ]);
+  const [playsRes, groupsRes] = await timed(
+    `listPlays:plays+groups pb=${playbookId}`,
+    () =>
+      Promise.all([
+        timed(`listPlays:plays-select pb=${playbookId}`, () => playsQ),
+        timed(`listPlays:groups-select pb=${playbookId}`, () =>
+          supabase
+            .from("playbook_groups")
+            .select("id, name, sort_order")
+            .eq("playbook_id", playbookId)
+            .is("deleted_at", null)
+            .order("sort_order", { ascending: true }),
+        ),
+      ]),
+  );
 
   if (playsRes.error)
     return { ok: false, error: playsRes.error.message, plays: [], groups: [], truncated: false };
@@ -169,10 +176,14 @@ export async function listPlaysAction(
   >();
   const notesByVersion = new Map<string, boolean>();
   if (versionIds.length > 0) {
-    const { data: versions } = await supabase
-      .from("play_versions")
-      .select("id, document")
-      .in("id", versionIds);
+    const { data: versions } = await timed(
+      `listPlays:versions-select n=${versionIds.length} pb=${playbookId}`,
+      () =>
+        supabase
+          .from("play_versions")
+          .select("id, document")
+          .in("id", versionIds),
+    );
     for (const v of versions ?? []) {
       const doc = v.document as PlayDocument | null;
       if (!doc) continue;

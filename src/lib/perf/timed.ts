@@ -18,7 +18,9 @@
  */
 export async function timed<T>(
   label: string,
-  fn: () => Promise<T>,
+  // PromiseLike (not Promise) so Supabase query builders work without
+  // an extra `await` inside the callback.
+  fn: () => PromiseLike<T>,
   options: { slowMs?: number; alwaysLog?: boolean } = {},
 ): Promise<T> {
   const slowMs = options.slowMs ?? 500;
