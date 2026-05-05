@@ -724,6 +724,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-04-28",
   },
   {
+    id: "coach-cal-undo",
+    name: "Coach Cal undo",
+    description:
+      "Coach Cal can now undo any edit it just made to a play. Asking it to \"undo\", \"revert\", or \"go back\" makes Cal pull the play's recent history, confirm the target version with the coach, and restore. The restore creates a new audit row instead of erasing history, so the coach can always step forward again.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-04",
+  },
+  {
     id: "print-redesign-format-presets",
     name: "Print page format picker + system presets",
     description:

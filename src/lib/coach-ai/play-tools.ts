@@ -2288,6 +2288,200 @@ const archive_play: CoachAiTool = {
   },
 };
 
+/**
+ * Read recent edit history for a play. Cal calls this when the coach asks to
+ * "undo", "revert", "go back", or otherwise reverse a recent change — Cal
+ * needs to see which version to restore. Versions are returned newest-first;
+ * the first row is the current state, so most "undo last change" requests
+ * mean restoring the SECOND row.
+ */
+const list_play_versions: CoachAiTool = {
+  def: {
+    name: "list_play_versions",
+    description:
+      "List the recent edit history of a play (newest first). Each row shows the " +
+      "version id, what kind of change it was (create/edit/restore), who made it, " +
+      "when, and a short diff summary. Use this when the coach asks to undo, revert, " +
+      "or reverse a change — pair it with restore_play_version. The current saved " +
+      "state is the first row; \"undo my last change\" usually means restoring the " +
+      "second row.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: {
+          type: "string",
+          description: "UUID, slot number (\"4\"), or exact name of the play.",
+        },
+        limit: {
+          type: "number",
+          description: "Max rows to return. Default 10, max 50.",
+        },
+      },
+      required: ["play_id"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
+    const limit = Math.max(1, Math.min(50, Number(input.limit) || 10));
+
+    const admin = createServiceRoleClient();
+    const { data: play } = await admin
+      .from("plays")
+      .select("name, current_version_id, playbook_id")
+      .eq("id", playId)
+      .maybeSingle();
+    if (!play || play.playbook_id !== ctx.playbookId) {
+      return { ok: false, error: "Play not found in this playbook." };
+    }
+    const currentId = (play.current_version_id as string | null) ?? null;
+
+    const { data: versions, error } = await admin
+      .from("play_versions")
+      .select("id, created_at, editor_name_snapshot, note, diff_summary, kind")
+      .eq("play_id", playId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return { ok: false, error: error.message };
+
+    const lines: string[] = [];
+    lines.push(`Recent versions of "${play.name}" (newest first):`);
+    for (const v of versions ?? []) {
+      const id = v.id as string;
+      const isCurrent = id === currentId;
+      const when = new Date(v.created_at as string).toLocaleString("en-US");
+      const editor = (v.editor_name_snapshot as string | null) ?? "unknown";
+      const kind = (v.kind as string | null) ?? "edit";
+      const note = (v.note as string | null) ?? "";
+      const diff = (v.diff_summary as string | null) ?? "";
+      const label = [
+        `${isCurrent ? "→ CURRENT  " : "           "}${id.slice(0, 8)}`,
+        kind,
+        editor,
+        when,
+        note || diff || "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      lines.push(label);
+    }
+    if ((versions ?? []).length === 0) {
+      lines.push("(no history yet)");
+    }
+    return { ok: true, result: lines.join("\n") };
+  },
+};
+
+/**
+ * Cal-callable wrapper around the existing restorePlayVersionAction. The
+ * restore creates a NEW version row (kind=restore) so the audit trail stays
+ * intact — it doesn't mutate or delete history.
+ */
+const restore_play_version: CoachAiTool = {
+  def: {
+    name: "restore_play_version",
+    description:
+      "Revert a play to a prior version's contents. Use this for any \"undo\", " +
+      "\"revert\", \"go back\", \"that wasn't right\" request — restoring is the " +
+      "only safe way to reverse an earlier write tool call. ALWAYS call " +
+      "list_play_versions first so you know which version_id to target, AND " +
+      "ALWAYS confirm the restore with the coach before calling (\"this will " +
+      "revert to the version saved at HH:MM by NAME — proceed?\"). Restoring " +
+      "creates a new \"restore\" version row; nothing is permanently lost. " +
+      "Requires edit access to the playbook.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: {
+          type: "string",
+          description: "UUID, slot number, or name of the play to revert.",
+        },
+        version_id: {
+          type: "string",
+          description:
+            "UUID of the play_versions row to restore (from list_play_versions). " +
+            "Or the literal string \"previous\" to restore the version immediately " +
+            "before the current one (most common case for \"undo my last change\").",
+        },
+      },
+      required: ["play_id", "version_id"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
+    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
+    const rawId = typeof input.play_id === "string" ? input.play_id : "";
+    const versionArg = typeof input.version_id === "string" ? input.version_id.trim() : "";
+    if (!versionArg) return { ok: false, error: "version_id is required." };
+
+    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const playId = resolved.id;
+
+    const admin = createServiceRoleClient();
+    const { data: play } = await admin
+      .from("plays")
+      .select("name, current_version_id, playbook_id")
+      .eq("id", playId)
+      .maybeSingle();
+    if (!play || play.playbook_id !== ctx.playbookId) {
+      return { ok: false, error: "Play not found in this playbook." };
+    }
+    const currentId = (play.current_version_id as string | null) ?? null;
+
+    // Resolve "previous" → the version immediately before the current one.
+    let targetVersionId: string;
+    if (versionArg.toLowerCase() === "previous") {
+      const { data: rows } = await admin
+        .from("play_versions")
+        .select("id")
+        .eq("play_id", playId)
+        .order("created_at", { ascending: false })
+        .limit(2);
+      const list = (rows ?? []) as { id: string }[];
+      if (list.length < 2) {
+        return {
+          ok: false,
+          error: "No prior version exists for this play — nothing to revert to.",
+        };
+      }
+      // First row is the current; second is the previous.
+      const first = list[0]!.id;
+      const second = list[1]!.id;
+      targetVersionId = first === currentId ? second : first;
+    } else if (UUID_RE.test(versionArg)) {
+      targetVersionId = versionArg;
+    } else {
+      return {
+        ok: false,
+        error:
+          "version_id must be a UUID from list_play_versions, or the literal \"previous\".",
+      };
+    }
+
+    if (targetVersionId === currentId) {
+      return { ok: true, result: "That version is already current — nothing to revert." };
+    }
+
+    const { restorePlayVersionAction } = await import("@/app/actions/versions");
+    const res = await restorePlayVersionAction(playId, targetVersionId);
+    if (!res.ok) return { ok: false, error: res.error };
+
+    return {
+      ok: true,
+      result:
+        `Restored "${play.name}" to version ${targetVersionId.slice(0, 8)}. ` +
+        `A new "restore" entry was added to the history; the old state is still ` +
+        `available via list_play_versions if you need to revert again.`,
+    };
+  },
+};
+
 export const PLAY_TOOLS: CoachAiTool[] = [
   list_plays,
   get_play,
@@ -2297,6 +2491,8 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   update_play_notes,
   update_player,
   explain_play,
+  list_play_versions,
+  restore_play_version,
   create_practice_plan,
   list_play_groups,
   create_play_group,

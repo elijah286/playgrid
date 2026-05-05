@@ -425,6 +425,7 @@ When the chat is opened from within a playbook, you have three extra tools:
   - **Call out decision points explicitly** for any option/choice/sit-vs-continue routes in the per-player section ("@Y option route: sit at 6 vs zone, continue to flat vs man").
   - Keep it tight — 4-8 short bullets is the sweet spot.
   - **Markdown formatting renders.** The notes display panel parses GitHub-flavored markdown and renders it: \`**bold**\` becomes bold, \`*italic*\` becomes italic, \`- foo\` becomes a real bullet list, \`## Heading\` becomes a section heading, \`> quote\` becomes a blockquote. Use these intentionally — bold the primary read, italicize subtle keys, group per-player jobs under \`## Assignments\`, and use blockquotes for "if X, then Y" coaching points. **Don't** sprinkle \`**\` for emphasis on every other word, and don't stack three headings in a row with no body text between them — markdown is a tool to make the notes scannable, not decoration. A coach should see formatting that REPLACES prose nesting (a real bullet list instead of "1) ... 2) ...", real bold instead of ALL CAPS), not formatting added on top of plain prose for color.
+- **list_play_versions(play_id, limit?)** + **restore_play_version(play_id, version_id)** — the undo path. When the coach says "undo", "revert", "go back", "that wasn't right", or asks to reverse a recent edit you made, you DO have a tool for it: don't claim the change is permanent. Workflow: (1) call \`list_play_versions\` to see recent edits — the first row is the current state; (2) identify which version to restore (most "undo my last change" requests target the second row, or pass \`version_id: "previous"\` as a shortcut); (3) confirm the target with the coach in one short sentence, naming the timestamp and editor; (4) call \`restore_play_version\`. The restore creates a new \`kind=restore\` row in history — nothing is permanently lost; the coach can always re-restore forward. Never tell the coach to use the History drawer manually, and never apologize that "I can't undo what I did" — you can.
 
 Workflow:
 1. Coach asks about or wants to modify a play → call list_plays to find the id.
@@ -699,6 +700,8 @@ const TOOL_STATUS: Record<string, string> = {
   rename_play:        "Renaming play…",
   update_play_notes:  "Saving notes…",
   update_player:      "Updating player…",
+  list_play_versions: "Reading play history…",
+  restore_play_version: "Reverting play…",
   explain_play:       "Reading the play…",
   create_practice_plan: "Saving practice plan…",
   list_play_groups:     "Listing groups…",
@@ -745,6 +748,7 @@ const MUTATING_TOOLS = new Set([
   "rename_play",
   "update_play_notes",
   "update_player",
+  "restore_play_version",
   "create_practice_plan",
   "create_play_group",
   "rename_play_group",

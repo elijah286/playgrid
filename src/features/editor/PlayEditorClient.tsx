@@ -205,6 +205,14 @@ function PlayEditorClientInner({
   // it's stale relative to local — both cases would visibly clobber edits
   // and wipe the undo stack via `replaceDocument`.
   const isDirtyRef = useRef(false);
+  // When Coach Cal mutates this play, the chat dispatches a `coach-ai-mutated`
+  // window event and we need the next incoming `initialDocument` to win even
+  // if the editor has pending local edits — the coach explicitly confirmed
+  // Cal's change in chat, so it should not get silently dropped by the
+  // dirty-guard. Set to true on the event, consumed (and cleared) by the
+  // first reconciliation that follows. Keeping it tightly scoped to one
+  // sync avoids accidentally re-clobbering future legitimate local edits.
+  const forceNextSyncRef = useRef(false);
   // Latest local doc reference, kept on a ref so the autosave timer can
   // tell whether local has moved on while a save was in flight without
   // depending on stale closure scope.
@@ -226,9 +234,16 @@ function PlayEditorClientInner({
     // Active local edits — never replace. Even if `initialDocument` is
     // semantically what we just sent, swapping it in would wipe the undo
     // stack (replaceDocument calls createUndoState which clears past/future).
-    if (isDirtyRef.current) {
+    if (isDirtyRef.current && !forceNextSyncRef.current) {
       lastSyncedDocRef.current = initialDocument;
       return;
+    }
+    // Force-sync from a Coach Cal mutation — clear the dirty flag too so the
+    // upcoming replaceDocument doesn't get autosave-clobbered with the stale
+    // local copy (the autosave effect compares against `lastSyncedDocRef`).
+    if (forceNextSyncRef.current) {
+      forceNextSyncRef.current = false;
+      isDirtyRef.current = false;
     }
     // Idle. Use an order-insensitive deep compare so that `sanitizedDoc`
     // and `normalizePlayDocument` rebuilding with `{...spread, override}`
@@ -252,6 +267,10 @@ function PlayEditorClientInner({
   // mismatches) doesn't leave the diagram showing stale geometry.
   useEffect(() => {
     function onMutated() {
+      // Mark the next reconciliation as "force apply" so the dirty-guard
+      // doesn't drop Cal's update when the coach has unsaved local edits.
+      // The coach said "yes" to Cal in chat — that's the consent signal.
+      forceNextSyncRef.current = true;
       router.refresh();
     }
     window.addEventListener("coach-ai-mutated", onMutated);
