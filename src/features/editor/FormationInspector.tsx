@@ -3,6 +3,7 @@
 import { Button, Input, Select, Badge } from "@/components/ui";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, PlayerRole, PlayerShape } from "@/domain/play/types";
+import { deriveLabelColor } from "@/domain/play/labelColor";
 
 type Props = {
   doc: PlayDocument;
@@ -225,7 +226,7 @@ export function FormationInspector({
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
             style={{
               backgroundColor: pl.style.fill,
-              color: pl.style.labelColor,
+              color: deriveLabelColor(pl.style.fill),
               border: `2px solid ${pl.style.stroke}`,
             }}
           >

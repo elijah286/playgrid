@@ -68,6 +68,7 @@ import {
   type ActionMenuItem,
 } from "@/components/ui";
 import type { SportVariant } from "@/domain/play/types";
+import { deriveLabelColor } from "@/domain/play/labelColor";
 import { useExamplePreview } from "@/features/admin/ExamplePreviewContext";
 
 type SortableListeners = Record<string, (event: unknown) => void> | undefined;
@@ -955,7 +956,7 @@ export function FormationThumbnail({ formation }: { formation: SavedFormation })
                 dominantBaseline="central"
                 fontSize={0.035}
                 fontWeight={700}
-                fill={p.style.labelColor}
+                fill={deriveLabelColor(p.style.fill)}
                 style={{ fontFamily: "Inter, system-ui, sans-serif" }}
               >
                 {p.label}

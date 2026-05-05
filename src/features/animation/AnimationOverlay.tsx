@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlayDocument, Player, Point2 } from "@/domain/play/types";
+import { deriveLabelColor } from "@/domain/play/labelColor";
 import type { PlayAnimation } from "./usePlayAnimation";
 
 type Props = {
@@ -65,7 +66,7 @@ function renderPlayerToken(pl: Player, pos: Point2, fieldAspect: number) {
   const ty = 1 - pos.y;
   const fillColor = pl.style?.fill ?? "#FFFFFF";
   const strokeColor = pl.style?.stroke ?? "rgba(0,0,0,0.6)";
-  const labelColor = readableLabelColor(fillColor, pl.style?.labelColor);
+  const labelColor = deriveLabelColor(fillColor);
   const shape = pl.shape ?? "circle";
 
   let shapeEl: React.ReactNode;
@@ -118,33 +119,3 @@ function renderPlayerToken(pl: Player, pos: Point2, fieldAspect: number) {
   );
 }
 
-function parseColor(c: string): { r: number; g: number; b: number } | null {
-  const s = c.trim();
-  if (s.startsWith("#")) {
-    const hex = s.slice(1);
-    const full = hex.length === 3 ? hex.split("").map((h) => h + h).join("") : hex;
-    if (full.length !== 6) return null;
-    const n = parseInt(full, 16);
-    if (Number.isNaN(n)) return null;
-    return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
-  }
-  const m = s.match(/rgba?\(([^)]+)\)/i);
-  if (m) {
-    const parts = m[1].split(",").map((p) => parseFloat(p.trim()));
-    if (parts.length >= 3) return { r: parts[0], g: parts[1], b: parts[2] };
-  }
-  return null;
-}
-
-function readableLabelColor(fill: string, preferred?: string): string {
-  const rgb = parseColor(fill);
-  if (!rgb) return preferred ?? "#1C1C1E";
-  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-  const auto = lum < 0.55 ? "#FFFFFF" : "#1C1C1E";
-  if (!preferred) return auto;
-  const pRgb = parseColor(preferred);
-  if (!pRgb) return auto;
-  const pLum = (0.299 * pRgb.r + 0.587 * pRgb.g + 0.114 * pRgb.b) / 255;
-  if (Math.abs(pLum - lum) < 0.35) return auto;
-  return preferred;
-}

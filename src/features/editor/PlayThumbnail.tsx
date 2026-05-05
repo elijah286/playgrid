@@ -1,6 +1,7 @@
 import type { Player, Route, Zone } from "@/domain/play/types";
 import { resolveEndDecoration, resolveRouteStroke } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
+import { deriveLabelColor } from "@/domain/play/labelColor";
 
 export type PlayThumbnailInput = {
   players: Player[];
@@ -267,7 +268,7 @@ export function PlayThumbnail({
                   />
                 )}
                 {shapeEl}
-                <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.035} fontWeight={700} fill={p.style.labelColor} style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
+                <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.035} fontWeight={700} fill={deriveLabelColor(p.style.fill)} style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
                   {p.label}
                 </text>
               </g>

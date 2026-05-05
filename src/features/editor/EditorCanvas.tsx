@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { createPortal } from "react-dom";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
+import { deriveLabelColor } from "@/domain/play/labelColor";
 import {
   routeToRenderedSegments,
   simplifyPolyline,
@@ -165,40 +166,6 @@ type Props = {
   onCommitPendingZone?: (position: Point2) => void;
   onCancelPendingZone?: () => void;
 };
-
-function parseColor(c: string): { r: number; g: number; b: number } | null {
-  const s = c.trim();
-  if (s.startsWith("#")) {
-    const hex = s.slice(1);
-    const full = hex.length === 3 ? hex.split("").map((h) => h + h).join("") : hex;
-    if (full.length !== 6) return null;
-    const n = parseInt(full, 16);
-    if (Number.isNaN(n)) return null;
-    return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
-  }
-  const m = s.match(/rgba?\(([^)]+)\)/i);
-  if (m) {
-    const parts = m[1].split(",").map((p) => parseFloat(p.trim()));
-    if (parts.length >= 3) return { r: parts[0], g: parts[1], b: parts[2] };
-  }
-  return null;
-}
-
-/** Pick black or white for legibility against `fill`. If the stored
- *  `preferred` already contrasts well (≥ 3:1), keep it. */
-function readableLabelColor(fill: string, preferred?: string): string {
-  const rgb = parseColor(fill);
-  if (!rgb) return preferred ?? "#1C1C1E";
-  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-  const auto = lum < 0.55 ? "#FFFFFF" : "#1C1C1E";
-  if (!preferred) return auto;
-  const pRgb = parseColor(preferred);
-  if (!pRgb) return auto;
-  const pLum = (0.299 * pRgb.r + 0.587 * pRgb.g + 0.114 * pRgb.b) / 255;
-  // If preferred label is too close in luminance to the fill, override.
-  if (Math.abs(pLum - lum) < 0.35) return auto;
-  return preferred;
-}
 
 /**
  * Floating context menu portaled to `document.body` and positioned at viewport
@@ -2024,9 +1991,7 @@ function EditorCanvasImpl({
             const fill = useStyled ? pl.style?.fill ?? "#9ca3af" : "#9ca3af";
             const stroke = useStyled ? pl.style?.stroke ?? "#4b5563" : "#4b5563";
             const strokeW = useStyled ? 1.5 : 1.2;
-            const labelColor = useStyled
-              ? readableLabelColor(fill, pl.style?.labelColor)
-              : "#1f2937";
+            const labelColor = useStyled ? deriveLabelColor(fill) : "#1f2937";
             const handlers = opponentEditable
               ? {
                   style: { cursor: "grab", touchAction: "none" } as React.CSSProperties,
@@ -2524,7 +2489,7 @@ function EditorCanvasImpl({
         const strokeColor = pl.style?.stroke ?? "rgba(0,0,0,0.6)";
         // With vectorEffect=non-scaling-stroke these widths are in CSS pixels.
         const strokeW = sel ? 2 : 1.5;
-        const labelColor = readableLabelColor(fillColor, pl.style?.labelColor);
+        const labelColor = deriveLabelColor(fillColor);
         const selectionRingColor = pl.style?.stroke ?? "#1C1C1E";
         const shape = pl.shape ?? "circle";
 
@@ -2724,13 +2689,8 @@ function EditorCanvasImpl({
             svgRef={svgRef}
             wrapperRef={wrapperRef}
             fieldAspect={fieldAspect}
-            onSave={(label, labelColor) => {
+            onSave={(label) => {
               dispatch({ type: "player.setLabel", playerId: pl.id, label });
-              dispatch({
-                type: "player.setStyle",
-                playerId: pl.id,
-                style: { ...pl.style, labelColor },
-              });
               setEditingPlayerId(null);
             }}
             onCancel={() => setEditingPlayerId(null)}
@@ -3198,20 +3158,10 @@ export const EditorCanvas = memo(EditorCanvasImpl);
 /*  Player label editor popover                                       */
 /* ------------------------------------------------------------------ */
 
-function autoLabelColor(fill: string): string {
-  const rgb = parseColor(fill);
-  if (!rgb) return "#1C1C1E";
-  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-  return lum < 0.55 ? "#FFFFFF" : "#1C1C1E";
-}
-
-const LABEL_COLOR_OPTIONS: { label: string; value: string | null }[] = [
-  { label: "Default", value: null },
-  { label: "White", value: "#FFFFFF" },
-  { label: "Gray", value: "#9CA3AF" },
-  { label: "Black", value: "#1C1C1E" },
-];
-
+// Double-click popover for renaming a player. The label-color picker that
+// used to live here was removed 2026-05-04 — letter color is now derived
+// entirely from the player's fill (see deriveLabelColor) and the override
+// path was a source of inconsistency across plays.
 function PlayerLabelEditor({
   player,
   svgRef,
@@ -3224,24 +3174,13 @@ function PlayerLabelEditor({
   svgRef: React.RefObject<SVGSVGElement | null>;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   fieldAspect: number;
-  onSave: (label: string, labelColor: string) => void;
+  onSave: (label: string) => void;
   onCancel: () => void;
 }) {
-  const autoColor = autoLabelColor(player.style.fill);
-  // If the stored labelColor matches auto, treat as "default" selection so the
-  // swatch reflects the user's most-likely intent when they re-open the popover.
-  const initialChoice: string | null =
-    player.style.labelColor.toUpperCase() === autoColor.toUpperCase()
-      ? null
-      : player.style.labelColor;
-
   const [label, setLabel] = useState(player.label);
-  const [choice, setChoice] = useState<string | null>(initialChoice);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const resolvedColor = choice ?? autoColor;
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
@@ -3287,11 +3226,11 @@ function PlayerLabelEditor({
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (rootRef.current?.contains(e.target as Node)) return;
-      onSave(label.slice(0, 2).toUpperCase(), resolvedColor);
+      onSave(label.slice(0, 2).toUpperCase());
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [label, resolvedColor, onSave]);
+  }, [label, onSave]);
 
   return (
     <div
@@ -3310,7 +3249,7 @@ function PlayerLabelEditor({
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            onSave(label.slice(0, 2).toUpperCase(), resolvedColor);
+            onSave(label.slice(0, 2).toUpperCase());
           } else if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
@@ -3320,33 +3259,6 @@ function PlayerLabelEditor({
         className="w-24 rounded border-2 border-primary bg-surface-raised px-2 py-1 text-center text-sm font-bold uppercase text-foreground outline-none"
         style={{ caretColor: "var(--color-primary)" }}
       />
-      <div className="flex items-center gap-1">
-        {LABEL_COLOR_OPTIONS.map((opt) => {
-          const active =
-            (opt.value === null && choice === null) ||
-            (opt.value !== null && choice?.toUpperCase() === opt.value.toUpperCase());
-          const swatchColor = opt.value ?? autoColor;
-          return (
-            <button
-              key={opt.label}
-              type="button"
-              title={opt.label}
-              aria-label={opt.label}
-              onClick={() => setChoice(opt.value)}
-              className={`flex size-6 items-center justify-center rounded border-2 transition-colors ${
-                active ? "border-primary" : "border-border"
-              }`}
-              style={{ backgroundColor: swatchColor }}
-            >
-              {opt.value === null && (
-                <span className="text-[9px] font-bold" style={{ color: autoLabelColor(autoColor) }}>
-                  A
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

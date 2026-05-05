@@ -1,5 +1,6 @@
 import type { PlayDocument, PlayerShape } from "../play/types";
 import { routeToPathGeometry, routeToPrintGroups } from "../play/geometry";
+import { deriveLabelColor } from "../play/labelColor";
 
 /** Dash patterns come from the editor in pixel units (assuming ~2px stroke).
  *  In print the stroke is in mm (~0.3-1mm), so pixel dashes render huge.
@@ -158,7 +159,7 @@ function buildPlayerLabelLookup(doc: PlayDocument): Map<string, NotePlayerStyle>
       label,
       fill: p.style.fill,
       stroke: p.style.stroke,
-      labelColor: p.style.labelColor,
+      labelColor: deriveLabelColor(p.style.fill),
     });
   }
   return out;
@@ -251,7 +252,7 @@ export function compilePlayToSvg(
     const pr = Math.max(1.8, 2.2 * doc.printProfile.fontScale);
     playerCircles += `<circle cx="${px}" cy="${py}" r="${pr}" fill="${p.style.fill}" stroke="${p.style.stroke}" stroke-width="0.35"/>`;
     if (vis.showPlayerLabels) {
-      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${p.style.labelColor}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif">${escSvgText(p.label)}</text>`;
+      playerCircles += `<text x="${px}" y="${py + 0.9}" text-anchor="middle" font-size="${fontMeta}" fill="${deriveLabelColor(p.style.fill)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -793,7 +794,7 @@ function renderFieldContents(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, look.playerOutline);
     if (look.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${p.style.labelColor}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1.2, pr * 1.05)}" fill="${deriveLabelColor(p.style.fill)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
     }
   }
 
@@ -1484,7 +1485,7 @@ function renderWristbandTile(
     const py = fieldY + (1 - fitY(p.position.y, fit)) * fieldH;
     players += playerMarkerSvg(p.shape, px, py, pr, p.style.fill, p.style.stroke, opts.playerOutline);
     if (opts.showPlayerLabels && vis.showPlayerLabels) {
-      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${p.style.labelColor}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
+      players += `<text x="${px}" y="${py + pr * 0.35}" text-anchor="middle" font-size="${Math.max(1, pr * 0.95)}" fill="${deriveLabelColor(p.style.fill)}" font-family="Inter,ui-sans-serif,system-ui,Helvetica,Arial,sans-serif" font-weight="bold">${escSvgText(p.label)}</text>`;
     }
   }
 

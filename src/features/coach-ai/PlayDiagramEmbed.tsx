@@ -14,6 +14,7 @@ import {
   hashColumnsForStyle,
 } from "@/domain/play/factory";
 import { routeToRenderedSegments } from "@/domain/play/geometry";
+import { deriveLabelColor } from "@/domain/play/labelColor";
 import { usePlayAnimation } from "@/features/animation/usePlayAnimation";
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
@@ -61,7 +62,7 @@ function PlayerToken({ player, cx, cy, r }: {
     <g transform={`translate(${cx} ${cy})`}>
       {shapeEl}
       <text x={0} y={labelY} textAnchor="middle" dominantBaseline="central"
-        fontSize={labelFont} fontWeight={700} fill={player.style.labelColor}
+        fontSize={labelFont} fontWeight={700} fill={deriveLabelColor(player.style.fill)}
         stroke={isTriangle ? "rgba(0,0,0,0.55)" : undefined}
         strokeWidth={isTriangle ? 1.2 : undefined}
         paintOrder={isTriangle ? "stroke" : undefined}
