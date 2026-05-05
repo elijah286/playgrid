@@ -6,25 +6,10 @@ import { recordPageViewAction } from "@/app/actions/page-views";
 import { recordPageDwellAction } from "@/app/actions/ui-events";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { CLICK_ID_PARAMS, type ClickIds } from "@/lib/attribution/click-ids";
-
-const SESSION_KEY = "playgrid:session-id";
-const FIRST_EVENT_KEY = "playgrid:session-first-sent";
-
-function getSessionId(): string {
-  try {
-    let id = sessionStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      sessionStorage.setItem(SESSION_KEY, id);
-    }
-    return id;
-  } catch {
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
-}
+import {
+  getSessionId,
+  consumeFirstSessionEventFlag,
+} from "@/lib/analytics/session-id";
 
 function detectDevice(): "mobile" | "tablet" | "desktop" {
   const w = window.innerWidth;
@@ -67,15 +52,7 @@ export default function PageViewTracker() {
 
     const sessionId = getSessionId();
 
-    let isFirst = false;
-    try {
-      if (!sessionStorage.getItem(FIRST_EVENT_KEY)) {
-        sessionStorage.setItem(FIRST_EVENT_KEY, "1");
-        isFirst = true;
-      }
-    } catch {
-      isFirst = false;
-    }
+    const isFirst = consumeFirstSessionEventFlag();
 
     let referrer: string | null = null;
     let utmSource: string | null = null;

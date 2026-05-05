@@ -8,6 +8,7 @@ import { FieldBackdrop } from "@/components/layout/FieldBackdrop";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import PageViewTracker from "@/components/PageViewTracker";
+import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
 import { createClient } from "@/lib/supabase/server";
@@ -149,6 +150,7 @@ export default async function RootLayout({
             <div className="flex flex-1 flex-col">{children}</div>
             <SiteFooter />
             <PageViewTracker />
+            <WebVitalsReporter />
             <ConsentGate />
             <NativeAppShell />
           </ToastProvider>
