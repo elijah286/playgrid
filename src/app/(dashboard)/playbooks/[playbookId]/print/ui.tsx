@@ -112,6 +112,32 @@ function compareByWristbandNumber(a: PlaybookPrintPackRow, b: PlaybookPrintPackR
   return a.nav.sort_order - b.nav.sort_order;
 }
 
+/**
+ * Per-group, 1-based positions for plays already grouped contiguously by
+ * group_id (i.e. after sortNavPlaysForPrint with grouping="group"). Mirrors
+ * the playbook grid view's positionByPlayId so a coach printing the
+ * Recommended group sees 01, 02, 03… instead of the absolute playbook
+ * positions (which leave gaps when other groups are unselected).
+ */
+function computeGroupPositions(
+  ordered: PlaybookPrintPackRow[],
+): Map<string, number> {
+  const m = new Map<string, number>();
+  let lastGid: string | null | undefined = undefined;
+  let counter = 0;
+  for (const r of ordered) {
+    const gid = r.nav.group_id ?? null;
+    if (gid !== lastGid) {
+      counter = 1;
+      lastGid = gid;
+    } else {
+      counter++;
+    }
+    m.set(r.id, counter);
+  }
+  return m;
+}
+
 function resolveFooterText(
   template: string,
   playbookName: string,
@@ -495,14 +521,19 @@ export function PrintPlaybookClient({
                 .map((n) => pool.find((r) => r.id === n.id))
                 .filter((x): x is PlaybookPrintPackRow => x != null);
             })();
+      const wbGroupPos =
+        sortBy === "group" ? computeGroupPositions(wbOrdered) : null;
       const docs = wbOrdered.map((r, i) => {
         const d = applyExportPresentation(r.document, config);
         const pos = playbookPositionById.get(r.id);
+        const groupIdx = wbGroupPos?.get(r.id) ?? null;
         const label = numberPlaysInOrder
           ? String(i + 1).padStart(2, "0")
-          : pos != null
-            ? String(pos).padStart(2, "0")
-            : d.metadata.wristbandCode;
+          : groupIdx != null
+            ? String(groupIdx).padStart(2, "0")
+            : pos != null
+              ? String(pos).padStart(2, "0")
+              : d.metadata.wristbandCode;
         d.metadata = { ...d.metadata, wristbandCode: label };
         if (d.metadata.coachName !== "​") {
           d.metadata = { ...d.metadata, coachName: r.nav.name };
@@ -543,14 +574,19 @@ export function PrintPlaybookClient({
               .map((n) => pool.find((r) => r.id === n.id))
               .filter((x): x is PlaybookPrintPackRow => x != null);
           })();
+    const playsheetGroupPos =
+      sortBy === "group" ? computeGroupPositions(ordered) : null;
     const docs = ordered.map((r, i) => {
       const d = applyExportPresentation(r.document, config);
       const pos = playbookPositionById.get(r.id);
+      const groupIdx = playsheetGroupPos?.get(r.id) ?? null;
       const label = numberPlaysInOrder
         ? String(i + 1).padStart(2, "0")
-        : pos != null
-          ? String(pos).padStart(2, "0")
-          : d.metadata.wristbandCode;
+        : groupIdx != null
+          ? String(groupIdx).padStart(2, "0")
+          : pos != null
+            ? String(pos).padStart(2, "0")
+            : d.metadata.wristbandCode;
       d.metadata = { ...d.metadata, wristbandCode: label };
       if (d.metadata.coachName !== "​") {
         d.metadata = { ...d.metadata, coachName: r.nav.name };
@@ -621,14 +657,19 @@ export function PrintPlaybookClient({
               .map((n) => rows.find((r) => r.id === n.id))
               .filter((x): x is PlaybookPrintPackRow => x != null);
           })();
+    const exportGroupPos =
+      sortBy === "group" ? computeGroupPositions(ordered) : null;
     const docs = ordered.map((r, i) => {
       const d = applyExportPresentation(r.document, config);
       const pos = playbookPositionById.get(r.id);
+      const groupIdx = exportGroupPos?.get(r.id) ?? null;
       const label = numberPlaysInOrder
         ? String(i + 1).padStart(2, "0")
-        : pos != null
-          ? String(pos).padStart(2, "0")
-          : d.metadata.wristbandCode;
+        : groupIdx != null
+          ? String(groupIdx).padStart(2, "0")
+          : pos != null
+            ? String(pos).padStart(2, "0")
+            : d.metadata.wristbandCode;
       d.metadata = { ...d.metadata, wristbandCode: label };
       if (d.metadata.coachName !== "​") {
         d.metadata = { ...d.metadata, coachName: r.nav.name };
@@ -1286,7 +1327,7 @@ function PlaysPanel(props: PlaysPanelProps) {
               </div>
               {expanded && (
                 <ul className="divide-y divide-border/50 border-t border-border/50">
-                  {node.rows.map((r) => {
+                  {node.rows.map((r, i) => {
                     const on = selected.has(r.id);
                     return (
                       <li key={r.id}>
@@ -1303,11 +1344,20 @@ function PlaysPanel(props: PlaysPanelProps) {
                                 {r.nav.name}
                               </span>
                               {(() => {
-                                const pos = playbookPositionById.get(r.id);
+                                // When sorted by group, mirror the
+                                // playbook grid: number plays
+                                // consecutively within each group
+                                // node. Otherwise fall back to the
+                                // per-type playbook position.
                                 const label =
-                                  pos != null
-                                    ? String(pos).padStart(2, "0")
-                                    : r.nav.wristband_code;
+                                  sortBy === "group"
+                                    ? String(i + 1).padStart(2, "0")
+                                    : (() => {
+                                        const pos = playbookPositionById.get(r.id);
+                                        return pos != null
+                                          ? String(pos).padStart(2, "0")
+                                          : r.nav.wristband_code;
+                                      })();
                                 return label ? <Badge variant="primary">{label}</Badge> : null;
                               })()}
                             </div>

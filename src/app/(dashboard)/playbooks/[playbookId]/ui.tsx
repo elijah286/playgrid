@@ -1785,8 +1785,8 @@ function PlaybookDetailClientInner({
                   isDropTarget ? "p-2 -m-2" : ""
                 } ${reorderMode && isOver && isDropTarget ? "bg-primary/10 outline outline-2 outline-primary/50" : ""}`}
               >
-                <div className="flex items-center gap-2 border-b border-border pb-1.5">
-                  <h2 className="truncate text-sm font-semibold text-foreground">{section.label}</h2>
+                <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <h2 className="truncate text-base font-bold text-foreground">{section.label}</h2>
                   <Badge variant="default">{section.plays.length}</Badge>
                 </div>
                 {viewMode === "cards" && (
