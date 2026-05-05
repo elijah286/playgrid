@@ -358,6 +358,7 @@ export async function sendPlaybookInviteEmailAction(input: {
 
 export type ShareResultRow =
   | { email: string; kind: "added"; userId: string }
+  | { email: string; kind: "upgraded"; userId: string }
   | { email: string; kind: "already_member" }
   | { email: string; kind: "invited"; inviteUrl: string }
   | { email: string; kind: "failed"; error: string };
@@ -455,11 +456,21 @@ export async function sharePlaybookWithEmailsAction(input: {
           .eq("playbook_id", input.playbookId)
           .eq("user_id", userId)
           .maybeSingle();
-        const alreadyActive = !!existing && existing.status === "active";
-        if (!alreadyActive) {
+        const isActive = !!existing && existing.status === "active";
+        // Active viewers can be promoted to editor by re-sharing as
+        // co-coach; without this the share UI silently no-ops with
+        // "already a member" and the recipient stays a viewer.
+        const isViewerToEditor =
+          isActive && existing!.role === "viewer" && input.role === "editor";
+        // No-op when the row is already at or above the requested role
+        // (active editor, active owner, or active viewer being re-shared
+        // as a player). Owners are never modified via this path.
+        const noChange = isActive && !isViewerToEditor;
+        if (!noChange) {
           // Seat guard: only coach (editor) memberships consume seats.
           // Player (viewer) invites are unlimited. Coach+ paying invitees
-          // ride free even when added as editors.
+          // ride free even when added as editors. Fires for new inserts,
+          // pending-row activations, AND viewer→editor promotions.
           if (ownerId && input.role === "editor") {
             const inviteeEntitlement = await getUserEntitlement(userId);
             const isPaidInvitee = tierAtLeast(inviteeEntitlement, "coach");
@@ -471,10 +482,11 @@ export async function sharePlaybookWithEmailsAction(input: {
               }
             }
           }
-          // Direct add / upgrade an existing pending row. The
-          // (playbook_id, user_id) unique index is partial (only where
-          // user_id is not null), so PostgREST's ON CONFLICT can't bind
-          // to it — do it manually via select-then-insert-or-update.
+          // Direct add / upgrade an existing pending row / promote an
+          // active viewer. The (playbook_id, user_id) unique index is
+          // partial (only where user_id is not null), so PostgREST's ON
+          // CONFLICT can't bind to it — do it manually via
+          // select-then-insert-or-update.
           const upErr = existing
             ? (
                 await admin
@@ -497,21 +509,24 @@ export async function sharePlaybookWithEmailsAction(input: {
           }
           // Seed recipient's view prefs from the sharer's current prefs,
           // first-visit-only (insert-or-nothing). Best-effort; silently
-          // skip on error so it never blocks the share.
-          const { data: myPrefs } = await supabase
-            .from("playbook_view_preferences")
-            .select("preferences")
-            .eq("user_id", user.id)
-            .eq("playbook_id", input.playbookId)
-            .maybeSingle();
-          await admin
-            .from("playbook_view_preferences")
-            .insert({
-              user_id: userId,
-              playbook_id: input.playbookId,
-              preferences: myPrefs?.preferences ?? {},
-            })
-            .then(() => undefined, () => undefined);
+          // skip on error so it never blocks the share. Skip on
+          // promotion — the existing user already has prefs.
+          if (!existing) {
+            const { data: myPrefs } = await supabase
+              .from("playbook_view_preferences")
+              .select("preferences")
+              .eq("user_id", user.id)
+              .eq("playbook_id", input.playbookId)
+              .maybeSingle();
+            await admin
+              .from("playbook_view_preferences")
+              .insert({
+                user_id: userId,
+                playbook_id: input.playbookId,
+                preferences: myPrefs?.preferences ?? {},
+              })
+              .then(() => undefined, () => undefined);
+          }
         }
         // Always send a "was shared with you" email, even on re-share, so
         // the recipient sees the signal. Surface email send errors instead
@@ -542,7 +557,7 @@ export async function sharePlaybookWithEmailsAction(input: {
         }
         results.push({
           email,
-          kind: alreadyActive ? "already_member" : "added",
+          kind: isViewerToEditor ? "upgraded" : noChange ? "already_member" : "added",
           userId,
         });
       } else {

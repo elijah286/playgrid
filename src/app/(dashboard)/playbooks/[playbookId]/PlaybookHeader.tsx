@@ -2008,16 +2008,18 @@ export function InviteTeamMemberDialog({
     }
     setShareResults(res.results);
     const added = res.results.filter((r) => r.kind === "added").length;
+    const upgraded = res.results.filter((r) => r.kind === "upgraded").length;
     const invited = res.results.filter((r) => r.kind === "invited").length;
     const already = res.results.filter((r) => r.kind === "already_member").length;
     const failed = res.results.filter((r) => r.kind === "failed").length;
     const bits: string[] = [];
     if (added) bits.push(`${added} added`);
+    if (upgraded) bits.push(`${upgraded} promoted to coach`);
     if (invited) bits.push(`${invited} invited`);
     if (already) bits.push(`${already} already a member`);
     if (failed) bits.push(`${failed} failed`);
     toast(bits.join(" · ") || "Done.", failed ? "error" : "success");
-    if (added > 0) router.refresh();
+    if (added > 0 || upgraded > 0) router.refresh();
   }
 
   return (
@@ -2306,11 +2308,13 @@ export function InviteTeamMemberDialog({
                       >
                         {r.kind === "added"
                           ? "Added"
-                          : r.kind === "invited"
-                            ? "Invite sent"
-                            : r.kind === "already_member"
-                              ? "Already a member"
-                              : `Failed: ${r.error}`}
+                          : r.kind === "upgraded"
+                            ? "Promoted to coach"
+                            : r.kind === "invited"
+                              ? "Invite sent"
+                              : r.kind === "already_member"
+                                ? "Already a member"
+                                : `Failed: ${r.error}`}
                       </span>
                     </li>
                   ))}
