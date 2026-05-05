@@ -64,31 +64,33 @@ async function loadPlaybookSettings(
   }
 }
 
-/**
- * Resolve a play_id input to a canonical UUID.
- *
- * Cal often calls play tools with the slot number ("4") or the name the
- * coach used ("Spread Slant"), not the UUID. Postgres rejects non-UUID
- * strings with `invalid input syntax for type uuid`, which used to surface
- * to the coach as a useless "UUID error". This helper accepts:
- *   - a real UUID — returned as-is after confirming it's in the playbook
- *   - a 1-based slot number ("4", "Play 4") — resolved by sort_order
- *   - an exact play name match — resolved by name
- *   - a fuzzy substring match if the name input matches exactly one play
- *
- * Returns the canonical UUID, or an error string explaining what didn't
- * match.
- */
-export async function resolvePlayId(
-  rawInput: string,
-  playbookId: string,
-): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
-  const input = rawInput.trim();
-  if (!input) return { ok: false, error: "play_id is required." };
+type ResolverPlayRow = {
+  id: string;
+  name: string;
+  sort_order: number;
+  group_id: string | null;
+};
 
+type OrderedPlaybook = {
+  /** Plays in playbook display order — same compareNavPlays sort the UI uses. */
+  plays: ResolverPlayRow[];
+  /** group_id (or empty string for ungrouped) → display label. */
+  groupLabelByKey: Map<string, string>;
+  /** group_id (or empty string) → 1-based slot map for that section. */
+  slotByPlayId: Map<string, number>;
+  /** group_id (or empty string) → ordered plays in that section. */
+  sectionPlays: Map<string, ResolverPlayRow[]>;
+  /** Section keys in display order (ungrouped first). */
+  sectionOrder: string[];
+};
+
+const UNGROUPED_LABEL = "Ungrouped";
+
+async function loadOrderedPlaybook(playbookId: string): Promise<{ ok: true; data: OrderedPlaybook } | { ok: false; error: string }> {
   const admin = createServiceRoleClient();
   // Mirror the playbook UI's compareNavPlays ordering so slot numbers
-  // match the orange play badges. See list_plays for the same logic.
+  // restart per group and match the orange play badges. See ui.tsx
+  // (positionByPlayId) for the per-section, 1-based numbering the coach sees.
   const [playsRes, groupsRes] = await Promise.all([
     admin
       .from("plays")
@@ -99,29 +101,85 @@ export async function resolvePlayId(
       .is("attached_to_play_id", null),
     admin
       .from("playbook_groups")
-      .select("id, sort_order")
-      .eq("playbook_id", playbookId),
+      .select("id, name, sort_order, deleted_at")
+      .eq("playbook_id", playbookId)
+      .is("deleted_at", null),
   ]);
   if (playsRes.error) return { ok: false, error: playsRes.error.message };
+
   const groupSortById = new Map<string, number>();
-  for (const g of groupsRes.data ?? []) {
-    groupSortById.set(g.id as string, (g.sort_order as number) ?? 0);
+  const groupNameById = new Map<string, string>();
+  for (const g of (groupsRes.data ?? []) as Array<{ id: string; name: string; sort_order: number | null }>) {
+    groupSortById.set(g.id, g.sort_order ?? 0);
+    groupNameById.set(g.id, g.name ?? "");
   }
-  const plays = ((playsRes.data ?? []) as Array<{
-    id: string;
-    name: string;
-    sort_order: number;
-    group_id: string | null;
-  }>).slice().sort((a, b) => {
-    const ungA = a.group_id == null ? 0 : 1;
-    const ungB = b.group_id == null ? 0 : 1;
-    if (ungA !== ungB) return ungA - ungB;
-    const ga = a.group_id != null ? groupSortById.get(a.group_id) ?? 0 : 0;
-    const gb = b.group_id != null ? groupSortById.get(b.group_id) ?? 0 : 0;
-    if (ga !== gb) return ga - gb;
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-  });
+
+  const plays = ((playsRes.data ?? []) as ResolverPlayRow[])
+    .slice()
+    .sort((a, b) => {
+      const ungA = a.group_id == null ? 0 : 1;
+      const ungB = b.group_id == null ? 0 : 1;
+      if (ungA !== ungB) return ungA - ungB;
+      const ga = a.group_id != null ? groupSortById.get(a.group_id) ?? 0 : 0;
+      const gb = b.group_id != null ? groupSortById.get(b.group_id) ?? 0 : 0;
+      if (ga !== gb) return ga - gb;
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+    });
+
+  const groupLabelByKey = new Map<string, string>();
+  const sectionPlays = new Map<string, ResolverPlayRow[]>();
+  const sectionOrder: string[] = [];
+  const slotByPlayId = new Map<string, number>();
+  for (const p of plays) {
+    const key = p.group_id ?? "";
+    if (!sectionPlays.has(key)) {
+      sectionPlays.set(key, []);
+      sectionOrder.push(key);
+      groupLabelByKey.set(
+        key,
+        p.group_id ? groupNameById.get(p.group_id) ?? "(unknown group)" : UNGROUPED_LABEL,
+      );
+    }
+    const arr = sectionPlays.get(key)!;
+    arr.push(p);
+    slotByPlayId.set(p.id, arr.length);
+  }
+
+  return { ok: true, data: { plays, groupLabelByKey, slotByPlayId, sectionPlays, sectionOrder } };
+}
+
+/** Strip a leading "play" or "#" / "/" / "—" / dash separators (e.g. "Recommended Play 5" → "5"). */
+function parseTrailingSlot(remainder: string): number | null {
+  const m = remainder.trim().match(/^(?:[#/\-–—:]\s*)?(?:play\s*)?#?\s*(\d+)\s*$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Pure resolver — given a parsed playbook and a raw input string, return the
+ * matching play (or an error). Factored out so it can be unit-tested without
+ * mocking Supabase. `resolvePlayId` is the I/O wrapper.
+ *
+ * Accepts:
+ *   - a real UUID — returned as-is after confirming it's in the playbook
+ *   - a group-qualified slot — "Recommended #5", "Goal Line/2", "Ungrouped 3" —
+ *     numbered 1-based within that group (matches the orange UI badges)
+ *   - a bare slot — "5", "Play 5", "#5" — accepted only when exactly one
+ *     section has a play at that position; otherwise the candidates are returned
+ *     so Cal can ask which group
+ *   - an exact play name (case-insensitive)
+ *   - a fuzzy substring match if exactly one play matches
+ */
+export function resolvePlayIdFromOrdered(
+  rawInput: string,
+  ordered: OrderedPlaybook,
+): { ok: true; id: string; name: string } | { ok: false; error: string } {
+  const input = rawInput.trim();
+  if (!input) return { ok: false, error: "play_id is required." };
+
+  const { plays, groupLabelByKey, slotByPlayId, sectionPlays, sectionOrder } = ordered;
   if (plays.length === 0) return { ok: false, error: "No plays in this playbook." };
 
   // 1) Direct UUID match.
@@ -131,39 +189,149 @@ export async function resolvePlayId(
     return { ok: false, error: `No play with id ${input} in this playbook.` };
   }
 
-  // 2) Slot number — "4", "Play 4", "play #4", "#4".
-  const numMatch = input.match(/^(?:play\s*)?#?\s*(\d+)$/i);
-  if (numMatch) {
-    const slot = parseInt(numMatch[1], 10);
-    if (slot >= 1 && slot <= plays.length) {
-      const hit = plays[slot - 1];
+  // Build a quick lookup: lowercased group label → section key. Allow fuzzy
+  // start-of-input matching since Cal might have stripped/altered formatting
+  // (e.g. "Goal-line #2" for "Goal Line").
+  const labelEntries: Array<{ key: string; label: string }> = [];
+  for (const key of sectionOrder) {
+    labelEntries.push({ key, label: groupLabelByKey.get(key) ?? "" });
+  }
+  // Sort longer labels first so "Goal Line Red Zone" wins over "Goal Line".
+  labelEntries.sort((a, b) => b.label.length - a.label.length);
+
+  const lower = input.toLowerCase();
+
+  // 2) Group-qualified slot — "Recommended #5", "Goal Line/2", "Ungrouped 3".
+  for (const { key, label } of labelEntries) {
+    if (!label) continue;
+    const lowerLabel = label.toLowerCase();
+    if (!lower.startsWith(lowerLabel)) continue;
+    const remainder = input.slice(label.length);
+    const slot = parseTrailingSlot(remainder);
+    if (slot == null) continue;
+    const section = sectionPlays.get(key) ?? [];
+    if (slot >= 1 && slot <= section.length) {
+      const hit = section[slot - 1];
       return { ok: true, id: hit.id, name: hit.name };
     }
-    return { ok: false, error: `Slot ${slot} is out of range (playbook has ${plays.length} plays).` };
+    return {
+      ok: false,
+      error: `Slot ${slot} is out of range for "${label}" (${section.length} play${section.length === 1 ? "" : "s"}).`,
+    };
   }
 
-  // 3) Exact name match (case-insensitive).
-  const lower = input.toLowerCase();
+  // 3) Bare slot — "5", "Play 5", "#5". With per-group numbering this is
+  //    only unambiguous when exactly one section has a play at that slot.
+  const bareSlot = parseTrailingSlot(input);
+  if (bareSlot != null) {
+    const candidates: Array<{ key: string; label: string; row: ResolverPlayRow }> = [];
+    for (const key of sectionOrder) {
+      const section = sectionPlays.get(key) ?? [];
+      if (bareSlot >= 1 && bareSlot <= section.length) {
+        candidates.push({ key, label: groupLabelByKey.get(key) ?? "", row: section[bareSlot - 1] });
+      }
+    }
+    if (candidates.length === 1) {
+      return { ok: true, id: candidates[0].row.id, name: candidates[0].row.name };
+    }
+    if (candidates.length === 0) {
+      return {
+        ok: false,
+        error: `No section has a play at slot ${bareSlot}. Use the group-qualified form (e.g. "${groupLabelByKey.get(sectionOrder[0]) ?? UNGROUPED_LABEL} #${bareSlot}") or the play name.`,
+      };
+    }
+    const list = candidates
+      .map((c) => `"${c.label} #${bareSlot}" → "${c.row.name}"`)
+      .join(", ");
+    return {
+      ok: false,
+      error: `"${input}" is ambiguous — multiple groups have a #${bareSlot}. Pick one: ${list}.`,
+    };
+  }
+
+  // 4) Exact name match (case-insensitive).
   const exact = plays.filter((p) => p.name.toLowerCase() === lower);
   if (exact.length === 1) return { ok: true, id: exact[0].id, name: exact[0].name };
   if (exact.length > 1) {
+    const tags = exact
+      .map((p) => `"${groupLabelByKey.get(p.group_id ?? "") ?? UNGROUPED_LABEL} #${slotByPlayId.get(p.id) ?? "?"}"`)
+      .join(", ");
     return {
       ok: false,
-      error: `Multiple plays named "${input}". Use the play's slot number or UUID to disambiguate. Candidates: ${exact.map((p, i) => `slot ${plays.indexOf(p) + 1}`).join(", ")}.`,
+      error: `Multiple plays named "${input}". Use the group-qualified slot or UUID to disambiguate. Candidates: ${tags}.`,
     };
   }
 
-  // 4) Fuzzy substring match — accept only if exactly one hit.
+  // 5) Fuzzy substring match — accept only if exactly one hit.
   const fuzzy = plays.filter((p) => p.name.toLowerCase().includes(lower));
   if (fuzzy.length === 1) return { ok: true, id: fuzzy[0].id, name: fuzzy[0].name };
   if (fuzzy.length > 1) {
+    const matches = fuzzy
+      .slice(0, 5)
+      .map((p) => `"${p.name}" (${groupLabelByKey.get(p.group_id ?? "") ?? UNGROUPED_LABEL} #${slotByPlayId.get(p.id) ?? "?"})`)
+      .join(", ");
     return {
       ok: false,
-      error: `"${input}" matched multiple plays. Use the slot number or full name. Matches: ${fuzzy.map((p) => `"${p.name}" (slot ${plays.indexOf(p) + 1})`).slice(0, 5).join(", ")}.`,
+      error: `"${input}" matched multiple plays. Use the group-qualified slot or full name. Matches: ${matches}.`,
     };
   }
 
-  return { ok: false, error: `No play matched "${input}" — try the slot number (e.g. 4) or exact name.` };
+  return { ok: false, error: `No play matched "${input}" — try the group-qualified slot (e.g. "Recommended #5") or exact name.` };
+}
+
+/** I/O wrapper: load the playbook ordering, then run the pure resolver. */
+export async function resolvePlayId(
+  rawInput: string,
+  playbookId: string,
+): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+  const trimmed = rawInput.trim();
+  if (!trimmed) return { ok: false, error: "play_id is required." };
+  const loaded = await loadOrderedPlaybook(playbookId);
+  if (!loaded.ok) return loaded;
+  return resolvePlayIdFromOrdered(trimmed, loaded.data);
+}
+
+// Internal helper exported only for testing — builds an OrderedPlaybook from
+// in-memory rows, mirroring the database loader's sort/section logic.
+export function _buildOrderedPlaybookForTest(args: {
+  plays: Array<{ id: string; name: string; sort_order: number; group_id: string | null }>;
+  groups: Array<{ id: string; name: string; sort_order: number }>;
+}): OrderedPlaybook {
+  const groupSortById = new Map<string, number>();
+  const groupNameById = new Map<string, string>();
+  for (const g of args.groups) {
+    groupSortById.set(g.id, g.sort_order);
+    groupNameById.set(g.id, g.name);
+  }
+  const plays = args.plays.slice().sort((a, b) => {
+    const ungA = a.group_id == null ? 0 : 1;
+    const ungB = b.group_id == null ? 0 : 1;
+    if (ungA !== ungB) return ungA - ungB;
+    const ga = a.group_id != null ? groupSortById.get(a.group_id) ?? 0 : 0;
+    const gb = b.group_id != null ? groupSortById.get(b.group_id) ?? 0 : 0;
+    if (ga !== gb) return ga - gb;
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  });
+  const groupLabelByKey = new Map<string, string>();
+  const sectionPlays = new Map<string, ResolverPlayRow[]>();
+  const sectionOrder: string[] = [];
+  const slotByPlayId = new Map<string, number>();
+  for (const p of plays) {
+    const key = p.group_id ?? "";
+    if (!sectionPlays.has(key)) {
+      sectionPlays.set(key, []);
+      sectionOrder.push(key);
+      groupLabelByKey.set(
+        key,
+        p.group_id ? groupNameById.get(p.group_id) ?? "(unknown group)" : UNGROUPED_LABEL,
+      );
+    }
+    const arr = sectionPlays.get(key)!;
+    arr.push(p);
+    slotByPlayId.set(p.id, arr.length);
+  }
+  return { plays, groupLabelByKey, slotByPlayId, sectionPlays, sectionOrder };
 }
 
 /** Convert a saved PlayDocument back into the CoachDiagram yard-based format. */
@@ -490,100 +658,62 @@ const list_plays: CoachAiTool = {
     const filter = typeof input.filter_name === "string" ? input.filter_name.toLowerCase() : null;
 
     try {
+      const ordered = await loadOrderedPlaybook(ctx.playbookId);
+      if (!ordered.ok) return ordered;
+      const { plays, groupLabelByKey, slotByPlayId, sectionPlays, sectionOrder } = ordered.data;
+      if (plays.length === 0) return { ok: true, result: "No plays found in this playbook." };
+
+      // Pull formation/type/tags in a single round-trip — we already have ids
+      // from the resolver helper but it doesn't fetch these fields.
       const admin = createServiceRoleClient();
-      // Mirror the playbook UI's ordering exactly so Cal's "Play 4" matches
-      // the orange-badge "04" the coach sees. The UI uses compareNavPlays:
-      //   ungrouped first, then by group_sort_order, then by sort_order,
-      //   tiebreak by name.
-      // A naive ORDER BY sort_order misaligns whenever plays span groups
-      // or share a sort_order — both of which happen in practice.
-      const [playsRes, groupsRes] = await Promise.all([
-        admin
-          .from("plays")
-          .select("id, name, formation_name, play_type, group_id, sort_order, tags, is_archived")
-          .eq("playbook_id", ctx.playbookId)
-          .eq("is_archived", false)
-          .is("deleted_at", null)
-          .is("attached_to_play_id", null),
-        admin
-          .from("playbook_groups")
-          .select("id, sort_order")
-          .eq("playbook_id", ctx.playbookId),
-      ]);
-
-      if (playsRes.error) return { ok: false, error: playsRes.error.message };
-      const data = playsRes.data;
-      if (!data || data.length === 0) return { ok: true, result: "No plays found in this playbook." };
-
-      const groupSortById = new Map<string, number>();
-      for (const g of groupsRes.data ?? []) {
-        groupSortById.set(g.id as string, (g.sort_order as number) ?? 0);
-      }
-
-      const groupNameById = new Map<string, string>();
-      // Pull group names alongside sort order so the listing shows which
-      // bucket each play already lives in. Without this, Cal can't tell
-      // "Play 4 is in Red Zone" vs "Play 4 is ungrouped" without a second
-      // tool call to list_play_groups.
-      const { data: groupNameRows } = await admin
-        .from("playbook_groups")
-        .select("id, name, deleted_at")
+      const { data: meta, error: metaErr } = await admin
+        .from("plays")
+        .select("id, formation_name, play_type, tags")
         .eq("playbook_id", ctx.playbookId)
-        .is("deleted_at", null);
-      for (const g of groupNameRows ?? []) {
-        groupNameById.set(g.id as string, (g.name as string) ?? "");
+        .in("id", plays.map((p) => p.id));
+      if (metaErr) return { ok: false, error: metaErr.message };
+      const metaById = new Map<string, { formation_name: string | null; play_type: string | null; tags: string[] | null }>();
+      for (const m of (meta ?? []) as Array<{ id: string; formation_name: string | null; play_type: string | null; tags: string[] | null }>) {
+        metaById.set(m.id, { formation_name: m.formation_name, play_type: m.play_type, tags: m.tags });
       }
 
-      const allRows = (data as Array<{
-        id: string;
-        name: string;
-        formation_name: string | null;
-        play_type: string | null;
-        group_id: string | null;
-        sort_order: number;
-        tags: string[] | null;
-        is_archived: boolean;
-      }>).slice().sort((a, b) => {
-        const ungA = a.group_id == null ? 0 : 1;
-        const ungB = b.group_id == null ? 0 : 1;
-        if (ungA !== ungB) return ungA - ungB;
-        const ga = a.group_id != null ? groupSortById.get(a.group_id) ?? 0 : 0;
-        const gb = b.group_id != null ? groupSortById.get(b.group_id) ?? 0 : 0;
-        if (ga !== gb) return ga - gb;
-        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-      });
+      // Filter is applied within sections so the per-group slot numbers stay
+      // stable (they always reflect the play's actual UI position, not its
+      // position in the filtered subset).
+      const sectionsOut: string[] = [];
+      let totalShown = 0;
+      for (const key of sectionOrder) {
+        const section = sectionPlays.get(key) ?? [];
+        const matching = filter ? section.filter((p) => p.name.toLowerCase().includes(filter)) : section;
+        if (matching.length === 0) continue;
+        const label = groupLabelByKey.get(key) ?? UNGROUPED_LABEL;
+        const lines = matching.map((p) => {
+          const slot = slotByPlayId.get(p.id) ?? 0;
+          const m = metaById.get(p.id);
+          const metaLine = [
+            m?.play_type ?? "offense",
+            m?.formation_name ? `formation: ${m.formation_name}` : null,
+            m?.tags && m.tags.length > 0 ? `tags: ${m.tags.join(", ")}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ");
+          return `• #${slot} — "${p.name}" [${p.id}] (${metaLine})`;
+        });
+        sectionsOut.push(`## ${label} (${section.length} play${section.length === 1 ? "" : "s"})\n${lines.join("\n")}`);
+        totalShown += matching.length;
+      }
 
-      // Tag every row with its 1-based slot in the FULL ordered list. We do
-      // this BEFORE filtering so the slot number reflects what the coach sees.
-      const slotById = new Map<string, number>();
-      allRows.forEach((r, i) => slotById.set(r.id, i + 1));
+      if (totalShown === 0) {
+        return { ok: true, result: `No plays match "${input.filter_name}".` };
+      }
 
-      const rows = filter
-        ? allRows.filter((r) => r.name.toLowerCase().includes(filter))
-        : allRows;
-
-      if (rows.length === 0) return { ok: true, result: `No plays match "${input.filter_name}".` };
-
-      const lines = rows.map((r) => {
-        const slot = slotById.get(r.id);
-        const slotLabel = slot != null ? `Play ${slot}` : "Play ?";
-        const groupLabel = r.group_id
-          ? (groupNameById.get(r.group_id) ?? "(unknown group)")
-          : "(ungrouped)";
-        const meta = [
-          r.play_type ?? "offense",
-          `group: ${groupLabel}`,
-          r.formation_name ? `formation: ${r.formation_name}` : null,
-          r.tags && r.tags.length > 0 ? `tags: ${r.tags.join(", ")}` : null,
-        ].filter(Boolean).join(" | ");
-        return `• ${slotLabel} — "${r.name}" [${r.id}] (${meta})`;
-      });
-      return {
-        ok: true,
-        result:
-          `${rows.length} play(s) in playbook display order. Slot numbers match what the coach sees in the UI — when calling other play tools (get_play, rename_play, etc.), you can pass the slot number ("4"), the exact name, or the UUID:\n${lines.join("\n")}`,
-      };
+      const header =
+        `${totalShown} play(s) shown, grouped by section. ` +
+        `Slot numbers (#1, #2, ...) restart per group and match the orange badges in the UI. ` +
+        `When you reference a play to the coach, qualify it by group: "Recommended #5", "Goal Line #2", etc. ` +
+        `When calling other play tools (get_play, rename_play, ...), you can pass the group-qualified slot ` +
+        `("Recommended #5"), the UUID, or the exact play name.`;
+      return { ok: true, result: `${header}\n\n${sectionsOut.join("\n\n")}` };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "list_plays failed" };
     }
@@ -596,15 +726,16 @@ const get_play: CoachAiTool = {
     description:
       "Get the full diagram for a specific play in the current playbook. " +
       "Returns a CoachDiagram JSON with players (positions, colors) and routes. " +
-      "Accepts UUID, slot number (\"4\" or \"Play 4\"), or exact play name.",
+      "Accepts UUID, group-qualified slot (\"Recommended #5\"), or exact play name.",
     input_schema: {
       type: "object",
       properties: {
         play_id: {
           type: "string",
           description:
-            "UUID, slot number (\"4\"), or exact name of the play to retrieve. " +
-            "Slot numbers are 1-based and match the playbook display order.",
+            "UUID, group-qualified slot (\"Recommended #5\", \"Goal Line/2\", \"Ungrouped #3\"), or exact name of the play to retrieve. " +
+            "Slot numbers restart per group and match the orange badges in the UI. " +
+            "A bare slot (\"5\") works only when exactly one group has a #5 — otherwise specify the group.",
         },
       },
       required: ["play_id"],
@@ -700,7 +831,7 @@ const update_play: CoachAiTool = {
       properties: {
         play_id: {
           type: "string",
-          description: "UUID, slot number (\"4\"), or exact name of the play to update.",
+          description: "UUID, group-qualified slot (\"Recommended #5\"), or exact name of the play to update.",
         },
         play_spec: {
           type: "object",
@@ -1209,7 +1340,7 @@ const rename_play: CoachAiTool = {
       properties: {
         play_id: {
           type: "string",
-          description: "UUID, slot number (\"4\"), or exact name of the play to rename.",
+          description: "UUID, group-qualified slot (\"Recommended #5\"), or exact name of the play to rename.",
         },
         new_name: { type: "string", description: "The new play name. 1-80 chars, trimmed." },
       },
@@ -1298,7 +1429,7 @@ const update_play_notes: CoachAiTool = {
       properties: {
         play_id: {
           type: "string",
-          description: "UUID, slot number (\"4\"), or exact name of the play to update.",
+          description: "UUID, group-qualified slot (\"Recommended #5\"), or exact name of the play to update.",
         },
         notes: {
           type: "string",
@@ -1481,7 +1612,7 @@ const update_player: CoachAiTool = {
       properties: {
         play_id: {
           type: "string",
-          description: "UUID, slot number (\"4\"), or exact name of the play to update.",
+          description: "UUID, group-qualified slot (\"Recommended #5\"), or exact name of the play to update.",
         },
         player: {
           type: "string",
@@ -1785,7 +1916,7 @@ const explain_play: CoachAiTool = {
       properties: {
         play_id: {
           type: "string",
-          description: "UUID, slot number (\"4\"), or exact name of the play to explain.",
+          description: "UUID, group-qualified slot (\"Recommended #5\"), or exact name of the play to explain.",
         },
       },
       required: ["play_id"],
@@ -2113,7 +2244,7 @@ const assign_plays_to_group: CoachAiTool = {
     description:
       "Move one or more plays into a group (or out of any group). Pass `group_id` " +
       "as the target group's UUID or exact name; pass `null` (or omit) to UNGROUP. " +
-      "`play_refs` accepts an array of UUIDs, slot numbers (\"4\"), and/or exact " +
+      "`play_refs` accepts an array of UUIDs, group-qualified slots (\"Recommended #5\"), and/or exact " +
       "play names — same resolution rules as get_play. Bulk on purpose: when " +
       "organizing 20+ plays, batching avoids 20 round trips. ALWAYS show the " +
       "coach the proposed grouping and wait for explicit confirmation before " +
@@ -2132,7 +2263,7 @@ const assign_plays_to_group: CoachAiTool = {
           minItems: 1,
           maxItems: 100,
           description:
-            "Array of play references — UUIDs, slot numbers (\"4\"), or exact names.",
+            "Array of play references — UUIDs, group-qualified slots (\"Recommended #5\"), or exact names.",
         },
       },
       required: ["play_refs"],
@@ -2216,7 +2347,7 @@ const archive_play: CoachAiTool = {
       "Use this when the coach asks to archive, hide, retire, or shelve plays " +
       "they no longer want active. NOT a delete — for permanent removal the " +
       "coach must use the playbook UI directly. " +
-      "`play_refs` accepts an array of UUIDs, slot numbers (\"4\"), and/or " +
+      "`play_refs` accepts an array of UUIDs, group-qualified slots (\"Recommended #5\"), and/or " +
       "exact play names — same resolution rules as get_play. Bulk on purpose: " +
       "when archiving a group of legacy plays, batching avoids round trips. " +
       "ALWAYS list the plays you intend to archive and wait for explicit " +
@@ -2231,7 +2362,7 @@ const archive_play: CoachAiTool = {
           minItems: 1,
           maxItems: 100,
           description:
-            "Array of play references — UUIDs, slot numbers (\"4\"), or exact names.",
+            "Array of play references — UUIDs, group-qualified slots (\"Recommended #5\"), or exact names.",
         },
       },
       required: ["play_refs"],
