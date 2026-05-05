@@ -401,6 +401,22 @@ export function PlaybookPrintRunControls({ config, onChange, section = "all", ca
                     className="accent-primary"
                   />
                 </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-muted">
+                    Play border darkness · {Math.round(config.playsheetBorderDarkness ?? 100)}%
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round(config.playsheetBorderDarkness ?? 100)}
+                    onChange={(e) =>
+                      patch({ playsheetBorderDarkness: Number(e.target.value) })
+                    }
+                    className="accent-primary"
+                  />
+                </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"

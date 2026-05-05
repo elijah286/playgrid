@@ -125,6 +125,66 @@ function wrapText(text: string, maxChars: number): string[] {
   return out;
 }
 
+/**
+ * Width-aware wrap for play notes. When `playerLookup` is non-empty,
+ * isolated player labels (X, Y, @Q, …) render as colored chips at runtime —
+ * each chip is ~3× as wide as the source character it replaces. Naive
+ * char-count wrapping overflows the cell, so this estimates true rendered
+ * width per word and breaks accordingly.
+ */
+function noteLineRenderedWidth(
+  line: string,
+  fontSize: number,
+  playerLookup: Map<string, NotePlayerStyle> | null,
+): number {
+  const charW = fontSize * 0.52; // slightly conservative vs. renderNoteLine's 0.48
+  if (!playerLookup || playerLookup.size === 0) return line.length * charW;
+  const labels = Array.from(playerLookup.keys()).sort((a, b) => b.length - a.length);
+  const escaped = labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // Mirror the renderer: optional leading "@" gets absorbed into the chip.
+  const re = new RegExp(`(?:^|\\b|(?<=[^A-Za-z0-9_]))@?(${escaped.join("|")})\\b`, "g");
+  const markerR = fontSize * 0.7;
+  const chipW = markerR * 2 + charW * 0.3;
+  let cx = 0;
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    cx += (m.index - cursor) * charW;
+    cx += chipW;
+    cursor = re.lastIndex;
+  }
+  cx += (line.length - cursor) * charW;
+  return cx;
+}
+
+function wrapNoteLines(
+  text: string,
+  maxWidth: number,
+  fontSize: number,
+  playerLookup: Map<string, NotePlayerStyle> | null,
+): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  for (const para of text.split(/\r?\n/)) {
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = "";
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (
+        line &&
+        noteLineRenderedWidth(next, fontSize, playerLookup) > maxWidth
+      ) {
+        out.push(line);
+        line = w;
+      } else {
+        line = next;
+      }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+
 function escSvgText(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -177,7 +237,9 @@ function renderNoteLine(
   }
   const labels = Array.from(playerLookup.keys()).sort((a, b) => b.length - a.length);
   const escaped = labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const re = new RegExp(`\\b(${escaped.join("|")})\\b`, "g");
+  // Match an optional leading "@" so it gets absorbed into the chip instead
+  // of leaking out as stray punctuation in the rendered note.
+  const re = new RegExp(`(?:^|\\b|(?<=[^A-Za-z0-9_]))@?(${escaped.join("|")})\\b`, "g");
   const charW = fontSize * 0.48;
   const markerR = fontSize * 0.7;
   let cx = x;
@@ -185,8 +247,11 @@ function renderNoteLine(
   let out = "";
   let m: RegExpExecArray | null;
   while ((m = re.exec(line)) !== null) {
-    if (m.index > cursor) {
-      const seg = line.slice(cursor, m.index);
+    // Determine the actual span of the source text we're consuming —
+    // includes the optional "@" prefix that we're collapsing into the chip.
+    const matchStart = m.index;
+    if (matchStart > cursor) {
+      const seg = line.slice(cursor, matchStart);
       out += `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}">${escSvgText(seg)}</text>`;
       cx += seg.length * charW;
     }
@@ -386,6 +451,11 @@ export type PlayTileLookOptions = {
   yardMarkersIntensity: number;
   /** Play-tile border thickness multiplier (0 = invisible, 1 = default). */
   borderThickness: number;
+  /**
+   * Play-tile border darkness 0–100. 100 = black, 0 = the original light
+   * slate-200. Only consumed by the playsheet renderer today.
+   */
+  borderDarkness?: number;
   showPlayerLabels: boolean;
   playerOutline: boolean;
   /** When true, the frozen opposing-side snapshot is rendered alongside the play. */
@@ -724,14 +794,23 @@ function renderPlaysheetCell(
     const lineH = 3.2 * noteFontMult;
     const noteLineCount = Math.max(1, Math.round(opts.noteLines));
     const raw = vis.showNotes ? (doc.metadata.notes ?? "").trim() : "";
-    const innerW = cw - padX * 2;
-    const charsPerLine = Math.max(10, Math.floor(innerW / (fontNote * 0.48)));
-    const wrapped = wrapText(raw, charsPerLine).slice(0, noteLineCount);
+    // Reserve a small right-edge gutter so anti-aliased glyphs and chip
+    // markers don't kiss the cell border at low-DPI print resolution.
+    const innerW = Math.max(1, cw - padX * 2 - 1);
+    const visualPlayers = opts.noteVisualPlayers ?? false;
+    const playerLookup = visualPlayers ? buildPlayerLabelLookup(doc) : null;
+    // Width-aware wrap: account for @-token player chips taking ~3× the
+    // width of a plain character. Without this the legacy char-count wrap
+    // overflows the cell and lines get clipped on the right.
+    const wrapped = wrapNoteLines(
+      raw,
+      innerW,
+      fontNote,
+      playerLookup,
+    ).slice(0, noteLineCount);
     const clipId = `nc-${Math.random().toString(36).slice(2, 9)}`;
     notes += `<defs><clipPath id="${clipId}"><rect x="${ox + padX}" y="${ny}" width="${innerW}" height="${notesH - 1}"/></clipPath></defs>`;
     notes += `<g clip-path="url(#${clipId})">`;
-    const visualPlayers = opts.noteVisualPlayers ?? false;
-    const playerLookup = visualPlayers ? buildPlayerLabelLookup(doc) : null;
     wrapped.forEach((line, i) => {
       const ly = ny + lineH * (i + 1);
       notes += renderNoteLine(line, ox + padX, ly, fontNote, playerLookup);
@@ -741,7 +820,13 @@ function renderPlaysheetCell(
   }
 
   const bt = Math.max(0, Math.min(2, opts.borderThickness ?? 1));
-  const outerStroke = bt === 0 ? "none" : "#e2e8f0";
+  // Map borderDarkness 0..100 to a gray channel value: 100 → black,
+  // 0 → the legacy slate-200 (#e2e8f0). Default to black so each play has
+  // a clearly visible outline out of the box.
+  const darkness = Math.max(0, Math.min(100, opts.borderDarkness ?? 100));
+  const outerGray = Math.round(226 * (1 - darkness / 100));
+  const outerHex = `rgb(${outerGray}, ${outerGray}, ${outerGray})`;
+  const outerStroke = bt === 0 ? "none" : outerHex;
   const outerW = bt === 0 ? 0 : padScale > 0 ? 0.3 * bt : 0.15 * bt;
   const outerBorder =
     padScale > 0

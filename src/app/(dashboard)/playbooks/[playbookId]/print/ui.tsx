@@ -143,7 +143,11 @@ function resolveFooterText(
   playbookName: string,
   coachName: string | null,
 ): string {
-  const date = new Date().toLocaleDateString(undefined, {
+  // Use a fixed locale so server and client format the same way — otherwise
+  // the SVG footer ("Printed: May 4, 2026" vs "5/4/2026") triggers a
+  // hydration mismatch that breaks event handlers on the entire client
+  // subtree.
+  const date = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -409,6 +413,7 @@ export function PrintPlaybookClient({
       losIntensity: config.playsheetLosIntensity,
       yardMarkersIntensity: config.playsheetYardMarkersIntensity,
       borderThickness: config.playsheetBorderThickness,
+      borderDarkness: config.playsheetBorderDarkness,
       showPlayerLabels: config.playsheetShowPlayerLabels,
       playerOutline: config.playsheetPlayerOutline,
       showOpponents: config.showOpponents,

@@ -125,6 +125,11 @@ export type PlaybookPrintRunConfig = {
   playsheetYardMarkersIntensity: number;
   /** Play-tile border thickness multiplier (0 = invisible, 1 = default). */
   playsheetBorderThickness: number;
+  /**
+   * Play-tile border darkness, 0–100. 100 = black, 0 = the original light
+   * slate-200. Defaults to 100 so each play has a clearly visible outline.
+   */
+  playsheetBorderDarkness: number;
   playsheetShowPlayerLabels: boolean;
   playsheetPlayerOutline: boolean;
   /**
@@ -235,6 +240,7 @@ export const defaultPlaybookPrintRunConfig: PlaybookPrintRunConfig = {
   playsheetLosIntensity: 0.5,
   playsheetYardMarkersIntensity: 0.3,
   playsheetBorderThickness: 1,
+  playsheetBorderDarkness: 100,
   playsheetShowPlayerLabels: true,
   playsheetPlayerOutline: false,
   showOpponents: false,
