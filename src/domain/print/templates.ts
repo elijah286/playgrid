@@ -271,8 +271,12 @@ function renderMarkdownTextSegment(
   ): number => {
     if (s.length === 0) return 0;
     const widthMul = weight === "bold" ? 1.05 : 1.0;
+    // xml:space="preserve" stops SVG from collapsing leading/trailing
+    // whitespace inside the segment. Without it, the space that lives
+    // right after a `**bold**` close (e.g. `**Use when:** attacking`)
+    // gets dropped when rendered, so notes print as "Use whenattacking".
     svg +=
-      `<text x="${cx}" y="${y}" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}"` +
+      `<text x="${cx}" y="${y}" xml:space="preserve" font-size="${fontSize}" font-family="${NOTE_TEXT_FONT}" fill="${NOTE_TEXT_FILL}"` +
       (weight === "bold" ? ` font-weight="bold"` : "") +
       (style === "italic" ? ` font-style="italic"` : "") +
       `>${escSvgText(s)}</text>`;
