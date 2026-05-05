@@ -71,9 +71,40 @@ export function canDuplicatePlaybook(
   return ownedCount < FREE_MAX_PLAYBOOKS_OWNED;
 }
 
-/** Team features: invites, shared playbook membership, rosters. Coach+ only. */
+/** Coach-collaboration features: inviting other coaches as editors,
+ *  sending playbook copies, practice plans, and any feature that depends
+ *  on a shared, multi-coach workspace. Coach+ only.
+ *
+ *  NOTE: as of 2026-05-04 this no longer gates the calendar or player
+ *  invites — those moved to the free tier so a solo coach can run the
+ *  team's schedule and roster without paying. The "team features" name
+ *  is preserved because it's still the right semantic for the things
+ *  it gates today (assistant coaches, send-copy, practice plans). When
+ *  adding a new gate, prefer a feature-specific predicate below. */
 export function canUseTeamFeatures(entitlement: Entitlement | null): boolean {
   return tierAtLeast(entitlement, "coach");
+}
+
+/** Inviting another coach to collaborate on a playbook (role=editor) and
+ *  sending a playbook copy to another user are Coach+ features. Inviting
+ *  players (role=viewer) is free for everyone. */
+export function canInviteCoachCollaborators(
+  entitlement: Entitlement | null,
+): boolean {
+  return tierAtLeast(entitlement, "coach");
+}
+
+/** Calendar (events, RSVPs, ICS feed) is free for every coach so a solo
+ *  coach can run their team's schedule without paying. Provided as a
+ *  predicate for symmetry; today this is unconditional. */
+export function canUseCalendar(_entitlement: Entitlement | null): boolean {
+  return true;
+}
+
+/** Inviting players (role=viewer) to view the playbook and receive
+ *  schedule + game-day comms is free for every coach, no cap. */
+export function canInvitePlayers(_entitlement: Entitlement | null): boolean {
+  return true;
 }
 
 /** Game Mode: sideline play view with outcome tracking. Coach+ only — free

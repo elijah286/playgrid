@@ -109,7 +109,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
     () =>
       supabase
         .from("playbooks")
-        .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication, is_example, is_public_example, example_author_label, is_archived")
+        .select("id, name, season, sport_variant, player_count, logo_url, color, custom_offense_count, settings, allow_coach_duplication, allow_player_duplication, allow_game_results_duplication, player_invite_policy, is_example, is_public_example, example_author_label, is_archived")
         .eq("id", playbookId)
         .single(),
   );
@@ -218,6 +218,21 @@ export default async function PlaybookDetailPage({ params }: Props) {
   // read-only header.
   const canManage = effectiveRole === "owner";
   const canShare = effectiveRole === "owner" || effectiveRole === "editor";
+  // Owner-controlled: whether viewers (players) can invite other players.
+  // Stored on playbooks.player_invite_policy. Default 'disabled' so
+  // existing playbooks behave as they did before this column was added.
+  const playerInvitePolicy =
+    ((book.player_invite_policy as string | null) ?? "disabled") as
+      | "disabled"
+      | "approval"
+      | "open";
+  // Players can hit Share when the owner has opted in. The dialog will
+  // run in `viewerOnly` mode for them — straight to a player invite,
+  // no "Send a copy" / "Co-coach" cards.
+  const canInvitePlayers =
+    canShare ||
+    (effectiveRole === "viewer" && playerInvitePolicy !== "disabled");
+  const inviteAsViewerOnly = !canShare && canInvitePlayers;
   const viewerEntitlement = await timed(
     `playbook-page:getEntitlement pb=${playbookId}`,
     () => getCurrentEntitlement(),
@@ -419,6 +434,9 @@ export default async function PlaybookDetailPage({ params }: Props) {
           accentColor,
           canManage,
           canShare,
+          canInvitePlayers,
+          inviteAsViewerOnly,
+          playerInvitePolicy,
           viewerIsCoach,
           senderName,
           ownerDisplayName,

@@ -1405,7 +1405,7 @@ export function DashboardClient({
 
       {teamCalendarAvailable && (
         <div hidden={homeTab !== "calendar"} className="mt-6">
-          <HomeCalendarTab canUseTeamFeatures={canUseTeamFeatures} />
+          <HomeCalendarTab />
         </div>
       )}
 

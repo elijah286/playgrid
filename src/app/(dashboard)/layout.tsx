@@ -41,7 +41,14 @@ export default async function DashboardLayout({
     ]);
 
   return (
-    <div className="min-h-full overflow-x-hidden">
+    // No `overflow-x-hidden` anywhere in this subtree — that property
+    // creates a containing block for sticky descendants, which would
+    // pin the playbook page's sticky banner at top-14 relative to the
+    // wrapper instead of the viewport (a ~60-100px ghost gap below the
+    // site header). The body has `overflow-x: clip` (set in globals
+    // CSS via `<body class="...overflow-x-hidden">`) which prevents
+    // horizontal scroll without becoming a sticky containing block.
+    <div className="min-h-full">
       {expirationNotice && <ExpirationBanner notice={expirationNotice} />}
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
       <NameCapturePrompt needed={nameCaptureNeeded} />

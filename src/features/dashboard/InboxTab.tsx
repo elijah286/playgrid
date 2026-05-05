@@ -987,7 +987,19 @@ function RsvpRow({
               {alert.playbookName}
             </span>
             <KindBadge kind={alert.kind} />
-            <span className="text-[11px] text-muted-light">{startsAt}</span>
+            <span
+              className="text-[11px] text-muted-light"
+              // The toLocaleString output for date+time is locale-dependent
+              // ("Mon, May 18, 7:00 PM" vs "Mon, May 18 at 7:00 PM") and
+              // can drift between server (default en-US) and client (real
+              // user locale). Suppressing the hydration warning here is
+              // safer than the alternatives — the displayed text is still
+              // correct on the client and the brief mismatch on first
+              // paint is invisible.
+              suppressHydrationWarning
+            >
+              {startsAt}
+            </span>
           </div>
           <p className="mt-0.5 truncate text-sm text-foreground">
             {eventTypeLabel}: {title}

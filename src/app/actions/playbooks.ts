@@ -230,6 +230,56 @@ export async function createPlaybookAction(
     : ({ ok: false as const, error: res.error });
 }
 
+/**
+ * Owner-only setting that controls whether viewers (players) can invite
+ * other players to this playbook. Three values:
+ *   'disabled' (default) — only owner/editor can issue invites.
+ *   'approval'           — viewers can issue player-invite links; new
+ *                          joiners land in pending status until approved.
+ *   'open'               — viewers can issue player-invite links; new
+ *                          joiners get active status immediately.
+ * The server-side gate in `createInviteAction` enforces the policy on
+ * the inviter side; the redemption flow uses the invite's auto_approve
+ * flag (server forces it from this column) to gate active vs pending.
+ */
+export async function updatePlayerInvitePolicyAction(
+  playbookId: string,
+  policy: "disabled" | "approval" | "open",
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  if (!["disabled", "approval", "open"].includes(policy)) {
+    return { ok: false as const, error: "Invalid policy value." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  // Owner-only — RLS already restricts this update to the owner row,
+  // but make the failure explicit so the UI can show a sensible error
+  // instead of a silent zero-row update.
+  const { data: caller } = await supabase
+    .from("playbook_members")
+    .select("role, status")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!caller || caller.status !== "active" || caller.role !== "owner") {
+    return {
+      ok: false as const,
+      error: "Only the playbook owner can change the player-invite policy.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ player_invite_policy: policy })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 export async function updatePlaybookAppearanceAction(
   playbookId: string,
   appearance: { logo_url: string | null; color: string | null },

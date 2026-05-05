@@ -2,19 +2,15 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
-  Bell,
-  CalendarDays,
   CalendarPlus,
   ChevronDown,
   Clock,
   ExternalLink,
   MapPin,
-  MapPinned,
   Pencil,
   Rss,
   Users,
 } from "lucide-react";
-import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 import { Button, useToast } from "@/components/ui";
 import {
   clearRsvpAction,
@@ -39,82 +35,6 @@ type Mode = "upcoming" | "past";
 type ViewKind = "list" | "week" | "month";
 
 export function PlaybookCalendarTab({
-  playbookId,
-  viewerIsCoach,
-  canUseTeamFeatures = true,
-  onCountsChange,
-}: {
-  playbookId: string;
-  viewerIsCoach: boolean;
-  canUseTeamFeatures?: boolean;
-  onCountsChange?: (counts: { upcomingTotal: number }) => void;
-}) {
-  if (!canUseTeamFeatures) {
-    return <CalendarUpgradePanel />;
-  }
-  return (
-    <PlaybookCalendarTabInner
-      playbookId={playbookId}
-      viewerIsCoach={viewerIsCoach}
-      onCountsChange={onCountsChange}
-    />
-  );
-}
-
-function CalendarUpgradePanel() {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
-        <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
-          <CalendarDays className="size-5" />
-        </div>
-        <p className="text-sm font-semibold text-foreground">
-          Team calendar is a Team Coach feature
-        </p>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-          Schedule practices, games, and scrimmages in one place — players see
-          the schedule and RSVP from any device.
-        </p>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          See Team Coach plan
-        </button>
-      </div>
-      <TeamCoachUpgradeDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        title="Team calendar is a Team Coach feature"
-        intro="Run your season from one shared schedule — practices, games, and scrimmages with everything your players need to show up ready."
-        upgradeQuery="team-calendar"
-        Icon={CalendarDays}
-        bullets={[
-          {
-            Icon: CalendarPlus,
-            text: "Schedule practices, games, and scrimmages with recurrence, arrival times, and locations.",
-          },
-          {
-            Icon: Users,
-            text: "Players RSVP from any device. See who's coming at a glance.",
-          },
-          {
-            Icon: MapPinned,
-            text: "Embedded maps and one-tap directions for every event.",
-          },
-          {
-            Icon: Bell,
-            text: "Subscribe from Apple, Google, or Outlook so the schedule lives where families already look.",
-          },
-        ]}
-      />
-    </>
-  );
-}
-
-function PlaybookCalendarTabInner({
   playbookId,
   viewerIsCoach,
   onCountsChange,
@@ -297,11 +217,27 @@ function PlaybookCalendarTabInner({
             <Rss className="size-3.5" />
             Subscribe
           </button>
-          {viewerIsCoach && (
+          {viewerIsCoach ? (
             <Button variant="primary" size="sm" onClick={openCreate}>
               <CalendarPlus className="mr-1.5 size-4" />
               New event
             </Button>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                toast(
+                  "Only the team's coaches can create and update the schedule.",
+                  "info",
+                )
+              }
+              title="Only the team's coaches can create and update the schedule"
+              className="inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-lg bg-surface-inset px-3 text-sm font-medium text-muted ring-1 ring-border"
+              aria-disabled="true"
+            >
+              <CalendarPlus className="size-4" />
+              <span>New event</span>
+            </button>
           )}
         </div>
       </div>

@@ -140,7 +140,13 @@ export function GameResultsPanel({
   if (games.length === 0) {
     if (!canUseGameMode) {
       return (
-        <>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Results</h2>
+            <p className="text-sm text-muted">
+              Review every called play, win-rate, and tag from your games.
+            </p>
+          </div>
           <div className="rounded-2xl border border-dashed border-border bg-surface-raised p-8 text-center">
             <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-lg bg-brand-green text-white">
               <Gamepad2 className="size-5" />
@@ -164,7 +170,7 @@ export function GameResultsPanel({
             open={upgradeOpen}
             onClose={() => setUpgradeOpen(false)}
           />
-        </>
+        </div>
       );
     }
     return (

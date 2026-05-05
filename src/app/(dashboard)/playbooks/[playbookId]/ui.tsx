@@ -166,6 +166,7 @@ import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPubli
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
 import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
+import { firstNameCased } from "@/lib/format/name";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -352,6 +353,9 @@ function PlaybookDetailClientInner({
     accentColor: string;
     canManage: boolean;
     canShare: boolean;
+    canInvitePlayers: boolean;
+    inviteAsViewerOnly: boolean;
+    playerInvitePolicy: "disabled" | "approval" | "open";
     viewerIsCoach: boolean;
     senderName: string | null;
     ownerDisplayName: string | null;
@@ -1128,49 +1132,25 @@ function PlaybookDetailClientInner({
   }
 
   return (
-    <div className="space-y-4">
-      <UpgradeModal
-        open={!!upgradeNotice}
-        onClose={() => setUpgradeNotice(null)}
-        title={upgradeNotice?.title ?? ""}
-        message={upgradeNotice?.message ?? ""}
-      />
-      <Modal
-        open={showViewerCreateHint}
-        onClose={() => setShowViewerCreateHint(false)}
-        title="Only coaches can add plays"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowViewerCreateHint(false)}>
-              Close
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setShowViewerCreateHint(false);
-                router.push("/home");
-              }}
-            >
-              Create your own playbook
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-foreground">
-          You have view-only access to this playbook. To add plays, ask the coach
-          to grant you edit access, or create your own playbook.
-        </p>
-      </Modal>
+    // -mt-8 cancels `<main>`'s py-8 top padding so the playbook banner
+    // sits flush below the site header. Applied to the OUTER wrapper
+    // (not the sticky) so children flow naturally. The sticky banner
+    // pins at `sm:top-14` (56px from viewport top, matching the site
+    // header height) — relies on the body's `overflow-x: clip` (not
+    // `hidden`) so no ancestor accidentally becomes a sticky containing
+    // block.
+    <div className="-mt-8 space-y-4">
       {/* Sticky header region: back link + playbook identity + slim top bar.
           Desktop: pinned below the global dashboard header (h ≈ 56px = top-14).
           Mobile: the global header is hidden, so pin to the very top (top-0).
-          `-mt-8` cancels the dashboard `<main>` py-8 top padding so the
-          pre-scroll layout matches the scrolled (compact) layout — same
-          spacing in both states. Sticky's `pt-3` and PlaybookHeader's
-          `-mt-3` cancel to land the banner flush with the sticky's top.
-          Solid bg (not blur) avoids the "appearing header" flicker when
-          scroll begins. */}
-      <div className="sticky top-0 sm:top-14 z-20 -mx-6 -mt-8 space-y-4 bg-surface px-6 pb-4 pt-3">
+          `-mx-6` lets the bg-surface bleed full-width inside `<main>`'s
+          horizontal padding — the px-6 inside restores content alignment.
+          Vertical positioning is handled by the parent's `-mt-8` so we
+          don't need any negative margins here — keeps subsequent
+          siblings (tab content) in their natural flow position with no
+          overlap. Solid bg (not blur) avoids the "appearing header"
+          flicker when scroll begins. */}
+      <div className="sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-4 pt-3">
         <PlaybookHeader
           playbookId={playbookId}
           name={headerProps.name}
@@ -1181,6 +1161,9 @@ function PlaybookDetailClientInner({
           accentColor={headerProps.accentColor}
           canManage={headerProps.canManage}
           canShare={headerProps.canShare}
+          canInvitePlayers={headerProps.canInvitePlayers}
+          inviteAsViewerOnly={headerProps.inviteAsViewerOnly}
+          playerInvitePolicy={headerProps.playerInvitePolicy}
           viewerIsCoach={headerProps.viewerIsCoach}
           senderName={headerProps.senderName}
           ownerDisplayName={headerProps.ownerDisplayName}
@@ -1624,8 +1607,7 @@ function PlaybookDetailClientInner({
       {tab === "calendar" && teamCalendarAvailable && (
         <PlaybookCalendarTab
           playbookId={playbookId}
-          viewerIsCoach={headerProps.viewerIsCoach}
-          canUseTeamFeatures={canUseTeamFeatures}
+          viewerIsCoach={headerProps.canShare}
           onCountsChange={(counts) => {
             setCalendarUpcomingTotal(counts.upcomingTotal);
           }}
@@ -2628,6 +2610,42 @@ function PlaybookDetailClientInner({
         />
       )}
 
+      {/* Modals — render at the bottom of the wrapper so they don't
+          interfere with the top-of-page layout. They're position:fixed
+          full-screen overlays, so JSX order is irrelevant for their
+          visual position when open. */}
+      <UpgradeModal
+        open={!!upgradeNotice}
+        onClose={() => setUpgradeNotice(null)}
+        title={upgradeNotice?.title ?? ""}
+        message={upgradeNotice?.message ?? ""}
+      />
+      <Modal
+        open={showViewerCreateHint}
+        onClose={() => setShowViewerCreateHint(false)}
+        title="Only coaches can add plays"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowViewerCreateHint(false)}>
+              Close
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowViewerCreateHint(false);
+                router.push("/home");
+              }}
+            >
+              Create your own playbook
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground">
+          You have view-only access to this playbook. To add plays, ask the coach
+          to grant you edit access, or create your own playbook.
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -4787,7 +4805,7 @@ function BuildYourOwnBanner({
   const ctaLabel = isExample ? "Make it mine" : "Build my playbook";
   const message = isExample
     ? `Like this example? Claim a copy as your starting point and customize it however you want.`
-    : `Like what ${ownerName ?? "this coach"} built? You can build your own playbook for free — keep collaborating here too.`;
+    : `Like what ${firstNameCased(ownerName) ?? "this coach"} built? You can build your own playbook for free — keep collaborating here too.`;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2">
       <p className="min-w-0 flex-1 text-sm text-foreground">{message}</p>

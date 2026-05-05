@@ -141,7 +141,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
       </head>
-      <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans">
+      <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans [overflow-x:clip]">
         <ThemeProvider forceLight={!isAuthed}>
           <FieldBackdrop />
           <ToastProvider>

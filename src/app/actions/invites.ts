@@ -8,7 +8,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getStoredResendConfig } from "@/lib/site/resend-config";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
-import { tierAtLeast } from "@/lib/billing/features";
+import { canInviteCoachCollaborators, tierAtLeast } from "@/lib/billing/features";
 import { ensureSeatsAvailable } from "@/lib/billing/seats";
 import { sanitizeSharedPrefs, type PlaybookViewPrefs } from "@/domain/playbook/view-prefs";
 import { tagShareUrl } from "@/lib/share/tag-url";
@@ -77,9 +77,12 @@ export async function createInviteAction(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  // Authorize: caller must be an active owner or editor of this playbook.
-  // Non-owner editors can issue player invites against the owner's seat
-  // allowance regardless of their own tier — the owner is the one paying.
+  // Authorize: caller must be an active owner, editor, or — when the
+  // owner has opted in via `player_invite_policy` — a viewer issuing
+  // a player (viewer-role) invite. Coach-collaboration invites stay
+  // owner-only further down. Non-owner editors can issue player invites
+  // against the owner's seat allowance regardless of their own tier —
+  // the owner is the one paying.
   const admin = createServiceRoleClient();
   const { data: callerMem } = await admin
     .from("playbook_members")
@@ -87,19 +90,60 @@ export async function createInviteAction(input: {
     .eq("playbook_id", input.playbookId)
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!callerMem || callerMem.status !== "active" || !["owner", "editor"].includes(callerMem.role as string)) {
+  if (
+    !callerMem ||
+    callerMem.status !== "active" ||
+    !["owner", "editor", "viewer"].includes(callerMem.role as string)
+  ) {
     return { ok: false, error: "You don't have permission to share this playbook." };
   }
   const isOwner = callerMem.role === "owner";
+  const isViewerCaller = callerMem.role === "viewer";
 
-  // Owner must be Coach+ to share at all (seat-bound features). Non-owner
-  // editors ride on the owner's tier — the owner already paid.
-  if (isOwner) {
-    const entitlement = await getUserEntitlement(user.id);
-    if (!tierAtLeast(entitlement, "coach")) {
+  // Viewer (player) callers may only issue player-invite links, and only
+  // when the owner has set `player_invite_policy` to 'approval' or
+  // 'open'. The policy also dictates `auto_approve` — server forces it,
+  // ignoring whatever the client sent, so a viewer can't grant immediate
+  // access on a playbook the owner only allowed with approval.
+  let viewerInviteAutoApprove: boolean | null = null;
+  if (isViewerCaller) {
+    if (input.role !== "viewer") {
       return {
         ok: false,
-        error: "Sharing a playbook is a Team Coach feature. Upgrade to unlock.",
+        error: "Players can only invite other players.",
+      };
+    }
+    const { data: pb } = await admin
+      .from("playbooks")
+      .select("player_invite_policy")
+      .eq("id", input.playbookId)
+      .maybeSingle();
+    const policy = ((pb?.player_invite_policy as string | null) ?? "disabled") as
+      | "disabled"
+      | "approval"
+      | "open";
+    if (policy === "disabled") {
+      return {
+        ok: false,
+        error:
+          "The playbook owner hasn't enabled player invites. Ask them to allow it from the playbook menu.",
+      };
+    }
+    viewerInviteAutoApprove = policy === "open";
+  }
+
+  // Coach-collaboration invites (role=editor) require the owner to be on
+  // Coach+ — those seats are the paid feature. Player invites (role=viewer)
+  // are free for every owner since 2026-05-04: a solo coach can grow their
+  // team's roster and run the schedule without paying. Non-owner editors
+  // ride on the owner's tier either way — the owner is the one paying.
+  if (isOwner && input.role === "editor") {
+    const entitlement = await getUserEntitlement(user.id);
+    if (!canInviteCoachCollaborators(entitlement)) {
+      return {
+        ok: false,
+        error:
+          "Inviting another coach to collaborate is a Team Coach feature. Upgrade to unlock.",
       };
     }
   }
@@ -146,7 +190,13 @@ export async function createInviteAction(input: {
       expires_at: expiresAt,
       created_by: user.id,
       filters_snapshot: sanitizeSharedPrefs(myPrefs?.preferences as PlaybookViewPrefs | null),
-      auto_approve: input.autoApprove ?? true,
+      // Viewer-callers: server forces auto_approve to match the playbook's
+      // policy ('open' → true, 'approval' → false). Owners/editors keep
+      // their previous client-controlled behavior.
+      auto_approve:
+        viewerInviteAutoApprove !== null
+          ? viewerInviteAutoApprove
+          : (input.autoApprove ?? true),
       auto_approve_limit: effectiveAutoApproveLimit,
     })
     .select("*")

@@ -268,16 +268,43 @@ export const FEATURES: FeatureEntry[] = [
     id: "roster-free-tier-build",
     name: "Free-tier roster building",
     description:
-      "Coaches on the free tier can add, rename, and edit their full roster (names, jersey numbers, positions) inside any playbook. Inviting players to actually join — sending links, approving claims, granting coach access — remains a Team Coach feature, so the upgrade moment lands when the coach is ready to share, not when they're organizing.",
+      "Coaches on the free tier can add, rename, and edit their full roster (names, jersey numbers, positions) inside any playbook.",
     category: "Roster & sharing",
     status: "ga",
     addedDate: "2026-05-01",
   },
   {
+    id: "player-invite-policy",
+    name: "Player-invite policy",
+    description:
+      "Owner-controlled per-playbook setting that decides whether players (viewers) can invite other players. Three options: disabled (default — only coaches can invite), approval (players can invite, but new joiners land in pending until the owner approves them in the Roster tab), and open (players can invite, new joiners get immediate access). Default is disabled so existing playbooks behave as before; owners opt in from Manage → Player invitations… in the playbook action menu. When enabled, viewers see the Share button (which jumps straight to a player-invite QR/link — Send a copy and Co-coach stay coach-only).",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-05-05",
+  },
+  {
+    id: "free-tier-player-invites",
+    name: "Free-tier player invites",
+    description:
+      "Solo (free) coaches can invite unlimited players to their playbook as read-only viewers. Players get the team calendar (practices, games, scrimmages with RSVPs), see the playbook, and receive game-day comms. Inviting another coach to collaborate (editor role) and sending a copy of the playbook to another coach remain Team Coach features. Replaces the prior model where any sharing required Team Coach.",
+    category: "Roster & sharing",
+    status: "ga",
+    addedDate: "2026-05-04",
+  },
+  {
+    id: "free-tier-team-calendar",
+    name: "Free-tier team calendar",
+    description:
+      "The team calendar (events, RSVPs, ICS subscribe feed, game results) is now free for every coach. A solo coach can run their team's schedule without paying — practices, games, scrimmages, RSVPs, and one-tap directions all included. Practice plans remain Team Coach because they're a planning surface for the coaching staff, not a player-facing schedule.",
+    category: "Calendar & scheduling",
+    status: "ga",
+    addedDate: "2026-05-04",
+  },
+  {
     id: "roster-invites",
     name: "Invite team members",
     description:
-      "Coaches generate links/codes that grant view or edit access to a playbook. Roles: owner, editor, viewer.",
+      "Coaches generate links/codes that grant view or edit access to a playbook. Player invites (role: viewer) are free for every owner — no cap. Coach (role: editor) invites consume Team Coach seats and require the owner to be on Team Coach or above.",
     category: "Roster & sharing",
     status: "ga",
     addedDate: "2025-07-01",

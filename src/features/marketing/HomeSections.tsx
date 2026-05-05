@@ -212,6 +212,8 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
   const perks = [
     `Up to ${freeMaxPlays} plays in your own playbook`,
     "Full editor — routes, formations, tags",
+    "Team calendar — practices, games, scrimmages with player RSVPs",
+    "Invite players to the schedule and roster — no cap",
     "Mobile & tablet views included",
     "Print call sheets to PDF (wristbands on Coach)",
   ];
@@ -239,8 +241,10 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
                 </h2>
                 <p className="mt-3 max-w-xl text-muted">
                   One playbook with up to {freeMaxPlays} plays is free, forever.
-                  Call sheets print free. Upgrade to Team Coach when you want
-                  wristbands, bigger playbooks, and staff collaboration.
+                  Call sheets print free. The team calendar, player invites,
+                  and roster are all yours — upgrade to Team Coach when you
+                  want wristbands, bigger playbooks, and assistant-coach
+                  collaboration.
                 </p>
               </div>
               <Link

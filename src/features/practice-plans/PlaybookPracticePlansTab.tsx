@@ -138,7 +138,7 @@ function PlaybookPracticePlansTabInner({ playbookId }: { playbookId: string }) {
   }
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Practice Plans</h2>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Sparkles, Trash2, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Sparkles, Trash2, Unlock, UserPlus, Users, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -14,6 +14,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
 import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import {
   archivePlaybookAction,
@@ -23,6 +24,7 @@ import {
   leavePlaybookAction,
   renamePlaybookAction,
   setPlaybookAllowDuplicationAction,
+  updatePlayerInvitePolicyAction,
   updatePlaybookAppearanceAction,
   updatePlaybookSeasonAction,
   updatePlaybookSettingsAction,
@@ -49,6 +51,7 @@ import { nativeShare } from "@/lib/native/share";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
 import { tagShareUrl } from "@/lib/share/tag-url";
+import { firstNameCased } from "@/lib/format/name";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
 
@@ -100,6 +103,9 @@ export function PlaybookHeader({
   accentColor,
   canManage,
   canShare,
+  canInvitePlayers,
+  inviteAsViewerOnly = false,
+  playerInvitePolicy = "disabled",
   viewerIsCoach,
   senderName,
   ownerDisplayName,
@@ -130,7 +136,20 @@ export function PlaybookHeader({
   logoUrl: string | null;
   accentColor: string;
   canManage: boolean;
+  /** Owner or editor on this playbook — full share dialog (Send a copy +
+   *  Co-coach + Add a player). */
   canShare: boolean;
+  /** Owner/editor (canShare) OR viewer when the owner has opted in via
+   *  player_invite_policy. Drives Share button visibility. */
+  canInvitePlayers: boolean;
+  /** When true, opening the share dialog skips the choose screen and
+   *  goes straight to the player-invite link/QR. Set for viewers who
+   *  can invite (policy enabled). */
+  inviteAsViewerOnly?: boolean;
+  /** Owner-controlled policy for player-issued invites. Owners only
+   *  edit it from the action menu; the value is read here so the
+   *  settings modal can render the current selection. */
+  playerInvitePolicy?: "disabled" | "approval" | "open";
   viewerIsCoach: boolean;
   senderName?: string | null;
   ownerDisplayName?: string | null;
@@ -165,6 +184,14 @@ export function PlaybookHeader({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [sendCopyOpen, setSendCopyOpen] = useState(false);
+  // Polished upgrade dialog when a free-tier owner tries to send a copy.
+  // Mirrors the Calendar / Practice Plans paywall look — replaces the
+  // older bare-lock UpgradeModal that didn't match the rest of the app.
+  const [sendCopyUpgradeOpen, setSendCopyUpgradeOpen] = useState(false);
+  // Owner-only modal for editing player_invite_policy. Three radio
+  // options: disabled / approval / open. Survey-style UI lives below
+  // in <PlayerInvitePolicyDialog>.
+  const [playerInvitePolicyOpen, setPlayerInvitePolicyOpen] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{
     title: string;
     message: string;
@@ -173,13 +200,10 @@ export function PlaybookHeader({
   } | null>(null);
 
   function openInvite() {
-    if (!viewerIsCoach) {
-      setUpgradeNotice({
-        title: "Sharing a playbook is a Team Coach feature",
-        message: "Upgrade to Team Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
-      });
-      return;
-    }
+    // Free coaches can invite players (read-only viewers) so they can run
+    // the schedule and game-day comms. The dialog itself gates the
+    // "Co-coach" (editor) role with an in-line upgrade prompt — no need
+    // to pre-block here.
     setInviteOpen(true);
   }
 
@@ -194,10 +218,7 @@ export function PlaybookHeader({
 
   function openSendCopy() {
     if (!viewerIsCoach) {
-      setUpgradeNotice({
-        title: "Sending a copy is a Team Coach feature",
-        message: "Upgrade to Team Coach ($9/mo or $99/yr) to share copies of your playbook.",
-      });
+      setSendCopyUpgradeOpen(true);
       return;
     }
     setSendCopyOpen(true);
@@ -213,14 +234,9 @@ export function PlaybookHeader({
     const params = new URLSearchParams(searchParams.toString());
     if (canShare && searchParams.get("share") === "1") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydrate from URL query param
-      if (viewerIsCoach) {
-        setInviteOpen(true);
-      } else {
-        setUpgradeNotice({
-          title: "Sharing a playbook is a Team Coach feature",
-          message: "Upgrade to Team Coach ($9/mo or $99/yr) to invite teammates and share playbooks.",
-        });
-      }
+      // Free coaches can open the invite dialog to add players; the
+      // dialog gates Co-coach (editor) invites in-line.
+      setInviteOpen(true);
       params.delete("share");
       changed = true;
     }
@@ -233,7 +249,7 @@ export function PlaybookHeader({
       const qs = params.toString();
       router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
     }
-  }, [canManage, canShare, viewerIsCoach, searchParams, router]);
+  }, [canManage, canShare, searchParams, router]);
 
   function run(
     fn: () => Promise<{ ok: boolean; error?: string; needsUpgrade?: boolean } | { ok: true; id?: string }>,
@@ -468,7 +484,9 @@ export function PlaybookHeader({
               {[
                 season,
                 variantLabel,
-                ownerDisplayName ? `Shared by ${ownerDisplayName}` : senderName,
+                ownerDisplayName
+                  ? `Shared by ${firstNameCased(ownerDisplayName) ?? ownerDisplayName}`
+                  : senderName,
               ]
                 .filter(Boolean)
                 .join(" · ") || variantLabel}
@@ -476,7 +494,7 @@ export function PlaybookHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {canShare && (
+            {canInvitePlayers && (
               <Button
                 size="sm"
                 leftIcon={UserPlus}
@@ -487,7 +505,7 @@ export function PlaybookHeader({
                     : "!bg-white !text-slate-900 hover:!bg-white/90"
                 }`}
               >
-                Share
+                {inviteAsViewerOnly ? "Invite a player" : "Share"}
               </Button>
             )}
             {isExamplePreview && (
@@ -513,13 +531,13 @@ export function PlaybookHeader({
                 Make this mine
               </Link>
             )}
-            {canShare && (
+            {canInvitePlayers && (
               <button
                 type="button"
                 onClick={openInvite}
                 className={`sm:hidden inline-flex items-center justify-center size-9 rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
-                aria-label="Share playbook"
-                title="Share"
+                aria-label={inviteAsViewerOnly ? "Invite a player" : "Share playbook"}
+                title={inviteAsViewerOnly ? "Invite a player" : "Share"}
               >
                 <UserPlus className="size-5" />
               </button>
@@ -534,14 +552,18 @@ export function PlaybookHeader({
                 />
               </div>
             )}
-            {(canShare || canManage || playActions || exampleAdmin) && (
+            {(canInvitePlayers || canManage || playActions || exampleAdmin) && (
               <HeaderMenu
                 playbookId={playbookId}
                 homeHref={homeHref}
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
                 lockTeamCoachItems={!viewerIsCoach}
-                onInvite={canShare ? openInvite : null}
+                onInvite={canInvitePlayers ? openInvite : null}
+                inviteLabel={inviteAsViewerOnly ? "Invite a player" : "Share"}
+                onPlayerInvitePolicy={
+                  canManage ? () => setPlayerInvitePolicyOpen(true) : null
+                }
                 onCustomize={canManage ? () => setCustomizeOpen(true) : null}
                 onRevokeAllInvites={
                   canShare && (outstandingInviteCount ?? 0) > 0
@@ -549,6 +571,9 @@ export function PlaybookHeader({
                     : null
                 }
                 outstandingInviteCount={outstandingInviteCount ?? 0}
+                // Send a copy is a coach-only action (creating a new
+                // playbook for another coach). Hide it from viewers even
+                // when they have the Share button via player_invite_policy.
                 onSendCopy={canShare ? openSendCopy : null}
                 onDuplicate={
                   canManage ||
@@ -618,6 +643,7 @@ export function PlaybookHeader({
           teamName={name}
           senderName={senderName ?? null}
           canManage={canManage}
+          viewerOnly={inviteAsViewerOnly}
           allowCoachDuplication={allowCoachDuplication ?? true}
           onToggleCoachDuplication={canManage ? handleToggleCoachDup : null}
           onSwitchToSendCopy={() => {
@@ -660,7 +686,171 @@ export function PlaybookHeader({
         secondaryLabel={upgradeNotice?.secondaryLabel}
         secondaryHref={upgradeNotice?.secondaryHref}
       />
+      <TeamCoachUpgradeDialog
+        open={sendCopyUpgradeOpen}
+        onClose={() => setSendCopyUpgradeOpen(false)}
+        title="Send a copy"
+        intro="Give another coach a starter playbook of their own. They become the owner — your playbook stays yours."
+        upgradeQuery="send-copy"
+        Icon={Send}
+        bullets={[
+          {
+            Icon: Send,
+            text: "One-tap share link or QR — they sign up and claim a copy in their own account.",
+          },
+          {
+            Icon: UserPlus,
+            text: "Great for handing a starter playbook to a peer coach or a new head coach on your staff.",
+          },
+          {
+            Icon: Sparkles,
+            text: "Earn referral days when a new coach claims a copy you sent.",
+          },
+        ]}
+      />
+      {playerInvitePolicyOpen && (
+        <PlayerInvitePolicyDialog
+          playbookId={playbookId}
+          initial={playerInvitePolicy}
+          onClose={() => setPlayerInvitePolicyOpen(false)}
+          onSaved={() => {
+            setPlayerInvitePolicyOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function PlayerInvitePolicyDialog({
+  playbookId,
+  initial,
+  onClose,
+  onSaved,
+}: {
+  playbookId: string;
+  initial: "disabled" | "approval" | "open";
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [policy, setPolicy] = useState<"disabled" | "approval" | "open">(initial);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const res = await updatePlayerInvitePolicyAction(playbookId, policy);
+    setSaving(false);
+    if (!res.ok) {
+      toast(res.error, "error");
+      return;
+    }
+    toast("Player invitations updated.", "success");
+    onSaved();
+  }
+
+  const options: {
+    value: "disabled" | "approval" | "open";
+    title: string;
+    description: string;
+  }[] = [
+    {
+      value: "disabled",
+      title: "Only coaches can invite",
+      description: "Players can't invite anyone. You and your assistant coaches handle all invites.",
+    },
+    {
+      value: "approval",
+      title: "Players can invite, with your approval",
+      description:
+        "Players can share the playbook. New joiners stay in pending until you approve them in the Roster tab.",
+    },
+    {
+      value: "open",
+      title: "Players can invite freely",
+      description: "Players can share the playbook. New joiners get access immediately.",
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-3 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Player invitations</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Decide whether players on this playbook can invite other players.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="space-y-2 px-5 py-4">
+          {options.map((opt) => {
+            const active = policy === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPolicy(opt.value)}
+                className={
+                  "flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors " +
+                  (active
+                    ? "border-primary bg-primary/5 ring-2 ring-primary/30"
+                    : "border-border bg-surface hover:bg-surface-inset")
+                }
+              >
+                <span
+                  className={
+                    "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full border " +
+                    (active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-surface")
+                  }
+                  aria-hidden
+                >
+                  {active && <Check className="size-3" />}
+                </span>
+                <span className="flex-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    {opt.title}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted">
+                    {opt.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={save}
+            loading={saving}
+            disabled={policy === initial}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1129,6 +1319,8 @@ function HeaderMenu({
   onAccentHover,
   lockTeamCoachItems,
   onInvite,
+  inviteLabel = "Share",
+  onPlayerInvitePolicy,
   onRevokeAllInvites,
   outstandingInviteCount,
   onSendCopy,
@@ -1153,6 +1345,11 @@ function HeaderMenu({
   /** When true, items that require Team Coach show a small lock badge. */
   lockTeamCoachItems: boolean;
   onInvite: (() => void) | null;
+  /** Label for the invite menu item. "Share" for owners/editors,
+   *  "Invite a player" for viewers acting under player_invite_policy. */
+  inviteLabel?: string;
+  /** Owner-only: opens the player-invite policy modal. */
+  onPlayerInvitePolicy?: (() => void) | null;
   onRevokeAllInvites: (() => void) | null;
   outstandingInviteCount: number;
   onSendCopy: (() => void) | null;
@@ -1204,7 +1401,7 @@ function HeaderMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+          className="absolute right-0 top-full z-30 mt-1 max-h-[calc(100vh-8rem)] w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
         >
           {/* Mobile-only navigation */}
           {/* Home intentionally omitted — the back arrow in the header
@@ -1232,7 +1429,6 @@ function HeaderMenu({
               >
                 <UserPlus className="size-4 shrink-0" />
                 <span>Share</span>
-                {lockTeamCoachItems && <TeamCoachLockBadge />}
               </button>
             )}
           </div>
@@ -1313,10 +1509,28 @@ function HeaderMenu({
           )}
 
           {/* Manage */}
-          {(onCustomize || onDuplicate || historyHref || onOpenTrash) && (
+          {(onCustomize ||
+            onDuplicate ||
+            onPlayerInvitePolicy ||
+            historyHref ||
+            onOpenTrash) && (
             <>
               <SectionDivider />
               <SectionLabel>Manage</SectionLabel>
+              {onPlayerInvitePolicy && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onPlayerInvitePolicy();
+                  }}
+                  className={menuItemCls}
+                >
+                  <UserPlus className="size-4 shrink-0" />
+                  <span>Player invitations…</span>
+                </button>
+              )}
               {onCustomize && (
                 <button
                   type="button"
@@ -1812,6 +2026,7 @@ export function InviteTeamMemberDialog({
   teamName,
   senderName,
   canManage = false,
+  viewerOnly = false,
   allowCoachDuplication = true,
   onToggleCoachDuplication = null,
   onSwitchToSendCopy = null,
@@ -1822,6 +2037,12 @@ export function InviteTeamMemberDialog({
   teamName: string;
   senderName: string | null;
   canManage?: boolean;
+  /** When true, this dialog is being opened by a viewer (player) who has
+   *  permission to invite other players via the owner-controlled
+   *  player_invite_policy. Skip the choose screen entirely and jump
+   *  straight to the link/QR view with role=viewer. The "Send a copy"
+   *  and "Add a co-coach" cards are hidden — those are coach-only. */
+  viewerOnly?: boolean;
   allowCoachDuplication?: boolean;
   onToggleCoachDuplication?: (() => void) | null;
   /** Lets a coach pivot from "invite a co-coach" to "send a copy" without
@@ -1837,7 +2058,13 @@ export function InviteTeamMemberDialog({
 }) {
   const { toast } = useToast();
   const router = useRouter();
-  const [mode, setMode] = useState<"choose" | "email" | "link">("choose");
+  // Viewers (players who have permission via player_invite_policy) skip
+  // the choose screen — they only have one option (invite another
+  // player), so render the QR view directly. Owners/editors start on
+  // choose so they can pick between Send a copy / Co-coach / Player.
+  const [mode, setMode] = useState<"choose" | "email" | "link">(
+    viewerOnly ? "link" : "choose",
+  );
   const [role, setRole] = useState<"viewer" | "editor">("viewer");
   const [creating, setCreating] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -1857,11 +2084,21 @@ export function InviteTeamMemberDialog({
     canManageSeats: boolean;
   } | null>(null);
   const [permsOpen, setPermsOpen] = useState(false);
+  // Polished upgrade dialog shown when a free-tier owner clicks "Add a
+  // co-coach" — replaces the old in-line danger-styled warning. Mirrors
+  // the look of the Calendar / Practice Plans paywall dialogs.
+  const [coachPlanUpgradeOpen, setCoachPlanUpgradeOpen] = useState(false);
+  // Tier-only check (independent of `role`) so we can intercept the
+  // co-coach card click before the user is committed to editor role.
+  const wouldNeedCoachPlan = seatStatus?.isCoachPlus === false;
   // Set when the user clicks one of the role cards (Co-coach / Player).
   // Tells the auto-generate effect below "the user already chose — skip
   // the config form and produce the QR straight away." Reset by Back so
   // the user can return to the cards or tweak settings.
-  const [skipConfig, setSkipConfig] = useState(false);
+  // Viewer-only dialogs auto-generate the QR straight away — there's no
+  // role choice to make and no config form to surface, so flip skipConfig
+  // on at mount to drive the auto-generate effect immediately.
+  const [skipConfig, setSkipConfig] = useState(viewerOnly);
   const outOfCoachSeats =
     role === "editor" && seatStatus?.isCoachPlus === true && seatStatus.available <= 0;
   const needsCoachPlan =
@@ -1875,6 +2112,22 @@ export function InviteTeamMemberDialog({
     seatStatus?.isCoachPlus === true &&
     parsedEmailCount > seatStatus.available;
 
+  // Catch every path that lands a free-tier owner on the editor role —
+  // direct click on the Co-coach card before seatStatus has loaded, a
+  // Player → Back → Co-coach detour where role state is sticky, etc.
+  // Whenever role=editor and the owner needs a Coach plan, pop the
+  // polished upgrade dialog and reset the picker so closing the upgrade
+  // dialog leaves them on a clean choice screen rather than a stale
+  // editor link form.
+  useEffect(() => {
+    if (role !== "editor") return;
+    if (!needsCoachPlan) return;
+    setCoachPlanUpgradeOpen(true);
+    setMode("choose");
+    setRole("viewer");
+    setSkipConfig(false);
+  }, [role, needsCoachPlan]);
+
   // After the user picks a role card, auto-create the invite so they land
   // on the QR straight away. Defaults match what almost every owner picks
   // anyway (auto-approve true, limit 25, 14-day expiry); coaches who need
@@ -1886,12 +2139,18 @@ export function InviteTeamMemberDialog({
     if (mode !== "link") return;
     if (inviteUrl) return;
     if (creating) return;
+    // Don't auto-fire the generate when the user can't actually create
+    // an editor invite — otherwise each failed call toasts an error and
+    // the effect re-runs on `creating` flipping back to false, producing
+    // a toast loop. The card click should have already routed to the
+    // upgrade dialog; this is a belt-and-suspenders guard.
+    if (role === "editor" && (needsCoachPlan || outOfCoachSeats)) return;
     void generate();
     // generate reads role + autoApprove + autoApproveLimit from state,
     // which are stable by the time this fires (they were set or defaulted
     // before skipConfig flipped on).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skipConfig, mode, inviteUrl, creating]);
+  }, [skipConfig, mode, inviteUrl, creating, role, needsCoachPlan, outOfCoachSeats]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2023,6 +2282,7 @@ export function InviteTeamMemberDialog({
   }
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
       onClick={(e) => {
@@ -2099,6 +2359,16 @@ export function InviteTeamMemberDialog({
                     description="They edit this playbook with you. Changes are shared in real time."
                     accent="default"
                     onClick={() => {
+                      // Free-tier owners get the polished upgrade dialog
+                      // instead of being routed into an invite flow that
+                      // will fail server-side. Once seatStatus loads we
+                      // know whether the owner is on Coach+; if it hasn't
+                      // loaded yet, fall through to the normal flow and
+                      // the inline warning will catch it.
+                      if (wouldNeedCoachPlan) {
+                        setCoachPlanUpgradeOpen(true);
+                        return;
+                      }
                       setRole("editor");
                       setMode("link");
                       setLinkTab("qr");
@@ -2123,37 +2393,22 @@ export function InviteTeamMemberDialog({
                     Only the playbook owner can grant co-coach (edit) access.
                   </p>
                 )}
-                {role === "editor" && (outOfCoachSeats || needsCoachPlan) && (
-                  <div className="mt-2 flex items-start gap-2 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+                {role === "editor" && outOfCoachSeats && !needsCoachPlan && (
+                  <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-900">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                     <div className="flex-1">
-                      {needsCoachPlan ? (
-                        <>
-                          <strong>Coaches need a Team Coach plan.</strong>
-                          {" "}You can keep inviting players for free.{" "}
-                          <Link
-                            href="/pricing"
-                            className="font-medium underline hover:no-underline"
-                          >
-                            See pricing
-                          </Link>
-                        </>
+                      <strong>Out of coach seats.</strong>{" "}
+                      {seatStatus?.used ?? 0} of {seatStatus?.total ?? 0}{" "}
+                      in use.{" "}
+                      {seatStatus?.canManageSeats ? (
+                        <Link
+                          href="/account"
+                          className="font-medium underline hover:no-underline"
+                        >
+                          Add a seat or remove a coach
+                        </Link>
                       ) : (
-                        <>
-                          <strong>Out of coach seats.</strong>{" "}
-                          {seatStatus?.used ?? 0} of {seatStatus?.total ?? 0}{" "}
-                          in use.{" "}
-                          {seatStatus?.canManageSeats ? (
-                            <Link
-                              href="/account"
-                              className="font-medium underline hover:no-underline"
-                            >
-                              Add a seat or remove a coach
-                            </Link>
-                          ) : (
-                            <span>Ask the playbook owner to add a seat.</span>
-                          )}
-                        </>
+                        <span>Ask the playbook owner to add a seat.</span>
                       )}
                     </div>
                   </div>
@@ -2333,34 +2588,20 @@ export function InviteTeamMemberDialog({
               spin. */}
           {mode === "link" && !inviteUrl && (
             <>
-              {role === "editor" && (outOfCoachSeats || needsCoachPlan) ? (
-                <div className="flex items-start gap-2 rounded-md bg-danger-light px-3 py-2 text-xs text-danger ring-1 ring-danger/30">
+              {role === "editor" && outOfCoachSeats ? (
+                <div className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-900">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <div className="flex-1">
-                    {needsCoachPlan ? (
-                      <>
-                        <strong>Coaches need a Team Coach plan.</strong>{" "}
-                        <Link
-                          href="/pricing"
-                          className="font-medium underline hover:no-underline"
-                        >
-                          See pricing
-                        </Link>
-                      </>
+                    <strong>Out of coach seats.</strong>{" "}
+                    {seatStatus?.canManageSeats ? (
+                      <Link
+                        href="/account"
+                        className="font-medium underline hover:no-underline"
+                      >
+                        Add a seat or remove a coach
+                      </Link>
                     ) : (
-                      <>
-                        <strong>Out of coach seats.</strong>{" "}
-                        {seatStatus?.canManageSeats ? (
-                          <Link
-                            href="/account"
-                            className="font-medium underline hover:no-underline"
-                          >
-                            Add a seat or remove a coach
-                          </Link>
-                        ) : (
-                          <span>Ask the playbook owner to add a seat.</span>
-                        )}
-                      </>
+                      <span>Ask the playbook owner to add a seat.</span>
                     )}
                   </div>
                 </div>
@@ -2384,18 +2625,22 @@ export function InviteTeamMemberDialog({
           {mode === "link" && inviteUrl && (
             <>
               <div className="-mt-1 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("choose");
-                    setInviteUrl(null);
-                    setQrDataUrl(null);
-                    setSkipConfig(false);
-                  }}
-                  className="flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
-                >
-                  <ArrowLeft className="size-3" /> Back
-                </button>
+                {viewerOnly ? (
+                  <span /> /* spacer keeps the email-instead button right-aligned */
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("choose");
+                      setInviteUrl(null);
+                      setQrDataUrl(null);
+                      setSkipConfig(false);
+                    }}
+                    className="flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
+                  >
+                    <ArrowLeft className="size-3" /> Back
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -2484,5 +2729,32 @@ export function InviteTeamMemberDialog({
       </div>
       </div>
     </div>
+    <TeamCoachUpgradeDialog
+      open={coachPlanUpgradeOpen}
+      onClose={() => setCoachPlanUpgradeOpen(false)}
+      title="Add a co-coach"
+      intro="Invite an assistant coach to collaborate on this playbook in real time. Players, schedule, and roster stay free for everyone."
+      upgradeQuery="add-co-coach"
+      Icon={UserPlus}
+      bullets={[
+        {
+          Icon: Zap,
+          text: "Co-coaches edit plays and formations alongside you — changes sync in real time.",
+        },
+        {
+          Icon: Users,
+          text: `Includes 1 assistant-coach seat. Add more anytime.`,
+        },
+        {
+          Icon: MessageSquare,
+          text: "They can message players, manage the roster, and run the schedule with you.",
+        },
+        {
+          Icon: Send,
+          text: "Send a copy of your playbook to peer coaches outside your team.",
+        },
+      ]}
+    />
+    </>
   );
 }
