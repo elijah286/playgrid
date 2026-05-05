@@ -10,7 +10,44 @@ All play and playbook persistence MUST stay **retrieval- and edit-friendly** for
 
 ## Git workflow
 
-Work directly on `main`. Commit and push small, focused changes straight to `main` instead of creating long-lived feature branches. Only create a branch when the user explicitly asks for one (e.g. a WIP spike, an experimental refactor the user wants isolated). Do not open pull requests unless asked.
+The site has real users. The default workflow optimizes for not breaking production over speed of iteration.
+
+### Branching
+- **Major / risky changes**: stage on a branch (the Claude worktree branch is fine), let the user review, push to `main` only after sign-off. Risky = anything that could break or lose user data: auth, DB migrations, payments, write paths, multi-file refactors, build/deploy config, or anything you're not sure about.
+- **Small / low-risk fixes**: copy tweaks, isolated CSS, obvious one-file bug fixes, doc edits — push to `main` directly.
+- When unsure which bucket a change falls in, ask. Cost of a confirm is low; cost of a bad prod push is high.
+
+### Pre-merge checks
+- `npm run typecheck` must pass for every push.
+- Tests covering the changed area must pass. New functionality lands with regression tests in the same commit (see Rule 12 below for Coach AI specifics).
+- For UI changes that need visual verification, ask before spinning up a local dev server — don't do it speculatively.
+
+### Pull requests
+- Don't open PRs unless asked. Branch-and-review happens locally; PR machinery isn't part of this workflow.
+
+## Production safety
+
+### Database migrations
+- Never run a migration that DROPs or DELETEs without explicit user confirmation in chat for that specific migration.
+- After running a migration, verify the schema change actually landed by querying the affected column / table. `supabase db push` will silently no-op if the version number is already in remote tracking — exit code alone is not proof.
+- Prefer additive migrations (add column → backfill → switch reads → drop old) over in-place mutations on tables with user data.
+
+### Secrets
+- Never commit env files, API keys, tokens, or credentials. Use `.env.local` locally and Railway env in production.
+- If a diff includes a secret, stop and flag it before committing.
+
+### Feature flags
+- Risky user-facing changes ship behind a beta gate (existing pattern: Coach AI, Practice Plans). Enable for self first, then expand.
+
+### Rollback
+- If a push breaks production, the default move is to revert the breaking commit (`git revert <sha>`) and push the revert. Forward-fix only if the diagnosis is fast and confident.
+- DB migrations are not rollback-safe the same way — write a compensating migration; don't try to undo data changes that are already live.
+
+### Post-deploy verification
+- After pushing a major change, verify the change actually works in production (Railway URL, Supabase, or whatever surface it touches). "It built" is not "it works."
+
+### Privacy policy
+- Any change that adds a sub-processor, tracker, auth provider, or new data collection bumps `src/app/privacy/page.tsx` in the same commit.
 
 ## Feature catalog (required)
 
