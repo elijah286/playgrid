@@ -305,7 +305,13 @@ function renderMarkdownTextSegment(
       }
     }
     // Plain run until the next `*` (or end of segment).
-    const next = text.indexOf("*", i);
+    // When we land here at a `*` that didn't form a bold/italic pair, scan
+    // for the NEXT `*` so the unmatched marker becomes part of the literal
+    // run and `i` advances. Without this, indexOf returns the current
+    // position and the loop spins forever on the orphan asterisk — which
+    // happens whenever wrapNoteLines splits a line mid-`**bold**`.
+    const scanFrom = text[i] === "*" ? i + 1 : i;
+    const next = text.indexOf("*", scanFrom);
     const segEnd = next === -1 ? text.length : next;
     emitText(text.slice(i, segEnd), "normal", "normal");
     i = segEnd;
