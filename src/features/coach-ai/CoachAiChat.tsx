@@ -25,6 +25,7 @@ import { AssistantMessage } from "./AssistantMessage";
 import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
 import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
+import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 
 type OutOfMessagesPayload = {
   count: number;
@@ -452,6 +453,14 @@ export function CoachAiChat({
     let savedFinalTurn = false;
     const seenToolCalls: string[] = [];
 
+    // The editor publishes its in-memory doc to a window-level store (see
+    // live-play-doc.ts) so Cal can see edits that the autosave debounce hasn't
+    // persisted yet. Without this, asking Cal a question mid-edit (e.g. while
+    // a player is selected — the autosave safety net is 30s) reads the
+    // pre-edit version_id from Postgres and Cal "corrects" the coach with
+    // stale data.
+    const livePlayDoc = playId ? readLivePlayDoc(playId) : null;
+
     try {
       const res = await fetch("/api/coach-ai/stream", {
         method: "POST",
@@ -461,6 +470,7 @@ export function CoachAiChat({
           userMessage: text,
           playbookId,
           playId,
+          livePlayDoc,
           mode,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),

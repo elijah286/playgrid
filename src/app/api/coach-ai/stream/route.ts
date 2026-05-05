@@ -14,6 +14,15 @@ type StreamRequest = {
   playbookId?: string | null;
   /** Set by the chat when the launcher is open from within the play editor. */
   playId?: string | null;
+  /**
+   * The editor's in-memory PlayDocument when the chat is open from a play
+   * route. The autosave debounce can defer persistence by up to 30s while a
+   * selection is active; without this, Cal queries play_versions and sees the
+   * pre-edit version, then "corrects" the coach with stale labels/colors.
+   * We trust this only for the diagram Cal shows the model — never for
+   * authorization or persistence.
+   */
+  livePlayDoc?: PlayDocument | null;
   mode?: CoachAiMode;
   timezone?: string | null;
 };
@@ -52,6 +61,7 @@ async function loadCallerInfo(): Promise<
 async function loadToolContext(
   playbookId: string | null,
   playId: string | null,
+  livePlayDoc: PlayDocument | null,
   isAdmin: boolean,
   mode: CoachAiMode,
   timezone: string | null,
@@ -77,20 +87,26 @@ async function loadToolContext(
         formation: (playRow.formation_name as string | null) ?? null,
         playbookId: (playRow.playbook_id as string | null) ?? null,
       };
-      const versionId = (playRow.current_version_id as string | null) ?? null;
-      if (versionId) {
-        const { data: version } = await supabase
-          .from("play_versions")
-          .select("document")
-          .eq("id", versionId)
-          .maybeSingle();
-        const doc = (version?.document ?? null) as PlayDocument | null;
-        if (doc) {
-          try {
-            const diagram = playDocumentToCoachDiagram(doc, resolvedPlay.name ?? "play");
-            playDiagramText = JSON.stringify(diagram);
-          } catch { /* malformed doc — fall back to no diagram, model can still call get_play */ }
+      // Prefer the client's live doc when available — it reflects edits the
+      // autosave debounce has not yet persisted. Fall back to play_versions
+      // when no editor is mounted (e.g. the chat is opened from a list view).
+      let doc: PlayDocument | null = livePlayDoc ?? null;
+      if (!doc) {
+        const versionId = (playRow.current_version_id as string | null) ?? null;
+        if (versionId) {
+          const { data: version } = await supabase
+            .from("play_versions")
+            .select("document")
+            .eq("id", versionId)
+            .maybeSingle();
+          doc = (version?.document ?? null) as PlayDocument | null;
         }
+      }
+      if (doc) {
+        try {
+          const diagram = playDocumentToCoachDiagram(doc, resolvedPlay.name ?? "play");
+          playDiagramText = JSON.stringify(diagram);
+        } catch { /* malformed doc — fall back to no diagram, model can still call get_play */ }
       }
     }
   }
@@ -199,8 +215,18 @@ export async function POST(req: Request): Promise<Response> {
     body.mode === "admin_training" ? "admin_training" : "normal";
 
   const tz = typeof body.timezone === "string" && body.timezone ? body.timezone : null;
+  // Treat the client's live doc as a hint about the in-memory editor state —
+  // not as authoritative for anything but the diagram Cal sees. We don't
+  // persist it, and any tool call that mutates the play still goes through
+  // the normal save path with full validation. Shape-validation is
+  // best-effort: the renderer (`playDocumentToCoachDiagram`) is wrapped in a
+  // try/catch and we fall through to the persisted doc when it throws.
+  const livePlayDoc =
+    body.livePlayDoc != null && typeof body.livePlayDoc === "object"
+      ? (body.livePlayDoc as PlayDocument)
+      : null;
   const [ctx] = await Promise.all([
-    loadToolContext(body.playbookId ?? null, body.playId ?? null, gate.isAdmin, requestedMode, tz),
+    loadToolContext(body.playbookId ?? null, body.playId ?? null, livePlayDoc, gate.isAdmin, requestedMode, tz),
   ]);
 
   const history: ChatMessage[] = [

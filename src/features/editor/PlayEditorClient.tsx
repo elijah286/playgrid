@@ -38,6 +38,7 @@ import {
 } from "@/features/playbooks/MovePlayToGroupDialog";
 import { TagsCard } from "./TagsCard";
 import { CoachCalCTA } from "@/features/coach-ai/CoachCalCTA";
+import { publishLivePlayDoc, clearLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 import { useToast } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
@@ -211,6 +212,15 @@ function PlayEditorClientInner({
   useEffect(() => {
     docRef.current = doc;
   }, [doc]);
+  // Publish the live doc to a window-level store so Coach Cal can see in-
+  // progress edits before autosave persists them. The selection-active safety
+  // net defers saves up to 30s; without this, Cal queries play_versions and
+  // sees pre-rename labels / pre-recolor fills, then "corrects" the coach
+  // based on stale data. Cleared on unmount or playId change.
+  useEffect(() => {
+    publishLivePlayDoc(playId, doc);
+    return () => clearLivePlayDoc(playId);
+  }, [playId, doc]);
   useEffect(() => {
     if (initialDocument === lastSyncedDocRef.current) return;
     // Active local edits — never replace. Even if `initialDocument` is
