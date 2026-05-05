@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { BookOpen, Check, Copy, Send, Trash2, Wrench, X } from "lucide-react";
+import { BookOpen, Check, Copy, Send, Square, Trash2, Wrench, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn, NoteProposalSavedState, PlaybookChip } from "@/app/actions/coach-ai";
 import {
@@ -445,6 +445,13 @@ export function CoachAiChat({
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
+    // Lifted out of try so the finally block can preserve any partial text
+    // when the coach hits Stop mid-stream.
+    let accumulated = "";
+    let blocked = false;
+    let savedFinalTurn = false;
+    const seenToolCalls: string[] = [];
+
     try {
       const res = await fetch("/api/coach-ai/stream", {
         method: "POST",
@@ -463,10 +470,6 @@ export function CoachAiChat({
       if (!res.ok || !res.body) {
         throw new Error(`HTTP ${res.status}`);
       }
-
-      let accumulated = "";
-      let blocked = false;
-      const seenToolCalls: string[] = [];
 
       for await (const { event, data } of parseSse(res.body)) {
         if (ctrl.signal.aborted) break;
@@ -521,6 +524,7 @@ export function CoachAiChat({
               noteProposalState: null,
             },
           ]);
+          savedFinalTurn = true;
           setUsageTick((n) => n + 1);
           // If the agent ran any DB-mutating tool (create_event, update_play,
           // KB writes, etc.), refresh the surrounding page so newly created
@@ -543,13 +547,40 @@ export function CoachAiChat({
         setError(e instanceof Error ? e.message : "Coach Cal request failed.");
       }
     } finally {
+      // If the coach hit Stop mid-stream, preserve whatever Cal had already
+      // streamed as a real assistant turn — same convention as ChatGPT /
+      // Claude.ai. Skip when clearChat() did the abort (it nulls the ref
+      // before the SSE loop notices), since clearing turns and then re-
+      // appending one would be wrong.
+      if (
+        !savedFinalTurn &&
+        ctrl.signal.aborted &&
+        accumulated.trim() &&
+        abortRef.current === ctrl
+      ) {
+        setTurns((cur) => [
+          ...cur,
+          {
+            role: "assistant",
+            text: accumulated,
+            toolCalls: seenToolCalls,
+            playbookChips: null,
+            noteProposals: null,
+            noteProposalState: null,
+          },
+        ]);
+      }
       setStreaming(false);
       setStatusText(null);
       setPartialText("");
       setToolCallsDuringStream([]);
-      abortRef.current = null;
+      if (abortRef.current === ctrl) abortRef.current = null;
     }
   }, [draft, streaming, turns, playbookId, playId, mode, router]);
+
+  const stopStream = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   // Externally-injected prompt (in-app CTA). When the key changes, drop the
   // text into the draft and — if the CTA wanted it sent — fire send() with
@@ -802,22 +833,33 @@ export function CoachAiChat({
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                void send();
+                if (!streaming) void send();
               }
             }}
-            placeholder="Ask Coach Cal…"
+            placeholder={streaming ? "Type your next message…" : "Ask Coach Cal…"}
             className="flex-1 resize-none rounded-xl bg-surface-inset px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-black/5 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            disabled={streaming}
           />
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={streaming || !draft.trim() || outOfMessages !== null}
-            onClick={() => void send()}
-            aria-label="Send"
-          >
-            <Send className="size-4" />
-          </Button>
+          {streaming ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={stopStream}
+              aria-label="Stop"
+              title="Stop"
+            >
+              <Square className="size-4 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!draft.trim() || outOfMessages !== null}
+              onClick={() => void send()}
+              aria-label="Send"
+            >
+              <Send className="size-4" />
+            </Button>
+          )}
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-3">
