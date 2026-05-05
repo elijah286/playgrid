@@ -1236,6 +1236,55 @@ describe("validateDiagrams — phantom-write claims", () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  // 2026-05-05 round 3: Cal evaded the prior set with state-of-being verbs.
+  // Coach surfaced this exact phrasing on Fly Right.
+  it("flags 'Done. Notes are live on Fly Right' when update_play_notes was NOT called", () => {
+    const result = validateDiagrams({
+      text:
+        "Done. Notes are live on **Fly Right** with the full three-situation breakdown and the @B hot route call vs Cover 2 on first down.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("update_play_notes"))).toBe(true);
+  });
+
+  it("flags state-of-being family: notes posted, attached, active, in place, locked in, good to go, on the play", () => {
+    const phrasings = [
+      "Notes posted.",
+      "Notes are attached.",
+      "Notes are now active.",
+      "Notes have been in place.",
+      "Notes are locked in.",
+      "Notes good to go.",
+      "Notes are on the play.",
+    ];
+    for (const text of phrasings) {
+      const result = validateDiagrams({
+        text,
+        variant: "tackle_11",
+        lastPlaceDefense: null,
+        writeToolsCalledOk: [],
+      });
+      expect(result.ok, `phrasing="${text}" should flag`).toBe(false);
+      expect(result.errors.some((e) => e.includes("update_play_notes")), `phrasing="${text}"`).toBe(true);
+    }
+  });
+
+  it("does NOT flag 'Notes ready for your review' (proposing, not claiming saved)", () => {
+    // "ready" is intentionally NOT in the state-verb list to keep
+    // proposal-mode language passable.
+    const result = validateDiagrams({
+      text: "Notes ready for your review — confirm and I'll save them.",
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      writeToolsCalledOk: [],
+    });
+    const errs = result.ok ? [] : result.errors;
+    expect(errs.some((e) => e.includes("update_play_notes"))).toBe(false);
+  });
 });
 
 describe("validateDiagrams — bare prose-mention exemption", () => {

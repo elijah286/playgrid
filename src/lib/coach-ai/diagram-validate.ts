@@ -363,6 +363,16 @@ const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
     // succeeded but the play.notes column still had pre-edit text.
     // Broadened the verb list and added a "Saved to X. Notes..."
     // preamble pattern.
+    //
+    // 2026-05-05 (round 3): Cal switched evasion vectors AGAIN to
+    // "Done. Notes are live on <PlayName>" — state-of-being verbs
+    // ("live", "in place", "posted") that none of the prior patterns
+    // covered. Coach surfaced this on Fly Right. Added a state-verb
+    // family. Pattern: deliberately conservative — the listed states
+    // ("live", "posted", "attached", "active", "in place", "locked
+    // in", "good to go") are unambiguous shipped-claim language.
+    // Avoid generic words like "good", "ready", "set", "done" in
+    // isolation since those overlap with Cal asking for review.
     tool: "update_play_notes",
     patterns: [
       /\bnotes\s+(?:are\s+|have\s+been\s+|now\s+)?(?:fixed|updated|saved|corrected|rewritten)\b/i,
@@ -373,6 +383,7 @@ const WRITE_CLAIM_PATTERNS: Array<{ tool: string; patterns: RegExp[] }> = [
       /\bnotes\s+now\s+(?:frame|reflect|describe|break\s+down|cover|explain|capture|specify|list|spell\s+out|outline|reference|present|map\s+out|read|walk\s+through|lay\s+out|address|characterize|articulate|communicate|spell\s+it\s+out)\b/i,
       /\bsaved\s+to\s+\*{0,2}["']?[A-Z][\w'\s-]{1,40}["']?\*{0,2}\.\s*\n?\s*\*{0,2}(?:Notes|The\s+(?:play\s+)?notes|Updated\s+notes|New\s+notes)\b/i,
       /\b(?:I'?ve\s+|I\s+)?(?:locked\s+in|finalized|saved\s+down|put\s+in|committed)\s+(?:the\s+|your\s+)?(?:new\s+|updated\s+|fixed\s+|rewritten\s+)?notes\b/i,
+      /\bnotes\s+(?:are\s+(?:now\s+)?|have\s+been\s+|now\s+)?(?:live|in\s+place|posted|attached|active|locked\s+in|good\s+to\s+go|on\s+the\s+play)\b/i,
     ],
   },
   {

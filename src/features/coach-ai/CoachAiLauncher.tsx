@@ -188,10 +188,33 @@ export function CoachAiLauncher({
       // we're on mobile (docked is hidden lg:flex; would render invisibly).
       const savedDockW = readStorage<number>("coach-ai:dock-width", DEFAULT_DOCK_W);
       if (savedDockW >= MIN_DOCK_W && savedDockW <= MAX_DOCK_W) setDockedWidth(savedDockW);
+      // Restore `open` from sessionStorage so a remount during
+      // `router.refresh()` (e.g. after Cal saves notes — chat dispatches
+      // `coach-ai-mutated`, editor + chat both refresh, server header
+      // re-runs and momentarily can re-derive coachAiAvailable, which
+      // re-evaluates the conditional that mounts the launcher) doesn't
+      // reset open=false and visually close the panel mid-conversation.
+      // sessionStorage scope keeps a fresh tab opening with Cal closed
+      // — only mid-session remounts restore. Surfaced 2026-05-05.
+      if (window.sessionStorage.getItem("coach-cal:open") === "1") {
+        setOpen(true);
+      }
     } catch { /* ignore */ }
     hasRestored.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist `open` to sessionStorage so the restore effect above can pick
+  // it up after a remount. Gated on hasRestored to avoid clobbering the
+  // restored value with the initial useState(false) before restore runs.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasRestored.current) return;
+    try {
+      if (open) window.sessionStorage.setItem("coach-cal:open", "1");
+      else      window.sessionStorage.removeItem("coach-cal:open");
+    } catch { /* ignore */ }
+  }, [open]);
 
   // Broadcast open/closed state so sibling surfaces (e.g. the playbook
   // floating CTA) can hide themselves while the chat is on screen — the toast
