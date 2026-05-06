@@ -551,6 +551,12 @@ export function PlaybookHeader({
                   entitled={coachAiAvailable ?? false}
                   playbookId={playbookId}
                   evalDays={coachAiEvalDays}
+                  // Accept global open events — the bottom-nav Cal FAB
+                  // dispatches `coach-cal:open` and we want THIS launcher
+                  // (with playbookId context) to catch it on mobile, not
+                  // the SiteHeader launcher which is hidden on playbook
+                  // routes anyway.
+                  acceptGlobalCommands
                 />
               </div>
             )}

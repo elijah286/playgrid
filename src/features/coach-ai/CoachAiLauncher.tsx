@@ -240,10 +240,23 @@ export function CoachAiLauncher({
       // been working with Cal in this session.
       if (entitled) {
         setPreviewState(null);
-        setInjectedPrompt({ text: prompt, autoSubmit: true, key });
+        // Generic open (no entry point): just open the empty chat — the
+        // user wants to start fresh, not be hit with an auto-submitted
+        // prompt. Specific entry points still inject + auto-submit.
+        if (entryPoint && prompt) {
+          setInjectedPrompt({ text: prompt, autoSubmit: true, key });
+        } else {
+          setInjectedPrompt(null);
+        }
       } else {
         setInjectedPrompt(null);
-        setPreviewState({ entryPoint, prompt, key });
+        // Non-entitled with no entry point: open the launcher's default
+        // marketing preview rather than a CTA-specific upsell.
+        if (entryPoint) {
+          setPreviewState({ entryPoint, prompt, key });
+        } else {
+          setPreviewState(null);
+        }
       }
     }
     window.addEventListener("coach-cal:open", onOpen);

@@ -66,6 +66,7 @@ import {
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
+import { HomeBottomNav } from "./HomeBottomNav";
 import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 
@@ -1024,6 +1025,8 @@ export function DashboardClient({
   inboxAlerts = [],
   activityEntries = [],
   initialTab = "playbooks",
+  coachAiAvailable = false,
+  showCoachCalPromo = false,
 }: {
   data: DashboardSummary;
   hideAnimation?: boolean;
@@ -1033,6 +1036,8 @@ export function DashboardClient({
   inboxAlerts?: InboxAlert[];
   activityEntries?: ActivityEntry[];
   initialTab?: HomeTab;
+  coachAiAvailable?: boolean;
+  showCoachCalPromo?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1392,15 +1397,17 @@ export function DashboardClient({
     teamCalendarAvailable || inboxCount > 0 || activityCount > 0;
 
   return (
-    <div className={pending ? "cursor-wait" : undefined}>
+    <div className={`pb-20 sm:pb-0 ${pending ? "cursor-wait" : ""}`}>
       {showTabNav && (
-        <HomeTabNav
-          tab={homeTab}
-          onChange={setHomeTab}
-          inboxCount={inboxCount}
-          inboxUrgent={inboxUrgent}
-          showCalendar={teamCalendarAvailable}
-        />
+        <div className="hidden sm:block">
+          <HomeTabNav
+            tab={homeTab}
+            onChange={setHomeTab}
+            inboxCount={inboxCount}
+            inboxUrgent={inboxUrgent}
+            showCalendar={teamCalendarAvailable}
+          />
+        </div>
       )}
 
       {teamCalendarAvailable && (
@@ -1740,6 +1747,18 @@ export function DashboardClient({
         secondaryHref={upgradeNotice?.secondaryHref}
       />
       </div>
+
+      {/* Mobile-only bottom nav: lobby tabs + center Cal FAB. The
+          existing top HomeTabNav above is hidden on mobile; this is the
+          primary mobile navigation surface. */}
+      <HomeBottomNav
+        active={homeTab}
+        onChange={setHomeTab}
+        showCalendar={teamCalendarAvailable}
+        inboxCount={inboxCount}
+        inboxUrgent={inboxUrgent}
+        showCoachCal={coachAiAvailable || showCoachCalPromo}
+      />
     </div>
   );
 }

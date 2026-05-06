@@ -2852,6 +2852,9 @@ function PlaybookDetailClientInner({
             calendar: calendarUpcomingTotal,
           }}
           messagesUnread={messagesUnread}
+          showCoachCal={
+            headerProps.coachAiAvailable || headerProps.showCoachCalPromo
+          }
         />
       )}
       {/* Mobile-only FAB for creating a new play. Only shows on the Plays

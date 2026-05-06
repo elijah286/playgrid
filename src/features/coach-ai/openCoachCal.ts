@@ -18,7 +18,9 @@ import {
 } from "./entry-points";
 
 export type CoachCalOpenDetail = {
-  entryPoint: CoachCalEntryPointId;
+  /** null when the open is "generic" (no specific entry point — e.g. the
+   *  bottom-nav Cal FAB just wants to open an empty chat). */
+  entryPoint: CoachCalEntryPointId | null;
   prompt: string;
   /** Monotonically increasing — lets the listener detect repeat dispatches. */
   key: number;
@@ -37,22 +39,27 @@ declare global {
 let _key = 0;
 
 export function openCoachCal(
-  entryPointId: CoachCalEntryPointId,
+  entryPointId?: CoachCalEntryPointId,
   context: EntryPointContext = {},
 ): void {
   if (typeof window === "undefined") return;
-  const config = ENTRY_POINTS[entryPointId];
-  if (!config) return;
-  const prompt = renderPromptTemplate(config.promptTemplate, context.values ?? {});
+  const config = entryPointId ? ENTRY_POINTS[entryPointId] : null;
+  if (entryPointId && !config) return;
+  const prompt = config
+    ? renderPromptTemplate(config.promptTemplate, context.values ?? {})
+    : "";
   const detail: CoachCalOpenDetail = {
-    entryPoint: entryPointId,
+    entryPoint: entryPointId ?? null,
     prompt,
     key: ++_key,
   };
   window.dispatchEvent(new CustomEvent("coach-cal:open", { detail }));
   track({
     event: "coach_cal_cta_click",
-    target: entryPointId,
-    metadata: { surface: "in_app_cta", entry_point: entryPointId },
+    target: entryPointId ?? "generic",
+    metadata: {
+      surface: "in_app_cta",
+      entry_point: entryPointId ?? "generic",
+    },
   });
 }

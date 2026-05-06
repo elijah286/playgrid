@@ -12,6 +12,8 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
+import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 
 /**
  * Mobile-first bottom navigation for the playbook detail page. Coaches and
@@ -60,6 +62,7 @@ export function PlaybookBottomNav({
   available,
   counts,
   messagesUnread,
+  showCoachCal,
 }: {
   active: PlaybookBottomNavTab;
   onChange: (k: PlaybookBottomNavTab) => void;
@@ -71,6 +74,9 @@ export function PlaybookBottomNav({
   };
   counts: { plays: number; formations: number; roster: number; calendar: number };
   messagesUnread: number;
+  /** Render a center "Cal" FAB above the nav row that opens Coach Cal.
+   *  Hidden when the user has no Cal access (no entitlement, no promo). */
+  showCoachCal: boolean;
 }) {
   const allTabs: TabDef[] = [
     {
@@ -179,6 +185,28 @@ export function PlaybookBottomNav({
           />
         )}
       </nav>
+
+      {/* Center Cal FAB. Floats above the nav row, half-overlapping the
+          top edge so it reads as the "primary action" against the row of
+          tabs. Dispatches the global coach-cal:open event — the playbook
+          header's CoachAiLauncher (acceptGlobalCommands) catches it and
+          opens the panel with playbookId context. */}
+      {showCoachCal && (
+        <button
+          type="button"
+          onClick={() => openCoachCal()}
+          aria-label="Open Coach Cal"
+          title="Coach Cal"
+          className="fixed left-1/2 z-40 inline-flex size-14 -translate-x-1/2 items-center justify-center rounded-full shadow-elevated ring-2 ring-surface-base transition-transform active:scale-95 sm:hidden"
+          style={{
+            bottom:
+              "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+            background: "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)",
+          }}
+        >
+          <CoachAiIcon className="size-8" />
+        </button>
+      )}
 
       {moreOpen && (
         <MoreSheet

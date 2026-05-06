@@ -40,6 +40,11 @@ export default async function HomePage({ searchParams }: Props) {
     { isAdmin, isEntitled: true },
   );
   const canUseTeamFeatures = isAdmin || tierAtLeast(entitlement, "coach");
+  const coachAiAvailable =
+    isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
+  // Logged-in users without Coach Pro see the promo CTA — same logic as
+  // SiteHeader uses to decide whether to render the Cal launcher button.
+  const showCoachCalPromo = !coachAiAvailable;
   const inboxAlerts = inbox.ok ? inbox.alerts : [];
   const activityEntries = activity.ok ? activity.entries : [];
   const initialTab: "playbooks" | "calendar" | "inbox" =
@@ -69,6 +74,8 @@ export default async function HomePage({ searchParams }: Props) {
           inboxAlerts={inboxAlerts}
           activityEntries={activityEntries}
           initialTab={initialTab}
+          coachAiAvailable={coachAiAvailable}
+          showCoachCalPromo={showCoachCalPromo}
         />
       )}
     </div>
