@@ -133,10 +133,15 @@ export default async function PlayEditPage({ params }: Props) {
   });
   const editorEntitlement = await getCurrentEntitlement();
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
+  const coachAiAvailable =
+    isAdmin || (editorEntitlement?.tier ?? "free") === "coach_ai";
   const showCoachCalCta =
     (editorEntitlement?.tier ?? "free") !== "coach_ai" &&
     user !== null &&
     !isAdmin;
+  // Cal launcher promo: only logged-in users without entitlement see the
+  // upgrade preview. Anonymous example viewers don't see Cal at all.
+  const showCoachCalPromo = user !== null && !coachAiAvailable;
   const coachAiEvalDays = await getCoachAiEvalDays();
 
   return (
@@ -151,6 +156,7 @@ export default async function PlayEditPage({ params }: Props) {
       playId={res.play.id}
       playbookId={res.play.playbook_id}
       playbookName={(book?.name as string | null) ?? null}
+      playbookColor={(book?.color as string | null) ?? null}
       initialDocument={res.document}
       initialNav={nav.ok ? nav.plays : []}
       initialGroups={nav.ok ? nav.groups : []}
@@ -166,6 +172,8 @@ export default async function PlayEditPage({ params }: Props) {
       mobileEditingEnabled={mobileEditingEnabled}
       gameModeAvailable={gameModeAvailable}
       canUseGameMode={viewerCanUseGameMode}
+      coachAiAvailable={coachAiAvailable}
+      showCoachCalPromo={showCoachCalPromo}
       initialCustomOpponentPlayId={res.customOpponentPlayId}
       initialOpponentHidden={res.opponentHidden}
     />

@@ -30,7 +30,8 @@ import type {
   PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
 import { EditorHeaderBar } from "./EditorHeaderBar";
-import { ShareButton } from "@/components/share/ShareButton";
+import { EditorPlaybookChrome } from "./EditorPlaybookChrome";
+import { EditorBottomNav } from "./EditorBottomNav";
 import { CopyToPlaybookDialog, type CopyTarget } from "@/features/playbooks/CopyToPlaybookDialog";
 import {
   MovePlayToGroupDialog,
@@ -87,6 +88,10 @@ type Props = {
   playId: string;
   playbookId: string;
   playbookName?: string | null;
+  /** Hex accent color of the parent playbook. Drives the slim mobile
+   *  chrome banner so coaches keep visual continuity with the playbook
+   *  page they came from. Falls back to brand orange when missing. */
+  playbookColor?: string | null;
   initialDocument: PlayDocument;
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
@@ -122,6 +127,10 @@ type Props = {
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
    *  still renders but opens an upgrade prompt instead of navigating. */
   canUseGameMode?: boolean;
+  /** Drives the slim chrome's Cal launcher visibility. Same logic as
+   *  SiteHeader: entitled = available, otherwise show the promo. */
+  coachAiAvailable?: boolean;
+  showCoachCalPromo?: boolean;
   /** ID of the hidden custom-opponent play attached to this play, if any.
    *  When present, the opposing-side players in `vs_play_snapshot` are
    *  drag-editable (they back this hidden play). */
@@ -150,6 +159,7 @@ function PlayEditorClientInner({
   playId,
   playbookId,
   playbookName,
+  playbookColor = null,
   initialDocument,
   initialNav,
   initialGroups,
@@ -165,6 +175,8 @@ function PlayEditorClientInner({
   mobileEditingEnabled = false,
   gameModeAvailable = false,
   canUseGameMode = false,
+  coachAiAvailable = false,
+  showCoachCalPromo = false,
   initialCustomOpponentPlayId = null,
   initialOpponentHidden = false,
 }: Props) {
@@ -951,15 +963,17 @@ function PlayEditorClientInner({
     return () => document.removeEventListener("pointerdown", onDocPointer, true);
   }, [selectedPlayerId, selectedRouteId, selectedZoneId, handleDone]);
 
-  /* ---------- Hide site header on mobile when editing ---------- */
+  /* ---------- Hide site header on mobile editor ---------- */
 
+  // Always hidden on mobile editor (not just in edit mode) — the slim
+  // EditorPlaybookChrome banner replaces it. CSS gates the rule to
+  // `<= 639px` so desktop site header stays visible.
   useEffect(() => {
-    if (mode !== "edit") return;
     document.body.classList.add("editor-hide-site-header");
     return () => {
       document.body.classList.remove("editor-hide-site-header");
     };
-  }, [mode]);
+  }, []);
 
   /* ---------- Keyboard shortcuts ---------- */
 
@@ -1122,7 +1136,20 @@ function PlayEditorClientInner({
   ) : null;
 
   return (
-    <div ref={rootRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+    <div
+      ref={rootRef}
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0"
+    >
+      {/* Mobile-only slim playbook banner. Replaces the SiteHeader
+          (hidden via editor-hide-site-header on mobile editor) and gives
+          coaches a back affordance + Cal access without leaving the
+          playbook's visual identity behind. */}
+      <EditorPlaybookChrome
+        playbookId={playbookId}
+        playbookName={playbookName ?? null}
+        playbookColor={playbookColor}
+        showCoachCal={coachAiAvailable || showCoachCalPromo}
+      />
       {isNavPending && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]"
@@ -1166,21 +1193,16 @@ function PlayEditorClientInner({
           Done editing button moves to the very top so the field has as much
           vertical room as possible. Desktop always keeps the header. */}
       <div className={isTouchDevice && mode === "edit" ? "hidden sm:block" : ""}>
-      <div className="mb-1 flex items-center justify-between gap-2">
+      {/* Desktop-only back-to-playbook breadcrumb. The mobile equivalent
+          lives in EditorPlaybookChrome (orange banner at top). */}
+      <div className="mb-1 hidden items-center justify-between gap-2 sm:flex">
         <Link
           href={`/playbooks/${playbookId}`}
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-foreground"
         >
           <ChevronLeft className="size-3.5" />
           <span className="truncate">{playbookName || "Back to playbook"}</span>
         </Link>
-        {/* Mobile-only: SiteHeaderShell is hidden by editor-hide-site-header
-            on mobile play edit, so the global Share button isn't reachable
-            from here. Surface it inline. Desktop already has it in the
-            global nav above. */}
-        <span className="sm:hidden">
-          <ShareButton userId={null} variant="inline" />
-        </span>
       </div>
       <EditorHeaderBar
         playId={playId}
@@ -1363,17 +1385,18 @@ function PlayEditorClientInner({
               // dots ended up rendered against the nearest positioned
               // ancestor (often a much larger container), throwing them
               // far outside the field — surfaced 2026-05-04.
-              className={`field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky z-10 sm:relative sm:top-auto sm:z-auto ${
-                // In edit mode the global site header is hidden (see
-                // `editor-hide-site-header` effect), so the field can pin
-                // flush at top: 0. In view mode the site header stays
-                // sticky on mobile, so the field tucks in just below it.
-                mode === "edit" ? "top-0" : "top-[var(--site-header-height,61px)]"
-              } ${
-                !canEdit || (isTouchDevice && mode === "view")
-                  ? "pointer-events-none select-none"
-                  : ""
-              }`}
+              className={
+                // The slim EditorPlaybookChrome banner is sticky at top
+                // (~60px tall) in both modes on mobile, so the field
+                // pins just below it. We reuse --site-header-height for
+                // the offset since the banner replaces the site header
+                // and matches its vertical height.
+                `field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky top-[var(--site-header-height,61px)] z-10 sm:relative sm:top-auto sm:z-auto ${
+                  !canEdit || (isTouchDevice && mode === "view")
+                    ? "pointer-events-none select-none"
+                    : ""
+                }`
+              }
               style={
                 {
                   aspectRatio: `${fieldAspect} / 1`,
@@ -1659,6 +1682,14 @@ function PlayEditorClientInner({
         onClose={() => setGameLock(null)}
       />
 
+      {/* Mobile-only footer with back-to-playbook tabs and a center Cal
+          FAB. Mirrors the pattern on the playbook + lobby pages so the
+          editor doesn't feel like a dead-end and Cal stays one tap
+          away. */}
+      <EditorBottomNav
+        playbookId={playbookId}
+        showCoachCal={coachAiAvailable || showCoachCalPromo}
+      />
     </div>
   );
 }
