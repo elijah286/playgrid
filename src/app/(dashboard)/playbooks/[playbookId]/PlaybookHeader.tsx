@@ -73,16 +73,15 @@ function hexLuminance(hex: string): number {
 }
 
 export type PlaybookHeaderPlayActions = {
-  onNewPlay: () => void;
   onToggleSelect: () => void;
   selectionMode: boolean;
-  creating: boolean;
   printHref: string;
   /** When null, the "New formation" item in the mobile kebab menu is
    *  suppressed. We use null for brand-new playbooks (zero plays) so the
-   *  only "create" affordance is "New play" — formations are an advanced
-   *  concept that lured at least two new users (Anton 04/29, Ralph 04/30)
-   *  off the play-creation path. Reappears once a play exists. */
+   *  only "create" affordance is the FAB / "New play" button —
+   *  formations are an advanced concept that lured at least two new
+   *  users (Anton 04/29, Ralph 04/30) off the play-creation path.
+   *  Reappears once a play exists. */
   newFormationHref: string | null;
   isViewer: boolean;
 };
@@ -1462,25 +1461,14 @@ function HeaderMenu({
             )}
           </div>
 
-          {/* Mobile-only play actions */}
+          {/* Mobile-only play actions. "New play" lives in the floating
+              + button above the bottom nav now — promoting it out of the
+              kebab so coaches stop missing it. The kebab keeps the
+              secondary actions: New formation, Select plays, Print. */}
           {playActions && (
             <div className="sm:hidden">
               <SectionDivider />
               <SectionLabel>Plays</SectionLabel>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={playActions.creating}
-                onClick={() => {
-                  setOpen(false);
-                  playActions.onNewPlay();
-                }}
-                title={playActions.isViewer ? "Viewers can't create plays" : undefined}
-                className={`${menuItemCls} disabled:opacity-50${playActions.isViewer ? " opacity-60" : ""}`}
-              >
-                <Plus className="size-4 shrink-0" />
-                <span>New play</span>
-              </button>
               {!playActions.isViewer && playActions.newFormationHref && (
                 <Link
                   href={playActions.newFormationHref}

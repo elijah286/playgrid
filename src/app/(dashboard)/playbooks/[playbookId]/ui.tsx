@@ -115,6 +115,7 @@ import type {
   ViewerProfile,
 } from "@/features/messages/useMessageStream";
 import { PlaybookBottomNav } from "./PlaybookBottomNav";
+import { MobileCreatePlayFab } from "./MobileCreatePlayFab";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
@@ -1321,7 +1322,6 @@ function PlaybookDetailClientInner({
             ).length
           }
           playActions={{
-            onNewPlay: openFormationPicker,
             onToggleSelect: () => {
               if (selectionMode) {
                 setSelectionMode(false);
@@ -1331,7 +1331,6 @@ function PlaybookDetailClientInner({
               }
             },
             selectionMode,
-            creating,
             printHref: `/playbooks/${playbookId}/print`,
             // Suppress "New formation" in the mobile kebab when this is a
             // brand-new empty playbook — same condition that hides the
@@ -2853,6 +2852,23 @@ function PlaybookDetailClientInner({
             calendar: calendarUpcomingTotal,
           }}
           messagesUnread={messagesUnread}
+        />
+      )}
+      {/* Mobile-only FAB for creating a new play. Only shows on the Plays
+          tab — on other tabs the bottom nav is the primary action surface
+          and a creation FAB would be context-confusing (e.g. on Roster,
+          tapping + would create a play, not invite a member).
+          Suppressed in preview mode (example playbooks can't persist
+          plays) and on the empty-state hero (FirstPlayHero already has
+          a prominent "Draw your first play" CTA). */}
+      {!isPreview && tab === "plays" && initialPlays.length > 0 && (
+        <MobileCreatePlayFab
+          onPickFormation={openFormationPicker}
+          isViewer={isViewer}
+          creating={creating}
+          showCoachCal={
+            headerProps.coachAiAvailable || headerProps.showCoachCalPromo
+          }
         />
       )}
     </div>
