@@ -1494,25 +1494,24 @@ function PlaybookDetailClientInner({
               }
             />
           </div>
-          <div className="relative sm:hidden">
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as PlayType | "all")}
-              aria-label="Filter plays by type"
-              className="appearance-none rounded-lg border border-border bg-surface-raised py-2 pl-3 pr-8 text-sm font-semibold text-foreground shadow-sm focus:border-primary focus:outline-none"
-            >
-              <option value="all">All plays</option>
-              <option value="offense">Offense</option>
-              <option value="defense">Defense</option>
-              {variant === "tackle_11" && (
-                <option value="special_teams">Special teams</option>
-              )}
-            </select>
-            <ChevronDown
-              aria-hidden
-              className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-muted"
-            />
-          </div>          <div className="min-w-0 flex-1">
+          <TypeFilterMenu
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v)}
+            options={
+              variant === "tackle_11"
+                ? [
+                    { value: "all", label: "All plays" },
+                    { value: "offense", label: "Offense" },
+                    { value: "defense", label: "Defense" },
+                    { value: "special_teams", label: "Special teams" },
+                  ]
+                : [
+                    { value: "all", label: "All plays" },
+                    { value: "offense", label: "Offense" },
+                    { value: "defense", label: "Defense" },
+                  ]
+            }
+          />          <div className="min-w-0 flex-1">
             <Input
               leftIcon={Search}
               value={q}
@@ -4817,6 +4816,92 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
       <div className="h-px flex-1 bg-border" />
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
       <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+/**
+ * Mobile-only play-type filter dropdown. Replaces the SegmentedControl on
+ * narrow viewports (where All/Offense/Defense + a 4th tackle option ate
+ * half the toolbar). Built with the same visual vocabulary as ActionMenu —
+ * rounded-lg border button, surface-raised popover, primary highlight on
+ * the active item — so it slots into the rest of the site without looking
+ * out-of-place. Hidden on `sm:` since desktop has the segmented control.
+ */
+function TypeFilterMenu({
+  value,
+  onChange,
+  options,
+}: {
+  value: PlayType | "all";
+  onChange: (v: PlayType | "all") => void;
+  options: Array<{ value: PlayType | "all"; label: string }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative sm:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Filter plays by type"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-surface-inset focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <span>{active.label}</span>
+        <ChevronDown
+          className={`size-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-30 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+        >
+          {options.map((opt) => {
+            const isActive = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                  isActive
+                    ? "bg-primary/10 font-semibold text-primary"
+                    : "text-foreground hover:bg-surface-inset"
+                }`}
+              >
+                <span className="flex-1">{opt.label}</span>
+                {isActive && <Check className="size-4 shrink-0" aria-hidden />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
