@@ -13,6 +13,7 @@ import ConsentGate from "@/components/ConsentGate";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -111,8 +112,12 @@ export default async function RootLayout({
   if (hasSupabaseEnv()) {
     try {
       const supabase = await createClient();
-      const { data } = await supabase.auth.getUser();
-      isAuthed = !!data.user;
+      // Time-bound the auth check so a hung refresh-token round-trip can't
+      // block server rendering. On timeout we fall through as not-authed —
+      // the worst case is a logged-out shell flash; the next request
+      // retries the refresh and recovers. See get-user-with-timeout.ts.
+      const result = await getUserWithTimeout(supabase);
+      isAuthed = result.kind === "ok" && !!result.user;
     } catch {
       isAuthed = false;
     }

@@ -6,6 +6,7 @@ import {
   SESSION_TOUCH_INTERVAL_MS,
   touchUserSession,
 } from "@/lib/auth/sessions";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 
 /**
  * Paths accessible without authentication. Everything else is redirected
@@ -87,15 +88,24 @@ export async function updateSession(request: NextRequest) {
   });
 
   let user: { id: string } | null = null;
+  let authTimedOut = false;
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
+    const result = await getUserWithTimeout(supabase);
+    if (result.kind === "timeout") {
+      authTimedOut = true;
+    } else {
+      user = result.user;
+    }
   } catch {
     /* Bad Supabase URL/key or network; fall through and let public paths work */
   }
 
   const { pathname, search } = request.nextUrl;
-  if (!user && !isPublicPath(pathname)) {
+  // On timeout, let the request through without enforcing the auth gate.
+  // The page will render in whatever logged-out state it can; the next
+  // request from the now-loaded page retries the refresh and recovers.
+  // Better to flash a logged-out shell than stall the tab indefinitely.
+  if (!authTimedOut && !user && !isPublicPath(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.search = `?next=${encodeURIComponent(pathname + search)}`;
