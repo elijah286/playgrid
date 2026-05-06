@@ -101,14 +101,13 @@ export function MessageInput({
           <Send className="size-4" />
         </button>
       </div>
-      <div className="mt-1 flex items-center justify-between px-1 text-[11px] text-muted">
-        <span>
-          {body.length > MAX_MESSAGE_LENGTH * 0.9
-            ? `${body.length}/${MAX_MESSAGE_LENGTH}`
-            : "Markdown supported · **bold** *italic* `code` · links auto-detected"}
-        </span>
-        <span>Shift + Enter for newline</span>
-      </div>
+      {body.length > MAX_MESSAGE_LENGTH * 0.9 && (
+        <div className="mt-1 flex justify-end px-1 text-[11px] text-muted">
+          <span>
+            {body.length}/{MAX_MESSAGE_LENGTH}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -94,14 +94,54 @@ export function useMessageStream({
   const upsertMessage = useCallback((row: RawDbRow) => {
     setMessages((prev) => {
       const existingIdx = prev.findIndex((m) => m.id === row.id);
-      // Realtime gives us the row but not the author profile. Reuse what the
-      // existing entry has, or fall back to a stub the bubble can render
-      // with initials. The Avatar component looks up `displayName/avatarUrl`,
-      // so a fetch-on-miss elsewhere keeps the UX clean — for now, we'll
-      // just keep the stub. A future enhancement would batch-fetch missing
-      // profiles in a background effect.
-      const existing = existingIdx >= 0 ? prev[existingIdx] : null;
-      const merged: StreamMessage = {
+
+      // Already in the list — update body/edited/deleted in place, keep the
+      // author we already hydrated.
+      if (existingIdx >= 0) {
+        const next = prev.slice();
+        next[existingIdx] = {
+          ...next[existingIdx],
+          body: row.body,
+          editedAt: row.edited_at,
+          deletedAt: row.deleted_at,
+          deletedBy: row.deleted_by,
+          pending: false,
+        };
+        return next;
+      }
+
+      // Dedupe: when our own optimistic row arrives back via realtime,
+      // replace the temp by author + body match. CRITICAL: preserve the
+      // temp's `author` field (the local viewer profile) — realtime
+      // payloads don't include author display_name/avatar, and dropping
+      // it makes the bubble fall back to a "Member" label.
+      const tempIdx = prev.findIndex(
+        (m) =>
+          m.id.startsWith("temp-") &&
+          m.authorId === row.author_id &&
+          m.body === row.body,
+      );
+      if (tempIdx >= 0) {
+        const next = prev.slice();
+        next[tempIdx] = {
+          id: row.id,
+          playbookId: row.playbook_id,
+          authorId: row.author_id,
+          body: row.body,
+          createdAt: row.created_at,
+          editedAt: row.edited_at,
+          deletedAt: row.deleted_at,
+          deletedBy: row.deleted_by,
+          author: prev[tempIdx].author,
+          pending: false,
+        };
+        return next;
+      }
+
+      // New message from someone else. Author starts null; the lazy
+      // hydrator effect below batch-fetches missing profiles so the
+      // bubble shows the right name on the next tick.
+      const inserted: StreamMessage = {
         id: row.id,
         playbookId: row.playbook_id,
         authorId: row.author_id,
@@ -110,52 +150,38 @@ export function useMessageStream({
         editedAt: row.edited_at,
         deletedAt: row.deleted_at,
         deletedBy: row.deleted_by,
-        author: existing?.author ?? null,
+        author: null,
         pending: false,
       };
-
-      // Dedupe: when our own optimistic row arrives back via realtime, find
-      // the matching temp by author + body + close timestamp and remove it.
-      if (existingIdx === -1) {
-        const tempIdx = prev.findIndex(
-          (m) =>
-            m.id.startsWith("temp-") &&
-            m.authorId === row.author_id &&
-            m.body === row.body,
-        );
-        if (tempIdx >= 0) {
-          const next = prev.slice();
-          next[tempIdx] = merged;
-          return next;
-        }
-        // Insert keeping ascending-by-createdAt order. Most realtime events
-        // arrive at the tail, so a quick last-element check usually wins.
-        if (
-          prev.length === 0 ||
-          new Date(prev[prev.length - 1].createdAt).getTime() <=
-            new Date(row.created_at).getTime()
-        ) {
-          return [...prev, merged];
-        }
-        const idx = prev.findIndex(
-          (m) =>
-            new Date(m.createdAt).getTime() >
-            new Date(row.created_at).getTime(),
-        );
-        if (idx === -1) return [...prev, merged];
-        return [...prev.slice(0, idx), merged, ...prev.slice(idx)];
+      // Insert sorted by createdAt ascending. Most realtime events arrive
+      // at the tail, so the quick last-element check usually wins.
+      if (
+        prev.length === 0 ||
+        new Date(prev[prev.length - 1].createdAt).getTime() <=
+          new Date(row.created_at).getTime()
+      ) {
+        return [...prev, inserted];
       }
-      const next = prev.slice();
-      next[existingIdx] = merged;
-      return next;
+      const insertAt = prev.findIndex(
+        (m) =>
+          new Date(m.createdAt).getTime() > new Date(row.created_at).getTime(),
+      );
+      if (insertAt === -1) return [...prev, inserted];
+      return [...prev.slice(0, insertAt), inserted, ...prev.slice(insertAt)];
     });
   }, []);
 
   // ── Initial load ────────────────────────────────────────────────────────
+  // Always fetch fresh on mount, even if `initial` is provided. The `initial`
+  // prop is a server-rendered snapshot from page load; once the user posts
+  // and tabs away, that snapshot is stale by the time they tab back. The
+  // tab unmounts on switch (conditional render in ui.tsx), so component
+  // state doesn't survive — without a refetch, posted messages would
+  // appear to vanish. We skip the loading spinner when initial is present
+  // so the refetch is a quiet refresh, not a UI flicker.
   useEffect(() => {
-    if (initial) return;
     let cancelled = false;
-    setLoading(true);
+    if (!initial) setLoading(true);
     listPlaybookMessagesAction(playbookId).then((res) => {
       if (cancelled) return;
       if (!res.ok) {
@@ -163,7 +189,24 @@ export function useMessageStream({
         setLoading(false);
         return;
       }
-      setMessages(res.messages.map((m) => ({ ...m })));
+      // Merge — preserve any client-only optimistic temps that haven't
+      // been ack'd yet (rare: only if the user posted ~ms before remount
+      // and the action hasn't resolved). The server response is the
+      // canonical truth for everything else.
+      setMessages((prev) => {
+        const pendingTemps = prev.filter((m) => m.id.startsWith("temp-"));
+        const fresh = res.messages.map((m) => ({ ...m }));
+        if (pendingTemps.length === 0) return fresh;
+        // Drop temps whose body is already in the fresh server list (the
+        // action committed during the refetch race).
+        const freshBodies = new Set(
+          fresh.map((m) => `${m.authorId}:${m.body}`),
+        );
+        const stillPending = pendingTemps.filter(
+          (t) => !freshBodies.has(`${t.authorId}:${t.body}`),
+        );
+        return [...fresh, ...stillPending];
+      });
       setHasMore(res.hasMore);
       setMessagingEnabled(res.messagingEnabled);
       setLoading(false);
@@ -222,6 +265,52 @@ export function useMessageStream({
       channelRef.current = null;
     };
   }, [playbookId, supabase, upsertMessage, viewer.id]);
+
+  // ── Lazy author hydration ──────────────────────────────────────────────
+  // Realtime payloads only carry the row, not the author's profile. When a
+  // message arrives from another member, the bubble would render "Member"
+  // until a refetch. This effect watches for messages with null `author`
+  // and batch-fetches the missing profiles, attaching them to the rows.
+  // Tracked-IDs ref prevents the effect from re-fetching the same profile
+  // on every messages-state update.
+  const fetchedAuthorIdsRef = useRef<Set<string>>(new Set([viewer.id]));
+  useEffect(() => {
+    const missingIds = new Set<string>();
+    for (const m of messages) {
+      if (!m.author && m.authorId && !fetchedAuthorIdsRef.current.has(m.authorId)) {
+        missingIds.add(m.authorId);
+      }
+    }
+    if (missingIds.size === 0) return;
+    for (const id of missingIds) fetchedAuthorIdsRef.current.add(id);
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .in("id", Array.from(missingIds));
+      if (cancelled || !data || data.length === 0) return;
+      const fetched = new Map<string, PlaybookMessageAuthor>();
+      for (const p of data) {
+        fetched.set(p.id as string, {
+          id: p.id as string,
+          displayName: (p.display_name as string | null) ?? null,
+          avatarUrl: (p.avatar_url as string | null) ?? null,
+        });
+      }
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.author) return m;
+          const author = fetched.get(m.authorId);
+          if (!author) return m;
+          return { ...m, author };
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, supabase, viewer.id]);
 
   // ── Typing TTL sweeper ─────────────────────────────────────────────────
   useEffect(() => {

@@ -95,6 +95,12 @@ const structuredData = [
     description:
       "Design football plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
     offers: {
+      // Explicit @context on the nested object — JSON-LD inherits parent
+      // context, but at least one third-party extension we've seen on
+      // user devices iterates ld+json objects and calls
+      // `obj["@context"].toLowerCase()` without checking that it exists,
+      // crashing on nested @type-bearing objects. Belt-and-suspenders.
+      "@context": "https://schema.org",
       "@type": "Offer",
       price: "0",
       priceCurrency: "USD",

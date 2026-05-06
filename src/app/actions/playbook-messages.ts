@@ -259,6 +259,68 @@ export async function setPlaybookMessagingEnabledAction(
 }
 
 /**
+ * Stamp the viewer's `last_read_messages_at` to now() so the Messages tab
+ * unread badge clears. Called when the user opens the Messages tab and on
+ * each new realtime message that arrives while the tab is active.
+ *
+ * No-op (returns ok) for non-members — there's no row to update, but the
+ * caller shouldn't error out either; just nothing to mark.
+ */
+export async function markPlaybookMessagesReadAction(
+  playbookId: string,
+): Promise<ActionResult<{ readAt: string }>> {
+  if (!hasSupabaseEnv()) return notConfigured();
+  const userId = await authedUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+  const sb = await createClient();
+  const readAt = new Date().toISOString();
+  const { error } = await sb
+    .from("playbook_members")
+    .update({ last_read_messages_at: readAt })
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, readAt };
+}
+
+/**
+ * Count of unread, non-deleted messages in this playbook for the viewer.
+ * Excludes the viewer's own messages — your own posts are never "unread"
+ * to you. Returns 0 if the viewer isn't a member or hasn't loaded yet.
+ *
+ * Used to seed the bottom-nav unread badge on first paint. After mount,
+ * the client tracks unread state in-memory based on realtime events +
+ * tab-active state.
+ */
+export async function getPlaybookUnreadCountAction(
+  playbookId: string,
+): Promise<ActionResult<{ unread: number }>> {
+  if (!hasSupabaseEnv()) return notConfigured();
+  const userId = await authedUserId();
+  if (!userId) return { ok: false, error: "Not signed in." };
+  const sb = await createClient();
+  const { data: membership } = await sb
+    .from("playbook_members")
+    .select("last_read_messages_at")
+    .eq("playbook_id", playbookId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!membership) return { ok: true, unread: 0 };
+  const lastReadAt =
+    (membership.last_read_messages_at as string | null) ??
+    "1970-01-01T00:00:00Z";
+  const { count, error } = await sb
+    .from("playbook_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("playbook_id", playbookId)
+    .neq("author_id", userId)
+    .is("deleted_at", null)
+    .gt("created_at", lastReadAt);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, unread: count ?? 0 };
+}
+
+/**
  * Count of non-deleted messages on a playbook the caller can read. Used by
  * the duplicate dialog to decide whether to surface the "Also copy message
  * history" checkbox — same pattern as getPlaybookKbCountAction.

@@ -53,6 +53,7 @@ import {
   ArrowUpDown,
   Check,
   CheckSquare,
+  ChevronDown,
   ClipboardCopy,
   Copy,
   Crown,
@@ -107,10 +108,14 @@ import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialo
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { PlaybookPracticePlansTab } from "@/features/practice-plans/PlaybookPracticePlansTab";
 import { PlaybookMessagesTab } from "@/features/messages/PlaybookMessagesTab";
+import { MessagesExampleCta } from "@/features/messages/MessagesExampleCta";
+import { markPlaybookMessagesReadAction } from "@/app/actions/playbook-messages";
 import type {
   StreamMessage,
   ViewerProfile,
 } from "@/features/messages/useMessageStream";
+import { PlaybookBottomNav } from "./PlaybookBottomNav";
+import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
@@ -314,9 +319,12 @@ function PlaybookDetailClientInner({
   versionHistoryAvailable = false,
   practicePlansAvailable = false,
   teamMessagingAvailable = false,
+  messagingExamplePreview = false,
+  messagingExampleClaimableId = null,
   messagingViewer = null,
   messagingViewerRole = null,
   initialMessages = null,
+  initialMessagesUnread = 0,
   canUseTeamFeatures = false,
 }: {
   playbookId: string;
@@ -344,6 +352,12 @@ function PlaybookDetailClientInner({
   practicePlansAvailable?: boolean;
   /** When true, show the "Messages" tab (team_messaging beta). */
   teamMessagingAvailable?: boolean;
+  /** When true, the viewer is previewing an example playbook — render the
+   *  CTA instead of the live chat so previews don't get a working chat. */
+  messagingExamplePreview?: boolean;
+  /** Public-example playbook id used to deep-link the CTA into the
+   *  /copy/example/<id> claim flow. Null for non-claimable previews. */
+  messagingExampleClaimableId?: string | null;
   /** Viewer profile (id, displayName, avatarUrl) — required when team
    *  messaging is available. The hook uses this to render optimistic
    *  bubbles and own-message alignment. Null when messaging is gated off. */
@@ -357,6 +371,10 @@ function PlaybookDetailClientInner({
     hasMore: boolean;
     messagingEnabled: boolean;
   } | null;
+  /** Server-rendered unread count for the messages tab — drives the badge
+   *  on first paint. Client tracks subsequent changes via realtime + the
+   *  mark-as-read effect when the tab is opened. */
+  initialMessagesUnread?: number;
   /** Total upcoming events — drives the neutral Calendar tab count. */
   initialCalendarUpcomingTotal?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
@@ -453,6 +471,53 @@ function PlaybookDetailClientInner({
   const [calendarUpcomingTotal, setCalendarUpcomingTotal] = useState(
     initialCalendarUpcomingTotal,
   );
+  // Live unread badge for the Messages tab. Server-rendered seed; bumps on
+  // realtime INSERT from another author when the tab isn't already "messages";
+  // clears when the user opens the tab (effect below also marks-as-read on
+  // the server).
+  const [messagesUnread, setMessagesUnread] = useState(initialMessagesUnread);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const messagingViewerId = messagingViewer?.id ?? null;
+  useEffect(() => {
+    if (!teamMessagingAvailable || !messagingViewerId || messagingExamplePreview)
+      return;
+    const supabase = createBrowserSupabase();
+    const channel = supabase
+      .channel(`playbook-messages-unread:${playbookId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "playbook_messages",
+          filter: `playbook_id=eq.${playbookId}`,
+        },
+        (payload) => {
+          const row = payload.new as { author_id?: string };
+          if (row?.author_id === messagingViewerId) return;
+          // If the user is already on the messages tab, the read-marker
+          // effect handles them. Don't bump the badge.
+          if (tabRef.current === "messages") return;
+          setMessagesUnread((c) => c + 1);
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [messagingViewerId, playbookId, teamMessagingAvailable, messagingExamplePreview]);
+
+  // Mark-as-read whenever the user lands on the Messages tab (on first
+  // navigation to it AND any subsequent return). Clears the local badge
+  // and stamps the server-side last_read_messages_at.
+  useEffect(() => {
+    if (tab !== "messages") return;
+    if (!teamMessagingAvailable || messagingExamplePreview || !messagingViewerId)
+      return;
+    setMessagesUnread(0);
+    void markPlaybookMessagesReadAction(playbookId);
+  }, [tab, teamMessagingAvailable, messagingExamplePreview, messagingViewerId, playbookId]);
   const variant = sportVariant as SportVariant;
   const variantProfile = sportProfileForVariant(variant);
   const expectedPlayerCount = playbookPlayerCount ?? variantProfile.offensePlayerCount;
@@ -1172,7 +1237,22 @@ function PlaybookDetailClientInner({
     // header height) — relies on the body's `overflow-x: clip` (not
     // `hidden`) so no ancestor accidentally becomes a sticky containing
     // block.
-    <div className="-mt-8 space-y-4">
+    <div className="-mt-8 flex flex-col gap-0 pb-20 sm:gap-4 sm:pb-0">
+      {/* flex+gap (instead of space-y) so display:none siblings — like the
+          tab strip on mobile — don't leave a phantom gap above the tab
+          content. space-y uses :not([hidden]) which doesn't match
+          class-based `hidden`, so it counted the invisible tab strip.
+          gap on flex containers skips display:none items entirely.
+
+          gap-0 on mobile so non-Plays tabs (Calendar, Roster, Messages)
+          sit flush below the sticky playbook banner. Plays gets its own
+          internal toolbar so it doesn't look cramped. Desktop keeps gap-4
+          since the tab strip is visible and benefits from breathing room.
+
+          pb-20 (80px) clears the fixed mobile bottom nav so the last bit
+          of content (e.g. message input, last play card) is fully
+          scrollable above it. Desktop drops the padding — the nav is
+          hidden there. */}
       {/* Sticky header region: back link + playbook identity + slim top bar.
           Desktop: pinned below the global dashboard header (h ≈ 56px = top-14).
           Mobile: the global header is hidden, so pin to the very top (top-0).
@@ -1183,7 +1263,10 @@ function PlaybookDetailClientInner({
           siblings (tab content) in their natural flow position with no
           overlap. Solid bg (not blur) avoids the "appearing header"
           flicker when scroll begins. */}
-      <div className="sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-4 pt-3">
+      <div className="sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-0 pt-3 sm:pb-4">
+      {/* pb-0 on mobile so the chat / calendar / roster tabs sit flush
+          below the orange banner — no top tabs there to pad against.
+          Desktop keeps pb-4 for breathing room with the visible top tabs. */}
         <PlaybookHeader
           playbookId={playbookId}
           name={headerProps.name}
@@ -1272,10 +1355,11 @@ function PlaybookDetailClientInner({
             (i) => !i.revoked_at && new Date(i.expires_at) > new Date(),
           ).length === 0 && <ShareFirstBanner />}
 
-        {/* Tabs: on mobile, scroll horizontally so all tabs stay reachable
-            at narrow widths. Edge-to-edge via -mx-6 + px-6 so the first
-            tab aligns with the banner content. */}
-        <div className="-mx-6 overflow-x-auto px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:overflow-visible sm:px-0">
+        {/* Tabs: top bar visible on tablet/desktop only. Mobile gets the
+            fixed-position PlaybookBottomNav further down — seven tabs in a
+            horizontal scroller doesn't survive thumb navigation, especially
+            once Messages is part of the rotation (TeamSnap/Slack pattern). */}
+        <div className="-mx-6 hidden overflow-x-auto px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:block sm:overflow-visible sm:px-0">
         <div className="border-b border-border min-w-max sm:min-w-0">
           <nav className="-mb-px flex gap-6" aria-label="Playbook sections">
             {(() => {
@@ -1385,26 +1469,50 @@ function PlaybookDetailClientInner({
            Print/Game/Search invites confused taps that go to nothing or
            bounce to /pricing (game mode upgrade dialog). */
         <div className="flex flex-wrap items-end gap-3">
-          {/* Type tabs are the primary play filter — visible at all
-              breakpoints; flex-wrap on the container handles narrow widths. */}
-          <SegmentedControl
-            value={typeFilter}
-            onChange={(v) => setTypeFilter(v as PlayType | "all")}
-            options={
-              variant === "tackle_11"
-                ? [
-                    { value: "all", label: "All" },
-                    { value: "offense", label: "Offense" },
-                    { value: "defense", label: "Defense" },
-                    { value: "special_teams", label: "Special teams" },
-                  ]
-                : [
-                    { value: "all", label: "All" },
-                    { value: "offense", label: "Offense" },
-                    { value: "defense", label: "Defense" },
-                  ]
-            }
-          />          <div className="min-w-0 flex-1">
+          {/* Type filter: SegmentedControl on tablet+, compact native select
+              on mobile so the toolbar fits comfortably with the search field
+              and Game button beside it. The native select opens the OS
+              picker (iOS sheet / Android dropdown) — minimal markup, max
+              thumb-friendliness. */}
+          <div className="hidden sm:block">
+            <SegmentedControl
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v as PlayType | "all")}
+              options={
+                variant === "tackle_11"
+                  ? [
+                      { value: "all", label: "All" },
+                      { value: "offense", label: "Offense" },
+                      { value: "defense", label: "Defense" },
+                      { value: "special_teams", label: "Special teams" },
+                    ]
+                  : [
+                      { value: "all", label: "All" },
+                      { value: "offense", label: "Offense" },
+                      { value: "defense", label: "Defense" },
+                    ]
+              }
+            />
+          </div>
+          <div className="relative sm:hidden">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as PlayType | "all")}
+              aria-label="Filter plays by type"
+              className="appearance-none rounded-lg border border-border bg-surface-raised py-2 pl-3 pr-8 text-sm font-semibold text-foreground shadow-sm focus:border-primary focus:outline-none"
+            >
+              <option value="all">All plays</option>
+              <option value="offense">Offense</option>
+              <option value="defense">Defense</option>
+              {variant === "tackle_11" && (
+                <option value="special_teams">Special teams</option>
+              )}
+            </select>
+            <ChevronDown
+              aria-hidden
+              className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-muted"
+            />
+          </div>          <div className="min-w-0 flex-1">
             <Input
               leftIcon={Search}
               value={q}
@@ -1662,11 +1770,10 @@ function PlaybookDetailClientInner({
         />
       )}
 
-      {tab === "messages" &&
-        teamMessagingAvailable &&
-        messagingViewer &&
-        messagingViewerRole &&
-        initialMessages && (
+      {tab === "messages" && teamMessagingAvailable && (
+        messagingExamplePreview ? (
+          <MessagesExampleCta examplePlaybookId={messagingExampleClaimableId} />
+        ) : messagingViewer && messagingViewerRole && initialMessages ? (
           <PlaybookMessagesTab
             playbookId={playbookId}
             playbookName={headerProps.name}
@@ -1674,7 +1781,8 @@ function PlaybookDetailClientInner({
             viewerRole={messagingViewerRole}
             initial={initialMessages}
           />
-        )}
+        ) : null
+      )}
 
       {tab === "plays" && (
       <div>
@@ -2701,6 +2809,30 @@ function PlaybookDetailClientInner({
           to grant you edit access, or create your own playbook.
         </p>
       </Modal>
+
+      {/* Mobile-only bottom nav. Hidden via CSS (`sm:hidden`) so it doesn't
+          render on desktop where the top tab bar takes over. The fixed
+          positioning + `pb-20 sm:pb-0` on the outer wrapper keeps content
+          fully scrollable above it. */}
+      {!isPreview && initialPlays.length > 0 && (
+        <PlaybookBottomNav
+          active={tab}
+          onChange={(k) => setTab(k)}
+          available={{
+            calendar: teamCalendarAvailable,
+            games: gameResultsAvailable,
+            practicePlans: practicePlansAvailable,
+            messages: teamMessagingAvailable,
+          }}
+          counts={{
+            plays: initialPlays.filter((p) => !p.is_archived).length,
+            formations: initialFormations.length,
+            roster: initialRoster.filter((m) => m.status === "active").length,
+            calendar: calendarUpcomingTotal,
+          }}
+          messagesUnread={messagesUnread}
+        />
+      )}
     </div>
   );
 }

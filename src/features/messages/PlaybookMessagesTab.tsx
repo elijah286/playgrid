@@ -82,7 +82,18 @@ export function PlaybookMessagesTab({
   }, [stream.loading]);
 
   return (
-    <div className="-mx-6 flex h-[calc(100vh-220px)] min-h-[480px] flex-col border border-border bg-surface-base sm:mx-0 sm:rounded-2xl">
+    <div className="-mx-6 -mb-20 flex h-[calc(100dvh-156px-env(safe-area-inset-bottom))] min-h-[360px] flex-col overflow-hidden border border-border bg-surface-base sm:mx-0 sm:mb-0 sm:h-[calc(100dvh-340px)] sm:max-h-[760px] sm:rounded-2xl">
+      {/* Height calc on mobile: subtract the sticky playbook banner
+          (~100px) + the bottom nav base height (~56px), plus the dynamic
+          `env(safe-area-inset-bottom)` so the panel re-fits when an
+          iPhone home indicator widens the nav. Net result: chat bottom
+          edge lands exactly at the bottom-nav top edge with no gap.
+          The negative -mb-20 absorbs the wrapper's pb-20 (which exists
+          for scrolling tabs like Plays to clear the bottom nav) — without
+          it an 80px void would sit below the input. Desktop drops both:
+          mb-0 + the larger 340px offset for site-header + top-tabs +
+          chrome, capped at 760px so very tall screens don't get an
+          absurdly long chat box. */}
       <Header
         playbookName={playbookName}
         messagingEnabled={stream.messagingEnabled}
@@ -252,12 +263,12 @@ function DaySeparator({ iso }: { iso: string }) {
 function EmptyState({ messagingEnabled }: { messagingEnabled: boolean }) {
   if (!messagingEnabled) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted">
         <MessageSquareOff className="size-8" />
-        <p className="text-sm font-semibold text-foreground">
+        <p className="text-base font-semibold text-foreground">
           Messaging is disabled
         </p>
-        <p className="max-w-sm text-sm">
+        <p className="max-w-sm text-sm leading-relaxed">
           The playbook owner has turned messaging off. They can re-enable it
           from the menu above.
         </p>
@@ -265,11 +276,11 @@ function EmptyState({ messagingEnabled }: { messagingEnabled: boolean }) {
     );
   }
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
-      <p className="text-sm font-semibold text-foreground">
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted">
+      <p className="text-base font-semibold text-foreground">
         No messages yet
       </p>
-      <p className="max-w-sm text-sm">
+      <p className="max-w-sm text-sm leading-relaxed">
         Start a conversation with your team. Use it for practice updates,
         equipment, last-minute schedule changes — anything the team needs.
       </p>

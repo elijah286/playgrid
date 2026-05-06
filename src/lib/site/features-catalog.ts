@@ -257,10 +257,10 @@ export const FEATURES: FeatureEntry[] = [
     id: "team-messaging",
     name: "Team chat",
     description:
-      "Per-playbook chat where coaches, players, and parents trade messages about practices, equipment, and schedule. Realtime delivery with typing indicators, markdown formatting, clickable links, and a 15-minute self-edit window. The owner can disable messaging or clear history per playbook; duplicating a playbook offers an opt-in to carry message history forward.",
+      "Per-playbook chat where coaches, players, and parents trade messages about practices, equipment, and schedule. Realtime delivery with typing indicators, markdown formatting, clickable links, and a 15-minute self-edit window. The owner can disable messaging or clear history per playbook; duplicating a playbook offers an opt-in to carry message history forward. On mobile, the playbook detail page swaps the top tab strip for a thumb-reachable bottom nav with a red unread badge on the Chat icon.",
     category: "Calendar & scheduling",
-    status: "beta",
-    addedDate: "2026-05-05",
+    status: "ga",
+    addedDate: "2026-05-06",
   },
 
   // ── Roster & sharing ───────────────────────────────────────────
