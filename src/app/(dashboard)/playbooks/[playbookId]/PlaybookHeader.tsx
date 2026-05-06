@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Sparkles, Trash2, Unlock, UserPlus, Users, X, Zap } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Share2, Sparkles, Trash2, Unlock, UserPlus, Users, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -542,7 +542,7 @@ export function PlaybookHeader({
                 aria-label={inviteAsViewerOnly ? "Invite a player" : "Share playbook"}
                 title={inviteAsViewerOnly ? "Invite a player" : "Share"}
               >
-                <UserPlus className="size-5" />
+                <Share2 className="size-5" />
               </button>
             )}
             {(coachAiAvailable || showCoachCalPromo) && (

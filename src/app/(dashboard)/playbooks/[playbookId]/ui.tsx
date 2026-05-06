@@ -468,6 +468,29 @@ function PlaybookDetailClientInner({
       setTab("roster");
     }
   }, [searchParams]);
+
+  // ?new=1 → open the formation picker. Used by the editor's "New play"
+  // button to bounce the user back here with the picker pre-opened, so
+  // creation flows through the same gate as the play grid's button.
+  // We strip the param after triggering so refresh / back-button don't
+  // re-open the picker.
+  useEffect(() => {
+    if (searchParams?.get("new") !== "1") return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("new");
+    const qs = next.toString();
+    window.history.replaceState(
+      {},
+      "",
+      qs ? `?${qs}` : window.location.pathname,
+    );
+    setTab("plays");
+    openFormationPicker();
+    // openFormationPicker is stable enough to omit from deps — the only
+    // moving parts it reads (isViewer, initialPlays.length, isPreview)
+    // are derived from props that don't change during the effect window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [calendarUpcomingTotal, setCalendarUpcomingTotal] = useState(
     initialCalendarUpcomingTotal,
   );
@@ -1859,7 +1882,7 @@ function PlaybookDetailClientInner({
           />
         )
       ) : (
-        <div className="relative space-y-6">
+        <div className="relative mt-3 space-y-6 sm:mt-0">
           {isReordering && (
             <div className="pointer-events-auto absolute inset-0 z-30 flex items-start justify-center bg-surface/40 pt-6 backdrop-blur-[1px]">
               <div className="flex items-center gap-2 rounded-full border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-foreground shadow-elevated">

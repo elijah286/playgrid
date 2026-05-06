@@ -724,7 +724,7 @@ function PlayEditorClientInner({
     });
   }, [playId, doc.metadata.coachName, doc.metadata.formationId, doc.metadata.formation, blockIfPreview]);
 
-  const newPlay = useCallback(async () => {
+  const newPlay = useCallback(() => {
     if (
       blockIfPreview(
         "Creating a play in an example playbook isn't persisted. Start your own playbook to save plays.",
@@ -732,16 +732,12 @@ function PlayEditorClientInner({
     ) {
       return;
     }
-    const res = await createPlayAction(playbookId, {
-      variant: doc.sportProfile.variant,
-      playerCount: playbookSettings?.maxPlayers,
-    });
-    if (!res.ok) {
-      toast(res.error, "error");
-      return;
-    }
-    router.push(`/plays/${res.playId}/edit`);
-  }, [blockIfPreview, playbookId, doc.sportProfile.variant, playbookSettings?.maxPlayers, router, toast]);
+    // Route back to the playbook with the formation picker auto-opened.
+    // Keeps creation consistent with the play grid's "New play" flow —
+    // the editor used to short-circuit to an empty play, which lost the
+    // formation context coaches expect when starting a new play.
+    router.push(`/playbooks/${playbookId}?tab=plays&new=1`);
+  }, [blockIfPreview, playbookId, router]);
 
   const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
   const openMoveToGroup = useCallback(
