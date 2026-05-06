@@ -8,6 +8,7 @@ import {
   copyPlaybookContents,
   copyPlaybookGameSessions,
   copyPlaybookKb,
+  copyPlaybookMessages,
   countPlaybookKbNotes,
 } from "@/lib/data/playbook-copy";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
@@ -502,6 +503,7 @@ export async function duplicatePlaybookAction(
   opts?: {
     copyGameResults?: boolean;
     copyKb?: boolean;
+    copyMessages?: boolean;
     color?: string;
     logoUrl?: string | null;
   },
@@ -628,6 +630,13 @@ export async function duplicatePlaybookAction(
   // private observations from another team.
   if (opts?.copyKb) {
     await copyPlaybookKb(playbookId, newBook.id, user.id);
+  }
+
+  // Team chat history is opt-in (default off in the dialog) — most
+  // duplicates want a fresh stream. Author identity is preserved on each
+  // copied row so attributions still read "Coach Smith said …".
+  if (opts?.copyMessages) {
+    await copyPlaybookMessages(playbookId, newBook.id);
   }
 
   revalidatePath("/home");

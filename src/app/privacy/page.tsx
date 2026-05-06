@@ -108,6 +108,20 @@ export default function PrivacyPage() {
               can opt out at any time by asking Coach AI to update your
               preference.
             </li>
+            <li>
+              <strong>Team chat:</strong> if your playbook has team
+              messaging turned on, every message you post (text, sender,
+              and timestamp) is stored so other members can read it. The
+              owner of a playbook can disable messaging or clear all
+              history at any time. While you&apos;re typing, a brief
+              &ldquo;is typing&hellip;&rdquo; signal is broadcast to other
+              members in the same chat — that signal is not stored. You
+              can edit or delete your own message within 15 minutes of
+              posting; after that, only the playbook&apos;s coaches can
+              remove it. Deleted messages leave a tombstone (&ldquo;this
+              message has been deleted&rdquo;) so the chronology stays
+              intact.
+            </li>
           </ul>
           <p className="mt-3">
             <strong>Inside the iOS / Android app:</strong> product-usage and

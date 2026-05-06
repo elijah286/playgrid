@@ -29,6 +29,7 @@ import {
   updatePlaybookSeasonAction,
   updatePlaybookSettingsAction,
 } from "@/app/actions/playbooks";
+import { getPlaybookMessagesCountAction } from "@/app/actions/playbook-messages";
 import { createCopyLinkAction } from "@/app/actions/copy-links";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
@@ -278,11 +279,13 @@ export function PlaybookHeader({
     logoUrl: string | null;
     copyGameResults: boolean;
     copyKb: boolean;
+    copyMessages: boolean;
   }) {
     setDuplicateOpen(false);
     duplicatePlaybookAction(playbookId, args.newName, {
       copyGameResults: args.copyGameResults,
       copyKb: args.copyKb,
+      copyMessages: args.copyMessages,
       color: args.color,
       logoUrl: args.logoUrl,
     }).then((res) => {
@@ -877,6 +880,7 @@ function DuplicatePlaybookDialog({
     logoUrl: string | null;
     copyGameResults: boolean;
     copyKb: boolean;
+    copyMessages: boolean;
   }) => void;
 }) {
   const [name, setName] = useState(suggestedName);
@@ -884,14 +888,20 @@ function DuplicatePlaybookDialog({
   const [logoUrl, setLogoUrl] = useState<string>(sourceLogoUrl ?? "");
   const [copyGameResults, setCopyGameResults] = useState(false);
   const [copyKb, setCopyKb] = useState(false);
+  const [copyMessages, setCopyMessages] = useState(false);
   const [kbCount, setKbCount] = useState<number | null>(null);
+  const [messagesCount, setMessagesCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const res = await getPlaybookKbCountAction(playbookId);
+      const [kbRes, msgRes] = await Promise.all([
+        getPlaybookKbCountAction(playbookId),
+        getPlaybookMessagesCountAction(playbookId),
+      ]);
       if (cancelled) return;
-      setKbCount(res.ok ? res.count : 0);
+      setKbCount(kbRes.ok ? kbRes.count : 0);
+      setMessagesCount(msgRes.ok ? msgRes.count : 0);
     })();
     return () => { cancelled = true; };
   }, [playbookId]);
@@ -905,6 +915,7 @@ function DuplicatePlaybookDialog({
       logoUrl: logoUrl.length > 0 ? logoUrl : null,
       copyGameResults: allowGameResultsCopy && copyGameResults,
       copyKb,
+      copyMessages,
     });
   }
   return (
@@ -1009,6 +1020,24 @@ function DuplicatePlaybookDialog({
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
                   Schemes, terminology, opponent notes, and other team-specific knowledge attached to this playbook&apos;s Coach Cal knowledge base.
+                </p>
+              </div>
+            </label>
+          )}
+          {messagesCount !== null && messagesCount > 0 && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-surface-inset/50 p-3">
+              <input
+                type="checkbox"
+                checked={copyMessages}
+                onChange={(e) => setCopyMessages(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 rounded border-border"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">
+                  Also copy message history ({messagesCount})
+                </div>
+                <p className="mt-0.5 text-xs text-muted">
+                  Carry over the team chat from the source playbook. Off by default — most duplicates start fresh.
                 </p>
               </div>
             </label>

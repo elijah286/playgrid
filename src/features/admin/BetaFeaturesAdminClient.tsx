@@ -60,6 +60,12 @@ const FEATURES: FeatureMeta[] = [
       "Practice Plans tab inside a playbook. Coaches build reusable practice templates with timed blocks, parallel activities (Skill / Line / Specialists), and drill diagrams using equipment props (cones, ladders, hurdles).",
   },
   {
+    key: "team_messaging",
+    label: "Team Messaging",
+    description:
+      "Per-playbook team chat where coaches, players, and parents trade messages about practices, equipment, and schedule. Realtime delivery with typing indicators, markdown formatting, and 15-minute self-edit window. The owner can disable messaging or clear all history per playbook.",
+  },
+  {
     key: "marketing_content",
     label: "Enhanced marketing content",
     description:

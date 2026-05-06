@@ -22,6 +22,7 @@ const DEFAULTS: BetaFeatures = {
   play_comments: "off",
   version_history: "off",
   practice_plans: "off",
+  team_messaging: "off",
 };
 
 export async function getBetaFeaturesAction() {

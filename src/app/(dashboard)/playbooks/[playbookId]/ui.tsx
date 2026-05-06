@@ -106,6 +106,11 @@ import {
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { PlaybookPracticePlansTab } from "@/features/practice-plans/PlaybookPracticePlansTab";
+import { PlaybookMessagesTab } from "@/features/messages/PlaybookMessagesTab";
+import type {
+  StreamMessage,
+  ViewerProfile,
+} from "@/features/messages/useMessageStream";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
 import {
@@ -233,7 +238,7 @@ const UNASSIGNED = "__unassigned__";
 type ThumbSize = "small" | "medium" | "large";
 
 type PlaybookPrefs = {
-  tab?: "plays" | "formations" | "roster" | "games" | "calendar";
+  tab?: "plays" | "formations" | "roster" | "games" | "calendar" | "messages";
   view: "active" | "archived";
   typeFilter: PlayType | "all";
   groupBy: GroupBy;
@@ -308,6 +313,10 @@ function PlaybookDetailClientInner({
   initialCalendarUpcomingTotal = 0,
   versionHistoryAvailable = false,
   practicePlansAvailable = false,
+  teamMessagingAvailable = false,
+  messagingViewer = null,
+  messagingViewerRole = null,
+  initialMessages = null,
   canUseTeamFeatures = false,
 }: {
   playbookId: string;
@@ -333,6 +342,21 @@ function PlaybookDetailClientInner({
   versionHistoryAvailable?: boolean;
   /** When true, show the "Practice Plans" tab (practice_plans beta). */
   practicePlansAvailable?: boolean;
+  /** When true, show the "Messages" tab (team_messaging beta). */
+  teamMessagingAvailable?: boolean;
+  /** Viewer profile (id, displayName, avatarUrl) — required when team
+   *  messaging is available. The hook uses this to render optimistic
+   *  bubbles and own-message alignment. Null when messaging is gated off. */
+  messagingViewer?: ViewerProfile | null;
+  /** Viewer's role on this playbook — drives which controls render. */
+  messagingViewerRole?: "owner" | "editor" | "viewer" | null;
+  /** Pre-fetched first page of messages so the tab paints without a
+   *  loading flash. Null when messaging is gated off. */
+  initialMessages?: {
+    messages: StreamMessage[];
+    hasMore: boolean;
+    messagingEnabled: boolean;
+  } | null;
   /** Total upcoming events — drives the neutral Calendar tab count. */
   initialCalendarUpcomingTotal?: number;
   /** When true, Game Mode is unlocked (Coach+ tier). When false, the button
@@ -395,7 +419,8 @@ function PlaybookDetailClientInner({
       t === "formations" ||
       t === "roster" ||
       t === "games" ||
-      t === "calendar"
+      t === "calendar" ||
+      t === "messages"
     )
       return t;
     // Legacy: staff tab merged into roster
@@ -403,7 +428,7 @@ function PlaybookDetailClientInner({
     return "plays";
   })();
   const [tab, setTab] = useState<
-    "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans"
+    "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans" | "messages"
   >(initialTab);
 
   // Re-sync tab when ?tab= changes mid-mount — e.g. clicking an "Open calendar"
@@ -411,7 +436,15 @@ function PlaybookDetailClientInner({
   // Without this, useState's initial value sticks and the tab doesn't move.
   useEffect(() => {
     const t = searchParams?.get("tab");
-    if (t === "plays" || t === "formations" || t === "roster" || t === "games" || t === "calendar" || t === "practice_plans") {
+    if (
+      t === "plays" ||
+      t === "formations" ||
+      t === "roster" ||
+      t === "games" ||
+      t === "calendar" ||
+      t === "practice_plans" ||
+      t === "messages"
+    ) {
       setTab(t);
     } else if (t === "staff") {
       setTab("roster");
@@ -1253,7 +1286,7 @@ function PlaybookDetailClientInner({
               // Re-expand after the first play is created.
               const noPlaysYet = initialPlays.length === 0 && !isViewer && !isPreview;
               const tabs: Array<{
-                key: "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans";
+                key: "plays" | "formations" | "roster" | "games" | "calendar" | "practice_plans" | "messages";
                 label: string;
                 count: number | null;
                 variant: "default";
@@ -1298,6 +1331,14 @@ function PlaybookDetailClientInner({
                   tabs.push({
                     key: "practice_plans",
                     label: "Practice Plans",
+                    count: null,
+                    variant: "default",
+                  });
+                }
+                if (teamMessagingAvailable) {
+                  tabs.push({
+                    key: "messages",
+                    label: "Messages",
                     count: null,
                     variant: "default",
                   });
@@ -1620,6 +1661,20 @@ function PlaybookDetailClientInner({
           canUseTeamFeatures={canUseTeamFeatures}
         />
       )}
+
+      {tab === "messages" &&
+        teamMessagingAvailable &&
+        messagingViewer &&
+        messagingViewerRole &&
+        initialMessages && (
+          <PlaybookMessagesTab
+            playbookId={playbookId}
+            playbookName={headerProps.name}
+            viewer={messagingViewer}
+            viewerRole={messagingViewerRole}
+            initial={initialMessages}
+          />
+        )}
 
       {tab === "plays" && (
       <div>

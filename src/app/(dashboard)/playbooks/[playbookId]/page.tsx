@@ -10,6 +10,8 @@ import {
 } from "@/app/actions/playbook-roster";
 import { listInvitesAction } from "@/app/actions/invites";
 import { listFormationsForPlaybookAction } from "@/app/actions/formations";
+import { listPlaybookMessagesAction } from "@/app/actions/playbook-messages";
+import type { PlaybookMessageRow } from "@/domain/messages/types";
 import { getPlaybookViewPrefsAction } from "@/app/actions/playbook-view-prefs";
 import { getCalendarRsvpPendingCountAction } from "@/app/actions/calendar";
 import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
@@ -338,6 +340,54 @@ export default async function PlaybookDetailPage({ params }: Props) {
       isAdmin,
       isEntitled: isCoachInPlaybook,
     });
+  // Team messaging is available to every member (owner/editor/viewer) once
+  // the beta is enabled — coaches, players, and parents all post in the
+  // same stream. The per-playbook owner switch (messaging_enabled column)
+  // is a separate kill-switch evaluated at post time.
+  const teamMessagingAvailable =
+    !isExamplePreview &&
+    isMember &&
+    isBetaFeatureAvailable(betaFeatures.team_messaging, {
+      isAdmin,
+      isEntitled: true,
+    });
+  // Pre-fetch the viewer profile + first page of messages on the server so
+  // the tab renders without a loading flash. Skipped when the beta is off
+  // for this viewer.
+  let messagingViewer: {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  } | null = null;
+  let initialMessages: {
+    messages: PlaybookMessageRow[];
+    hasMore: boolean;
+    messagingEnabled: boolean;
+  } | null = null;
+  if (teamMessagingAvailable && user) {
+    const { data: viewerProfile } = await supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle();
+    messagingViewer = {
+      id: user.id,
+      displayName: (viewerProfile?.display_name as string | null) ?? null,
+      avatarUrl: (viewerProfile?.avatar_url as string | null) ?? null,
+    };
+    const messagesRes = await listPlaybookMessagesAction(playbookId);
+    if (messagesRes.ok) {
+      initialMessages = {
+        messages: messagesRes.messages,
+        hasMore: messagesRes.hasMore,
+        messagingEnabled: messagesRes.messagingEnabled,
+      };
+    } else {
+      // Fall back to an empty stream so the tab still renders. The hook
+      // will retry on mount and surface any error there.
+      initialMessages = { messages: [], hasMore: false, messagingEnabled: true };
+    }
+  }
   // Wrapped in try/catch because the count expands every event's recurrence
   // rule — a single bad rule (or a transient Supabase blip) shouldn't crash
   // the entire playbook page render.
@@ -420,6 +470,10 @@ export default async function PlaybookDetailPage({ params }: Props) {
         teamCalendarAvailable={teamCalendarAvailable}
         versionHistoryAvailable={versionHistoryAvailable}
         practicePlansAvailable={practicePlansAvailable}
+        teamMessagingAvailable={teamMessagingAvailable}
+        messagingViewer={messagingViewer}
+        messagingViewerRole={effectiveRole}
+        initialMessages={initialMessages}
         initialCalendarUpcomingTotal={calendarCounts.upcomingTotal}
         canUseGameMode={viewerCanUseGameMode || isAdmin || isExamplePreview}
         canUseTeamFeatures={

@@ -170,6 +170,37 @@ body {
   }
 }
 
+/* Team messaging — incoming bubble (someone else). Subtle fade + slide
+ * from the leading edge so it doesn't compete with the sender bubble's
+ * bigger swoop. Origin top-left matches the avatar anchor on the left. */
+@keyframes team-msg-in-other {
+  0%   { opacity: 0; transform: translateX(-12px) scale(0.98); }
+  100% { opacity: 1; transform: translateX(0)    scale(1); }
+}
+.team-msg-in-other {
+  animation: team-msg-in-other 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top left;
+}
+
+/* Three-dot typing bounce. Each dot rides the same keyframe with a stagger
+ * applied as inline animation-delay in the component. */
+@keyframes msg-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0);     opacity: 0.45; }
+  30%           { transform: translateY(-3px);  opacity: 1;    }
+}
+.msg-typing-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: msg-typing-bounce 900ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-msg-in-other { animation: none; }
+  .msg-typing-dot    { animation: none; opacity: 0.6; }
+}
+
 /* Coach Cal docked mode — body shifts left so the fixed right panel has room */
 html.coach-docked body {
   padding-right: var(--coach-dock-w, 380px);

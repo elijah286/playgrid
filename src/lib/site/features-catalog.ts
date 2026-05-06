@@ -253,6 +253,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-03-01",
   },
+  {
+    id: "team-messaging",
+    name: "Team chat",
+    description:
+      "Per-playbook chat where coaches, players, and parents trade messages about practices, equipment, and schedule. Realtime delivery with typing indicators, markdown formatting, clickable links, and a 15-minute self-edit window. The owner can disable messaging or clear history per playbook; duplicating a playbook offers an opt-in to carry message history forward.",
+    category: "Calendar & scheduling",
+    status: "beta",
+    addedDate: "2026-05-05",
+  },
 
   // ── Roster & sharing ───────────────────────────────────────────
   {

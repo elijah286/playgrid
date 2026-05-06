@@ -499,3 +499,48 @@ async function buildSourceToTargetPlayMap(
   }
   return map;
 }
+
+/**
+ * Copy team-chat history from one playbook to another. Used by the
+ * "duplicate playbook" flow when the user opts into "Also copy message
+ * history". Off by default — message history rarely makes sense to carry
+ * across to a fresh copy.
+ *
+ * Author identity is preserved: the original `author_id` stays on each row
+ * so attributions still read "Coach Smith said …" even if the new playbook
+ * has a different roster. The author's profile reference is by `profiles.id`
+ * (a profile, not a membership), so the foreign key still resolves whether
+ * or not the original author has been invited to the duplicate.
+ *
+ * Soft-deleted rows are copied verbatim so the chronology and tombstones
+ * survive the duplication. The owner of the duplicate can clear them later
+ * via the "Clear all messages" action if they want a fresh slate.
+ */
+export async function copyPlaybookMessages(
+  sourcePlaybookId: string,
+  targetPlaybookId: string,
+): Promise<{ copied: number }> {
+  const svc = createServiceRoleClient();
+
+  const { data: rows, error: srcErr } = await svc
+    .from("playbook_messages")
+    .select("author_id, body, created_at, edited_at, deleted_at, deleted_by")
+    .eq("playbook_id", sourcePlaybookId)
+    .order("created_at", { ascending: true });
+  if (srcErr) throw new Error(`copy playbook messages: ${srcErr.message}`);
+  if (!rows || rows.length === 0) return { copied: 0 };
+
+  const insertRows = rows.map((r) => ({
+    playbook_id: targetPlaybookId,
+    author_id: r.author_id,
+    body: r.body,
+    created_at: r.created_at,
+    edited_at: r.edited_at,
+    deleted_at: r.deleted_at,
+    deleted_by: r.deleted_by,
+  }));
+
+  const { error } = await svc.from("playbook_messages").insert(insertRows);
+  if (error) throw new Error(`copy playbook messages: ${error.message}`);
+  return { copied: insertRows.length };
+}
