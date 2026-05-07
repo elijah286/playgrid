@@ -481,6 +481,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-server-side-history",
+    name: "Coach Cal keeps working when you close the chat",
+    description:
+      "Closing the Coach Cal window mid-reply used to drop the work — Cal would stop thinking and the answer was lost. Conversation history now lives on our servers (one thread per playbook), so Cal keeps generating the answer in the background after the window closes and the finished reply appears the next time you open Cal — on the same device or another. The trash icon now wipes server-side history too, and chats follow you between devices when signed in.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-06",
+  },
+  {
     id: "coach-cal-in-app-cta-schedule-season",
     name: "Schedule the season with Coach Cal — from the Calendar tab",
     description:

@@ -166,6 +166,11 @@ export function CoachAiChat({
   const [feedbackOptIn, setFeedbackOptIn] = useState<"loading" | "consenting" | "declined" | "unanswered">("loading");
   const [optInPending, setOptInPending] = useState(false);
   const [upgradeBannerEnabled, setUpgradeBannerEnabled] = useState(false);
+  // Set when the server reports an in-flight assistant turn for this thread
+  // (typically because the coach closed the window mid-stream and reopened).
+  // While set, a polling effect drives the visible "thinking" indicator and
+  // appends the finished assistant turn to history when status flips to done.
+  const [pollingRunningTurnId, setPollingRunningTurnId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Index of the user turn added by the most recent send() call — receives
   // the .msg-in animation. Null for history turns loaded from localStorage.
@@ -399,6 +404,130 @@ export function CoachAiChat({
     saveTurns(storageKey, turns);
   }, [storageKey, turns]);
 
+  // Server hydration: replace any localStorage-derived state with the
+  // server's source-of-truth history once available. Runs after the
+  // localStorage init effects above so they fill the gap during the
+  // round-trip; if the server has zero turns we leave localStorage in
+  // place — the next send will backfill it server-side. If the server
+  // reports a running turn, kick off polling so the coach sees Cal's
+  // reply when it lands even if they closed the original window.
+  useEffect(() => {
+    let cancelled = false;
+    const ctrl = new AbortController();
+    void (async () => {
+      type ThreadResponse = {
+        ok: boolean;
+        turns?: CoachAiTurn[];
+        runningTurnId?: string | null;
+      };
+      const qs = new URLSearchParams();
+      qs.set("mode", mode);
+      if (mode === "normal" && playbookId) qs.set("playbookId", playbookId);
+      let data: ThreadResponse | null = null;
+      try {
+        const res = await fetch(`/api/coach-ai/thread?${qs.toString()}`, { signal: ctrl.signal });
+        if (!res.ok) return;
+        data = (await res.json()) as ThreadResponse;
+      } catch {
+        return; // network error — keep localStorage state, retry on next mount
+      }
+      if (cancelled || !data?.ok) return;
+      const serverTurns = data.turns ?? [];
+      if (serverTurns.length > 0) {
+        setTurns(serverTurns);
+        saveTurns(storageKey, serverTurns);
+      }
+      if (data.runningTurnId) {
+        setPollingRunningTurnId(data.runningTurnId);
+      }
+    })();
+    return () => { cancelled = true; ctrl.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  // Poll a running turn until it completes. Set when (a) the server-hydration
+  // effect above sees a running turn from a prior session, or (b) the SSE
+  // connection drops mid-stream and we captured a turn_id at the start. The
+  // visible "thinking" indicator continues so the coach sees Cal still working.
+  useEffect(() => {
+    if (!pollingRunningTurnId) return;
+    setStreaming(true);
+    setStatusText("Picking up where Cal left off…");
+
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    type TurnPollResponse = {
+      ok: boolean;
+      status?: "running" | "done" | "errored";
+      turn?: CoachAiTurn | null;
+      mutated?: boolean;
+      error?: string | null;
+    };
+
+    const poll = async () => {
+      if (cancelled) return;
+      let data: TurnPollResponse | null = null;
+      try {
+        const res = await fetch(`/api/coach-ai/turn/${pollingRunningTurnId}`);
+        if (!res.ok) {
+          timeout = setTimeout(poll, 2500);
+          return;
+        }
+        data = (await res.json()) as TurnPollResponse;
+      } catch {
+        timeout = setTimeout(poll, 2500);
+        return;
+      }
+      if (cancelled) return;
+      if (!data?.ok) {
+        timeout = setTimeout(poll, 2500);
+        return;
+      }
+      if (data.status === "done") {
+        const finishedTurn = data.turn;
+        if (finishedTurn) {
+          setTurns((cur) => {
+            const next = [...cur, finishedTurn];
+            saveTurns(storageKey, next);
+            return next;
+          });
+        }
+        if (data.mutated) {
+          router.refresh();
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
+          }
+        }
+        setStreaming(false);
+        setStatusText(null);
+        setPartialText("");
+        setToolCallsDuringStream([]);
+        setUsageTick((n) => n + 1);
+        setPollingRunningTurnId(null);
+        return;
+      }
+      if (data.status === "errored") {
+        setError(data.error ?? "Coach Cal didn't finish in time. Try again.");
+        setStreaming(false);
+        setStatusText(null);
+        setPartialText("");
+        setToolCallsDuringStream([]);
+        setPollingRunningTurnId(null);
+        return;
+      }
+      // Still running — schedule the next poll. 1.5s strikes a balance
+      // between snappy reveal when Cal lands and not hammering the row.
+      timeout = setTimeout(poll, 1500);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [pollingRunningTurnId, storageKey, router]);
+
   function clearChat() {
     // Abort any in-flight stream — otherwise the SSE consumer keeps
     // reading until the server closes, and on a hung/disconnected
@@ -409,6 +538,10 @@ export function CoachAiChat({
     // only the streaming UI state hadn't cleared.
     abortRef.current?.abort();
     abortRef.current = null;
+    // Stop any reconnect-poll loop too. The unmount-cleanup in the
+    // poll effect won't fire on its own because we're not unmounting,
+    // just nulling the id which the effect's setter is keyed on.
+    setPollingRunningTurnId(null);
     setStreaming(false);
     setPartialText("");
     setStatusText(null);
@@ -419,6 +552,17 @@ export function CoachAiChat({
       try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
       saveLastPlayId(storageKey, playId ?? null);
     }
+    // Server-side wipe — fire-and-forget. If it fails the local clear
+    // still feels right to the coach; on next mount the server thread
+    // will re-hydrate and any not-yet-cleared turns will reappear.
+    void fetch("/api/coach-ai/thread/clear", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode,
+        playbookId: mode === "admin_training" ? null : (playbookId ?? null),
+      }),
+    }).catch(() => { /* non-critical */ });
   }
 
   const send = useCallback(async (overrideText?: string) => {
@@ -452,6 +596,11 @@ export function CoachAiChat({
     let blocked = false;
     let savedFinalTurn = false;
     const seenToolCalls: string[] = [];
+    // The server's first SSE frame is a `turn_id` event identifying the
+    // detached agent run. If the SSE connection drops before `done`, we
+    // hand this id off to the polling effect so the coach still sees the
+    // result when it lands.
+    let capturedTurnId: string | null = null;
 
     // The editor publishes its in-memory doc to a window-level store (see
     // live-play-doc.ts) so Cal can see edits that the autosave debounce hasn't
@@ -486,6 +635,9 @@ export function CoachAiChat({
         let payload: Record<string, unknown>;
         try { payload = JSON.parse(data) as Record<string, unknown>; } catch { continue; }
 
+        if (event === "turn_id") {
+          capturedTurnId = (payload.id as string | undefined) ?? null;
+        }
         if (event === "status")     setStatusText(payload.text as string);
         if (event === "tool_call") {
           const name = payload.name as string;
@@ -549,12 +701,30 @@ export function CoachAiChat({
               window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
             }
           }
+          // The SSE delivered a clean `done` — no need to fall back to
+          // polling on the same turn id.
+          capturedTurnId = null;
           break;
         }
       }
+      // The SSE ended without a `done` frame (network blip, server
+      // restart, etc.) but we have a turn id — pivot to polling so the
+      // coach still gets the answer Cal is finishing server-side.
+      if (!savedFinalTurn && !blocked && capturedTurnId && !ctrl.signal.aborted) {
+        setPollingRunningTurnId(capturedTurnId);
+        capturedTurnId = null;
+      }
     } catch (e) {
       if ((e as { name?: string }).name !== "AbortError") {
-        setError(e instanceof Error ? e.message : "Coach Cal request failed.");
+        // Mid-stream connection failure with a known turn id → let the
+        // polling effect deliver the result rather than surface an error
+        // for a turn that's almost certainly going to complete.
+        if (!savedFinalTurn && capturedTurnId) {
+          setPollingRunningTurnId(capturedTurnId);
+          capturedTurnId = null;
+        } else {
+          setError(e instanceof Error ? e.message : "Coach Cal request failed.");
+        }
       }
     } finally {
       // If the coach hit Stop mid-stream, preserve whatever Cal had already

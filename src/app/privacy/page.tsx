@@ -97,6 +97,19 @@ export default function PrivacyPage() {
               ask us to delete it at any time.
             </li>
             <li>
+              <strong>Coach AI chat history:</strong> when you chat with
+              Coach Cal we store your messages and Cal&apos;s replies on
+              our servers, organized per playbook. This is what lets Cal
+              keep working on a long answer if you close the chat window
+              and pick up the result when you return, and it lets the
+              same conversation appear when you sign in on another
+              device. Only you (and our database administrators acting
+              for support / debugging) can read your conversation. You
+              can wipe the history for a given playbook at any time
+              with the trash icon at the top of the chat panel — that
+              deletes the rows on our servers, not just on your device.
+            </li>
+            <li>
               <strong>Coach AI feedback (opt-in):</strong> if you accept the
               one-time prompt the first time you use Coach AI, we log the
               <em> topic</em> of any question Coach AI had to answer from
@@ -104,9 +117,8 @@ export default function PrivacyPage() {
               (e.g. &ldquo;Tampa 2 defense&rdquo;), along with your question
               text and the playbook context (sport variant, sanctioning body,
               age division). We use this to decide which topics to add to the
-              knowledge base next. We don&apos;t log the rest of your chat. You
-              can opt out at any time by asking Coach AI to update your
-              preference.
+              knowledge base next. You can opt out at any time by asking
+              Coach AI to update your preference.
             </li>
             <li>
               <strong>Team chat:</strong> if your playbook has team

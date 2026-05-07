@@ -8,6 +8,16 @@ import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getCoachCalCapState } from "@/lib/billing/coach-cal-cap";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
+import {
+  backfillHistory,
+  completeAssistantTurn,
+  failAssistantTurn,
+  getOrCreateThread,
+  insertRunningAssistantTurn,
+  insertUserTurn,
+  isThreadEmpty,
+} from "@/lib/coach-ai/persistence";
+import { createChannel, disposeChannel } from "@/lib/coach-ai/running-turns";
 
 type StreamRequest = {
   history: { role: "user" | "assistant"; text: string; toolCalls?: string[] }[];
@@ -239,69 +249,144 @@ export async function POST(req: Request): Promise<Response> {
     { role: "user", content: text },
   ];
 
-  const enc = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: string, data: unknown) => {
-        controller.enqueue(enc.encode(sseChunk(event, data)));
-      };
+  // ── Persist the turn server-side BEFORE kicking off the agent ─────────────
+  // This is the change that makes "close the window, come back to the
+  // result" work: the assistant turn row exists with status='running' the
+  // moment we start, regardless of whether the SSE connection survives.
+  const threadPlaybookId =
+    requestedMode === "admin_training" ? null : (ctx.playbookId ?? null);
+  const threadId = await getOrCreateThread(gate.userId, requestedMode, threadPlaybookId);
 
-      // Hard cap on a single runAgent call. Surfaced 2026-05-02: a coach
-      // saw the prose render but the chat UI stay in "thinking" pulse for
-      // several minutes. Most likely cause is a deploy mid-stream
-      // interrupting the agent loop; without a timeout the SSE connection
-      // hangs open and the client never sees `done`. 4 minutes covers
-      // even the slowest legitimate Opus 4.7 multi-tool turn (typical:
-      // 20-60s) with comfortable headroom; anything longer is almost
-      // certainly a hang.
-      const AGENT_TIMEOUT_MS = 4 * 60 * 1000;
+  // First-load migration: when a coach has localStorage history but the
+  // server thread is brand-new, persist the prior turns once so the chat
+  // doesn't appear to wipe their history. After this insert the server
+  // becomes the source of truth for this scope.
+  if (await isThreadEmpty(threadId) && body.history.length > 0) {
+    try {
+      await backfillHistory(threadId, gate.userId, body.history);
+    } catch (e) {
+      // Backfill failure is non-fatal — the coach loses prior history but
+      // the new turn still works. Surface for debugging without aborting.
+      console.error("[coach-ai] backfill failed:", e);
+    }
+  }
 
-      try {
-        const result = await Promise.race([
-          runAgent(history, ctx, (e: AgentStreamEvent) => {
-            if (e.type === "status")     send("status",     { text: e.text });
-            if (e.type === "tool_call")  send("tool_call",  { name: e.name });
-            if (e.type === "text_delta") send("text_delta", { text: e.text });
-          }),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`coach-ai agent timed out after ${AGENT_TIMEOUT_MS / 1000}s`)),
-              AGENT_TIMEOUT_MS,
-            ),
+  await insertUserTurn(threadId, gate.userId, text, ctx.playId ?? null);
+  const assistantTurnId = await insertRunningAssistantTurn(
+    threadId,
+    gate.userId,
+    ctx.playId ?? null,
+  );
+
+  // ── In-memory pub/sub channel for live SSE ────────────────────────────────
+  // The detached agent publishes events to this channel; the SSE response
+  // tails it. Two layers of decoupling:
+  //   1. Channel lives in this Node process only — DB row is the source of
+  //      truth for cross-process / cross-tab reconnect.
+  //   2. SSE response unsubscribes on client disconnect, but never closes
+  //      the channel or aborts the agent.
+  const channel = createChannel(assistantTurnId);
+
+  // ── Detached agent execution ───────────────────────────────────────────────
+  // Fire-and-forget. NOT awaited — the SSE response below returns
+  // independently. The agent finishes in its own time and writes the
+  // result to the DB row regardless of whether anyone is still listening.
+  const AGENT_TIMEOUT_MS = 4 * 60 * 1000;
+  void (async () => {
+    try {
+      const result = await Promise.race([
+        runAgent(history, ctx, (e: AgentStreamEvent) => {
+          if (e.type === "status")     channel.publish({ kind: "event", event: "status",     data: { text: e.text } });
+          if (e.type === "tool_call")  channel.publish({ kind: "event", event: "tool_call",  data: { name: e.name } });
+          if (e.type === "text_delta") channel.publish({ kind: "event", event: "text_delta", data: { text: e.text } });
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`coach-ai agent timed out after ${AGENT_TIMEOUT_MS / 1000}s`)),
+            AGENT_TIMEOUT_MS,
           ),
-        ]);
+        ),
+      ]);
 
-        // Record usage asynchronously — don't block the response
-        recordUsage(gate.userId).catch(() => { /* non-critical */ });
-
-        // KB-miss + refusal logging now happens via the silent flag_outside_kb
-        // and flag_refusal tools the agent calls directly — no post-hoc text
-        // parsing needed.
-        send("done", {
+      await completeAssistantTurn(assistantTurnId, {
+        text: result.finalText,
+        toolCalls: result.toolCalls,
+        playbookChips: result.playbookChips,
+        noteProposals: result.noteProposals,
+        mutated: result.mutated,
+      });
+      channel.publish({
+        kind: "done",
+        data: {
           toolCalls: result.toolCalls,
           text: result.finalText,
           playbookChips: result.playbookChips ?? null,
           noteProposals: result.noteProposals ?? null,
           mutated: result.mutated,
-        });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        send("error", { message: msg });
-        // Always emit a `done` after an error too — this is the
-        // belt-and-suspenders companion to the timeout. Even when the
-        // agent threw mid-stream (LLM API drop, tool crash), the client
-        // needs to leave its "thinking" state. Without a `done`, the
-        // pulsing UI stays up indefinitely (surfaced 2026-05-02).
-        send("done", {
+        },
+      });
+      // Record usage asynchronously — don't block the response
+      recordUsage(gate.userId).catch(() => { /* non-critical */ });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      await failAssistantTurn(assistantTurnId, msg).catch(() => {});
+      channel.publish({ kind: "error", data: { message: msg } });
+      // Always emit a `done` after an error too — this is the
+      // belt-and-suspenders companion to the timeout. Even when the
+      // agent threw mid-stream (LLM API drop, tool crash), the client
+      // needs to leave its "thinking" state.
+      channel.publish({
+        kind: "done",
+        data: {
           toolCalls: [],
           text: "",
           playbookChips: null,
           noteProposals: null,
           mutated: false,
-        });
-      } finally {
-        controller.close();
-      }
+        },
+      });
+    } finally {
+      disposeChannel(assistantTurnId);
+    }
+  })();
+
+  // ── SSE response — pure tail of the channel ───────────────────────────────
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        try {
+          controller.enqueue(enc.encode(sseChunk(event, data)));
+        } catch {
+          // Client disconnected — the channel keeps running, the agent
+          // keeps running, the row will still be updated. We just stop
+          // forwarding events to a closed pipe.
+        }
+      };
+
+      // First frame: tell the client which turn id to poll if they reopen.
+      send("turn_id", { id: assistantTurnId });
+
+      let unsub: (() => void) | null = null;
+
+      const cleanup = () => {
+        if (unsub) { unsub(); unsub = null; }
+        try { controller.close(); } catch { /* already closed */ }
+      };
+
+      unsub = channel.subscribe((e) => {
+        if (e.kind === "event") send(e.event, e.data);
+        if (e.kind === "error") send("error", e.data);
+        if (e.kind === "done") {
+          send("done", e.data);
+          cleanup();
+        }
+      });
+
+      // Client closed the SSE connection → stop forwarding. The agent and
+      // the channel keep going; the row will be updated when the agent
+      // finishes. The user sees the result on next poll/reload.
+      req.signal.addEventListener("abort", cleanup);
     },
   });
 
