@@ -631,6 +631,18 @@ function PlaybookDetailClientInner({
     // bigger thumbnails can switch to Md/Lg once and the pref persists.
     (initialPrefs?.thumbSize as ThumbSize | undefined) ?? "small",
   );
+  // Override saved thumbSize → "small" on phones / small displays. A
+  // medium/large pref carried over from desktop puts one big card per
+  // row on a phone, which costs 4+ scrolls to skim a typical playbook.
+  // Coaches can still pick Md/Lg from the filter popover — this only
+  // resets the *initial* render to small, so the page is usable as
+  // soon as it loads. Runs after mount to avoid an SSR/CSR mismatch.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(max-width: 639px)").matches) {
+      setThumbSize("small");
+    }
+  }, []);
   const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
     typeof initialPrefs?.showPlayNumbers === "boolean"
       ? initialPrefs.showPlayNumbers
@@ -2342,7 +2354,7 @@ function PlaybookDetailClientInner({
       )}
 
       {reorderMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] z-40 flex justify-center px-4 sm:bottom-6">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-surface-raised px-4 py-2 shadow-elevated">
             <ArrowUpDown className="size-4 text-primary" />
             <span className="text-sm font-medium text-foreground">
@@ -2360,7 +2372,7 @@ function PlaybookDetailClientInner({
       )}
 
       {selectionMode && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+72px)] z-40 flex justify-center px-4 sm:bottom-6">
           {/*
             The pill grows as the action set grows. Layout strategy:
               - Mobile (< sm): stack into two rows. Top = status / select-all
