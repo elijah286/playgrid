@@ -1040,6 +1040,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Admin tools ────────────────────────────────────────────────
   {
+    id: "admin-system-notices",
+    name: "System notices in admin inbox",
+    description:
+      "Site admins see operational events in their inbox: new signups, Team Coach / Coach Pro purchases and cancellations, and the moment a user creates their 10th play. A 'View system notices' checkbox (on by default, admin-only) hides them when triaging coach-side work.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-06",
+  },
+  {
     id: "admin-coach-cal-upgrade-banner",
     name: "Coach Cal upgrade banner toggle",
     description:

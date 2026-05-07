@@ -16,7 +16,17 @@ export type InboxAlertKind =
   //   - share: head-coach broadcasts surfaced from `play_team_notifications`
   | "system_alert"
   | "mention"
-  | "share";
+  | "share"
+  // Site-admin-only operational feed (signups, subscription events, play
+  // milestones). Visible only when the caller has profiles.role = 'admin';
+  // gated in the UI behind a "View system notices" checkbox.
+  | "admin_notice";
+
+export type AdminNoticeKind =
+  | "user_signup"
+  | "subscription_purchased"
+  | "subscription_canceled"
+  | "play_milestone";
 
 /** Window for showing upcoming events without an RSVP. */
 const RSVP_LOOKAHEAD_DAYS = 14;
@@ -56,6 +66,11 @@ export type InboxAlert = {
   body?: string | null;
   href?: string | null;
   severity?: "info" | "warn" | "critical";
+
+  // admin_notice — site-admin operational feed. The UI uses adminKind to
+  // pick a label/icon and the body holds the full headline (e.g.
+  // "purchased Team Coach"); user_email/displayName are the subject.
+  adminKind?: AdminNoticeKind;
 };
 
 /**
@@ -64,9 +79,13 @@ export type InboxAlert = {
  * claims (owner playbooks only). Player-side: upcoming event occurrences
  * without an RSVP yet (any membership). Returns a flat list sorted
  * newest-first; the UI can re-sort.
+ *
+ * Site admins additionally see admin_notice rows (signups, subscription
+ * starts/cancels, play milestones). `isSiteAdmin` is returned so the UI
+ * can render the "View system notices" checkbox only for admins.
  */
 export async function listInboxAlertsAction(): Promise<
-  { ok: true; alerts: InboxAlert[] } | { ok: false; error: string }
+  { ok: true; alerts: InboxAlert[]; isSiteAdmin: boolean } | { ok: false; error: string }
 > {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
@@ -74,6 +93,13 @@ export async function listInboxAlertsAction(): Promise<
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
+
+  const { data: profileRow } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isSiteAdmin = profileRow?.role === "admin";
 
   const [ownedRowsRes, memberRowsRes] = await Promise.all([
     supabase
@@ -165,8 +191,56 @@ export async function listInboxAlertsAction(): Promise<
     alerts.push(...rsvpAlerts);
   }
 
+  // ─── Site-admin alerts: system notices ───────────────────────────────
+  if (isSiteAdmin) {
+    const adminAlerts = await buildAdminNoticeAlerts(supabase);
+    alerts.push(...adminAlerts);
+  }
+
   alerts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return { ok: true, alerts };
+  return { ok: true, alerts, isSiteAdmin };
+}
+
+async function buildAdminNoticeAlerts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<InboxAlert[]> {
+  const { data, error } = await supabase
+    .from("system_notices")
+    .select(
+      "id, kind, severity, user_id, user_display_name, user_email, body, href, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+
+  type Row = {
+    id: string;
+    kind: AdminNoticeKind;
+    severity: "info" | "warn" | "critical";
+    user_id: string | null;
+    user_display_name: string | null;
+    user_email: string | null;
+    body: string;
+    href: string | null;
+    created_at: string;
+  };
+
+  return (data as Row[]).map((r) => ({
+    key: `admin:${r.id}`,
+    kind: "admin_notice" as const,
+    adminKind: r.kind,
+    // Admin notices aren't scoped to a playbook — synthesise a "Site"
+    // identity so the existing notification row UI renders cleanly.
+    playbookId: "",
+    playbookName: "Site",
+    playbookLogoUrl: null,
+    playbookColor: null,
+    displayName: r.user_display_name?.trim() || r.user_email || null,
+    createdAt: r.created_at,
+    body: r.body,
+    href: r.href,
+    severity: r.severity,
+  }));
 }
 
 function appendOwnerAlerts(

@@ -1060,7 +1060,11 @@ export function DashboardClient({
     },
     [searchParams],
   );
-  const inboxCount = inboxAlerts.length;
+  // Tab badge counts actionable items only. Admin "system notices" are
+  // informational (signups, purchases, milestones) — they show inside the
+  // inbox but don't inflate the red badge that's meant to mean "you have
+  // work to do." Mirrors the urgency logic in InboxTab.
+  const inboxCount = inboxAlerts.filter((a) => a.kind !== "admin_notice").length;
   // Inbox is "urgent" when it contains time-pressured items: pending RSVPs
   // or (future) billing/system alerts. Otherwise the badge stays neutral.
   const inboxUrgent = inboxAlerts.some(
@@ -1420,6 +1424,7 @@ export function DashboardClient({
         <InboxTab
           initialAlerts={inboxAlerts}
           initialActivity={activityEntries}
+          isSiteAdmin={isAdmin}
         />
       </div>
 
