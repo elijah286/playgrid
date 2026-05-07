@@ -1013,6 +1013,7 @@ const update_play: CoachAiTool = {
         parentVersionId: parentId,
         userId: user.id,
         kind: "edit",
+        actor: "ai",
         note: typeof input.note === "string" ? input.note : "Edited by Coach Cal",
       });
 
@@ -1292,6 +1293,7 @@ const create_play: CoachAiTool = {
         parentVersionId: createRes.versionId,
         userId: user.id,
         kind: "edit",
+        actor: "ai",
         note: typeof input.note === "string" ? input.note : "Created by Coach Cal",
       });
       if (!versionResult.ok) return { ok: false, error: versionResult.error };
@@ -1563,6 +1565,7 @@ const update_play_notes: CoachAiTool = {
         parentVersionId: parentId,
         userId: user.id,
         kind: "edit",
+        actor: "ai",
         note: editNote,
       });
       if (!versionResult.ok) return { ok: false, error: versionResult.error };
@@ -1713,6 +1716,7 @@ const update_player: CoachAiTool = {
         parentVersionId: parentId,
         userId: user.id,
         kind: "edit",
+        actor: "ai",
         note: editNote,
       });
       if (!versionResult.ok) return { ok: false, error: versionResult.error };

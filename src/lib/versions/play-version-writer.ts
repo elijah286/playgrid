@@ -5,6 +5,7 @@ import { summarizePlayDiff } from "@/lib/versions/play-diff";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 type RecordKind = "create" | "edit" | "restore";
+type Actor = "user" | "ai";
 
 type RecordArgs = {
   supabase: SupabaseClient;
@@ -13,6 +14,7 @@ type RecordArgs = {
   parentVersionId: string | null;
   userId: string;
   kind: RecordKind;
+  actor?: Actor;
   note?: string | null;
   label?: string | null;
   restoredFromVersionId?: string | null;
@@ -20,8 +22,14 @@ type RecordArgs = {
 };
 
 type RecordResult =
-  | { ok: true; versionId: string; deduped: boolean }
+  | { ok: true; versionId: string; deduped: boolean; coalesced?: boolean }
   | { ok: false; error: string };
+
+// How long after the previous user edit on the same play we'll keep folding
+// new edits into that row. 5 minutes is long enough to absorb a typical
+// drag-fest editing session, short enough that "I came back after lunch"
+// becomes its own history entry.
+const COALESCE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function recordPlayVersion(args: RecordArgs): Promise<RecordResult> {
   const {
@@ -31,6 +39,7 @@ export async function recordPlayVersion(args: RecordArgs): Promise<RecordResult>
     parentVersionId,
     userId,
     kind,
+    actor = "user",
     note,
     label,
     restoredFromVersionId,
@@ -76,6 +85,52 @@ export async function recordPlayVersion(args: RecordArgs): Promise<RecordResult>
     }
   }
 
+  // Coalesce: a user editing the same play within COALESCE_WINDOW_MS of
+  // their previous user-authored edit folds into that row instead of
+  // inserting a new one. AI (Coach Cal) edits never coalesce — they
+  // always materialize as a distinct row so attribution stays clean.
+  // Labeled saves and restores also never coalesce.
+  if (kind === "edit" && actor === "user" && !label && parentVersionId) {
+    const coalesceTarget = await loadCoalesceCandidate({
+      supabase,
+      playId,
+      userId,
+      windowMs: COALESCE_WINDOW_MS,
+    });
+    if (coalesceTarget && coalesceTarget.id === parentVersionId) {
+      // Recompute the diff against the version BEFORE the editing
+      // session started — i.e. the coalesce target's own parent. The
+      // surviving row should reflect the total session change, not
+      // the last tick.
+      let preSessionDoc: PlayDocument | null = null;
+      if (coalesceTarget.parent_version_id) {
+        const { data: gp } = await supabase
+          .from("play_versions")
+          .select("document")
+          .eq("id", coalesceTarget.parent_version_id)
+          .maybeSingle();
+        preSessionDoc = (gp?.document as PlayDocument | undefined) ?? null;
+      }
+      const diffSummary = preSessionDoc ? summarizePlayDiff(preSessionDoc, document) : null;
+
+      const { error: updErr } = await supabase
+        .from("play_versions")
+        .update({
+          document: document as unknown as Record<string, unknown>,
+          diff_summary: diffSummary,
+          // Bump created_at so the timeline shows the session's most
+          // recent activity. The id and parent_version_id stay the
+          // same — the version chain is unchanged.
+          created_at: new Date().toISOString(),
+        })
+        .eq("id", coalesceTarget.id);
+      if (updErr) {
+        return { ok: false, error: updErr.message };
+      }
+      return { ok: true, versionId: coalesceTarget.id, deduped: false, coalesced: true };
+    }
+  }
+
   const editorName = await lookupDisplayName(supabase, userId);
   const diffSummary = parentDoc ? summarizePlayDiff(parentDoc, document) : null;
 
@@ -90,6 +145,7 @@ export async function recordPlayVersion(args: RecordArgs): Promise<RecordResult>
       created_by: userId,
       editor_name_snapshot: editorName,
       kind,
+      actor,
       note: note ?? null,
       diff_summary: diffSummary,
       restored_from_version_id: restoredFromVersionId ?? null,
@@ -101,6 +157,34 @@ export async function recordPlayVersion(args: RecordArgs): Promise<RecordResult>
     return { ok: false, error: error?.message ?? "Failed to record version" };
   }
   return { ok: true, versionId: data.id as string, deduped: false };
+}
+
+async function loadCoalesceCandidate(args: {
+  supabase: SupabaseClient;
+  playId: string;
+  userId: string;
+  windowMs: number;
+}): Promise<{ id: string; parent_version_id: string | null } | null> {
+  const { supabase, playId, userId, windowMs } = args;
+  const { data } = await supabase
+    .from("play_versions")
+    .select("id, parent_version_id, created_by, created_at, kind, actor, label")
+    .eq("play_id", playId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  if (data.kind !== "edit") return null;
+  if (data.actor !== "user") return null;
+  if (data.label) return null;
+  if (data.created_by !== userId) return null;
+  const createdAt = new Date(data.created_at as string).getTime();
+  if (!Number.isFinite(createdAt)) return null;
+  if (Date.now() - createdAt > windowMs) return null;
+  return {
+    id: data.id as string,
+    parent_version_id: (data.parent_version_id as string | null) ?? null,
+  };
 }
 
 async function lookupDisplayName(
