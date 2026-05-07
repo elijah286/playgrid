@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Share2 } from "lucide-react";
+import { Send } from "lucide-react";
 import { ShareDialog } from "./ShareDialog";
 
 type Props = {
@@ -37,7 +37,7 @@ export function ShareButton({
         title={label}
         className={`inline-flex items-center justify-center text-muted transition-colors hover:bg-surface-inset hover:text-foreground ${sizeCls} ${className}`}
       >
-        <Share2 className="size-4" />
+        <Send className="size-4" />
       </button>
       {open && <ShareDialog userId={userId} onClose={() => setOpen(false)} />}
     </>

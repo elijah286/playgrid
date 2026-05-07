@@ -66,7 +66,6 @@ import {
 } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookHeader";
 import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
-import { HomeBottomNav } from "./HomeBottomNav";
 import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
 
@@ -1418,12 +1417,12 @@ export function DashboardClient({
       )}
 
       {teamCalendarAvailable && (
-        <div hidden={homeTab !== "calendar"} className="mt-6">
+        <div hidden={homeTab !== "calendar"} className="mt-4">
           <HomeCalendarTab />
         </div>
       )}
 
-      <div hidden={homeTab !== "inbox"} className="mt-6">
+      <div hidden={homeTab !== "inbox"} className="mt-4">
         <InboxTab
           initialAlerts={inboxAlerts}
           initialActivity={activityEntries}
@@ -1431,7 +1430,7 @@ export function DashboardClient({
         />
       </div>
 
-      <div hidden={homeTab !== "playbooks"} className="mt-8 space-y-8">
+      <div hidden={homeTab !== "playbooks"} className="mt-4 space-y-8">
         {pending && (
         <div
           className="pointer-events-none fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-elevated"
@@ -1759,13 +1758,9 @@ export function DashboardClient({
       {/* Mobile-only bottom nav: lobby tabs + center Cal FAB. The
           existing top HomeTabNav above is hidden on mobile; this is the
           primary mobile navigation surface. */}
-      <HomeBottomNav
-        active={homeTab}
-        onChange={setHomeTab}
-        showCalendar={teamCalendarAvailable}
-        inboxCount={inboxCount}
-        inboxUrgent={inboxUrgent}
-      />
+      {/* HomeBottomNav now lives in (dashboard)/layout.tsx so it
+          persists across page navigations within the dashboard
+          (no flicker when going from /home → /account, etc.). */}
     </div>
   );
 }

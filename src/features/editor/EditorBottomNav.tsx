@@ -10,7 +10,9 @@ import {
   ListChecks,
   MessageCircle,
   MoreHorizontal,
+  Shield,
   Trophy,
+  User,
   Users,
 } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
@@ -30,6 +32,7 @@ export function EditorBottomNav({
   playbookId,
   showCoachCal,
   available,
+  isAdmin = false,
 }: {
   playbookId: string;
   showCoachCal: boolean;
@@ -39,6 +42,8 @@ export function EditorBottomNav({
     practicePlans: boolean;
     messages: boolean;
   };
+  /** Site admin sees an extra "Site Admin" link in the More sheet. */
+  isAdmin?: boolean;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const router = useRouter();
@@ -69,7 +74,7 @@ export function EditorBottomNav({
     <>
       <nav
         aria-label="Playbook sections"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
+        className="fixed left-0 bottom-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
       >
         <NavLink
@@ -103,6 +108,7 @@ export function EditorBottomNav({
         <MoreSheet
           playbookId={playbookId}
           available={available}
+          isAdmin={isAdmin}
           onClose={() => setMoreOpen(false)}
         />
       )}
@@ -159,6 +165,7 @@ function NavLink({
 function MoreSheet({
   playbookId,
   available,
+  isAdmin,
   onClose,
 }: {
   playbookId: string;
@@ -168,6 +175,7 @@ function MoreSheet({
     practicePlans: boolean;
     messages: boolean;
   };
+  isAdmin: boolean;
   onClose: () => void;
 }) {
   const items: { label: string; href: string; Icon: React.ElementType }[] = [];
@@ -203,6 +211,13 @@ function MoreSheet({
       href: `/playbooks/${playbookId}?tab=practice_plans`,
       Icon: ClipboardList,
     });
+  }
+  // Account + (admin) Site Admin live in the More sheet on every mobile
+  // surface so they're reachable from anywhere without burning a
+  // top-level nav slot.
+  items.push({ label: "Account", href: "/account", Icon: User });
+  if (isAdmin) {
+    items.push({ label: "Site Admin", href: "/settings", Icon: Shield });
   }
 
   // Overflow popover — anchored above the More button (right-bottom),

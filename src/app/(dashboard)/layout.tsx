@@ -7,6 +7,10 @@ import { userHasCreatedPlayAction } from "@/app/actions/plays";
 import { getExpirationNotice } from "@/lib/billing/expiration-notice";
 import { ExpirationBanner } from "@/components/billing/ExpirationBanner";
 import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
+import { getCurrentEntitlement } from "@/lib/billing/entitlement";
+import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
+import { listInboxAlertsAction } from "@/app/actions/inbox";
+import { HomeBottomNav } from "./home/HomeBottomNav";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
 // pages under this layout (e.g. /playbooks/[id] for a public example);
@@ -32,13 +36,50 @@ export default async function DashboardLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [feedbackSettings, hasCreatedPlay, expirationNotice, nameCaptureNeeded] =
-    await Promise.all([
-      getFeedbackWidgetSettings(),
-      user ? userHasCreatedPlayAction() : Promise.resolve(false),
-      user ? getExpirationNotice() : Promise.resolve(null),
-      user ? checkNameCaptureNeeded(user.id, user.email ?? null) : Promise.resolve(false),
-    ]);
+  const [
+    feedbackSettings,
+    hasCreatedPlay,
+    expirationNotice,
+    nameCaptureNeeded,
+    selfRoleRow,
+    entitlement,
+    betaFeatures,
+    inboxRes,
+  ] = await Promise.all([
+    getFeedbackWidgetSettings(),
+    user ? userHasCreatedPlayAction() : Promise.resolve(false),
+    user ? getExpirationNotice() : Promise.resolve(null),
+    user ? checkNameCaptureNeeded(user.id, user.email ?? null) : Promise.resolve(false),
+    user
+      ? supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    user ? getCurrentEntitlement() : Promise.resolve(null),
+    getBetaFeatures(),
+    user ? listInboxAlertsAction() : Promise.resolve(null),
+  ]);
+
+  const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
+  const coachAiAvailable =
+    isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
+  const teamCalendarAvailable = isBetaFeatureAvailable(
+    betaFeatures.team_calendar,
+    { isAdmin, isEntitled: true },
+  );
+  // Inbox alerts visible to the current user. Filter out admin notices
+  // for non-admins (paranoia), match the home page's badge semantics
+  // (status === "active") so the toolbar count matches the inbox tab.
+  const inboxAlerts =
+    inboxRes && inboxRes.ok
+      ? inboxRes.alerts.filter(
+          (a) => isAdmin || a.kind !== "admin_notice",
+        )
+      : [];
+  const inboxCount = inboxAlerts.filter((a) => a.status === "active").length;
+  const inboxUrgent = inboxAlerts.some(
+    (a) =>
+      a.status === "active" &&
+      (a.kind === "rsvp_pending" || a.kind === "system_alert"),
+  );
 
   return (
     // No `overflow-x-hidden` anywhere in this subtree — that property
@@ -57,6 +98,20 @@ export default async function DashboardLayout({
         <FeedbackWidget
           hasCreatedPlay={hasCreatedPlay}
           touchEnabled={feedbackSettings.touchEnabled}
+        />
+      )}
+      {/* Global mobile bottom nav. Persists across every dashboard
+          route so the toolbar never disappears between page navs.
+          The component itself bails (returns null) on routes that
+          have their own toolbar (playbook detail, play editor) so
+          we don't stack two bars on top of each other. */}
+      {user && (
+        <HomeBottomNav
+          showCalendar={teamCalendarAvailable}
+          showCoachCal={coachAiAvailable}
+          inboxCount={inboxCount}
+          inboxUrgent={inboxUrgent}
+          isAdmin={isAdmin}
         />
       )}
     </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Check, Copy, Gift, QrCode, Share2, X } from "lucide-react";
+import { Check, Copy, Gift, QrCode, Send, X } from "lucide-react";
 import { Button, Input, useToast } from "@/components/ui";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { nativeShare } from "@/lib/native/share";
@@ -148,7 +148,7 @@ export function ShareDialog({ userId, onClose }: Props) {
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
-              <Share2 className="size-4" />
+              <Send className="size-4" />
               Share XO Gridmaker
             </h2>
             <p className="mt-0.5 text-xs text-muted">

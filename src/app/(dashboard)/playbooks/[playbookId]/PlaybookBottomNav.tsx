@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Calendar,
   ClipboardList,
@@ -8,7 +9,9 @@ import {
   ListChecks,
   MessageCircle,
   MoreHorizontal,
+  Shield,
   Trophy,
+  User,
   Users,
 } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
@@ -61,6 +64,7 @@ export function PlaybookBottomNav({
   counts,
   messagesUnread,
   showCoachCal,
+  isAdmin = false,
 }: {
   active: PlaybookBottomNavTab;
   onChange: (k: PlaybookBottomNavTab) => void;
@@ -74,6 +78,8 @@ export function PlaybookBottomNav({
   messagesUnread: number;
   /** Render the Cal action button. Hidden when the user has no Cal access. */
   showCoachCal: boolean;
+  /** Site admin sees an extra "Site Admin" link in the More sheet. */
+  isAdmin?: boolean;
 }) {
   const allTabs: TabDef[] = [
     {
@@ -163,7 +169,7 @@ export function PlaybookBottomNav({
     <>
       <nav
         aria-label="Playbook sections"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
+        className="fixed left-0 bottom-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
       >
         {/* Order: Plays · Messages · [Cal] · Calendar · More.
@@ -211,6 +217,7 @@ export function PlaybookBottomNav({
         <MoreSheet
           tabs={moreTabs}
           active={active}
+          isAdmin={isAdmin}
           onClose={() => setMoreOpen(false)}
           onPick={(k) => {
             onChange(k);
@@ -265,11 +272,13 @@ function NavButton({
 function MoreSheet({
   tabs,
   active,
+  isAdmin,
   onClose,
   onPick,
 }: {
   tabs: TabDef[];
   active: PlaybookBottomNavTab;
+  isAdmin: boolean;
   onClose: () => void;
   onPick: (k: PlaybookBottomNavTab) => void;
 }) {
@@ -324,6 +333,30 @@ function MoreSheet({
             </button>
           );
         })}
+        {/* Account / Site Admin always live in the More sheet on mobile —
+            keeps the top header free of the avatar so the bottom toolbar
+            owns "user pile" navigation across every surface. */}
+        {(tabs.length > 0) && <div className="my-1 border-t border-border" />}
+        <Link
+          href="/account"
+          role="menuitem"
+          onClick={onClose}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+        >
+          <User className="size-4 shrink-0" aria-hidden />
+          <span className="flex-1 text-left">Account</span>
+        </Link>
+        {isAdmin && (
+          <Link
+            href="/settings"
+            role="menuitem"
+            onClick={onClose}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+          >
+            <Shield className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 text-left">Site Admin</span>
+          </Link>
+        )}
       </div>
     </>
   );

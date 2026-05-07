@@ -2933,6 +2933,7 @@ function PlaybookDetailClientInner({
           showCoachCal={
             headerProps.coachAiAvailable || headerProps.showCoachCalPromo
           }
+          isAdmin={isAdmin}
         />
       )}
       {/* The floating "+ New play" FAB was promoted to a full-width

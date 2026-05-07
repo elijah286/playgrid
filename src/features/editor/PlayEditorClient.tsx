@@ -149,6 +149,9 @@ type Props = {
   /** When true, the user "cleared" the opponent overlay: the custom data is
    *  preserved but the snapshot is hidden in the canvas. */
   initialOpponentHidden?: boolean;
+  /** Site-admin flag. Adds a "Site Admin" item to the editor footer's
+   *  More sheet so admins can jump to /admin from any play. */
+  isAdmin?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
@@ -195,6 +198,7 @@ function PlayEditorClientInner({
   practicePlansAvailable = false,
   initialCustomOpponentPlayId = null,
   initialOpponentHidden = false,
+  isAdmin = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -1825,6 +1829,7 @@ function PlayEditorClientInner({
           practicePlans: practicePlansAvailable,
           messages: teamMessagingAvailable,
         }}
+        isAdmin={isAdmin}
       />
     </div>
   );

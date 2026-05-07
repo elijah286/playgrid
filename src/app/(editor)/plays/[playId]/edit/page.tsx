@@ -201,6 +201,7 @@ export default async function PlayEditPage({ params }: Props) {
       practicePlansAvailable={practicePlansAvailable}
       initialCustomOpponentPlayId={res.customOpponentPlayId}
       initialOpponentHidden={res.opponentHidden}
+      isAdmin={isAdmin}
     />
     {isExamplePreview && (
       <>

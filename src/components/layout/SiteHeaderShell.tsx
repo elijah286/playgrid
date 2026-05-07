@@ -53,25 +53,35 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
         </Link>
         {user ? (
           <div className="flex items-center gap-2">
+            {/* Cal launcher: trigger button visible only on desktop.
+                The bottom toolbar's CalNavButton takes over on mobile.
+                The launcher stays mounted on every viewport (the
+                wrapper hides only the trigger via `display: none`) so
+                its `coach-cal:open` window listener stays alive — the
+                chat panel renders via createPortal so the hidden
+                wrapper doesn't suppress it. */}
             {(coachAiAvailable || showCoachCalPromo) && (
-              <CoachAiLauncher
-                isAdmin={isAdmin}
-                entitled={coachAiAvailable ?? false}
-                acceptGlobalCommands
-                evalDays={coachAiEvalDays}
-              />
+              <div className="hidden sm:block">
+                <CoachAiLauncher
+                  isAdmin={isAdmin}
+                  entitled={coachAiAvailable ?? false}
+                  acceptGlobalCommands
+                  evalDays={coachAiEvalDays}
+                />
+              </div>
             )}
             <ShareButton userId={user.id} />
-            {/* Thin divider separates "things I can do" (Coach Cal,
-                Share) from "me" (avatar) — same trick Linear and
-                Stripe Dashboard use to group action vs. account. */}
-            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-            <UserMenu
-              email={user.email ?? ""}
-              displayName={displayName}
-              avatarUrl={avatarUrl}
-              isAdmin={isAdmin}
-            />
+            {/* Account moves to the bottom toolbar on mobile (slot 5).
+                Desktop keeps the avatar + thin divider treatment. */}
+            <div className="hidden sm:flex sm:items-center sm:gap-2">
+              <span className="h-5 w-px bg-border" aria-hidden />
+              <UserMenu
+                email={user.email ?? ""}
+                displayName={displayName}
+                avatarUrl={avatarUrl}
+                isAdmin={isAdmin}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-3 sm:gap-4">

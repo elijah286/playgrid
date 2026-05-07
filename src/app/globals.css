@@ -83,6 +83,11 @@
 
 html {
   color-scheme: light;
+  /* Reserve space for the vertical scrollbar even when content fits, so
+     the page (and any fixed-position bottom toolbar) doesn't shift
+     horizontally the moment content grows past the viewport. Critical
+     on desktop browsers that use traditional (non-overlay) scrollbars. */
+  scrollbar-gutter: stable;
 }
 
 html.dark {
