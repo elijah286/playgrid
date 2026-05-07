@@ -1175,7 +1175,7 @@ function PlayEditorClientInner({
         style={{ touchAction: "manipulation", userSelect: "none" }}
       >
         <div
-          className="relative h-full max-h-screen overflow-hidden bg-surface-inset"
+          className="relative h-full max-h-screen overflow-hidden bg-black"
           style={{ aspectRatio: `${fieldAspect} / 1` }}
         >
           <EditorCanvas
