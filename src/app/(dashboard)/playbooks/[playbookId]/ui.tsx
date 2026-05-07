@@ -1767,11 +1767,13 @@ function PlaybookDetailClientInner({
           )}
           <Button
             variant="primary"
-            leftIcon={Plus}
             loading={creating}
             onClick={openFormationPicker}
             title={isViewer ? "Viewers can't create plays" : undefined}
-            className={`sm:order-8 sm:ml-0 ${
+            // No leftIcon: the "+" + label combo wrapped to two lines on
+            // narrow phones ("+ New" / "play"). Text-only sizes the
+            // button to a single tight pill that never wraps.
+            className={`whitespace-nowrap sm:order-8 sm:ml-0 ${
               gameModeAvailable ? "" : "ml-auto"
             } ${isViewer ? "opacity-60" : ""}`}
           >

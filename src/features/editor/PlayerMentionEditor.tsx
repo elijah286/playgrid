@@ -818,10 +818,13 @@ export function PlayerMentionEditor({
               setMention(null);
             }, 120);
           }}
-          className="min-h-[120px] w-full whitespace-pre-wrap break-words rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          // text-base on mobile (16px) keeps iOS Safari from zooming the
+          // viewport when this contenteditable receives focus. Desktop
+          // shrinks to text-sm (14px) where the auto-zoom doesn't apply.
+          className="min-h-[120px] w-full whitespace-pre-wrap break-words rounded-md border border-border bg-surface px-3 py-2 text-base text-foreground focus:border-primary focus:outline-none sm:text-sm"
         />
         {isEmpty && placeholder && (
-          <div className="pointer-events-none absolute left-3 top-2 text-sm text-muted">
+          <div className="pointer-events-none absolute left-3 top-2 text-base text-muted sm:text-sm">
             {placeholder}
           </div>
         )}
