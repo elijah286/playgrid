@@ -54,7 +54,7 @@ import { PlayResultsCard } from "./PlayResultsCard";
 import { QuickRoutes } from "./QuickRoutes";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
-import { NotesMarkdown } from "./NotesMarkdown";
+import { NotesMarkdown, copyNotesToClipboard } from "./NotesMarkdown";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import {
   ExamplePreviewProvider,
@@ -1687,9 +1687,17 @@ function PlayNotesCard({
   // Empty notes auto-open in edit mode so the field doesn't render as a
   // blank card with no obvious affordance.
   const [editing, setEditing] = useState(!readOnly && value.trim().length === 0);
+  const [copied, setCopied] = useState(false);
+  const hasNotes = value.trim().length > 0;
+  async function handleCopy() {
+    const ok = await copyNotesToClipboard(value);
+    if (!ok) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
   // Read-only viewers with no notes at all have nothing to show — collapse
   // the card entirely so the sidebar stays uncluttered.
-  if (readOnly && !value.trim()) return null;
+  if (readOnly && !hasNotes) return null;
   return (
     <div className="rounded-xl border border-border bg-surface-raised">
       <div className="flex items-center justify-between gap-2 px-4 py-3">
@@ -1699,7 +1707,7 @@ function PlayNotesCard({
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <span className="text-sm font-semibold text-foreground">Play notes</span>
-          {!open && value.trim() && (
+          {!open && hasNotes && (
             <span className="truncate text-xs text-muted">
               {value.trim().slice(0, 80)}
               {value.trim().length > 80 ? "…" : ""}
@@ -1707,6 +1715,15 @@ function PlayNotesCard({
           )}
         </button>
         <div className="flex shrink-0 items-center gap-2">
+          {open && hasNotes && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          )}
           {!readOnly && open && (
             <button
               type="button"
