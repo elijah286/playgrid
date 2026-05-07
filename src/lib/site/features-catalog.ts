@@ -108,6 +108,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "play-landscape-fullscreen",
+    name: "Fullscreen landscape play view on phones",
+    description:
+      "Rotate a phone to landscape on any play and the editor chrome drops away — the field fills the viewport with black bars on either side. Tap anywhere to step through motion → snap → done → replay. Built for the sideline use case where a coach wants the biggest possible diagram with zero buttons in the way.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-07",
+  },
+  {
     id: "play-editor-mobile-sticky",
     name: "Mobile play editor: sticky field + always-visible notes",
     description:

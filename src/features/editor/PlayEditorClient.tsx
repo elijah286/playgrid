@@ -341,6 +341,18 @@ function PlayEditorClientInner({
     };
   }, [doc, vsSnapshot]);
   const anim = usePlayAnimation(animDoc);
+  // Phone-in-landscape detector. The max-height filter keeps tablets and
+  // desktop landscape windows on the regular editor — only a real phone
+  // held sideways (≤500px short edge) flips into the immersive view.
+  const [isLandscapePhone, setIsLandscapePhone] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(orientation: landscape) and (max-height: 500px)");
+    const update = () => setIsLandscapePhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   // Viewport aspect is fixed — the on-screen box doesn't change size when
   // the user edits field yardage. Adding yards compresses the distance
   // between yard lines (more yards in the same pixels); removing yards
@@ -1151,6 +1163,90 @@ function PlayEditorClientInner({
     )
   ) : null;
 
+  // Phone-in-landscape: drop the editor chrome (toolbars, sidebar, opponent
+  // picker, etc.) and render a fullscreen, tap-to-step playback view. We
+  // reuse the real EditorCanvas (with a transparent click-catcher on top to
+  // suppress edits) so the field looks identical to portrait — yard lines,
+  // defenders, route arrowheads, run-path squiggle, all of it.
+  if (isLandscapePhone) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black"
+        style={{ touchAction: "manipulation", userSelect: "none" }}
+      >
+        <div
+          className="relative h-full max-h-screen overflow-hidden bg-surface-inset"
+          style={{ aspectRatio: `${fieldAspect} / 1` }}
+        >
+          <EditorCanvas
+            doc={doc}
+            dispatch={dispatch}
+            selectedPlayerId={selectedPlayerId}
+            selectedRouteId={selectedRouteId}
+            selectedNodeId={selectedNodeId}
+            selectedSegmentId={selectedSegmentId}
+            selectedZoneId={selectedZoneId}
+            onSelectPlayer={setSelectedPlayerId}
+            onSelectRoute={setSelectedRouteId}
+            onSelectNode={setSelectedNodeId}
+            onSelectSegment={setSelectedSegmentId}
+            onSelectZone={setSelectedZoneId}
+            pendingZone={pendingZone}
+            onCommitPendingZone={(position) => {
+              if (!pendingZone) return;
+              dispatch({
+                type: "zone.add",
+                zone: mkZone(pendingZone.kind, "", position, pendingZone.style),
+              });
+              setPendingZone(null);
+            }}
+            onCancelPendingZone={() => setPendingZone(null)}
+            activeShape={activeShape}
+            activeStrokePattern={activeStrokePattern}
+            onActiveStrokePatternChange={setActiveStrokePattern}
+            activeColor={activeColor}
+            activeWidth={activeWidth}
+            fieldAspect={fieldAspect}
+            fieldBackground={doc.fieldBackground}
+            animatingPlayerIds={animatingPlayerIds}
+            opponentFormation={opponentFormation ?? null}
+            opponentPlayers={
+              opponentPlayers ??
+              (customOpponentPlayId != null && !opponentHidden
+                ? editableOppPlayers
+                : opponentHidden
+                  ? null
+                  : vsSnapshot?.players ?? null)
+            }
+            opponentRoutes={
+              showOpponentRoutes
+                ? (opponentPickedRoutes && opponentPickedRoutes.length > 0
+                    ? opponentPickedRoutes
+                    : isDefense && vsSnapshot
+                      ? vsSnapshot.routes
+                      : null)
+                : null
+            }
+            opponentEditable={false}
+            onOpponentPlayerMove={handleOpponentPlayerMove}
+            activeSide={activeSide}
+            onActivateSide={setActiveSide}
+          />
+          <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
+          {/* Transparent click-catcher: sits on top of EditorCanvas so taps
+              advance the animation instead of starting a route draw or
+              selecting a player. */}
+          <button
+            type="button"
+            onClick={anim.step}
+            aria-label="Advance play"
+            className="absolute inset-0 cursor-pointer bg-transparent"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={rootRef}
@@ -1751,7 +1847,7 @@ function PlayNotesCard({
    *  to a placeholder if the play hasn't been named yet. */
   playName?: string | null;
 }) {
-  const [open, setOpen] = useState(value.length > 0);
+  const [open, setOpen] = useState(value.trim().length > 0);
   // Edit / view toggle — coaches see the rendered markdown by default
   // (bold, lists, headings, @-mention chips). Click "Edit" to drop into
   // the raw-markdown editor; "Done" swaps back to the rendered view.
@@ -1783,7 +1879,7 @@ function PlayNotesCard({
           ) : (
             <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
           )}
-          <span className="text-sm font-semibold text-foreground">Play notes</span>
+          <span className="text-sm font-semibold text-foreground">Notes</span>
           {!open && hasNotes && (
             <span className="truncate text-xs text-muted">
               {value.trim().slice(0, 80)}
