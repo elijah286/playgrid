@@ -149,3 +149,59 @@ export function NotesMarkdown({
     </div>
   );
 }
+
+/**
+ * Copy notes to the clipboard in a format that pastes cleanly into common
+ * destinations (Gmail, Slack, Apple Notes, Word, plain text fields).
+ *
+ * Writes two MIME types:
+ *  - `text/html`: clean semantic HTML (no Tailwind classes) so rich-text
+ *    targets render bold / italic / lists / headings.
+ *  - `text/plain`: the raw markdown source — already designed to be
+ *    readable as plain text, and preserves @-mentions verbatim.
+ *
+ * `react-dom/server` is dynamically imported so SSR rendering code only
+ * loads on click, not on every play view.
+ *
+ * Returns true on success, false if the clipboard write failed entirely.
+ */
+export async function copyNotesToClipboard(value: string): Promise<boolean> {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  if (typeof navigator === "undefined" || !navigator.clipboard) return false;
+
+  let html = "";
+  try {
+    const [{ renderToStaticMarkup }, React] = await Promise.all([
+      import("react-dom/server"),
+      import("react"),
+    ]);
+    html = renderToStaticMarkup(
+      React.createElement(ReactMarkdown, { remarkPlugins: [remarkGfm] }, value),
+    );
+  } catch {
+    // If SSR rendering fails for any reason, fall through to plain-text only.
+  }
+
+  if (html && typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([value], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    } catch {
+      // Fall through to writeText fallback.
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}

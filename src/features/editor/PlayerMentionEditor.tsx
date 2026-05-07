@@ -796,34 +796,36 @@ export function PlayerMentionEditor({
           </FormatBtn>
         </div>
       )}
-      <div
-        ref={ref}
-        role="textbox"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={handleInput}
-        onKeyDown={handleKeyDown}
-        onKeyUp={updateMentionState}
-        onMouseUp={updateMentionState}
-        onFocus={() => setFocused(true)}
-        onBlur={() => {
-          // Defer so a tap on a toolbar button (which preventDefaults
-          // its own mousedown) doesn't visibly flicker the toolbar
-          // while the focus briefly leaves the editor.
-          setTimeout(() => {
-            const el = ref.current;
-            if (!el) return;
-            if (document.activeElement !== el) setFocused(false);
-            setMention(null);
-          }, 120);
-        }}
-        className="min-h-[120px] w-full whitespace-pre-wrap break-words rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-      />
-      {isEmpty && placeholder && (
-        <div className="pointer-events-none absolute left-3 top-2 text-sm text-muted">
-          {placeholder}
-        </div>
-      )}
+      <div className="relative">
+        <div
+          ref={ref}
+          role="textbox"
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onKeyUp={updateMentionState}
+          onMouseUp={updateMentionState}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            // Defer so a tap on a toolbar button (which preventDefaults
+            // its own mousedown) doesn't visibly flicker the toolbar
+            // while the focus briefly leaves the editor.
+            setTimeout(() => {
+              const el = ref.current;
+              if (!el) return;
+              if (document.activeElement !== el) setFocused(false);
+              setMention(null);
+            }, 120);
+          }}
+          className="min-h-[120px] w-full whitespace-pre-wrap break-words rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+        />
+        {isEmpty && placeholder && (
+          <div className="pointer-events-none absolute left-3 top-2 text-sm text-muted">
+            {placeholder}
+          </div>
+        )}
+      </div>
       {mention && candidates.length > 0 && (
         <ul
           className="absolute z-20 min-w-[140px] overflow-hidden rounded-md border border-border bg-surface-raised shadow-lg"

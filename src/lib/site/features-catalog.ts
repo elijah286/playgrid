@@ -207,6 +207,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2025-05-01",
   },
   {
+    id: "play-notes-copy",
+    name: "Copy play notes with formatting preserved",
+    description:
+      "A Copy button on the play notes card writes both rich-text HTML and plain-text markdown to the clipboard. Pastes into Gmail, Slack, Apple Notes, or Word with bold, lists, and headings intact, and falls back to clean readable markdown in plain-text fields.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-06",
+  },
+  {
     id: "play-tags-groups",
     name: "Play tags and groups",
     description:
