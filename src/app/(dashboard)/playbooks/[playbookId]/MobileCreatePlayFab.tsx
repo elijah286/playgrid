@@ -55,10 +55,14 @@ export function MobileCreatePlayFab({
         aria-label="Create new play"
         title="New play"
         disabled={creating}
-        className="fixed right-4 z-30 inline-flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-elevated ring-1 ring-primary/30 transition-transform active:scale-95 disabled:opacity-60 sm:hidden"
+        // Extended FAB pattern (Material Design): pill shape with an
+        // icon + label so coaches don't have to guess what the "+"
+        // does. Stays right-anchored above the bottom nav.
+        className="fixed right-4 z-30 inline-flex h-14 items-center gap-2 rounded-full bg-primary pl-4 pr-5 text-base font-semibold text-primary-foreground shadow-elevated ring-1 ring-primary/30 transition-transform active:scale-95 disabled:opacity-60 sm:hidden"
         style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 72px)" }}
       >
-        <Plus className="size-7" aria-hidden />
+        <Plus className="size-6" aria-hidden />
+        <span>New play</span>
       </button>
 
       {open && (

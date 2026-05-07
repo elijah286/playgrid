@@ -252,23 +252,14 @@ export function EditorHeaderBar({
                 {mode === "edit" ? "Done" : "Edit"}
               </Button>
             )}
-            {/* Copy is visible on desktop only — on mobile it folds into
-                the overflow menu so the bar stays one row even with a
-                long play name. */}
+            {/* Match the grid view's "New play" CTA — primary pill, not
+                a ghost text button — so the action looks the same in
+                every place a coach can create a play. Copy lives in
+                the overflow menu (one location for the secondary
+                action; the standalone desktop button was redundant). */}
             <Button
               type="button"
-              size="sm"
-              variant="ghost"
-              leftIcon={Copy}
-              onClick={onDuplicate}
-              className="hidden sm:inline-flex"
-            >
-              Copy
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
+              variant="primary"
               leftIcon={Plus}
               onClick={onNewPlay}
             >
@@ -290,11 +281,8 @@ export function EditorHeaderBar({
               label="More play actions"
               items={(() => {
                 const items: ActionMenuItem[] = [
-                  // Mobile-only: Copy lives here so the bar fits in one row.
-                  // On desktop we hide it via Tailwind below — but ActionMenu
-                  // doesn't support per-item responsive hiding, so we
-                  // include Copy unconditionally and accept the duplicate
-                  // affordance on desktop. Cheap; one extra menu line.
+                  // Copy lives only here — one location for the
+                  // secondary action across mobile + desktop.
                   { label: "Copy", icon: Copy, onSelect: onDuplicate },
                   { label: "Notify team", icon: Megaphone, onSelect: () => setNotifyOpen(true) },
                   { label: "View history", icon: History, onSelect: () => setHistoryOpen(true) },
@@ -322,11 +310,11 @@ export function EditorHeaderBar({
           </div>
         )}
       </div>
-      <div
-        className={`${
-          hideMobileNav ? "hidden sm:flex" : "flex"
-        } mt-1 flex-wrap items-center gap-1`}
-      >
+      {/* Desktop-only Previous / All plays / Next row. Mobile uses the
+          bottom-nav Plays tab to open the same picker — having both an
+          inline row and a footer entry felt redundant on small screens
+          and ate vertical space the field needed. */}
+      <div className="mt-1 hidden flex-wrap items-center gap-1 sm:flex">
         <Button
           type="button"
           size="sm"

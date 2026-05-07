@@ -105,7 +105,7 @@ export default async function PlayEditPage({ params }: Props) {
   // but autosave is suppressed and any save attempt surfaces the CTA.
   const { data: book } = await supabase
     .from("playbooks")
-    .select("is_example, is_public_example, is_archived, name, color")
+    .select("is_example, is_public_example, is_archived, name, color, logo_url")
     .eq("id", res.play.playbook_id)
     .maybeSingle();
   const isExamplePreview =
@@ -131,6 +131,26 @@ export default async function PlayEditPage({ params }: Props) {
     isAdmin,
     isEntitled: isCoachInPlaybook,
   });
+  // Drive the editor bottom nav's "More" sheet — same per-playbook
+  // beta-feature flags the playbook page uses to decide which tabs to
+  // show. We expose only the flags relevant to navigation; the editor
+  // doesn't render those tabs itself, just links back to the playbook.
+  const teamCalendarAvailable = isBetaFeatureAvailable(
+    betaFeatures.team_calendar,
+    { isAdmin, isEntitled: true },
+  );
+  const teamMessagingAvailable = isBetaFeatureAvailable(
+    betaFeatures.team_messaging,
+    { isAdmin, isEntitled: true },
+  );
+  const gameResultsAvailable = isBetaFeatureAvailable(
+    betaFeatures.game_results,
+    { isAdmin, isEntitled: isCoachInPlaybook },
+  );
+  const practicePlansAvailable = isBetaFeatureAvailable(
+    betaFeatures.practice_plans,
+    { isAdmin, isEntitled: isCoachInPlaybook },
+  );
   const editorEntitlement = await getCurrentEntitlement();
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
   const coachAiAvailable =
@@ -157,6 +177,7 @@ export default async function PlayEditPage({ params }: Props) {
       playbookId={res.play.playbook_id}
       playbookName={(book?.name as string | null) ?? null}
       playbookColor={(book?.color as string | null) ?? null}
+      playbookLogoUrl={(book?.logo_url as string | null) ?? null}
       initialDocument={res.document}
       initialNav={nav.ok ? nav.plays : []}
       initialGroups={nav.ok ? nav.groups : []}
@@ -174,6 +195,10 @@ export default async function PlayEditPage({ params }: Props) {
       canUseGameMode={viewerCanUseGameMode}
       coachAiAvailable={coachAiAvailable}
       showCoachCalPromo={showCoachCalPromo}
+      teamCalendarAvailable={teamCalendarAvailable}
+      teamMessagingAvailable={teamMessagingAvailable}
+      gameResultsAvailable={gameResultsAvailable}
+      practicePlansAvailable={practicePlansAvailable}
       initialCustomOpponentPlayId={res.customOpponentPlayId}
       initialOpponentHidden={res.opponentHidden}
     />

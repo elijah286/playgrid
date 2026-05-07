@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft } from "lucide-react";
-import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
-import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 
 /**
  * Mobile-only slim chrome for the play editor — mirrors the orange
@@ -12,20 +11,22 @@ import { openCoachCal } from "@/features/coach-ai/openCoachCal";
  * (which is hidden on mobile editor via `editor-hide-site-header`).
  *
  * Just the essentials: back arrow, playbook initial/avatar, playbook
- * name, Cal launcher. Full PlaybookHeader actions (share, kebab) stay
- * scoped to the playbook page itself.
+ * name. Cal lives in the bottom nav so it has a single home (and the
+ * top stays free for navigation context). Full PlaybookHeader actions
+ * (share, kebab) stay scoped to the playbook page itself.
  */
 export function EditorPlaybookChrome({
   playbookId,
   playbookName,
   playbookColor,
-  showCoachCal,
+  playbookLogoUrl,
 }: {
   playbookId: string;
   playbookName: string | null;
   /** Hex color (e.g. "#F26522"). Falls back to brand orange. */
   playbookColor: string | null;
-  showCoachCal: boolean;
+  /** Team logo URL. Falls back to the playbook initial when null. */
+  playbookLogoUrl: string | null;
 }) {
   const accentColor = playbookColor || "#F26522";
   const isLightBg = hexLuminance(accentColor) > 0.55;
@@ -37,8 +38,12 @@ export function EditorPlaybookChrome({
     <div
       // -mx-6 -mt-5 escapes the editor layout's px-6 py-5 padding so the
       // banner bleeds edge-to-edge like the playbook page's banner.
+      // backgroundColor is set explicitly under backgroundImage so the
+      // gradient's alpha steps don't let content scroll-through. The
+      // playbook page's chrome avoids this because it sits inside a
+      // `bg-surface` wrapper; the editor doesn't have that backdrop.
       className="sticky top-0 z-30 -mx-6 -mt-5 sm:hidden"
-      style={{ background: gradient }}
+      style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3">
         <Link
@@ -53,24 +58,23 @@ export function EditorPlaybookChrome({
             isLightBg ? "bg-white/80 ring-black/10" : "bg-white/20 ring-white/30"
           } ${onAccent}`}
         >
-          <span>{initial}</span>
+          {playbookLogoUrl ? (
+            <Image
+              src={playbookLogoUrl}
+              alt=""
+              fill
+              className="object-contain p-1"
+              sizes="36px"
+            />
+          ) : (
+            <span>{initial}</span>
+          )}
         </div>
         <h1
           className={`min-w-0 flex-1 truncate text-base font-extrabold tracking-tight ${onAccent}`}
         >
           {playbookName || "Playbook"}
         </h1>
-        {showCoachCal && (
-          <button
-            type="button"
-            onClick={() => openCoachCal()}
-            aria-label="Open Coach Cal"
-            title="Coach Cal"
-            className={`inline-flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors ${onAccentHover}`}
-          >
-            <CoachAiIcon className="size-6" />
-          </button>
-        )}
       </div>
     </div>
   );

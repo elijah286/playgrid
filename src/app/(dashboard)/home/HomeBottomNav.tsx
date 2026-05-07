@@ -1,8 +1,6 @@
 "use client";
 
 import { BookOpen, Calendar, Inbox } from "lucide-react";
-import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
-import { openCoachCal } from "@/features/coach-ai/openCoachCal";
 
 /**
  * Mobile-first bottom nav for the home/lobby page. Mirrors the structure
@@ -22,15 +20,12 @@ export function HomeBottomNav({
   showCalendar,
   inboxCount,
   inboxUrgent,
-  showCoachCal,
 }: {
   active: HomeBottomNavTab;
   onChange: (k: HomeBottomNavTab) => void;
   showCalendar: boolean;
   inboxCount: number;
   inboxUrgent: boolean;
-  /** Render the center Cal FAB. Hidden when the user has no Cal access. */
-  showCoachCal: boolean;
 }) {
   type TabDef = {
     key: HomeBottomNavTab;
@@ -58,7 +53,7 @@ export function HomeBottomNav({
     <>
       <nav
         aria-label="Home sections"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-base/95 shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-surface-base/80 sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
       >
         {tabs.map((t) => (
@@ -73,22 +68,6 @@ export function HomeBottomNav({
           />
         ))}
       </nav>
-
-      {showCoachCal && (
-        <button
-          type="button"
-          onClick={() => openCoachCal()}
-          aria-label="Open Coach Cal"
-          title="Coach Cal"
-          className="fixed left-1/2 z-40 inline-flex size-14 -translate-x-1/2 items-center justify-center rounded-full shadow-elevated ring-2 ring-surface-base transition-transform active:scale-95 sm:hidden"
-          style={{
-            bottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
-            background: "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)",
-          }}
-        >
-          <CoachAiIcon className="size-8" />
-        </button>
-      )}
     </>
   );
 }

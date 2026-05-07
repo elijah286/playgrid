@@ -29,6 +29,7 @@ export type CoachCalOpenDetail = {
 declare global {
   interface WindowEventMap {
     "coach-cal:open": CustomEvent<CoachCalOpenDetail>;
+    "coach-cal:close": CustomEvent<void>;
     "coach-cal:state-change": CustomEvent<{ open: boolean }>;
   }
   interface Window {
@@ -37,6 +38,14 @@ declare global {
 }
 
 let _key = 0;
+
+/** Programmatically close the Cal panel — mirrors openCoachCal so any
+ *  CTA that opened the panel can also close it (e.g. the bottom-nav
+ *  Cal button toggling, or a tap-outside detector). */
+export function closeCoachCal(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("coach-cal:close"));
+}
 
 export function openCoachCal(
   entryPointId?: CoachCalEntryPointId,

@@ -153,7 +153,20 @@ export function CoachAiChat({
   injectedPrompt?: { text: string; autoSubmit: boolean; key: number } | null;
 }) {
   const storageKey = storageKeyFor(mode, playbookId ?? null);
-  const [turns, setTurns] = useState<CoachAiTurn[]>([]);
+  // Initialize from localStorage synchronously so the first paint shows
+  // the existing conversation, not the empty-state suggested prompts.
+  // Without this, opening Cal mid-session flashes Empty for a frame
+  // before the load-history useEffect runs and replaces it. The useEffect
+  // below still handles bridge turns (playbook/play switches) and the
+  // cal_from carry-over case.
+  const [turns, setTurns] = useState<CoachAiTurn[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return loadTurns(storageKey);
+    } catch {
+      return [];
+    }
+  });
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
@@ -845,7 +858,23 @@ export function CoachAiChat({
         }}
       >
         {turns.length === 0 && !streaming ? (
-          <Empty prompts={starterPrompts} />
+          <Empty
+            prompts={starterPrompts}
+            onSelectPrompt={(text) => {
+              setDraft(text);
+              // Keep the focus + caret behavior — coaches can keep
+              // typing to extend the prompt before sending.
+              requestAnimationFrame(() => {
+                const ta = document.querySelector<HTMLTextAreaElement>(
+                  "[data-coach-ai-input]",
+                );
+                if (ta) {
+                  ta.focus();
+                  ta.setSelectionRange(text.length, text.length);
+                }
+              });
+            }}
+          />
         ) : (
           <ul className="space-y-5">
             {turns.map((t, i) => {
@@ -1096,7 +1125,13 @@ function UserMessageBubble({ text, animate }: { text: string; animate?: boolean 
   );
 }
 
-function Empty({ prompts }: { prompts: SuggestedPrompt[] }) {
+function Empty({
+  prompts,
+  onSelectPrompt,
+}: {
+  prompts: SuggestedPrompt[];
+  onSelectPrompt: (text: string) => void;
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 text-center">
       {/* Standalone mark — icon ships its own gradient tile. */}
@@ -1111,14 +1146,7 @@ function Empty({ prompts }: { prompts: SuggestedPrompt[] }) {
           <li key={p.id}>
             <button
               type="button"
-              onClick={() => {
-                const ta = document.querySelector<HTMLTextAreaElement>("[data-coach-ai-input]");
-                if (ta) {
-                  ta.value = p.text;
-                  ta.dispatchEvent(new Event("input", { bubbles: true }));
-                  ta.focus();
-                }
-              }}
+              onClick={() => onSelectPrompt(p.text)}
               className="w-full rounded-lg bg-surface-inset px-3 py-2 text-left text-xs text-foreground hover:bg-surface-inset/80"
             >
               {p.text}

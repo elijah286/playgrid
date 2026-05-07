@@ -114,11 +114,27 @@ export function CoachAiLauncher({
   const [dockedWidth, setDockedWidth] = useState(DEFAULT_DOCK_W);
   const [fontSize, setFontSize] = useState<FontSize>(14);
 
+  // Tracks whether the viewport is narrow enough that the panel should
+  // render as a CSS-controlled bottom sheet (50vh), ignoring the saved
+  // window size that's only meaningful for desktop float mode. Without
+  // this, an old saved `size` from a desktop session leaks across to
+  // mobile and overrides the `h-[50vh]` class via inline style.
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsNarrow(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   const [contextOpen,    setContextOpen]    = useState(false);
   const [playbookList,   setPlaybookList]   = useState<PlaybookRow[] | null>(null);
   const [loadingPlaybooks, setLoadingPlaybooks] = useState(false);
   const contextPopoverRef = useRef<HTMLDivElement>(null);
   const contextBtnRef     = useRef<HTMLButtonElement>(null);
+  const dialogRef         = useRef<HTMLDivElement>(null);
 
   const [windowPos, setWindowPos] = useState<WindowPos | null>(null);
 
@@ -259,17 +275,53 @@ export function CoachAiLauncher({
         }
       }
     }
+    function onClose() { closeDialog(); }
     window.addEventListener("coach-cal:open", onOpen);
-    return () => window.removeEventListener("coach-cal:open", onOpen);
+    window.addEventListener("coach-cal:close", onClose);
+    return () => {
+      window.removeEventListener("coach-cal:open", onOpen);
+      window.removeEventListener("coach-cal:close", onClose);
+    };
+    // closeDialog is stable enough — it only mutates local state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acceptGlobalCommands, entitled]);
 
+  // Slide animation state. `slideIn` drives the translate-y transition:
+  //   - On open: starts false so first paint is offscreen, then flips
+  //     to true on the next frame → slides up.
+  //   - On close: flipped to false → slides down. After the transition
+  //     duration the panel unmounts (open=false).
+  // Double rAF: a single rAF fires before the browser has painted the
+  // initial mount in some cases, so React's two state updates batch
+  // and the transition skips. Waiting two frames guarantees the
+  // browser has painted translate-y-full before we flip to 0.
+  const [slideIn, setSlideIn] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setSlideIn(false);
+      return;
+    }
+    let r1 = 0;
+    let r2 = 0;
+    r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => setSlideIn(true));
+    });
+    return () => {
+      if (r1) cancelAnimationFrame(r1);
+      if (r2) cancelAnimationFrame(r2);
+    };
+  }, [open]);
+
   function closeDialog() {
-    setOpen(false);
-    // Only reset fullscreen — keep docked/float across close so the user's
-    // chosen panel mode persists into the next open.
-    setPanelMode((m) => (m === "fullscreen" ? "float" : m));
-    setInjectedPrompt(null);
-    setPreviewState(null);
+    setSlideIn(false);
+    window.setTimeout(() => {
+      setOpen(false);
+      // Only reset fullscreen — keep docked/float across close so the
+      // user's chosen panel mode persists into the next open.
+      setPanelMode((m) => (m === "fullscreen" ? "float" : m));
+      setInjectedPrompt(null);
+      setPreviewState(null);
+    }, 200);
   }
 
   useEffect(() => { if (hasRestored.current) writeStorage("coach-ai:adminMode",   adminMode ? "1" : "0"); }, [adminMode]);
@@ -334,6 +386,27 @@ export function CoachAiLauncher({
     if (panelMode === "fullscreen") document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [open, panelMode]);
+
+  // Tap outside the panel closes it (mobile + docked desktop). Skip
+  // for fullscreen since the backdrop already handles that. Skip taps
+  // on the Cal nav button since clicking it toggles — letting both
+  // close and re-open fire would loop. Gated on slideIn so taps that
+  // land mid-exit-animation don't trigger a re-close.
+  useEffect(() => {
+    if (!open || !slideIn) return;
+    if (panelMode === "fullscreen" || panelMode === "docked") return;
+    function onDocPointer(e: PointerEvent) {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (dialogRef.current?.contains(target)) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('[aria-label="Open Coach Cal"]')) return;
+      closeDialog();
+    }
+    document.addEventListener("pointerdown", onDocPointer);
+    return () => document.removeEventListener("pointerdown", onDocPointer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, slideIn, panelMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -508,8 +581,11 @@ export function CoachAiLauncher({
   }
 
   // ── Inline style for the dialog ──────────────────────────────────────────
+  // On narrow viewports the panel is a CSS-controlled bottom sheet — no
+  // inline width/height, so the `h-[50vh]` class wins and a stale
+  // desktop-saved size doesn't bleed in.
   const windowPosStyle: React.CSSProperties =
-    panelMode === "fullscreen" || panelMode === "docked"
+    isNarrow || panelMode === "fullscreen" || panelMode === "docked"
       ? {}
       : windowPos
         ? { top: windowPos.top, left: windowPos.left, right: "auto", bottom: "auto", width: size.w, height: size.h }
@@ -566,21 +642,38 @@ export function CoachAiLauncher({
 
       {open && typeof document !== "undefined" && createPortal(
         <>
-          {/* Backdrop — fullscreen and mobile only */}
+          {/* Backdrop — fullscreen mode only. Mobile half-sheet
+              intentionally has no scrim so coaches can keep reading
+              the page Cal is acting on; the panel sits above the
+              bottom nav, leaving the rest of the page visible and
+              fully interactive. Closes via the X in the panel header. */}
           <div
             onClick={closeDialog}
             className={cn(
               "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity",
-              panelMode === "fullscreen" ? "block" : "block sm:hidden",
+              panelMode === "fullscreen" ? "block" : "hidden",
             )}
             aria-hidden="true"
           />
 
           {/* ── Dialog window ───────────────────────────────────────────── */}
           <div
+            ref={dialogRef}
             role="dialog"
             aria-label="Coach Cal chat"
             style={{
+              // Mobile float: pin above the bottom nav and constrain
+              // height to half the viewport. Inline-style version of
+              // the positioning because Tailwind arbitrary-values choke
+              // on the env() comma inside calc(), leading to silently
+              // dropped `bottom`.
+              ...(isNarrow && panelMode !== "fullscreen" && panelMode !== "docked"
+                ? {
+                    bottom:
+                      "calc(env(safe-area-inset-bottom, 0px) + 52px)",
+                    height: "50vh",
+                  }
+                : {}),
               ...windowPosStyle,
               ...(panelMode === "docked" ? { width: dockedWidth } : {}),
             }}
@@ -589,11 +682,25 @@ export function CoachAiLauncher({
             onPointerUp={onHeaderPointerUp}
             onPointerCancel={onHeaderPointerUp}
             className={cn(
-              "fixed z-50 flex flex-col overflow-hidden bg-surface-raised text-foreground shadow-2xl select-none",
-              // Ring / border
+              "fixed flex flex-col overflow-hidden bg-surface-raised text-foreground select-none",
+              // z-index. Mobile float sits BEHIND the bottom nav (z-40)
+              // so the footer toolbar stays on top — slide-in/out from
+              // below visually disappears under the footer chrome.
+              // Fullscreen + docked stay above their respective
+              // backdrops at z-50.
+              panelMode === "fullscreen" || panelMode === "docked"
+                ? "z-50"
+                : "z-30 sm:z-50",
+              // Edges + shadow. Mobile float reads as an extension of
+              // the bottom nav: rounded top, soft upward-only shadow,
+              // no bottom edge or downward shadow so the panel and the
+              // footer appear as one continuous chrome. Desktop float
+              // and fullscreen keep their floating-window treatment.
               panelMode === "docked"
-                ? "border-l border-border"
-                : "rounded-2xl ring-1 ring-black/10",
+                ? "border-l border-border shadow-2xl"
+                : panelMode === "fullscreen"
+                  ? "rounded-2xl ring-1 ring-black/10 shadow-2xl"
+                  : "rounded-t-2xl border-t border-black/10 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] sm:rounded-2xl sm:border-0 sm:ring-1 sm:ring-black/10 sm:shadow-2xl",
               adminTrainingActive && "ring-2 ring-amber-400",
               // Position
               panelMode === "fullscreen"
@@ -601,14 +708,26 @@ export function CoachAiLauncher({
                 : panelMode === "docked"
                   ? "inset-y-0 right-0 hidden lg:flex"
                   : [
-                      // Mobile: bottom sheet sized so the page behind stays
-                      // partially visible — coaches can see what Cal is
-                      // referencing and tap a CTA that lands them on the
-                      // page underneath. Use the Maximize button in the
-                      // header to toggle to fullscreen for sustained chat.
-                      "inset-x-2 bottom-2 top-auto h-[65vh]",
-                      // Desktop: position controlled by windowPosStyle
-                      "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto",
+                      // Mobile: bottom HALF-sheet, lifted above the
+                      // bottom nav. `bottom`/`height` are set via inline
+                      // style on the parent (Tailwind arbitrary values
+                      // choke on the env() comma in calc()). Here we
+                      // pin horizontal edges and unset top so the inline
+                      // bottom + height take effect.
+                      "inset-x-0 top-auto",
+                      // Animation: translate-y for reliable slide-up on
+                      // open and slide-down on close. The closing state
+                      // holds the panel mounted for the transition
+                      // duration before unmount. Initial render with
+                      // !mounted gets `translate-y-full` so the first
+                      // paint is offscreen, then the next paint
+                      // transitions to translate-y-0.
+                      "transition-transform duration-200 ease-out",
+                      slideIn ? "translate-y-0" : "translate-y-full",
+                      // Desktop: position controlled by windowPosStyle.
+                      // Reset translate so desktop float doesn't get
+                      // shifted off-screen.
+                      "sm:inset-auto sm:right-4 sm:bottom-4 sm:left-auto sm:top-auto sm:h-auto sm:translate-y-0 sm:transition-none",
                     ].join(" "),
             )}
           >
@@ -753,8 +872,12 @@ export function CoachAiLauncher({
 
               {/* ── Toolbar ──────────────────────────────────────────────── */}
               <div className="ml-auto flex items-center gap-0.5">
-                {/* Font size A− / A+ */}
-                <div className="mr-1 flex items-center rounded-md bg-surface-inset px-1 py-0.5">
+                {/* Font size A− / A+ — desktop only. Mobile uses the
+                    system font size to stay consistent with native
+                    accessibility settings (Dynamic Type / browser zoom);
+                    coaches don't have screen real estate to spare for
+                    custom sizing on a phone anyway. */}
+                <div className="mr-1 hidden items-center rounded-md bg-surface-inset px-1 py-0.5 sm:flex">
                   <button
                     type="button"
                     onClick={() => setFontSize((f) => { const i = FONT_SIZES.indexOf(f); return i > 0 ? FONT_SIZES[i - 1] : f; })}
@@ -853,10 +976,12 @@ export function CoachAiLauncher({
             </header>
 
             {/* ── Chat content ─────────────────────────────────────────── */}
+            {/* fontSize is desktop-only; mobile inherits the system font
+                size so Dynamic Type / browser zoom takes over. */}
             <div
               data-no-drag
               className="flex-1 min-h-0"
-              style={{ fontSize: `${fontSize}px` }}
+              style={isNarrow ? undefined : { fontSize: `${fontSize}px` }}
             >
               {previewState ? (
                 <CoachAiPreviewChat

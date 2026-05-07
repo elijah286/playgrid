@@ -10,18 +10,21 @@ import {
   MoreHorizontal,
   Trophy,
   Users,
-  X,
 } from "lucide-react";
-import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
-import { openCoachCal } from "@/features/coach-ai/openCoachCal";
+import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 
 /**
  * Mobile-first bottom navigation for the playbook detail page. Coaches and
  * parents use this app a lot from phones (sideline, carpool); the seven
- * top-tab labels collapse poorly into a horizontal scroll. This bar puts
- * the four highest-traffic surfaces in thumb range — Plays, Calendar,
- * Messages, Roster — and tucks the rest into a "More" sheet (Formations,
- * Results, Practice Plans).
+ * top-tab labels collapse poorly into a horizontal scroll.
+ *
+ * Five primary slots — the surfaces that matter from the sideline:
+ *   Plays · Messages · Coach Cal · Game Mode · More
+ *
+ * Calendar, Roster, Formations, Results, and Practice Plans all live
+ * in the "More" sheet. Cal and Game aren't tabs — they're actions.
+ * Tapping Cal opens the chat; tapping Game launches game mode (or
+ * surfaces an upgrade prompt).
  *
  * Visible only on mobile (`<sm`). The top tab bar is hidden in the same
  * breakpoint so the two patterns don't fight for screen real estate.
@@ -49,12 +52,7 @@ type TabDef = {
   badge?: number;
 };
 
-const PRIMARY_KEYS: PlaybookBottomNavTab[] = [
-  "plays",
-  "calendar",
-  "messages",
-  "roster",
-];
+const PRIMARY_KEYS: PlaybookBottomNavTab[] = ["plays", "messages", "calendar"];
 
 export function PlaybookBottomNav({
   active,
@@ -74,8 +72,7 @@ export function PlaybookBottomNav({
   };
   counts: { plays: number; formations: number; roster: number; calendar: number };
   messagesUnread: number;
-  /** Render a center "Cal" FAB above the nav row that opens Coach Cal.
-   *  Hidden when the user has no Cal access (no entitlement, no promo). */
+  /** Render the Cal action button. Hidden when the user has no Cal access. */
   showCoachCal: boolean;
 }) {
   const allTabs: TabDef[] = [
@@ -147,6 +144,9 @@ export function PlaybookBottomNav({
   const primaryTabs = allTabs.filter((t) => PRIMARY_KEYS.includes(t.key));
   const moreTabs = allTabs.filter((t) => !PRIMARY_KEYS.includes(t.key));
   const moreActive = moreTabs.some((t) => t.key === active);
+  const byKey = Object.fromEntries(
+    primaryTabs.map((t) => [t.key, t]),
+  ) as Partial<Record<PlaybookBottomNavTab, TabDef>>;
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Close the More sheet on Escape and on tab change away from the sheet.
@@ -163,19 +163,40 @@ export function PlaybookBottomNav({
     <>
       <nav
         aria-label="Playbook sections"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-base/95 shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-surface-base/80 sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
       >
-        {primaryTabs.map((t) => (
+        {/* Order: Plays · Messages · [Cal] · Calendar · More.
+            Cal is centered between team-comm and time-comm tabs so
+            its svelte gradient circle reads as the visual centerpiece. */}
+        {byKey.plays && (
           <NavButton
-            key={t.key}
-            isActive={active === t.key}
-            label={t.shortLabel}
-            Icon={t.Icon}
-            badge={t.badge}
-            onClick={() => onChange(t.key)}
+            isActive={active === byKey.plays.key}
+            label={byKey.plays.shortLabel}
+            Icon={byKey.plays.Icon}
+            badge={byKey.plays.badge}
+            onClick={() => onChange(byKey.plays!.key)}
           />
-        ))}
+        )}
+        {byKey.messages && (
+          <NavButton
+            isActive={active === byKey.messages.key}
+            label={byKey.messages.shortLabel}
+            Icon={byKey.messages.Icon}
+            badge={byKey.messages.badge}
+            onClick={() => onChange(byKey.messages!.key)}
+          />
+        )}
+        {showCoachCal && <CalNavButton />}
+        {byKey.calendar && (
+          <NavButton
+            isActive={active === byKey.calendar.key}
+            label={byKey.calendar.shortLabel}
+            Icon={byKey.calendar.Icon}
+            badge={byKey.calendar.badge}
+            onClick={() => onChange(byKey.calendar!.key)}
+          />
+        )}
         {moreTabs.length > 0 && (
           <NavButton
             isActive={moreActive}
@@ -185,28 +206,6 @@ export function PlaybookBottomNav({
           />
         )}
       </nav>
-
-      {/* Center Cal FAB. Floats above the nav row, half-overlapping the
-          top edge so it reads as the "primary action" against the row of
-          tabs. Dispatches the global coach-cal:open event — the playbook
-          header's CoachAiLauncher (acceptGlobalCommands) catches it and
-          opens the panel with playbookId context. */}
-      {showCoachCal && (
-        <button
-          type="button"
-          onClick={() => openCoachCal()}
-          aria-label="Open Coach Cal"
-          title="Coach Cal"
-          className="fixed left-1/2 z-40 inline-flex size-14 -translate-x-1/2 items-center justify-center rounded-full shadow-elevated ring-2 ring-surface-base transition-transform active:scale-95 sm:hidden"
-          style={{
-            bottom:
-              "calc(env(safe-area-inset-bottom, 0px) + 28px)",
-            background: "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)",
-          }}
-        >
-          <CoachAiIcon className="size-8" />
-        </button>
-      )}
 
       {moreOpen && (
         <MoreSheet
@@ -274,67 +273,58 @@ function MoreSheet({
   onClose: () => void;
   onPick: (k: PlaybookBottomNavTab) => void;
 }) {
+  // Overflow popover — anchored above the More button (right-bottom),
+  // sized to its content. Doesn't take full width or render a backdrop
+  // scrim, so it doesn't visually compete with the Cal panel when both
+  // are open. An invisible click-area behind it catches taps outside
+  // to dismiss. Standard mobile convention for kebab-style overflow
+  // menus (Twitter, Instagram, Discord).
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-label="More playbook sections"
-    >
+    <>
       <button
         type="button"
         aria-label="Close"
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="fixed inset-0 z-40 sm:hidden"
         onClick={onClose}
       />
       <div
-        className="relative w-full rounded-t-2xl border-t border-border bg-surface-raised p-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-2xl"
+        role="menu"
+        aria-label="More playbook sections"
+        className="fixed right-2 z-40 w-56 animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-black/10 bg-surface-raised p-1 shadow-elevated duration-150 sm:hidden"
+        style={{
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)",
+        }}
       >
-        <div className="mx-auto mb-3 mt-1 h-1 w-10 rounded-full bg-border" aria-hidden />
-        <div className="mb-1 flex items-center justify-between px-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-muted">
-            More sections
-          </span>
-          <button
-            type="button"
-            aria-label="Close"
-            className="rounded-full p-1 text-muted hover:bg-surface-inset hover:text-foreground"
-            onClick={onClose}
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="flex flex-col">
-          {tabs.map((t) => {
-            const isActive = active === t.key;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => onPick(t.key)}
-                aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-base transition-colors ${
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground hover:bg-surface-inset"
-                }`}
-              >
-                <t.Icon className="size-5" aria-hidden />
-                <span className="flex-1 text-left">{t.label}</span>
-                {typeof t.count === "number" && t.count > 0 && (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${
-                      isActive ? "bg-primary/20 text-primary" : "bg-surface-inset text-muted"
-                    }`}
-                  >
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {tabs.map((t) => {
+          const isActive = active === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="menuitem"
+              onClick={() => onPick(t.key)}
+              aria-current={isActive ? "page" : undefined}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-foreground hover:bg-surface-inset"
+              }`}
+            >
+              <t.Icon className="size-4 shrink-0" aria-hidden />
+              <span className="flex-1 text-left">{t.label}</span>
+              {typeof t.count === "number" && t.count > 0 && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                    isActive ? "bg-primary/20 text-primary" : "bg-surface-inset text-muted"
+                  }`}
+                >
+                  {t.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </>
   );
 }

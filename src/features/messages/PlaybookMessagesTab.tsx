@@ -81,19 +81,44 @@ export function PlaybookMessagesTab({
     didInitialScroll.current = true;
   }, [stream.loading]);
 
+  // Lock the document scroll on mobile so only the message list scrolls.
+  // Without this, banners stacking above the chat push its bottom — and
+  // the input — below the viewport, and a scroll gesture on the messages
+  // chains out to the page. The body-scroll lock + fixed positioning
+  // below keeps the input glued to the viewport bottom.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = () => {
+      const isMobile = window.matchMedia("(max-width: 639px)").matches;
+      if (isMobile) {
+        document.documentElement.classList.add("messages-mobile-lock");
+      } else {
+        document.documentElement.classList.remove("messages-mobile-lock");
+      }
+    };
+    apply();
+    const mq = window.matchMedia("(max-width: 639px)");
+    mq.addEventListener("change", apply);
+    return () => {
+      mq.removeEventListener("change", apply);
+      document.documentElement.classList.remove("messages-mobile-lock");
+    };
+  }, []);
+
   return (
-    <div className="-mx-6 -mb-20 flex h-[calc(100dvh-156px-env(safe-area-inset-bottom))] min-h-[360px] flex-col overflow-hidden border border-border bg-surface-base sm:mx-0 sm:mb-0 sm:h-[calc(100dvh-340px)] sm:max-h-[760px] sm:rounded-2xl">
-      {/* Height calc on mobile: subtract the sticky playbook banner
-          (~100px) + the bottom nav base height (~56px), plus the dynamic
-          `env(safe-area-inset-bottom)` so the panel re-fits when an
-          iPhone home indicator widens the nav. Net result: chat bottom
-          edge lands exactly at the bottom-nav top edge with no gap.
-          The negative -mb-20 absorbs the wrapper's pb-20 (which exists
-          for scrolling tabs like Plays to clear the bottom nav) — without
-          it an 80px void would sit below the input. Desktop drops both:
-          mb-0 + the larger 340px offset for site-header + top-tabs +
-          chrome, capped at 760px so very tall screens don't get an
-          absurdly long chat box. */}
+    <div
+      // Mobile: `messages-mobile-fixed` (defined in globals.css under
+      // the @media (max-width: 639px) block) anchors the chat below
+      // the sticky banner and above the bottom nav. `messages-mobile-lock`
+      // on <html> (set by the effect above) clamps the document to
+      // viewport height so the page can't scroll out from under it.
+      //
+      // Desktop: normal flow with a calc'd height (340px subtracted from
+      // 100dvh covers site-header + top-tabs + chrome) capped at 760px
+      // so very tall screens don't get an absurdly long chat. The
+      // mobile class becomes a no-op on `sm:` and up.
+      className="messages-mobile-fixed flex flex-col overflow-hidden bg-surface-base sm:h-[calc(100dvh-340px)] sm:max-h-[760px] sm:rounded-2xl sm:border sm:border-border"
+    >
       <Header
         playbookName={playbookName}
         messagingEnabled={stream.messagingEnabled}
@@ -131,7 +156,7 @@ export function PlaybookMessagesTab({
 
       <div
         ref={scrollerRef}
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto overscroll-contain"
         aria-live="polite"
         aria-relevant="additions"
       >

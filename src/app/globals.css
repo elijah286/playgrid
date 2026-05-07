@@ -282,7 +282,7 @@ html.coach-docked body {
 /* Field viewport cap on small screens. Without this, when the editor
  * column grows in edit mode the aspect-ratio field can end up taller than
  * the phone viewport. The cap binds both dimensions so the aspect ratio
- * stays intact. Desktop keeps the full column width. */
+ * stays intact. */
 @media (max-width: 639px) {
   .field-viewport {
     max-height: min(42dvh, 320px);
@@ -291,6 +291,97 @@ html.coach-docked body {
   body.editor-hide-site-header [data-site-header],
   body.editor-hide-site-header [data-site-footer] {
     display: none;
+  }
+  /* Messages tab on mobile: clamp the document to viewport height and
+   * prevent body scrolling so the fixed-position chat container fills
+   * the visible area exactly and the input stays glued to the bottom
+   * edge. The site footer is hidden because it has no place inside a
+   * full-viewport chat surface. */
+  html.messages-mobile-lock,
+  html.messages-mobile-lock body {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  html.messages-mobile-lock [data-site-footer] {
+    display: none;
+  }
+  /* Mobile-only positioning for the team-chat container. Driven by a
+   * dedicated class instead of Tailwind arbitrary `top-[var(...)]`
+   * because Turbopack's CSS extraction occasionally drops complex
+   * `var()` defaults inside arbitrary values, leaving the chat
+   * incorrectly positioned. The class is mobile-scoped so desktop's
+   * `sm:relative` flow layout is unaffected.
+   *
+   * `top` reads `--playbook-content-top` (set by the parent's
+   * ResizeObserver in ui.tsx after measuring the sticky banner) with
+   * a 96px fallback for the first paint before the layout effect runs.
+   * `bottom` is 60px above the bottom nav's top edge — enough room
+   * that the input doesn't crowd the nav, plus the home-indicator
+   * safe area so it clears the iPhone notch / Android gesture bar. */
+  .messages-mobile-fixed {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--playbook-content-top, 96px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+    z-index: 10;
+  }
+}
+
+/* Field viewport height cap on desktop — keeps the diagram in view
+ * alongside the toolbar + sidebar on wide screens. We cap HEIGHT only
+ * (and let aspect-ratio + the natural column width drive the rendered
+ * width) so the field stays the same width as the toolbar above it.
+ * Capping width independently would make the field narrower than its
+ * toolbar — visually mismatched. Game mode opts out via
+ * `.game-mode-field` (rule below). */
+@media (min-width: 640px) {
+  .field-viewport {
+    max-height: min(60dvh, 420px);
+  }
+}
+
+/* Play-editor content wrapper: caps the ENTIRE editor stack — back
+ * link, header bar, grid (field column + sidebar) — to a width that
+ * fits the field at its natural max size. Without this, the field
+ * shrinks via its own max-height while the surrounding chrome stays
+ * at the layout's full max-w-6xl width, leaving:
+ *  - a visible gap between the field column and the right sidebar,
+ *  - the header bar / "+ New play" button drifting out past the
+ *    field's right edge, breaking visual alignment.
+ *
+ * `--field-aspect` is set on the wrapper from PlayEditorClient.tsx and
+ * mirrors the runtime fieldAspect prop. `mx-auto` centers the wrapper
+ * within the editor layout's max-w-6xl shell on very wide monitors.
+ *
+ * Width math:
+ *  - field_max_width = min(<height_cap>, <dvh_cap>) × field_aspect
+ *  - On `lg:` (sidebar visible) we add 320px sidebar + 20px gap-5
+ *    so the wrapper is exactly column + gap + sidebar wide.
+ *  - Below `lg:` the sidebar wraps under the column, so the wrapper
+ *    just matches the field's width.
+ *
+ * Height caps mirror `.field-viewport` (320px on mobile, 420px on
+ * desktop) so the wrapper width tracks the actual rendered field. */
+.play-editor-content {
+  margin-left: auto;
+  margin-right: auto;
+}
+@media (max-width: 639px) {
+  .play-editor-content {
+    max-width: calc(min(42dvh, 320px) * var(--field-aspect, 1.6));
+  }
+}
+@media (min-width: 640px) {
+  .play-editor-content {
+    max-width: calc(min(60dvh, 420px) * var(--field-aspect, 1.6));
+  }
+}
+@media (min-width: 1024px) {
+  .play-editor-content {
+    max-width: calc(
+      (min(60dvh, 420px) * var(--field-aspect, 1.6)) + 340px
+    );
   }
 }
 

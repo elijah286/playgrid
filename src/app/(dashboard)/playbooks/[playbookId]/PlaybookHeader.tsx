@@ -545,17 +545,20 @@ export function PlaybookHeader({
               </button>
             )}
             {(coachAiAvailable || showCoachCalPromo) && (
-              <div className="sm:hidden">
+              // Hidden launcher — kept mounted on mobile so its
+              // acceptGlobalCommands listener catches `coach-cal:open`
+              // events fired by the bottom-nav Cal button (and other
+              // inline CTAs). The visible Cal entry point on mobile
+              // playbook lives in the bottom nav now; SiteHeader's
+              // launcher handles desktop. Display:none doesn't unmount
+              // the component, so the listener and portal-rendered
+              // dialog continue to work.
+              <div className="hidden">
                 <CoachAiLauncher
                   isAdmin={isAdmin ?? false}
                   entitled={coachAiAvailable ?? false}
                   playbookId={playbookId}
                   evalDays={coachAiEvalDays}
-                  // Accept global open events — the bottom-nav Cal FAB
-                  // dispatches `coach-cal:open` and we want THIS launcher
-                  // (with playbookId context) to catch it on mobile, not
-                  // the SiteHeader launcher which is hidden on playbook
-                  // routes anyway.
                   acceptGlobalCommands
                 />
               </div>

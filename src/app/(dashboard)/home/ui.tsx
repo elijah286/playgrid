@@ -1757,7 +1757,6 @@ export function DashboardClient({
         showCalendar={teamCalendarAvailable}
         inboxCount={inboxCount}
         inboxUrgent={inboxUrgent}
-        showCoachCal={coachAiAvailable || showCoachCalPromo}
       />
     </div>
   );

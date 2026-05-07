@@ -43,6 +43,15 @@ type Props = {
   onToggleGroup?: (groupId: string | null, next: boolean) => void;
   triggerClassName?: string;
   onNavigatePlay?: (playId: string) => void;
+  /** Optional controlled open state — lets external triggers (e.g. the
+   *  mobile editor's bottom-nav Plays button) drive the picker. When
+   *  provided alongside `onOpenChange`, the internal trigger button can
+   *  be suppressed via `hideTrigger`. */
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
+  /** Suppress the built-in "All plays" trigger button — use when an
+   *  external trigger drives the picker via `open`/`onOpenChange`. */
+  hideTrigger?: boolean;
 };
 
 export function PlaybookPlaySearchMenu({
@@ -55,8 +64,17 @@ export function PlaybookPlaySearchMenu({
   onToggleGroup,
   triggerClassName,
   onNavigatePlay,
+  open: openProp,
+  onOpenChange,
+  hideTrigger,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const resolved = typeof next === "function" ? next(open) : next;
+    if (onOpenChange) onOpenChange(resolved);
+    if (openProp === undefined) setOpenState(resolved);
+  };
   const [q, setQ] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [typeFilter, setTypeFilter] = useState<"all" | "offense" | "defense" | "special_teams">("all");
@@ -207,28 +225,53 @@ export function PlaybookPlaySearchMenu({
 
   return (
     <div ref={rootRef} className="relative">
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="secondary"
-        size="sm"
-        rightIcon={ChevronDown}
-        className={cn("max-w-[220px] truncate", triggerClassName)}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {printMode ? "Plays in print" : "All plays"}
-      </Button>
+      {!hideTrigger && (
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="secondary"
+          size="sm"
+          rightIcon={ChevronDown}
+          className={cn("max-w-[220px] truncate", triggerClassName)}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {printMode ? "Plays in print" : "All plays"}
+        </Button>
+      )}
+      {open && hideTrigger && (
+        // Triggerless mode (mobile bottom-nav Plays button) — render
+        // a tap-anywhere backdrop behind the panel so taps outside
+        // close it. Anchored-trigger mode uses click-outside detection
+        // via the document listener instead.
+        <button
+          type="button"
+          aria-label="Close"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm sm:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
       {open && (
         <div
           ref={panelRef}
           style={
-            mobileTop != null
-              ? { top: mobileTop }
-              : desktopPos
-                ? { left: desktopPos.left, top: desktopPos.top, width: desktopPos.width }
-                : undefined
+            hideTrigger
+              ? undefined
+              : mobileTop != null
+                ? { top: mobileTop }
+                : desktopPos
+                  ? { left: desktopPos.left, top: desktopPos.top, width: desktopPos.width }
+                  : undefined
           }
-          className="fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:inset-x-auto"
+          className={
+            hideTrigger
+              ? // Triggerless: full-height sheet on mobile, anchored
+                // top-to-just-above-footer-nav. Height is driven by the
+                // top/bottom values, not by a fixed `h-` class — so the
+                // sheet adapts to viewport size and the footer stays
+                // visible underneath.
+                "fixed inset-x-0 top-0 bottom-[calc(env(safe-area-inset-bottom,0px)+52px)] z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-surface-raised shadow-2xl animate-in slide-in-from-bottom duration-200 sm:hidden"
+              : "fixed inset-x-2 z-30 overflow-hidden rounded-xl border border-border bg-surface-raised shadow-elevated sm:inset-x-auto"
+          }
         >
           <div className="border-b border-border p-2">
             <div className="flex items-center gap-2">

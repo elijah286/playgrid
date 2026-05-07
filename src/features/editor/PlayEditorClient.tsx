@@ -92,6 +92,9 @@ type Props = {
    *  chrome banner so coaches keep visual continuity with the playbook
    *  page they came from. Falls back to brand orange when missing. */
   playbookColor?: string | null;
+  /** Team / playbook logo URL — shown as the avatar in the slim chrome.
+   *  Falls back to the first letter of the playbook name when null. */
+  playbookLogoUrl?: string | null;
   initialDocument: PlayDocument;
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
@@ -131,6 +134,14 @@ type Props = {
    *  SiteHeader: entitled = available, otherwise show the promo. */
   coachAiAvailable?: boolean;
   showCoachCalPromo?: boolean;
+  /** Drives which links appear in the editor footer's "More" sheet —
+   *  same beta-feature flags the playbook page uses to decide which
+   *  tabs render. The editor doesn't host these tabs itself; the sheet
+   *  links the user back to the playbook with the right tab. */
+  teamCalendarAvailable?: boolean;
+  teamMessagingAvailable?: boolean;
+  gameResultsAvailable?: boolean;
+  practicePlansAvailable?: boolean;
   /** ID of the hidden custom-opponent play attached to this play, if any.
    *  When present, the opposing-side players in `vs_play_snapshot` are
    *  drag-editable (they back this hidden play). */
@@ -160,6 +171,7 @@ function PlayEditorClientInner({
   playbookId,
   playbookName,
   playbookColor = null,
+  playbookLogoUrl = null,
   initialDocument,
   initialNav,
   initialGroups,
@@ -177,6 +189,10 @@ function PlayEditorClientInner({
   canUseGameMode = false,
   coachAiAvailable = false,
   showCoachCalPromo = false,
+  teamCalendarAvailable = false,
+  teamMessagingAvailable = false,
+  gameResultsAvailable = false,
+  practicePlansAvailable = false,
   initialCustomOpponentPlayId = null,
   initialOpponentHidden = false,
 }: Props) {
@@ -1138,7 +1154,19 @@ function PlayEditorClientInner({
   return (
     <div
       ref={rootRef}
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0"
+      // `play-editor-content` (defined in globals.css) caps this wrapper
+      // — and therefore everything inside it: back link, EditorHeaderBar,
+      // EditorPlaybookChrome, and the grid below — to a width that
+      // matches the field at its natural max size. Lifting the cap to
+      // this level (instead of the inner field-column) keeps the header
+      // bar and "+ New play" button right-aligned with the field's
+      // right edge, and removes the gap that opened up between the
+      // column and the right sidebar when the column was capped alone.
+      // `--field-aspect` lives here so the CSS calc sees the runtime
+      // ratio; the field-viewport child still publishes its own copy
+      // for the existing `.field-viewport` @media rules.
+      className="play-editor-content relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0"
+      style={{ ["--field-aspect" as string]: String(fieldAspect) }}
     >
       {/* Mobile-only slim playbook banner. Replaces the SiteHeader
           (hidden via editor-hide-site-header on mobile editor) and gives
@@ -1148,7 +1176,7 @@ function PlayEditorClientInner({
         playbookId={playbookId}
         playbookName={playbookName ?? null}
         playbookColor={playbookColor}
-        showCoachCal={coachAiAvailable || showCoachCalPromo}
+        playbookLogoUrl={playbookLogoUrl}
       />
       {isNavPending && (
         <div
@@ -1240,6 +1268,11 @@ function PlayEditorClientInner({
       {/* Routes */}
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-h-[260px] min-w-0 flex-col gap-3 sm:min-h-[420px]">
+            {/* No max-width on this inner column — the parent
+                `.play-editor-content` wrapper already caps the entire
+                editor stack to match the field's natural width, so the
+                column naturally fills its grid cell exactly (column =
+                field width on `lg:`, full content on smaller). */}
             {/* Touch-only Edit/Done toggle. Sits directly above the field
                 so coaches on phones / tablets can flip between viewing and
                 editing without hunting through the UI. Pointer-and-keyboard
@@ -1390,8 +1423,10 @@ function PlayEditorClientInner({
                 // (~60px tall) in both modes on mobile, so the field
                 // pins just below it. We reuse --site-header-height for
                 // the offset since the banner replaces the site header
-                // and matches its vertical height.
-                `field-viewport relative mx-auto w-full overflow-hidden bg-surface-inset sticky top-[var(--site-header-height,61px)] z-10 sm:relative sm:top-auto sm:z-auto ${
+                // and matches its vertical height. z-20 keeps the field
+                // above any opponent picker / play list scrolling
+                // beneath, so the diagram stays the visual focus.
+                `field-viewport relative mx-auto w-full overflow-hidden rounded-xl bg-surface-inset sticky top-[var(--site-header-height,61px)] z-20 sm:relative sm:top-auto sm:z-auto ${
                   !canEdit || (isTouchDevice && mode === "view")
                     ? "pointer-events-none select-none"
                     : ""
@@ -1682,13 +1717,18 @@ function PlayEditorClientInner({
         onClose={() => setGameLock(null)}
       />
 
-      {/* Mobile-only footer with back-to-playbook tabs and a center Cal
-          FAB. Mirrors the pattern on the playbook + lobby pages so the
-          editor doesn't feel like a dead-end and Cal stays one tap
-          away. */}
+      {/* Mobile-only footer. Same shape as PlaybookBottomNav. Tabs that
+          aren't Cal navigate the page (no overlays) — Plays goes back
+          to the playbook's plays tab; Cal slides up over the page. */}
       <EditorBottomNav
         playbookId={playbookId}
         showCoachCal={coachAiAvailable || showCoachCalPromo}
+        available={{
+          calendar: teamCalendarAvailable,
+          games: gameResultsAvailable,
+          practicePlans: practicePlansAvailable,
+          messages: teamMessagingAvailable,
+        }}
       />
     </div>
   );

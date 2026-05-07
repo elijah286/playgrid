@@ -1,34 +1,75 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ListChecks, Users } from "lucide-react";
-import { CoachAiIcon } from "@/features/coach-ai/CoachAiIcon";
-import { openCoachCal } from "@/features/coach-ai/openCoachCal";
+import { useRouter } from "next/navigation";
+import {
+  Calendar,
+  ClipboardList,
+  Layers,
+  ListChecks,
+  MessageCircle,
+  MoreHorizontal,
+  Trophy,
+  Users,
+} from "lucide-react";
+import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 
 /**
- * Mobile-only footer for the play editor. Mirrors the bottom-nav pattern
- * coaches see on the playbook page so the editor doesn't feel like a
- * dead-end. Tapping a tab routes back to the playbook with that tab
- * pre-selected; the center Cal FAB opens Coach Cal in-place.
+ * Mobile-only footer for the play editor — mirrors PlaybookBottomNav's
+ * structure (Plays · Cal · Game · More) so coaches see the same nav on
+ * both surfaces. Differences vs. the playbook nav:
  *
- * Kept narrow on purpose — only Plays + Roster (always-available tabs).
- * Calendar / Messages availability is per-playbook and the editor
- * doesn't fetch playbook beta-feature config, so we leave those tabs
- * to the playbook's own bottom nav once the user navigates back.
+ *   - Plays  → opens the all-plays picker IN-EDITOR (parent renders a
+ *              hidden controlled PlaybookPlaySearchMenu).
+ *   - More   → opens a sheet with links back to the playbook's other
+ *              tabs (Roster, Calendar, Messages, Formations, Practice,
+ *              Results) — the editor itself doesn't host those tabs.
  */
 export function EditorBottomNav({
   playbookId,
   showCoachCal,
+  available,
 }: {
   playbookId: string;
-  /** Render the Cal FAB. Hidden when the user has no Cal access. */
   showCoachCal: boolean;
+  available: {
+    calendar: boolean;
+    games: boolean;
+    practicePlans: boolean;
+    messages: boolean;
+  };
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const router = useRouter();
+
+  // Prefetch the playbook page on mount so tapping "Plays" (or any
+  // other tab) feels as instant as a tab toggle on the playbook page
+  // itself. Next.js's automatic Link prefetching is gated by
+  // viewport intersection + production mode, so explicit warming is
+  // the most reliable way to get the playbook RSC into the cache
+  // before the user taps. Re-runs if `playbookId` changes (rare).
+  useEffect(() => {
+    router.prefetch(`/playbooks/${playbookId}?tab=plays`);
+    if (available.messages) {
+      router.prefetch(`/playbooks/${playbookId}?tab=messages`);
+    }
+  }, [router, playbookId, available.messages]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
+
   return (
     <>
       <nav
         aria-label="Playbook sections"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-base/95 shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-surface-base/80 sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
       >
         <NavLink
@@ -36,29 +77,62 @@ export function EditorBottomNav({
           label="Plays"
           Icon={ListChecks}
         />
-        <NavLink
-          href={`/playbooks/${playbookId}?tab=roster`}
-          label="Roster"
-          Icon={Users}
+        {available.messages && (
+          <NavLink
+            href={`/playbooks/${playbookId}?tab=messages`}
+            label="Chat"
+            Icon={MessageCircle}
+          />
+        )}
+        {showCoachCal && <CalNavButton />}
+        {available.calendar && (
+          <NavLink
+            href={`/playbooks/${playbookId}?tab=calendar`}
+            label="Calendar"
+            Icon={Calendar}
+          />
+        )}
+        <NavButton
+          onClick={() => setMoreOpen(true)}
+          label="More"
+          Icon={MoreHorizontal}
         />
       </nav>
 
-      {showCoachCal && (
-        <button
-          type="button"
-          onClick={() => openCoachCal()}
-          aria-label="Open Coach Cal"
-          title="Coach Cal"
-          className="fixed left-1/2 z-40 inline-flex size-14 -translate-x-1/2 items-center justify-center rounded-full shadow-elevated ring-2 ring-surface-base transition-transform active:scale-95 sm:hidden"
-          style={{
-            bottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
-            background: "linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%)",
-          }}
-        >
-          <CoachAiIcon className="size-8" />
-        </button>
+      {moreOpen && (
+        <MoreSheet
+          playbookId={playbookId}
+          available={available}
+          onClose={() => setMoreOpen(false)}
+        />
       )}
     </>
+  );
+}
+
+function NavButton({
+  onClick,
+  label,
+  Icon,
+  isActive,
+}: {
+  onClick: () => void;
+  label: string;
+  Icon: React.ElementType;
+  isActive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={isActive ? "true" : undefined}
+      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-colors ${
+        isActive ? "text-primary" : "text-muted hover:text-foreground"
+      }`}
+    >
+      <Icon className="size-5" aria-hidden />
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 
@@ -79,5 +153,89 @@ function NavLink({
       <Icon className="size-5" aria-hidden />
       <span className="truncate">{label}</span>
     </Link>
+  );
+}
+
+function MoreSheet({
+  playbookId,
+  available,
+  onClose,
+}: {
+  playbookId: string;
+  available: {
+    calendar: boolean;
+    games: boolean;
+    practicePlans: boolean;
+    messages: boolean;
+  };
+  onClose: () => void;
+}) {
+  const items: { label: string; href: string; Icon: React.ElementType }[] = [];
+  if (available.calendar) {
+    items.push({
+      label: "Calendar",
+      href: `/playbooks/${playbookId}?tab=calendar`,
+      Icon: Calendar,
+    });
+  }
+  // Messages is in the primary footer row when available, so it doesn't
+  // appear here too (avoid duplication).
+  items.push({
+    label: "Roster",
+    href: `/playbooks/${playbookId}?tab=roster`,
+    Icon: Users,
+  });
+  items.push({
+    label: "Formations",
+    href: `/playbooks/${playbookId}?tab=formations`,
+    Icon: Layers,
+  });
+  if (available.games) {
+    items.push({
+      label: "Results",
+      href: `/playbooks/${playbookId}?tab=games`,
+      Icon: Trophy,
+    });
+  }
+  if (available.practicePlans) {
+    items.push({
+      label: "Practice Plans",
+      href: `/playbooks/${playbookId}?tab=practice_plans`,
+      Icon: ClipboardList,
+    });
+  }
+
+  // Overflow popover — anchored above the More button (right-bottom),
+  // sized to its content. Mirrors PlaybookBottomNav's MoreSheet.
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Close"
+        className="fixed inset-0 z-40 sm:hidden"
+        onClick={onClose}
+      />
+      <div
+        role="menu"
+        aria-label="More playbook sections"
+        className="fixed right-2 z-40 w-56 animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-black/10 bg-surface-raised p-1 shadow-elevated duration-150 sm:hidden"
+        style={{
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)",
+        }}
+      >
+        {items.map((it) => (
+          <Link
+            key={it.href}
+            href={it.href}
+            role="menuitem"
+            onClick={onClose}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+          >
+            <it.Icon className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 text-left">{it.label}</span>
+          </Link>
+        ))}
+      </div>
+    </>
   );
 }

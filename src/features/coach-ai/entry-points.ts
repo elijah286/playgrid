@@ -55,7 +55,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ],
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
-    ctaLabel: "Generate notes with Coach Cal",
+    ctaLabel: "Generate notes",
   },
   playbook_generate_play: {
     id: "playbook_generate_play",
@@ -72,7 +72,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ],
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
-    ctaLabel: "Generate plays with Coach Cal",
+    ctaLabel: "Generate plays",
   },
   play_suggest_counter: {
     id: "play_suggest_counter",
@@ -89,7 +89,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ],
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
-    ctaLabel: "Suggest a counter with Coach Cal",
+    ctaLabel: "Suggest a counter",
   },
   playbook_generate_starter: {
     id: "playbook_generate_starter",
@@ -106,7 +106,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ],
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
-    ctaLabel: "Generate a starter playbook with Coach Cal",
+    ctaLabel: "Generate a starter playbook",
   },
   playbook_generate_practice_plan: {
     id: "playbook_generate_practice_plan",
@@ -123,7 +123,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ],
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
-    ctaLabel: "Generate a practice plan with Coach Cal",
+    ctaLabel: "Generate a practice plan",
   },
   playbook_schedule_season: {
     id: "playbook_schedule_season",
@@ -140,7 +140,7 @@ export const ENTRY_POINTS: Record<CoachCalEntryPointId, EntryPointConfig> = {
       ],
       ctaLabelTemplate: "Start ${evalDays}-day free trial",
     },
-    ctaLabel: "Schedule the season with Coach Cal",
+    ctaLabel: "Schedule the season",
   },
 };
 

@@ -115,7 +115,6 @@ import type {
   ViewerProfile,
 } from "@/features/messages/useMessageStream";
 import { PlaybookBottomNav } from "./PlaybookBottomNav";
-import { MobileCreatePlayFab } from "./MobileCreatePlayFab";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import { TrashDrawer } from "@/features/versions/TrashDrawer";
 import type { Player, PlayType, Route, SpecialTeamsUnit, SportVariant, Zone } from "@/domain/play/types";
@@ -592,11 +591,45 @@ function PlaybookDetailClientInner({
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersPanelRef = useRef<HTMLDivElement | null>(null);
+  const stickyBannerRef = useRef<HTMLDivElement | null>(null);
+
+  // Publish the sticky banner's bottom edge as a CSS variable so children
+  // (currently the Messages tab on mobile) can anchor themselves directly
+  // below it, regardless of how many banners stack inside (Pending
+  // approvals, Build-your-own, Share-first all live in the sticky region).
+  // Without this, hardcoded offsets push the chat input below the
+  // viewport on coaches who have any of those banners visible.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const el = stickyBannerRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      document.documentElement.style.setProperty(
+        "--playbook-content-top",
+        `${Math.round(rect.bottom)}px`,
+      );
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      document.documentElement.style.removeProperty("--playbook-content-top");
+    };
+  }, []);
   const [viewMode, setViewMode] = useState<"cards" | "list">(
     initialPrefs?.viewMode === "list" ? "list" : "cards",
   );
   const [thumbSize, setThumbSize] = useState<ThumbSize>(
-    (initialPrefs?.thumbSize as ThumbSize | undefined) ?? "medium",
+    // Default to small so mobile coaches see ~2 cards per row out of the
+    // box. Desktop users with a screen wider than ~640px who prefer
+    // bigger thumbnails can switch to Md/Lg once and the pref persists.
+    (initialPrefs?.thumbSize as ThumbSize | undefined) ?? "small",
   );
   const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
     typeof initialPrefs?.showPlayNumbers === "boolean"
@@ -1287,7 +1320,7 @@ function PlaybookDetailClientInner({
           siblings (tab content) in their natural flow position with no
           overlap. Solid bg (not blur) avoids the "appearing header"
           flicker when scroll begins. */}
-      <div className="sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-0 pt-3 sm:pb-4">
+      <div ref={stickyBannerRef} className="sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-3 pt-3 sm:pb-4">
       {/* pb-0 on mobile so the chat / calendar / roster tabs sit flush
           below the orange banner — no top tabs there to pad against.
           Desktop keeps pb-4 for breathing room with the visible top tabs. */}
@@ -1485,18 +1518,27 @@ function PlaybookDetailClientInner({
         </div>
 
         {tab === "plays" && !(initialPlays.length === 0 && !isViewer && !isPreview) && (
-        /* Slim top bar: type tabs, search, filters, print, new.
-           Suppressed for brand-new owners (zero plays) — the FirstPlayHero
-           below is the only action that makes sense there, and showing
-           Print/Game/Search invites confused taps that go to nothing or
-           bounce to /pricing (game mode upgrade dialog). */
-        <div className="flex flex-wrap items-end gap-3">
-          {/* Type filter: SegmentedControl on tablet+, compact native select
-              on mobile so the toolbar fits comfortably with the search field
-              and Game button beside it. The native select opens the OS
-              picker (iOS sheet / Android dropdown) — minimal markup, max
-              thumb-friendliness. */}
-          <div className="hidden sm:block">
+        /* Slim top bar: type tabs, search, filters, select, reorder,
+           print, game, new play. All actions are on the same row at
+           every breakpoint — on mobile the row wraps so the action
+           buttons appear in their own line beneath search/filter.
+           Suppressed for brand-new owners (zero plays) — the
+           FirstPlayHero below is the only action that makes sense
+           there, and showing the action buttons invites confused taps
+           that go nowhere or bounce to /pricing. */
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
+          {/* Mobile: row 1 = action buttons only (Filter, Select, Reorder,
+              Print, Game, New play). The TypeFilterMenu has been moved
+              into row 2 alongside Search (see below) so this row stays
+              narrow and the New play button never word-wraps. The
+              wrapper uses `sm:contents` so on desktop these children
+              pass through to the outer flex-wrap row alongside the
+              SegmentedControl + Search at their `sm:order` positions. */}
+          <div className="flex items-end gap-2 sm:contents">
+          {/* Type filter: SegmentedControl on tablet+ only. The mobile
+              equivalent (TypeFilterMenu) lives in the row-2 wrapper
+              below so it sits beside the search field on phones. */}
+          <div className="hidden sm:order-1 sm:block">
             <SegmentedControl
               value={typeFilter}
               onChange={(v) => setTypeFilter(v as PlayType | "all")}
@@ -1516,33 +1558,7 @@ function PlaybookDetailClientInner({
               }
             />
           </div>
-          <TypeFilterMenu
-            value={typeFilter}
-            onChange={(v) => setTypeFilter(v)}
-            options={
-              variant === "tackle_11"
-                ? [
-                    { value: "all", label: "All plays" },
-                    { value: "offense", label: "Offense" },
-                    { value: "defense", label: "Defense" },
-                    { value: "special_teams", label: "Special teams" },
-                  ]
-                : [
-                    { value: "all", label: "All plays" },
-                    { value: "offense", label: "Offense" },
-                    { value: "defense", label: "Defense" },
-                  ]
-            }
-          />          <div className="min-w-0 flex-1">
-            <Input
-              leftIcon={Search}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search plays…"
-            />
-          </div>
-
-          <div ref={filtersPanelRef} className="relative">
+          <div ref={filtersPanelRef} className="relative sm:order-3">
             {/* Filters button: icon-only across breakpoints to keep the
                 toolbar compact and let the search input breathe. The "•"
                 badge signals active filters. */}
@@ -1563,7 +1579,13 @@ function PlaybookDetailClientInner({
               <div
                 role="dialog"
                 aria-label="Play filters"
-                className="absolute right-0 top-full z-30 mt-2 w-[280px] space-y-4 rounded-xl border border-border bg-surface-raised p-4 shadow-elevated"
+                // Anchor left on mobile (Filter button sits at the
+                // left edge of the action-buttons row, so a
+                // right-anchored popover would extend off-screen to
+                // the left). Desktop keeps right-anchoring since the
+                // Filter button is mid-toolbar there with plenty of
+                // room to its left.
+                className="absolute left-0 top-full z-30 mt-2 w-[280px] space-y-4 rounded-xl border border-border bg-surface-raised p-4 shadow-elevated sm:left-auto sm:right-0"
               >
                 <div>
                   <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
@@ -1659,10 +1681,6 @@ function PlaybookDetailClientInner({
             )}
           </div>
 
-          {/* Desktop: Select / Reorder / Print / Game / New play as dedicated buttons.
-              Mobile: all of these live in the team-banner kebab menu so the
-              toolbar stays focused on viewing and filtering plays. Reorder
-              isn't exposed on mobile — drag-to-reorder is a desktop gesture. */}
           <Button
             variant={selectionMode ? "primary" : "secondary"}
             leftIcon={CheckSquare}
@@ -1677,7 +1695,7 @@ function PlaybookDetailClientInner({
             }}
             aria-label={selectionMode ? "Cancel selection" : "Select plays"}
             title={selectionMode ? "Cancel selection" : "Select plays"}
-            className="hidden px-2.5 sm:inline-flex"
+            className="px-2.5 sm:order-4"
           >
             <span className="sr-only">{selectionMode ? "Cancel" : "Select"}</span>
           </Button>
@@ -1695,11 +1713,14 @@ function PlaybookDetailClientInner({
             }}
             aria-label={reorderMode ? "Done reordering" : "Reorder plays"}
             title={reorderMode ? "Done reordering" : "Reorder plays"}
-            className="hidden px-2.5 sm:inline-flex"
+            className="px-2.5 sm:order-5"
           >
             {reorderMode && <span>Done</span>}
           </Button>
-          <Link href={`/playbooks/${playbookId}/print`} className="hidden sm:inline-flex">
+          <Link
+            href={`/playbooks/${playbookId}/print`}
+            className="sm:order-6"
+          >
             <Button
               variant="secondary"
               leftIcon={Printer}
@@ -1708,14 +1729,13 @@ function PlaybookDetailClientInner({
               className="px-2.5"
             />
           </Link>
-          {/* Game mode button. On every viewport — laptop sideliners on
-              desktop, the primary sideline entry on mobile. Hidden when the
-              beta feature is off for this user. */}
+          {/* Game mode button — visible at every breakpoint when the
+              beta feature is on for this user. */}
           {gameModeAvailable && (
             canUseGameMode ? (
               <Link
                 href={`/playbooks/${playbookId}/game`}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
+                className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0"
                 aria-label="Game mode"
               >
                 <Gamepad2 className="size-4" />
@@ -1725,7 +1745,7 @@ function PlaybookDetailClientInner({
               <button
                 type="button"
                 onClick={() => setGameModeUpgradeOpen(true)}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover"
+                className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0"
                 aria-label="Game mode"
               >
                 <Gamepad2 className="size-4" />
@@ -1739,10 +1759,48 @@ function PlaybookDetailClientInner({
             loading={creating}
             onClick={openFormationPicker}
             title={isViewer ? "Viewers can't create plays" : undefined}
-            className={`hidden sm:inline-flex${isViewer ? " opacity-60" : ""}`}
+            className={`sm:order-8 sm:ml-0 ${
+              gameModeAvailable ? "" : "ml-auto"
+            } ${isViewer ? "opacity-60" : ""}`}
           >
             New play
           </Button>
+          </div>
+          {/* Mobile: row 2 = TypeFilterMenu + Search. Putting the type
+              filter beside search (instead of with the action buttons
+              above) keeps row 1 narrow enough that the New play button
+              doesn't word-wrap on phones. The wrapper is `sm:contents`
+              so on desktop the children become siblings of the row-1
+              items at their `sm:order` positions — preserving the
+              single-row desktop layout. */}
+          <div className="flex items-end gap-2 sm:contents">
+            <TypeFilterMenu
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v)}
+              options={
+                variant === "tackle_11"
+                  ? [
+                      { value: "all", label: "All plays" },
+                      { value: "offense", label: "Offense" },
+                      { value: "defense", label: "Defense" },
+                      { value: "special_teams", label: "Special teams" },
+                    ]
+                  : [
+                      { value: "all", label: "All plays" },
+                      { value: "offense", label: "Offense" },
+                      { value: "defense", label: "Defense" },
+                    ]
+              }
+            />
+            <div className="min-w-0 flex-1 sm:order-2 sm:flex-1">
+              <Input
+                leftIcon={Search}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search plays…"
+              />
+            </div>
+          </div>
         </div>
         )}
       </div>
@@ -1872,7 +1930,7 @@ function PlaybookDetailClientInner({
                   <CoachCalCTA
                     entryPoint="playbook_generate_starter"
                     variant="primary"
-                    label="Generate with Coach Cal"
+                    label="Generate play"
                     className="whitespace-nowrap"
                   />
                 </div>
@@ -2857,23 +2915,9 @@ function PlaybookDetailClientInner({
           }
         />
       )}
-      {/* Mobile-only FAB for creating a new play. Only shows on the Plays
-          tab — on other tabs the bottom nav is the primary action surface
-          and a creation FAB would be context-confusing (e.g. on Roster,
-          tapping + would create a play, not invite a member).
-          Suppressed in preview mode (example playbooks can't persist
-          plays) and on the empty-state hero (FirstPlayHero already has
-          a prominent "Draw your first play" CTA). */}
-      {!isPreview && tab === "plays" && initialPlays.length > 0 && (
-        <MobileCreatePlayFab
-          onPickFormation={openFormationPicker}
-          isViewer={isViewer}
-          creating={creating}
-          showCoachCal={
-            headerProps.coachAiAvailable || headerProps.showCoachCalPromo
-          }
-        />
-      )}
+      {/* The floating "+ New play" FAB was promoted to a full-width
+          button in the toolbar row above (alongside Game) so coaches
+          don't have to chase a corner FAB on tap. */}
     </div>
   );
 }
@@ -5018,7 +5062,7 @@ function FirstPlayHero({
             <CoachCalCTA
               entryPoint="playbook_generate_starter"
               variant="primary"
-              label="Generate with Coach Cal"
+              label="Generate play"
               className="h-12 w-full min-w-[260px] justify-center whitespace-nowrap rounded-full px-6 text-sm font-bold sm:w-auto"
             />
             <p className="mt-2 text-xs text-muted">Coach Pro — done in seconds.</p>
