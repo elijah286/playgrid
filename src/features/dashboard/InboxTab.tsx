@@ -44,7 +44,8 @@ type FilterKind =
   | "rsvp"
   | "roster"
   | "comments"
-  | "shares";
+  | "shares"
+  | "system";
 type ViewMode = "pending" | "resolved";
 
 /** Lower bucket = more urgent. Drives default sort and the inbox tab's red badge. */
@@ -66,6 +67,9 @@ function urgencyBucket(a: InboxAlert): number {
     return 5;
   }
   if (a.kind === "mention") return 6;
+  // Admin system notices are informational and shouldn't drive the red
+  // badge — drop them to the bottom of the urgency sort.
+  if (a.kind === "admin_notice") return 8;
   return 7; // share + anything else
 }
 
@@ -87,15 +91,22 @@ function matchesFilter(a: InboxAlert, f: FilterKind): boolean {
     );
   if (f === "comments") return a.kind === "mention";
   if (f === "shares") return a.kind === "share";
+  if (f === "system") return a.kind === "admin_notice";
   return false;
 }
+
+const ADMIN_SYSTEM_NOTICES_KEY = "inbox.showAdminNotices";
 
 export function InboxTab({
   initialAlerts,
   initialActivity = [],
+  isSiteAdmin = false,
 }: {
   initialAlerts: InboxAlert[];
   initialActivity?: ActivityEntry[];
+  /** When true, render the "View system notices" checkbox and surface
+   *  admin_notice rows. Server-side flag — clients can't promote. */
+  isSiteAdmin?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -108,6 +119,23 @@ export function InboxTab({
   const [resolvedLoading, setResolvedLoading] = useState(false);
   const [showRsvps, setShowRsvps] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Admin-only: "View system notices" checkbox state. Default ON;
+  // persisted in localStorage so the choice sticks across reloads.
+  const [showAdminNotices, setShowAdminNotices] = useState(true);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const v = window.localStorage.getItem(ADMIN_SYSTEM_NOTICES_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate persisted preference
+      if (v === "0") setShowAdminNotices(false);
+    } catch {}
+  }, []);
+  const updateShowAdminNotices = (v: boolean) => {
+    setShowAdminNotices(v);
+    try {
+      window.localStorage.setItem(ADMIN_SYSTEM_NOTICES_KEY, v ? "1" : "0");
+    } catch {}
+  };
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -137,9 +165,27 @@ export function InboxTab({
     };
   }, [view, resolved, toast]);
 
+  // Apply the admin "view system notices" toggle before any other
+  // counting/filtering: when off, admin_notice rows are invisible
+  // everywhere (counts, filters, urgency badge).
+  const effectiveAlerts = useMemo(() => {
+    if (isSiteAdmin && !showAdminNotices) {
+      return alerts.filter((a) => a.kind !== "admin_notice");
+    }
+    return alerts;
+  }, [alerts, isSiteAdmin, showAdminNotices]);
+
   const counts = useMemo(() => {
-    const c = { all: 0, billing: 0, rsvp: 0, roster: 0, comments: 0, shares: 0 };
-    for (const a of alerts) {
+    const c = {
+      all: 0,
+      billing: 0,
+      rsvp: 0,
+      roster: 0,
+      comments: 0,
+      shares: 0,
+      system: 0,
+    };
+    for (const a of effectiveAlerts) {
       c.all += 1;
       if (a.kind === "system_alert") c.billing += 1;
       else if (a.kind === "rsvp_pending") c.rsvp += 1;
@@ -151,12 +197,13 @@ export function InboxTab({
         c.roster += 1;
       else if (a.kind === "mention") c.comments += 1;
       else if (a.kind === "share") c.shares += 1;
+      else if (a.kind === "admin_notice") c.system += 1;
     }
     return c;
-  }, [alerts]);
+  }, [effectiveAlerts]);
 
   const visible = useMemo(() => {
-    const filtered = alerts.filter((a) => matchesFilter(a, filter));
+    const filtered = effectiveAlerts.filter((a) => matchesFilter(a, filter));
     const sorted = [...filtered];
     if (sort === "urgency") {
       sorted.sort((a, b) => {
@@ -174,7 +221,7 @@ export function InboxTab({
       sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
     return sorted;
-  }, [alerts, sort, filter]);
+  }, [effectiveAlerts, sort, filter]);
 
   function removeByKey(key: string) {
     setAlerts((prev) => prev.filter((a) => a.key !== key));
@@ -264,11 +311,25 @@ export function InboxTab({
           </h2>
           <p className="text-xs text-muted">
             {view === "pending"
-              ? `${alerts.length} item${alerts.length === 1 ? "" : "s"} waiting across your playbooks.`
+              ? `${effectiveAlerts.length} item${effectiveAlerts.length === 1 ? "" : "s"} waiting across your playbooks.`
               : "History of approvals and rejections."}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isSiteAdmin && (
+            <label
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-surface-inset hover:text-foreground"
+              title="Site-admin operational events: signups, subscription starts/cancels, play milestones."
+            >
+              <input
+                type="checkbox"
+                checked={showAdminNotices}
+                onChange={(e) => updateShowAdminNotices(e.target.checked)}
+                className="size-3.5 accent-primary"
+              />
+              View system notices
+            </label>
+          )}
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
@@ -303,11 +364,11 @@ export function InboxTab({
       </div>
 
       {view === "pending" ? (
-        alerts.length === 0 ? (
+        effectiveAlerts.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
             <Inbox className="mx-auto size-8 text-muted" />
             <h2 className="mt-3 text-base font-bold text-foreground">
-              You're all caught up
+              You&apos;re all caught up
             </h2>
             <p className="mt-1 text-sm text-muted">
               Nothing waiting on you right now. Upcoming events that need an
@@ -361,6 +422,14 @@ export function InboxTab({
                   onClick={() => setFilter("shares")}
                   label="Shares"
                   count={counts.shares}
+                />
+              )}
+              {counts.system > 0 && (
+                <FilterChip
+                  active={filter === "system"}
+                  onClick={() => setFilter("system")}
+                  label="System"
+                  count={counts.system}
                 />
               )}
             </div>
@@ -847,7 +916,8 @@ function AlertRow({
   if (
     alert.kind === "system_alert" ||
     alert.kind === "mention" ||
-    alert.kind === "share"
+    alert.kind === "share" ||
+    alert.kind === "admin_notice"
   ) {
     return <NotificationRow alert={alert} />;
   }
@@ -1099,6 +1169,7 @@ function KindBadge({ kind }: { kind: InboxAlertKind | ResolvedKind }) {
     system_alert: { label: "billing", cls: "bg-danger-light text-danger" },
     mention: { label: "mention", cls: "bg-primary/10 text-primary" },
     share: { label: "share", cls: "bg-secondary/10 text-secondary" },
+    admin_notice: { label: "system", cls: "bg-foreground/10 text-foreground" },
   };
   const { label, cls } = map[kind];
   return (
@@ -1150,6 +1221,8 @@ function titleForKind(kind: InboxAlertKind): string {
       return "You were mentioned";
     case "share":
       return "New from your team";
+    case "admin_notice":
+      return "System notice";
     default:
       return "Notification";
   }

@@ -360,6 +360,9 @@ export async function createPlayAction(
 
   await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
 
+  // 10th-play system notice fires from a play_versions trigger — see
+  // 20260506180000_system_notices.sql.
+
   return { ok: true as const, playId: play.id, versionId: ver.id };
 }
 
