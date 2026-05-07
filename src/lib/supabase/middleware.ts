@@ -142,6 +142,14 @@ function shouldTouchSession(request: NextRequest, pathname: string): boolean {
   return Date.now() - ms >= SESSION_TOUCH_INTERVAL_MS;
 }
 
+/** Upper bound on how long middleware will wait for the session-touch DB
+ *  round-trip. The touch is best-effort bookkeeping — when an iOS tab
+ *  resumes after long idle the underlying TCP connection is often stale
+ *  and the await can hang for tens of seconds rather than rejecting,
+ *  during which the tab paints white. Treat a timeout as ok and skip the
+ *  cookie stamp so the next request retries. */
+const SESSION_TOUCH_TIMEOUT_MS = 2000;
+
 async function maybeTouchSession(input: {
   request: NextRequest;
   response: NextResponse;
@@ -150,17 +158,33 @@ async function maybeTouchSession(input: {
   const deviceId = ensureDeviceId(input.request, input.response);
   const ip = clientIp(input.request);
   const userAgent = input.request.headers.get("user-agent");
+  let timer: ReturnType<typeof setTimeout> | null = null;
   try {
-    const result = await touchUserSession({
-      userId: input.userId,
-      deviceId,
-      ip,
-      userAgent,
-    });
-    if (result.kind === "revoked") return "revoked";
+    const result = await Promise.race<TouchOutcome>([
+      touchUserSession({
+        userId: input.userId,
+        deviceId,
+        ip,
+        userAgent,
+      }).then((r) => ({ kind: "result" as const, result: r })),
+      new Promise<TouchOutcome>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ kind: "timeout" }),
+          SESSION_TOUCH_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    if (result.kind === "timeout") {
+      // Skip the cookie stamp so the next request retries instead of
+      // throttling itself out for the next minute.
+      return "ok";
+    }
+    if (result.result.kind === "revoked") return "revoked";
   } catch {
     // Best-effort: never block navigation if session bookkeeping fails.
     return "ok";
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   input.response.cookies.set(SESSION_TOUCH_COOKIE, String(Date.now()), {
     httpOnly: false,
@@ -170,6 +194,10 @@ async function maybeTouchSession(input: {
   });
   return "ok";
 }
+
+type TouchOutcome =
+  | { kind: "result"; result: Awaited<ReturnType<typeof touchUserSession>> }
+  | { kind: "timeout" };
 
 function ensureDeviceId(request: NextRequest, response: NextResponse): string {
   const existing = request.cookies.get(DEVICE_ID_COOKIE)?.value;
