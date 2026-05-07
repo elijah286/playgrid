@@ -64,37 +64,35 @@ export async function listUsersForAdminAction() {
   });
   if (authErr) return { ok: false as const, error: authErr.message, users: [] };
 
-  const [{ data: profiles }, { data: entitlements }, { data: versionRows }] =
-    await Promise.all([
-      admin
-        .from("profiles")
-        .select("id, display_name, role, created_at, total_seconds_on_site"),
-      admin
-        .from("user_entitlements")
-        .select(
-          "user_id, tier, source, expires_at, comp_grant_id, subscription_id",
-        ),
-      // Distinct (user, play) pairs — matches the per-user stats panel logic.
-      // play_versions is unbounded but rows are small (two uuids each); for
-      // an admin-only page this is acceptable. If it grows past ~100k rows
-      // we can replace this with an RPC that does the aggregation in SQL.
-      admin.from("play_versions").select("created_by, play_id"),
-    ]);
+  // Aggregate distinct (user, play) pairs in SQL via RPC — selecting
+  // play_versions client-side trips PostgREST's max_rows=1000 cap once the
+  // table grows past ~1k rows and silently under-counts users whose
+  // versions fall beyond the truncation point.
+  const [
+    { data: profiles },
+    { data: entitlements },
+    { data: playCountRows },
+  ] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("id, display_name, role, created_at, total_seconds_on_site"),
+    admin
+      .from("user_entitlements")
+      .select(
+        "user_id, tier, source, expires_at, comp_grant_id, subscription_id",
+      ),
+    admin.rpc("admin_play_counts_by_user"),
+  ]);
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   const entMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
 
-  const playsByUser = new Map<string, Set<string>>();
-  for (const r of versionRows ?? []) {
-    const uid = r.created_by as string | null;
-    const pid = r.play_id as string | null;
-    if (!uid || !pid) continue;
-    let set = playsByUser.get(uid);
-    if (!set) {
-      set = new Set();
-      playsByUser.set(uid, set);
-    }
-    set.add(pid);
+  const playsByUser = new Map<string, number>();
+  for (const r of (playCountRows ?? []) as {
+    user_id: string;
+    plays_created: number;
+  }[]) {
+    if (r.user_id) playsByUser.set(r.user_id, r.plays_created);
   }
 
   const users: AdminUserRowData[] = (authData.users ?? []).map((u) => {
@@ -116,7 +114,7 @@ export async function listUsersForAdminAction() {
         typeof pr?.total_seconds_on_site === "number"
           ? (pr.total_seconds_on_site as number)
           : null,
-      playsCreated: playsByUser.get(u.id)?.size ?? 0,
+      playsCreated: playsByUser.get(u.id) ?? 0,
     };
   });
 
