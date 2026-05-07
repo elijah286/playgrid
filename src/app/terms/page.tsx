@@ -17,7 +17,7 @@ export default function TermsPage() {
           <p className="mt-2">
             By creating an account or using XO Gridmaker (the &quot;Service&quot;), you agree to
             these Terms of Service. If you do not agree, do not use the Service.
-            The Service is operated by XO Gridmaker LLC (&quot;XO Gridmaker,&quot; &quot;we,&quot; &quot;us&quot;),
+            The Service is operated by Kerry Software, LLC (&quot;XO Gridmaker,&quot; &quot;we,&quot; &quot;us&quot;),
             a Texas limited liability company.
           </p>
         </section>

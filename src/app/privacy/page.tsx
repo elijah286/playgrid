@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted">
         <section>
           <p>
-            XO Gridmaker LLC (&quot;XO Gridmaker,&quot; &quot;we,&quot; &quot;us&quot;) cares about your privacy. This
+            Kerry Software, LLC (&quot;XO Gridmaker,&quot; &quot;we,&quot; &quot;us&quot;) cares about your privacy. This
             policy explains what we collect, why, and how it&apos;s protected.
           </p>
         </section>
