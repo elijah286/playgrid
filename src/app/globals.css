@@ -113,6 +113,34 @@ body {
   animation: marching-ants 0.6s linear infinite;
 }
 
+/* iOS-style "jiggle" on play tiles in reorder mode. Two keyframes with
+ * slightly different rotations + durations applied alternately to odd/even
+ * children so the grid feels organic instead of uniformly mechanical.
+ * translate3d nudges the animation onto the GPU. */
+@keyframes jiggle {
+  0%   { transform: rotate(-1.2deg) translate3d(0, -1px, 0); }
+  50%  { transform: rotate(1.4deg)  translate3d(0,  1px, 0); }
+  100% { transform: rotate(-1.2deg) translate3d(0, -1px, 0); }
+}
+@keyframes jiggle-alt {
+  0%   { transform: rotate(1.2deg)  translate3d(0,  1px, 0); }
+  50%  { transform: rotate(-1.4deg) translate3d(0, -1px, 0); }
+  100% { transform: rotate(1.2deg)  translate3d(0,  1px, 0); }
+}
+.animate-jiggle {
+  animation: jiggle 0.22s ease-in-out infinite;
+  will-change: transform;
+}
+.animate-jiggle:nth-child(2n) {
+  animation: jiggle-alt 0.18s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-jiggle,
+  .animate-jiggle:nth-child(2n) {
+    animation: none;
+  }
+}
+
 /* Calendar week navigation — slides incoming view up or down so the user
    keeps their bearings as they advance/retreat through weeks. */
 @keyframes calendar-slide-up {

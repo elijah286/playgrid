@@ -626,22 +626,28 @@ function PlaybookDetailClientInner({
     initialPrefs?.viewMode === "list" ? "list" : "cards",
   );
   const [thumbSize, setThumbSize] = useState<ThumbSize>(
-    // Default to small so mobile coaches see ~2 cards per row out of the
-    // box. Desktop users with a screen wider than ~640px who prefer
-    // bigger thumbnails can switch to Md/Lg once and the pref persists.
+    // SSR default stays "small" so phones (which have no JS yet) don't
+    // flash a too-big grid on first paint. Post-hydration the effect
+    // below promotes desktop without a saved pref to "medium".
     (initialPrefs?.thumbSize as ThumbSize | undefined) ?? "small",
   );
-  // Override saved thumbSize → "small" on phones / small displays. A
-  // medium/large pref carried over from desktop puts one big card per
-  // row on a phone, which costs 4+ scrolls to skim a typical playbook.
-  // Coaches can still pick Md/Lg from the filter popover — this only
-  // resets the *initial* render to small, so the page is usable as
-  // soon as it loads. Runs after mount to avoid an SSR/CSR mismatch.
+  // Per-viewport defaults applied once on mount:
+  //   - Mobile (<sm): force "small". A medium/large desktop pref carried
+  //     over to a phone puts one giant card per row, costing 4+ scrolls
+  //     to skim a typical playbook.
+  //   - Desktop without saved pref: promote to "medium". Small thumbs on
+  //     a wide screen leave the right half of the grid empty.
+  // Coaches can still pick any size from the filter popover — this only
+  // resets the *initial* render. Runs after mount to avoid SSR/CSR mismatch.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(max-width: 639px)").matches) {
+    const isMobile = window.matchMedia("(max-width: 639px)").matches;
+    if (isMobile) {
       setThumbSize("small");
+    } else if (!initialPrefs?.thumbSize) {
+      setThumbSize("medium");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount default; ignore prop changes
   }, []);
   const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
     typeof initialPrefs?.showPlayNumbers === "boolean"
@@ -2129,7 +2135,7 @@ function PlaybookDetailClientInner({
                         {...(reorderMode ? attributes : {})}
                         {...(reorderMode && listeners ? listeners : {})}
                         hover
-                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab touch-none select-none active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
+                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab touch-none select-none active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${reorderMode && !isDragging ? "animate-jiggle" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         onClick={
                           selectionMode
                             ? (e) => {
