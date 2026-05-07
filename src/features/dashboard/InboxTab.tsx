@@ -4,12 +4,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowUpRight,
   Calendar,
   Check,
+  CheckSquare,
   Inbox,
   Megaphone,
+  MoreHorizontal,
   Settings,
+  Trash2,
   UserPlus,
   X,
 } from "lucide-react";
@@ -23,7 +28,14 @@ import {
 } from "@/app/actions/playbook-roster";
 import { setRsvpAction } from "@/app/actions/calendar";
 import {
+  archiveAlertAction,
+  bulkArchiveAlertsAction,
+  bulkDeleteAlertsAction,
+  bulkRsvpAction,
+  deleteAlertAction,
   listResolvedInboxEventsAction,
+  unarchiveAlertAction,
+  type AlertRef,
   type InboxAlert,
   type InboxAlertKind,
   type ResolvedInboxEvent,
@@ -46,7 +58,16 @@ type FilterKind =
   | "comments"
   | "shares"
   | "system";
-type ViewMode = "pending" | "resolved";
+/** Top-level inbox segment.
+ *   - active   → not yet archived/deleted; what counts toward the badge
+ *   - archived → user-dismissed but still recoverable
+ *   - all      → active + archived (excludes deleted)
+ *   - resolved → audit log of approvals/denials/RSVPs (different shape) */
+type ViewMode = "active" | "archived" | "all" | "resolved";
+
+function alertRef(a: InboxAlert): AlertRef {
+  return { kind: a.kind, sourceId: a.sourceId };
+}
 
 /** Lower bucket = more urgent. Drives default sort and the inbox tab's red badge. */
 function urgencyBucket(a: InboxAlert): number {
@@ -114,11 +135,16 @@ export function InboxTab({
   const [busy, setBusy] = useState<string | null>(null);
   const [sort, setSort] = useState<SortMode>("urgency");
   const [filter, setFilter] = useState<FilterKind>("all");
-  const [view, setView] = useState<ViewMode>("pending");
+  const [view, setView] = useState<ViewMode>("active");
   const [resolved, setResolved] = useState<ResolvedInboxEvent[] | null>(null);
   const [resolvedLoading, setResolvedLoading] = useState(false);
   const [showRsvps, setShowRsvps] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Multi-select for bulk archive / delete / RSVP. Mirrors the Plays
+  // grid pattern: tap "Select" → checkboxes appear → bulk-action bar
+  // shows over the list. Cancel exits without applying anything.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   // Admin-only: "View system notices" checkbox state. Default ON;
   // persisted in localStorage so the choice sticks across reloads.
   const [showAdminNotices, setShowAdminNotices] = useState(true);
@@ -165,16 +191,45 @@ export function InboxTab({
     };
   }, [view, resolved, toast]);
 
+  // Switching views or leaving select mode clears any pending selection
+  // so the bulk action bar doesn't carry over rows that are no longer
+  // visible.
+  useEffect(() => {
+    setSelectedKeys(new Set());
+  }, [view, selectMode]);
+
   // Apply the admin "view system notices" toggle before any other
   // counting/filtering: when off, admin_notice rows are invisible
   // everywhere (counts, filters, urgency badge).
-  const effectiveAlerts = useMemo(() => {
+  const adminFilteredAlerts = useMemo(() => {
     if (isSiteAdmin && !showAdminNotices) {
       return alerts.filter((a) => a.kind !== "admin_notice");
     }
     return alerts;
   }, [alerts, isSiteAdmin, showAdminNotices]);
 
+  // Active = the items the user hasn't dismissed yet. Drives the badge,
+  // the "Active" view, and the empty-state copy. Archived/all view their
+  // own scoped slices below.
+  const activeAlerts = useMemo(
+    () => adminFilteredAlerts.filter((a) => a.status === "active"),
+    [adminFilteredAlerts],
+  );
+  const archivedAlerts = useMemo(
+    () => adminFilteredAlerts.filter((a) => a.status === "archived"),
+    [adminFilteredAlerts],
+  );
+
+  // Pick the slice that drives the current view.
+  const viewAlerts = useMemo(() => {
+    if (view === "archived") return archivedAlerts;
+    if (view === "all") return adminFilteredAlerts;
+    return activeAlerts;
+  }, [view, adminFilteredAlerts, activeAlerts, archivedAlerts]);
+
+  // Filter chip counts always reflect the *active* view, so the chips
+  // act as a triage tool ("how many things still need me?") regardless
+  // of which segment is open.
   const counts = useMemo(() => {
     const c = {
       all: 0,
@@ -185,7 +240,7 @@ export function InboxTab({
       shares: 0,
       system: 0,
     };
-    for (const a of effectiveAlerts) {
+    for (const a of activeAlerts) {
       c.all += 1;
       if (a.kind === "system_alert") c.billing += 1;
       else if (a.kind === "rsvp_pending") c.rsvp += 1;
@@ -200,10 +255,10 @@ export function InboxTab({
       else if (a.kind === "admin_notice") c.system += 1;
     }
     return c;
-  }, [effectiveAlerts]);
+  }, [activeAlerts]);
 
   const visible = useMemo(() => {
-    const filtered = effectiveAlerts.filter((a) => matchesFilter(a, filter));
+    const filtered = viewAlerts.filter((a) => matchesFilter(a, filter));
     const sorted = [...filtered];
     if (sort === "urgency") {
       sorted.sort((a, b) => {
@@ -221,10 +276,185 @@ export function InboxTab({
       sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
     return sorted;
-  }, [effectiveAlerts, sort, filter]);
+  }, [viewAlerts, sort, filter]);
 
   function removeByKey(key: string) {
     setAlerts((prev) => prev.filter((a) => a.key !== key));
+  }
+
+  function setStatusByKey(key: string, status: InboxAlert["status"]) {
+    setAlerts((prev) =>
+      prev.map((a) => (a.key === key ? { ...a, status } : a)),
+    );
+  }
+
+  function toggleSelected(key: string) {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelectedKeys(new Set(visible.map((a) => a.key)));
+  }
+  function clearSelection() {
+    setSelectedKeys(new Set());
+  }
+
+  // Items are only RSVP-able if every selected row is an RSVP_pending.
+  // Used to enable/disable the bulk RSVP buttons in the action bar.
+  const selectedAlerts = useMemo(
+    () => visible.filter((a) => selectedKeys.has(a.key)),
+    [visible, selectedKeys],
+  );
+  const allSelectedAreRsvp =
+    selectedAlerts.length > 0 &&
+    selectedAlerts.every((a) => a.kind === "rsvp_pending");
+
+  function actArchive(alert: InboxAlert) {
+    const busyKey = `arch:${alert.key}`;
+    setBusy(busyKey);
+    // Optimistic: flip immediately. Roll back if the server rejects.
+    setStatusByKey(alert.key, "archived");
+    startTransition(async () => {
+      try {
+        const res = await archiveAlertAction(alertRef(alert));
+        if (!res.ok) {
+          setStatusByKey(alert.key, "active");
+          toast(res.error, "error");
+          return;
+        }
+        toast("Archived", "success");
+      } finally {
+        setBusy(null);
+      }
+    });
+  }
+
+  function actDelete(alert: InboxAlert) {
+    const busyKey = `del:${alert.key}`;
+    setBusy(busyKey);
+    // Optimistic remove. If the server fails, the next router.refresh()
+    // (or a manual reload) will resurrect the row.
+    removeByKey(alert.key);
+    startTransition(async () => {
+      try {
+        const res = await deleteAlertAction(alertRef(alert));
+        if (!res.ok) {
+          toast(res.error, "error");
+          router.refresh();
+          return;
+        }
+        toast("Deleted", "success");
+      } finally {
+        setBusy(null);
+      }
+    });
+  }
+
+  function actUnarchive(alert: InboxAlert) {
+    const busyKey = `unarch:${alert.key}`;
+    setBusy(busyKey);
+    setStatusByKey(alert.key, "active");
+    startTransition(async () => {
+      try {
+        const res = await unarchiveAlertAction(alertRef(alert));
+        if (!res.ok) {
+          setStatusByKey(alert.key, "archived");
+          toast(res.error, "error");
+          return;
+        }
+        toast("Restored", "success");
+      } finally {
+        setBusy(null);
+      }
+    });
+  }
+
+  function bulkArchive() {
+    const refs = selectedAlerts.map(alertRef);
+    if (refs.length === 0) return;
+    const keys = selectedAlerts.map((a) => a.key);
+    setBusy("bulk:arch");
+    setAlerts((prev) =>
+      prev.map((a) =>
+        keys.includes(a.key) ? { ...a, status: "archived" } : a,
+      ),
+    );
+    clearSelection();
+    setSelectMode(false);
+    startTransition(async () => {
+      try {
+        const res = await bulkArchiveAlertsAction(refs);
+        if (!res.ok) {
+          toast(res.error, "error");
+          router.refresh();
+          return;
+        }
+        toast(`Archived ${refs.length}`, "success");
+      } finally {
+        setBusy(null);
+      }
+    });
+  }
+
+  function bulkDelete() {
+    const refs = selectedAlerts.map(alertRef);
+    if (refs.length === 0) return;
+    const keys = new Set(selectedAlerts.map((a) => a.key));
+    setBusy("bulk:del");
+    setAlerts((prev) => prev.filter((a) => !keys.has(a.key)));
+    clearSelection();
+    setSelectMode(false);
+    startTransition(async () => {
+      try {
+        const res = await bulkDeleteAlertsAction(refs);
+        if (!res.ok) {
+          toast(res.error, "error");
+          router.refresh();
+          return;
+        }
+        toast(`Deleted ${refs.length}`, "success");
+      } finally {
+        setBusy(null);
+      }
+    });
+  }
+
+  function bulkRsvp(status: "yes" | "maybe" | "no") {
+    const events = selectedAlerts
+      .filter((a) => a.kind === "rsvp_pending" && a.eventId && a.occurrenceDate)
+      .map((a) => ({
+        eventId: a.eventId as string,
+        occurrenceDate: a.occurrenceDate as string,
+      }));
+    if (events.length === 0) return;
+    const keys = new Set(selectedAlerts.map((a) => a.key));
+    setBusy("bulk:rsvp");
+    // Optimistic remove: an RSVP'd event no longer needs your attention.
+    setAlerts((prev) => prev.filter((a) => !keys.has(a.key)));
+    clearSelection();
+    setSelectMode(false);
+    startTransition(async () => {
+      try {
+        const res = await bulkRsvpAction(events, status);
+        if (!res.ok) {
+          toast(`${res.error} (${res.applied}/${events.length} applied)`, "error");
+          router.refresh();
+          return;
+        }
+        toast(
+          `RSVP'd ${labelForRsvp(status)} to ${res.applied} event${res.applied === 1 ? "" : "s"}`,
+          "success",
+        );
+        router.refresh();
+      } finally {
+        setBusy(null);
+      }
+    });
   }
 
   function actRsvp(
@@ -302,20 +532,43 @@ export function InboxTab({
     });
   }
 
+  // Heading + subhead vary per view. Active is the default action-driven
+  // copy; Archived/All are scoped to themselves; Resolved is the historical
+  // audit log so it gets its own framing.
+  const headingFor = (v: ViewMode): { title: string; subtitle: string } => {
+    if (v === "archived") {
+      return {
+        title: "Archived",
+        subtitle: `${archivedAlerts.length} item${archivedAlerts.length === 1 ? "" : "s"} you've set aside. Restore or delete.`,
+      };
+    }
+    if (v === "all") {
+      return {
+        title: "All inbox items",
+        subtitle: `${adminFilteredAlerts.length} item${adminFilteredAlerts.length === 1 ? "" : "s"} across active and archived.`,
+      };
+    }
+    if (v === "resolved") {
+      return {
+        title: "Recently resolved",
+        subtitle: "History of approvals, denials, and RSVPs.",
+      };
+    }
+    return {
+      title: "Needs your attention",
+      subtitle: `${activeAlerts.length} item${activeAlerts.length === 1 ? "" : "s"} waiting across your playbooks.`,
+    };
+  };
+  const heading = headingFor(view);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-foreground">
-            {view === "pending" ? "Needs your attention" : "Recently resolved"}
-          </h2>
-          <p className="text-xs text-muted">
-            {view === "pending"
-              ? `${effectiveAlerts.length} item${effectiveAlerts.length === 1 ? "" : "s"} waiting across your playbooks.`
-              : "History of approvals and rejections."}
-          </p>
+          <h2 className="text-base font-bold text-foreground">{heading.title}</h2>
+          <p className="text-xs text-muted">{heading.subtitle}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isSiteAdmin && (
             <label
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-surface-inset hover:text-foreground"
@@ -342,37 +595,68 @@ export function InboxTab({
           <SegmentedControl<ViewMode>
             size="sm"
             value={view}
-            onChange={setView}
+            onChange={(v) => {
+              setView(v);
+              setSelectMode(false);
+            }}
             options={[
-              { value: "pending", label: "Pending" },
+              { value: "active", label: "Active" },
+              { value: "archived", label: "Archived" },
+              { value: "all", label: "All" },
               { value: "resolved", label: "Resolved" },
             ]}
           />
-          {view === "pending" && (
-            <SegmentedControl<SortMode>
-              size="sm"
-              value={sort}
-              onChange={setSort}
-              options={[
-                { value: "urgency", label: "Urgency" },
-                { value: "newest", label: "Newest" },
-                { value: "oldest", label: "Oldest" },
-              ]}
-            />
+          {view !== "resolved" && (
+            <>
+              <SegmentedControl<SortMode>
+                size="sm"
+                value={sort}
+                onChange={setSort}
+                options={[
+                  { value: "urgency", label: "Urgency" },
+                  { value: "newest", label: "Newest" },
+                  { value: "oldest", label: "Oldest" },
+                ]}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectMode((s) => !s);
+                  clearSelection();
+                }}
+                disabled={visible.length === 0}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  selectMode
+                    ? "bg-primary text-white hover:bg-primary-hover"
+                    : "text-muted hover:bg-surface-inset hover:text-foreground"
+                }`}
+                title={selectMode ? "Cancel multi-select" : "Select multiple"}
+              >
+                <CheckSquare className="size-3.5" />
+                {selectMode ? "Cancel" : "Select"}
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {view === "pending" ? (
-        effectiveAlerts.length === 0 ? (
+      {view !== "resolved" ? (
+        viewAlerts.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface px-6 py-12 text-center">
             <Inbox className="mx-auto size-8 text-muted" />
             <h2 className="mt-3 text-base font-bold text-foreground">
-              You&apos;re all caught up
+              {view === "archived"
+                ? "Nothing archived"
+                : view === "all"
+                  ? "Inbox is empty"
+                  : "You're all caught up"}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Nothing waiting on you right now. Upcoming events that need an
-              RSVP, roster claims, and join requests will show up here.
+              {view === "archived"
+                ? "Items you archive from Active will show up here. Restore or delete from this view."
+                : view === "all"
+                  ? "No active or archived items right now."
+                  : "Nothing waiting on you right now. Upcoming events that need an RSVP, roster claims, and join requests will show up here."}
             </p>
           </div>
         ) : (
@@ -433,6 +717,20 @@ export function InboxTab({
                 />
               )}
             </div>
+            {selectMode && (
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                visibleCount={visible.length}
+                allRsvp={allSelectedAreRsvp}
+                view={view}
+                busy={busy?.startsWith("bulk:") ?? false}
+                onSelectAll={selectAllVisible}
+                onClear={clearSelection}
+                onArchive={bulkArchive}
+                onDelete={bulkDelete}
+                onRsvp={bulkRsvp}
+              />
+            )}
             <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
               {visible.map((alert) => (
                 <AlertRow
@@ -441,6 +739,12 @@ export function InboxTab({
                   busy={busy}
                   onAct={act}
                   onRsvp={actRsvp}
+                  selectMode={selectMode}
+                  selected={selectedKeys.has(alert.key)}
+                  onToggleSelect={() => toggleSelected(alert.key)}
+                  onArchive={actArchive}
+                  onDelete={actDelete}
+                  onUnarchive={actUnarchive}
                 />
               ))}
             </ul>
@@ -455,13 +759,118 @@ export function InboxTab({
         />
       )}
 
-      {view === "pending" && initialActivity.length > 0 && (
+      {view === "active" && initialActivity.length > 0 && (
         <RecentActivity entries={initialActivity} />
       )}
 
       {settingsOpen && (
         <DigestSettingsModal onClose={() => setSettingsOpen(false)} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Sticky-ish toolbar that appears above the alert list while the user is
+ * in multi-select mode. Surfaces bulk Archive / Delete (always) and bulk
+ * RSVP yes/maybe/no (only when every selected row is rsvp_pending —
+ * RSVP'ing to a non-event row is meaningless). Restore replaces Archive
+ * when the user is on the Archived view.
+ */
+function BulkActionBar({
+  selectedCount,
+  visibleCount,
+  allRsvp,
+  view,
+  busy,
+  onSelectAll,
+  onClear,
+  onArchive,
+  onDelete,
+  onRsvp,
+}: {
+  selectedCount: number;
+  visibleCount: number;
+  allRsvp: boolean;
+  view: ViewMode;
+  busy: boolean;
+  onSelectAll: () => void;
+  onClear: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  onRsvp: (status: "yes" | "maybe" | "no") => void;
+}) {
+  const noneSelected = selectedCount === 0;
+  const allSelected = selectedCount > 0 && selectedCount === visibleCount;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2">
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <button
+          type="button"
+          onClick={allSelected ? onClear : onSelectAll}
+          className="font-medium text-primary hover:underline"
+        >
+          {allSelected ? "Clear" : `Select all (${visibleCount})`}
+        </button>
+        <span className="text-muted">
+          {noneSelected
+            ? "Pick items to act on."
+            : `${selectedCount} selected`}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {allRsvp && (
+          <>
+            <button
+              type="button"
+              disabled={busy || noneSelected}
+              onClick={() => onRsvp("yes")}
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check className="size-3.5" />
+              Going
+            </button>
+            <button
+              type="button"
+              disabled={busy || noneSelected}
+              onClick={() => onRsvp("maybe")}
+              className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Maybe
+            </button>
+            <button
+              type="button"
+              disabled={busy || noneSelected}
+              onClick={() => onRsvp("no")}
+              className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <X className="size-3.5" />
+              Can&apos;t go
+            </button>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          </>
+        )}
+        {view !== "archived" && (
+          <button
+            type="button"
+            disabled={busy || noneSelected}
+            onClick={onArchive}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-raised px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-surface-inset disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Archive className="size-3.5" />
+            Archive
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy || noneSelected}
+          onClick={onDelete}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-surface-raised px-2.5 py-1 text-xs font-semibold text-danger hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Trash2 className="size-3.5" />
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
@@ -894,11 +1303,26 @@ function FilterChip({
   );
 }
 
+type RowChromeProps = {
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onArchive: (alert: InboxAlert) => void;
+  onDelete: (alert: InboxAlert) => void;
+  onUnarchive: (alert: InboxAlert) => void;
+};
+
 function AlertRow({
   alert,
   busy,
   onAct,
   onRsvp,
+  selectMode,
+  selected,
+  onToggleSelect,
+  onArchive,
+  onDelete,
+  onUnarchive,
 }: {
   alert: InboxAlert;
   busy: string | null;
@@ -909,9 +1333,24 @@ function AlertRow({
     okMsg: string,
   ) => void;
   onRsvp: (alert: InboxAlert, status: "yes" | "no" | "maybe") => void;
-}) {
+} & RowChromeProps) {
+  const chromeProps: RowChromeProps = {
+    selectMode,
+    selected,
+    onToggleSelect,
+    onArchive,
+    onDelete,
+    onUnarchive,
+  };
   if (alert.kind === "rsvp_pending") {
-    return <RsvpRow alert={alert} busy={busy} onRsvp={onRsvp} />;
+    return (
+      <RsvpRow
+        alert={alert}
+        busy={busy}
+        onRsvp={onRsvp}
+        {...chromeProps}
+      />
+    );
   }
   if (
     alert.kind === "system_alert" ||
@@ -919,7 +1358,7 @@ function AlertRow({
     alert.kind === "share" ||
     alert.kind === "admin_notice"
   ) {
-    return <NotificationRow alert={alert} />;
+    return <NotificationRow alert={alert} {...chromeProps} />;
   }
   const approveKey = `a:${alert.key}`;
   const rejectKey = `r:${alert.key}`;
@@ -956,19 +1395,26 @@ function AlertRow({
     rejectMsg = `Rejected ${name}`;
   }
 
+  const ctaHref = `/playbooks/${alert.playbookId}?tab=roster`;
   return (
-    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <div className="flex min-w-0 items-start gap-3">
-        <PlaybookAvatar
-          name={alert.playbookName}
-          logoUrl={alert.playbookLogoUrl}
-          color={alert.playbookColor}
-        />
-        <div className="min-w-0 flex-1">
+    <RowFrame
+      alert={alert}
+      ctaHref={ctaHref}
+      ctaTitle="Open in roster"
+      busy={busy}
+      onArchive={onArchive}
+      onDelete={onDelete}
+      onUnarchive={onUnarchive}
+      selectMode={selectMode}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      body={
+        <>
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href={`/playbooks/${alert.playbookId}?tab=roster`}
+              href={ctaHref}
               className="truncate text-xs font-semibold text-muted hover:text-foreground hover:underline"
+              onClick={(e) => selectMode && e.preventDefault()}
             >
               {alert.playbookName}
             </Link>
@@ -981,35 +1427,168 @@ function AlertRow({
           {detail && (
             <p className="mt-0.5 line-clamp-2 text-xs text-muted">{detail}</p>
           )}
+        </>
+      }
+      inlineActions={
+        alert.status === "active" ? (
+          <>
+            <Button
+              size="sm"
+              variant="primary"
+              leftIcon={Check}
+              disabled={busy !== null}
+              onClick={() => onAct(alert, "approve", approveKey, approveMsg)}
+            >
+              {busy === approveKey ? "…" : approveLabel}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={X}
+              disabled={busy !== null}
+              onClick={() => onAct(alert, "reject", rejectKey, rejectMsg)}
+            >
+              {busy === rejectKey ? "…" : rejectLabel}
+            </Button>
+          </>
+        ) : null
+      }
+    />
+  );
+}
+
+/**
+ * Shared chrome for every inbox row. Owns:
+ *   - The leading element (checkbox in select mode, playbook avatar otherwise)
+ *   - Inline kind-specific actions (passed in as `inlineActions`)
+ *   - The trailing utility cluster: open-in-context link, archive (or restore
+ *     when alert is archived), and delete.
+ *
+ * The body slot is opaque — each kind renders its own headline/detail layout.
+ */
+function RowFrame({
+  alert,
+  ctaHref,
+  ctaTitle,
+  ctaIcon,
+  body,
+  inlineActions,
+  busy,
+  onArchive,
+  onDelete,
+  onUnarchive,
+  selectMode,
+  selected,
+  onToggleSelect,
+}: {
+  alert: InboxAlert;
+  ctaHref: string;
+  ctaTitle: string;
+  ctaIcon?: React.ReactNode;
+  body: React.ReactNode;
+  inlineActions?: React.ReactNode;
+  busy: string | null;
+  onArchive: (a: InboxAlert) => void;
+  onDelete: (a: InboxAlert) => void;
+  onUnarchive: (a: InboxAlert) => void;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+}) {
+  const archiveKey = `arch:${alert.key}`;
+  const deleteKey = `del:${alert.key}`;
+  const unarchKey = `unarch:${alert.key}`;
+  const isArchived = alert.status === "archived";
+  return (
+    <li
+      className={`flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${
+        selectMode
+          ? "cursor-pointer hover:bg-surface-inset"
+          : isArchived
+            ? "bg-surface-inset/40"
+            : ""
+      } ${selected ? "bg-primary/5" : ""}`}
+      onClick={selectMode ? onToggleSelect : undefined}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        {selectMode ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect();
+            }}
+            className={`flex size-9 shrink-0 items-center justify-center rounded-lg border-2 transition-colors ${
+              selected
+                ? "border-primary bg-primary text-white"
+                : "border-border bg-surface-raised text-transparent hover:border-primary/50"
+            }`}
+            aria-label={selected ? "Deselect" : "Select"}
+          >
+            <Check className="size-4" />
+          </button>
+        ) : (
+          <PlaybookAvatar
+            name={alert.playbookName}
+            logoUrl={alert.playbookLogoUrl}
+            color={alert.playbookColor}
+          />
+        )}
+        <div className="min-w-0 flex-1">{body}</div>
+      </div>
+      {!selectMode && (
+        <div
+          className="flex shrink-0 items-center gap-1.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {inlineActions}
+          <Link
+            href={ctaHref}
+            className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+            title={ctaTitle}
+          >
+            {ctaIcon ?? <ArrowUpRight className="size-4" />}
+          </Link>
+          {isArchived ? (
+            <button
+              type="button"
+              onClick={() => onUnarchive(alert)}
+              disabled={busy !== null}
+              className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground disabled:opacity-50"
+              title="Restore to Active"
+            >
+              <ArchiveRestore className="size-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onArchive(alert)}
+              disabled={busy !== null}
+              className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground disabled:opacity-50"
+              title="Archive"
+            >
+              {busy === archiveKey ? (
+                <MoreHorizontal className="size-4 animate-pulse" />
+              ) : (
+                <Archive className="size-4" />
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onDelete(alert)}
+            disabled={busy !== null}
+            className="rounded-md p-1.5 text-muted hover:bg-danger-light hover:text-danger disabled:opacity-50"
+            title="Delete"
+          >
+            {busy === deleteKey || busy === unarchKey ? (
+              <MoreHorizontal className="size-4 animate-pulse" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+          </button>
         </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          size="sm"
-          variant="primary"
-          leftIcon={Check}
-          disabled={busy !== null}
-          onClick={() => onAct(alert, "approve", approveKey, approveMsg)}
-        >
-          {busy === approveKey ? "…" : approveLabel}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          leftIcon={X}
-          disabled={busy !== null}
-          onClick={() => onAct(alert, "reject", rejectKey, rejectMsg)}
-        >
-          {busy === rejectKey ? "…" : rejectLabel}
-        </Button>
-        <Link
-          href={`/playbooks/${alert.playbookId}?tab=roster`}
-          className="rounded-md p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-          title="Open in playbook"
-        >
-          <ArrowUpRight className="size-4" />
-        </Link>
-      </div>
+      )}
     </li>
   );
 }
@@ -1022,11 +1601,17 @@ function RsvpRow({
   alert,
   busy,
   onRsvp,
+  selectMode,
+  selected,
+  onToggleSelect,
+  onArchive,
+  onDelete,
+  onUnarchive,
 }: {
   alert: InboxAlert;
   busy: string | null;
   onRsvp: (alert: InboxAlert, status: "yes" | "no" | "maybe") => void;
-}) {
+} & RowChromeProps) {
   const title = alert.eventTitle?.trim() || "Upcoming event";
   const startsAt = alert.eventStartsAt
     ? formatEventTime(alert.eventStartsAt)
@@ -1040,46 +1625,9 @@ function RsvpRow({
           ? "Scrimmage"
           : "Event";
   const href = `/playbooks/${alert.playbookId}?tab=calendar`;
-  return (
-    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <Link
-        href={href}
-        className="flex min-w-0 flex-1 items-start gap-3 hover:opacity-90"
-      >
-        <PlaybookAvatar
-          name={alert.playbookName}
-          logoUrl={alert.playbookLogoUrl}
-          color={alert.playbookColor}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-xs font-semibold text-muted">
-              {alert.playbookName}
-            </span>
-            <KindBadge kind={alert.kind} />
-            <span
-              className="text-[11px] text-muted-light"
-              // The toLocaleString output for date+time is locale-dependent
-              // ("Mon, May 18, 7:00 PM" vs "Mon, May 18 at 7:00 PM") and
-              // can drift between server (default en-US) and client (real
-              // user locale). Suppressing the hydration warning here is
-              // safer than the alternatives — the displayed text is still
-              // correct on the client and the brief mismatch on first
-              // paint is invisible.
-              suppressHydrationWarning
-            >
-              {startsAt}
-            </span>
-          </div>
-          <p className="mt-0.5 truncate text-sm text-foreground">
-            {eventTypeLabel}: {title}
-          </p>
-        </div>
-      </Link>
-      <div
-        className="flex shrink-0 items-center gap-1.5"
-        onClick={(e) => e.stopPropagation()}
-      >
+  const inlineActions =
+    alert.status === "active" ? (
+      <>
         {(["yes", "maybe", "no"] as const).map((s) => {
           const labels = { yes: "Going", maybe: "Maybe", no: "Can\u2019t go" };
           const colors = {
@@ -1104,8 +1652,47 @@ function RsvpRow({
             </button>
           );
         })}
-      </div>
-    </li>
+      </>
+    ) : null;
+
+  return (
+    <RowFrame
+      alert={alert}
+      ctaHref={href}
+      ctaTitle="Open in calendar"
+      ctaIcon={<Calendar className="size-4" />}
+      busy={busy}
+      onArchive={onArchive}
+      onDelete={onDelete}
+      onUnarchive={onUnarchive}
+      selectMode={selectMode}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      body={
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={href}
+              className="truncate text-xs font-semibold text-muted hover:text-foreground hover:underline"
+              onClick={(e) => selectMode && e.preventDefault()}
+            >
+              {alert.playbookName}
+            </Link>
+            <KindBadge kind={alert.kind} />
+            <span
+              className="text-[11px] text-muted-light"
+              suppressHydrationWarning
+            >
+              {startsAt}
+            </span>
+          </div>
+          <p className="mt-0.5 truncate text-sm text-foreground">
+            {eventTypeLabel}: {title}
+          </p>
+        </>
+      }
+      inlineActions={inlineActions}
+    />
   );
 }
 
@@ -1181,23 +1768,42 @@ function KindBadge({ kind }: { kind: InboxAlertKind | ResolvedKind }) {
   );
 }
 
-function NotificationRow({ alert }: { alert: InboxAlert }) {
+function NotificationRow({
+  alert,
+  selectMode,
+  selected,
+  onToggleSelect,
+  onArchive,
+  onDelete,
+  onUnarchive,
+}: {
+  alert: InboxAlert;
+} & RowChromeProps) {
   const title = alert.displayName?.trim() || titleForKind(alert.kind);
   const body = alert.body?.trim() || null;
   const href = alert.href || `/playbooks/${alert.playbookId}`;
   return (
-    <li className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <Link href={href} className="flex min-w-0 flex-1 items-start gap-3 hover:opacity-90">
-        <PlaybookAvatar
-          name={alert.playbookName}
-          logoUrl={alert.playbookLogoUrl}
-          color={alert.playbookColor}
-        />
-        <div className="min-w-0 flex-1">
+    <RowFrame
+      alert={alert}
+      ctaHref={href}
+      ctaTitle="Open"
+      busy={null}
+      onArchive={onArchive}
+      onDelete={onDelete}
+      onUnarchive={onUnarchive}
+      selectMode={selectMode}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      body={
+        <>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-xs font-semibold text-muted">
+            <Link
+              href={href}
+              className="truncate text-xs font-semibold text-muted hover:text-foreground hover:underline"
+              onClick={(e) => selectMode && e.preventDefault()}
+            >
               {alert.playbookName}
-            </span>
+            </Link>
             <KindBadge kind={alert.kind} />
             <span className="text-[11px] text-muted-light">
               {timeAgo(alert.createdAt)}
@@ -1207,9 +1813,9 @@ function NotificationRow({ alert }: { alert: InboxAlert }) {
           {body && (
             <p className="mt-0.5 line-clamp-2 text-xs text-muted">{body}</p>
           )}
-        </div>
-      </Link>
-    </li>
+        </>
+      }
+    />
   );
 }
 

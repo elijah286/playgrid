@@ -43,6 +43,15 @@ export type FeatureEntry = {
 export const FEATURES: FeatureEntry[] = [
   // ── Playbook ─────────────────────────────────────────────────────
   {
+    id: "inbox-archive-delete-bulk",
+    name: "Inbox: archive, delete, multi-select, per-type CTAs",
+    description:
+      "The home inbox now behaves like an actual inbox. Archive items you've handled mentally but don't want to act on, delete ones you never want to see again, or restore from the Archived view. Tap Select to enter multi-select mode and apply Archive, Delete, or batch RSVP across many rows in one tap. The red-bang count covers every active item — including system notices — and drops as soon as you RSVP, archive, or delete. Each row's tile opens the right context: RSVPs jump to the calendar, roster requests to the roster, mentions to the play, system notices to wherever they originated.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-05-07",
+  },
+  {
     id: "playbook-create",
     name: "Custom playbooks",
     description:

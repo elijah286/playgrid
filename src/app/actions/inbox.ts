@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { expandRecurrence } from "@/lib/calendar/recurrence";
+import { setRsvpAction } from "@/app/actions/calendar";
 
 export type InboxAlertKind =
   | "membership"
@@ -28,13 +29,25 @@ export type AdminNoticeKind =
   | "subscription_canceled"
   | "play_milestone";
 
+/** Active = visible in the default Active view + counted in the red-bang
+ *  badge. Archived = visible only in the Archived view + not counted.
+ *  Deleted rows are hidden from every view (the server query filters
+ *  them out), so they don't appear here. */
+export type InboxAlertStatus = "active" | "archived";
+
 /** Window for showing upcoming events without an RSVP. */
 const RSVP_LOOKAHEAD_DAYS = 14;
 
 export type InboxAlert = {
   /** Stable id for React keys + dedupe. */
   key: string;
+  /** Stable id for the underlying source row, used as the inbox_state
+   *  PK alongside `kind`. Format depends on kind — see the migration
+   *  comment in 20260507120000_inbox_state.sql. */
+  sourceId: string;
   kind: InboxAlertKind;
+  /** Per-user state overlay (defaults to "active" when no row exists). */
+  status: InboxAlertStatus;
   playbookId: string;
   playbookName: string;
   playbookLogoUrl: string | null;
@@ -197,8 +210,47 @@ export async function listInboxAlertsAction(): Promise<
     alerts.push(...adminAlerts);
   }
 
-  alerts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return { ok: true, alerts, isSiteAdmin };
+  // ─── Per-user state overlay (archive / delete) ───────────────────────
+  // Look up inbox_state for every (kind, sourceId) we just produced. Drop
+  // 'deleted' rows entirely; tag 'archived' rows so the UI can filter them
+  // into the Archived view; everything else defaults to 'active'.
+  const stateBySource = await loadInboxStateOverlay(supabase, user.id, alerts);
+  const filtered: InboxAlert[] = [];
+  for (const a of alerts) {
+    const overlay = stateBySource.get(stateOverlayKey(a.kind, a.sourceId));
+    if (overlay === "deleted") continue;
+    filtered.push({ ...a, status: overlay === "archived" ? "archived" : "active" });
+  }
+
+  filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { ok: true, alerts: filtered, isSiteAdmin };
+}
+
+function stateOverlayKey(kind: InboxAlertKind, sourceId: string): string {
+  return `${kind}::${sourceId}`;
+}
+
+async function loadInboxStateOverlay(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  alerts: InboxAlert[],
+): Promise<Map<string, "archived" | "deleted">> {
+  const out = new Map<string, "archived" | "deleted">();
+  if (alerts.length === 0) return out;
+  // RLS already restricts to auth.uid(), but pin the user_id filter so the
+  // query plan can use the index even when the policy compiles to a join.
+  const { data } = await supabase
+    .from("inbox_state")
+    .select("alert_kind, source_id, status")
+    .eq("user_id", userId);
+  for (const row of (data ?? []) as Array<{
+    alert_kind: InboxAlertKind;
+    source_id: string;
+    status: "archived" | "deleted";
+  }>) {
+    out.set(stateOverlayKey(row.alert_kind, row.source_id), row.status);
+  }
+  return out;
 }
 
 async function buildAdminNoticeAlerts(
@@ -227,6 +279,8 @@ async function buildAdminNoticeAlerts(
 
   return (data as Row[]).map((r) => ({
     key: `admin:${r.id}`,
+    sourceId: r.id,
+    status: "active" as const,
     kind: "admin_notice" as const,
     adminKind: r.kind,
     // Admin notices aren't scoped to a playbook — synthesise a "Site"
@@ -267,8 +321,11 @@ function appendOwnerAlerts(
     if (!book) continue;
     const prof = Array.isArray(raw.profiles) ? raw.profiles[0] ?? null : raw.profiles;
     if (raw.status === "pending" && (raw.role === "editor" || raw.role === "viewer")) {
+      const sourceId = `${raw.playbook_id}:${raw.user_id}`;
       alerts.push({
-        key: `m:${raw.playbook_id}:${raw.user_id}`,
+        key: `m:${sourceId}`,
+        sourceId,
+        status: "active",
         kind: "membership",
         playbookId: raw.playbook_id,
         playbookName: book.name,
@@ -285,8 +342,11 @@ function appendOwnerAlerts(
       raw.status === "active" &&
       raw.role === "viewer"
     ) {
+      const sourceId = `${raw.playbook_id}:${raw.user_id}`;
       alerts.push({
-        key: `cu:${raw.playbook_id}:${raw.user_id}`,
+        key: `cu:${sourceId}`,
+        sourceId,
+        status: "active",
         kind: "coach_upgrade",
         playbookId: raw.playbook_id,
         playbookName: book.name,
@@ -333,6 +393,8 @@ function appendOwnerAlerts(
     const prof = Array.isArray(raw.profiles) ? raw.profiles[0] ?? null : raw.profiles;
     alerts.push({
       key: `rc:${raw.id}`,
+      sourceId: raw.id,
+      status: "active",
       kind: "roster_claim",
       playbookId: m.playbook_id,
       playbookName: book.name,
@@ -406,8 +468,11 @@ async function buildRsvpPendingAlerts(
       if (startMs <= now.getTime()) continue;
       const k = `${e.id}|${occ.occurrenceDate}`;
       if (responded.has(k)) continue;
+      const sourceId = `${e.id}|${occ.occurrenceDate}`;
       out.push({
         key: `rsvp:${e.id}:${occ.occurrenceDate}`,
+        sourceId,
+        status: "active",
         kind: "rsvp_pending",
         playbookId: e.playbook_id,
         playbookName: book.name,
@@ -632,4 +697,117 @@ export async function listResolvedInboxEventsAction(
 
   events.sort((a, b) => b.resolvedAt.localeCompare(a.resolvedAt));
   return { ok: true, events: events.slice(0, limit) };
+}
+
+// ─── Per-user state mutations (archive / delete / restore) ─────────────
+
+/** Identifier for an alert in the per-user state overlay. */
+export type AlertRef = { kind: InboxAlertKind; sourceId: string };
+
+type StatusUpdateResult = { ok: true } | { ok: false; error: string };
+
+async function setInboxStatusAction(
+  refs: AlertRef[],
+  status: "archived" | "deleted",
+): Promise<StatusUpdateResult> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  if (refs.length === 0) return { ok: true };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const rows = refs.map((r) => ({
+    user_id: user.id,
+    alert_kind: r.kind,
+    source_id: r.sourceId,
+    status,
+    updated_at: new Date().toISOString(),
+  }));
+  // Composite-PK upsert. Status flips on existing rows; new rows are
+  // inserted at the requested status. RLS pins the user_id check.
+  const { error } = await supabase
+    .from("inbox_state")
+    .upsert(rows, { onConflict: "user_id,alert_kind,source_id" });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Archive a single alert. Hides it from Active view; visible in Archived. */
+export async function archiveAlertAction(
+  ref: AlertRef,
+): Promise<StatusUpdateResult> {
+  return setInboxStatusAction([ref], "archived");
+}
+
+/** Soft-delete a single alert. Hides it from every view. */
+export async function deleteAlertAction(
+  ref: AlertRef,
+): Promise<StatusUpdateResult> {
+  return setInboxStatusAction([ref], "deleted");
+}
+
+/** Restore an archived/deleted alert back to Active. Drops the overlay row. */
+export async function unarchiveAlertAction(
+  ref: AlertRef,
+): Promise<StatusUpdateResult> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const { error } = await supabase
+    .from("inbox_state")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("alert_kind", ref.kind)
+    .eq("source_id", ref.sourceId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Bulk archive — single round-trip upsert. */
+export async function bulkArchiveAlertsAction(
+  refs: AlertRef[],
+): Promise<StatusUpdateResult> {
+  return setInboxStatusAction(refs, "archived");
+}
+
+/** Bulk delete — single round-trip upsert. */
+export async function bulkDeleteAlertsAction(
+  refs: AlertRef[],
+): Promise<StatusUpdateResult> {
+  return setInboxStatusAction(refs, "deleted");
+}
+
+/** Apply the same RSVP answer to a list of (eventId, occurrenceDate)
+ *  pairs in parallel. Used by the inbox bulk-action bar so coaches can
+ *  RSVP "yes" to every selected event in one shot. Returns ok=true only
+ *  if every individual RSVP succeeded; otherwise ok=false with the first
+ *  error (the rest of the batch still applies on a best-effort basis,
+ *  matching the optimistic UI pattern). */
+export async function bulkRsvpAction(
+  events: { eventId: string; occurrenceDate: string }[],
+  status: "yes" | "no" | "maybe",
+): Promise<{ ok: true; applied: number } | { ok: false; error: string; applied: number }> {
+  if (events.length === 0) return { ok: true, applied: 0 };
+  const results = await Promise.all(
+    events.map((e) =>
+      setRsvpAction({
+        eventId: e.eventId,
+        occurrenceDate: e.occurrenceDate,
+        status,
+        note: null,
+      }),
+    ),
+  );
+  const firstError = results.find((r) => !r.ok) as
+    | { ok: false; error: string }
+    | undefined;
+  const applied = results.filter((r) => r.ok).length;
+  if (firstError) return { ok: false, error: firstError.error, applied };
+  return { ok: true, applied };
 }

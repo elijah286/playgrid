@@ -1060,15 +1060,18 @@ export function DashboardClient({
     },
     [searchParams],
   );
-  // Tab badge counts actionable items only. Admin "system notices" are
-  // informational (signups, purchases, milestones) — they show inside the
-  // inbox but don't inflate the red badge that's meant to mean "you have
-  // work to do." Mirrors the urgency logic in InboxTab.
-  const inboxCount = inboxAlerts.filter((a) => a.kind !== "admin_notice").length;
+  // Tab badge counts every active item the user hasn't dismissed yet —
+  // including admin "system notices" (signups, purchases, milestones).
+  // The badge drops when the user RSVPs, archives, or deletes; archived
+  // and deleted rows arrive with a non-active status from the server.
+  const inboxCount = inboxAlerts.filter((a) => a.status === "active").length;
   // Inbox is "urgent" when it contains time-pressured items: pending RSVPs
   // or (future) billing/system alerts. Otherwise the badge stays neutral.
+  // Archived/deleted items don't drive the urgency flag.
   const inboxUrgent = inboxAlerts.some(
-    (a) => a.kind === "rsvp_pending" || a.kind === "system_alert",
+    (a) =>
+      a.status === "active" &&
+      (a.kind === "rsvp_pending" || a.kind === "system_alert"),
   );
   const activityCount = activityEntries.length;
   const { toast } = useToast();
