@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive as ArchiveIcon, ChevronLeft, FlaskConical } from "lucide-react";
+import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -1704,8 +1704,14 @@ function PlayNotesCard({
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
+          {open ? (
+            <ChevronDown className="size-4 shrink-0 text-muted" aria-hidden />
+          ) : (
+            <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
+          )}
           <span className="text-sm font-semibold text-foreground">Play notes</span>
           {!open && hasNotes && (
             <span className="truncate text-xs text-muted">
@@ -1739,13 +1745,6 @@ function PlayNotesCard({
               context={{ values: { playName: playName?.trim() || "this play" } }}
             />
           )}
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="text-xs text-muted hover:text-foreground"
-          >
-            {open ? "Hide" : "Show"}
-          </button>
         </div>
       </div>
       {open && (
