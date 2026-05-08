@@ -1410,6 +1410,7 @@ function PlaybookDetailClientInner({
 
         {headerProps.canManage &&
           !isPreview &&
+          initialPlays.filter((p) => !p.is_archived).length > 0 &&
           initialRoster.filter(
             (m) => (m.role === "editor" || m.role === "owner") && !!m.user_id,
           ).length <= 1 &&

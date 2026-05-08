@@ -109,19 +109,18 @@ export type LeaguePresetDefinition = {
   markingDefaults: FieldMarkingDefaults;
 };
 
-// Flag leagues default to showing the league-fixed down markers (orange),
-// not the per-play first-down line (lime dashed). The chain is opt-in
-// per play because coaches set it situationally (`doc.firstDownLineYards`
-// is LOS-relative); the down markers are FIXED by league rule and don't
-// move from play to play. Presets without fixed markers (e.g. tackle)
-// override `showDownMarkers` back to false below.
+// New playbooks ship with all league-fixed markings (endzones, no-run
+// zones, first-down line, down markers) hidden. Coaches can opt in via
+// the Markings popover; the structural data (no-run bands, fixed-down
+// yardages) still lives on the preset so toggling on works without
+// re-picking a league.
 const FLAG_DEFAULT_MARKINGS: FieldMarkingDefaults = {
   background: "green",
-  showEndzones: true,
-  showNoRunZones: true,
+  showEndzones: false,
+  showNoRunZones: false,
   showFirstDownLine: false,
-  showDownMarkers: true,
-  rotatedYardNumbers: false,
+  showDownMarkers: false,
+  rotatedYardNumbers: true,
   showHashMarks: false,
   hashStyle: "none",
   showYardNumbers: true,
@@ -129,7 +128,7 @@ const FLAG_DEFAULT_MARKINGS: FieldMarkingDefaults = {
 
 const TACKLE_DEFAULT_MARKINGS: FieldMarkingDefaults = {
   background: "green",
-  showEndzones: true,
+  showEndzones: false,
   showNoRunZones: false,
   showFirstDownLine: false,
   showDownMarkers: false,

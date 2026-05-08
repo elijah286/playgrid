@@ -131,11 +131,10 @@ export function resolveShowDownMarkers(doc: PlayDocument): boolean {
 }
 
 /** Whether yard-number glyphs should be rotated to read from each
- *  sideline. Defaults derive from variant — on for tackle and other wide
- *  fields, off for narrow flag fields. */
+ *  sideline. Defaults to rotated; coaches can flip per-play. */
 export function resolveRotatedYardNumbers(doc: PlayDocument): boolean {
   if (typeof doc.rotatedYardNumbers === "boolean") return doc.rotatedYardNumbers;
-  return doc.sportProfile.variant === "tackle_11";
+  return true;
 }
 
 /** Hash-mark column positions, with explicit numeric override winning over
