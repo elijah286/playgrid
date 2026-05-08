@@ -6,7 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { emailHasAccountAction } from "@/app/actions/auth-lookup";
 import { afterSignupSyncRoleAction } from "@/app/actions/coach-invitations";
-import { updateDisplayNameAction } from "@/app/actions/account";
+import {
+  runSignupAttributionAction,
+  updateDisplayNameAction,
+} from "@/app/actions/account";
 import { Button, Input, useToast } from "@/components/ui";
 import { PASSWORD_RULES_LABEL, validatePassword } from "@/lib/auth/password";
 import { suggestEmailDomainCorrection } from "@/lib/auth/email-typo";
@@ -251,6 +254,17 @@ export function AuthFlow({
         type: "email",
       });
       if (error) throw error;
+
+      // Stamp first-touch attribution onto the new profile. The OAuth
+      // callback handles this for Apple/Google flows, but email-OTP
+      // signups never hit that route, so without this the
+      // pg_first_touch cookie is lost and the admin Users tab shows
+      // "Unknown" for everyone who signed up by email code. Fire-and-
+      // forget — the action is idempotent and gates itself with a
+      // 5-minute grace window so returning users don't trigger writes.
+      if (data.session) {
+        void runSignupAttributionAction();
+      }
 
       // Sync coach role if an invite code was carried through signup.
       if (inviteCode && data.session) {

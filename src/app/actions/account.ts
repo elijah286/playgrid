@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { validatePassword } from "@/lib/auth/password";
+import { snapshotFirstTouchToProfile } from "@/lib/attribution/snapshot";
 
 const AVATAR_BUCKET = "avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -37,6 +38,31 @@ export async function revokeUserSessionAction(input: { sessionId: string }) {
   if (error) return { ok: false as const, error: error.message };
 
   revalidatePath("/account");
+  return { ok: true as const };
+}
+
+/** Run first-touch attribution for the currently-signed-in user. The
+ *  /auth/callback OAuth route already does this for Apple/Google, but
+ *  email-OTP signups never hit that route — they go straight from
+ *  verifyOtp() → display-name step → /home. Without this, ~70% of
+ *  signups (everything that isn't OAuth) end up with first_landing_path
+ *  = null in profiles and get classified as "Unknown" in the admin
+ *  Users tab. The underlying snapshot function is idempotent and gates
+ *  itself with a 5-minute grace window after auth.users.created_at, so
+ *  calling this on every sign-in (returning users included) is safe.
+ *  Fire-and-forget from the client. */
+export async function runSignupAttributionAction() {
+  if (!hasSupabaseEnv()) return { ok: true as const };
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: true as const };
+    await snapshotFirstTouchToProfile(user.id, user.created_at);
+  } catch {
+    // Best-effort — never bubble up.
+  }
   return { ok: true as const };
 }
 
