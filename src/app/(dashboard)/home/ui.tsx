@@ -1529,7 +1529,7 @@ export function DashboardClient({
         </div>
       ) : view === "preview" ? (
         <section className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
             {owned.map((b) => (
               <PlaybookBookTile key={b.id} tile={b} actions={buildOwnerActions(b)} />
             ))}
@@ -1546,7 +1546,7 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {archived.map((b) => (
                   <PlaybookBookTile
                     key={b.id}
@@ -1570,7 +1570,7 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {examples.map((b) => (
                   <PlaybookBookTile
                     key={b.id}
@@ -1588,7 +1588,7 @@ export function DashboardClient({
         </section>
       ) : (
         <section className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
             <NewPlaybookTile onClick={() => setShowCreate(true)} />
             {owned.map((b) => (
               <PlaybookTile
@@ -1610,7 +1610,7 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 opacity-70 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {archived.map((b) => (
                   <PlaybookTile
                     key={b.id}
@@ -1634,7 +1634,7 @@ export function DashboardClient({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {examples.map((b) => (
                   <PlaybookTile
                     key={b.id}
