@@ -11,6 +11,11 @@ import {
   type ReferrerSource,
 } from "@/lib/analytics/referrer-source";
 import { lookupIpLocation } from "@/lib/analytics/ip-geo";
+import {
+  classifySignupSource,
+  extractSignupShareToken,
+  type SignupSourceKind,
+} from "@/lib/analytics/signup-source";
 
 export type AdminUserRowData = {
   id: string;
@@ -31,6 +36,13 @@ export type AdminUserRowData = {
   totalSecondsOnSite: number | null;
   /** Distinct plays the user has authored at least one version of. */
   playsCreated: number;
+  /** Glanceable "how did this user enter the site" classification for
+   *  the users list. Derived from the first-touch columns on profiles. */
+  signupSource: {
+    kind: SignupSourceKind;
+    label: string;
+    detail: string | null;
+  };
 };
 
 async function assertAdmin() {
@@ -75,7 +87,9 @@ export async function listUsersForAdminAction() {
   ] = await Promise.all([
     admin
       .from("profiles")
-      .select("id, display_name, role, created_at, total_seconds_on_site"),
+      .select(
+        "id, display_name, role, created_at, total_seconds_on_site, first_landing_path, first_utm_source, first_utm_medium, first_utm_campaign, first_referrer",
+      ),
     admin
       .from("user_entitlements")
       .select(
@@ -96,8 +110,28 @@ export async function listUsersForAdminAction() {
   }
 
   const users: AdminUserRowData[] = (authData.users ?? []).map((u) => {
-    const pr = profileMap.get(u.id);
+    const pr = profileMap.get(u.id) as
+      | {
+          id: string;
+          display_name: string | null;
+          role: string | null;
+          created_at: string;
+          total_seconds_on_site: number | null;
+          first_landing_path: string | null;
+          first_utm_source: string | null;
+          first_utm_medium: string | null;
+          first_utm_campaign: string | null;
+          first_referrer: string | null;
+        }
+      | undefined;
     const e = entMap.get(u.id);
+    const cls = classifySignupSource({
+      landingPath: pr?.first_landing_path ?? null,
+      utmSource: pr?.first_utm_source ?? null,
+      utmMedium: pr?.first_utm_medium ?? null,
+      utmCampaign: pr?.first_utm_campaign ?? null,
+      referrer: pr?.first_referrer ?? null,
+    });
     return {
       id: u.id,
       email: u.email ?? "",
@@ -115,6 +149,7 @@ export async function listUsersForAdminAction() {
           ? (pr.total_seconds_on_site as number)
           : null,
       playsCreated: playsByUser.get(u.id) ?? 0,
+      signupSource: { kind: cls.kind, label: cls.label, detail: cls.detail },
     };
   });
 
@@ -620,6 +655,55 @@ export async function getAdminUserActivityAction(
     }
   }
 
+  // Copy-link landing: resolve token → playbook + sender so the panel
+  // can say "Copied 'Examples vs. 1-3-1 Blitz' (sent by alice@…)" rather
+  // than just "Other landing page".
+  let copyLinkContext: {
+    playbookName: string | null;
+    senderEmail: string | null;
+    senderDisplayName: string | null;
+    token: string;
+  } | null = null;
+  const copyToken = extractSignupShareToken(landingPath);
+  if (copyToken && landingPath?.startsWith("/copy/")) {
+    const { data: cl } = await admin
+      .from("playbook_copy_links")
+      .select("playbook_id, created_by")
+      .eq("token", copyToken)
+      .maybeSingle();
+    if (cl) {
+      let playbookName: string | null = null;
+      let senderEmail: string | null = null;
+      let senderDisplayName: string | null = null;
+      if (cl.playbook_id) {
+        const { data: pb } = await admin
+          .from("playbooks")
+          .select("name")
+          .eq("id", cl.playbook_id as string)
+          .maybeSingle();
+        playbookName = (pb?.name as string | null) ?? null;
+      }
+      if (cl.created_by) {
+        const { data: senderUser } = await admin.auth.admin.getUserById(
+          cl.created_by as string,
+        );
+        senderEmail = senderUser?.user?.email ?? null;
+        const { data: senderProfile } = await admin
+          .from("profiles")
+          .select("display_name")
+          .eq("id", cl.created_by as string)
+          .maybeSingle();
+        senderDisplayName = (senderProfile?.display_name as string | null) ?? null;
+      }
+      copyLinkContext = {
+        playbookName,
+        senderEmail,
+        senderDisplayName,
+        token: copyToken,
+      };
+    }
+  }
+
   let signupSource: AdminUserActivity["signupSource"];
   if (coachInviteRow) {
     signupSource = {
@@ -630,6 +714,21 @@ export async function getAdminUserActivityAction(
         : "Redeemed a coach invite code",
       invitedByEmail: coachInviterEmail,
       playbookName: null,
+    };
+  } else if (copyLinkContext) {
+    const senderLabel =
+      copyLinkContext.senderDisplayName ||
+      copyLinkContext.senderEmail ||
+      "another coach";
+    const pbLabel = copyLinkContext.playbookName
+      ? `"${copyLinkContext.playbookName}"`
+      : "a playbook";
+    signupSource = {
+      kind: "shared_playbook",
+      label: "Copy link",
+      detail: `Came from a copy link to ${pbLabel} sent by ${senderLabel}`,
+      invitedByEmail: copyLinkContext.senderEmail,
+      playbookName: copyLinkContext.playbookName,
     };
   } else if (landingPath && landingPath.startsWith("/invite/")) {
     signupSource = {

@@ -1067,6 +1067,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Admin tools ────────────────────────────────────────────────
   {
+    id: "admin-signup-source-attribution",
+    name: "Signup-source attribution in users + inbox",
+    description:
+      "The Site Admin → Users tab shows a 'Joined via' chip on every row labeling how each user first arrived (copy link, shared playbook, campaign, home, etc.). Signup notices in the admin inbox are enriched at sign-in time with the same context — copy-link signups read 'X signed up via copy link to \"Playbook\" (sent by Y)' so admins see who claimed a shared link without clicking through.",
+    category: "Admin tools",
+    status: "internal",
+    addedDate: "2026-05-08",
+  },
+  {
     id: "admin-system-notices",
     name: "System notices in admin inbox",
     description:

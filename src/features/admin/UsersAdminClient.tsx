@@ -107,7 +107,43 @@ export type AdminUserRow = {
   subscriptionId: string | null;
   totalSecondsOnSite: number | null;
   playsCreated: number;
+  signupSource: {
+    kind:
+      | "copy_link"
+      | "share_view"
+      | "playbook_invite"
+      | "coach_invite"
+      | "home"
+      | "campaign"
+      | "direct"
+      | "other"
+      | "unknown";
+    label: string;
+    detail: string | null;
+  };
 };
+
+/** Color/tone for the signup-source chip in the users list. Distinct
+ *  from role badges so admins can scan how users entered the site at a
+ *  glance without confusing it with permissions. */
+function signupSourceChipClass(kind: AdminUserRow["signupSource"]["kind"]): string {
+  switch (kind) {
+    case "copy_link":
+      return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
+    case "share_view":
+    case "playbook_invite":
+      return "bg-sky-500/15 text-sky-300 ring-sky-500/30";
+    case "coach_invite":
+      return "bg-violet-500/15 text-violet-300 ring-violet-500/30";
+    case "campaign":
+      return "bg-amber-500/15 text-amber-300 ring-amber-500/30";
+    case "home":
+    case "direct":
+      return "bg-surface text-muted ring-border";
+    default:
+      return "bg-surface text-muted ring-border";
+  }
+}
 
 type Dialog =
   | { kind: "add" }
@@ -286,13 +322,19 @@ export function UsersAdminClient({
                 dir={sortDir}
                 onClick={() => toggleSort("timeOnSite")}
               />
+              <th
+                className="px-4 py-3 text-left"
+                title="How this user first arrived on the site, derived from their first-touch attribution. Hover the chip for detail."
+              >
+                Joined via
+              </th>
               <th className="w-12 px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-muted">
                   No users match that search.
                 </td>
               </tr>
@@ -389,6 +431,14 @@ export function UsersAdminClient({
                   >
                     {formatTimeOnSite(u.totalSecondsOnSite)}
                   </td>
+                  <td className="px-4 py-3 align-middle">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${signupSourceChipClass(u.signupSource.kind)}`}
+                      title={u.signupSource.detail ?? u.signupSource.label}
+                    >
+                      {u.signupSource.label}
+                    </span>
+                  </td>
                   <td
                     className="px-4 py-3 align-middle"
                     onClick={(e) => e.stopPropagation()}
@@ -415,7 +465,7 @@ export function UsersAdminClient({
                 </tr>
                 {isOpen && (
                   <tr className="bg-surface-inset/30">
-                    <td colSpan={9} className="px-4 py-4">
+                    <td colSpan={10} className="px-4 py-4">
                       <UserStatsPanel userId={u.id} />
                     </td>
                   </tr>
