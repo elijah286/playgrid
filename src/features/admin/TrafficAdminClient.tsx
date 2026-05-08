@@ -12,6 +12,7 @@ import {
   getViralitySummaryAction,
   type CoachCalCtaRow,
   type EngagementSummary,
+  type MobileEngagementSummary,
   type ViralitySummary,
 } from "@/app/actions/admin-traffic-insights";
 
@@ -535,6 +536,8 @@ function EngagementPanel({
         />
       </div>
 
+      <MobileEngagementPanel data={data.mobileEngagement} />
+
       <CoachCalCtaPanel rows={data.coachCalCtas} />
 
       {noData ? (
@@ -544,6 +547,142 @@ function EngagementPanel({
         </p>
       ) : null}
     </>
+  );
+}
+
+function deltaFmt(
+  current: number,
+  prior: number,
+  opts: { kind: "pct" | "ratio" | "ms" | "int"; lowerIsBetter?: boolean },
+): { label: string; tone: "positive" | "negative" | "neutral" } {
+  // No prior data → can't infer direction.
+  if (prior === 0 && current === 0) return { label: "—", tone: "neutral" };
+  if (prior === 0) return { label: "new", tone: "neutral" };
+  const diff = current - prior;
+  const rel = diff / prior;
+  // Direction: did the metric move in the desired direction?
+  const better = opts.lowerIsBetter ? diff < 0 : diff > 0;
+  const same = Math.abs(rel) < 0.02; // <2% noise floor
+  const tone = same ? "neutral" : better ? "positive" : "negative";
+  let label: string;
+  if (opts.kind === "pct" || opts.kind === "ratio") {
+    // Show absolute pp delta for percentage metrics — easier to read
+    // than relative change of a rate.
+    const pp = (current - prior) * 100;
+    label = `${pp >= 0 ? "+" : ""}${pp.toFixed(1)}pp`;
+  } else if (opts.kind === "ms") {
+    const sec = (diff / 1000).toFixed(1);
+    label = `${diff >= 0 ? "+" : ""}${sec}s`;
+  } else {
+    label = `${diff >= 0 ? "+" : ""}${formatInt(diff)}`;
+  }
+  return { label, tone };
+}
+
+function MobileEngagementPanel({ data }: { data: MobileEngagementSummary }) {
+  const { current, prior, windowDays } = data;
+  const noData =
+    current.mobile.sessions === 0 &&
+    current.desktop.sessions === 0 &&
+    prior.mobile.sessions === 0 &&
+    prior.desktop.sessions === 0;
+  return (
+    <div className="rounded-2xl border border-border bg-surface-raised p-4">
+      <div>
+        <p className="text-sm font-semibold text-foreground">
+          Mobile vs desktop on viewer surfaces
+        </p>
+        <p className="mt-0.5 text-[11px] italic text-muted/80">
+          Are mobile-UX changes helping viewers actually browse playbooks
+          and plays? Compares this {windowDays}-day window to the prior {windowDays}-day window.
+          Bounce = sessions that hit a viewer page and didn&rsquo;t click through to a second one.
+        </p>
+      </div>
+      {noData ? (
+        <p className="mt-3 text-xs text-muted">
+          No qualifying device-classified sessions in this window. The
+          panel populates as visitors land on /playbooks, /plays, /v,
+          /m/play, /copy, or /examples surfaces.
+        </p>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-xs">
+            <thead className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <tr>
+                <th className="pb-2 pr-3">Cohort</th>
+                <th className="pb-2 pr-3 text-right">Sessions</th>
+                <th className="pb-2 pr-3 text-right">Viewer sessions</th>
+                <th className="pb-2 pr-3 text-right">Viewer bounce</th>
+                <th className="pb-2 pr-3 text-right">Pages / session</th>
+                <th className="pb-2 text-right">Avg viewer dwell</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {(["mobile", "desktop"] as const).map((cls) => {
+                const c = current[cls];
+                const p = prior[cls];
+                const sessDelta = deltaFmt(c.sessions, p.sessions, { kind: "int" });
+                const viewerSessDelta = deltaFmt(c.viewerSessions, p.viewerSessions, { kind: "int" });
+                const bounceDelta = deltaFmt(c.viewerBounceRate, p.viewerBounceRate, {
+                  kind: "ratio",
+                  lowerIsBetter: true,
+                });
+                const depthDelta = deltaFmt(c.viewsPerSession, p.viewsPerSession, { kind: "int" });
+                const dwellDelta = deltaFmt(
+                  c.viewerAvgDwellMs ?? 0,
+                  p.viewerAvgDwellMs ?? 0,
+                  { kind: "ms" },
+                );
+                return (
+                  <tr key={cls}>
+                    <td className="py-2 pr-3 text-foreground">
+                      <div className="font-medium capitalize">{cls}</div>
+                      <div className="text-[10px] text-muted">
+                        {cls === "mobile" ? "phone + tablet" : "desktop only"}
+                      </div>
+                    </td>
+                    <DeltaCell value={formatInt(c.sessions)} delta={sessDelta} />
+                    <DeltaCell value={formatInt(c.viewerSessions)} delta={viewerSessDelta} />
+                    <DeltaCell value={pct(c.viewerBounceRate)} delta={bounceDelta} />
+                    <DeltaCell value={c.viewsPerSession.toFixed(2)} delta={depthDelta} />
+                    <DeltaCell
+                      value={formatDwell(c.viewerAvgDwellMs)}
+                      delta={dwellDelta}
+                    />
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[10px] text-muted">
+            Lower bounce + higher pages/session + longer dwell on the mobile row is
+            the signal that mobile-UX work is paying off. Sessions with unknown
+            device class are excluded from both cohorts.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeltaCell({
+  value,
+  delta,
+}: {
+  value: string;
+  delta: { label: string; tone: "positive" | "negative" | "neutral" };
+}) {
+  const toneClass =
+    delta.tone === "positive"
+      ? "text-emerald-400/90"
+      : delta.tone === "negative"
+        ? "text-amber-300/90"
+        : "text-muted";
+  return (
+    <td className="py-2 pr-3 text-right tabular-nums text-foreground">
+      <div>{value}</div>
+      <div className={`text-[10px] ${toneClass}`}>{delta.label}</div>
+    </td>
   );
 }
 

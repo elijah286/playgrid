@@ -30,6 +30,39 @@ export type CoachCalCtaRow = {
   dismissRate: number;
 };
 
+export type DeviceCohortMetrics = {
+  sessions: number;
+  views: number;
+  viewsPerSession: number;
+  /** Fraction of sessions with exactly one page_view (0..1). */
+  bounceRate: number;
+  /** Sessions whose first or any view hit a viewer surface (playbook,
+   *  play, share/copy token, examples). Bounce rate below is computed
+   *  over this subset. */
+  viewerSessions: number;
+  viewerBounceRate: number;
+  /** Mean dwell across viewer-surface views with a recorded dwell, in ms. */
+  viewerAvgDwellMs: number | null;
+};
+
+export type MobileEngagementSummary = {
+  windowDays: number;
+  /** ISO timestamp at which the current window begins. */
+  windowStart: string;
+  /** ISO timestamp at which the prior window begins. */
+  priorWindowStart: string;
+  /** Mobile = device in {mobile, tablet}. Desktop = device == "desktop"
+   *  (unknown/null devices are excluded from both cohorts to avoid noise). */
+  current: {
+    mobile: DeviceCohortMetrics;
+    desktop: DeviceCohortMetrics;
+  };
+  prior: {
+    mobile: DeviceCohortMetrics;
+    desktop: DeviceCohortMetrics;
+  };
+};
+
 export type EngagementSummary = {
   windowDays: number;
   funnel: FunnelStep[];
@@ -39,6 +72,7 @@ export type EngagementSummary = {
   topEvents: Array<{ event: string; count: number; uniqueUsers: number }>;
   totalEvents: number;
   coachCalCtas: CoachCalCtaRow[];
+  mobileEngagement: MobileEngagementSummary;
 };
 
 export type ViralitySummary = {
@@ -89,6 +123,31 @@ async function requireAdmin(): Promise<{ ok: true } | { ok: false; error: string
   return { ok: true };
 }
 
+function emptyDeviceCohort(): DeviceCohortMetrics {
+  return {
+    sessions: 0,
+    views: 0,
+    viewsPerSession: 0,
+    bounceRate: 0,
+    viewerSessions: 0,
+    viewerBounceRate: 0,
+    viewerAvgDwellMs: null,
+  };
+}
+
+function emptyMobileEngagement(windowDays: number): MobileEngagementSummary {
+  const now = Date.now();
+  const ws = new Date(now - windowDays * 86400 * 1000).toISOString();
+  const ps = new Date(now - 2 * windowDays * 86400 * 1000).toISOString();
+  return {
+    windowDays,
+    windowStart: ws,
+    priorWindowStart: ps,
+    current: { mobile: emptyDeviceCohort(), desktop: emptyDeviceCohort() },
+    prior: { mobile: emptyDeviceCohort(), desktop: emptyDeviceCohort() },
+  };
+}
+
 function emptyEngagement(windowDays: number): EngagementSummary {
   return {
     windowDays,
@@ -99,7 +158,125 @@ function emptyEngagement(windowDays: number): EngagementSummary {
     topEvents: [],
     totalEvents: 0,
     coachCalCtas: [],
+    mobileEngagement: emptyMobileEngagement(windowDays),
   };
+}
+
+/** True for paths that put a coach in front of *content* — playbook
+ *  pages, single-play pages, share/copy token landings, the examples
+ *  index, and the mobile play viewer. These are the surfaces the
+ *  mobile-UX work targeted; bounce rate here is the headline metric
+ *  for "did the changes help viewers actually browse." */
+function isViewerPath(path: string): boolean {
+  if (!path) return false;
+  if (path.startsWith("/playbooks/")) return true;
+  if (path.startsWith("/plays/")) return true;
+  if (path.startsWith("/v/")) return true;
+  if (path.startsWith("/m/play")) return true;
+  if (path.startsWith("/copy/")) return true;
+  if (path === "/examples" || path.startsWith("/examples/")) return true;
+  return false;
+}
+
+type DeviceClass = "mobile" | "desktop" | null;
+function classifyDevice(d: string | null | undefined): DeviceClass {
+  if (d === "mobile" || d === "tablet") return "mobile";
+  if (d === "desktop") return "desktop";
+  return null;
+}
+
+type ViewLite = {
+  session_id: string;
+  path: string;
+  device: string | null;
+  dwell_ms: number | null;
+  user_id: string | null;
+  created_at: string;
+};
+
+function computeDeviceCohort(views: ViewLite[]): {
+  mobile: DeviceCohortMetrics;
+  desktop: DeviceCohortMetrics;
+} {
+  // Each session is one device class — we resolve by majority vote of
+  // its rows (typically every row agrees, but handle the rare flip).
+  const sessionDevice = new Map<string, { mobile: number; desktop: number }>();
+  for (const v of views) {
+    const cls = classifyDevice(v.device);
+    if (!cls) continue;
+    const slot = sessionDevice.get(v.session_id) ?? { mobile: 0, desktop: 0 };
+    slot[cls] += 1;
+    sessionDevice.set(v.session_id, slot);
+  }
+  const sessionClass = new Map<string, "mobile" | "desktop">();
+  for (const [sid, c] of sessionDevice) {
+    sessionClass.set(sid, c.mobile >= c.desktop ? "mobile" : "desktop");
+  }
+
+  type Acc = {
+    sessions: Set<string>;
+    views: number;
+    viewerSessions: Set<string>;
+    viewerDwellSum: number;
+    viewerDwellN: number;
+    sessionViewCounts: Map<string, number>;
+    sessionViewerViewCounts: Map<string, number>;
+  };
+  function emptyAcc(): Acc {
+    return {
+      sessions: new Set(),
+      views: 0,
+      viewerSessions: new Set(),
+      viewerDwellSum: 0,
+      viewerDwellN: 0,
+      sessionViewCounts: new Map(),
+      sessionViewerViewCounts: new Map(),
+    };
+  }
+  const accs = { mobile: emptyAcc(), desktop: emptyAcc() };
+
+  for (const v of views) {
+    const cls = sessionClass.get(v.session_id);
+    if (!cls) continue;
+    const a = accs[cls];
+    a.sessions.add(v.session_id);
+    a.views += 1;
+    a.sessionViewCounts.set(
+      v.session_id,
+      (a.sessionViewCounts.get(v.session_id) ?? 0) + 1,
+    );
+    if (isViewerPath(v.path)) {
+      a.viewerSessions.add(v.session_id);
+      a.sessionViewerViewCounts.set(
+        v.session_id,
+        (a.sessionViewerViewCounts.get(v.session_id) ?? 0) + 1,
+      );
+      if (typeof v.dwell_ms === "number" && v.dwell_ms > 0) {
+        a.viewerDwellSum += v.dwell_ms;
+        a.viewerDwellN += 1;
+      }
+    }
+  }
+
+  function finalize(a: Acc): DeviceCohortMetrics {
+    const sessions = a.sessions.size;
+    let bounced = 0;
+    for (const c of a.sessionViewCounts.values()) if (c <= 1) bounced += 1;
+    let viewerBounced = 0;
+    for (const c of a.sessionViewerViewCounts.values()) if (c <= 1) viewerBounced += 1;
+    return {
+      sessions,
+      views: a.views,
+      viewsPerSession: sessions > 0 ? +(a.views / sessions).toFixed(2) : 0,
+      bounceRate: sessions > 0 ? bounced / sessions : 0,
+      viewerSessions: a.viewerSessions.size,
+      viewerBounceRate:
+        a.viewerSessions.size > 0 ? viewerBounced / a.viewerSessions.size : 0,
+      viewerAvgDwellMs: a.viewerDwellN > 0 ? Math.round(a.viewerDwellSum / a.viewerDwellN) : null,
+    };
+  }
+
+  return { mobile: finalize(accs.mobile), desktop: finalize(accs.desktop) };
 }
 
 function emptyVirality(windowDays: number): ViralitySummary {
@@ -127,7 +304,11 @@ export async function getEngagementSummaryAction(
 
   const days = Math.max(1, Math.min(365, Math.floor(windowDays)));
   const admin = createServiceRoleClient();
-  const windowStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const now = Date.now();
+  const windowStartMs = now - days * 24 * 60 * 60 * 1000;
+  const priorWindowStartMs = now - 2 * days * 24 * 60 * 60 * 1000;
+  const windowStart = new Date(windowStartMs).toISOString();
+  const priorWindowStart = new Date(priorWindowStartMs).toISOString();
 
   try {
     const { data: adminProfiles } = await admin
@@ -137,27 +318,38 @@ export async function getEngagementSummaryAction(
       .limit(1000);
     const adminIds = new Set<string>((adminProfiles ?? []).map((p) => p.id as string));
 
-    // Page views (for funnel + exits + dwell). Exclude bots and admins.
+    // Page views (for funnel + exits + dwell + mobile cohort).
+    // Pull 2× window so the prior period is in scope for comparison.
     const { data: pvRaw } = await admin
       .from("page_views")
-      .select("session_id, user_id, path, dwell_ms, is_exit, created_at")
+      .select("session_id, user_id, path, device, dwell_ms, is_exit, created_at")
       .eq("is_bot", false)
-      .gte("created_at", windowStart)
+      .gte("created_at", priorWindowStart)
       .limit(200000);
-    const pv = (pvRaw ?? []) as Array<{
+    const pvAll = (pvRaw ?? []) as Array<{
       session_id: string;
       user_id: string | null;
       path: string;
+      device: string | null;
       dwell_ms: number | null;
       is_exit: boolean | null;
       created_at: string;
     }>;
 
     const adminSessionIds = new Set<string>();
-    for (const v of pv) {
+    for (const v of pvAll) {
       if (v.user_id && adminIds.has(v.user_id)) adminSessionIds.add(v.session_id);
     }
-    const views = pv.filter((v) => !adminSessionIds.has(v.session_id));
+    const allViews = pvAll.filter((v) => !adminSessionIds.has(v.session_id));
+    // Split current vs prior. The funnel/exits/dwell calcs below should
+    // only see the current window — historical behavior is preserved.
+    const views: typeof allViews = [];
+    const priorViews: typeof allViews = [];
+    for (const v of allViews) {
+      const t = new Date(v.created_at).getTime();
+      if (t >= windowStartMs) views.push(v);
+      else if (t >= priorWindowStartMs) priorViews.push(v);
+    }
 
     const sessions = new Set(views.map((v) => v.session_id));
     const usersWithView = new Set(
@@ -363,6 +555,14 @@ export async function getEngagementSummaryAction(
     // Suppress unused-var warning while still surfacing the count for parity.
     void usersWithView;
 
+    const mobileEngagement: MobileEngagementSummary = {
+      windowDays: days,
+      windowStart,
+      priorWindowStart,
+      current: computeDeviceCohort(views),
+      prior: computeDeviceCohort(priorViews),
+    };
+
     return {
       ok: true,
       summary: {
@@ -374,6 +574,7 @@ export async function getEngagementSummaryAction(
         topEvents,
         totalEvents: evRows.length,
         coachCalCtas,
+        mobileEngagement,
       },
     };
   } catch (e) {
