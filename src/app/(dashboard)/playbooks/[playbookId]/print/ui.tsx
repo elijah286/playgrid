@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -199,6 +199,101 @@ export function PrintPlaybookClient({
     return new Set(initialPack.map((p) => p.id));
   });
   const [config, setConfig] = useState<PlaybookPrintRunConfig>(defaultPlaybookPrintRunConfig);
+
+  // Presets are lifted from FormatAndPresetPanel so the format-switch logic
+  // below can pick "first system preset for this format" without forcing the
+  // panel to be open. Both this component and the panel render from the same
+  // source of truth.
+  const [presets, setPresets] = useState<PrintPreset[] | null>(null);
+  const refreshPresets = useCallback(async () => {
+    const res = await listPrintPresetsAction();
+    if (res.ok) setPresets(res.presets);
+    else setPresets([]);
+  }, []);
+  useEffect(() => {
+    refreshPresets();
+    const onRefresh = () => {
+      refreshPresets();
+    };
+    window.addEventListener("print-presets:refresh", onRefresh);
+    return () => window.removeEventListener("print-presets:refresh", onRefresh);
+  }, [refreshPresets]);
+
+  // Per-format config snapshots so a coach who customizes Wristband, switches
+  // to Call sheet, then comes back to Wristband sees their tweaks restored —
+  // not the system preset reapplied on top. Lifetime is the page session.
+  const perFormatConfigsRef = useRef<Map<PrintProductKind, PlaybookPrintRunConfig>>(new Map());
+  // Tracks formats the user has been on this session — used so we know
+  // whether to auto-apply the first system preset (first time on a format) or
+  // restore the snapshot (return visit).
+  const visitedFormatsRef = useRef<Set<PrintProductKind>>(new Set());
+
+  function firstSystemPresetFor(product: PrintProductKind): PrintPreset | null {
+    if (!presets) return null;
+    return (
+      presets.find(
+        (p) => p.kind === "system" && (p.product ?? p.config.product) === product,
+      ) ?? null
+    );
+  }
+
+  // First time presets load, auto-apply the first system preset for the
+  // currently-selected format. Mirrors what happens on subsequent format
+  // switches so the initial render isn't an awkward "raw defaults" view.
+  const initialAutoApplyDoneRef = useRef(false);
+  useEffect(() => {
+    if (!presets || initialAutoApplyDoneRef.current) return;
+    initialAutoApplyDoneRef.current = true;
+    visitedFormatsRef.current.add(config.product);
+    const sp = firstSystemPresetFor(config.product);
+    if (sp) {
+      setConfig(
+        normalizePrintRunConfig({ ...defaultPlaybookPrintRunConfig, ...sp.config }),
+      );
+    }
+    // We intentionally only react to the first presets load. Subsequent
+    // format changes route through handleConfigChange.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presets]);
+
+  /**
+   * Single entry point for any change to `config`. When `next.product`
+   * differs from the current product, we treat it as a format switch:
+   *  1. Snapshot the *outgoing* format's settings under its product key.
+   *  2. If we have a snapshot for the incoming format, restore it.
+   *  3. Otherwise, if we have a first system preset for the incoming
+   *     format, apply it.
+   *  4. Otherwise, fall through to the raw `next` config.
+   */
+  const handleConfigChange = useCallback(
+    (next: PlaybookPrintRunConfig) => {
+      if (next.product === config.product) {
+        setConfig(next);
+        return;
+      }
+      perFormatConfigsRef.current.set(config.product, config);
+      const saved = perFormatConfigsRef.current.get(next.product);
+      if (saved) {
+        visitedFormatsRef.current.add(next.product);
+        setConfig(saved);
+        return;
+      }
+      const sp = firstSystemPresetFor(next.product);
+      if (sp && !visitedFormatsRef.current.has(next.product)) {
+        visitedFormatsRef.current.add(next.product);
+        setConfig(
+          normalizePrintRunConfig({ ...defaultPlaybookPrintRunConfig, ...sp.config }),
+        );
+        return;
+      }
+      visitedFormatsRef.current.add(next.product);
+      setConfig(next);
+    },
+    // `presets` is read via firstSystemPresetFor — re-bind when it loads so
+    // the lookup sees the latest list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, presets],
+  );
   const [q, setQ] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("position");
   const [numberPlaysInOrder, setNumberPlaysInOrder] = useState<boolean>(false);
@@ -932,7 +1027,7 @@ export function PrintPlaybookClient({
             >
               <FormatAndPresetPanel
                 config={config}
-                onConfigChange={setConfig}
+                onConfigChange={handleConfigChange}
                 canUseWristbands={canUseWristbands}
                 isSiteAdmin={isSiteAdmin}
                 onPromote={(name, description, presetId) =>
@@ -940,6 +1035,8 @@ export function PrintPlaybookClient({
                 }
                 presetSaveName={presetSaveName}
                 setPresetSaveName={setPresetSaveName}
+                presets={presets}
+                refreshPresets={refreshPresets}
               />
             </Section>
 
@@ -952,7 +1049,7 @@ export function PrintPlaybookClient({
             >
               <CustomizePanel
                 config={config}
-                setConfig={setConfig}
+                setConfig={handleConfigChange}
                 canUseWristbands={canUseWristbands}
                 canRemovePlaysheetWatermark={canRemovePlaysheetWatermark}
                 logoUrl={logoUrl}
@@ -1397,6 +1494,8 @@ function FormatAndPresetPanel({
   onPromote,
   presetSaveName,
   setPresetSaveName,
+  presets,
+  refreshPresets,
 }: {
   config: PlaybookPrintRunConfig;
   onConfigChange: (cfg: PlaybookPrintRunConfig) => void;
@@ -1405,25 +1504,11 @@ function FormatAndPresetPanel({
   onPromote: (name: string, description: string, presetId: string | null) => void;
   presetSaveName: string;
   setPresetSaveName: (v: string) => void;
+  presets: PrintPreset[] | null;
+  refreshPresets: () => Promise<void> | void;
 }) {
   const { toast } = useToast();
-  const [presets, setPresets] = useState<PrintPreset[] | null>(null);
   const [busy, startBusy] = useTransition();
-
-  const refreshPresets = async () => {
-    const res = await listPrintPresetsAction();
-    if (res.ok) setPresets(res.presets);
-    else setPresets([]);
-  };
-
-  useEffect(() => {
-    refreshPresets();
-    const onRefresh = () => {
-      refreshPresets();
-    };
-    window.addEventListener("print-presets:refresh", onRefresh);
-    return () => window.removeEventListener("print-presets:refresh", onRefresh);
-  }, []);
 
   function applyPreset(p: PrintPreset) {
     onConfigChange(

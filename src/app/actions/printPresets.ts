@@ -44,8 +44,10 @@ function rowToPreset(r: {
 }
 
 /**
- * Returns every preset visible to the current user — their own user presets
- * plus the global system presets — so the print page can show both.
+ * Returns every preset visible to the current viewer — system presets always,
+ * plus the user's own presets when signed in. Anonymous viewers (e.g. example
+ * playbook previews) still see system presets so they can browse curated
+ * layouts without needing an account.
  */
 export async function listPrintPresetsAction(): Promise<
   | { ok: true; presets: PrintPreset[] }
@@ -53,11 +55,9 @@ export async function listPrintPresetsAction(): Promise<
 > {
   if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Not signed in." };
-  // RLS exposes both `is_system = true` rows and the user's own rows.
+  // RLS exposes both `is_system = true` rows (to anyone) and the signed-in
+  // user's own rows. We don't gate on auth.getUser() — system presets are
+  // public and example viewers need to see them.
   const { data, error } = await supabase
     .from("print_presets")
     .select("id, name, config, updated_at, is_system, description, thumbnail_url, product")
