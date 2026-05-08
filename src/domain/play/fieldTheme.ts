@@ -27,52 +27,59 @@ export type FieldTheme = {
 const BG_COLORS: Record<string, { main: string; dark: string }> = {
   green: { main: "#2D8B4E", dark: "#247540" },
   white: { main: "#FFFFFF", dark: "#FFFFFF" },
+  // Gray now ships as its own palette (was a white alias). Slightly cooler
+  // dark stop so the gradient still reads on print.
+  gray: { main: "#E5E7EB", dark: "#D1D5DB" },
   black: { main: "#0A0A0A", dark: "#141414" },
 };
 
 const LINE_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.30)",
   white: "rgba(0,0,0,0.55)",
+  gray: "rgba(0,0,0,0.45)",
   black: "rgba(255,255,255,0.22)",
 };
 
 const HASH_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.75)",
   white: "rgba(0,0,0,0.70)",
+  gray: "rgba(0,0,0,0.60)",
   black: "rgba(255,255,255,0.60)",
 };
 
 const NUMBER_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.85)",
   white: "rgba(0,0,0,0.80)",
+  gray: "rgba(0,0,0,0.75)",
   black: "rgba(255,255,255,0.70)",
 };
 
 const BORDER_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.35)",
   white: "rgba(0,0,0,0.50)",
+  gray: "rgba(0,0,0,0.40)",
   black: "rgba(255,255,255,0.30)",
 };
 
 const LOS_COLORS: Record<string, string> = {
   green: "rgba(255,255,255,0.55)",
   white: "rgba(0,0,0,0.55)",
+  gray: "rgba(0,0,0,0.50)",
   black: "rgba(255,255,255,0.50)",
 };
 
-/** Resolve every theme color for a given background choice. Legacy "gray"
- *  plays fall back to the white theme so they don't render an unstyled mess.
+/** Resolve every theme color for a given background choice.
  *
  *  Defense in depth: any UNKNOWN string (e.g. a corrupted save, a future
  *  variant the runtime doesn't recognize, or coach AI accidentally writing
- *  an arbitrary value) ALSO falls back to green. Without this, an unknown
- *  key produces `BG_COLORS[key] === undefined` and accessing `.main` on it
+ *  an arbitrary value) falls back to green. Without this, an unknown key
+ *  produces `BG_COLORS[key] === undefined` and accessing `.main` on it
  *  crashes the renderer. The renderer is the LAST line of defense before
  *  a coach sees a play; falling back is always better than throwing or
  *  rendering a giant color block.
  */
 export function resolveFieldTheme(bg: FieldBackground | null | undefined): FieldTheme {
-  const requested: string = bg === "gray" ? "white" : (bg ?? "green");
+  const requested: string = bg ?? "green";
   // Validate the key is in our palette dicts. If not, log and fall back
   // to green — we want to see the bad value in dev tools but never let
   // it corrupt the render.

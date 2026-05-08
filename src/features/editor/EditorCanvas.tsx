@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
@@ -15,16 +15,24 @@ import {
 } from "@/domain/play/animation";
 import {
   resolveEndDecoration,
+  resolveFieldPositionYds,
   resolveFieldZone,
+  resolveHashColumns,
   resolveLineOfScrimmage,
   resolveLineOfScrimmageY,
+  resolveRotatedYardNumbers,
   resolveRouteStroke,
+  resolveShowDownMarkers,
+  resolveShowEndzones,
+  resolveShowFirstDownLine,
   resolveShowHashMarks,
+  resolveShowNoRunZones,
   resolveHashStyle,
   hashColumnsForStyle,
   resolveShowYardNumbers,
   uid,
 } from "@/domain/play/factory";
+import type { FieldStructure } from "@/domain/play/leaguePresets";
 
 /* ------------------------------------------------------------------ */
 /*  Interaction state machine                                         */
@@ -127,6 +135,17 @@ type Props = {
   onAddPlayer?: (position: import("@/domain/play/types").Point2) => void;
   /** Field background color theme */
   fieldBackground?: "green" | "white" | "black" | "gray";
+  /** Resolved league field structure (length, no-run yardage, first-down
+   *  lines, etc.). When provided, the renderer draws the league markings
+   *  that fall inside the 25-yd display window — endzones, no-run zones,
+   *  first-down lines, down markers — and labels yard numbers using the
+   *  ball's league position. When undefined, the canvas falls back to
+   *  legacy 25-yd-window-only rendering with synthesized yard labels. */
+  fieldStructure?: FieldStructure | null;
+  /** Playbook accent color (hex). Used to tint the opponent endzone's
+   *  diagonal-stripe pattern so it reads as the team's "scoring" zone.
+   *  The own endzone always uses a muted gray/white pattern. */
+  playbookColor?: string | null;
   /** Player IDs whose static tokens should be suppressed because an animation
    *  overlay is drawing them in motion. Routes, decorations, zones, and
    *  non-animating players all continue to render normally — the overlay only
@@ -299,6 +318,8 @@ function EditorCanvasImpl({
   mode = "routes",
   onAddPlayer,
   fieldBackground,
+  fieldStructure = null,
+  playbookColor = null,
   animatingPlayerIds = null,
   opponentFormation = null,
   opponentPlayers = null,
@@ -313,6 +334,15 @@ function EditorCanvasImpl({
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Unique-per-instance suffix for SVG <defs> ids. Without this, multiple
+  // EditorCanvas/PlayAnimation svgs mounted on the same page (game-mode
+  // preview alongside playbook tile previews, etc.) collided on shared
+  // ids and the browser would resolve `url(#…)` to the first match —
+  // causing patterns/gradients to bleed between instances. Mirrors the
+  // same fix on PlayDiagramEmbed.
+  const defsId = useId().replace(/:/g, "");
+  const ezOwnPatternId = `ezOwnPattern-${defsId}`;
+  const ezOppPatternId = `ezOppPattern-${defsId}`;
   /** Ghost cursor position in normalized field coords while a pendingZone is
    *  active. Defaults to field center until the user moves the mouse. */
   const [ghostPos, setGhostPos] = useState<Point2>({ x: 0.5, y: 0.65 });
@@ -1476,7 +1506,35 @@ function EditorCanvasImpl({
   const zone = resolveFieldZone(doc);
   // Anchor yard value at LOS based on zone.
   const losYardValue = zone === "midfield" ? 50 : 20;
+  // League-aware label resolution (when fieldStructure is provided): the
+  // ball is spotted at `ballLeagueYds` on the league field; the visible
+  // window's bottom corresponds to (ballLeagueYds - losYd) league yards,
+  // and a window yardage `yd` maps to (windowBottomLeague + yd) on the
+  // league field. Standard convention: yard labels show distance to the
+  // closer goal (50 at midfield, 1 near a goal line, "G" at the goal).
+  const ballLeagueYds = fieldStructure
+    ? resolveFieldPositionYds(doc, fieldStructure)
+    : null;
+  const windowBottomLeague =
+    ballLeagueYds != null ? ballLeagueYds - losYd : null;
+  const leagueYToWindowYd = (m: number): number | null => {
+    if (windowBottomLeague == null) return null;
+    const yd = m - windowBottomLeague;
+    if (yd < 0 || yd > fieldLengthYds) return null;
+    return yd;
+  };
   const yardLabel = (yd: number) => {
+    if (fieldStructure && windowBottomLeague != null) {
+      // League-aware label: show distance to nearer goal line.
+      const m = windowBottomLeague + yd;
+      if (m < 0 || m > fieldStructure.fieldLengthYds) return "";
+      const dist = Math.min(m, fieldStructure.fieldLengthYds - m);
+      const rounded = Math.round(dist);
+      if (rounded <= 0) return "G";
+      if (rounded % 5 !== 0) return "";
+      // Beyond a half-field swing the labels would loop around — clamp.
+      return String(Math.min(50, rounded));
+    }
     // yd is yards from bottom edge of window; offset from LOS in yards:
     const delta = yd - losYd;
     if (zone === "midfield") {
@@ -1493,12 +1551,35 @@ function EditorCanvasImpl({
     return String(v);
   };
   const showYardNumbers = resolveShowYardNumbers(doc);
-  // Iterate 5-yard marks anchored to the LOS (not the bottom of the window),
-  // so the LOS always sits on a yard line and the numbers always appear at
-  // the expected ±5, ±10, ... offsets regardless of where the LOS lands.
-  const firstBelowLos = losYd - Math.floor(losYd / yardInterval) * yardInterval;
-  for (let yd = firstBelowLos; yd < fieldLengthYds; yd += yardInterval) {
-    if (yd <= 0) continue;
+  const rotatedNumbers = resolveRotatedYardNumbers(doc);
+  // Choose where the 5-yard marks sit:
+  //   - With a league field structure, anchor to the LEAGUE grid so the
+  //     5/10/15… stripes stay glued to the field as the ball moves. The
+  //     window slides over a fixed grid; numbers don't disappear when
+  //     the ball is at a non-multiple-of-5 yard.
+  //   - Without a league structure (free-form play), fall back to anchoring
+  //     at the LOS so coaches always see ±5, ±10, … relative to it.
+  const yardWindowYds: number[] = [];
+  if (fieldStructure && windowBottomLeague != null) {
+    const startM = Math.ceil(windowBottomLeague / yardInterval) * yardInterval;
+    const endM = windowBottomLeague + fieldLengthYds;
+    for (let m = startM; m <= endM; m += yardInterval) {
+      // Skip the goal lines themselves (rendered by the endzone layer)
+      // and anything off the league field.
+      if (m <= 0 || m >= fieldStructure.fieldLengthYds) continue;
+      const yd = m - windowBottomLeague;
+      if (yd <= 0 || yd >= fieldLengthYds) continue;
+      yardWindowYds.push(yd);
+    }
+  } else {
+    const firstBelowLos =
+      losYd - Math.floor(losYd / yardInterval) * yardInterval;
+    for (let yd = firstBelowLos; yd < fieldLengthYds; yd += yardInterval) {
+      if (yd <= 0) continue;
+      yardWindowYds.push(yd);
+    }
+  }
+  for (const yd of yardWindowYds) {
     const y = yd / fieldLengthYds;
     const svgY = fy(y);
     // Skip the solid stripe exactly at LOS — the dashed LOS line draws there.
@@ -1523,32 +1604,67 @@ function EditorCanvasImpl({
       const numY = svgY + 0.018;
       const NUM_X_LEFT = 0.27 * fieldAspect;
       const NUM_X_RIGHT = 0.73 * fieldAspect;
-      yardNumbers.push(
-        <text
-          key={`nL${yd}`}
-          x={NUM_X_LEFT}
-          y={numY}
-          fontSize={0.04}
-          fontWeight={700}
-          fill={numberColor}
-          textAnchor="middle"
-          pointerEvents="none"
-        >
-          {label}
-        </text>,
-        <text
-          key={`nR${yd}`}
-          x={NUM_X_RIGHT}
-          y={numY}
-          fontSize={0.04}
-          fontWeight={700}
-          fill={numberColor}
-          textAnchor="middle"
-          pointerEvents="none"
-        >
-          {label}
-        </text>,
-      );
+      if (rotatedNumbers) {
+        // Real-field convention: numbers read INTO the field from each
+        // sideline. Left column rotates +90° (reads right when facing in
+        // from left sideline), right column rotates −90°. textAnchor stays
+        // middle, baseline shifted slightly so glyph centers on numY.
+        yardNumbers.push(
+          <text
+            key={`nL${yd}`}
+            transform={`rotate(90 ${NUM_X_LEFT} ${svgY}) translate(0 0.012)`}
+            x={NUM_X_LEFT}
+            y={svgY}
+            fontSize={0.04}
+            fontWeight={700}
+            fill={numberColor}
+            textAnchor="middle"
+            pointerEvents="none"
+          >
+            {label}
+          </text>,
+          <text
+            key={`nR${yd}`}
+            transform={`rotate(-90 ${NUM_X_RIGHT} ${svgY}) translate(0 0.012)`}
+            x={NUM_X_RIGHT}
+            y={svgY}
+            fontSize={0.04}
+            fontWeight={700}
+            fill={numberColor}
+            textAnchor="middle"
+            pointerEvents="none"
+          >
+            {label}
+          </text>,
+        );
+      } else {
+        yardNumbers.push(
+          <text
+            key={`nL${yd}`}
+            x={NUM_X_LEFT}
+            y={numY}
+            fontSize={0.04}
+            fontWeight={700}
+            fill={numberColor}
+            textAnchor="middle"
+            pointerEvents="none"
+          >
+            {label}
+          </text>,
+          <text
+            key={`nR${yd}`}
+            x={NUM_X_RIGHT}
+            y={numY}
+            fontSize={0.04}
+            fontWeight={700}
+            fill={numberColor}
+            textAnchor="middle"
+            pointerEvents="none"
+          >
+            {label}
+          </text>,
+        );
+      }
     }
   }
 
@@ -1559,7 +1675,7 @@ function EditorCanvasImpl({
   const showHash = resolveShowHashMarks(doc);
   const hashMarks: React.ReactNode[] = [];
   if (showHash) {
-    const [leftFrac, rightFrac] = hashColumnsForStyle(resolveHashStyle(doc));
+    const [leftFrac, rightFrac] = resolveHashColumns(doc);
     const HASH_X_LEFT = leftFrac * fieldAspect;
     const HASH_X_RIGHT = rightFrac * fieldAspect;
     const TICK_HALF = 0.010; // half-length of each tick in field-units
@@ -1590,6 +1706,213 @@ function EditorCanvasImpl({
           vectorEffect="non-scaling-stroke"
         />,
       );
+    }
+  }
+
+  /* ---------- League markings (endzones / no-run / first-down / down markers) ---------- */
+  // Only computed when fieldStructure is provided. Each marking renders
+  // only if it falls inside the visible 25-yd window.
+  const leagueMarkings: React.ReactNode[] = [];
+  if (fieldStructure && windowBottomLeague != null) {
+    const showEndzones = resolveShowEndzones(doc);
+    const showNoRunZones = resolveShowNoRunZones(doc);
+    const showFirstDownLine = resolveShowFirstDownLine(doc);
+    const showDownMarkers = resolveShowDownMarkers(doc);
+    const fieldLen = fieldStructure.fieldLengthYds;
+    const ezDepth = fieldStructure.endzoneDepthYds;
+
+    /** Convert a league yardage `m` to its SVG y, clamped to the visible
+     *  window. Returns null when fully outside. */
+    const ydToSvg = (m: number): number | null => {
+      const yd = leagueYToWindowYd(m);
+      if (yd == null) return null;
+      return fy(yd / fieldLengthYds);
+    };
+
+    /** Render a horizontal band between league yardages a..b (a < b). */
+    const bandSvgY = (a: number, b: number): { yTop: number; yBottom: number } | null => {
+      const lo = Math.max(a, windowBottomLeague);
+      const hi = Math.min(b, windowBottomLeague + fieldLengthYds);
+      if (hi <= lo) return null;
+      const yLo = (lo - windowBottomLeague) / fieldLengthYds;
+      const yHi = (hi - windowBottomLeague) / fieldLengthYds;
+      // SVG y is inverted (fy): so band's top in SVG = fy(yHi), bottom = fy(yLo).
+      return { yTop: fy(yHi), yBottom: fy(yLo) };
+    };
+
+    // 1) Endzone shading: own EZ from -ezDepth..0, opp EZ from fieldLen..fieldLen+ezDepth.
+    //    Each endzone gets a 45° diagonal-stripe pattern so it reads as a
+    //    real endzone — own EZ in muted gray/white, opp EZ tinted with the
+    //    playbook's accent color. Plus a thicker goal line + back-line.
+    if (showEndzones && ezDepth > 0) {
+      const ownBand = bandSvgY(-ezDepth, 0);
+      if (ownBand) {
+        leagueMarkings.push(
+          <rect
+            key="ez-own-fill"
+            x={0}
+            y={ownBand.yTop}
+            width={fieldAspect}
+            height={ownBand.yBottom - ownBand.yTop}
+            fill={`url(#${ezOwnPatternId})`}
+            pointerEvents="none"
+          />,
+          <line
+            key="ez-own-goal"
+            x1={0}
+            y1={ownBand.yBottom}
+            x2={fieldAspect}
+            y2={ownBand.yBottom}
+            stroke={numberColor}
+            strokeWidth={3}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />,
+        );
+        const ownBack = ydToSvg(-ezDepth);
+        if (ownBack != null) {
+          leagueMarkings.push(
+            <line
+              key="ez-own-back"
+              x1={0}
+              y1={ownBack}
+              x2={fieldAspect}
+              y2={ownBack}
+              stroke={numberColor}
+              strokeWidth={2.5}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />,
+          );
+        }
+      }
+      const oppBand = bandSvgY(fieldLen, fieldLen + ezDepth);
+      if (oppBand) {
+        leagueMarkings.push(
+          <rect
+            key="ez-opp-fill"
+            x={0}
+            y={oppBand.yTop}
+            width={fieldAspect}
+            height={oppBand.yBottom - oppBand.yTop}
+            fill={`url(#${ezOppPatternId})`}
+            pointerEvents="none"
+          />,
+          <line
+            key="ez-opp-goal"
+            x1={0}
+            y1={oppBand.yTop}
+            x2={fieldAspect}
+            y2={oppBand.yTop}
+            stroke={numberColor}
+            strokeWidth={3}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />,
+        );
+        const oppBack = ydToSvg(fieldLen + ezDepth);
+        if (oppBack != null) {
+          leagueMarkings.push(
+            <line
+              key="ez-opp-back"
+              x1={0}
+              y1={oppBack}
+              x2={fieldAspect}
+              y2={oppBack}
+              stroke={numberColor}
+              strokeWidth={2.5}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />,
+          );
+        }
+      }
+    }
+
+    // 2) No-run zones (flag): yellow translucent bands. Each zone is an
+    //    explicit `{ atYd, depthYds }` entry on `fieldStructure.noRunZones`
+    //    (from the league preset, optionally overridden per playbook).
+    //    Renderer just iterates the list — no derivation here, so coaches
+    //    can add/remove/tune individual zones in the playbook config.
+    if (showNoRunZones && fieldStructure.noRunZones.length > 0) {
+      for (let i = 0; i < fieldStructure.noRunZones.length; i++) {
+        const z = fieldStructure.noRunZones[i];
+        const from = z.atYd - z.depthYds;
+        const to = z.atYd;
+        if (to <= 0 || from >= fieldLen) continue;
+        const band = bandSvgY(Math.max(0, from), Math.min(fieldLen, to));
+        if (!band) continue;
+        leagueMarkings.push(
+          <rect
+            key={`nr-${i}`}
+            x={0}
+            y={band.yTop}
+            width={fieldAspect}
+            height={band.yBottom - band.yTop}
+            fill="rgba(250, 204, 21, 0.22)"
+            stroke="rgba(202, 138, 4, 0.6)"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />,
+        );
+      }
+    }
+
+    // 3) First-down line: per-play LOS-relative chain only. The league-
+    //    fixed yardages are NOT a fallback here — they belong to the
+    //    "down markers" concept below. Style: lime DASHED so it's
+    //    distinct from the orange-solid down marker.
+    if (showFirstDownLine) {
+      const perPlay = doc.firstDownLineYards;
+      const firstDownLines: number[] = [];
+      if (typeof perPlay === "number") {
+        // LOS-relative → SVG y. losY is normalized; perPlay is yards.
+        const yNorm = losY + perPlay / fieldLengthYds;
+        if (yNorm >= 0 && yNorm <= 1) firstDownLines.push(fy(yNorm));
+      }
+      for (let i = 0; i < firstDownLines.length; i++) {
+        const y = firstDownLines[i];
+        leagueMarkings.push(
+          <line
+            key={`fd-${i}`}
+            x1={0}
+            y1={y}
+            x2={fieldAspect}
+            y2={y}
+            stroke="#84CC16"
+            strokeWidth={2.5}
+            strokeDasharray="6 4"
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />,
+        );
+      }
+    }
+
+    // 4) Down markers: league-fixed yardages (`fieldStructure.firstDownLineYds`).
+    //    These are FIXED by league rule (5v5 = midfield, 7v7 = every 15
+    //    yds) — coaches can't move them per play. Solid bright-orange,
+    //    visually distinct from the dashed lime first-down line.
+    if (showDownMarkers) {
+      for (let i = 0; i < fieldStructure.firstDownLineYds.length; i++) {
+        const y = ydToSvg(fieldStructure.firstDownLineYds[i]);
+        if (y == null) continue;
+        leagueMarkings.push(
+          <line
+            key={`dm-${i}`}
+            x1={0}
+            y1={y}
+            x2={fieldAspect}
+            y2={y}
+            stroke="#F97316"
+            strokeWidth={3}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />,
+        );
+      }
     }
   }
 
@@ -1626,18 +1949,49 @@ function EditorCanvasImpl({
         e.preventDefault();
       }}
     >
-      {/* Field — solid fill (no gradient ref). The previous
-          fill="url(#fieldGrad)" with a non-unique id collided when
-          multiple EditorCanvas/PlayAnimation svgs mounted on the same
-          page (game-mode preview alongside playbook tile previews,
-          etc.) and let the rect fall back to currentColor — surfacing
-          as orange on a tinted ancestor (e.g. anchored playbook accent
-          in the chat panel). Matches the same fix already on
-          PlayDiagramEmbed. */}
+      {/* Endzone stripe patterns — diagonal stripes for own EZ (muted
+          gray/white) and opp EZ (tinted with the playbook accent color).
+          IDs are namespaced per-instance via `useId()` so multiple
+          canvases on the same page don't share defs and bleed visuals
+          into each other (matches the orange-leak fix that turned the
+          field rect into a solid fill). */}
+      <defs>
+        <pattern
+          id={ezOwnPatternId}
+          patternUnits="userSpaceOnUse"
+          width="0.05"
+          height="0.05"
+          patternTransform="rotate(45)"
+        >
+          <rect width="0.05" height="0.05" fill="rgba(0,0,0,0.06)" />
+          <rect width="0.025" height="0.05" fill="rgba(255,255,255,0.10)" />
+        </pattern>
+        <pattern
+          id={ezOppPatternId}
+          patternUnits="userSpaceOnUse"
+          width="0.05"
+          height="0.05"
+          patternTransform="rotate(45)"
+        >
+          <rect
+            width="0.05"
+            height="0.05"
+            fill={playbookColor || "#F26522"}
+            fillOpacity={0.08}
+          />
+          <rect
+            width="0.025"
+            height="0.05"
+            fill={playbookColor || "#F26522"}
+            fillOpacity={0.22}
+          />
+        </pattern>
+      </defs>
       <rect width={fieldAspect} height={1} fill={bg.main} />
       {yardLines}
       {yardNumbers}
       {hashMarks}
+      {leagueMarkings}
 
       {/* Line of scrimmage */}
       {losStyle === "line" && (
@@ -1698,8 +2052,10 @@ function EditorCanvasImpl({
         );
       })()}
 
-      {/* Rush line (flag defense): dashed line at losY + rushLineYards / fieldLengthYds. */}
-      {doc.metadata.playType === "defense" && (doc.showRushLine ?? true) && (() => {
+      {/* Rush line: dashed line at losY + rushLineYards / fieldLengthYds.
+       *  Originally defense-only; now optional on any play type so coaches
+       *  can show offensive plays where the rusher will start from. */}
+      {(doc.showRushLine ?? doc.metadata.playType === "defense") && (() => {
         const rushYds = doc.rushLineYards ?? 7;
         const rushY = losY + rushYds / fieldLengthYds;
         if (rushY >= 1) return null;

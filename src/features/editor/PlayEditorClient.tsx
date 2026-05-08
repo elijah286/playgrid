@@ -8,7 +8,7 @@ import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, 
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
 import { resolveEndDecoration, mkZone, zoneStyleFromColor } from "@/domain/play/factory";
-import { fieldAspectFor, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
+import { fieldAspectFor, fieldAspectForWidth, NARROW_FIELD_ASPECT } from "@/domain/play/render-config";
 import {
   archivePlayAction,
   createCustomOpponentAction,
@@ -56,7 +56,10 @@ import { QuickRoutes } from "./QuickRoutes";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
 import { NotesMarkdown, copyNotesToClipboard } from "./NotesMarkdown";
-import type { PlaybookSettings } from "@/domain/playbook/settings";
+import {
+  resolvePlaybookFieldStructure,
+  type PlaybookSettings,
+} from "@/domain/playbook/settings";
 import {
   ExamplePreviewProvider,
   useExamplePreview,
@@ -95,6 +98,15 @@ type Props = {
   /** Team / playbook logo URL — shown as the avatar in the slim chrome.
    *  Falls back to the first letter of the playbook name when null. */
   playbookLogoUrl?: string | null;
+  /** Season label ("Spring 2026", etc.) shown as the first segment of the
+   *  banner subtitle — mirrors the playbook grid view's banner. */
+  playbookSeason?: string | null;
+  /** Sport variant id (flag_5v5 / tackle_11 / …). Resolved to its label
+   *  for the banner subtitle. */
+  playbookVariant?: string | null;
+  /** Display name of the playbook owner. Shown in the banner subtitle so
+   *  the editor banner reads identically to the playbook page banner. */
+  playbookOwnerName?: string | null;
   initialDocument: PlayDocument;
   initialNav: PlaybookPlayNavItem[];
   initialGroups: PlaybookGroupRow[];
@@ -175,6 +187,9 @@ function PlayEditorClientInner({
   playbookName,
   playbookColor = null,
   playbookLogoUrl = null,
+  playbookSeason = null,
+  playbookVariant = null,
+  playbookOwnerName = null,
   initialDocument,
   initialNav,
   initialGroups,
@@ -182,7 +197,7 @@ function PlayEditorClientInner({
   opponentFormation,
   allFormations = [],
   opponentFormations,
-  playbookSettings,
+  playbookSettings: initialPlaybookSettings,
   canEdit: roleCanEdit = true,
   isExamplePreview = false,
   isArchived = false,
@@ -204,6 +219,21 @@ function PlayEditorClientInner({
   const { toast } = useToast();
   const { blockIfPreview } = useExamplePreview();
   const { doc, dispatch, undo, redo, replaceDocument, canUndo, canRedo } = usePlayEditor(initialDocument);
+
+  // Local state for playbook settings so width/length spinners (in the
+  // Display popover's Field-size section) can update the canvas live
+  // instead of waiting for a refresh. The server action persists in the
+  // background; this state mirrors the persisted value optimistically.
+  const [playbookSettings, setPlaybookSettings] = useState(
+    initialPlaybookSettings,
+  );
+
+  // Resolved league field structure from the playbook's fieldDisplay config.
+  // Drives the canvas's league markings (endzones, no-run zones, first-down
+  // lines, down markers) and the footer's position picker chips.
+  const fieldStructure = playbookSettings
+    ? resolvePlaybookFieldStructure(playbookSettings.fieldDisplay)
+    : null;
 
   // `canEdit` gates every body-level edit affordance (canvas, toolbars,
   // notes, tags, inspector, quick routes). When the play is archived, these
@@ -386,8 +416,12 @@ function PlayEditorClientInner({
   }, []);
   // Aspect comes from the shared render-config helper (matches every other
   // surface that draws a play field — chat embed, game mode, formation
-  // editor — so they all stay in lockstep).
-  const naturalAspect = fieldAspectFor(doc);
+  // editor — so they all stay in lockstep). When the playbook's
+  // fieldStructure has a custom width, that wins so the Display popover's
+  // width spinner immediately re-shapes the canvas.
+  const naturalAspect = fieldStructure
+    ? fieldAspectForWidth(fieldStructure.fieldWidthYds)
+    : fieldAspectFor(doc);
   const fieldAspect = fullFieldWidth
     ? naturalAspect
     : Math.min(naturalAspect, NARROW_FIELD_ASPECT);
@@ -1212,6 +1246,8 @@ function PlayEditorClientInner({
             activeWidth={activeWidth}
             fieldAspect={fieldAspect}
             fieldBackground={doc.fieldBackground}
+            fieldStructure={fieldStructure}
+            playbookColor={playbookColor}
             animatingPlayerIds={animatingPlayerIds}
             opponentFormation={opponentFormation ?? null}
             opponentPlayers={
@@ -1277,6 +1313,9 @@ function PlayEditorClientInner({
         playbookName={playbookName ?? null}
         playbookColor={playbookColor}
         playbookLogoUrl={playbookLogoUrl}
+        playbookSeason={playbookSeason}
+        playbookVariant={playbookVariant}
+        playbookOwnerName={playbookOwnerName}
       />
       {isNavPending && (
         <div
@@ -1321,17 +1360,6 @@ function PlayEditorClientInner({
           Done editing button moves to the very top so the field has as much
           vertical room as possible. Desktop always keeps the header. */}
       <div className={isTouchDevice && mode === "edit" ? "hidden sm:block" : ""}>
-      {/* Desktop-only back-to-playbook breadcrumb. The mobile equivalent
-          lives in EditorPlaybookChrome (orange banner at top). */}
-      <div className="mb-1 hidden items-center justify-between gap-2 sm:flex">
-        <Link
-          href={`/playbooks/${playbookId}`}
-          className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="truncate">{playbookName || "Back to playbook"}</span>
-        </Link>
-      </div>
       <EditorHeaderBar
         playId={playId}
         playbookId={playbookId}
@@ -1571,6 +1599,8 @@ function PlayEditorClientInner({
                 activeWidth={activeWidth}
                 fieldAspect={fieldAspect}
                 fieldBackground={doc.fieldBackground}
+                fieldStructure={fieldStructure}
+                playbookColor={playbookColor}
                 animatingPlayerIds={animatingPlayerIds}
                 opponentFormation={opponentFormation ?? null}
                 opponentPlayers={
@@ -1670,7 +1700,18 @@ function PlayEditorClientInner({
                 card directly under the field (see PlayNotesCard above). */}
             {canEdit && mode === "edit" && (
               <div className="sm:hidden">
-                <FieldSizeControls doc={doc} dispatch={dispatch} showFullFieldToggle={canExpandFieldWidth} fullFieldWidth={fullFieldWidth} onFullFieldWidthChange={setFullFieldWidthPersisted} />
+                <FieldSizeControls
+                  doc={doc}
+                  dispatch={dispatch}
+                  showFullFieldToggle={canExpandFieldWidth}
+                  fullFieldWidth={fullFieldWidth}
+                  onFullFieldWidthChange={setFullFieldWidthPersisted}
+                  fieldStructure={fieldStructure}
+                  playbookId={playbookId}
+                  playbookSettings={playbookSettings}
+                  onPlaybookSettingsChange={setPlaybookSettings}
+                  playbookColor={playbookColor}
+                />
               </div>
             )}
 
@@ -1678,7 +1719,18 @@ function PlayEditorClientInner({
                 FieldSizeControls in the edit-only block above. */}
             {canEdit && (
               <div className="hidden sm:block">
-                <FieldSizeControls doc={doc} dispatch={dispatch} showFullFieldToggle={canExpandFieldWidth} fullFieldWidth={fullFieldWidth} onFullFieldWidthChange={setFullFieldWidthPersisted} />
+                <FieldSizeControls
+                  doc={doc}
+                  dispatch={dispatch}
+                  showFullFieldToggle={canExpandFieldWidth}
+                  fullFieldWidth={fullFieldWidth}
+                  onFullFieldWidthChange={setFullFieldWidthPersisted}
+                  fieldStructure={fieldStructure}
+                  playbookId={playbookId}
+                  playbookSettings={playbookSettings}
+                  onPlaybookSettingsChange={setPlaybookSettings}
+                  playbookColor={playbookColor}
+                />
               </div>
             )}
             <div className="hidden sm:block">

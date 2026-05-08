@@ -568,6 +568,30 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
     case "document.setShowRushLine":
       return { ...doc, showRushLine: cmd.showRushLine };
 
+    case "document.setFieldPositionYds":
+      return { ...doc, fieldPositionYds: cmd.fieldPositionYds };
+
+    case "document.setShowEndzones":
+      return { ...doc, showEndzones: cmd.showEndzones };
+
+    case "document.setShowNoRunZones":
+      return { ...doc, showNoRunZones: cmd.showNoRunZones };
+
+    case "document.setShowFirstDownLine":
+      return { ...doc, showFirstDownLine: cmd.showFirstDownLine };
+
+    case "document.setShowDownMarkers":
+      return { ...doc, showDownMarkers: cmd.showDownMarkers };
+
+    case "document.setRotatedYardNumbers":
+      return { ...doc, rotatedYardNumbers: cmd.rotatedYardNumbers };
+
+    case "document.setHashColumns":
+      return { ...doc, hashColumns: cmd.hashColumns };
+
+    case "document.setFirstDownLineYards":
+      return { ...doc, firstDownLineYards: cmd.firstDownLineYards };
+
     case "document.setFormationLink": {
       const metadata = {
         ...doc.metadata,

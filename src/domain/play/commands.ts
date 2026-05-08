@@ -128,6 +128,14 @@ export type PlayCommand =
   | { type: "document.setFieldZone"; fieldZone: "midfield" | "red_zone" }
   | { type: "document.setRushLineYards"; rushLineYards: number }
   | { type: "document.setShowRushLine"; showRushLine: boolean }
+  | { type: "document.setFieldPositionYds"; fieldPositionYds: number }
+  | { type: "document.setShowEndzones"; showEndzones: boolean }
+  | { type: "document.setShowNoRunZones"; showNoRunZones: boolean }
+  | { type: "document.setShowFirstDownLine"; showFirstDownLine: boolean }
+  | { type: "document.setShowDownMarkers"; showDownMarkers: boolean }
+  | { type: "document.setRotatedYardNumbers"; rotatedYardNumbers: boolean }
+  | { type: "document.setHashColumns"; hashColumns: [number, number] | undefined }
+  | { type: "document.setFirstDownLineYards"; firstDownLineYards: number | undefined }
   | {
       type: "document.setFormationLink";
       formationId: string | null;

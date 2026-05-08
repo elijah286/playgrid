@@ -117,6 +117,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "editor-field-customization",
+    name: "Customizable field markings in the play editor",
+    description:
+      "Coaches can dial in the field to match their league directly from the play editor footer. The Markings popover lets you add, remove, and tune individual no-run / pass-only zones (each with its own yardage and depth) and fixed down-marker yard lines, so a 5v5 league can show midfield + scoring approach bands while a 7v7 league shows none — or anything in between. Field width and length are also adjustable in 5- and 10-yard steps for non-standard fields. Everything saves as a per-team default and applies across every play in the playbook.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-08",
+  },
+  {
     id: "play-landscape-fullscreen",
     name: "Fullscreen landscape play view on phones",
     description:

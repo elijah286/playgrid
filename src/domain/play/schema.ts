@@ -330,6 +330,15 @@ export const playDocumentSchema = z.object({
   fieldZone: fieldZoneSchema.optional(),
   rushLineYards: z.number().optional(),
   showRushLine: z.boolean().optional(),
+  fieldPositionYds: z.number().optional(),
+  showEndzones: z.boolean().optional(),
+  showNoRunZones: z.boolean().optional(),
+  showFirstDownLine: z.boolean().optional(),
+  showDownMarkers: z.boolean().optional(),
+  rotatedYardNumbers: z.boolean().optional(),
+  hashColumns: z.tuple([z.number(), z.number()]).optional(),
+  firstDownLineYards: z.number().optional(),
+  downMarkerYards: z.number().optional(),
 }).strict();
 
 export type PlayDocumentParsed = z.infer<typeof playDocumentSchema>;

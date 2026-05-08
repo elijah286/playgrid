@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Minus,
   Spline,
@@ -243,20 +245,7 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="flex items-center gap-0.5">
-          {COLOR_PRESETS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => onColorChange(c)}
-              className={`size-4 rounded-full border-2 transition-transform ${
-                c === color ? "scale-110 border-primary" : "border-transparent hover:scale-105"
-              }`}
-              style={{ backgroundColor: c }}
-              title={c}
-            />
-          ))}
-        </div>
+        <ColorPickerButton color={color} onColorChange={onColorChange} />
       </div>
 
       {/* Row 2: history / player actions / zones */}
@@ -347,5 +336,155 @@ export function RouteToolbar({
         )}
       </div>
     </div>
+  );
+}
+
+/** Compact color trigger that opens a popover with the preset swatches.
+ *  Uses the standard "palette" icon so it's recognizable at a glance,
+ *  with a thin colored underline showing the current pick. The popover
+ *  renders into a portal so it never clips against the toolbar/card it
+ *  lives inside. */
+function ColorPickerButton({
+  color,
+  onColorChange,
+}: {
+  color: string;
+  onColorChange: (c: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  // Reposition under the trigger when opening or on resize/scroll.
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const t = triggerRef.current;
+      const p = popRef.current;
+      if (!t) return;
+      const r = t.getBoundingClientRect();
+      const pw = p?.offsetWidth ?? 168; // matches min-w below
+      const ph = p?.offsetHeight ?? 60;
+      const pad = 6;
+      // Default: align to the right edge of the trigger, just below.
+      let left = r.right - pw;
+      const top = r.bottom + 4;
+      // Clamp to viewport.
+      left = Math.max(pad, Math.min(left, window.innerWidth - pw - pad));
+      const finalTop = Math.min(top, window.innerHeight - ph - pad);
+      setPos({ left, top: finalTop });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const popover = open && pos ? (
+    <div
+      ref={popRef}
+      role="menu"
+      style={{ position: "fixed", left: pos.left, top: pos.top, minWidth: "10.5rem" }}
+      className="z-50 flex flex-wrap gap-1 rounded-md border border-border bg-surface-raised p-1.5 shadow-lg"
+    >
+      {COLOR_PRESETS.map((c) => {
+        const active = c === color;
+        return (
+          <button
+            key={c}
+            type="button"
+            role="menuitemradio"
+            aria-checked={active}
+            onClick={() => {
+              onColorChange(c);
+              setOpen(false);
+            }}
+            className={`size-6 rounded-full border-2 transition-transform ${
+              active
+                ? "scale-110 border-primary"
+                : "border-transparent hover:scale-105 hover:border-foreground/20"
+            }`}
+            style={{ backgroundColor: c }}
+            title={c}
+          />
+        );
+      })}
+    </div>
+  ) : null;
+
+  return (
+    <>
+      <Tooltip content="Color">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="Pick color"
+          className={`relative flex size-7 items-center justify-center rounded-md border transition-colors ${
+            open
+              ? "border-primary bg-primary/10"
+              : "border-border bg-surface-inset hover:bg-surface-raised"
+          }`}
+        >
+          {/* Custom palette glyph: outline in foreground color, dots
+              filled in saturated hues so the affordance reads as a
+              color picker at a glance (instead of a flat gray icon). */}
+          <svg
+            viewBox="0 0 24 24"
+            className="size-4 text-foreground"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 2C6.477 2 2 6.477 2 12c0 5.523 4.477 10 10 10 .995 0 1.8-.805 1.8-1.8 0-.46-.182-.876-.474-1.18a1.797 1.797 0 0 1-.474-1.222c0-.995.805-1.798 1.8-1.798h2.117c3.183 0 5.768-2.585 5.768-5.768C22.537 5.683 17.834 2 12 2z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="6.5" cy="12.5" r="1.3" fill="#22C55E" />
+            <circle cx="8.5" cy="7.5" r="1.3" fill="#FACC15" />
+            <circle cx="13.5" cy="6.5" r="1.3" fill="#EF4444" />
+            <circle cx="17.5" cy="10.5" r="1.3" fill="#3B82F6" />
+          </svg>
+          <span
+            aria-hidden
+            className="absolute inset-x-1 bottom-0.5 h-1 rounded-sm border border-black/15"
+            style={{ backgroundColor: color }}
+          />
+        </button>
+      </Tooltip>
+      {typeof document !== "undefined" && popover
+        ? createPortal(popover, document.body)
+        : null}
+    </>
   );
 }

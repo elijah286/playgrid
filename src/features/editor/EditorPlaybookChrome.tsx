@@ -3,23 +3,28 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft } from "lucide-react";
+import { SPORT_VARIANT_LABELS } from "@/domain/play/factory";
+import type { SportVariant } from "@/domain/play/types";
 
 /**
- * Mobile-only slim chrome for the play editor — mirrors the orange
- * playbook banner that's shown on the playbook detail page so the user
- * doesn't lose context when they tap into a play. Replaces the SiteHeader
- * (which is hidden on mobile editor via `editor-hide-site-header`).
+ * Slim chrome banner for the play editor — mirrors the colored playbook
+ * banner on the playbook detail page so the user keeps the team's visual
+ * identity (logo + color + name + season subtitle) while editing a play.
  *
- * Just the essentials: back arrow, playbook initial/avatar, playbook
- * name. Cal lives in the bottom nav so it has a single home (and the
- * top stays free for navigation context). Full PlaybookHeader actions
- * (share, kebab) stay scoped to the playbook page itself.
+ * Renders on both mobile and desktop. Sticky-and-z-elevated on mobile
+ * (where it stands in for the hidden SiteHeader) and static-positioned
+ * on desktop (z-auto so it doesn't fight the SiteHeader's z-index — it
+ * just scrolls away with the page). Just the essentials: back arrow,
+ * playbook avatar, name, subtitle.
  */
 export function EditorPlaybookChrome({
   playbookId,
   playbookName,
   playbookColor,
   playbookLogoUrl,
+  playbookSeason,
+  playbookVariant,
+  playbookOwnerName,
 }: {
   playbookId: string;
   playbookName: string | null;
@@ -27,34 +32,67 @@ export function EditorPlaybookChrome({
   playbookColor: string | null;
   /** Team logo URL. Falls back to the playbook initial when null. */
   playbookLogoUrl: string | null;
+  /** Season label, e.g. "Spring 2026". Shown in the subtitle. */
+  playbookSeason?: string | null;
+  /** SportVariant id (flag_5v5, tackle_11, …). Resolved to a human label. */
+  playbookVariant?: string | null;
+  /** Owner display name shown in the subtitle. */
+  playbookOwnerName?: string | null;
 }) {
   const accentColor = playbookColor || "#F26522";
   const isLightBg = hexLuminance(accentColor) > 0.55;
   const onAccent = isLightBg ? "text-slate-900" : "text-white";
+  const onAccentMuted = isLightBg ? "text-slate-700" : "text-white/80";
   const onAccentHover = isLightBg ? "hover:bg-black/10" : "hover:bg-white/15";
   const gradient = `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 55%, ${accentColor}a8 100%)`;
   const initial = (playbookName ?? "P").trim().charAt(0).toUpperCase();
+  const variantLabel =
+    playbookVariant && playbookVariant in SPORT_VARIANT_LABELS
+      ? SPORT_VARIANT_LABELS[playbookVariant as SportVariant]
+      : null;
+  const subtitle = [
+    playbookSeason?.trim() || null,
+    variantLabel,
+    playbookOwnerName?.trim() || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div
       // -mx-6 -mt-5 escapes the editor layout's px-6 py-5 padding so the
-      // banner bleeds edge-to-edge like the playbook page's banner.
-      // backgroundColor is set explicitly under backgroundImage so the
-      // gradient's alpha steps don't let content scroll-through. The
-      // playbook page's chrome avoids this because it sits inside a
-      // `bg-surface` wrapper; the editor doesn't have that backdrop.
-      className="sticky top-0 z-30 -mx-6 -mt-5 sm:hidden"
+      // banner bleeds edge-to-edge. Sticky on mobile only — on desktop
+      // we drop sticky (`sm:static`) AND clear the z-index (`sm:z-auto`)
+      // so the banner stays in normal flow and doesn't fight the
+      // SiteHeader's stacking when the page scrolls.
+      // backgroundColor under backgroundImage keeps the gradient's alpha
+      // steps from letting content scroll-through on mobile.
+      className="sticky top-0 z-30 -mx-6 -mt-5 sm:static sm:z-auto"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
-      <div className="flex items-center gap-2 px-4 py-3">
+      <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+        {/* Mobile: icon-only back arrow. Desktop: "Back" text link. */}
         <Link
           href={`/playbooks/${playbookId}`}
-          className={`-ml-1 inline-flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors ${onAccent} ${onAccentHover}`}
+          className={`-ml-1 inline-flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors sm:hidden ${onAccent} ${onAccentHover}`}
           aria-label="Back to playbook"
         >
           <ArrowLeft className="size-5" />
         </Link>
+        <Link
+          href={`/playbooks/${playbookId}`}
+          className={`hidden items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors sm:inline-flex ${onAccentMuted} ${onAccentHover}`}
+          aria-label="Back to playbook"
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </Link>
         <div
-          className={`relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-base font-extrabold ring-1 ${
+          className={`hidden h-6 w-px sm:block ${
+            isLightBg ? "bg-black/20" : "bg-white/25"
+          }`}
+        />
+        <div
+          className={`relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-base font-extrabold ring-1 sm:size-11 sm:rounded-xl sm:text-lg ${
             isLightBg ? "bg-white/80 ring-black/10" : "bg-white/20 ring-white/30"
           } ${onAccent}`}
         >
@@ -64,17 +102,26 @@ export function EditorPlaybookChrome({
               alt=""
               fill
               className="object-contain p-1"
-              sizes="36px"
+              sizes="44px"
             />
           ) : (
             <span>{initial}</span>
           )}
         </div>
-        <h1
-          className={`min-w-0 flex-1 truncate text-base font-extrabold tracking-tight ${onAccent}`}
-        >
-          {playbookName || "Playbook"}
-        </h1>
+        <div className="min-w-0 flex-1">
+          <h1
+            className={`truncate text-base font-extrabold tracking-tight sm:text-2xl ${onAccent}`}
+          >
+            {playbookName || "Playbook"}
+          </h1>
+          {subtitle && (
+            <p
+              className={`truncate text-[11px] font-medium sm:text-sm ${onAccentMuted}`}
+            >
+              {subtitle}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

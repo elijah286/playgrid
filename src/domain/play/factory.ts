@@ -9,6 +9,7 @@ import {
   type SportProfile,
   type SportVariant,
 } from "./types";
+import type { FieldStructure } from "./leaguePresets";
 
 /** Whether hash marks should render by default for a given sport variant.
  *  Flag football plays a smaller, cleaner field — hash marks are noise.
@@ -80,6 +81,79 @@ export function resolveLineOfScrimmageY(doc: PlayDocument): number {
 /** Field zone, defaulting to mid-field. */
 export function resolveFieldZone(doc: PlayDocument): "midfield" | "red_zone" {
   return doc.fieldZone ?? "midfield";
+}
+
+/** Resolve where the ball is spotted, in yards from the offense's own goal
+ *  line. Reads the explicit `fieldPositionYds` if set; otherwise derives a
+ *  sensible default from the legacy `fieldZone` flag. */
+export function resolveFieldPositionYds(
+  doc: PlayDocument,
+  structure: Pick<FieldStructure, "fieldLengthYds">,
+): number {
+  const explicit = doc.fieldPositionYds;
+  if (typeof explicit === "number" && Number.isFinite(explicit)) {
+    return Math.max(0, Math.min(structure.fieldLengthYds, explicit));
+  }
+  // Legacy mapping: midfield → midpoint of field, red_zone → 10 yds from
+  // opp goal. Plays saved before fieldPositionYds existed get the same
+  // visible result they did before.
+  const zone = resolveFieldZone(doc);
+  if (zone === "red_zone") {
+    return Math.max(0, structure.fieldLengthYds - 10);
+  }
+  return structure.fieldLengthYds / 2;
+}
+
+/** Whether endzones should render. Defaults to true — the explicit field
+ *  flag wins, so a play can hide them. */
+export function resolveShowEndzones(doc: PlayDocument): boolean {
+  return doc.showEndzones ?? true;
+}
+
+/** Whether the no-run zone band(s) should render. Defaults to true; the
+ *  renderer additionally suppresses the zones when the field structure
+ *  has `noRunZoneYds === null` (e.g. tackle, where there's no rule). */
+export function resolveShowNoRunZones(doc: PlayDocument): boolean {
+  return doc.showNoRunZones ?? true;
+}
+
+/** Whether the league's fixed first-down line(s) should render. Defaults
+ *  to true; the renderer additionally suppresses the line when the field
+ *  structure has no `firstDownLineYds`. */
+export function resolveShowFirstDownLine(doc: PlayDocument): boolean {
+  return doc.showFirstDownLine ?? true;
+}
+
+/** Whether bright-orange down marker line(s) should render. Defaults to
+ *  false — most leagues don't surface this; coaches opt in. */
+export function resolveShowDownMarkers(doc: PlayDocument): boolean {
+  return doc.showDownMarkers ?? false;
+}
+
+/** Whether yard-number glyphs should be rotated to read from each
+ *  sideline. Defaults derive from variant — on for tackle and other wide
+ *  fields, off for narrow flag fields. */
+export function resolveRotatedYardNumbers(doc: PlayDocument): boolean {
+  if (typeof doc.rotatedYardNumbers === "boolean") return doc.rotatedYardNumbers;
+  return doc.sportProfile.variant === "tackle_11";
+}
+
+/** Hash-mark column positions, with explicit numeric override winning over
+ *  the named style. Returns left/right x as fractions of field width. */
+export function resolveHashColumns(doc: PlayDocument): [number, number] {
+  const override = doc.hashColumns;
+  if (
+    Array.isArray(override) &&
+    override.length === 2 &&
+    typeof override[0] === "number" &&
+    typeof override[1] === "number" &&
+    override[0] >= 0.05 && override[0] <= 0.95 &&
+    override[1] >= 0.05 && override[1] <= 0.95 &&
+    override[0] < override[1]
+  ) {
+    return [override[0], override[1]];
+  }
+  return hashColumnsForStyle(resolveHashStyle(doc));
 }
 
 /**
@@ -364,17 +438,51 @@ export function defaultFlagSevenPlayers(): Player[] {
   ];
 }
 
-export function createEmptyPlayDocument(overrides?: Partial<PlayDocument>): PlayDocument {
+/** Apply the playbook's field-display defaults to a fresh PlayDocument.
+ *  Defaults can be passed at create time so a new play inherits the
+ *  playbook's league preset (e.g. IFAF flag → no-run zones on, midfield
+ *  first-down line on). Per-play overrides specified in `overrides` win
+ *  over the defaults. */
+type FieldDisplayDefaultsLike = {
+  background: PlayDocument["fieldBackground"];
+  showEndzones: boolean;
+  showNoRunZones: boolean;
+  showFirstDownLine: boolean;
+  showDownMarkers: boolean;
+  rotatedYardNumbers: boolean;
+  showHashMarks: boolean;
+  hashStyle: NonNullable<PlayDocument["hashStyle"]>;
+  showYardNumbers: boolean;
+};
+
+export function createEmptyPlayDocument(
+  overrides?: Partial<PlayDocument>,
+  fieldDefaults?: FieldDisplayDefaultsLike | null,
+): PlayDocument {
   const variant: SportVariant =
     (overrides?.sportProfile?.variant as SportVariant | undefined) ?? "flag_7v7";
   const players = defaultPlayersForVariant(variant);
   const anchors: Record<string, { x: number; y: number }> = {};
   for (const p of players) anchors[p.label] = { ...p.position };
 
+  const fd = fieldDefaults ?? null;
   const base: PlayDocument = {
     schemaVersion: PLAY_DOCUMENT_SCHEMA_VERSION,
     sportProfile: sportProfileForVariant(variant),
     lineOfScrimmageY: 0.4,
+    ...(fd
+      ? {
+          fieldBackground: fd.background,
+          showEndzones: fd.showEndzones,
+          showNoRunZones: fd.showNoRunZones,
+          showFirstDownLine: fd.showFirstDownLine,
+          showDownMarkers: fd.showDownMarkers,
+          rotatedYardNumbers: fd.rotatedYardNumbers,
+          showHashMarks: fd.showHashMarks,
+          hashStyle: fd.hashStyle,
+          showYardNumbers: fd.showYardNumbers,
+        }
+      : {}),
     metadata: {
       coachName: "New Play",
       shorthand: "",

@@ -15,6 +15,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { SportVariant } from "@/domain/play/types";
 import {
   normalizePlaybookSettings,
+  type FieldDisplaySettings,
   type PlaybookSettings,
 } from "@/domain/playbook/settings";
 import { getUserEntitlement } from "@/lib/billing/entitlement";
@@ -371,11 +372,56 @@ export async function updatePlaybookSettingsAction(
       settings.maxThrowDepthYds > 0
         ? settings.maxThrowDepthYds
         : null,
+    fieldDisplay: settings.fieldDisplay,
   };
 
   const { error } = await supabase
     .from("playbooks")
     .update({ settings: payload })
+    .eq("id", playbookId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
+/**
+ * Update only the `fieldDisplay` block of the playbook settings.
+ * The play-editor footer's "Save as team default" calls this — every
+ * other settings field stays untouched. Server-side reads the current
+ * row, normalizes (so legacy/null rows get a sane base), then writes
+ * back the merged blob.
+ */
+export async function updatePlaybookFieldDisplayAction(
+  playbookId: string,
+  fieldDisplay: FieldDisplaySettings,
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const lock = await assertPlaybookNotLocked(playbookId);
+  if (!lock.ok) return { ok: false as const, error: lock.error };
+
+  const { data: row, error: readErr } = await supabase
+    .from("playbooks")
+    .select("sport_variant, custom_offense_count, settings")
+    .eq("id", playbookId)
+    .single();
+  if (readErr || !row) {
+    return { ok: false as const, error: readErr?.message ?? "Playbook not found." };
+  }
+  const current = normalizePlaybookSettings(
+    row.settings,
+    (row.sport_variant as SportVariant) ?? "flag_7v7",
+    (row.custom_offense_count as number | null) ?? null,
+  );
+  const merged: PlaybookSettings = { ...current, fieldDisplay };
+
+  const { error } = await supabase
+    .from("playbooks")
+    .update({ settings: merged })
     .eq("id", playbookId);
   if (error) return { ok: false as const, error: error.message };
   return { ok: true as const };

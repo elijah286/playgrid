@@ -252,6 +252,38 @@ export function EditorHeaderBar({
                 {mode === "edit" ? "Done" : "Edit"}
               </Button>
             )}
+            {/* Desktop-only sibling-play navigation, inlined here so it
+                shares the title row's empty horizontal space instead of
+                eating its own row underneath. Mobile uses the bottom-nav
+                Plays tab to open the same picker. */}
+            <div className="mr-1 hidden items-center gap-0.5 sm:flex">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                leftIcon={ChevronLeft}
+                disabled={!prevPlay}
+                onClick={() => prevPlay && onNavigateToPlay(prevPlay.id)}
+              >
+                Prev
+              </Button>
+              <PlaybookPlaySearchMenu
+                plays={nav}
+                groups={groups}
+                currentPlayId={playId}
+                onNavigatePlay={onNavigateToPlay}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                rightIcon={ChevronRight}
+                disabled={!nextPlay}
+                onClick={() => nextPlay && onNavigateToPlay(nextPlay.id)}
+              >
+                Next
+              </Button>
+            </div>
             {/* Match the grid view's "New play" CTA — primary pill, not
                 a ghost text button — so the action looks the same in
                 every place a coach can create a play. Copy lives in
@@ -309,38 +341,6 @@ export function EditorHeaderBar({
             />
           </div>
         )}
-      </div>
-      {/* Desktop-only Previous / All plays / Next row. Mobile uses the
-          bottom-nav Plays tab to open the same picker — having both an
-          inline row and a footer entry felt redundant on small screens
-          and ate vertical space the field needed. */}
-      <div className="mt-1 hidden flex-wrap items-center gap-1 sm:flex">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          leftIcon={ChevronLeft}
-          disabled={!prevPlay}
-          onClick={() => prevPlay && onNavigateToPlay(prevPlay.id)}
-        >
-          Previous play
-        </Button>
-        <PlaybookPlaySearchMenu
-          plays={nav}
-          groups={groups}
-          currentPlayId={playId}
-          onNavigatePlay={onNavigateToPlay}
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          rightIcon={ChevronRight}
-          disabled={!nextPlay}
-          onClick={() => nextPlay && onNavigateToPlay(nextPlay.id)}
-        >
-          Next play
-        </Button>
       </div>
     </header>
   );

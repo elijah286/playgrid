@@ -1978,6 +1978,7 @@ function CreatePlaybookDialog({
                   }}
                   disabled={pending}
                   hideHeader
+                  sportVariant={variant}
                 />
               )}
             </div>

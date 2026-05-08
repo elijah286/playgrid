@@ -105,9 +105,34 @@ export default async function PlayEditPage({ params }: Props) {
   // but autosave is suppressed and any save attempt surfaces the CTA.
   const { data: book } = await supabase
     .from("playbooks")
-    .select("is_example, is_public_example, is_archived, name, color, logo_url")
+    .select(
+      "is_example, is_public_example, is_archived, name, color, logo_url, season, sport_variant",
+    )
     .eq("id", res.play.playbook_id)
     .maybeSingle();
+
+  // Owner display name for the banner subtitle — mirrors the playbook
+  // page's "Spring 2026 · Flag · OWNER" line so the editor banner reads
+  // the same as the grid view banner.
+  let ownerDisplayName: string | null = null;
+  {
+    const { data: ownerRow } = await supabase
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", res.play.playbook_id)
+      .eq("role", "owner")
+      .limit(1)
+      .maybeSingle();
+    const ownerId = (ownerRow?.user_id as string | null) ?? null;
+    if (ownerId) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", ownerId)
+        .maybeSingle();
+      ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
+    }
+  }
   const isExamplePreview =
     !isMember && Boolean(book?.is_public_example || book?.is_example);
   if (isExamplePreview) canEdit = true;
@@ -178,6 +203,9 @@ export default async function PlayEditPage({ params }: Props) {
       playbookName={(book?.name as string | null) ?? null}
       playbookColor={(book?.color as string | null) ?? null}
       playbookLogoUrl={(book?.logo_url as string | null) ?? null}
+      playbookSeason={(book?.season as string | null) ?? null}
+      playbookVariant={(book?.sport_variant as string | null) ?? null}
+      playbookOwnerName={ownerDisplayName}
       initialDocument={res.document}
       initialNav={nav.ok ? nav.plays : []}
       initialGroups={nav.ok ? nav.groups : []}

@@ -402,4 +402,47 @@ export type PlayDocument = {
    * legacy docs so existing defense plays keep the line visible.
    */
   showRushLine?: boolean;
+  /**
+   * Where the ball is spotted, in yards from the offense's own goal line.
+   * 0 = own goal, fieldLengthYds = opponent goal. Used by the renderer to
+   * decide which league markings (own goal, no-run lines, first-down lines,
+   * opponent goal/endzone) fall inside the 25-yd display window. The window
+   * size never changes; only what's visible inside it.
+   *
+   * When undefined, the renderer falls back to legacy `fieldZone` semantics
+   * (midfield → 50% of field length; red_zone → fieldLengthYds − 10).
+   */
+  fieldPositionYds?: number;
+  /** Render endzone(s) (sideline-to-sideline shaded band + back line) when
+   *  the goal line falls inside the visible 25-yd window. */
+  showEndzones?: boolean;
+  /** Render no-run zone band(s) (yellow rectangle) when in view. */
+  showNoRunZones?: boolean;
+  /** Render the league's fixed first-down line(s) when in view. */
+  showFirstDownLine?: boolean;
+  /** Render bright-orange down marker line(s) at the league's down-marker
+   *  yardages when in view. (Distinct from first-down lines: some leagues
+   *  use both, e.g. NFL Flag 7v7 with two midfield-style markers.) */
+  showDownMarkers?: boolean;
+  /** Per-play first-down line ("chain"), in yards from the LOS (positive
+   *  = downfield). When set and `showFirstDownLine` is true, the renderer
+   *  draws a single dashed lime line at LOS + this value. The line is
+   *  per-play because the chain moves with the down/distance situation;
+   *  the league's FIXED markers live separately under
+   *  `fieldStructure.firstDownLineYds` and render as orange "down
+   *  markers" via `showDownMarkers`. */
+  firstDownLineYards?: number;
+  /** @deprecated No longer settable per-play (down markers are league-
+   *  fixed). Field kept for back-compat with already-saved plays so the
+   *  strict Zod parse doesn't reject them; ignored at render time. */
+  downMarkerYards?: number;
+  /** Rotate the painted yard-number glyphs 90° so they read correctly from
+   *  each sideline (real-field convention). Default derives from variant —
+   *  on for tackle and other wide fields, off for narrow flag fields. */
+  rotatedYardNumbers?: boolean;
+  /** Numeric override for hash-mark x positions, as fractions of field
+   *  width (left, right). Wins over `hashStyle` when both are set; allows
+   *  a coach to dial in non-standard hash placement. Range 0.05–0.95;
+   *  values outside that band are ignored at resolve time. */
+  hashColumns?: [number, number];
 };

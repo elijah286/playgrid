@@ -284,10 +284,26 @@ export async function createPlayAction(
     opts?.initialPlayers ??
     defaultPlayersForVariant(effectiveVariant, opts?.playerCount);
 
-  const doc = createEmptyPlayDocument({
-    sportProfile,
-    layers: { players, routes: [], annotations: [] },
-  });
+  // Pull the playbook's marking defaults so a fresh play inherits the
+  // league preset's visibility (no-run zones on for IFAF flag, etc.).
+  const { data: pbRow } = await supabase
+    .from("playbooks")
+    .select("settings, custom_offense_count")
+    .eq("id", playbookId)
+    .maybeSingle();
+  const pbSettings = normalizePlaybookSettings(
+    pbRow?.settings,
+    effectiveVariant,
+    (pbRow?.custom_offense_count as number | null) ?? null,
+  );
+
+  const doc = createEmptyPlayDocument(
+    {
+      sportProfile,
+      layers: { players, routes: [], annotations: [] },
+    },
+    pbSettings.fieldDisplay.markingDefaults,
+  );
 
   // Patch metadata with formation link + play type
   doc.metadata.formationId = opts?.formationId ?? null;
