@@ -395,9 +395,32 @@ export async function getEngagementSummaryAction(
       if (uid && newSignupIds.has(uid)) firstShareUsers.add(uid);
     }
 
+    // Paid-intent signal: any /pricing view by a new signup. We session-
+    // stitch so an anonymous /pricing view that *later* authenticates as
+    // a new signup counts too — coaches typically scan pricing before
+    // they create the account, and we'd undercount intent if we only
+    // looked at authed views.
+    const sessionToNewUserId = new Map<string, string>();
+    for (const v of views) {
+      if (v.user_id && newSignupIds.has(v.user_id)) {
+        sessionToNewUserId.set(v.session_id, v.user_id);
+      }
+    }
+    const pricingViewUsers = new Set<string>();
+    for (const v of views) {
+      if (v.path !== "/pricing") continue;
+      if (v.user_id && newSignupIds.has(v.user_id)) {
+        pricingViewUsers.add(v.user_id);
+        continue;
+      }
+      const stitchedUid = sessionToNewUserId.get(v.session_id);
+      if (stitchedUid) pricingViewUsers.add(stitchedUid);
+    }
+
     const visitorCount = sessions.size;
     const signupCount = newSignups.length;
     const playCount = firstPlayUsers.size;
+    const pricingViewCount = pricingViewUsers.size;
     const shareCount = firstShareUsers.size;
 
     function dropoff(prev: number, cur: number): number {
@@ -412,6 +435,20 @@ export async function getEngagementSummaryAction(
         count: signupCount,
         dropoff: dropoff(visitorCount, signupCount),
       },
+      // Pricing-view sits right after signup so the dropoff reads as
+      // "% of signups that showed paid intent" — the headline number
+      // for the upgrade funnel until conversions are large enough to
+      // measure directly.
+      {
+        key: "viewed_pricing",
+        label: "Viewed pricing",
+        count: pricingViewCount,
+        dropoff: dropoff(signupCount, pricingViewCount),
+      },
+      // Activation. Compared back to signup (not pricing) because the
+      // play-create path doesn't require visiting pricing, so making
+      // playCount's denominator be pricingViewCount would distort the
+      // activation rate when most coaches jump straight into the editor.
       {
         key: "first_play",
         label: "Created first play",
