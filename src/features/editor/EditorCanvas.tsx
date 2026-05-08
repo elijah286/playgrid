@@ -1626,13 +1626,15 @@ function EditorCanvasImpl({
         e.preventDefault();
       }}
     >
-      <defs>
-        <linearGradient id="fieldGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={bg.main} />
-          <stop offset="100%" stopColor={bg.dark} />
-        </linearGradient>
-      </defs>
-      <rect width={fieldAspect} height={1} fill="url(#fieldGrad)" />
+      {/* Field — solid fill (no gradient ref). The previous
+          fill="url(#fieldGrad)" with a non-unique id collided when
+          multiple EditorCanvas/PlayAnimation svgs mounted on the same
+          page (game-mode preview alongside playbook tile previews,
+          etc.) and let the rect fall back to currentColor — surfacing
+          as orange on a tinted ancestor (e.g. anchored playbook accent
+          in the chat panel). Matches the same fix already on
+          PlayDiagramEmbed. */}
+      <rect width={fieldAspect} height={1} fill={bg.main} />
       {yardLines}
       {yardNumbers}
       {hashMarks}

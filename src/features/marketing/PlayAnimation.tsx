@@ -75,14 +75,13 @@ export function PlayAnimation({ className = "" }: { className?: string }) {
       role="img"
       aria-label="Animated example play"
     >
-      {/* Field */}
-      <defs>
-        <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#2D8B4E" />
-          <stop offset="1" stopColor="#1B5E30" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="400" height="260" fill="url(#field)" rx="12" />
+      {/* Field — solid fill (no gradient ref). The previous
+          fill="url(#field)" with a non-unique id collided when multiple
+          PlayAnimation/EditorCanvas svgs mounted on the same page and
+          let the rect fall back to currentColor — surfacing as orange
+          on a tinted ancestor. Matches the same fix already on
+          PlayDiagramEmbed. */}
+      <rect x="0" y="0" width="400" height="260" fill="#2D8B4E" rx="12" />
       {/* Yard lines */}
       {[40, 80, 120, 160, 200, 240].map((y) => (
         <line
