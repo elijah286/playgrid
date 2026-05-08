@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type CSSProperties,
@@ -25,6 +26,8 @@ import {
   Pencil,
   Plus,
   Search,
+  Settings2,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -133,9 +136,20 @@ export function PlaybookFormationsTab({
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [reorderMode, setReorderMode] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const filtersPanelRef = useRef<HTMLDivElement>(null);
   const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!filtersPanelRef.current?.contains(e.target as Node)) setFiltersOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [filtersOpen]);
 
   const newFormationHref = (() => {
     const q = new URLSearchParams({
@@ -299,74 +313,117 @@ export function PlaybookFormationsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px] flex-1">
-          <Input
-            leftIcon={Search}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search formations…"
-          />
-        </div>
-        <SegmentedControl
-          size="sm"
-          value={view}
-          onChange={(v) => setView(v as "active" | "archived")}
-          options={[
-            { value: "active", label: "Active" },
-            { value: "archived", label: "Archived" },
-          ]}
-        />
-        <SegmentedControl
-          size="sm"
-          value={viewMode}
-          onChange={(v) => setViewMode(v as "cards" | "list")}
-          options={[
-            { value: "cards", label: "Grid", icon: LayoutGrid },
-            { value: "list", label: "List", icon: List },
-          ]}
-        />
-        <Button
-          variant={selectionMode ? "primary" : "secondary"}
-          leftIcon={CheckSquare}
-          onClick={() => {
-            if (selectionMode) {
-              setSelectionMode(false);
-              setSelectedIds(new Set());
-            } else {
-              setReorderMode(false);
-              setSelectionMode(true);
-            }
-          }}
-          aria-label={selectionMode ? "Cancel selection" : "Select formations"}
-          title={selectionMode ? "Cancel selection" : "Select formations"}
-          className="hidden px-2.5 sm:inline-flex"
-        >
-          <span className="sr-only">{selectionMode ? "Cancel" : "Select"}</span>
-        </Button>
-        <Button
-          variant={reorderMode ? "primary" : "secondary"}
-          leftIcon={ArrowUpDown}
-          onClick={() => {
-            if (reorderMode) {
-              setReorderMode(false);
-            } else {
-              setSelectionMode(false);
-              setSelectedIds(new Set());
-              setReorderMode(true);
-            }
-          }}
-          aria-label={reorderMode ? "Done reordering" : "Reorder formations"}
-          title={reorderMode ? "Done reordering" : "Reorder formations"}
-          className="hidden sm:inline-flex"
-        >
-          {reorderMode ? "Done" : "Reorder"}
-        </Button>
-        <Link href={newFormationHref} className="hidden sm:inline-flex">
-          <Button variant="primary" leftIcon={Plus}>
-            New formation
+      {/* Toolbar mirrors the Plays-tab shape: two rows on mobile (action
+          buttons + search), one wrapping flex row on desktop via
+          `sm:contents`. Keeps Filter/Select/Reorder/New visible at every
+          breakpoint. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3">
+        <div className="flex items-end gap-2 sm:contents">
+          <div ref={filtersPanelRef} className="relative sm:order-3">
+            <Button
+              variant="secondary"
+              leftIcon={SlidersHorizontal}
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              aria-label="Filters"
+              title="Filters"
+              className="px-2.5"
+            >
+              {!(viewMode === "cards" && view === "active") && (
+                <span aria-hidden="true">•</span>
+              )}
+            </Button>
+            {filtersOpen && (
+              <div
+                role="dialog"
+                aria-label="Formation filters"
+                className="absolute left-0 top-full z-30 mt-2 w-[280px] space-y-4 rounded-xl border border-border bg-surface-raised p-4 shadow-elevated sm:left-auto sm:right-0"
+              >
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    <Settings2 className="size-3" /> View
+                  </div>
+                  <SegmentedControl
+                    size="sm"
+                    className="w-full [&>button]:flex-1"
+                    value={viewMode}
+                    onChange={(v) => setViewMode(v as "cards" | "list")}
+                    options={[
+                      { value: "cards", label: "Grid", icon: LayoutGrid },
+                      { value: "list", label: "List", icon: List },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                    Status
+                  </div>
+                  <SegmentedControl
+                    size="sm"
+                    className="w-full [&>button]:flex-1"
+                    value={view}
+                    onChange={(v) => setView(v as "active" | "archived")}
+                    options={[
+                      { value: "active", label: "Active" },
+                      { value: "archived", label: "Archived" },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <Button
+            variant={selectionMode ? "primary" : "secondary"}
+            leftIcon={CheckSquare}
+            onClick={() => {
+              if (selectionMode) {
+                setSelectionMode(false);
+                setSelectedIds(new Set());
+              } else {
+                setReorderMode(false);
+                setSelectionMode(true);
+              }
+            }}
+            aria-label={selectionMode ? "Cancel selection" : "Select formations"}
+            title={selectionMode ? "Cancel selection" : "Select formations"}
+            className="px-2.5 sm:order-4"
+          >
+            <span className="sr-only">{selectionMode ? "Cancel" : "Select"}</span>
           </Button>
-        </Link>
+          <Button
+            variant={reorderMode ? "primary" : "secondary"}
+            leftIcon={ArrowUpDown}
+            onClick={() => {
+              if (reorderMode) {
+                setReorderMode(false);
+              } else {
+                setSelectionMode(false);
+                setSelectedIds(new Set());
+                setReorderMode(true);
+              }
+            }}
+            aria-label={reorderMode ? "Done reordering" : "Reorder formations"}
+            title={reorderMode ? "Done reordering" : "Reorder formations"}
+            className="px-2.5 sm:order-5"
+          >
+            {reorderMode && <span>Done</span>}
+          </Button>
+          <Link href={newFormationHref} className="ml-auto sm:order-6 sm:ml-0">
+            <Button variant="primary" className="whitespace-nowrap">
+              New formation
+            </Button>
+          </Link>
+        </div>
+        <div className="flex items-end gap-2 sm:contents">
+          <div className="min-w-[200px] flex-1 sm:order-2">
+            <Input
+              leftIcon={Search}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search formations…"
+            />
+          </div>
+        </div>
       </div>
 
       {visible.length === 0 ? (

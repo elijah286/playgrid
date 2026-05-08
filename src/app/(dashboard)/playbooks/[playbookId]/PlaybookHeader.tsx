@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, Plus, Printer, QrCode, Send, Settings2, Sparkles, Trash2, Unlock, UserPlus, Users, X, Zap } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Check, CheckSquare, ChevronDown, Copy, CreditCard, FlaskConical, Globe, History, Lock, LogOut, Mail, MailX, MessageSquare, MoreVertical, QrCode, Send, Settings2, Sparkles, Trash2, Unlock, UserPlus, Users, X, Zap } from "lucide-react";
 import QRCode from "qrcode";
 import {
   Button,
@@ -75,15 +75,6 @@ function hexLuminance(hex: string): number {
 export type PlaybookHeaderPlayActions = {
   onToggleSelect: () => void;
   selectionMode: boolean;
-  printHref: string;
-  /** When null, the "New formation" item in the mobile kebab menu is
-   *  suppressed. We use null for brand-new playbooks (zero plays) so the
-   *  only "create" affordance is the FAB / "New play" button —
-   *  formations are an advanced concept that lured at least two new
-   *  users (Anton 04/29, Ralph 04/30) off the play-creation path.
-   *  Reappears once a play exists. */
-  newFormationHref: string | null;
-  isViewer: boolean;
 };
 
 export type ExampleAdminState = {
@@ -563,29 +554,15 @@ export function PlaybookHeader({
                 />
               </div>
             )}
-            {(canInvitePlayers || canManage || playActions || exampleAdmin) && (
+            {(canInvitePlayers || canManage || exampleAdmin) && (
               <HeaderMenu
                 playbookId={playbookId}
-                homeHref={homeHref}
                 onAccent={onAccent}
                 onAccentHover={onAccentHover}
                 lockTeamCoachItems={!viewerIsCoach}
                 onInvite={canInvitePlayers ? openInvite : null}
                 inviteLabel={inviteAsViewerOnly ? "Invite a player" : "Share"}
-                onPlayerInvitePolicy={
-                  canManage ? () => setPlayerInvitePolicyOpen(true) : null
-                }
                 onCustomize={canManage ? () => setCustomizeOpen(true) : null}
-                onRevokeAllInvites={
-                  canShare && (outstandingInviteCount ?? 0) > 0
-                    ? handleRevokeAllInvites
-                    : null
-                }
-                outstandingInviteCount={outstandingInviteCount ?? 0}
-                // Send a copy is a coach-only action (creating a new
-                // playbook for another coach). Hide it from viewers even
-                // when they have the Share button via player_invite_policy.
-                onSendCopy={canShare ? openSendCopy : null}
                 onDuplicate={
                   canManage ||
                   (canShare && (allowCoachDuplication ?? true)) ||
@@ -601,7 +578,6 @@ export function PlaybookHeader({
                 onUnarchive={canManage && isArchived ? handleUnarchive : null}
                 onDelete={canManage ? handleDelete : null}
                 onLeave={!canManage ? handleLeave : null}
-                playActions={playActions}
                 exampleAdmin={exampleAdmin ?? null}
                 onToggleExample={exampleAdmin ? handleToggleExample : null}
                 onTogglePublishExample={
@@ -1351,16 +1327,11 @@ function TeamCoachLockBadge() {
 
 function HeaderMenu({
   playbookId,
-  homeHref,
   onAccent,
   onAccentHover,
   lockTeamCoachItems,
   onInvite,
   inviteLabel = "Share",
-  onPlayerInvitePolicy,
-  onRevokeAllInvites,
-  outstandingInviteCount,
-  onSendCopy,
   onCustomize,
   onDuplicate,
   historyHref,
@@ -1369,14 +1340,12 @@ function HeaderMenu({
   onUnarchive,
   onDelete,
   onLeave,
-  playActions,
   exampleAdmin,
   onToggleExample,
   onTogglePublishExample,
   onToggleHeroExample,
 }: {
   playbookId: string;
-  homeHref: string;
   onAccent: string;
   onAccentHover: string;
   /** When true, items that require Team Coach show a small lock badge. */
@@ -1385,11 +1354,6 @@ function HeaderMenu({
   /** Label for the invite menu item. "Share" for owners/editors,
    *  "Invite a player" for viewers acting under player_invite_policy. */
   inviteLabel?: string;
-  /** Owner-only: opens the player-invite policy modal. */
-  onPlayerInvitePolicy?: (() => void) | null;
-  onRevokeAllInvites: (() => void) | null;
-  outstandingInviteCount: number;
-  onSendCopy: (() => void) | null;
   onCustomize: (() => void) | null;
   onDuplicate: (() => void) | null;
   historyHref: string | null;
@@ -1398,7 +1362,6 @@ function HeaderMenu({
   onUnarchive: (() => void) | null;
   onDelete: (() => void) | null;
   onLeave: (() => void) | null;
-  playActions?: PlaybookHeaderPlayActions;
   exampleAdmin: ExampleAdminState | null;
   onToggleExample: (() => void) | null;
   onTogglePublishExample: (() => void) | null;
@@ -1440,21 +1403,11 @@ function HeaderMenu({
           role="menu"
           className="absolute right-0 top-full z-30 mt-1 max-h-[calc(100vh-8rem)] w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
         >
-          {/* Mobile-only navigation */}
-          {/* Home intentionally omitted — the back arrow in the header
-              already navigates to the lobby/examples view. */}
-          <div className="sm:hidden">
-            <SectionLabel>Navigate</SectionLabel>
-            <Link
-              href="/account"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className={menuItemCls}
-            >
-              <CreditCard className="size-4 shrink-0" />
-              <span>Account</span>
-            </Link>
-            {onInvite && (
+          {/* Share (single entry — opens the unified share dialog with
+              invite link, send-a-copy, and player-invitations all inside). */}
+          {onInvite && (
+            <>
+              <SectionLabel>Share</SectionLabel>
               <button
                 type="button"
                 role="menuitem"
@@ -1464,72 +1417,8 @@ function HeaderMenu({
                 }}
                 className={menuItemCls}
               >
-                <UserPlus className="size-4 shrink-0" />
-                <span>Share</span>
-              </button>
-            )}
-          </div>
-
-          {/* Mobile-only play actions. "New play" lives in the floating
-              + button above the bottom nav now — promoting it out of the
-              kebab so coaches stop missing it. The kebab keeps the
-              secondary actions: New formation, Select plays, Print. */}
-          {playActions && (
-            <div className="sm:hidden">
-              <SectionDivider />
-              <SectionLabel>Plays</SectionLabel>
-              {!playActions.isViewer && playActions.newFormationHref && (
-                <Link
-                  href={playActions.newFormationHref}
-                  role="menuitem"
-                  onClick={() => setOpen(false)}
-                  className={menuItemCls}
-                >
-                  <Plus className="size-4 shrink-0" />
-                  <span>New formation</span>
-                </Link>
-              )}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  playActions.onToggleSelect();
-                }}
-                className={menuItemCls}
-              >
-                <CheckSquare className="size-4 shrink-0" />
-                <span>{playActions.selectionMode ? "Cancel selection" : "Select plays"}</span>
-              </button>
-              <Link
-                href={playActions.printHref}
-                role="menuitem"
-                onClick={() => setOpen(false)}
-                className={menuItemCls}
-              >
-                <Printer className="size-4 shrink-0" />
-                <span>Print playbook</span>
-              </Link>
-            </div>
-          )}
-
-          {/* Share */}
-          {onSendCopy && (
-            <>
-              <SectionDivider />
-              <SectionLabel>Share</SectionLabel>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  onSendCopy();
-                }}
-                className={menuItemCls}
-              >
                 <Send className="size-4 shrink-0" />
-                <span>Send a copy</span>
-                {lockTeamCoachItems && <TeamCoachLockBadge />}
+                <span>{inviteLabel}</span>
               </button>
             </>
           )}
@@ -1537,26 +1426,11 @@ function HeaderMenu({
           {/* Manage */}
           {(onCustomize ||
             onDuplicate ||
-            onPlayerInvitePolicy ||
             historyHref ||
             onOpenTrash) && (
             <>
-              <SectionDivider />
+              {onInvite && <SectionDivider />}
               <SectionLabel>Manage</SectionLabel>
-              {onPlayerInvitePolicy && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    onPlayerInvitePolicy();
-                  }}
-                  className={menuItemCls}
-                >
-                  <UserPlus className="size-4 shrink-0" />
-                  <span>Player invitations…</span>
-                </button>
-              )}
               {onCustomize && (
                 <button
                   type="button"
@@ -1616,29 +1490,6 @@ function HeaderMenu({
                 className={menuItemCls}
                 onAction={() => setOpen(false)}
               />
-            </>
-          )}
-
-          {/* Team */}
-          {onRevokeAllInvites && (
-            <>
-              <SectionDivider />
-              <SectionLabel>Team</SectionLabel>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  onRevokeAllInvites();
-                }}
-                className={menuItemCls}
-              >
-                <MailX className="size-4 shrink-0" />
-                <span className="flex-1 truncate">Revoke outstanding invites</span>
-                <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                  {outstandingInviteCount}
-                </span>
-              </button>
             </>
           )}
 

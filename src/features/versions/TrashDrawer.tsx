@@ -55,13 +55,18 @@ export function TrashDrawer({ open, onClose, playbookId }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Trash"
+    >
       <div
         className="absolute inset-0"
         onClick={onClose}
         aria-label="Close trash"
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-card text-foreground shadow-xl">
+      <div className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-surface-raised text-foreground shadow-elevated">
         <header className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <h2 className="text-base font-semibold">Trash</h2>
@@ -72,7 +77,7 @@ export function TrashDrawer({ open, onClose, playbookId }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-muted/10"
+            className="rounded-md px-2 py-1 text-sm text-muted hover:bg-surface-inset"
           >
             Close
           </button>
@@ -90,11 +95,11 @@ export function TrashDrawer({ open, onClose, playbookId }: Props) {
               {items.map((item) => (
                 <li
                   key={`${item.kind}-${item.id}`}
-                  className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2"
+                  className="flex items-start justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="rounded bg-muted/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                      <span className="rounded bg-surface-inset px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                         {item.kind === "play" ? "Play" : "Group"}
                       </span>
                       <span className="truncate text-sm font-medium">{item.name}</span>
@@ -110,7 +115,7 @@ export function TrashDrawer({ open, onClose, playbookId }: Props) {
                     type="button"
                     disabled={pendingId === item.id}
                     onClick={() => restore(item)}
-                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/10 disabled:opacity-50"
+                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-surface-inset disabled:opacity-50"
                   >
                     {pendingId === item.id ? "Restoring…" : "Restore"}
                   </button>
@@ -119,7 +124,7 @@ export function TrashDrawer({ open, onClose, playbookId }: Props) {
             </ul>
           )}
         </div>
-      </aside>
+      </div>
     </div>
   );
 }

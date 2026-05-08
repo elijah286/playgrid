@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Calendar,
   ClipboardList,
   Layers,
   ListChecks,
+  LogOut,
   MessageCircle,
   MoreHorizontal,
   Shield,
@@ -15,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
+import { signOutAction } from "@/app/actions/auth";
 
 /**
  * Mobile-first bottom navigation for the playbook detail page. Coaches and
@@ -333,9 +335,10 @@ function MoreSheet({
             </button>
           );
         })}
-        {/* Account / Site Admin always live in the More sheet on mobile —
-            keeps the top header free of the avatar so the bottom toolbar
-            owns "user pile" navigation across every surface. */}
+        {/* Account / Site Admin / Sign out always live in the More sheet
+            on mobile — keeps the top header free of the avatar so the
+            bottom toolbar owns "user pile" navigation across every
+            surface. */}
         {(tabs.length > 0) && <div className="my-1 border-t border-border" />}
         <Link
           href="/account"
@@ -357,6 +360,16 @@ function MoreSheet({
             <span className="flex-1 text-left">Site Admin</span>
           </Link>
         )}
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            role="menuitem"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+          >
+            <LogOut className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 text-left">Sign out</span>
+          </button>
+        </form>
       </div>
     </>
   );
