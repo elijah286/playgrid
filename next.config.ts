@@ -50,9 +50,16 @@ const nextConfig: NextConfig = {
         // Force HTML documents to revalidate so browsers (notably Safari)
         // can't pin a stale shell across deploys. Hashed assets under
         // /_next/static remain immutable and are excluded.
+        //
+        // `no-cache` (not `no-store`) is deliberate: `no-store` opts the
+        // page out of Chrome's back/forward cache, so returning to a
+        // discarded tab triggers a full middleware + RSC round-trip
+        // (auth refresh + DB queries) and stalls for 1–3s. `no-cache`
+        // still forces revalidation via ETag, so Safari can't pin a
+        // stale shell, but bfcache restores stay instant.
         source: "/:path((?!_next/static|_next/image|favicon.ico).*)",
         headers: [
-          { key: "Cache-Control", value: "no-store, must-revalidate" },
+          { key: "Cache-Control", value: "private, no-cache, must-revalidate" },
         ],
       },
     ];
