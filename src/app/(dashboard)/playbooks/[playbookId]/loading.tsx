@@ -1,3 +1,5 @@
+import { Calendar, ListChecks, MessageCircle, MoreHorizontal } from "lucide-react";
+
 /**
  * Route-level loading UI shown by Next.js while the playbook page is
  * fetching plays / formations / roster / settings. Renders instantly
@@ -6,8 +8,10 @@
  * playbook page itself.
  *
  * Mirrors the playbook's mobile shell: orange chrome at top, a
- * skeleton toolbar and play card grid, and the bottom nav. Real
- * content swaps in once page.tsx finishes server-rendering.
+ * skeleton toolbar and play card grid, and the bottom nav. The bottom
+ * nav skeleton uses the SAME labels + structure as the real
+ * PlaybookBottomNav so the toolbar reads as continuous through the
+ * navigation transition rather than collapsing to anonymous dots.
  */
 export default function PlaybookDetailLoading() {
   return (
@@ -54,21 +58,33 @@ export default function PlaybookDetailLoading() {
         ))}
       </div>
 
-      {/* Bottom nav skeleton — keeps the footer chrome stable across
-          the navigation transition so it doesn't pop in on swap. */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised sm:hidden"
-        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
+      {/* Bottom-nav skeleton — matches the real PlaybookBottomNav's
+          label set so the toolbar reads as continuous through the
+          navigation transition. Disabled (opacity-60) so it's clearly
+          a placeholder. */}
+      <nav
+        aria-label="Loading"
+        className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface-raised opacity-60 sm:hidden"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
+        }}
       >
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="flex min-h-[52px] flex-1 items-center justify-center"
-          >
-            <div className="size-5 rounded-full bg-surface-inset" aria-hidden />
-          </div>
-        ))}
-      </div>
+        <NavSkeleton label="Plays" Icon={ListChecks} />
+        <NavSkeleton label="Chat" Icon={MessageCircle} />
+        <NavSkeleton label="Calendar" Icon={Calendar} />
+        <NavSkeleton label="More" Icon={MoreHorizontal} />
+      </nav>
+    </div>
+  );
+}
+
+function NavSkeleton({ label, Icon }: { label: string; Icon: React.ElementType }) {
+  return (
+    <div className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight text-muted">
+      <Icon className="size-5" aria-hidden />
+      <span className="truncate">{label}</span>
     </div>
   );
 }

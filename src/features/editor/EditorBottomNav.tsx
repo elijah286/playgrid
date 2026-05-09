@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Layers,
   ListChecks,
+  Loader2,
   LogOut,
   MessageCircle,
   MoreHorizontal,
@@ -157,14 +158,40 @@ function NavLink({
   label: string;
   Icon: React.ElementType;
 }) {
+  // Wrap navigation in a transition so the button can show a pending
+  // visual the moment a coach taps it — even if the destination page
+  // takes 1–3s to fetch and hydrate. Without this, the only
+  // acknowledgment was the css :active flash that disappeared the
+  // instant their finger left the screen, then a long blank gap
+  // before the new page rendered.
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   return (
-    <Link
-      href={href}
-      className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight text-muted transition-all duration-100 active:scale-[0.94] active:bg-surface-inset hover:text-foreground"
+    <button
+      type="button"
+      onClick={() => {
+        startTransition(() => {
+          router.push(href);
+        });
+      }}
+      aria-busy={isPending || undefined}
+      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
+        isPending ? "text-primary" : "text-muted hover:text-foreground"
+      }`}
     >
-      <Icon className="size-5" aria-hidden />
+      {isPending ? (
+        <Loader2 className="size-5 animate-spin" aria-hidden />
+      ) : (
+        <Icon className="size-5" aria-hidden />
+      )}
       <span className="truncate">{label}</span>
-    </Link>
+      {/* Hidden prefetch <Link> — Next.js automatically prefetches Link
+       *  hrefs on viewport intersection, so keeping a 0-size Link in
+       *  the tree warms the route cache for our button-driven push. */}
+      <Link href={href} prefetch className="sr-only" aria-hidden tabIndex={-1}>
+        {label}
+      </Link>
+    </button>
   );
 }
 

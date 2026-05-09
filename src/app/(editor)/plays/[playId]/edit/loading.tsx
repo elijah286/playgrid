@@ -1,3 +1,5 @@
+import { Calendar, ListChecks, MessageCircle, MoreHorizontal } from "lucide-react";
+
 /**
  * Route-level loading UI shown by Next.js while the editor's server
  * page is fetching play / formation / settings data. Renders instantly
@@ -6,8 +8,10 @@
  * server work.
  *
  * Mirrors the editor's mobile shell: orange chrome at top, a skeleton
- * field, a skeleton notes card, and the bottom nav. Real content
- * swaps in once page.tsx finishes server-rendering.
+ * field, a skeleton notes card, and the bottom nav. The bottom-nav
+ * skeleton uses the SAME labels + structure as the real
+ * EditorBottomNav so the toolbar appears continuous through the
+ * navigation transition rather than collapsing to anonymous dots.
  */
 export default function EditorLoading() {
   return (
@@ -15,7 +19,7 @@ export default function EditorLoading() {
       {/* Mobile-only orange playbook chrome placeholder. The real chrome
           fills in playbook name + initial once data loads. */}
       <div
-        className="sticky top-0 z-30 -mx-6 -mt-5 flex items-center gap-2 px-4 py-3 sm:hidden"
+        className="native-safe-top sticky top-0 z-30 -mx-6 -mt-8 flex items-center gap-2 px-4 py-3 sm:hidden sm:-mt-5"
         style={{ backgroundColor: "#F26522" }}
       >
         <div className="size-9 rounded-lg bg-white/20" aria-hidden />
@@ -42,21 +46,33 @@ export default function EditorLoading() {
         <div className="h-12 rounded bg-surface-inset" aria-hidden />
       </div>
 
-      {/* Bottom nav skeleton — keeps the footer chrome stable across
-          the navigation transition so users don't see it pop in. */}
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border bg-surface-raised sm:hidden"
-        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
+      {/* Bottom-nav skeleton — matches the real EditorBottomNav's
+          label set so the toolbar reads as continuous through the
+          navigation transition. Disabled (opacity-50) so it's clearly
+          a placeholder; real labels become live once the page mounts. */}
+      <nav
+        aria-label="Loading"
+        className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface-raised opacity-60 sm:hidden"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
+        }}
       >
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="flex min-h-[52px] flex-1 items-center justify-center"
-          >
-            <div className="size-5 rounded-full bg-surface-inset" aria-hidden />
-          </div>
-        ))}
-      </div>
+        <NavSkeleton label="Plays" Icon={ListChecks} />
+        <NavSkeleton label="Chat" Icon={MessageCircle} />
+        <NavSkeleton label="Calendar" Icon={Calendar} />
+        <NavSkeleton label="More" Icon={MoreHorizontal} />
+      </nav>
+    </div>
+  );
+}
+
+function NavSkeleton({ label, Icon }: { label: string; Icon: React.ElementType }) {
+  return (
+    <div className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight text-muted">
+      <Icon className="size-5" aria-hidden />
+      <span className="truncate">{label}</span>
     </div>
   );
 }
