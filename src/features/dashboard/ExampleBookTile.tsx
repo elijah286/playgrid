@@ -227,29 +227,33 @@ export function ExampleBookTile({
                     />
                   ))}
                 </div>
-                <div className="flex h-full flex-col justify-between p-5 text-white">
+                <div className="flex h-full flex-col justify-between p-3 text-white sm:p-5">
                   <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
                     Example
                   </span>
-                  <div className="flex flex-1 items-center justify-center">
+                  {/* min-h-0 lets the middle shrink so the bottom text row
+                   *  stays visible inside the 3:4 aspect box on narrow
+                   *  viewports. overflow-hidden clips an oversized logo or
+                   *  initials rather than pushing the name off the cover. */}
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
                     {tile.logo_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={tile.logo_url}
                         alt=""
-                        className="h-36 w-36 object-contain drop-shadow"
+                        className="h-20 w-20 object-contain drop-shadow sm:h-28 sm:w-28 lg:h-36 lg:w-36"
                       />
                     ) : (
-                      <span className="text-8xl font-black tracking-tight drop-shadow">
+                      <span className="text-6xl font-black tracking-tight drop-shadow sm:text-7xl lg:text-8xl">
                         {initials}
                       </span>
                     )}
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-extrabold leading-tight drop-shadow-sm">
+                  <div className="min-w-0 shrink-0">
+                    <h3 className="truncate text-base font-extrabold leading-tight drop-shadow-sm sm:text-lg">
                       {tile.name}
                     </h3>
-                    <p className="mt-0.5 truncate text-xs font-medium text-white/80">
+                    <p className="mt-0.5 truncate text-[11px] font-medium text-white/80 sm:text-xs">
                       {tile.season ? `${tile.season} · ` : ""}
                       {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
                     </p>
