@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConfigBanner } from "@/components/layout/ConfigBanner";
@@ -67,6 +67,15 @@ export const metadata: Metadata = {
     googleBot: { index: true, follow: true },
   },
   category: "sports",
+};
+
+export const viewport: Viewport = {
+  // viewportFit=cover lets the WebView render edge-to-edge into the
+  // status-bar zone and behind the home indicator. Components opt into
+  // safe-area insets where their content needs to clear those zones —
+  // header background can fill the notch while text padding holds it
+  // below; landscape play view actually reaches the screen edges.
+  viewportFit: "cover",
 };
 
 const structuredData = [

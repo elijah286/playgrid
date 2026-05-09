@@ -393,7 +393,11 @@ export function PlaybookHeader({
   return (
     <>
       <div
-        className="relative -mx-6 -mt-3"
+        // native-safe-top pads the gradient's content below the notch
+        // while the gradient bg itself extends all the way to the
+        // viewport top (the -mt-3 cancels the banner's pt-3 so this
+        // div sits flush with the sticky banner's top edge).
+        className="native-safe-top relative -mx-6 -mt-3"
         style={{ background: gradient }}
       >
         <div className="relative mx-auto flex max-w-7xl items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">

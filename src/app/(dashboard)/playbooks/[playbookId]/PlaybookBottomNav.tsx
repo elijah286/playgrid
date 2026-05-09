@@ -172,7 +172,11 @@ export function PlaybookBottomNav({
       <nav
         aria-label="Playbook sections"
         className="fixed left-0 bottom-0 z-40 flex w-screen items-stretch border-t border-border bg-surface-raised shadow-[0_-1px_0_0_rgba(0,0,0,0.02)] sm:hidden"
-        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 4px)" }}
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
+        }}
       >
         {/* Order: Plays · Messages · [Cal] · Calendar · More.
             Cal is centered between team-comm and time-comm tabs so
@@ -249,7 +253,7 @@ function NavButton({
       type="button"
       onClick={onClick}
       aria-current={isActive ? "page" : undefined}
-      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-colors ${
+      className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
         isActive
           ? "text-primary"
           : "text-muted hover:text-foreground"
@@ -303,7 +307,7 @@ function MoreSheet({
         aria-label="More playbook sections"
         className="fixed right-2 z-40 w-56 animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-black/10 bg-surface-raised p-1 shadow-elevated duration-150 sm:hidden"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 56px)",
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 68px)",
         }}
       >
         {tabs.map((t) => {

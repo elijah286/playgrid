@@ -59,14 +59,17 @@ export function EditorPlaybookChrome({
     .join(" · ");
   return (
     <div
-      // -mx-6 -mt-5 escapes the editor layout's px-6 py-5 padding so the
-      // banner bleeds edge-to-edge. Sticky on mobile only — on desktop
-      // we drop sticky (`sm:static`) AND clear the z-index (`sm:z-auto`)
-      // so the banner stays in normal flow and doesn't fight the
-      // SiteHeader's stacking when the page scrolls.
-      // backgroundColor under backgroundImage keeps the gradient's alpha
-      // steps from letting content scroll-through on mobile.
-      className="native-safe-top sticky top-0 z-30 -mx-6 -mt-5 sm:static sm:z-auto"
+      // `-mx-6 -mt-8` escapes the dashboard layout's `px-6 py-8` padding
+      // so the banner bleeds edge-to-edge AND extends all the way up to
+      // the viewport top. Without -mt-8 the banner would sit ~32px below
+      // the top of <main>, leaving a transparent gap that scrolled
+      // content peeked through above the colored chrome on iPhone.
+      // Sticky on mobile only — on desktop we drop sticky (`sm:static`)
+      // AND clear the z-index (`sm:z-auto`) so the banner stays in
+      // normal flow and doesn't fight the SiteHeader's stacking when
+      // the page scrolls. backgroundColor under backgroundImage keeps
+      // the gradient's alpha steps from letting content scroll-through.
+      className="native-safe-top sticky top-0 z-30 -mx-6 -mt-8 sm:static sm:z-auto sm:-mt-5"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
