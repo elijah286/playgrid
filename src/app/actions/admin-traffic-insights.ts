@@ -417,10 +417,42 @@ export async function getEngagementSummaryAction(
       if (stitchedUid) pricingViewUsers.add(stitchedUid);
     }
 
+    // Checkout-started / completed signals. Fired client-side from the
+    // pricing page click handler (`checkout_started`) and from the
+    // /account return-from-Stripe effect (`checkout_completed`). Same
+    // session-stitching as pricing — anonymous events on a session that
+    // later authenticates as a new signup still count.
+    const { data: checkoutEvRaw } = await admin
+      .from("ui_events")
+      .select("event_name, user_id, session_id")
+      .in("event_name", ["checkout_started", "checkout_completed"])
+      .gte("created_at", windowStart)
+      .limit(50000);
+    const checkoutStartedUsers = new Set<string>();
+    const checkoutCompletedUsers = new Set<string>();
+    for (const e of (checkoutEvRaw ?? []) as Array<{
+      event_name: string;
+      user_id: string | null;
+      session_id: string;
+    }>) {
+      const set =
+        e.event_name === "checkout_started"
+          ? checkoutStartedUsers
+          : checkoutCompletedUsers;
+      if (e.user_id && newSignupIds.has(e.user_id)) {
+        set.add(e.user_id);
+        continue;
+      }
+      const stitched = sessionToNewUserId.get(e.session_id);
+      if (stitched) set.add(stitched);
+    }
+
     const visitorCount = sessions.size;
     const signupCount = newSignups.length;
     const playCount = firstPlayUsers.size;
     const pricingViewCount = pricingViewUsers.size;
+    const checkoutStartedCount = checkoutStartedUsers.size;
+    const checkoutCompletedCount = checkoutCompletedUsers.size;
     const shareCount = firstShareUsers.size;
 
     function dropoff(prev: number, cur: number): number {
@@ -445,10 +477,30 @@ export async function getEngagementSummaryAction(
         count: pricingViewCount,
         dropoff: dropoff(signupCount, pricingViewCount),
       },
-      // Activation. Compared back to signup (not pricing) because the
-      // play-create path doesn't require visiting pricing, so making
-      // playCount's denominator be pricingViewCount would distort the
-      // activation rate when most coaches jump straight into the editor.
+      // Started checkout: clicked Subscribe on /pricing. Dropoff is
+      // relative to pricing-viewers — this is the "% of pricing
+      // viewers who actually clicked through" leak rate. The single
+      // most actionable mid-funnel metric for diagnosing whether
+      // /pricing copy / CTAs are converting.
+      {
+        key: "checkout_started",
+        label: "Started checkout",
+        count: checkoutStartedCount,
+        dropoff: dropoff(pricingViewCount, checkoutStartedCount),
+      },
+      // Completed checkout: returned to /account?checkout=success
+      // from Stripe. Dropoff is "% of starts that didn't make it
+      // through the Stripe form" — payment-form abandonment rate.
+      {
+        key: "checkout_completed",
+        label: "Completed checkout",
+        count: checkoutCompletedCount,
+        dropoff: dropoff(checkoutStartedCount, checkoutCompletedCount),
+      },
+      // Activation. Compared back to signup (not pricing/checkout)
+      // because the play-create path doesn't require any of those
+      // upgrade-flow steps — most coaches jump straight to the editor
+      // before they ever consider paying.
       {
         key: "first_play",
         label: "Created first play",

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { track } from "@/lib/analytics/track";
 import { AlertTriangle, Check, CreditCard, IdCard, KeyRound, Lock, LogOut, MessageSquareQuote, Monitor, Moon, Smartphone, Sun, Users, UserCircle } from "lucide-react";
 import {
   changePasswordAction,
@@ -71,6 +72,27 @@ export function AccountClient({
   pendingCoachInvites: PendingCoachInvite[];
   aiFeedbackStatus: "consenting" | "declined" | "unanswered";
 }) {
+  // Stripe redirects back here with ?checkout=success or ?checkout=cancel
+  // after a checkout attempt. Record both as ui_events so the engagement
+  // funnel can show pricing → started → completed conversion. Stripped
+  // from the URL after firing so a refresh doesn't re-record.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("checkout");
+    if (status !== "success" && status !== "cancel") return;
+    track({
+      event: status === "success" ? "checkout_completed" : "checkout_canceled",
+      target: "stripe",
+      metadata: null,
+    });
+    params.delete("checkout");
+    const qs = params.toString();
+    const cleanUrl =
+      window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash;
+    window.history.replaceState(null, "", cleanUrl);
+  }, []);
+
   return (
     <div className="space-y-10">
       <Section

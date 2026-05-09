@@ -7,6 +7,7 @@ import {
   createCheckoutSessionAction,
   redeemGiftCodeAction,
 } from "@/app/actions/billing";
+import { track } from "@/lib/analytics/track";
 import { TIER_LABEL } from "@/lib/billing/features";
 import {
   MESSAGE_PACK_PRICE_USD_PER_MONTH,
@@ -171,6 +172,14 @@ export function PricingClient({
       return;
     }
     startTransition(async () => {
+      // Telemetry: record the click so the engagement funnel can show
+      // pricing → checkout dropoff. Fired before the action so we still
+      // capture intent if the action fails or the redirect aborts.
+      track({
+        event: "checkout_started",
+        target: t.id,
+        metadata: { interval, tier: t.id },
+      });
       const res = await createCheckoutSessionAction({
         tier: t.id as Exclude<SubscriptionTier, "free">,
         interval,
