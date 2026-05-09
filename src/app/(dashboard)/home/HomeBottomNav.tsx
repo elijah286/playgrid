@@ -169,9 +169,7 @@ function NavLink({
         <Icon className="size-5" aria-hidden />
         {typeof badge === "number" && badge > 0 && (
           <span
-            className={`absolute -right-2 -top-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none ring-2 ring-surface-base ${
-              badgeUrgent ? "bg-red-600 text-white" : "bg-primary text-primary-foreground"
-            }`}
+            className="absolute -right-2 -top-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-surface-base"
             aria-label={`${badge} ${badgeUrgent ? "urgent" : ""} item${badge === 1 ? "" : "s"}`}
           >
             {badge > 99 ? "99+" : badge}

@@ -2172,11 +2172,7 @@ function HomeTabNav({
               <span
                 className={
                   "rounded-full px-1.5 py-px text-[10px] font-semibold " +
-                  (active
-                    ? "bg-white/25 text-primary-foreground"
-                    : inboxUrgent
-                      ? "bg-red-600 text-white"
-                      : "bg-primary text-primary-foreground")
+                  (active ? "bg-white/25 text-primary-foreground" : "bg-red-600 text-white")
                 }
                 title={
                   inboxUrgent
