@@ -72,7 +72,6 @@ import type { ActivityEntry } from "@/app/actions/activity";
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
 type DashboardView = "preview" | "classic";
-const VIEW_STORAGE_KEY = "dashboard.view";
 
 function usePersistedFlag(key: string): [boolean, (v: boolean) => void] {
   const [value, setValue] = useState(false);
@@ -89,48 +88,6 @@ function usePersistedFlag(key: string): [boolean, (v: boolean) => void] {
     } catch {}
   };
   return [value, update];
-}
-
-// The book-preview animation is hover-driven and feels fiddly on touch.
-// Detect input capability rather than viewport size: a wide touch laptop
-// still gets Simple mode, a narrow desktop window keeps the animation.
-function useIsTouchDevice(): boolean {
-  const [touch, setTouch] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from matchMedia
-    setTouch(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setTouch(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-  return touch;
-}
-
-function useDashboardView(): [DashboardView, (v: DashboardView) => void] {
-  const [view, setView] = useState<DashboardView>("preview");
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
-      if (stored === "preview" || stored === "classic") {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating user preference from localStorage
-        setView(stored);
-        return;
-      }
-      // No explicit preference: default to Classic on small screens because
-      // the open-book layout needs the horizontal room to read.
-      if (window.matchMedia("(max-width: 767px)").matches) {
-        setView("classic");
-      }
-    } catch {}
-  }, []);
-  const update = (v: DashboardView) => {
-    setView(v);
-    try {
-      window.localStorage.setItem(VIEW_STORAGE_KEY, v);
-    } catch {}
-  };
-  return [view, update];
 }
 
 function LogoPicker({
@@ -385,6 +342,19 @@ function PlaybookBookTile({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mouseInsideRef = useRef(false);
 
+  // Touch screens have no hover, so the open-on-hover animation never
+  // fires meaningfully there. Skip wiring the handlers (and let a tap go
+  // straight to the playbook link) — the closed cover stays as the tile.
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from matchMedia
+    setIsTouch(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   // When the action menu closes (via click-outside or selection), if the
   // mouse has already left the tile, collapse the book too.
   useEffect(() => {
@@ -459,8 +429,8 @@ function PlaybookBookTile({
   return (
     <div
       ref={wrapperRef}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
+      onMouseEnter={isTouch ? undefined : handleEnter}
+      onMouseLeave={isTouch ? undefined : handleLeave}
       className="group relative z-0"
       style={{ zIndex: hover ? 20 : 0 }}
     >
@@ -587,12 +557,12 @@ function PlaybookBookTile({
               ))}
             </div>
 
-            <div className="flex h-full flex-col justify-between p-5 text-white">
+            <div className="flex h-full flex-col justify-between p-3 text-white sm:p-5">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
                   Playbook
                 </span>
-                <div className="flex flex-wrap items-center justify-end gap-1.5 max-w-[120px]">
+                <div className="flex max-w-[120px] flex-wrap items-center justify-end gap-1.5">
                   {tile.is_example && <Badge variant="primary">Example</Badge>}
                   {tile.role !== "owner" && (
                     <Badge variant={tile.role === "editor" ? "primary" : "default"}>
@@ -602,26 +572,28 @@ function PlaybookBookTile({
                 </div>
               </div>
 
-              <div className="flex flex-1 items-center justify-center">
+              {/* min-h-0 lets the middle shrink so the bottom name/meta row
+               *  stays visible inside the 3:4 aspect box on narrow widths. */}
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
                 {tile.logo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={tile.logo_url}
                     alt=""
-                    className="h-36 w-36 object-contain drop-shadow"
+                    className="h-20 w-20 object-contain drop-shadow sm:h-28 sm:w-28 lg:h-36 lg:w-36"
                   />
                 ) : (
-                  <span className="text-8xl font-black tracking-tight drop-shadow">
+                  <span className="text-6xl font-black tracking-tight drop-shadow sm:text-7xl lg:text-8xl">
                     {initials}
                   </span>
                 )}
               </div>
 
-              <div className="min-w-0">
-                <h3 className="truncate text-lg font-extrabold leading-tight drop-shadow-sm">
+              <div className="min-w-0 shrink-0">
+                <h3 className="truncate text-base font-extrabold leading-tight drop-shadow-sm sm:text-lg">
                   {tile.name}
                 </h3>
-                <p className="mt-0.5 truncate text-xs font-medium text-white/80">
+                <p className="mt-0.5 truncate text-[11px] font-medium text-white/80 sm:text-xs">
                   {tile.season ? `${tile.season} · ` : ""}
                   {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
                 </p>
@@ -1094,12 +1066,12 @@ export function DashboardClient({
   const [duplicating, setDuplicating] = useState<DashboardPlaybookTile | null>(null);
   const [customizing, setCustomizing] = useState<DashboardPlaybookTile | null>(null);
   const [inviting, setInviting] = useState<DashboardPlaybookTile | null>(null);
-  const [storedView, setView] = useDashboardView();
-  // The open-book hover animation is fiddly on touch — force Simple mode
-  // and hide the toggle on touch devices regardless of viewport size.
-  const isTouch = useIsTouchDevice();
-  const effectiveHideAnimation = hideAnimation || isTouch;
-  const view: DashboardView = effectiveHideAnimation ? "classic" : storedView;
+  // Book covers everywhere. The site-admin "hide_lobby_animation" toggle
+  // still falls back to flat tiles for low-end-device cohorts; otherwise
+  // we always render the cover treatment. Per-tile touch detection inside
+  // PlaybookBookTile keeps the cover static (no hover animation) on
+  // phones and tablets without dropping the visual.
+  const view: DashboardView = hideAnimation ? "classic" : "preview";
   const [showArchived, setShowArchived] = usePersistedFlag(
     "dashboard.showArchived",
   );
@@ -1501,17 +1473,11 @@ export function DashboardClient({
             >
               Browse examples
             </Link>
-            {/* Desktop: keep the explicit "+ New Playbook" button — the
-                preview (book) view has no empty-tile affordance to take
-                its place. Mobile uses the dashed NewPlaybookTile in the
-                grid instead, so the duplicate toolbar button just crowded
-                the row. */}
             <Button
               variant="primary"
               size="sm"
               leftIcon={Plus}
               onClick={() => setShowCreate(true)}
-              className="hidden sm:inline-flex"
             >
               New Playbook
             </Button>
@@ -1656,23 +1622,6 @@ export function DashboardClient({
             </>
           )}
         </section>
-      )}
-
-      {!isEmpty && !effectiveHideAnimation && (
-        <div className="flex flex-col items-center gap-1.5 pt-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-            Tile style
-          </span>
-          <SegmentedControl
-            size="sm"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "preview", label: "Preview" },
-              { value: "classic", label: "Simple" },
-            ]}
-          />
-        </div>
       )}
 
       {duplicating && (
