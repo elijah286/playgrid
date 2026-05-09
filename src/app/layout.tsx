@@ -22,6 +22,7 @@ const inter = Inter({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.xogridmaker.com";
+const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61589257046303";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -55,6 +56,9 @@ export const metadata: Metadata = {
       "Create custom playbooks and share them with your team. Quickly generate game-ready wristbands and play sheets. Designed for flag, 7v7, and tackle football coaches.",
     locale: "en_US",
   },
+  other: {
+    "article:publisher": FACEBOOK_URL,
+  },
   twitter: {
     card: "summary_large_image",
     title: "XO Gridmaker — Football play designer & playbook builder",
@@ -87,6 +91,7 @@ const structuredData = [
     url: SITE_URL,
     description:
       "XO Gridmaker is a football play designer for coaches and athletes — build plays, organize playbooks, and preview wristbands.",
+    sameAs: [FACEBOOK_URL],
   },
   {
     "@context": "https://schema.org",
