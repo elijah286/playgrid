@@ -66,7 +66,7 @@ export function EditorPlaybookChrome({
       // SiteHeader's stacking when the page scrolls.
       // backgroundColor under backgroundImage keeps the gradient's alpha
       // steps from letting content scroll-through on mobile.
-      className="sticky top-0 z-30 -mx-6 -mt-5 sm:static sm:z-auto"
+      className="native-safe-top sticky top-0 z-30 -mx-6 -mt-5 sm:static sm:z-auto"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">

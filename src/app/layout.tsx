@@ -147,12 +147,36 @@ export default async function RootLayout({
             }}
           />
         )}
+        {/* Tag the document as a Capacitor shell before paint so the
+            loading overlay's CSS can reveal it without waiting for React.
+            window.Capacitor is injected by the runtime before the page
+            loads, so the check is reliable on native and false on web. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){document.documentElement.classList.add('native-shell');}}catch(e){}`,
+          }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
       </head>
       <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans [overflow-x:clip]">
+        {/* Native loading overlay. Hidden on web (display:none unless
+            <html> has .native-shell). Bridges the gap between the native
+            splash hiding and the dashboard hydrating so coaches don't see
+            a black/blank flash on cold launch. NativeAppShell adds
+            .native-ready to <html> on window 'load' to fade it out. */}
+        <div id="native-loading-overlay" aria-hidden="true">
+          <img
+            src="/brand/xogridmaker_monogram.svg"
+            alt=""
+            width={120}
+            height={120}
+            decoding="sync"
+          />
+          <div className="bar" />
+        </div>
         <ThemeProvider forceLight={!isAuthed}>
           <FieldBackdrop />
           <ToastProvider>

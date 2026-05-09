@@ -475,16 +475,22 @@ export function AuthFlow({
           {step === "email" && (appleEnabled || googleEnabled) && (
             <>
               {googleEnabled && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => void signInWithGoogle()}
-                  disabled={pending}
-                >
-                  <GoogleGlyph className="mr-2 size-4" aria-hidden />
-                  Continue with Google
-                </Button>
+                // Google's OAuth servers refuse to load in WebView UAs since
+                // 2021, and our Capacitor wrapper has no deep-link callback
+                // to bring users back from a system-browser flow. Hide the
+                // button on native; Apple Sign In + email OTP cover the gap.
+                <div data-web-only>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => void signInWithGoogle()}
+                    disabled={pending}
+                  >
+                    <GoogleGlyph className="mr-2 size-4" aria-hidden />
+                    Continue with Google
+                  </Button>
+                </div>
               )}
               {appleEnabled && (
                 <Button

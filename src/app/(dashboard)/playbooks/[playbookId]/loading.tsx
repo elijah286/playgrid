@@ -15,7 +15,7 @@ export default function PlaybookDetailLoading() {
       {/* Mobile-only orange playbook chrome placeholder. The real chrome
           fills in playbook name + initial once data loads. */}
       <div
-        className="sticky top-0 z-30 -mx-6 flex items-center gap-2 px-4 py-3 sm:hidden"
+        className="native-safe-top sticky top-0 z-30 -mx-6 flex items-center gap-2 px-4 py-3 sm:hidden"
         style={{ backgroundColor: "#F26522" }}
       >
         <div className="size-9 rounded-lg bg-white/20" aria-hidden />

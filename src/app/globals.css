@@ -424,11 +424,71 @@ html.coach-docked body {
  * class is added to <body> by NativeAppShell when running inside the wrapper.
  * Goals: respect notch/home-indicator safe areas, hide web-only chrome
  * (marketing footer, install prompts) that has no place in the native app. */
+/* Loading overlay shown during the native cold-start gap between the
+ * native splash hiding and React hydrating. The <html>.native-shell
+ * class is set by an inline script in <head> before paint, so the overlay
+ * appears without waiting for React. NativeAppShell adds .native-ready
+ * on window 'load' to fade it out. Hidden on web by default. */
+#native-loading-overlay {
+  display: none;
+}
+html.native-shell #native-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  background: #ffffff;
+  transition: opacity 280ms ease-out;
+}
+html.native-shell #native-loading-overlay img {
+  width: 96px;
+  height: auto;
+}
+html.native-shell #native-loading-overlay .bar {
+  position: relative;
+  width: 160px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+html.native-shell #native-loading-overlay .bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: #f26522;
+  border-radius: 999px;
+  animation: native-loading-bar 1.2s ease-in-out infinite;
+}
+@keyframes native-loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+html.native-shell.native-ready #native-loading-overlay {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Safe-area handling: only horizontal padding goes on <body>. Vertical
+ * insets are owned by the components that anchor to the top (sticky site
+ * header) and bottom (fixed bottom navs) of the viewport, so their
+ * backgrounds extend behind the status bar / home indicator while their
+ * content sits in the safe zone. Padding on <body> would leave the safe
+ * areas transparent, exposing scrolled content under the status bar. */
 body.native-app {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+body.native-app [data-site-header],
+body.native-app .native-safe-top {
+  padding-top: env(safe-area-inset-top);
 }
 body.native-app [data-site-footer],
 body.native-app [data-marketing-only],

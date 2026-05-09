@@ -1338,7 +1338,7 @@ function PlaybookDetailClientInner({
           siblings (tab content) in their natural flow position with no
           overlap. Solid bg (not blur) avoids the "appearing header"
           flicker when scroll begins. */}
-      <div ref={stickyBannerRef} className="sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-3 pt-3 sm:pb-4">
+      <div ref={stickyBannerRef} className="native-safe-top sticky top-0 sm:top-14 z-20 -mx-6 space-y-4 bg-surface px-6 pb-3 pt-3 sm:pb-4">
       {/* pb-0 on mobile so the chat / calendar / roster tabs sit flush
           below the orange banner — no top tabs there to pad against.
           Desktop keeps pb-4 for breathing room with the visible top tabs. */}
