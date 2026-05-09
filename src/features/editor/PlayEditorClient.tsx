@@ -1632,6 +1632,22 @@ function PlayEditorClientInner({
                 onActivateSide={setActiveSide}
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
+              {/* Read-only viewers (shared, archived, examples) get the
+               *  same tap-to-step gesture as landscape fullscreen so
+               *  coaches and parents can flip through the animation
+               *  with one finger without hunting for the play button.
+               *  pointer-events-auto overrides the wrapper's
+               *  pointer-events-none — the rest of the canvas stays
+               *  inert. Hidden when canEdit since taps need to reach
+               *  the editing affordances underneath. */}
+              {!canEdit && (
+                <button
+                  type="button"
+                  onClick={anim.step}
+                  aria-label="Advance play"
+                  className="pointer-events-auto absolute inset-0 cursor-pointer bg-transparent"
+                />
+              )}
             </div>
 
             {/* Mobile: notes card immediately below the (sticky) field, in
