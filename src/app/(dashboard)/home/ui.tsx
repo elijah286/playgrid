@@ -1501,11 +1501,17 @@ export function DashboardClient({
             >
               Browse examples
             </Link>
+            {/* Desktop: keep the explicit "+ New Playbook" button — the
+                preview (book) view has no empty-tile affordance to take
+                its place. Mobile uses the dashed NewPlaybookTile in the
+                grid instead, so the duplicate toolbar button just crowded
+                the row. */}
             <Button
               variant="primary"
               size="sm"
               leftIcon={Plus}
               onClick={() => setShowCreate(true)}
+              className="hidden sm:inline-flex"
             >
               New Playbook
             </Button>
