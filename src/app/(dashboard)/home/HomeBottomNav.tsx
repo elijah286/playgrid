@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BookOpen, Calendar, CreditCard, Inbox, MoreHorizontal, Shield, User } from "lucide-react";
+import { BookOpen, Calendar, CreditCard, Inbox, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
+import { signOutAction } from "@/app/actions/auth";
 
 /**
  * Mobile-first bottom nav rendered at the dashboard layout level.
@@ -111,25 +112,16 @@ export function HomeBottomNav({
           badge={inboxCount > 0 ? inboxCount : undefined}
           badgeUrgent={inboxUrgent}
         />
-        {/* 5th slot: direct Account link for regular users; a "More"
-            popover for admins (so Site Admin can ride alongside without
-            burning a top-level nav slot). Same metaphor as the playbook
-            More menu so the gesture is identical. */}
-        {isAdmin ? (
-          <NavButton
-            isActive={onAccount || onAdmin || moreOpen}
-            label="More"
-            Icon={MoreHorizontal}
-            onClick={() => setMoreOpen(true)}
-          />
-        ) : (
-          <NavLink
-            href="/account"
-            isActive={onAccount}
-            label="Account"
-            Icon={User}
-          />
-        )}
+        {/* 5th slot: a "More" popover for everyone — exposes Account,
+            Sign out, and (for admins) Billing + Site Admin. Same metaphor
+            as the playbook More menu so the gesture is identical, and
+            Sign out stays reachable from any mobile surface. */}
+        <NavButton
+          isActive={onAccount || onAdmin || moreOpen}
+          label="More"
+          Icon={MoreHorizontal}
+          onClick={() => setMoreOpen(true)}
+        />
       </nav>
 
       {moreOpen && (
@@ -137,8 +129,12 @@ export function HomeBottomNav({
           onClose={() => setMoreOpen(false)}
           items={[
             { label: "Account", href: "/account", Icon: User },
-            { label: "Billing", href: "/account?tab=billing", Icon: CreditCard },
-            { label: "Site Admin", href: "/settings", Icon: Shield },
+            ...(isAdmin
+              ? [
+                  { label: "Billing", href: "/account?tab=billing", Icon: CreditCard },
+                  { label: "Site Admin", href: "/settings", Icon: Shield },
+                ]
+              : []),
           ]}
         />
       )}
@@ -248,6 +244,16 @@ function MorePopover({
             <span className="flex-1 text-left">{it.label}</span>
           </Link>
         ))}
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            role="menuitem"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+          >
+            <LogOut className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 text-left">Sign out</span>
+          </button>
+        </form>
       </div>
     </>
   );

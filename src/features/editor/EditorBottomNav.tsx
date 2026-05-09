@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Layers,
   ListChecks,
+  LogOut,
   MessageCircle,
   MoreHorizontal,
   Shield,
@@ -16,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
+import { signOutAction } from "@/app/actions/auth";
 
 /**
  * Mobile-only footer for the play editor — mirrors PlaybookBottomNav's
@@ -250,6 +252,16 @@ function MoreSheet({
             <span className="flex-1 text-left">{it.label}</span>
           </Link>
         ))}
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            role="menuitem"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+          >
+            <LogOut className="size-4 shrink-0" aria-hidden />
+            <span className="flex-1 text-left">Sign out</span>
+          </button>
+        </form>
       </div>
     </>
   );
