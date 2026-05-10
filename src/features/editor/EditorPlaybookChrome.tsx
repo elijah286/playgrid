@@ -59,22 +59,22 @@ export function EditorPlaybookChrome({
     .join(" · ");
   return (
     <div
-      // Outer sticky wrapper — bg-surface frame matches the playbook
-      // list page's sticky banner. The chrome sits at its natural
-      // position inside play-editor-content (which sits below the
-      // layout's py-5 padding), giving 20px of bg-surface visible
-      // above the gradient at scroll=0. iOS Safari samples that strip
-      // for URL bar tinting, matching the playbook detail page's
-      // appearance.
+      // Outer sticky wrapper — bg-surface frame above and below the
+      // gradient. Top padding includes env(safe-area-inset-top) so on
+      // iPhone there's a substantial bg-surface strip behind the iOS
+      // status-bar / URL-bar zone when sticky-pinned. Without this,
+      // when the user scrolls and the chrome pins at top:0, the
+      // gradient ends up at viewport-top:0 and iOS Safari samples it
+      // for URL-bar tint — turning the URL bar red. The pt
+      // intentionally does NOT get cancelled by the inner gradient
+      // (no -mt-3) so the dark strip stays visible.
       //
       // Desktop drops the sticky + dark frame: gradient sits in
-      // normal flow below the SiteHeader. We also drop z-30 so the
-      // banner doesn't fight the SiteHeader's stacking as the page
-      // scrolls.
-      className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:bg-transparent sm:p-0"
+      // normal flow below the SiteHeader.
+      className="sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:static sm:z-auto sm:bg-transparent sm:p-0"
     >
     <div
-      className="-mx-6 -mt-3 sm:mx-0 sm:mt-0"
+      className="-mx-6 sm:mx-0"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
