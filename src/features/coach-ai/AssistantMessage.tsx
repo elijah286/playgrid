@@ -194,14 +194,19 @@ function DetailsFade({ markdown }: { markdown: string }) {
   );
 }
 
-function isInternalHref(href: string): boolean {
-  if (!href) return false;
-  if (href.startsWith("/") && !href.startsWith("//")) return true;
-  return false;
-}
-
 const PLAY_REF_RE     = /^play:\/\/([0-9a-f-]{8,})$/i;
 const PLAYBOOK_REF_RE = /^playbook:\/\/([0-9a-f-]{8,})$/i;
+// Cal sometimes emits a relative path without the leading slash —
+// e.g. `[name](plays/<uuid>)` instead of `[name](play://<uuid>)` or
+// `[name](/plays/<uuid>/edit)`. Surfaced 2026-05-10: a coach reported
+// that clicking a Cal-linked play opened a new browser window
+// instead of navigating in-place. Cause: the malformed bare-path
+// href didn't match `isInternalHref` (which required a leading `/`)
+// and fell through to the external-link branch, which uses
+// `target="_blank"`. These patterns cover the slip and route the
+// click through next/link.
+const BARE_PLAY_PATH_RE     = /^plays\/([0-9a-f-]{8,})(?:\/(?:edit|view|print))?$/i;
+const BARE_PLAYBOOK_PATH_RE = /^playbooks\/([0-9a-f-]{8,})(?:\/.*)?$/i;
 
 /** Resolve Cal's `play://<id>` / `playbook://<id>` markdown links into the
  *  in-app routes the rest of the renderer treats as internal. Returns null if
@@ -211,6 +216,54 @@ function resolveCoachRef(href: string): { route: string; kind: "play" | "playboo
   if (playMatch) return { route: `/plays/${playMatch[1]}/edit`, kind: "play" };
   const pbMatch = PLAYBOOK_REF_RE.exec(href);
   if (pbMatch) return { route: `/playbooks/${pbMatch[1]}`, kind: "playbook" };
+  return null;
+}
+
+/**
+ * Returns the canonical in-app path for an href that points within this
+ * site, or null if the href is external. Catches three failure modes
+ * where Cal emits a same-origin URL in a non-canonical shape, all of
+ * which would otherwise route to the external `<a target="_blank">`
+ * branch and open a new browser window:
+ *
+ *   1. Relative path with leading slash: `/plays/<uuid>/edit` (canonical
+ *      — passed through unchanged).
+ *   2. Bare relative path missing the slash: `plays/<uuid>` →
+ *      `/plays/<uuid>/edit`. Cal slipped into this on 2026-05-10
+ *      (Tampa 2 vs Noah link) despite the system prompt forbidding it.
+ *   3. Full same-origin URL: `https://xogridmaker.com/plays/<uuid>/edit`
+ *      → `/plays/<uuid>/edit`. Different-origin URLs return null and
+ *      fall through to the external-link branch.
+ *
+ * Pure function — no `window` access — so it's safe to call from any
+ * render path. Origin-comparison is done at call-time inside `<a>` once
+ * we know we're in the browser.
+ */
+export function normalizeInternalHref(
+  href: string,
+  currentOrigin: string | null,
+): string | null {
+  if (!href) return null;
+  // Canonical: starts with single slash.
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  // Bare-path slips. These are clearly meant to be in-app — Cal just
+  // forgot the slash — so promote them to canonical paths.
+  const playBare = BARE_PLAY_PATH_RE.exec(href);
+  if (playBare) return `/plays/${playBare[1]}/edit`;
+  const pbBare = BARE_PLAYBOOK_PATH_RE.exec(href);
+  if (pbBare) return `/playbooks/${pbBare[1]}`;
+  // Full same-origin URL. Strip down to path so `<Link>` navigates
+  // in-place; cross-origin URLs stay external.
+  if (currentOrigin && /^https?:\/\//i.test(href)) {
+    try {
+      const u = new URL(href);
+      if (u.origin === currentOrigin) {
+        return u.pathname + u.search + u.hash;
+      }
+    } catch {
+      /* malformed URL — fall through to external */
+    }
+  }
   return null;
 }
 
@@ -346,9 +399,14 @@ const components: Components = {
         </Link>
       );
     }
-    if (isInternalHref(url)) {
+    // `window` is only defined in the browser — `AssistantMessage` is
+    // a client component, but components passed to react-markdown can
+    // technically be evaluated in any environment, so guard the access.
+    const origin = typeof window !== "undefined" ? window.location.origin : null;
+    const internalPath = normalizeInternalHref(url, origin);
+    if (internalPath !== null) {
       return (
-        <Link href={url} className="text-primary underline-offset-2 hover:underline">
+        <Link href={internalPath} className="text-primary underline-offset-2 hover:underline">
           {children}
         </Link>
       );
@@ -385,8 +443,12 @@ const components: Components = {
 // react-markdown's default url transform strips schemes outside of an
 // allowlist (http, https, mailto, tel, …). Cal's `play://<id>` and
 // `playbook://<id>` shortcuts get wiped silently without this override.
+// Also let bare in-app paths through (`plays/<id>` without the leading
+// slash) so the `<a>` renderer can promote them to canonical paths
+// before they hit `<Link>`.
 function urlTransform(url: string): string {
   if (PLAY_REF_RE.test(url) || PLAYBOOK_REF_RE.test(url)) return url;
+  if (BARE_PLAY_PATH_RE.test(url) || BARE_PLAYBOOK_PATH_RE.test(url)) return url;
   // Default-ish behavior for everything else: only allow safe-looking
   // protocols and same-origin paths through.
   if (/^(https?:|mailto:|tel:|#|\/[^/])/i.test(url)) return url;
