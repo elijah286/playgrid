@@ -15,12 +15,12 @@ import { Calendar, ListChecks, MessageCircle, MoreHorizontal } from "lucide-reac
  */
 export default function EditorLoading() {
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0">
+    <div className="relative -mt-5 flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:-mt-0 sm:pb-0">
       {/* Mobile-only orange playbook chrome placeholder. The real chrome
           fills in playbook name + initial once data loads. Outer
           bg-surface pt-3/pb-3 mirrors EditorPlaybookChrome so the URL
           bar tints dark and the banner has breathing room below. */}
-      <div className="native-safe-top sticky top-0 z-30 -mx-6 -mt-5 bg-surface px-6 pb-3 pt-3 sm:hidden">
+      <div className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:hidden">
         <div
           className="-mx-6 -mt-3 flex items-center gap-2 px-4 py-3"
           style={{ backgroundColor: "#F26522" }}
