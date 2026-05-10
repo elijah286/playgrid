@@ -1951,7 +1951,14 @@ async function loadParentForCustomOpponent(parentPlayId: string) {
   return { ok: true as const, supabase, parent, variant };
 }
 
-export async function createCustomOpponentAction(parentPlayId: string) {
+export async function createCustomOpponentAction(
+  parentPlayId: string,
+  /** Optional seed players + routes to bootstrap the custom opponent from
+   *  (e.g. promoting a previewed saved-defense overlay into an editable
+   *  custom). When omitted, falls back to defaultDefendersForVariant /
+   *  defaultPlayersForVariant. */
+  seed?: { players: Player[]; routes?: Route[] },
+) {
   if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
   const ctx = await loadParentForCustomOpponent(parentPlayId);
   if (!ctx.ok) return ctx;
@@ -1983,14 +1990,16 @@ export async function createCustomOpponentAction(parentPlayId: string) {
 
   const parentType = (parent.play_type as PlayType | null) ?? "offense";
   const sportProfile = sportProfileForVariant(variant);
-  const players: Player[] =
-    parentType === "offense"
+  const players: Player[] = seed?.players?.length
+    ? seed.players
+    : parentType === "offense"
       ? defaultDefendersForVariant(variant)
       : defaultPlayersForVariant(variant);
+  const seedRoutes = seed?.routes ?? [];
 
   const doc = createEmptyPlayDocument({
     sportProfile,
-    layers: { players, routes: [], annotations: [] },
+    layers: { players, routes: seedRoutes, annotations: [] },
   });
   doc.metadata.coachName = "Custom opponent";
   doc.metadata.playType = parentType === "offense" ? "defense" : "offense";
@@ -2104,6 +2113,92 @@ export async function updateCustomOpponentPlayersAction(
   const nextDoc: PlayDocument = {
     ...doc,
     layers: { ...doc.layers, players },
+  };
+
+  const { error: updVerErr } = await supabase
+    .from("play_versions")
+    .update({ document: nextDoc as unknown as Record<string, unknown> })
+    .eq("id", ver.id);
+  if (updVerErr) return { ok: false as const, error: updVerErr.message };
+
+  const snapshot: VsPlaySnapshot = {
+    players: nextDoc.layers.players,
+    routes: nextDoc.layers.routes,
+    lineOfScrimmageY:
+      typeof nextDoc.lineOfScrimmageY === "number" ? nextDoc.lineOfScrimmageY : 0.4,
+    sourceVersionId: ver.id as string,
+    snapshotAt: new Date().toISOString(),
+    sourceName: nextDoc.metadata.coachName ?? "Custom opponent",
+    sourceFormationName: "",
+  };
+  await supabase
+    .from("plays")
+    .update({ vs_play_snapshot: snapshot as unknown as Record<string, unknown> })
+    .eq("id", parentPlayId);
+
+  return { ok: true as const, snapshot };
+}
+
+/**
+ * Persist routes (defender movement) on the parent play's custom opponent.
+ * The opponent is a hidden play attached to the parent — same persistence
+ * model as updateCustomOpponentPlayersAction, just for `layers.routes` instead
+ * of `layers.players`. The new routes are written to the hidden play's
+ * document AND mirrored into the parent's vs_play_snapshot so the editor
+ * (which reads from the snapshot) stays consistent.
+ *
+ * Per-play scope: changes here NEVER touch the source defense play. If the
+ * coach picked "Cover 2 No Rush" as their opponent and then drew movement on
+ * a defender, the saved Cover 2 stays as-is; the movement lives only on this
+ * offensive play's hidden custom-opponent copy.
+ */
+export async function updateCustomOpponentRoutesAction(
+  parentPlayId: string,
+  routes: Route[],
+) {
+  if (!hasSupabaseEnv()) return { ok: false as const, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  const { data: parent } = await supabase
+    .from("plays")
+    .select("id, playbook_id, vs_play_id")
+    .eq("id", parentPlayId)
+    .single();
+  if (!parent?.vs_play_id) return { ok: false as const, error: "No custom opponent attached." };
+
+  const gameLock = await assertNoActiveGameSession(supabase, parent.playbook_id as string);
+  if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
+
+  const { data: hidden } = await supabase
+    .from("plays")
+    .select("id, attached_to_play_id, current_version_id")
+    .eq("id", parent.vs_play_id)
+    .single();
+  if (!hidden || hidden.attached_to_play_id !== parentPlayId) {
+    return { ok: false as const, error: "Linked opponent is not a custom hidden play." };
+  }
+  if (!hidden.current_version_id) return { ok: false as const, error: "Hidden play has no version." };
+
+  const { data: ver } = await supabase
+    .from("play_versions")
+    .select("id, document")
+    .eq("id", hidden.current_version_id)
+    .single();
+  if (!ver) return { ok: false as const, error: "Version row missing." };
+
+  const doc = normalizePlayDocument(ver.document as PlayDocument);
+  // Filter out routes whose carrier no longer exists on the opponent — keeps
+  // the document self-consistent when a coach removed a defender after drawing
+  // movement on them.
+  const validCarrierIds = new Set(doc.layers.players.map((p) => p.id));
+  const filteredRoutes = routes.filter((r) => validCarrierIds.has(r.carrierPlayerId));
+  const nextDoc: PlayDocument = {
+    ...doc,
+    layers: { ...doc.layers, routes: filteredRoutes },
   };
 
   const { error: updVerErr } = await supabase

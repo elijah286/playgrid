@@ -117,6 +117,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "defender-movement-paths",
+    name: "Defender movement paths in the editor",
+    description:
+      "Defenders are now first-class authors of movement, not just tokens you reposition. Select any defender on a defense play and drag from the field to draw the path they take at the snap — rotation down to the flat, blitz angle, post-snap zone shift, anything you'd diagram on a whiteboard. Same gesture works on the custom-opponent overlay of an offensive play: tap an overlay defender and draw their reaction without leaving the offense view (changes stay local to that offensive play — your saved coverage stays pristine). Paths render the same way offensive routes do (straight or curved, with arrowheads) and round-trip through Coach Cal so the spec stays the source of truth: Cal can read the movement to explain it, edit it, or generate notes that describe each defender's job by name. Toolbar gives a clear-movement button per defender so you can wipe and redraw without touching anything else.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-09",
+  },
+  {
     id: "editor-field-customization",
     name: "Customizable field markings in the play editor",
     description:

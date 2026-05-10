@@ -65,6 +65,11 @@ type Interaction =
       extendFromNodeId: string | null;
       /** Points captured during drag (first point = anchor position) */
       points: Point2[];
+      /** When true, the carrier is an opponent (overlay) player and the
+       *  committed route routes through `onCommitOpponentRoute`, not the
+       *  primary doc dispatch. Opponent draws never extend an existing
+       *  primary route, so extendingRouteId stays null in this case. */
+      isOpponent?: boolean;
     };
 
 const DRAG_THRESHOLD_PX = 5;
@@ -166,6 +171,18 @@ type Props = {
   /** Called on each opponent drag move with the new normalized position.
    *  Parent decides whether to debounce + persist. */
   onOpponentPlayerMove?: (playerId: string, position: Point2) => void;
+  /** Currently-selected opponent player. Mutually exclusive with
+   *  `selectedPlayerId` — touching either side clears the other so a draw-
+   *  from-canvas gesture can never silently attach to the wrong carrier. */
+  selectedOpponentPlayerId?: string | null;
+  /** Set/clear the opponent selection. Called on opponent token tap. */
+  onSelectOpponentPlayer?: (id: string | null) => void;
+  /** Commit a freshly-drawn route on an opponent player. Parent appends to
+   *  its editable opponent-route state and persists per-play (does NOT
+   *  modify any source defense play). */
+  onCommitOpponentRoute?: (route: import("@/domain/play/types").Route) => void;
+  /** Clear all routes carried by the named opponent player. */
+  onClearOpponentRoutes?: (playerId: string) => void;
   /** Active side of the canvas. The inactive side is dimmed; clicking a
    *  player on the inactive side flips activeSide. Only meaningful when
    *  `opponentEditable` is true. */
@@ -230,6 +247,11 @@ function ClampedMenu({
     <div
       ref={ref}
       {...rest}
+      // Tag every ClampedMenu so the editor's outside-click deselect handler
+      // skips clicks on portaled context menus (segment, anchor, player).
+      // Without this, opening a menu and clicking an action wipes the
+      // selection mid-action.
+      data-editor-overlay="context-menu"
       className={className}
       style={{ position: "fixed", left: pos.left, top: pos.top }}
       onPointerDown={onPointerDown}
@@ -326,6 +348,10 @@ function EditorCanvasImpl({
   opponentRoutes = null,
   opponentEditable = false,
   onOpponentPlayerMove,
+  selectedOpponentPlayerId = null,
+  onSelectOpponentPlayer,
+  onCommitOpponentRoute,
+  onClearOpponentRoutes,
   activeSide = "primary",
   onActivateSide,
   pendingZone = null,
@@ -652,6 +678,15 @@ function EditorCanvasImpl({
       // Switch focus to the opponent side as soon as the user grabs an
       // opponent player. The parent observes activeSide and dims accordingly.
       if (activeSide !== "opponent") onActivateSide?.("opponent");
+      // Select this opponent so a follow-up drag-from-canvas (route draw)
+      // anchors here, and CLEAR any offense selection so it can't grab the
+      // route by mistake.
+      onSelectOpponentPlayer?.(playerId);
+      onSelectPlayer(null);
+      onSelectRoute(null);
+      onSelectNode(null);
+      onSelectSegment(null);
+      onSelectZone?.(null);
       if (!opponentEditable || !onOpponentPlayerMove) return;
       const svg = svgRef.current;
       try {
@@ -684,7 +719,19 @@ function EditorCanvasImpl({
       window.addEventListener("pointerup", endHandler);
       window.addEventListener("pointercancel", endHandler);
     },
-    [activeSide, onActivateSide, opponentEditable, onOpponentPlayerMove, toNorm],
+    [
+      activeSide,
+      onActivateSide,
+      onSelectOpponentPlayer,
+      onSelectPlayer,
+      onSelectRoute,
+      onSelectNode,
+      onSelectSegment,
+      onSelectZone,
+      opponentEditable,
+      onOpponentPlayerMove,
+      toNorm,
+    ],
   );
 
   /* ---------- Active style builder ---------- */
@@ -737,7 +784,11 @@ function EditorCanvasImpl({
       const simplified = simplifyPolyline(points, SIMPLIFY_EPSILON);
       if (simplified.length < 2) return;
 
-      const carrier = doc.layers.players.find((p) => p.id === playerId);
+      // Resolve the carrier from the right player pool: opponent draws look in
+      // opponentPlayers, primary draws look in doc.layers.players.
+      const carrier = state.isOpponent
+        ? (opponentPlayers ?? []).find((p) => p.id === playerId)
+        : doc.layers.players.find((p) => p.id === playerId);
       if (carrier) {
         // Drop any trailing/intermediate points that fall within the player
         // circle (except the very first, which is the anchor position).
@@ -750,6 +801,43 @@ function EditorCanvasImpl({
         }
       }
       if (simplified.length < 2) return;
+
+      // Opponent path: build a self-contained Route and hand it to the parent
+      // (no `route.add` dispatch — opponent routes don't live in doc.layers.routes).
+      // Opponent draws never extend an existing route, always create.
+      if (state.isOpponent && onCommitOpponentRoute) {
+        const oppNodes: RouteNode[] = simplified.map((pt) => ({
+          id: uid("node"),
+          position: pt,
+        }));
+        const oppShape = simplified.length > 2 ? "curve" : activeShape;
+        const oppStroke = activeStrokePattern === "motion" ? "solid" : activeStrokePattern;
+        const oppSegments: RouteSegment[] = [];
+        for (let i = 0; i < oppNodes.length - 1; i++) {
+          oppSegments.push({
+            id: uid("seg"),
+            fromNodeId: oppNodes[i].id,
+            toNodeId: oppNodes[i + 1].id,
+            shape: oppShape,
+            strokePattern: oppStroke,
+            controlOffset: null,
+          });
+        }
+        const oppRoute: Route = {
+          id: uid("route"),
+          carrierPlayerId: playerId,
+          semantic: null,
+          nodes: oppNodes,
+          segments: oppSegments,
+          style: {
+            stroke: carrier?.style.fill ?? "#FFFFFF",
+            strokeWidth: activeWidth,
+          },
+        };
+        onCommitOpponentRoute(oppRoute);
+        if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
+        return;
+      }
 
       // A freehand (drag) path with 3+ points renders more faithfully as
       // curves; with exactly 2 points (effectively a straight drag), honor
@@ -816,24 +904,42 @@ function EditorCanvasImpl({
       onSelectSegment(null);
       if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, onActiveStrokePatternChange, buildRouteStyle, doc.layers.players],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, activeWidth, onActiveStrokePatternChange, buildRouteStyle, doc.layers.players, opponentPlayers, onCommitOpponentRoute],
   );
 
   /* ---------- Create a 2-node line route (single click, no existing route) ---------- */
 
   const commitClickRoute = useCallback(
-    (playerId: string, playerPos: Point2, clickPos: Point2) => {
+    (playerId: string, playerPos: Point2, clickPos: Point2, isOpponent = false) => {
       const snapped = snapOutsidePlayer(clickPos, playerPos);
       const startNode: RouteNode = { id: uid("node"), position: playerPos };
       const endNode: RouteNode = { id: uid("node"), position: snapped };
+      const stroke = activeStrokePattern === "motion" && isOpponent ? "solid" : activeStrokePattern;
       const seg: RouteSegment = {
         id: uid("seg"),
         fromNodeId: startNode.id,
         toNodeId: endNode.id,
         shape: activeShape,
-        strokePattern: activeStrokePattern,
+        strokePattern: stroke,
         controlOffset: null,
       };
+      if (isOpponent && onCommitOpponentRoute) {
+        const carrier = (opponentPlayers ?? []).find((p) => p.id === playerId);
+        const route: Route = {
+          id: uid("route"),
+          carrierPlayerId: playerId,
+          semantic: null,
+          nodes: [startNode, endNode],
+          segments: [seg],
+          style: {
+            stroke: carrier?.style.fill ?? "#FFFFFF",
+            strokeWidth: activeWidth,
+          },
+        };
+        onCommitOpponentRoute(route);
+        if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
+        return;
+      }
       const route: Route = {
         id: uid("route"),
         carrierPlayerId: playerId,
@@ -848,7 +954,7 @@ function EditorCanvasImpl({
       onSelectSegment(null);
       if (activeStrokePattern === "motion") onActiveStrokePatternChange?.("solid");
     },
-    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, onActiveStrokePatternChange, buildRouteStyle, doc.layers.players],
+    [dispatch, onSelectRoute, onSelectNode, onSelectSegment, activeShape, activeStrokePattern, activeWidth, onActiveStrokePatternChange, buildRouteStyle, doc.layers.players, opponentPlayers, onCommitOpponentRoute],
   );
 
   /* ---------- Pointer handlers ---------- */
@@ -952,6 +1058,10 @@ function EditorCanvasImpl({
         onSelectNode(null);
         onSelectSegment(null);
         onSelectZone?.(null);
+        // Cross-side clear: a previously-selected opponent must NOT linger as
+        // the carrier for the next draw-from-canvas gesture (that's the
+        // "drew on the wrong player" misattach we're guarding against).
+        onSelectOpponentPlayer?.(null);
       }
 
       // Schedule a long-press → context menu. Only meaningful on touch
@@ -1096,6 +1206,25 @@ function EditorCanvasImpl({
             if (!player) return;
             startPos = player.position;
             playerId = selectedPlayerId;
+          } else if (selectedOpponentPlayerId && opponentEditable && onCommitOpponentRoute) {
+            // Opponent draw: anchor at the selected overlay defender. The
+            // committed route flows through onCommitOpponentRoute and lands
+            // on the parent's editableOppRoutes — never on doc.layers.routes.
+            const opp = (opponentPlayers ?? []).find((p) => p.id === selectedOpponentPlayerId);
+            if (!opp) return;
+            startPos = opp.position;
+            playerId = selectedOpponentPlayerId;
+            const next: Interaction = {
+              type: "drawing_route",
+              playerId,
+              extendingRouteId: null,
+              extendFromNodeId: null,
+              points: [startPos, state.origin, toNorm(e)],
+              isOpponent: true,
+            };
+            setInteraction(next);
+            interactionRef.current = next;
+            return;
           } else {
             return;
           }
@@ -1190,7 +1319,7 @@ function EditorCanvasImpl({
         return;
       }
     },
-    [toNorm, dispatch, selectedPlayerId, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, cancelLongPress],
+    [toNorm, dispatch, selectedPlayerId, selectedOpponentPlayerId, opponentPlayers, opponentEditable, onCommitOpponentRoute, doc.layers.players, doc.layers.routes, getAnchor, mode, losY, activeShape, cancelLongPress],
   );
 
   const finishInteraction = useCallback(
@@ -1252,6 +1381,11 @@ function EditorCanvasImpl({
               if (player) {
                 commitClickRoute(selectedPlayerId, player.position, state.origin);
               }
+            } else if (selectedOpponentPlayerId && opponentEditable && onCommitOpponentRoute) {
+              const opp = (opponentPlayers ?? []).find((p) => p.id === selectedOpponentPlayerId);
+              if (opp) {
+                commitClickRoute(selectedOpponentPlayerId, opp.position, state.origin, true);
+              }
             } else {
               // Nothing selected → deselect all
               onSelectPlayer(null);
@@ -1279,7 +1413,8 @@ function EditorCanvasImpl({
     },
     [
       onSelectPlayer, onSelectRoute, onSelectNode, onSelectSegment,
-      selectedPlayerId, doc.layers.players, commitClickRoute, commitFreehandRoute,
+      selectedPlayerId, selectedOpponentPlayerId, opponentEditable, opponentPlayers,
+      onCommitOpponentRoute, doc.layers.players, commitClickRoute, commitFreehandRoute,
       getAnchor, dispatch, activeShape, activeStrokePattern, mode, onAddPlayer, losY,
       onActiveStrokePatternChange, onSelectZone, cancelLongPress, detachWindowListeners,
     ],
@@ -2332,7 +2467,13 @@ function EditorCanvasImpl({
        *  active, the offense dims; otherwise the opponent dims. */}
       {opponentPlayers && opponentPlayers.length > 0 && (
         <g
-          pointerEvents={opponentEditable ? undefined : "none"}
+          // Pointer events flip on as soon as a select-or-promote handler is
+          // wired (onSelectOpponentPlayer). That covers BOTH the editable
+          // custom-opponent case (drag-to-position + draw movement) AND the
+          // previewed saved-defense case (tap to grab → parent auto-promotes
+          // the preview to a custom). When neither is wired the overlay stays
+          // a non-interactive ghost.
+          pointerEvents={onSelectOpponentPlayer ? undefined : "none"}
           opacity={
             opponentEditable
               ? activeSide === "opponent"
@@ -2348,16 +2489,30 @@ function EditorCanvasImpl({
             const useStyled = opponentEditable;
             const fill = useStyled ? pl.style?.fill ?? "#9ca3af" : "#9ca3af";
             const stroke = useStyled ? pl.style?.stroke ?? "#4b5563" : "#4b5563";
-            const strokeW = useStyled ? 1.5 : 1.2;
+            const sel = pl.id === selectedOpponentPlayerId;
+            const strokeW = sel ? 2.25 : useStyled ? 1.5 : 1.2;
             const labelColor = useStyled ? deriveLabelColor(fill) : "#1f2937";
-            const handlers = opponentEditable
+            const handlers = onSelectOpponentPlayer
               ? {
-                  style: { cursor: "grab", touchAction: "none" } as React.CSSProperties,
+                  style: { cursor: opponentEditable ? "grab" : "pointer", touchAction: "none" } as React.CSSProperties,
                   onPointerDown: (e: React.PointerEvent) => beginOpponentDrag(e, pl.id),
                 }
               : undefined;
             return (
               <g key={`oppplay-${pl.id}`} transform={`translate(${cx} ${cy})`}>
+                {sel && (
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={r * 1.55}
+                    fill="none"
+                    stroke={pl.style?.stroke ?? "#1C1C1E"}
+                    strokeWidth={1.25}
+                    strokeDasharray="3 2"
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                )}
                 <PlayerShape
                   shape={pl.shape}
                   cx={0}
@@ -2423,14 +2578,18 @@ function EditorCanvasImpl({
         </g>
       )}
 
-      {/* Opponent route ghosts (gray, non-interactive). Rendered when the
-          defense editor's "view offense routes" toggle is on so the coach can
-          see where the offense runs while drawing the defensive reaction. */}
+      {/* Opponent routes. Two contexts:
+       *   - Editable overlay (custom opponent + edit mode): render in the
+       *     carrier's color at full opacity so coach-drawn defender movement
+       *     looks like real movement, not a ghost preview.
+       *   - View-only ghosts (defense editor "view offense routes" toggle,
+       *     non-editable opponent preview): keep the gray ghost rendering. */}
       {opponentRoutes && opponentRoutes.length > 0 && (
-        <g pointerEvents="none" opacity={0.55}>
+        <g pointerEvents="none" opacity={opponentEditable ? 1 : 0.55}>
           <g transform={`scale(${fieldAspect}, 1)`}>
             {opponentRoutes.map((route) => {
               const rendered = routeToRenderedSegments(route);
+              const stroke = opponentEditable ? route.style.stroke : "#9ca3af";
               return (
                 <g key={`opproute-${route.id}`}>
                   {rendered.map((rs) => (
@@ -2438,7 +2597,7 @@ function EditorCanvasImpl({
                       key={rs.segmentId}
                       d={rs.d}
                       fill="none"
-                      stroke="#9ca3af"
+                      stroke={stroke}
                       strokeWidth={route.style.strokeWidth}
                       strokeDasharray={rs.dash}
                       strokeLinecap="round"
@@ -2482,7 +2641,7 @@ function EditorCanvasImpl({
                   if (len < 1e-4) return null;
                   const ux = dxS / len;
                   const uy = dyS / len;
-                  const stroke = "#9ca3af";
+                  const stroke = opponentEditable ? route.style.stroke : "#9ca3af";
                   const strokeW = route.style.strokeWidth;
                   if (decoration === "arrow") {
                     const arrowLen = 0.028;

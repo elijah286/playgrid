@@ -154,7 +154,12 @@ export function RouteToolbar({
   hasAnySelection = false,
   onDone,
 }: Props) {
-  const showPlayerActions = !isDefense;
+  // Hot-route is offense-specific (audible signal). Clearing the player's
+  // path is meaningful for both — it just means "wipe the routes I drew on
+  // this offensive player" or "wipe the movement I drew on this defender."
+  const showHotRoute = !isDefense;
+  const showClearPath = true;
+  const clearLabel = isDefense ? "movement" : "route";
   const strokeOptions = isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE;
   const activeStroke = strokePattern === "motion" && isDefense ? "solid" : strokePattern;
   return (
@@ -225,7 +230,7 @@ export function RouteToolbar({
             return (
               <Tooltip
                 key={opt.value}
-                content={hasSelectedRoute ? opt.label : "Select a route first"}
+                content={hasSelectedRoute ? opt.label : `Select a ${clearLabel} first`}
               >
                 <button
                   type="button"
@@ -278,38 +283,38 @@ export function RouteToolbar({
           </>
         )}
 
-        {showPlayerActions && (
-          <>
-            <Tooltip content={hasSelectedPlayer ? (isHotRoute ? "Remove hot route" : "Mark as hot route") : "Select a player to toggle hot route"}>
-              <IconButton
-                icon={Star}
-                variant="ghost"
-                size="sm"
-                disabled={!hasSelectedPlayer}
-                onClick={onToggleHotRoute}
-                className={hasSelectedPlayer && isHotRoute ? "text-amber-400 hover:text-amber-300" : undefined}
-                aria-pressed={isHotRoute}
-              />
-            </Tooltip>
-            <Tooltip
-              content={
-                !hasSelectedPlayer
-                  ? "Select a player to clear their routes"
-                  : playerRouteCount > 0
-                    ? `Clear ${playerRouteCount} route${playerRouteCount !== 1 ? "s" : ""}`
-                    : "No routes to clear"
-              }
-            >
-              <IconButton
-                icon={Trash2}
-                variant="ghost"
-                size="sm"
-                disabled={!hasSelectedPlayer || playerRouteCount === 0}
-                onClick={onClearPlayerRoutes}
-                className="text-danger hover:bg-danger/10 hover:text-danger"
-              />
-            </Tooltip>
-          </>
+        {showHotRoute && (
+          <Tooltip content={hasSelectedPlayer ? (isHotRoute ? "Remove hot route" : "Mark as hot route") : "Select a player to toggle hot route"}>
+            <IconButton
+              icon={Star}
+              variant="ghost"
+              size="sm"
+              disabled={!hasSelectedPlayer}
+              onClick={onToggleHotRoute}
+              className={hasSelectedPlayer && isHotRoute ? "text-amber-400 hover:text-amber-300" : undefined}
+              aria-pressed={isHotRoute}
+            />
+          </Tooltip>
+        )}
+        {showClearPath && (
+          <Tooltip
+            content={
+              !hasSelectedPlayer
+                ? `Select a player to clear their ${clearLabel}s`
+                : playerRouteCount > 0
+                  ? `Clear ${playerRouteCount} ${clearLabel}${playerRouteCount !== 1 ? "s" : ""}`
+                  : `No ${clearLabel}s to clear`
+            }
+          >
+            <IconButton
+              icon={Trash2}
+              variant="ghost"
+              size="sm"
+              disabled={!hasSelectedPlayer || playerRouteCount === 0}
+              onClick={onClearPlayerRoutes}
+              className="text-danger hover:bg-danger/10 hover:text-danger"
+            />
+          </Tooltip>
         )}
 
         {showDoneButton && onDone && (
@@ -410,6 +415,13 @@ function ColorPickerButton({
     <div
       ref={popRef}
       role="menu"
+      // Tagged so the editor's outside-click deselect handler knows to
+      // ignore clicks landing in this portaled popover — without this, the
+      // act of picking a color triggers the deselect (since the popover is
+      // portaled outside the editor root) and the in-flight selection
+      // (offense player or opponent defender) is wiped before the color
+      // change is reflected on screen.
+      data-editor-overlay="color-picker"
       style={{ position: "fixed", left: pos.left, top: pos.top, minWidth: "10.5rem" }}
       className="z-50 flex flex-wrap gap-1 rounded-md border border-border bg-surface-raised p-1.5 shadow-lg"
     >

@@ -19,6 +19,7 @@ import {
   savePlayVersionAction,
   setOpponentHiddenAction,
   updateCustomOpponentPlayersAction,
+  updateCustomOpponentRoutesAction,
 } from "@/app/actions/plays";
 import { usePlayEditor } from "./usePlayEditor";
 import { EditorCanvas } from "./EditorCanvas";
@@ -218,7 +219,48 @@ function PlayEditorClientInner({
   const router = useRouter();
   const { toast } = useToast();
   const { blockIfPreview } = useExamplePreview();
-  const { doc, dispatch, undo, redo, replaceDocument, canUndo, canRedo } = usePlayEditor(initialDocument);
+  const {
+    doc,
+    dispatch: primaryDispatch,
+    undo: primaryUndo,
+    redo: primaryRedo,
+    replaceDocument: primaryReplaceDocument,
+    canUndo: primaryCanUndo,
+    canRedo: primaryCanRedo,
+  } = usePlayEditor(initialDocument);
+
+  // Unified edit timeline so undo/redo unwinds the most recent change across
+  // BOTH the primary doc (offense) AND the custom-opponent overlay
+  // (defenders + their movement). Each entry tags which side was edited;
+  // the actual snapshots live in `usePlayEditor` (primary) and the
+  // oppPast/oppFuture stacks below (opponent).
+  type OppSnapshot = { players: Player[] | null; routes: Route[] | null };
+  const [editTimeline, setEditTimeline] = useState<("primary" | "opponent")[]>([]);
+  const [oppPast, setOppPast] = useState<OppSnapshot[]>([]);
+  const [oppFuture, setOppFuture] = useState<OppSnapshot[]>([]);
+
+  const dispatch = useCallback(
+    (cmd: Parameters<typeof primaryDispatch>[0]) => {
+      setEditTimeline((t) => [...t, "primary"]);
+      // Doc dispatch clears its own redo stack on a new edit; clear ours too
+      // so a fresh primary edit doesn't leave a stale opponent redo branch.
+      setOppFuture([]);
+      primaryDispatch(cmd);
+    },
+    [primaryDispatch],
+  );
+
+  const replaceDocument = useCallback(
+    (next: PlayDocument) => {
+      // Hard reset: clear the unified timeline AND opponent stacks so the
+      // freshly-loaded doc starts with no undo history.
+      setEditTimeline([]);
+      setOppPast([]);
+      setOppFuture([]);
+      primaryReplaceDocument(next);
+    },
+    [primaryReplaceDocument],
+  );
 
   // Local state for playbook settings so width/length spinners (in the
   // Display popover's Field-size section) can update the canvas live
@@ -360,21 +402,9 @@ function PlayEditorClientInner({
   const vsSnapshot = doc.metadata.vsPlaySnapshot ?? null;
   const isDefense = (doc.metadata.playType ?? "offense") === "defense";
 
-  // Merge snapshot players/routes into the doc we hand to the animation so
-  // playback runs both sides on the same clock. The snapshot is read-only;
-  // the editable `doc` still only contains the defensive side.
-  const animDoc = useMemo<PlayDocument>(() => {
-    if (!vsSnapshot) return doc;
-    return {
-      ...doc,
-      layers: {
-        ...doc.layers,
-        players: [...doc.layers.players, ...vsSnapshot.players],
-        routes: [...doc.layers.routes, ...vsSnapshot.routes],
-      },
-    };
-  }, [doc, vsSnapshot]);
-  const anim = usePlayAnimation(animDoc);
+  // animDoc + anim are declared lower — they merge in editable opponent state
+  // that hasn't been declared at this point yet. See the block right after
+  // `editableOppRoutes` below.
   // Phone-in-landscape detector. The max-height filter keeps tablets and
   // desktop landscape windows on the regular editor — only a real phone
   // held sideways (≤500px short edge) flips into the immersive view.
@@ -430,10 +460,8 @@ function PlayEditorClientInner({
   // Stable set: changes only on phase transitions (not every RAF frame), so
   // EditorCanvas doesn't receive a new prop reference 60× per second and
   // re-rasterize its SVG text with shimmering subpixel alignment.
-  const animatingPlayerIds = useMemo(() => {
-    if (anim.phase === "idle") return null;
-    return new Set(anim.flats.map((f) => f.carrierPlayerId));
-  }, [anim.phase, anim.flats]);
+  // (animatingPlayerIds is now computed below, alongside animDoc + anim,
+  // since it depends on `anim`.)
 
   // Selection state
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -509,18 +537,266 @@ function PlayEditorClientInner({
     if (customOpponentPlayId == null || opponentHidden) setActiveSide("primary");
   }, [customOpponentPlayId, opponentHidden]);
 
+  // Editable copy of the custom-opponent's routes — defender movement that
+  // a coach drew on this offensive play. Same per-play override semantics
+  // as `editableOppPlayers`: the data lives on the hidden play, surfaces
+  // through `vsSnapshot.routes`, and changes here NEVER touch any source
+  // defense play (saved coverages stay pristine).
+  const [editableOppRoutes, setEditableOppRoutes] = useState<Route[] | null>(null);
+  const editableOppRoutesRef = useRef<Route[] | null>(null);
+  useEffect(() => {
+    editableOppRoutesRef.current = editableOppRoutes;
+  }, [editableOppRoutes]);
+  // Re-seed from the snapshot's routes only when the underlying hidden
+  // version changes — same load-once-per-version rule as players, so an
+  // in-flight draw isn't clobbered by the post-save round-trip.
+  const seededRoutesVersionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (customOpponentPlayId == null || opponentHidden) {
+      setEditableOppRoutes(null);
+      seededRoutesVersionRef.current = null;
+      return;
+    }
+    const ver = vsSnapshot?.sourceVersionId ?? null;
+    if (ver === seededRoutesVersionRef.current) return;
+    seededRoutesVersionRef.current = ver;
+    setEditableOppRoutes(vsSnapshot?.routes ?? []);
+  }, [customOpponentPlayId, opponentHidden, vsSnapshot]);
+
+  // ── Animation: merge primary + opponent into a single doc so playback
+  // runs both sides on the same clock. For a custom opponent under live
+  // edit we read from the in-flight `editableOppPlayers` / `editableOppRoutes`
+  // (so a defender movement just drawn animates immediately, not after the
+  // 350ms persistence debounce). Falls back to `vsSnapshot` for the read-
+  // only saved-defense overlay case.
+  const animDoc = useMemo<PlayDocument>(() => {
+    if (!vsSnapshot) return doc;
+    const oppPlayers = editableOppPlayers ?? vsSnapshot.players;
+    const oppRoutes = editableOppRoutes ?? vsSnapshot.routes;
+    return {
+      ...doc,
+      layers: {
+        ...doc.layers,
+        players: [...doc.layers.players, ...oppPlayers],
+        routes: [...doc.layers.routes, ...oppRoutes],
+      },
+    };
+  }, [doc, vsSnapshot, editableOppPlayers, editableOppRoutes]);
+  const anim = usePlayAnimation(animDoc);
+  const animatingPlayerIds = useMemo(() => {
+    if (anim.phase === "idle") return null;
+    return new Set(anim.flats.map((f) => f.carrierPlayerId));
+  }, [anim.phase, anim.flats]);
+
+  // Currently-selected opponent player. Held separately from `selectedPlayerId`
+  // (which targets `doc.layers.players`) because opponent players live in a
+  // parallel state slot. The two selections are mutually exclusive — touching
+  // either side clears the other — so the canvas always knows which carrier
+  // a draw-from-canvas gesture should attach to.
+  const [selectedOpponentPlayerId, setSelectedOpponentPlayerId] = useState<string | null>(null);
+  // Reset the opponent selection if the opponent disappears (custom removed,
+  // hidden toggled off) so a stale id can never anchor a future draw.
+  useEffect(() => {
+    if (customOpponentPlayId == null || opponentHidden) {
+      setSelectedOpponentPlayerId(null);
+    }
+  }, [customOpponentPlayId, opponentHidden]);
+
+  // Coalesce rapid-fire opponent edits (every pixel of a drag, repeated
+  // discrete clicks within ~500ms) into a single undo entry. Without this
+  // a one-second drag would push 60+ stack entries and undo would unwind
+  // one pixel at a time. The first call captures a pre-mutation snapshot;
+  // subsequent calls within the window just extend the silence timer. The
+  // next mutation after the window expires starts a fresh undo entry.
+  const oppEditCoalesceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const COALESCE_MS = 500;
+  const recordOppEdit = useCallback(() => {
+    if (oppEditCoalesceTimerRef.current) {
+      clearTimeout(oppEditCoalesceTimerRef.current);
+      oppEditCoalesceTimerRef.current = setTimeout(() => {
+        oppEditCoalesceTimerRef.current = null;
+      }, COALESCE_MS);
+      return;
+    }
+    const snapshot: OppSnapshot = {
+      players: editableOppRef.current,
+      routes: editableOppRoutesRef.current,
+    };
+    setOppPast((p) => [...p, snapshot]);
+    setOppFuture([]);
+    setEditTimeline((t) => [...t, "opponent"]);
+    oppEditCoalesceTimerRef.current = setTimeout(() => {
+      oppEditCoalesceTimerRef.current = null;
+    }, COALESCE_MS);
+  }, []);
+
   const oppSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const oppRouteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (oppSaveTimerRef.current) clearTimeout(oppSaveTimerRef.current);
+    if (oppRouteSaveTimerRef.current) clearTimeout(oppRouteSaveTimerRef.current);
   }, []);
+
+  const persistOpponentRoutes = useCallback(() => {
+    if (oppRouteSaveTimerRef.current) clearTimeout(oppRouteSaveTimerRef.current);
+    oppRouteSaveTimerRef.current = setTimeout(() => {
+      const latest = editableOppRoutesRef.current;
+      if (!latest) return;
+      void (async () => {
+        const res = await updateCustomOpponentRoutesAction(playId, latest);
+        if (!res.ok) {
+          toast(res.error, "error");
+          return;
+        }
+        // Mirror snapshot via primaryDispatch — this is an internal sync
+        // after persistence, NOT a user edit, so it shouldn't enter the
+        // unified undo timeline.
+        primaryDispatch({
+          type: "document.setMetadata",
+          patch: { vsPlaySnapshot: res.snapshot },
+        });
+      })();
+    }, 350);
+  }, [playId, primaryDispatch, toast]);
+
+  const handleOpponentRouteCommit = useCallback(
+    (route: Route) => {
+      recordOppEdit();
+      // Wipe any prior route on the same defender first — overlay defenders
+      // get one movement path at a time. Drawing a new one replaces the
+      // previous (matches how a single hand-drawn arrow per defender reads
+      // on a whiteboard).
+      setEditableOppRoutes((prev) => {
+        const base = (prev ?? []).filter((r) => r.carrierPlayerId !== route.carrierPlayerId);
+        return [...base, route];
+      });
+      persistOpponentRoutes();
+    },
+    [persistOpponentRoutes, recordOppEdit],
+  );
+
+  const handleClearOpponentRoutes = useCallback(
+    (playerId: string) => {
+      const had = (editableOppRoutesRef.current ?? []).some((r) => r.carrierPlayerId === playerId);
+      if (!had) return;
+      recordOppEdit();
+      setEditableOppRoutes((prev) => {
+        if (!prev) return prev;
+        return prev.filter((r) => r.carrierPlayerId !== playerId);
+      });
+      persistOpponentRoutes();
+    },
+    [persistOpponentRoutes, recordOppEdit],
+  );
+
+  // Handler the canvas calls when the user touches an opponent token. If the
+  // overlay is just a preview (saved defense picked, no custom yet), auto-
+  // promote to a custom opponent BEFORE setting the selection — otherwise
+  // drawing won't work because the preview is non-editable. The promotion
+  // seeds the custom from the previewed players + routes so the visible
+  // formation doesn't jump when it flips from preview → editable.
+  const handleSelectOpponentPlayer = useCallback(
+    (playerId: string | null) => {
+      // Deselect always passes through unchanged.
+      if (playerId == null) {
+        setSelectedOpponentPlayerId(null);
+        return;
+      }
+      // Already a custom opponent attached → just select.
+      if (customOpponentPlayId != null) {
+        setSelectedOpponentPlayerId(playerId);
+        return;
+      }
+      // Preview overlay (transient `opponentPlayers`) and no custom yet →
+      // create a custom seeded from the preview, then select.
+      if (opponentPlayers != null) {
+        if (
+          blockIfPreview(
+            "Custom opponents aren't saved on example plays. Start your own playbook to keep changes.",
+          )
+        ) {
+          return;
+        }
+        const seedPlayers = opponentPlayers;
+        const seedRoutes = opponentPickedRoutes ?? [];
+        setSelectedOpponentPlayerId(playerId);
+        void (async () => {
+          const res = await createCustomOpponentAction(playId, {
+            players: seedPlayers,
+            routes: seedRoutes,
+          });
+          if (!res.ok) {
+            toast(res.error, "error");
+            setSelectedOpponentPlayerId(null);
+            return;
+          }
+          setCustomOpponentPlayId(res.hiddenPlayId);
+          setOpponentHidden(false);
+          // Drop the transient preview now that the custom is the source of
+          // truth — the canvas will switch to reading from editableOppPlayers.
+          setOpponentPlayers(null);
+          setOpponentPickedRoutes(null);
+          router.refresh();
+        })();
+        return;
+      }
+      // Defenders showing without preview AND without custom (e.g. defense
+      // play viewing offense). Selection still flips for symmetry, but
+      // drawing remains non-functional in this read-only context.
+      setSelectedOpponentPlayerId(playerId);
+    },
+    [customOpponentPlayId, opponentPlayers, opponentPickedRoutes, playId, blockIfPreview, toast, router],
+  );
+
   const handleOpponentPlayerMove = useCallback(
     (playerId: string, position: Point2) => {
+      // Compute the delta BEFORE we update positions so we can translate any
+      // movement routes carried by this defender by the same amount —
+      // mirrors the offense `player.move` reducer's behavior so the route
+      // stays anchored to the player. Without this the route's start node
+      // remains at the original location and the defender visibly detaches
+      // from their movement line.
+      const prevPlayers = editableOppRef.current;
+      const moving = prevPlayers?.find((p) => p.id === playerId);
+      const dx = moving ? position.x - moving.position.x : 0;
+      const dy = moving ? position.y - moving.position.y : 0;
+      // No-op moves (sub-pixel jitter that resolved to identical position)
+      // shouldn't pollute the undo stack.
+      if (dx === 0 && dy === 0) return;
+      recordOppEdit();
+
       setEditableOppPlayers((prev) => {
         if (!prev) return prev;
         return prev.map((p) =>
           p.id === playerId ? { ...p, position } : p,
         );
       });
+      if (dx !== 0 || dy !== 0) {
+        setEditableOppRoutes((prev) => {
+          if (!prev || prev.length === 0) return prev;
+          return prev.map((r) => {
+            if (r.carrierPlayerId !== playerId) return r;
+            return {
+              ...r,
+              nodes: r.nodes.map((n) => ({
+                ...n,
+                position: { x: n.position.x + dx, y: n.position.y + dy },
+              })),
+              segments: r.segments.map((s) =>
+                s.controlOffset
+                  ? {
+                      ...s,
+                      controlOffset: {
+                        x: s.controlOffset.x + dx,
+                        y: s.controlOffset.y + dy,
+                      },
+                    }
+                  : s,
+              ),
+            };
+          });
+        });
+      }
       if (oppSaveTimerRef.current) clearTimeout(oppSaveTimerRef.current);
       oppSaveTimerRef.current = setTimeout(() => {
         const latest = editableOppRef.current;
@@ -532,16 +808,122 @@ function PlayEditorClientInner({
             return;
           }
           // Mirror the persisted snapshot into doc.metadata so other consumers
-          // (animation, vs-play card) see the up-to-date positions.
-          dispatch({
+          // (animation, vs-play card) see the up-to-date positions. Goes
+          // through primaryDispatch so it doesn't enter the undo timeline
+          // (this is an internal post-save sync, not a user edit).
+          primaryDispatch({
             type: "document.setMetadata",
             patch: { vsPlaySnapshot: res.snapshot },
           });
         })();
       }, 350);
+      // Persist the routes too — the routes-only action handles its own
+      // debounce, so subsequent moves coalesce naturally.
+      if (dx !== 0 || dy !== 0) {
+        persistOpponentRoutes();
+      }
     },
-    [playId, dispatch, toast],
+    [playId, primaryDispatch, toast, persistOpponentRoutes, recordOppEdit],
   );
+
+  // Persist a freshly-applied opponent snapshot (used after undo/redo so
+  // the server state catches up to the in-memory revert). Players +
+  // routes both flow through their individual debounced save paths.
+  const persistOpponentPlayers = useCallback(() => {
+    if (oppSaveTimerRef.current) clearTimeout(oppSaveTimerRef.current);
+    oppSaveTimerRef.current = setTimeout(() => {
+      const latest = editableOppRef.current;
+      if (!latest) return;
+      void (async () => {
+        const res = await updateCustomOpponentPlayersAction(playId, latest);
+        if (!res.ok) {
+          toast(res.error, "error");
+          return;
+        }
+        primaryDispatch({
+          type: "document.setMetadata",
+          patch: { vsPlaySnapshot: res.snapshot },
+        });
+      })();
+    }, 50);
+  }, [playId, primaryDispatch, toast]);
+
+  // Apply an opponent snapshot to local state. Used by both undo and redo
+  // to swap the live state for a saved one. After applying we kick the
+  // persistence handlers so the server catches up.
+  const applyOppSnapshot = useCallback(
+    (snap: OppSnapshot) => {
+      setEditableOppPlayers(snap.players);
+      setEditableOppRoutes(snap.routes);
+      // Re-arm the seeded-version refs so the snapshot useEffects don't
+      // immediately overwrite our applied state. We do NOT touch
+      // seededVersionRef here because the underlying hidden-play version
+      // hasn't actually changed — only the in-memory state has.
+      persistOpponentPlayers();
+      persistOpponentRoutes();
+    },
+    [persistOpponentPlayers, persistOpponentRoutes],
+  );
+
+  const undo = useCallback(() => {
+    setEditTimeline((t) => {
+      if (t.length === 0) return t;
+      const last = t[t.length - 1];
+      if (last === "primary") {
+        primaryUndo();
+      } else {
+        // Pop opp past, push current to opp future, apply snapshot.
+        setOppPast((p) => {
+          if (p.length === 0) return p;
+          const snap = p[p.length - 1];
+          const current: OppSnapshot = {
+            players: editableOppRef.current,
+            routes: editableOppRoutesRef.current,
+          };
+          setOppFuture((f) => [current, ...f]);
+          applyOppSnapshot(snap);
+          return p.slice(0, -1);
+        });
+      }
+      return t.slice(0, -1);
+    });
+  }, [primaryUndo, applyOppSnapshot]);
+
+  const redo = useCallback(() => {
+    // Redo logic mirrors undo: peek the inverse of the most-recent undo.
+    // We track the "redo timeline" by inferring from primary + opp future
+    // sizes since we don't keep a separate redoTimeline (the primary's
+    // own future stack handles its own redo, and the order is preserved
+    // because every primary `dispatch` clears the opp future too).
+    if (primaryCanRedo && oppFuture.length === 0) {
+      primaryRedo();
+      setEditTimeline((t) => [...t, "primary"]);
+      return;
+    }
+    if (oppFuture.length > 0 && !primaryCanRedo) {
+      const next = oppFuture[0];
+      const current: OppSnapshot = {
+        players: editableOppRef.current,
+        routes: editableOppRoutesRef.current,
+      };
+      setOppPast((p) => [...p, current]);
+      setOppFuture((f) => f.slice(1));
+      applyOppSnapshot(next);
+      setEditTimeline((t) => [...t, "opponent"]);
+      return;
+    }
+    // Both have redo available — choose primary by default. (The mixed
+    // case is rare since we clear oppFuture on primary edits; it only
+    // arises if the user undoes opp, then undoes primary, then wants to
+    // redo. Primary-first is a sensible default.)
+    if (primaryCanRedo) {
+      primaryRedo();
+      setEditTimeline((t) => [...t, "primary"]);
+    }
+  }, [primaryCanRedo, primaryRedo, oppFuture, applyOppSnapshot]);
+
+  const canUndo = primaryCanUndo || oppPast.length > 0;
+  const canRedo = primaryCanRedo || oppFuture.length > 0;
 
   // Active drawing style (defaults for new routes)
   const [activeShape, setActiveShape] = useState<SegmentShape>("straight");
@@ -760,27 +1142,58 @@ function PlayEditorClientInner({
     [router, startNavTransition],
   );
 
-  // Show toolbar when a player, route, or zone is selected
+  // Show toolbar when a player (offense or opponent), route, or zone is selected
   const showToolbar =
-    selectedPlayerId != null || selectedRouteId != null || selectedZoneId != null;
+    selectedPlayerId != null ||
+    selectedOpponentPlayerId != null ||
+    selectedRouteId != null ||
+    selectedZoneId != null;
   const selectedZone = (doc.layers.zones ?? []).find((z) => z.id === selectedZoneId) ?? null;
 
   const selectedRoute = doc.layers.routes.find((r) => r.id === selectedRouteId);
   const selectedSeg = selectedRoute?.segments.find((s) => s.id === selectedSegmentId);
   const selectedPlayer = doc.layers.players.find((p) => p.id === selectedPlayerId);
+  const selectedOpponentPlayer =
+    (editableOppPlayers ?? []).find((p) => p.id === selectedOpponentPlayerId) ?? null;
+  // Located here (rather than next to the toolbar handlers below) because
+  // both the display-value computations AND the handlers need it.
+  const selectedOpponentRoute = useMemo<Route | null>(() => {
+    if (!selectedOpponentPlayerId) return null;
+    return (
+      (editableOppRoutes ?? []).find(
+        (r) => r.carrierPlayerId === selectedOpponentPlayerId,
+      ) ?? null
+    );
+  }, [selectedOpponentPlayerId, editableOppRoutes]);
 
-  // Toolbar display values: reflect current selection if one exists, else active defaults
+  // Toolbar display values: reflect current selection if one exists, else active defaults.
+  // Opponent route values take effect when an opponent player is selected (and
+  // they carry a movement route) — the toolbar should show what's currently
+  // applied to that route, just like the offense path does for selectedRoute.
   // If a segment's stored shape is "zigzag" (legacy — the shape option has been
   // removed in favour of the motion stroke pattern), fall back to "straight"
   // so the SegmentedControl has a valid selection.
-  const rawShape = selectedSeg?.shape ?? activeShape;
+  const oppRouteForDisplay = selectedOpponentRoute;
+  const oppFirstSeg = oppRouteForDisplay?.segments[0] ?? null;
+  const rawShape = selectedSeg?.shape ?? oppFirstSeg?.shape ?? activeShape;
   const displayShape: SegmentShape = rawShape === "zigzag" ? "straight" : rawShape;
-  const displayStroke = selectedSeg?.strokePattern ?? activeStrokePattern;
+  const displayStroke =
+    selectedSeg?.strokePattern ?? oppFirstSeg?.strokePattern ?? activeStrokePattern;
   const displayColor =
     selectedRoute?.style.stroke ??
-    (selectedPlayer && !selectedRouteId ? selectedPlayer.style.fill : activeColor);
-  const displayWidth = selectedRoute?.style.strokeWidth ?? activeWidth;
-  const displayEndDecoration = selectedRoute ? resolveEndDecoration(selectedRoute) : "arrow";
+    oppRouteForDisplay?.style.stroke ??
+    (selectedPlayer && !selectedRouteId ? selectedPlayer.style.fill : null) ??
+    selectedOpponentPlayer?.style.fill ??
+    activeColor;
+  const displayWidth =
+    selectedRoute?.style.strokeWidth ??
+    oppRouteForDisplay?.style.strokeWidth ??
+    activeWidth;
+  const displayEndDecoration = selectedRoute
+    ? resolveEndDecoration(selectedRoute)
+    : oppRouteForDisplay
+      ? resolveEndDecoration(oppRouteForDisplay)
+      : "arrow";
 
   const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
@@ -891,6 +1304,45 @@ function PlayEditorClientInner({
 
   /* ---------- Toolbar handlers ---------- */
 
+  // Mutate the opponent route carried by the selected defender, recording
+  // the edit for undo + persisting via the routes-only debounced action.
+  const updateSelectedOppRoute = useCallback(
+    (transform: (r: Route) => Route) => {
+      if (!selectedOpponentPlayerId) return;
+      const list = editableOppRoutesRef.current ?? [];
+      const target = list.find((r) => r.carrierPlayerId === selectedOpponentPlayerId);
+      if (!target) return;
+      recordOppEdit();
+      setEditableOppRoutes((prev) =>
+        (prev ?? []).map((r) =>
+          r.carrierPlayerId === selectedOpponentPlayerId ? transform(r) : r,
+        ),
+      );
+      persistOpponentRoutes();
+    },
+    [selectedOpponentPlayerId, persistOpponentRoutes, recordOppEdit],
+  );
+
+  // Mutate the opponent player token style (color of the triangle).
+  // Preserves the existing labelColor; only fill + stroke move.
+  const updateSelectedOppPlayerStyle = useCallback(
+    (patch: { fill: string; stroke: string }) => {
+      if (!selectedOpponentPlayerId) return;
+      recordOppEdit();
+      setEditableOppPlayers((prev) =>
+        prev == null
+          ? prev
+          : prev.map((p) =>
+              p.id === selectedOpponentPlayerId
+                ? { ...p, style: { ...p.style, ...patch } }
+                : p,
+            ),
+      );
+      persistOpponentPlayers();
+    },
+    [selectedOpponentPlayerId, persistOpponentPlayers, recordOppEdit],
+  );
+
   const handleShapeChange = useCallback(
     (shape: SegmentShape) => {
       setActiveShape(shape);
@@ -901,46 +1353,63 @@ function PlayEditorClientInner({
         for (const s of selectedRoute.segments) {
           dispatch({ type: "route.setSegmentShape", routeId: selectedRouteId, segmentId: s.id, shape });
         }
+      } else if (selectedOpponentRoute) {
+        updateSelectedOppRoute((r) => ({
+          ...r,
+          segments: r.segments.map((s) => ({ ...s, shape })),
+        }));
       }
     },
-    [dispatch, selectedRouteId, selectedSegmentId, selectedRoute],
+    [dispatch, selectedRouteId, selectedSegmentId, selectedRoute, selectedOpponentRoute, updateSelectedOppRoute],
   );
 
   const handleStrokeChange = useCallback(
     (strokePattern: StrokePattern) => {
       setActiveStrokePattern(strokePattern);
-      if (!selectedRouteId || !selectedRoute) return;
-
-      // Apply the stroke pattern ONLY to the explicitly selected segment.
-      // If no specific segment is selected, apply to all segments of the
-      // route (whole-route edit).
-      if (selectedSegmentId) {
-        dispatch({
-          type: "route.setSegmentStroke",
-          routeId: selectedRouteId,
-          segmentId: selectedSegmentId,
-          strokePattern,
-        });
-      } else {
-        for (const s of selectedRoute.segments) {
+      if (selectedRouteId && selectedRoute) {
+        // Apply the stroke pattern ONLY to the explicitly selected segment.
+        // If no specific segment is selected, apply to all segments of the
+        // route (whole-route edit).
+        if (selectedSegmentId) {
           dispatch({
             type: "route.setSegmentStroke",
             routeId: selectedRouteId,
-            segmentId: s.id,
+            segmentId: selectedSegmentId,
             strokePattern,
           });
+        } else {
+          for (const s of selectedRoute.segments) {
+            dispatch({
+              type: "route.setSegmentStroke",
+              routeId: selectedRouteId,
+              segmentId: s.id,
+              strokePattern,
+            });
+          }
         }
+        return;
+      }
+      if (selectedOpponentRoute) {
+        updateSelectedOppRoute((r) => ({
+          ...r,
+          segments: r.segments.map((s) => ({ ...s, strokePattern })),
+        }));
       }
     },
-    [dispatch, selectedRouteId, selectedSegmentId, selectedRoute],
+    [dispatch, selectedRouteId, selectedSegmentId, selectedRoute, selectedOpponentRoute, updateSelectedOppRoute],
   );
 
   const handleEndDecorationChange = useCallback(
     (endDecoration: EndDecoration) => {
-      if (!selectedRouteId) return;
-      dispatch({ type: "route.setEndDecoration", routeId: selectedRouteId, endDecoration });
+      if (selectedRouteId) {
+        dispatch({ type: "route.setEndDecoration", routeId: selectedRouteId, endDecoration });
+        return;
+      }
+      if (selectedOpponentRoute) {
+        updateSelectedOppRoute((r) => ({ ...r, endDecoration }));
+      }
     },
-    [dispatch, selectedRouteId],
+    [dispatch, selectedRouteId, selectedOpponentRoute, updateSelectedOppRoute],
   );
 
   const handleColorChange = useCallback(
@@ -963,21 +1432,52 @@ function PlayEditorClientInner({
           zoneId: selectedZone.id,
           patch: { style: { fill, stroke } },
         });
-      } else if (selectedRouteId && selectedRoute) {
+        return;
+      }
+      if (selectedRouteId && selectedRoute) {
         dispatch({
           type: "route.setStyle",
           routeId: selectedRouteId,
           style: { ...selectedRoute.style, stroke: color },
         });
-      } else if (selectedPlayer) {
+        return;
+      }
+      if (selectedPlayer) {
         dispatch({
           type: "player.setStyle",
           playerId: selectedPlayer.id,
           style: { ...selectedPlayer.style, fill: color },
         });
+        return;
+      }
+      if (selectedOpponentPlayerId) {
+        // Color the defender token AND any movement they carry — same
+        // visual coupling offense uses (player color = route color by
+        // default). Persist both.
+        const opp = (editableOppPlayers ?? []).find((p) => p.id === selectedOpponentPlayerId);
+        if (opp) {
+          updateSelectedOppPlayerStyle({ ...opp.style, fill: color });
+        }
+        if (selectedOpponentRoute) {
+          updateSelectedOppRoute((r) => ({
+            ...r,
+            style: { ...r.style, stroke: color },
+          }));
+        }
       }
     },
-    [dispatch, selectedRouteId, selectedRoute, selectedPlayer, selectedZone],
+    [
+      dispatch,
+      selectedRouteId,
+      selectedRoute,
+      selectedPlayer,
+      selectedZone,
+      selectedOpponentPlayerId,
+      selectedOpponentRoute,
+      editableOppPlayers,
+      updateSelectedOppPlayerStyle,
+      updateSelectedOppRoute,
+    ],
   );
 
   const handleWidthChange = useCallback(
@@ -989,9 +1489,16 @@ function PlayEditorClientInner({
           routeId: selectedRouteId,
           style: { ...selectedRoute.style, strokeWidth: width },
         });
+        return;
+      }
+      if (selectedOpponentRoute) {
+        updateSelectedOppRoute((r) => ({
+          ...r,
+          style: { ...r.style, strokeWidth: width },
+        }));
       }
     },
-    [dispatch, selectedRouteId, selectedRoute],
+    [dispatch, selectedRouteId, selectedRoute, selectedOpponentRoute, updateSelectedOppRoute],
   );
 
   const handleSmooth = useCallback(() => {
@@ -1010,24 +1517,40 @@ function PlayEditorClientInner({
     setSelectedSegmentId(null);
     setSelectedRouteId(null);
     setSelectedPlayerId(null);
+    // "Done" returns the editor to its default offense-mode posture: drop
+    // the opponent selection AND flip the active side back to primary so
+    // the offense un-dims and subsequent canvas gestures act on the
+    // primary play, not the overlay.
+    setSelectedOpponentPlayerId(null);
+    setActiveSide("primary");
   }, []);
 
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (selectedPlayerId == null && selectedRouteId == null && selectedZoneId == null) return;
+    if (
+      selectedPlayerId == null &&
+      selectedOpponentPlayerId == null &&
+      selectedRouteId == null &&
+      selectedZoneId == null
+    ) return;
     function onDocPointer(e: PointerEvent) {
       const root = rootRef.current;
       if (!root) return;
-      const target = e.target as Node | null;
+      const target = e.target as Element | null;
       if (!target) return;
       if (root.contains(target)) return;
+      // Portaled editor popovers (color picker, future menus) are tagged with
+      // `data-editor-overlay`. They live outside rootRef but logically belong
+      // to the editor — clicks inside them must NOT trigger deselect, or a
+      // user picking a color sees the in-flight selection wiped mid-pick.
+      if (typeof target.closest === "function" && target.closest("[data-editor-overlay]")) return;
       handleDone();
       setSelectedZoneId(null);
     }
     document.addEventListener("pointerdown", onDocPointer, true);
     return () => document.removeEventListener("pointerdown", onDocPointer, true);
-  }, [selectedPlayerId, selectedRouteId, selectedZoneId, handleDone]);
+  }, [selectedPlayerId, selectedOpponentPlayerId, selectedRouteId, selectedZoneId, handleDone]);
 
   /* ---------- Hide site header on mobile editor ---------- */
 
@@ -1259,16 +1782,26 @@ function PlayEditorClientInner({
                   : vsSnapshot?.players ?? null)
             }
             opponentRoutes={
-              showOpponentRoutes
-                ? (opponentPickedRoutes && opponentPickedRoutes.length > 0
-                    ? opponentPickedRoutes
-                    : isDefense && vsSnapshot
-                      ? vsSnapshot.routes
-                      : null)
-                : null
+              // Custom-opponent routes (defender movement the coach drew) always
+              // render so the user can SEE what they just drew, regardless of the
+              // showOpponentRoutes ghost-toggle. Other route sources (picked
+              // preview / installed defense's offense ghost) stay gated by it.
+              customOpponentPlayId != null && !opponentHidden
+                ? editableOppRoutes
+                : showOpponentRoutes
+                  ? (opponentPickedRoutes && opponentPickedRoutes.length > 0
+                      ? opponentPickedRoutes
+                      : isDefense && vsSnapshot
+                        ? vsSnapshot.routes
+                        : null)
+                  : null
             }
             opponentEditable={false}
             onOpponentPlayerMove={handleOpponentPlayerMove}
+            selectedOpponentPlayerId={selectedOpponentPlayerId}
+            onSelectOpponentPlayer={handleSelectOpponentPlayer}
+            onCommitOpponentRoute={handleOpponentRouteCommit}
+            onClearOpponentRoutes={handleClearOpponentRoutes}
             activeSide={activeSide}
             onActivateSide={setActiveSide}
           />
@@ -1478,8 +2011,8 @@ function PlayEditorClientInner({
                 }
                 endDecoration={displayEndDecoration}
                 onEndDecorationChange={handleEndDecorationChange}
-                hasSelectedRoute={selectedRouteId != null}
-                hasSelectedPlayer={selectedPlayerId != null}
+                hasSelectedRoute={selectedRouteId != null || selectedOpponentRoute != null}
+                hasSelectedPlayer={selectedPlayerId != null || selectedOpponentPlayerId != null}
                 isHotRoute={
                   doc.layers.players.find((p) => p.id === selectedPlayerId)?.isHotRoute ?? false
                 }
@@ -1494,11 +2027,17 @@ function PlayEditorClientInner({
                   });
                 }}
                 playerRouteCount={
-                  selectedPlayerId
-                    ? doc.layers.routes.filter((r) => r.carrierPlayerId === selectedPlayerId).length
-                    : 0
+                  selectedOpponentPlayerId
+                    ? (editableOppRoutes ?? []).filter((r) => r.carrierPlayerId === selectedOpponentPlayerId).length
+                    : selectedPlayerId
+                      ? doc.layers.routes.filter((r) => r.carrierPlayerId === selectedPlayerId).length
+                      : 0
                 }
                 onClearPlayerRoutes={() => {
+                  if (selectedOpponentPlayerId) {
+                    handleClearOpponentRoutes(selectedOpponentPlayerId);
+                    return;
+                  }
                   if (!selectedPlayerId) return;
                   const playerRoutes = doc.layers.routes.filter(
                     (r) => r.carrierPlayerId === selectedPlayerId,
@@ -1507,7 +2046,7 @@ function PlayEditorClientInner({
                     dispatch({ type: "route.remove", routeId: r.id });
                   }
                 }}
-                isDefense={doc.metadata.playType === "defense"}
+                isDefense={doc.metadata.playType === "defense" || selectedOpponentPlayerId != null}
                 onAddRectZone={() => {
                   const baseColor = selectedPlayer?.style.fill ?? null;
                   setPendingZone({
@@ -1525,6 +2064,7 @@ function PlayEditorClientInner({
                 showDoneButton={!isTouchDevice}
                 hasAnySelection={
                   selectedPlayerId != null ||
+                  selectedOpponentPlayerId != null ||
                   selectedRouteId != null ||
                   selectedNodeId != null ||
                   selectedSegmentId != null ||
@@ -1609,13 +2149,20 @@ function PlayEditorClientInner({
                       : vsSnapshot?.players ?? null)
                 }
                 opponentRoutes={
-                  showOpponentRoutes
-                    ? (opponentPickedRoutes && opponentPickedRoutes.length > 0
-                        ? opponentPickedRoutes
-                        : isDefense && vsSnapshot
-                          ? vsSnapshot.routes
-                          : null)
-                    : null
+                  // Custom-opponent routes (defender movement the coach drew)
+                  // always render so the user can SEE what they drew, regardless
+                  // of the showOpponentRoutes ghost-toggle. Other route sources
+                  // (picked preview / installed defense's offense ghost) stay
+                  // gated by it.
+                  customOpponentPlayId != null && !opponentHidden
+                    ? editableOppRoutes
+                    : showOpponentRoutes
+                      ? (opponentPickedRoutes && opponentPickedRoutes.length > 0
+                          ? opponentPickedRoutes
+                          : isDefense && vsSnapshot
+                            ? vsSnapshot.routes
+                            : null)
+                      : null
                 }
                 opponentEditable={
                   opponentPlayers == null &&
@@ -1625,6 +2172,10 @@ function PlayEditorClientInner({
                   !isExamplePreview
                 }
                 onOpponentPlayerMove={handleOpponentPlayerMove}
+                selectedOpponentPlayerId={selectedOpponentPlayerId}
+                onSelectOpponentPlayer={handleSelectOpponentPlayer}
+                onCommitOpponentRoute={handleOpponentRouteCommit}
+                onClearOpponentRoutes={handleClearOpponentRoutes}
                 activeSide={activeSide}
                 onActivateSide={setActiveSide}
               />
