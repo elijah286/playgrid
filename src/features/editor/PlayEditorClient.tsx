@@ -1547,14 +1547,11 @@ function PlayEditorClientInner({
               // ancestor (often a much larger container), throwing them
               // far outside the field — surfaced 2026-05-04.
               className={
-                // The slim EditorPlaybookChrome banner is sticky at top
-                // (~60px tall) in both modes on mobile, so the field
-                // pins just below it. We reuse --site-header-height for
-                // the offset since the banner replaces the site header
-                // and matches its vertical height. z-20 keeps the field
-                // above any opponent picker / play list scrolling
-                // beneath, so the diagram stays the visual focus.
-                `field-viewport relative mx-auto w-full overflow-hidden rounded-xl bg-surface-inset sticky top-[var(--site-header-height,61px)] z-20 sm:relative sm:top-auto sm:z-auto ${
+                // Static positioning (relative for AnimationOverlay's
+                // absolute anchor). The field scrolls with the page —
+                // matching the playbook list's behavior, where only the
+                // header is sticky and content flows beneath it.
+                `field-viewport relative mx-auto w-full overflow-hidden rounded-xl bg-surface-inset ${
                   !canEdit || (isTouchDevice && mode === "view")
                     ? "pointer-events-none select-none"
                     : ""
@@ -1650,7 +1647,7 @@ function PlayEditorClientInner({
               )}
             </div>
 
-            {/* Mobile: notes card immediately below the (sticky) field, in
+            {/* Mobile: notes card immediately below the field, in
                 both view and edit modes. Desktop keeps its sidebar version
                 further down — see the `hidden sm:block` block. The card is
                 collapsible so coaches can scan a play without the notes
