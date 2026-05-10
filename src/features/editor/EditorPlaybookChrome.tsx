@@ -67,11 +67,15 @@ export function EditorPlaybookChrome({
       // re-bleeds via its own `-mx-6 -mt-3` so the banner itself is
       // edge-to-edge and flush with the sticky's top edge.
       //
-      // Desktop drops the sticky + dark frame entirely: `sm:-mt-5`
-      // cancels the layout's py-5 so the gradient sits at the top of
-      // <main>, below the SiteHeader. We also drop z-30 so the banner
+      // `-mt-5` cancels the editor layout's py-5 so the wrapper top
+      // sits at main-top — same trick the playbook list uses with
+      // -mt-8 against its py-8 layout. Without it, the chrome sits 20px
+      // lower than the playbook list's banner at scroll=0.
+      //
+      // Desktop drops the sticky + dark frame: gradient sits at main
+      // top, below the SiteHeader. We also drop z-30 so the banner
       // doesn't fight the SiteHeader's stacking as the page scrolls.
-      className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:-mt-5 sm:bg-transparent sm:p-0"
+      className="native-safe-top sticky top-0 z-30 -mx-6 -mt-5 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:bg-transparent sm:p-0"
     >
     <div
       className="-mx-6 -mt-3 sm:mx-0 sm:mt-0"
