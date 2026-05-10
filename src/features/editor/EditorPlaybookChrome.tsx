@@ -59,11 +59,13 @@ export function EditorPlaybookChrome({
     .join(" · ");
   return (
     <div
-      // Outer sticky wrapper on mobile — bg-surface with pt-3/pb-3
-      // produces a 12px dark frame above and below the gradient. The
-      // visible dark strip above is what the user sees as "black above
-      // the banner" on the playbook list. `-mx-6` bleeds horizontally
-      // through the editor layout's px-6.
+      // Outer sticky wrapper — bg-surface frame matches the playbook
+      // list page's sticky banner. The gradient is at sticky-top
+      // (inner has -mt-3 cancelling our pt-3), with pb-3 below for
+      // breathing room. The dark URL bar tint comes from the global
+      // themeColor in the root viewport export — without it iOS Safari
+      // samples page content and inconsistently picked up the gradient
+      // on the editor route.
       //
       // The lift to main-top lives on `play-editor-content` (the parent)
       // via `-mt-5` — same trick the playbook list uses with -mt-8 on
@@ -78,7 +80,7 @@ export function EditorPlaybookChrome({
       className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:-mt-5 sm:bg-transparent sm:p-0"
     >
     <div
-      className="-mx-6 sm:mx-0"
+      className="-mx-6 -mt-3 sm:mx-0 sm:mt-0"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">

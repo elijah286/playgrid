@@ -22,7 +22,7 @@ export default function EditorLoading() {
           bar tints dark and the banner has breathing room below. */}
       <div className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:hidden">
         <div
-          className="-mx-6 flex items-center gap-2 px-4 py-3"
+          className="-mx-6 -mt-3 flex items-center gap-2 px-4 py-3"
           style={{ backgroundColor: "#F26522" }}
         >
           <div className="size-9 rounded-lg bg-white/20" aria-hidden />

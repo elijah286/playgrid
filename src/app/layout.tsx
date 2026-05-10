@@ -80,6 +80,15 @@ export const viewport: Viewport = {
   // header background can fill the notch while text padding holds it
   // below; landscape play view actually reaches the screen edges.
   viewportFit: "cover",
+  // themeColor pins the iOS Safari URL bar tint to bg-surface dark
+  // instead of letting Safari sample page content (which inconsistently
+  // picked up the playbook chrome's gradient color on some routes,
+  // making the URL bar tint red on the play view but dark on the
+  // playbook list).
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAFAF8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F1115" },
+  ],
 };
 
 const structuredData = [
