@@ -31,8 +31,7 @@ import {
 } from "./notes-lint";
 import { explainSpec } from "./explain-from-spec";
 import { applyPlayerStyleMod } from "./player-mutations";
-
-const LOS_Y = 0.4;
+import { resolveLineOfScrimmageY } from "@/domain/play/factory";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -337,6 +336,13 @@ export function _buildOrderedPlaybookForTest(args: {
 /** Convert a saved PlayDocument back into the CoachDiagram yard-based format. */
 export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): CoachDiagram {
   const { fieldWidthYds, fieldLengthYds, variant } = doc.sportProfile;
+  // Read the LOS from the document, never a hardcoded constant. A saved play
+  // can carry any lineOfScrimmageY in [0,1] (red-zone shots, custom field
+  // positions). Surfaced 2026-05-09: a play with lineOfScrimmageY=0.5 was
+  // being read with LOS_Y=0.4, shifting every player by ~5 yards in Cal's
+  // eyes — receivers visually on the LOS got narrated as "5 yards in the
+  // backfield".
+  const losY = resolveLineOfScrimmageY(doc);
 
   // Build a stable id per player that's unique within the diagram. Letter
   // labels collide regularly (twins formation, two Zs in 4-wide, etc.) and
@@ -357,7 +363,7 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
     id: idByPlayerUuid.get(p.id)!,
     role: p.label || p.role,
     x: Math.round(((p.position.x - 0.5) * fieldWidthYds) * 10) / 10,
-    y: Math.round(((p.position.y - LOS_Y) * fieldLengthYds) * 10) / 10,
+    y: Math.round(((p.position.y - losY) * fieldLengthYds) * 10) / 10,
     team: (p.style.fill === "#DC2626" || p.style.fill === "#B91C1C") ? "D" as const : "O" as const,
     color: p.style.fill,
   }));
@@ -366,7 +372,7 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
     const nodes = r.nodes.slice(1); // skip start node (= player position)
     const path: [number, number][] = nodes.map((n) => [
       Math.round(((n.position.x - 0.5) * fieldWidthYds) * 10) / 10,
-      Math.round(((n.position.y - LOS_Y) * fieldLengthYds) * 10) / 10,
+      Math.round(((n.position.y - losY) * fieldLengthYds) * 10) / 10,
     ]);
     const fromLabel = idByPlayerUuid.get(r.carrierPlayerId) ?? r.carrierPlayerId;
     const hasCurve = r.segments.some((s) => s.shape === "curve");
@@ -399,7 +405,7 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
     kind: z.kind,
     center: [
       Math.round(((z.center.x - 0.5) * fieldWidthYds) * 10) / 10,
-      Math.round(((z.center.y - LOS_Y) * fieldLengthYds) * 10) / 10,
+      Math.round(((z.center.y - losY) * fieldLengthYds) * 10) / 10,
     ] as [number, number],
     size: [
       Math.round((z.size.w * 2 * fieldWidthYds) * 10) / 10,

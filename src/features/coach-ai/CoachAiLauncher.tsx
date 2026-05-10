@@ -22,6 +22,7 @@ import { CoachAiPreviewChat } from "./CoachAiPreviewChat";
 import type { CoachCalEntryPointId } from "./entry-points";
 import type { CoachCalOpenDetail } from "./openCoachCal";
 import { usePlaybookAnchor } from "./playbook-anchor";
+import { usePlayAnchor } from "./play-anchor";
 import { listPlaybooksAction, type PlaybookRow } from "@/app/actions/playbooks";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
@@ -152,7 +153,8 @@ export function CoachAiLauncher({
 
   const pathname = usePathname();
   const anchor   = usePlaybookAnchor();
-  const playbookId = useMemo<string | null>(() => {
+  const playAnchor = usePlayAnchor();
+  const resolvedPlaybookId = useMemo<string | null>(() => {
     if (playbookIdProp) return playbookIdProp;
     const m = pathname?.match(PLAYBOOK_ROUTE_RE);
     if (m?.[1]) return m[1];
@@ -162,6 +164,38 @@ export function CoachAiLauncher({
     const m = pathname?.match(PLAY_ROUTE_RE);
     return m?.[1] ?? null;
   }, [pathname]);
+  const inPlaybookContext = playId !== null || (pathname?.match(PLAYBOOK_ROUTE_RE) != null);
+
+  // Sticky last-known playbookId. Three scenarios it has to handle:
+  //
+  //   1. Hard load on /plays/[playId]/edit — anchor not yet published. We
+  //      flash the pending state briefly, then settle (no chat history to
+  //      lose; first mount is the only one).
+  //   2. Navigation between /playbooks/X and /plays/Y/edit (in the same
+  //      playbook) — there's a transient frame where the previous page's
+  //      PlaybookAnchorPublisher cleanup has run but the new one's effect
+  //      hasn't. Without a sticky cache, resolvedPlaybookId would briefly
+  //      flip to null, unmounting CoachAiChat and resetting the panel
+  //      mid-navigation. The ref carries the previous value across the gap.
+  //   3. Navigation to a global route (/home, /pricing, etc.) — clear the
+  //      cache so an open Cal doesn't keep showing a stale playbook scope.
+  const lastGoodPlaybookIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (resolvedPlaybookId !== null) {
+      lastGoodPlaybookIdRef.current = resolvedPlaybookId;
+    } else if (!inPlaybookContext) {
+      lastGoodPlaybookIdRef.current = null;
+    }
+    // resolved=null + inPlaybookContext=true → transient gap, hold the cache
+  }, [resolvedPlaybookId, inPlaybookContext]);
+
+  const playbookId = resolvedPlaybookId ?? (inPlaybookContext ? lastGoodPlaybookIdRef.current : null);
+
+  // Pending only on the very first paint of /plays/[playId]/edit before the
+  // anchor publishes. After we've ever seen a valid playbookId for this
+  // route, the sticky cache covers transient nulls so we never flap back
+  // to pending mid-session.
+  const playbookPending = playId !== null && playbookId === null;
 
   const anchorMatchesScope = !!anchor && !!playbookId && anchor.id === playbookId;
   const anchoredName  = anchorMatchesScope ? anchor!.name  ?? null : null;
@@ -814,7 +848,13 @@ export function CoachAiLauncher({
                   {adminTrainingActive
                     ? "Curating the global knowledge base — confirms before each write."
                     : anchoredName
-                      ? `Anchored to ${anchoredName}`
+                      ? // Show the play name alongside the playbook when the
+                        // coach is in a play view, so they can verify Cal's
+                        // anchor matches the diagram on screen. Falls back to
+                        // playbook-only when there's no play in scope.
+                        playId && playAnchor?.id === playId && playAnchor.name
+                        ? `Anchored to ${anchoredName} · ${playAnchor.name}`
+                        : `Anchored to ${anchoredName}`
                       : "Your AI coaching partner"}
                 </div>
 
@@ -995,6 +1035,8 @@ export function CoachAiLauncher({
                 // closing a CTA-driven preview) — show the general welcome
                 // surface so the chat is never empty for them.
                 <CoachAiHeaderPreview evalDays={evalDays} onCtaClick={() => setOpen(false)} />
+              ) : playbookPending ? (
+                <CoachAiChatPending />
               ) : (
                 <CoachAiChat
                   playbookId={playbookId}
@@ -1029,6 +1071,18 @@ export function CoachAiLauncher({
         document.body,
       )}
     </>
+  );
+}
+
+function CoachAiChatPending() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <span className="inline-flex items-center gap-1 text-sm text-muted" aria-label="Loading">
+        <span className="size-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
+        <span className="size-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "120ms" }} />
+        <span className="size-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "240ms" }} />
+      </span>
+    </div>
   );
 }
 

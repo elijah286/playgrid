@@ -15,7 +15,6 @@ import {
 } from "@/components/ui";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { TeamCoachUpgradeDialog } from "@/features/upgrade/TeamCoachUpgradeDialog";
-import { CoachAiLauncher } from "@/features/coach-ai/CoachAiLauncher";
 import {
   archivePlaybookAction,
   deletePlaybookAction,
@@ -539,25 +538,15 @@ export function PlaybookHeader({
                 <Send className="size-5" />
               </button>
             )}
-            {(coachAiAvailable || showCoachCalPromo) && (
-              // Hidden launcher — kept mounted on mobile so its
-              // acceptGlobalCommands listener catches `coach-cal:open`
-              // events fired by the bottom-nav Cal button (and other
-              // inline CTAs). The visible Cal entry point on mobile
-              // playbook lives in the bottom nav now; SiteHeader's
-              // launcher handles desktop. Display:none doesn't unmount
-              // the component, so the listener and portal-rendered
-              // dialog continue to work.
-              <div className="hidden">
-                <CoachAiLauncher
-                  isAdmin={isAdmin ?? false}
-                  entitled={coachAiAvailable ?? false}
-                  playbookId={playbookId}
-                  evalDays={coachAiEvalDays}
-                  acceptGlobalCommands
-                />
-              </div>
-            )}
+            {/* SiteHeader (root layout) owns the only CoachAiLauncher.
+                A second instance here would mount its own dialog through
+                createPortal AND restore open=true from sessionStorage on
+                mount, so navigating into a playbook page mid-conversation
+                produced two stacked Cal panels. The bottom-nav CalNavButton
+                dispatches `coach-cal:open` to the global event bus; the
+                SiteHeader launcher catches it from anywhere — including
+                mobile playbook pages where SiteHeader is visually hidden
+                but still mounted. */}
             {(canInvitePlayers || canManage || exampleAdmin) && (
               <HeaderMenu
                 playbookId={playbookId}

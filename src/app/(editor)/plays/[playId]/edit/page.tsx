@@ -21,6 +21,7 @@ import {
 } from "@/features/marketing/SharedViewerCta";
 import { StickyExampleCta } from "@/features/marketing/StickyExampleCta";
 import { PlaybookAnchorPublisher } from "@/features/coach-ai/PlaybookAnchorPublisher";
+import { PlayAnchorPublisher } from "@/features/coach-ai/PlayAnchorPublisher";
 import { CoachCalPlaybookCta } from "@/features/coach-ai/CoachCalPlaybookCta";
 import type { SavedFormation } from "@/app/actions/formations";
 
@@ -195,6 +196,10 @@ export default async function PlayEditPage({ params }: Props) {
         playbookId={res.play.playbook_id}
         playbookName={(book?.name as string | null) ?? null}
         playbookColor={(book?.color as string | null) ?? null}
+      />
+      <PlayAnchorPublisher
+        playId={res.play.id}
+        playName={(res.play.name as string | null) ?? null}
       />
       <CoachCalPlaybookCta show={showCoachCalCta} evalDays={coachAiEvalDays} />
       <PlayEditorClient
