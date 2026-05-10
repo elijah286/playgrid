@@ -30,6 +30,7 @@ import {
   validateOffensiveRoster,
   validateCenterEligibility,
   validateOffensiveCoverage,
+  validateMotion,
 } from "./play-content-validate";
 
 const OFFENSE_LETTERS = new Set([
@@ -690,6 +691,14 @@ export function validateDiagrams(opts: {
     // VARIANT-RULE GATE B — center eligibility. Delegated to
     // validateCenterEligibility so the same rule fires at save-time.
     for (const msg of validateCenterEligibility(json as CoachDiagram, settings, opts.variant)) {
+      errors.push(`${tag}${msg}`);
+    }
+
+    // UNIVERSAL FOOTBALL RULE — only one player in motion, motion never
+    // moves the player forward of where they started. Delegated to
+    // validateMotion so the same rule fires at save-time. Same wording
+    // and same delete-on-failure semantics across both gates.
+    for (const msg of validateMotion(json as CoachDiagram)) {
       errors.push(`${tag}${msg}`);
     }
 

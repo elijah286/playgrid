@@ -373,6 +373,98 @@ const RUN_CONCEPT_TITLE_KEYWORDS = [
   "rush",
 ];
 
+/**
+ * Universal football motion rules — apply across every variant and league:
+ *
+ *   1. **At most one player in pre-snap motion.** "Two players in motion at
+ *      the snap" is a basic illegal-procedure penalty in tackle, flag, NFL
+ *      FLAG, and IFAF flag alike. Surfaced 2026-05-09 (maltagliatis trial
+ *      thread): Cal generated a Reverse Jet with two motion paths; coach
+ *      pushed back ("you can't put two players in motion, that's basic
+ *      football") and Cal acknowledged in prose but re-emitted essentially
+ *      the same fence. The fix is structural: a multi-motion fence cannot
+ *      persist regardless of what Cal claims about it.
+ *
+ *   2. **A motion player's snap-time position cannot be forward of where
+ *      they started.** Universal interpretation of the "no forward motion"
+ *      rule — at the snap, the moving player must be behind or level with
+ *      their starting y. Mid-motion zig-zag toward the LOS and back is
+ *      tolerated; the geometry that's checked is the LAST motion node (the
+ *      player's position when the ball is snapped). Tolerance is 0.1 yards
+ *      to forgive floating-point.
+ *
+ * These rules are universal — they do NOT key on `playbookSettings`. The
+ * coach can't opt out of "only one in motion" any more than they can opt
+ * out of "11 on the field." Plays that try to violate them are illegal
+ * everywhere.
+ */
+export function validateMotion(diagram: CoachDiagram): string[] {
+  const errors: string[] = [];
+  const players = Array.isArray(diagram.players) ? diagram.players : [];
+  const offense = players.filter((p) => (p as { team?: string }).team !== "D");
+  const startById = new Map<string, { x: number; y: number }>();
+  for (const p of offense as Array<{ id?: unknown; x?: unknown; y?: unknown }>) {
+    if (typeof p.id !== "string") continue;
+    startById.set(p.id, {
+      x: typeof p.x === "number" ? p.x : 0,
+      y: typeof p.y === "number" ? p.y : 0,
+    });
+  }
+
+  const routes = Array.isArray(diagram.routes) ? diagram.routes : [];
+  const motionRoutes: Array<{ from: string; motion: [number, number][] }> = [];
+  for (const r of routes) {
+    const from = typeof r.from === "string" ? r.from : null;
+    if (!from) continue;
+    // Only offensive players are subject to pre-snap motion rules — a
+    // defender "motioning" pre-snap is just defensive movement, not the
+    // offensive procedural rule. Skip routes whose carrier isn't an
+    // offensive player on this play.
+    if (!startById.has(from)) continue;
+    const m = (r as { motion?: unknown }).motion;
+    if (!Array.isArray(m) || m.length === 0) continue;
+    // Filter to well-formed [x, y] tuples; ignore garbage points.
+    const cleaned = m
+      .filter(
+        (pt): pt is [number, number] =>
+          Array.isArray(pt) &&
+          pt.length === 2 &&
+          typeof pt[0] === "number" &&
+          typeof pt[1] === "number",
+      );
+    if (cleaned.length === 0) continue;
+    motionRoutes.push({ from, motion: cleaned });
+  }
+
+  if (motionRoutes.length > 1) {
+    const names = motionRoutes.map((r) => `@${r.from}`).join(", ");
+    errors.push(
+      `multiple players in pre-snap motion (${names}) — only ONE player can be in motion at the snap. ` +
+        `Pick the single carrier you want to motion (typically the player taking the handoff or the receiver clearing space) ` +
+        `and remove motion from the other(s). Re-emit the spec with at most one motion path.`,
+    );
+  }
+
+  const FORWARD_TOLERANCE_YDS = 0.1;
+  for (const r of motionRoutes) {
+    const start = startById.get(r.from);
+    if (!start) continue;
+    const last = r.motion[r.motion.length - 1];
+    const endY = last[1];
+    if (endY > start.y + FORWARD_TOLERANCE_YDS) {
+      const delta = (endY - start.y).toFixed(1);
+      errors.push(
+        `@${r.from} motion ends ${delta} yard(s) forward of where they started ` +
+          `(start y=${start.y.toFixed(1)}, motion endpoint y=${endY.toFixed(1)}) — pre-snap motion cannot move the player ` +
+          `toward the line of scrimmage. The player at the snap must be at or behind their starting depth. ` +
+          `Adjust the motion endpoint so y ≤ ${start.y.toFixed(1)}, or remove the motion entirely.`,
+      );
+    }
+  }
+
+  return errors;
+}
+
 export function validateRunConceptFidelity(
   diagram: CoachDiagram,
   variant: string | null | undefined,
@@ -460,6 +552,7 @@ export function validatePlayContent(
     ...validateOffensiveCoverage(diagram, variant, settings, playType),
     ...validateOffensiveRoster(diagram, variant, settings, playType),
     ...validateRunConceptFidelity(diagram, variant, playType),
+    ...validateMotion(diagram),
   ];
   return errors.length === 0 ? { ok: true } : { ok: false, errors };
 }

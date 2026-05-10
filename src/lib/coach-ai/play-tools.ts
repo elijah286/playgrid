@@ -17,7 +17,7 @@ import { coachDiagramToPlaySpec } from "@/domain/play/specParser";
 import { playSpecToCoachDiagram, type RenderWarning } from "@/domain/play/specRenderer";
 import { parseCoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
-import type { CoachAiTool } from "./tools";
+import type { CoachAiTool, ToolContext } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
 import { validatePlayContent, formatPlayContentErrors } from "./play-content-validate";
 import { defaultSettingsForVariant, normalizePlaybookSettings } from "@/domain/playbook/settings";
@@ -61,6 +61,77 @@ async function loadPlaybookSettings(
   } catch {
     return defaultSettingsForVariant(variant);
   }
+}
+
+type TargetPlaybookResolution =
+  | { ok: true; playbookId: string; sportVariant: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Pick the playbook for a write tool: explicit `playbook_id` arg wins, else
+ * fall back to the anchored `ctx.playbookId`. When the explicit id differs
+ * from the anchored id (or the chat has no anchor), this verifies the
+ * caller has edit access via `can_edit_playbook` and pulls the variant
+ * fresh from the DB so downstream validators see the target playbook's
+ * variant — not whatever the chat happens to be anchored to.
+ *
+ * Lifted out of `create_play` so it can be unit-tested without exercising
+ * the full save path. The same shape is intended for any future write
+ * tool that wants to opt into cross-playbook saves.
+ */
+export async function resolveTargetPlaybook(
+  rawPlaybookIdInput: unknown,
+  ctx: ToolContext,
+): Promise<TargetPlaybookResolution> {
+  const explicit =
+    typeof rawPlaybookIdInput === "string" && UUID_RE.test(rawPlaybookIdInput.trim())
+      ? rawPlaybookIdInput.trim()
+      : null;
+
+  // Anchored case: no explicit id (or it matches ctx). Use the ctx values
+  // straight through — the API route already ran can_edit_playbook when
+  // building ctx.canEditPlaybook.
+  if (!explicit || explicit === ctx.playbookId) {
+    if (!ctx.playbookId) {
+      return {
+        ok: false,
+        error:
+          "No playbook selected. Pass playbook_id (from list_my_playbooks) or open a playbook first.",
+      };
+    }
+    if (!ctx.canEditPlaybook) {
+      return { ok: false, error: "You don't have edit access to this playbook." };
+    }
+    return { ok: true, playbookId: ctx.playbookId, sportVariant: ctx.sportVariant };
+  }
+
+  // Cross-playbook case: verify membership + fetch variant.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  const { data: canEdit, error: rpcErr } = await supabase.rpc("can_edit_playbook", {
+    pb: explicit,
+  });
+  if (rpcErr) return { ok: false, error: rpcErr.message };
+  if (!canEdit) {
+    return { ok: false, error: "You don't have edit access to that playbook." };
+  }
+
+  const admin = createServiceRoleClient();
+  const { data: pb, error: pbErr } = await admin
+    .from("playbooks")
+    .select("sport_variant")
+    .eq("id", explicit)
+    .maybeSingle();
+  if (pbErr) return { ok: false, error: pbErr.message };
+  if (!pb) return { ok: false, error: "Playbook not found." };
+  return {
+    ok: true,
+    playbookId: explicit,
+    sportVariant: (pb.sport_variant as string | null) ?? null,
+  };
 }
 
 type ResolverPlayRow = {
@@ -1070,14 +1141,26 @@ const create_play: CoachAiTool = {
   def: {
     name: "create_play",
     description:
-      "Create a brand-new play in the current playbook. Use this when the coach asks " +
+      "Create a brand-new play in a playbook. Use this when the coach asks " +
       "you to make/add/build a new play (or accepts your offer to do so). Requires " +
-      "edit access to the playbook. Always confirm name + diagram with the coach " +
-      "before calling — show them the play diagram and wait for an explicit 'yes'.",
+      "edit access to the target playbook. Always confirm name + diagram with the coach " +
+      "before calling — show them the play diagram and wait for an explicit 'yes'. " +
+      "When the chat is anchored to a playbook, omit `playbook_id` and the play is created " +
+      "in the anchored playbook. When there is no anchor (global thread), pass `playbook_id` " +
+      "to target a specific playbook the coach owns or belongs to — call `list_my_playbooks` " +
+      "first to get the id. The coach does NOT need to navigate — the play is saved and you " +
+      "link them to it directly.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Play name. 1-80 chars. Required." },
+        playbook_id: {
+          type: "string",
+          description:
+            "Optional UUID of the target playbook. Required only when the chat is NOT anchored " +
+            "to a playbook (global thread). When omitted, the play is created in the anchored " +
+            "playbook. Use the id from list_my_playbooks — do not invent one.",
+        },
         play_spec: {
           type: "object",
           description:
@@ -1132,9 +1215,6 @@ const create_play: CoachAiTool = {
     },
   },
   async handler(input, ctx) {
-    if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
-    if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
-
     const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
     if (!name) return { ok: false, error: "Play name is required." };
     const maxRouteDepthYds =
@@ -1147,10 +1227,24 @@ const create_play: CoachAiTool = {
       : "offense") as "offense" | "defense" | "special_teams";
     const formationName = typeof input.formation_name === "string" ? input.formation_name.slice(0, 60) : undefined;
 
-    // Resolve variant: playbook's variant > spec/diagram hint > default.
+    // Resolve target playbook (anchored OR explicit playbook_id arg). When the
+    // caller passes playbook_id, we run our own permission check via the
+    // can_edit_playbook RPC and pull the variant fresh from the DB — ctx
+    // values describe the anchored playbook, which may not be the target.
+    // This unblocks the global-thread save path: Cal can generate plays in
+    // an unanchored chat, then save them by passing playbook_id from
+    // list_my_playbooks. Surfaced 2026-05-10 (bhbfearless thread): coach
+    // generated 6 plays in chat, said "save all to playbook" — without this
+    // path Cal had to ask the coach to navigate to the playbook first,
+    // which broke the conversation.
+    const targetResolution = await resolveTargetPlaybook(input.playbook_id, ctx);
+    if (!targetResolution.ok) return { ok: false, error: targetResolution.error };
+    const targetPlaybookId = targetResolution.playbookId;
+    const targetSportVariant = targetResolution.sportVariant;
+
     const specHintVariant = (input.play_spec as { variant?: string } | null | undefined)?.variant;
     const diagramHintVariant = (input.diagram as { variant?: string } | null | undefined)?.variant;
-    const resolvedVariant = (ctx.sportVariant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
+    const resolvedVariant = (targetSportVariant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
 
     const resolved = resolveDiagramAndSpec(input.play_spec, input.diagram, resolvedVariant, {
       formationName,
@@ -1217,7 +1311,7 @@ const create_play: CoachAiTool = {
     // stating "less than 15 yards" — Cal forgot to propagate
     // max_throw_depth_yds on the create_play calls. The persistent
     // playbook setting closes the gap so the cap can't be lost.
-    const playbookSettingsPreCreate = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+    const playbookSettingsPreCreate = await loadPlaybookSettings(targetPlaybookId, resolvedVariant);
     const effectiveMaxRouteDepthYds =
       maxRouteDepthYds ?? playbookSettingsPreCreate.maxThrowDepthYds ?? undefined;
 
@@ -1249,7 +1343,7 @@ const create_play: CoachAiTool = {
       // All gates passed — now create the play row.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createPlayAction } = require("@/app/actions/plays") as typeof import("@/app/actions/plays");
-      const createRes = await createPlayAction(ctx.playbookId, {
+      const createRes = await createPlayAction(targetPlaybookId, {
         playName: name,
         playType,
         formationName,

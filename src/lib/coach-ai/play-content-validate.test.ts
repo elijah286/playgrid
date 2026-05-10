@@ -22,6 +22,7 @@ import { describe, expect, it } from "vitest";
 import {
   validateColorClash,
   validateCenterEligibility,
+  validateMotion,
   validateOffensiveCoverage,
   validateOffensiveRoster,
   validatePlayContent,
@@ -809,5 +810,196 @@ describe("validateRunConceptFidelity — title vs diagram mechanics", () => {
       "defense",
     );
     expect(errors).toHaveLength(0);
+  });
+});
+
+describe("validateMotion — universal football rules", () => {
+  it("accepts a play with no motion at all", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-10, 7], [-12, 12]] },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("accepts a single legal motion (lateral, ends at start depth)", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "Z", x: 10, y: -1, team: "O" },
+      ],
+      routes: [
+        { from: "Z", path: [[-12, 5]], motion: [[5, -1], [-2, -1], [-8, -1]] },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("accepts a single motion that ends BEHIND the start depth (legal backward motion)", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "B", x: 3, y: -2, team: "O" },
+      ],
+      routes: [
+        { from: "B", path: [], motion: [[3, -4]] },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("REJECTS two players in pre-snap motion (universal rule)", () => {
+    const errors = validateMotion({
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+        { id: "H", x: 5, y: -1, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-10, 8]], motion: [[-5, 0]] },
+        { from: "Z", path: [[10, 8]], motion: [[5, 0]] },
+      ],
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/multiple players in pre-snap motion/i);
+    expect(errors[0]).toMatch(/@X/);
+    expect(errors[0]).toMatch(/@Z/);
+    expect(errors[0]).toMatch(/only ONE player can be in motion/i);
+  });
+
+  it("REJECTS three players in motion", () => {
+    const errors = validateMotion({
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "X", x: -12, y: 0, team: "O" },
+        { id: "Z", x: 12, y: 0, team: "O" },
+        { id: "Y", x: 5, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [], motion: [[-8, 0]] },
+        { from: "Z", path: [], motion: [[8, 0]] },
+        { from: "Y", path: [], motion: [[2, 0]] },
+      ],
+    });
+    expect(errors[0]).toMatch(/@X.*@Z.*@Y|@Y.*@Z.*@X/);
+  });
+
+  it("REJECTS forward motion crossing the LOS", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "B", x: 3, y: -2, team: "O" },
+      ],
+      routes: [
+        { from: "B", path: [], motion: [[3, 0], [3, 3]] },
+      ],
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/@B/);
+    expect(errors[0]).toMatch(/forward of where they started/i);
+    expect(errors[0]).toMatch(/y ≤ -2\.0/);
+  });
+
+  it("REJECTS forward motion that doesn't cross the LOS but moves toward it", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "B", x: 3, y: -3, team: "O" },
+      ],
+      routes: [
+        { from: "B", path: [], motion: [[3, -1]] },
+      ],
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/forward/i);
+  });
+
+  it("tolerates 0.1-yard floating-point drift in motion endpoint y", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "B", x: 3, y: -2, team: "O" },
+      ],
+      routes: [
+        { from: "B", path: [], motion: [[3, -1.95]] },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("ignores motion arrays with malformed waypoint tuples", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "Q", x: 0, y: -5, team: "O" },
+        { id: "X", x: -10, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-10, 8]], motion: [["bogus", null] as unknown as [number, number]] },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("does not check defenders' motion (offensive rule only)", () => {
+    const errors = validateMotion({
+      variant: "flag_7v7",
+      players: [
+        { id: "ML", x: 0, y: 4, team: "D" },
+        { id: "OLB", x: 6, y: 4, team: "D" },
+      ],
+      routes: [
+        { from: "ML", path: [], motion: [[0, 6]] },
+        { from: "OLB", path: [], motion: [[6, 6]] },
+      ],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("aggregator rejects when validateMotion fires (multi-motion case)", () => {
+    const result = validatePlayContent(
+      {
+        variant: "flag_7v7",
+        title: "Two-Motion Special",
+        players: [
+          { id: "Q", x: 0, y: -5, team: "O" },
+          { id: "C", x: 0, y: 0, team: "O" },
+          { id: "X", x: -12, y: 0, team: "O" },
+          { id: "Z", x: 12, y: 0, team: "O" },
+          { id: "H", x: -6, y: -1, team: "O" },
+          { id: "Y", x: 6, y: 0, team: "O" },
+          { id: "B", x: 3, y: -3, team: "O" },
+        ],
+        routes: [
+          { from: "X", path: [[-12, 8]] },
+          { from: "Z", path: [[12, 8]], motion: [[6, 0]] },
+          { from: "H", path: [[-3, 5]] },
+          { from: "Y", path: [[6, 8]], motion: [[2, 0]] },
+          { from: "B", path: [[5, 2]] },
+        ],
+      },
+      "flag_7v7",
+      defaultSettingsForVariant("flag_7v7"),
+      "offense",
+    );
+    if (result.ok) throw new Error("expected validation to fail");
+    expect(result.errors.some((e) => /multiple players in pre-snap motion/i.test(e))).toBe(true);
   });
 });

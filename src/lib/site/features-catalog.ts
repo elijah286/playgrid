@@ -517,6 +517,24 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-motion-rules-structural",
+    name: "Coach Cal can no longer save multi-motion or forward-motion plays",
+    description:
+      "Two universal football rules — only one player can be in pre-snap motion, and a motion player can't end up forward of where they started — are now enforced as save-time and chat-time validators, not just prompt-level guidance. Cal physically cannot ship a play that violates them: the create_play / update_play save is rejected, and the chat-time gate flags the fence before it ever reaches save. This came out of a coach correcting Cal mid-conversation (\"you can't put two players in motion, that's basic football\") where Cal acknowledged in prose but re-emitted the same broken play. With the structural enforcement, the prose-only acknowledgement path is closed.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-10",
+  },
+  {
+    id: "coach-cal-cross-playbook-save",
+    name: "Coach Cal can save plays into any of your playbooks from the global chat",
+    description:
+      "Cal used to refuse to save plays unless you'd already opened the destination playbook — coaches generating plays from the global chat (no anchor) hit a dead end where Cal said \"open the playbook first and come back.\" The save tool now accepts an explicit playbook_id argument: Cal calls list_my_playbooks to fetch your team ids, then writes the play directly into the right playbook and links you to it. Permission is still checked per-call against can_edit_playbook, so the rule of \"only the coaches you've granted edit access can save\" is unchanged. The unanchored conversation flow now works end-to-end — generate, confirm, save, click the link.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-10",
+  },
+  {
     id: "coach-cal-server-side-history",
     name: "Coach Cal keeps working when you close the chat",
     description:
