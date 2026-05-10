@@ -60,24 +60,18 @@ export function EditorPlaybookChrome({
   return (
     <div
       // Outer sticky wrapper — bg-surface frame matches the playbook
-      // list page's sticky banner. The gradient is at sticky-top
-      // (inner has -mt-3 cancelling our pt-3), with pb-3 below for
-      // breathing room. The dark URL bar tint comes from the global
-      // themeColor in the root viewport export — without it iOS Safari
-      // samples page content and inconsistently picked up the gradient
-      // on the editor route.
+      // list page's sticky banner. The chrome sits at its natural
+      // position inside play-editor-content (which sits below the
+      // layout's py-5 padding), giving 20px of bg-surface visible
+      // above the gradient at scroll=0. iOS Safari samples that strip
+      // for URL bar tinting, matching the playbook detail page's
+      // appearance.
       //
-      // The lift to main-top lives on `play-editor-content` (the parent)
-      // via `-mt-5` — same trick the playbook list uses with -mt-8 on
-      // its outer wrapper. We deliberately do NOT put a negative margin
-      // on the sticky element itself: iOS Safari's sticky+negative-mt
-      // combo has scroll-jank where the element's effective height
-      // changes between scrolled and un-scrolled states.
-      //
-      // Desktop drops the sticky + dark frame: gradient sits at main
-      // top, below the SiteHeader. We also drop z-30 so the banner
-      // doesn't fight the SiteHeader's stacking as the page scrolls.
-      className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:-mt-5 sm:bg-transparent sm:p-0"
+      // Desktop drops the sticky + dark frame: gradient sits in
+      // normal flow below the SiteHeader. We also drop z-30 so the
+      // banner doesn't fight the SiteHeader's stacking as the page
+      // scrolls.
+      className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:bg-transparent sm:p-0"
     >
     <div
       className="-mx-6 -mt-3 sm:mx-0 sm:mt-0"

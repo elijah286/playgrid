@@ -1301,7 +1301,7 @@ function PlayEditorClientInner({
       // `--field-aspect` lives here so the CSS calc sees the runtime
       // ratio; the field-viewport child still publishes its own copy
       // for the existing `.field-viewport` @media rules.
-      className="play-editor-content relative -mt-5 flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:-mt-0 sm:pb-0"
+      className="play-editor-content relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0"
       style={{ ["--field-aspect" as string]: String(fieldAspect) }}
     >
       {/* Mobile-only slim playbook banner. Replaces the SiteHeader
