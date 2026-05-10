@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, RefreshCw, Trash2, Eye, EyeOff } from "lucide-react";
+import { Check, RefreshCw, Trash2, ShieldOff, Shield } from "lucide-react";
 import { Button, IconButton, useToast } from "@/components/ui";
 import { AssistantMessage } from "@/features/coach-ai/AssistantMessage";
 import {
@@ -18,6 +18,44 @@ import {
   type PositiveFeedbackRow,
   type NegativeFeedbackRow,
 } from "@/app/actions/coach-ai-feedback";
+
+/**
+ * Render the "from <user>" line that goes on every feedback row. Falls
+ * back gracefully: prefer email (most useful for ID), then display
+ * name, then a truncated user_id, then "anonymous". An admin badge
+ * appears inline when the row IS from an admin (only shown when the
+ * "Hide admin queries" toggle is OFF — when it's ON, admin rows are
+ * filtered out server-side).
+ */
+function UserAttribution({
+  user_email,
+  user_display_name,
+  user_id,
+  user_role,
+}: {
+  user_email: string | null;
+  user_display_name: string | null;
+  user_id: string | null;
+  user_role: string | null;
+}) {
+  const label =
+    user_email ??
+    user_display_name ??
+    (user_id ? `user ${user_id.slice(0, 8)}` : "anonymous");
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-medium">from {label}</span>
+      {user_role === "admin" && (
+        <span
+          className="rounded bg-amber-100 px-1 py-px text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+          title="This query is from a site admin"
+        >
+          admin
+        </span>
+      )}
+    </span>
+  );
+}
 
 const KB_MISS_REASON_LABEL: Record<string, string> = {
   no_results: "No KB results",
@@ -62,6 +100,12 @@ export function CoachAiFeedbackAdminClient({
   const [positiveFeedback, setPositiveFeedback] = useState<PositiveFeedbackRow[]>([]);
   const [err, setErr] = useState<string | null>(initialError);
   const [filter, setFilter] = useState<"unreviewed" | "all">("unreviewed");
+  // Hide site-admin-authored queries by default — what the operator
+  // mostly cares about is real-user pain, not Cal-team self-testing.
+  // Toggling OFF reveals admin rows (with an "admin" badge so they're
+  // visually distinguishable) and refetches every loaded tab so the
+  // user IDs match the new filter.
+  const [excludeAdmins, setExcludeAdmins] = useState(true);
   const [pending, startTransition] = useTransition();
   const [dataLoaded, setDataLoaded] = useState<Record<FeedbackType, boolean>>({
     all: false,
@@ -89,23 +133,27 @@ export function CoachAiFeedbackAdminClient({
             ? negativeFeedback
             : positiveFeedback;
 
-  function refresh(nextFilter: "unreviewed" | "all" = filter, type: FeedbackType = feedbackType) {
+  function refresh(
+    nextFilter: "unreviewed" | "all" = filter,
+    type: FeedbackType = feedbackType,
+    nextExcludeAdmins: boolean = excludeAdmins,
+  ) {
     startTransition(async () => {
       const load = async (t: Exclude<FeedbackType, "all">) => {
         if (t === "kb_miss") {
-          const res = await listCoachAiKbMissesAction(nextFilter);
+          const res = await listCoachAiKbMissesAction(nextFilter, nextExcludeAdmins);
           if (!res.ok) { setErr(res.error); return; }
           setKbMisses(res.items);
         } else if (t === "refusal") {
-          const res = await listCoachAiRefusalsAction(nextFilter);
+          const res = await listCoachAiRefusalsAction(nextFilter, nextExcludeAdmins);
           if (!res.ok) { setErr(res.error); return; }
           setRefusals(res.items);
         } else if (t === "negative") {
-          const res = await listCoachAiNegativeFeedbackAction();
+          const res = await listCoachAiNegativeFeedbackAction(nextExcludeAdmins);
           if (!res.ok) { setErr(res.error); return; }
           setNegativeFeedback(res.items);
         } else if (t === "positive") {
-          const res = await listCoachAiPositiveFeedbackAction();
+          const res = await listCoachAiPositiveFeedbackAction(nextExcludeAdmins);
           if (!res.ok) { setErr(res.error); return; }
           setPositiveFeedback(res.items);
         }
@@ -132,6 +180,40 @@ export function CoachAiFeedbackAdminClient({
       setDataLoaded({ ...dataLoaded, [type]: true });
       refresh(filter, type);
     }
+  }
+
+  function toggleExcludeAdmins() {
+    const next = !excludeAdmins;
+    setExcludeAdmins(next);
+    // Toggling the admin filter changes EVERY loaded tab's row set.
+    // Mark every tab as "needs reload" and refetch the active one
+    // immediately; other tabs reload on next switch via the dataLoaded
+    // gate. Cleanest path is to refetch all loaded tabs eagerly so the
+    // "All" view's counts stay correct without a manual refresh.
+    startTransition(async () => {
+      const tabs: Array<Exclude<FeedbackType, "all">> = [];
+      if (dataLoaded.kb_miss) tabs.push("kb_miss");
+      if (dataLoaded.refusal) tabs.push("refusal");
+      if (dataLoaded.negative) tabs.push("negative");
+      if (dataLoaded.positive) tabs.push("positive");
+      await Promise.all(
+        tabs.map(async (t) => {
+          if (t === "kb_miss") {
+            const res = await listCoachAiKbMissesAction(filter, next);
+            if (res.ok) setKbMisses(res.items);
+          } else if (t === "refusal") {
+            const res = await listCoachAiRefusalsAction(filter, next);
+            if (res.ok) setRefusals(res.items);
+          } else if (t === "negative") {
+            const res = await listCoachAiNegativeFeedbackAction(next);
+            if (res.ok) setNegativeFeedback(res.items);
+          } else if (t === "positive") {
+            const res = await listCoachAiPositiveFeedbackAction(next);
+            if (res.ok) setPositiveFeedback(res.items);
+          }
+        }),
+      );
+    });
   }
 
   function markReviewed(id: string, reviewed: boolean, itemType?: string) {
@@ -256,7 +338,7 @@ export function CoachAiFeedbackAdminClient({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-lg bg-surface-inset p-0.5 text-xs">
           <button
             type="button"
@@ -273,6 +355,24 @@ export function CoachAiFeedbackAdminClient({
             All
           </button>
         </div>
+        <Button
+          variant={excludeAdmins ? "primary" : "ghost"}
+          size="sm"
+          onClick={toggleExcludeAdmins}
+          disabled={pending}
+          title={
+            excludeAdmins
+              ? "Admin queries are hidden — click to show them"
+              : "Admin queries are visible — click to hide them"
+          }
+        >
+          {excludeAdmins ? (
+            <ShieldOff className="mr-1 size-3.5" />
+          ) : (
+            <Shield className="mr-1 size-3.5" />
+          )}
+          {excludeAdmins ? "Hiding admins" : "Showing admins"}
+        </Button>
         <Button variant="ghost" size="sm" onClick={() => refresh(filter)} disabled={pending}>
           <RefreshCw className="mr-1 size-3.5" />
           Refresh
@@ -333,6 +433,13 @@ export function CoachAiFeedbackAdminClient({
                       <p className="font-semibold text-foreground">{(it as KbMissRow).topic}</p>
                       <p className="mt-1 text-foreground/80">&ldquo;{(it as KbMissRow).user_question}&rdquo;</p>
                       <p className="mt-1 text-xs text-muted">
+                        <UserAttribution
+                          user_email={(it as KbMissRow).user_email}
+                          user_display_name={(it as KbMissRow).user_display_name}
+                          user_id={(it as KbMissRow).user_id}
+                          user_role={(it as KbMissRow).user_role}
+                        />
+                        {" · "}
                         {KB_MISS_REASON_LABEL[(it as KbMissRow).reason] ?? (it as KbMissRow).reason}
                         {(it as KbMissRow).sport_variant ? ` · ${(it as KbMissRow).sport_variant}` : ""}
                         {(it as KbMissRow).sanctioning_body ? ` · ${(it as KbMissRow).sanctioning_body}` : ""}
@@ -346,6 +453,13 @@ export function CoachAiFeedbackAdminClient({
                     <>
                       <p className="font-semibold text-foreground">Request: &ldquo;{(it as RefusalRow).user_request}&rdquo;</p>
                       <p className="mt-1 text-xs text-muted">
+                        <UserAttribution
+                          user_email={(it as RefusalRow).user_email}
+                          user_display_name={(it as RefusalRow).user_display_name}
+                          user_id={(it as RefusalRow).user_id}
+                          user_role={(it as RefusalRow).user_role}
+                        />
+                        {" · "}
                         {REFUSAL_REASON_LABEL[(it as RefusalRow).refusal_reason] ?? (it as RefusalRow).refusal_reason}
                         {(it as RefusalRow).sport_variant ? ` · ${(it as RefusalRow).sport_variant}` : ""}
                         {(it as RefusalRow).sanctioning_body ? ` · ${(it as RefusalRow).sanctioning_body}` : ""}
@@ -361,7 +475,16 @@ export function CoachAiFeedbackAdminClient({
                       <div className="mt-1 rounded-lg bg-surface-raised/50 p-2 ring-1 ring-black/5">
                         <AssistantMessage text={(it as NegativeFeedbackRow).response_text} />
                       </div>
-                      <p className="mt-1 text-xs text-muted">{formatDate(it.created_at)}</p>
+                      <p className="mt-1 text-xs text-muted">
+                        <UserAttribution
+                          user_email={(it as NegativeFeedbackRow).user_email}
+                          user_display_name={(it as NegativeFeedbackRow).user_display_name}
+                          user_id={(it as NegativeFeedbackRow).user_id}
+                          user_role={(it as NegativeFeedbackRow).user_role}
+                        />
+                        {" · "}
+                        {formatDate(it.created_at)}
+                      </p>
                     </>
                   ) : (
                     <>
@@ -369,7 +492,16 @@ export function CoachAiFeedbackAdminClient({
                       <div className="mt-1 rounded-lg bg-surface-raised/50 p-2 ring-1 ring-black/5">
                         <AssistantMessage text={(it as PositiveFeedbackRow).response_text} />
                       </div>
-                      <p className="mt-1 text-xs text-muted">{formatDate(it.created_at)}</p>
+                      <p className="mt-1 text-xs text-muted">
+                        <UserAttribution
+                          user_email={(it as PositiveFeedbackRow).user_email}
+                          user_display_name={(it as PositiveFeedbackRow).user_display_name}
+                          user_id={(it as PositiveFeedbackRow).user_id}
+                          user_role={(it as PositiveFeedbackRow).user_role}
+                        />
+                        {" · "}
+                        {formatDate(it.created_at)}
+                      </p>
                     </>
                   )}
                 </div>

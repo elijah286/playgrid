@@ -1,7 +1,59 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "./admin-guard";
+
+/**
+ * Resolve a set of user_ids to display info (email, display_name, role).
+ * Returns a map keyed by id. Used by every admin list action so the table
+ * rows show "from <email>" — the most-asked-for context per the
+ * 2026-05-10 review of the AI Feedback page (the unidentified-rows
+ * problem made it hard to tell coach pain from admin testing).
+ *
+ * Two trips: profiles (display_name, role — RLS-bypassed via service role)
+ * and auth.users.listUsers (email — only available through the admin API).
+ * listUsers paginates at perPage=1000; we fetch up to 1000 in one pass,
+ * which covers the foreseeable user base. If we ever cross 1k users, the
+ * function returns whatever it could fetch and the UI shows "(unknown)"
+ * for users past the page boundary — a degraded but non-breaking failure.
+ */
+type UserInfo = {
+  email: string | null;
+  display_name: string | null;
+  role: string | null;
+};
+
+async function resolveUserInfo(userIds: string[]): Promise<Map<string, UserInfo>> {
+  const out = new Map<string, UserInfo>();
+  if (userIds.length === 0) return out;
+  const admin = createServiceRoleClient();
+  const [{ data: profiles }, authRes] = await Promise.all([
+    admin.from("profiles").select("id, display_name, role").in("id", userIds),
+    admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
+  ]);
+  const profileById = new Map(
+    (profiles ?? []).map((p) => [
+      p.id as string,
+      {
+        display_name: (p as { display_name: string | null }).display_name,
+        role: (p as { role: string | null }).role,
+      },
+    ]),
+  );
+  const emailById = new Map(
+    (authRes.data?.users ?? []).map((u) => [u.id, u.email ?? null]),
+  );
+  for (const id of userIds) {
+    const prof = profileById.get(id);
+    out.set(id, {
+      email: emailById.get(id) ?? null,
+      display_name: prof?.display_name ?? null,
+      role: prof?.role ?? null,
+    });
+  }
+  return out;
+}
 
 /** Per-user opt-in status for AI feedback collection. */
 export async function getAiFeedbackOptInAction(): Promise<
@@ -55,22 +107,44 @@ export type KbMissRow = {
   age_division: string | null;
   reviewed_at: string | null;
   created_at: string;
+  user_id: string | null;
+  user_email: string | null;
+  user_display_name: string | null;
+  user_role: string | null;
 };
 
 export async function listCoachAiKbMissesAction(
   reviewedFilter: "unreviewed" | "all" = "unreviewed",
+  excludeAdmins: boolean = true,
 ): Promise<{ ok: true; items: KbMissRow[] } | { ok: false; error: string }> {
   await requireAdmin();
   const supabase = await createClient();
   let q = supabase
     .from("coach_ai_kb_misses")
-    .select("id, topic, user_question, reason, playbook_id, sport_variant, sanctioning_body, game_level, age_division, reviewed_at, created_at")
+    .select("id, topic, user_question, reason, playbook_id, sport_variant, sanctioning_body, game_level, age_division, reviewed_at, created_at, user_id")
     .order("created_at", { ascending: false })
     .limit(500);
   if (reviewedFilter === "unreviewed") q = q.is("reviewed_at", null);
   const { data, error } = await q;
   if (error) return { ok: false, error: error.message };
-  return { ok: true, items: (data ?? []) as KbMissRow[] };
+  const rows = (data ?? []) as Array<KbMissRow & { user_id: string | null }>;
+  const userIds = Array.from(
+    new Set(rows.map((r) => r.user_id).filter((id): id is string => !!id)),
+  );
+  const userInfoById = await resolveUserInfo(userIds);
+  const enriched: KbMissRow[] = rows.map((r) => {
+    const info = r.user_id ? userInfoById.get(r.user_id) : null;
+    return {
+      ...r,
+      user_email: info?.email ?? null,
+      user_display_name: info?.display_name ?? null,
+      user_role: info?.role ?? null,
+    };
+  });
+  const filtered = excludeAdmins
+    ? enriched.filter((r) => r.user_role !== "admin")
+    : enriched;
+  return { ok: true, items: filtered };
 }
 
 export async function setKbMissReviewedAction(
@@ -110,22 +184,44 @@ export type RefusalRow = {
   age_division: string | null;
   reviewed_at: string | null;
   created_at: string;
+  user_id: string | null;
+  user_email: string | null;
+  user_display_name: string | null;
+  user_role: string | null;
 };
 
 export async function listCoachAiRefusalsAction(
   reviewedFilter: "unreviewed" | "all" = "unreviewed",
+  excludeAdmins: boolean = true,
 ): Promise<{ ok: true; items: RefusalRow[] } | { ok: false; error: string }> {
   await requireAdmin();
   const supabase = await createClient();
   let q = supabase
     .from("coach_ai_refusals")
-    .select("id, user_request, refusal_reason, playbook_id, sport_variant, sanctioning_body, game_level, age_division, reviewed_at, created_at")
+    .select("id, user_request, refusal_reason, playbook_id, sport_variant, sanctioning_body, game_level, age_division, reviewed_at, created_at, user_id")
     .order("created_at", { ascending: false })
     .limit(500);
   if (reviewedFilter === "unreviewed") q = q.is("reviewed_at", null);
   const { data, error } = await q;
   if (error) return { ok: false, error: error.message };
-  return { ok: true, items: (data ?? []) as RefusalRow[] };
+  const rows = (data ?? []) as Array<RefusalRow & { user_id: string | null }>;
+  const userIds = Array.from(
+    new Set(rows.map((r) => r.user_id).filter((id): id is string => !!id)),
+  );
+  const userInfoById = await resolveUserInfo(userIds);
+  const enriched: RefusalRow[] = rows.map((r) => {
+    const info = r.user_id ? userInfoById.get(r.user_id) : null;
+    return {
+      ...r,
+      user_email: info?.email ?? null,
+      user_display_name: info?.display_name ?? null,
+      user_role: info?.role ?? null,
+    };
+  });
+  const filtered = excludeAdmins
+    ? enriched.filter((r) => r.user_role !== "admin")
+    : enriched;
+  return { ok: true, items: filtered };
 }
 
 export async function setRefusalReviewedAction(
@@ -233,6 +329,10 @@ export type PositiveFeedbackRow = {
   response_text: string;
   user_message: string;
   created_at: string;
+  user_id: string | null;
+  user_email: string | null;
+  user_display_name: string | null;
+  user_role: string | null;
 };
 
 export type NegativeFeedbackRow = {
@@ -240,32 +340,79 @@ export type NegativeFeedbackRow = {
   response_text: string;
   user_message: string;
   created_at: string;
+  user_id: string | null;
+  user_email: string | null;
+  user_display_name: string | null;
+  user_role: string | null;
 };
 
-export async function listCoachAiPositiveFeedbackAction(): Promise<
+type EnrichedUserFields = {
+  user_email: string | null;
+  user_display_name: string | null;
+  user_role: string | null;
+};
+
+async function listThumbsFeedback<T extends { user_id: string | null }>(
+  table: "coach_ai_positive_feedback" | "coach_ai_negative_feedback",
+  excludeAdmins: boolean,
+): Promise<{ ok: true; items: Array<T & EnrichedUserFields> } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from(table)
+    .select("id, response_text, user_message, created_at, user_id")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) return { ok: false, error: error.message };
+  const rows = (data ?? []) as Array<T>;
+  const userIds = Array.from(
+    new Set(rows.map((r) => r.user_id).filter((id): id is string => !!id)),
+  );
+  const userInfoById = await resolveUserInfo(userIds);
+  const enriched: Array<T & EnrichedUserFields> = rows.map((r) => {
+    const info = r.user_id ? userInfoById.get(r.user_id) : null;
+    return {
+      ...r,
+      user_email: info?.email ?? null,
+      user_display_name: info?.display_name ?? null,
+      user_role: info?.role ?? null,
+    };
+  });
+  const filtered = excludeAdmins
+    ? enriched.filter((r) => r.user_role !== "admin")
+    : enriched;
+  return { ok: true, items: filtered };
+}
+
+export async function listCoachAiPositiveFeedbackAction(
+  excludeAdmins: boolean = true,
+): Promise<
   { ok: true; items: PositiveFeedbackRow[] } | { ok: false; error: string }
 > {
   await requireAdmin();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("coach_ai_positive_feedback")
-    .select("id, response_text, user_message, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, items: (data ?? []) as PositiveFeedbackRow[] };
+  const res = await listThumbsFeedback<{
+    id: string;
+    response_text: string;
+    user_message: string;
+    created_at: string;
+    user_id: string | null;
+  }>("coach_ai_positive_feedback", excludeAdmins);
+  if (!res.ok) return res;
+  return { ok: true, items: res.items as unknown as PositiveFeedbackRow[] };
 }
 
-export async function listCoachAiNegativeFeedbackAction(): Promise<
+export async function listCoachAiNegativeFeedbackAction(
+  excludeAdmins: boolean = true,
+): Promise<
   { ok: true; items: NegativeFeedbackRow[] } | { ok: false; error: string }
 > {
   await requireAdmin();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("coach_ai_negative_feedback")
-    .select("id, response_text, user_message, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, items: (data ?? []) as NegativeFeedbackRow[] };
+  const res = await listThumbsFeedback<{
+    id: string;
+    response_text: string;
+    user_message: string;
+    created_at: string;
+    user_id: string | null;
+  }>("coach_ai_negative_feedback", excludeAdmins);
+  if (!res.ok) return res;
+  return { ok: true, items: res.items as unknown as NegativeFeedbackRow[] };
 }
