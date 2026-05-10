@@ -2524,6 +2524,150 @@ const archive_play: CoachAiTool = {
 };
 
 /**
+ * Copy a play into another playbook the coach can edit. The destination
+ * gets a fresh play row with a "(copy)" suffix on the name (auto-numbered
+ * on collision), the formation linked to the source play is duplicated
+ * into the destination playbook (so layout + alignments survive), and
+ * the routes are preserved verbatim. Source play is left untouched —
+ * this is COPY, not MOVE. If the coach wants the source gone, they
+ * archive it after the copy lands.
+ *
+ * The handler delegates to `copyPlayAction`, which is the same primitive
+ * the in-app "Copy to playbook" dialog uses. Permission is enforced
+ * server-side: caller must be owner/editor on the destination playbook.
+ *
+ * Surfaced 2026-05-09 (ge.montiel transcript): coach asked Cal to "move
+ * the play currently in my screen (play name screen) to the highlandgirls
+ * playbook." Cal said "I don't have a tool to move plays between
+ * playbooks." Now it does.
+ */
+const copy_play: CoachAiTool = {
+  def: {
+    name: "copy_play",
+    description:
+      "Copy a play into another playbook the coach owns or can edit. Use this when " +
+      "the coach asks to move/copy/duplicate/clone a play to a different team or playbook. " +
+      "The destination play gets a fresh id, a \"(copy)\" name suffix (auto-numbered on " +
+      "collision), and a duplicated formation so the layout survives. The source play is " +
+      "preserved — this is COPY, not MOVE. If the coach wanted the source gone after the " +
+      "copy, follow up with archive_play once the new copy is confirmed in the target playbook. " +
+      "`play_id` accepts a UUID OR a slot/name reference (\"Recommended #5\", \"Screen\") — " +
+      "slot/name refs only resolve when the chat is anchored to the SOURCE playbook (since slots " +
+      "are playbook-relative). Pass the UUID directly when copying from an unanchored thread. " +
+      "`target_playbook_id` must be a UUID — call list_my_playbooks if you don't already have it. " +
+      "Always confirm the source play AND the destination team with the coach before calling.",
+    input_schema: {
+      type: "object",
+      properties: {
+        play_id: {
+          type: "string",
+          description:
+            "Source play — UUID, group-qualified slot (\"Recommended #5\"), or exact name. " +
+            "Slot/name refs require the chat to be anchored to the source playbook.",
+        },
+        target_playbook_id: {
+          type: "string",
+          description:
+            "UUID of the destination playbook. The coach must have owner or editor membership " +
+            "on it (server enforces). Use list_my_playbooks to fetch ids.",
+        },
+      },
+      required: ["play_id", "target_playbook_id"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, _ctx) {
+    const rawPlayRef = typeof input.play_id === "string" ? input.play_id.trim() : "";
+    const rawTargetId =
+      typeof input.target_playbook_id === "string" ? input.target_playbook_id.trim() : "";
+    if (!rawPlayRef) return { ok: false, error: "play_id is required." };
+    if (!UUID_RE.test(rawTargetId)) {
+      return {
+        ok: false,
+        error:
+          "target_playbook_id must be a UUID. Call list_my_playbooks to fetch the destination id.",
+      };
+    }
+
+    // Resolve source play: UUID is direct, slot/name refs need an
+    // anchored source playbook so resolvePlayId knows where to look.
+    let sourcePlayId: string;
+    let sourcePlayName: string;
+    if (UUID_RE.test(rawPlayRef)) {
+      const admin = createServiceRoleClient();
+      const { data: srcPlay, error: srcErr } = await admin
+        .from("plays")
+        .select("id, name, playbook_id")
+        .eq("id", rawPlayRef)
+        .maybeSingle();
+      if (srcErr) return { ok: false, error: srcErr.message };
+      if (!srcPlay) return { ok: false, error: "Source play not found." };
+      sourcePlayId = srcPlay.id as string;
+      sourcePlayName = (srcPlay.name as string | null) ?? "(untitled)";
+    } else {
+      // Slot or name ref — need anchored source playbook for resolution.
+      if (!_ctx.playbookId) {
+        return {
+          ok: false,
+          error:
+            "Slot/name play references (e.g. \"Recommended #5\", \"Screen\") require the chat to be " +
+            "anchored to the source playbook. Either anchor first, or pass the play UUID directly.",
+        };
+      }
+      const r = await resolvePlayId(rawPlayRef, _ctx.playbookId);
+      if (!r.ok) return { ok: false, error: r.error };
+      sourcePlayId = r.id;
+      sourcePlayName = r.name;
+    }
+
+    if (sourcePlayId === rawTargetId) {
+      // Highly unlikely (UUIDs collide with playbook ids only by accident),
+      // but guard anyway.
+      return { ok: false, error: "Source and target playbook are the same." };
+    }
+
+    try {
+      // Lazy-loaded via dynamic import (NOT require) so vitest's vi.mock
+      // can intercept the action in unit tests. The original require()
+      // pattern in this file dodges a circular-import at module init;
+      // dynamic import() also defers evaluation but plays well with the
+      // test harness, so we use it for tools that have unit coverage.
+      const { copyPlayAction } = await import("@/app/actions/plays");
+      const res = await copyPlayAction({
+        playId: sourcePlayId,
+        destinationPlaybookId: rawTargetId,
+        // "copy" duplicates the source formation into the target playbook
+        // so the alignment doesn't break across the boundary. This matches
+        // the in-app dialog's default and is the safe choice when Cal
+        // doesn't know what formations the destination already has.
+        formationMode: "copy",
+      });
+      if (!res.ok) return { ok: false, error: res.error };
+
+      const newUrl = `/plays/${res.playId}/edit`;
+      const droppedNote =
+        res.droppedRouteCount > 0
+          ? ` (Dropped ${res.droppedRouteCount} route(s) whose carrier didn't have a matching label in the destination formation — review and re-add manually if needed.)`
+          : "";
+      const renamedNote = res.formationRenamed && res.formationNewName
+        ? ` Formation was renamed to "${res.formationNewName}" to avoid a collision in the destination playbook.`
+        : "";
+      return {
+        ok: true,
+        result:
+          `Copied "${sourcePlayName}" into the destination playbook. ` +
+          `[Open the copy](${newUrl}). The source play in the original playbook is unchanged — ` +
+          `if the coach wanted the source gone, ask before calling archive_play on it.` +
+          droppedNote +
+          renamedNote,
+      };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "copy_play failed" };
+    }
+  },
+};
+
+/**
  * Read recent edit history for a play. Cal calls this when the coach asks to
  * "undo", "revert", "go back", or otherwise reverse a recent change — Cal
  * needs to see which version to restore. Versions are returned newest-first;
@@ -2735,4 +2879,5 @@ export const PLAY_TOOLS: CoachAiTool[] = [
   delete_play_group,
   assign_plays_to_group,
   archive_play,
+  copy_play,
 ];

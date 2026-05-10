@@ -517,6 +517,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-copy-play-cross-playbook",
+    name: "Coach Cal can copy plays between your playbooks",
+    description:
+      "Cal used to refuse to copy or move plays across playbooks (\"I don't have a tool to move plays between playbooks — that's a copy/paste operation in the app\"). Now there's a copy_play tool: tell Cal to copy a play from one team into another and it duplicates the play, formation, and routes into the destination, leaves a \"(copy)\" suffix on the name to avoid collisions, and links you to the new copy. Source play is preserved — if you wanted a true move, Cal asks before archiving the original. Permission is enforced per-call: Cal only copies into playbooks you own or have editor access on. Same primitive as the in-app Copy-to-playbook dialog, just exposed to the chat.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-10",
+  },
+  {
     id: "coach-cal-motion-rules-structural",
     name: "Coach Cal can no longer save multi-motion or forward-motion plays",
     description:

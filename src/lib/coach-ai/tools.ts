@@ -2425,16 +2425,26 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
   }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PLAY_TOOLS } = require("./play-tools") as typeof import("./play-tools");
-  const writeNames = new Set(["update_play", "create_play", "rename_play", "update_play_notes", "archive_play"]);
+  const writeNames = new Set(["update_play", "create_play", "rename_play", "update_play_notes", "archive_play", "copy_play"]);
 
-  // create_play is always exposed when the user is signed in — it accepts a
-  // `playbook_id` arg so Cal can save into any playbook the coach edits, even
-  // from a global thread with no anchor. The handler runs its own
-  // can_edit_playbook check on the target. Other write tools still require
-  // an anchored playbook because they resolve play references against the
+  // Tools that work in BOTH anchored and global threads. They take their
+  // own playbook id (or play UUID) as input and run their own permission
+  // checks server-side, so they don't need ctx.playbookId set.
+  //
+  //   - create_play: accepts `playbook_id` so Cal can save into any
+  //     playbook the coach edits, even from a global thread. The handler
+  //     runs can_edit_playbook on the target.
+  //   - copy_play: accepts a play UUID + a target_playbook_id UUID and
+  //     duplicates the play across playbooks. The underlying
+  //     copyPlayAction enforces destination edit access.
+  //
+  // Other write tools (update_play, rename_play, etc.) still require an
+  // anchored playbook because they resolve play references against the
   // anchored playbook only.
-  const createPlay = PLAY_TOOLS.find((t) => t.def.name === "create_play");
-  if (createPlay) tools.push(createPlay);
+  const ALWAYS_ON_WRITE_NAMES = new Set(["create_play", "copy_play"]);
+  for (const t of PLAY_TOOLS) {
+    if (ALWAYS_ON_WRITE_NAMES.has(t.def.name)) tools.push(t);
+  }
 
   if (ctx.playbookId) {
     const readTools = PLAY_TOOLS.filter((t) => !writeNames.has(t.def.name));
@@ -2443,7 +2453,7 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
     tools.push(list_events);
     if (ctx.canEditPlaybook) {
       const writeTools = PLAY_TOOLS.filter(
-        (t) => writeNames.has(t.def.name) && t.def.name !== "create_play",
+        (t) => writeNames.has(t.def.name) && !ALWAYS_ON_WRITE_NAMES.has(t.def.name),
       );
       tools.push(...writeTools);
       // Scheduling: only available to coaches who can edit the playbook.
