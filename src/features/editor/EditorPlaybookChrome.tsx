@@ -59,13 +59,11 @@ export function EditorPlaybookChrome({
     .join(" · ");
   return (
     <div
-      // Outer sticky wrapper on mobile — bg-surface with pt-3/pb-3 gives
-      // a 12px dark frame above and below the gradient, mirroring the
-      // playbook list page's sticky banner. The dark strip above is what
-      // makes iOS Safari tint the URL bar dark instead of red. `-mx-6`
-      // bleeds through the editor layout's px-6, and the inner gradient
-      // re-bleeds via its own `-mx-6 -mt-3` so the banner itself is
-      // edge-to-edge and flush with the sticky's top edge.
+      // Outer sticky wrapper on mobile — bg-surface with pt-3/pb-3
+      // produces a 12px dark frame above and below the gradient. The
+      // visible dark strip above is what the user sees as "black above
+      // the banner" on the playbook list. `-mx-6` bleeds horizontally
+      // through the editor layout's px-6.
       //
       // The lift to main-top lives on `play-editor-content` (the parent)
       // via `-mt-5` — same trick the playbook list uses with -mt-8 on
@@ -80,7 +78,7 @@ export function EditorPlaybookChrome({
       className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:-mt-5 sm:bg-transparent sm:p-0"
     >
     <div
-      className="-mx-6 -mt-3 sm:mx-0 sm:mt-0"
+      className="-mx-6 sm:mx-0"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
