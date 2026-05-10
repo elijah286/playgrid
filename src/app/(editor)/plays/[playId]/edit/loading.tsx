@@ -17,14 +17,18 @@ export default function EditorLoading() {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2 pb-20 sm:pb-0">
       {/* Mobile-only orange playbook chrome placeholder. The real chrome
-          fills in playbook name + initial once data loads. */}
-      <div
-        className="native-safe-top sticky top-0 z-30 -mx-6 -mt-8 flex items-center gap-2 px-4 py-3 sm:hidden sm:-mt-5"
-        style={{ backgroundColor: "#F26522" }}
-      >
-        <div className="size-9 rounded-lg bg-white/20" aria-hidden />
-        <div className="size-9 rounded-lg bg-white/30" aria-hidden />
-        <div className="h-4 flex-1 rounded bg-white/30" aria-hidden />
+          fills in playbook name + initial once data loads. Outer
+          bg-surface pt-3/pb-3 mirrors EditorPlaybookChrome so the URL
+          bar tints dark and the banner has breathing room below. */}
+      <div className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:hidden">
+        <div
+          className="-mx-6 -mt-3 flex items-center gap-2 px-4 py-3"
+          style={{ backgroundColor: "#F26522" }}
+        >
+          <div className="size-9 rounded-lg bg-white/20" aria-hidden />
+          <div className="size-9 rounded-lg bg-white/30" aria-hidden />
+          <div className="h-4 flex-1 rounded bg-white/30" aria-hidden />
+        </div>
       </div>
 
       {/* Field skeleton: matches the field-viewport mobile cap so the

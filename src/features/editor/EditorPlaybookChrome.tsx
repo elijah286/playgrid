@@ -59,17 +59,22 @@ export function EditorPlaybookChrome({
     .join(" · ");
   return (
     <div
-      // `-mx-6 -mt-8` escapes the dashboard layout's `px-6 py-8` padding
-      // so the banner bleeds edge-to-edge AND extends all the way up to
-      // the viewport top. Without -mt-8 the banner would sit ~32px below
-      // the top of <main>, leaving a transparent gap that scrolled
-      // content peeked through above the colored chrome on iPhone.
-      // Sticky on mobile only — on desktop we drop sticky (`sm:static`)
-      // AND clear the z-index (`sm:z-auto`) so the banner stays in
-      // normal flow and doesn't fight the SiteHeader's stacking when
-      // the page scrolls. backgroundColor under backgroundImage keeps
-      // the gradient's alpha steps from letting content scroll-through.
-      className="native-safe-top sticky top-0 z-30 -mx-6 -mt-8 sm:static sm:z-auto sm:-mt-5"
+      // Outer sticky wrapper on mobile — bg-surface with pt-3/pb-3 gives
+      // a 12px dark frame above and below the gradient, mirroring the
+      // playbook list page's sticky banner. The dark strip above is what
+      // makes iOS Safari tint the URL bar dark instead of red. `-mx-6`
+      // bleeds through the editor layout's px-6, and the inner gradient
+      // re-bleeds via its own `-mx-6 -mt-3` so the banner itself is
+      // edge-to-edge and flush with the sticky's top edge.
+      //
+      // Desktop drops the sticky + dark frame entirely: `sm:-mt-5`
+      // cancels the layout's py-5 so the gradient sits at the top of
+      // <main>, below the SiteHeader. We also drop z-30 so the banner
+      // doesn't fight the SiteHeader's stacking as the page scrolls.
+      className="native-safe-top sticky top-0 z-30 -mx-6 bg-surface px-6 pb-3 pt-3 sm:static sm:z-auto sm:-mt-5 sm:bg-transparent sm:p-0"
+    >
+    <div
+      className="-mx-6 -mt-3 sm:mx-0 sm:mt-0"
       style={{ backgroundImage: gradient, backgroundColor: accentColor }}
     >
       <div className="flex items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
@@ -126,6 +131,7 @@ export function EditorPlaybookChrome({
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }
