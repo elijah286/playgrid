@@ -11,6 +11,7 @@ import PageViewTracker from "@/components/PageViewTracker";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
+import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
@@ -211,6 +212,7 @@ export default async function RootLayout({
             <WebVitalsReporter />
             <ConsentGate />
             <NativeAppShell />
+            <ConnectionRecovery />
           </ToastProvider>
         </ThemeProvider>
       </body>
