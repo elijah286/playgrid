@@ -66,6 +66,7 @@ Behavior rules — follow these strictly:
 
 7c. **You CAN add brand-new plays to the anchored playbook — use \`create_play\`.** When the coach asks to "create play 1", "add this play to my playbook", "save this as a play", or accepts your offer to add a concept you just diagrammed, you have a tool for it. **NEVER say "I don't have a direct tool to create individual plays" or tell the coach to open the playbook and click + New Play — you can do it directly.** Workflow:
     - You should already have a diagram in chat (rule 9 has you draw one by default). Confirm the play name and that the diagram on screen is what they want saved ("Save this as 'Spread Slant' in your CPYFA playbook?"), wait for an explicit yes, then call \`create_play\`.
+    - **"YES" MEANS SAVE — call \`create_play\` IMMEDIATELY, do NOT propose another play first.** When the coach affirms a play fence you just showed them ("yes", "yeah", "sounds good", "looks good", "perfect", "save it", "do it", "go for it") your VERY NEXT action MUST be a \`create_play\` call for the fence they just confirmed. Common failure: Cal proposes Play 1, coach says "yes", Cal moves on to "**Play 2:**" with a new fence and never saves Play 1. The coach finishes a 10-play conversation thinking they have a playbook full of plays and lands on an empty playbook. **The save is the deliverable.** If the coach gave the affirmation, the play exists in the chat, and the playbook is anchored + editable, you have everything you need — save it before proposing the next play. The harness has a backstop auto-commit for this exact case (so trailing fences eventually persist) but don't rely on it; the explicit \`create_play\` call this turn produces a cleaner reply with a [link] the coach can click.
     - **Pass \`play_spec\` (preferred) instead of \`diagram\` whenever you can describe the play in named primitives** — a known formation, optional named defense, and per-player assignments referencing catalog route families (Slant, Post, Dig, Curl, Hitch, Out, In, etc.). The renderer derives geometry deterministically from the catalogs, so silent fallbacks (formation gibberish, unknown routes, made-up defenses) are rejected with a structured error you can act on. The saved play also gets a canonical PlaySpec stamped on it, which unlocks deterministic notes generation (see rule 7g below). Use \`diagram\` only when the play has genuinely off-catalog routes ("draw a 7-yard skinny slant") or hand-placed elements that don't fit the spec shape — the legacy diagram path remains supported.
     - **STRIP DEFENDERS BEFORE CALLING.** A play in the playbook is one-sided (offense OR defense, never both). When you saved the chat diagram with a full opposing defense for visualization, do NOT pass that defense through to \`create_play\` — pass only the players whose team matches the play's side. (The tool also strips them server-side as a backstop, but doing it client-side keeps the tool result honest.) Defenders that the coach wanted alongside the play go via the "custom opponent" overlay, NOT in the play's main roster.
     - **NOTES ARE STRUCTURALLY GUARANTEED, NOT BEHAVIORAL.** When you call \`create_play\` with a \`play_spec\`, the tool now auto-writes canonical notes from the spec on the very FIRST saved version — every spec-based play ships teach-ready by default. You do NOT need to follow up with \`update_play_notes\` to satisfy the "every play has notes" rule; that requirement is met by construction. The result string from \`create_play\` will tell you whether auto-notes ran. **EVERY PLAY'S NOTES MUST OPEN WITH A WHEN-TO-USE LINE.** The auto-projector emits a generic templated opener (e.g. "**Use when:** Quick-game answer — best vs pressure on rhythm throws"); you SHOULD call \`update_play_notes\` afterwards to replace that placeholder with a play-specific situational cue in your coaching voice (down/distance, coverage tendency, score/clock context — whatever fits the play). The first sentence the coach reads must be "WHEN do I call this?", not "what does @Q look at?". A confident, situation-specific opener reads better than the generic fallback and uses the playbook's age/personnel context. You do NOT need to ask permission first; the play is already saved with serviceable notes — your update is an enhancement. **Legacy diagram-only path (no \`play_spec\`)**: the tool surfaces a ⚠️ warning in its result string. In that case you MUST call \`update_play_notes\` before ending the turn — those plays would otherwise ship empty.
@@ -798,6 +799,47 @@ const MUTATING_TOOLS = new Set([
   // commitPlaybookNoteProposalAction server action when the coach clicks Save.
 ]);
 
+/**
+ * Patterns that mean "save the play(s) we were just looking at."
+ *
+ * Two flavors:
+ *   - `PURE_CONFIRMATION_RE`: the whole user message is just a confirmation
+ *     ("yes", "sounds good", "perfect"). Strict — the regex anchors start
+ *     and end so qualified responses like "yes that was unimaginative"
+ *     don't match.
+ *   - `EXPLICIT_SAVE_RE`: anywhere in the message, an explicit save verb
+ *     pointed at the current play(s). Looser — fires on "save all plays
+ *     to playbook", "save these", "save the play", "save it".
+ *
+ * Either match triggers the create-auto-commit at the end of the agent
+ * loop. Both are exported for unit testing — agent.ts doesn't have an
+ * easy hook to test the auto-commit branch end-to-end without a real
+ * Supabase context.
+ *
+ * The reason this logic exists: surfaced 2026-05-10 by a trialing coach
+ * (bhbfearless, 50-msg game-planning thread, ZERO plays saved). Cal kept
+ * emitting play fences in chat and the coach kept saying "yes," but Cal
+ * never followed up with `create_play`. The plays appeared as visuals
+ * but never persisted — the coach finished an hour of work and had
+ * nothing in their playbook. The prompt rule "wait for explicit yes,
+ * then call create_play" wasn't enough by itself; Cal interpreted "yes"
+ * as "yes, propose the next play" instead of "yes, save this one."
+ * Auto-commit is the structural backstop.
+ */
+export const PURE_CONFIRMATION_RE =
+  /^(y(es|eah|ep|up)?|ok(ay)?|sure|sounds? good|looks? good|do it|let'?s (go|do it)|go for it|good|great|perfect|fine|👍|✓)[\s.,!?]*$/i;
+export const EXPLICIT_SAVE_RE =
+  /\bsave\s+(it|them|these|all|those|(the\s+)?plays?)\b/i;
+
+/** True if the user's message means "save what we were just looking at." */
+export function userWantsSave(rawText: string): boolean {
+  const trimmed = rawText.trim();
+  if (!trimmed) return false;
+  if (PURE_CONFIRMATION_RE.test(trimmed)) return true;
+  if (EXPLICIT_SAVE_RE.test(trimmed)) return true;
+  return false;
+}
+
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
 export async function runAgent(
   history: ChatMessage[],
@@ -909,6 +951,21 @@ export async function runAgent(
     return null;
   })();
   const priorAssistantTurnHadFence = priorAssistantFenceJson !== null;
+  /** Every play fence in the most-recent fence-bearing assistant turn —
+   *  not just the first. Cal sometimes emits 3 plays in one reply and
+   *  the coach says one "yes" meaning "save all three." Walks back the
+   *  same way `priorAssistantFenceJson` does but returns every match
+   *  from that turn. */
+  const priorAssistantFenceJsons: string[] = (() => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      if (m.role !== "assistant") continue;
+      const text = extractAssistantText(m);
+      const matches = [...text.matchAll(/```play\s*\n([\s\S]*?)\n```/g)];
+      if (matches.length > 0) return matches.map((mm) => mm[1].trim());
+    }
+    return [];
+  })();
   const lastUserText = (() => {
     for (let i = history.length - 1; i >= 0; i--) {
       const m = history[i];
@@ -1324,6 +1381,82 @@ export async function runAgent(
     } catch {
       // Fence wasn't valid JSON — leave the chat output alone and let the
       // coach retry. We deliberately don't surface this to the LLM mid-turn.
+    }
+  }
+
+  // ── Create auto-commit ──────────────────────────────────────────────
+  // Companion to the update auto-commit above. When the chat is anchored
+  // to an editable playbook (NOT a specific play in the editor) and the
+  // coach's latest message means "save the play(s) we were just looking
+  // at" — but Cal didn't call `create_play` itself — persist every fence
+  // from the most-recent fence-bearing assistant turn.
+  //
+  // Why this exists (2026-05-10): a trialing coach spent 50 messages
+  // game-planning with Cal in a Lions playbook anchor. Cal emitted ~10
+  // play fences across the conversation, the coach said "Yes" after
+  // each, and `create_play` was called ZERO times. The Lions playbook
+  // ended the session with zero plays. The prompt rule "wait for yes,
+  // then call create_play" wasn't structurally enforced — Cal
+  // interpreted "Yes" as "continue proposing" instead of "save this."
+  // This block makes the save happen even when Cal forgets.
+  //
+  // Safety:
+  //   - Scoped to playbook-anchor + editable (so we know what playbook
+  //     to write into and we have permission)
+  //   - Skipped when `ctx.playId` is set — that's the editor anchor; an
+  //     update auto-commit (above) handles it, and we don't want to
+  //     create a NEW play row when the coach is editing an existing one
+  //   - Skipped when Cal already called `create_play` this turn (Cal's
+  //     own call wins; auto-commit is a backstop, not a doubler)
+  //   - Save-intent detector is conservative (`userWantsSave`): a "yes"
+  //     followed by a qualifier ("yes that was unimaginative") does NOT
+  //     match. False negatives are recoverable (coach says save again);
+  //     false positives create unwanted plays the coach must archive.
+  if (
+    ctx.playbookId &&
+    ctx.canEditPlaybook &&
+    !ctx.playId &&
+    userWantsSave(lastUserText) &&
+    !writeToolsCalledOk.includes("create_play") &&
+    priorAssistantFenceJsons.length > 0
+  ) {
+    const savedNames: string[] = [];
+    for (const fenceJson of priorAssistantFenceJsons) {
+      try {
+        const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
+        const fenceName =
+          typeof parsed.title === "string" && parsed.title.trim()
+            ? parsed.title.trim().slice(0, 80)
+            : "Cal-generated play";
+        const commit = await runTool(
+          "create_play",
+          { name: fenceName, diagram: parsed },
+          ctx,
+        );
+        if (commit.ok) {
+          mutated = true;
+          toolCalls.push("create_play");
+          savedNames.push(fenceName);
+        }
+      } catch {
+        // Fence wasn't valid JSON or create_play rejected — skip this one
+        // and continue with the rest. We deliberately don't surface
+        // per-fence errors mid-stream; Cal can still ask the coach for
+        // the next step.
+      }
+    }
+    if (savedNames.length > 0) {
+      // Append a short status line to the assistant's reply so the coach
+      // sees confirmation that the plays landed. Without this, Cal's
+      // own reply might say "saved!" without a tool call OR not mention
+      // the save at all — the auto-commit happens AFTER finalText is
+      // streamed, so we tack on a postscript the streaming UI shows.
+      const suffix =
+        `\n\n_${savedNames.length === 1 ? "Saved" : `Saved ${savedNames.length} plays`}: ` +
+        savedNames.map((n) => `"${n}"`).join(", ") +
+        ". Open the playbook to see them._";
+      finalText = finalText + suffix;
+      onEvent?.({ type: "text_delta", text: suffix });
     }
   }
 

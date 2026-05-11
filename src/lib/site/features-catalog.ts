@@ -526,6 +526,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-auto-save-on-confirmation",
+    name: "Coach Cal auto-saves plays when you confirm",
+    description:
+      "When you're game-planning with Cal in a playbook and Cal shows a play diagram in chat, saying \"yes\", \"sounds good\", \"perfect\", \"save it\", or any clear confirmation now actually saves the play to your playbook — even if Cal forgot to call the save tool itself. Discovered when a trialing coach spent 50 messages designing plays with Cal and the playbook ended up empty: Cal interpreted \"yes\" as \"yes, propose the next play\" instead of \"yes, save this one.\" The fix is a harness-level backstop: at the end of every turn where Cal showed a play fence in chat and you confirmed it, the play (or plays) gets persisted automatically. You see a one-line confirmation appended to Cal's reply listing what was saved. Qualified responses (\"yes that was unimaginative\", \"yes but make it longer\") deliberately do NOT trigger the auto-save — only clean confirmations and explicit save commands.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-10",
+  },
+  {
     id: "coach-cal-copy-play-cross-playbook",
     name: "Coach Cal can copy plays between your playbooks",
     description:
