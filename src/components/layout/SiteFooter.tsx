@@ -9,7 +9,7 @@ export function SiteFooter() {
           © {year} XO Gridmaker · Cedar Park, TX
         </p>
         <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-          <Link href="/#tour" className="hover:text-foreground transition-colors">
+          <Link href="/tour" className="hover:text-foreground transition-colors">
             Tour
           </Link>
           <Link href="/coach-cal" className="hover:text-foreground transition-colors">

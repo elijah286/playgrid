@@ -1323,7 +1323,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "marketing-consolidated-landing",
     name: "Consolidated landing page",
     description:
-      "The home page is the single marketing surface and tells the full story in one scroll: hero with a free-led CTA, the product tour (#tour anchor), Coach Cal teaser, free-for-solo callout, print-to-wristband proof, real example playbooks, and a final CTA. The previous /learn-more deep-dive route is 301-redirected to /#tour. /coach-cal remains as a dedicated AI-pitch page for ad landing and SEO.",
+      "The home page is the primary marketing surface and tells the full story in one scroll: hero with a free-led CTA, the product tour (#tour anchor), Coach Cal teaser, free-for-solo callout, print-to-wristband proof, real example playbooks, and a final CTA. A dedicated /tour route mirrors the tour content so signed-in users (redirected away from /) can still reach it from the footer and other off-page links. /learn-more 301-redirects to /tour. /coach-cal remains as a dedicated AI-pitch page for ad landing and SEO.",
     category: "Marketing site",
     status: "ga",
     addedDate: "2026-04-29",

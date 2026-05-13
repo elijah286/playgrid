@@ -97,7 +97,7 @@ export function BuildYourOwnPlaybookCta({
               <ArrowRight className="size-4" aria-hidden />
             </Link>
             <Link
-              href="/#tour"
+              href="/tour"
               onClick={() =>
                 track({
                   event: "example_cta_click",
@@ -123,7 +123,7 @@ export function MadeWithBadge() {
       className="mx-auto mt-10 flex max-w-5xl items-center justify-center px-6"
     >
       <Link
-        href="/#tour"
+        href="/tour"
         onClick={() =>
           track({
             event: "example_cta_click",

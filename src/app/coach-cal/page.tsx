@@ -241,7 +241,7 @@ function Hero({ evalDays }: { evalDays: number }) {
               <ArrowRight className="size-4" />
             </Link>
             <Link
-              href="/#tour"
+              href="/tour"
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-5 py-3 text-base font-semibold text-foreground hover:bg-surface-inset"
             >
               Take the tour
@@ -744,7 +744,7 @@ function FinalCta({ evalDays }: { evalDays: number }) {
             Start free trial <ArrowRight className="size-5" />
           </Link>
           <Link
-            href="/#tour"
+            href="/tour"
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-6 py-3.5 text-base font-semibold text-foreground hover:bg-surface-inset"
           >
             Take the tour
