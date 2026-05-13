@@ -1737,6 +1737,145 @@ const create_playbook: CoachAiTool = {
   },
 };
 
+/**
+ * Flip an advanced-capability toggle on the current playbook. Use this
+ * when a coach asks for a play that requires a capability the playbook
+ * hasn't enabled (e.g. asks for a Flea Flicker in a playbook without
+ * `handoff_chain`). Per AGENTS.md project-safety rules, this is a
+ * coach-confirmed action: Cal asks first ("Want me to enable handoff
+ * chain on this playbook?"), then calls the tool only on a clean yes.
+ *
+ * Why this tool exists: before 2026-05-13, capability gates dead-ended
+ * the conversation — Cal told the coach to dig through Settings to find
+ * a toggle. Coaches in that state were usually one click away from
+ * what they wanted; making it a Cal-tool keeps them in the chat flow.
+ *
+ * Why we don't auto-flip without asking: capabilities encode league
+ * rules. Some 5v5 leagues forbid handoffs entirely; flipping
+ * `handoff_chain` on for that league would let Cal save plays the
+ * coach can't actually call in a game. The confirmation step protects
+ * coaches whose league rules differ from the variant default.
+ */
+const enable_playbook_capability: CoachAiTool = {
+  def: {
+    name: "enable_playbook_capability",
+    description:
+      "Enable an advanced Coach Cal capability on the CURRENT playbook (handoff_chain, designed_qb_run, or rpo_read). " +
+      "Call this ONLY when (a) Cal hit a capability gate while composing a play (e.g. \"Flea Flicker requires handoff_chain\") " +
+      "AND (b) the coach explicitly confirmed they want it enabled (\"yes\", \"turn it on\", \"do it\"). " +
+      "Never call without the explicit yes — these capabilities encode league rules, and flipping one " +
+      "on for a coach whose league forbids it would let them save plays they can't actually call. " +
+      "After enabling, the original blocked operation (compose_play, etc.) needs to be retried — the tool " +
+      "doesn't auto-retry. Mention what's now unlocked when you describe the result to the coach.",
+    input_schema: {
+      type: "object",
+      properties: {
+        capability: {
+          type: "string",
+          enum: ["handoff_chain", "designed_qb_run", "rpo_read"],
+          description:
+            "Which capability to enable. handoff_chain → handoffs, reverses, flea flicker, sweeps, etc. " +
+            "designed_qb_run → QB Draw and similar designed QB carries. rpo_read → RPOs with the QB reading a defender.",
+        },
+      },
+      required: ["capability"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.playbookId) {
+      return {
+        ok: false,
+        error: "No playbook is anchored to this chat — capability toggles live on a specific playbook.",
+      };
+    }
+    if (!ctx.canEditPlaybook) {
+      return {
+        ok: false,
+        error:
+          "You don't have edit access to this playbook, so capability toggles can't be flipped. " +
+          "The playbook owner needs to enable it in Settings → Playbook Rules.",
+      };
+    }
+    const capability = typeof input.capability === "string" ? input.capability : "";
+    const allowed = new Set(["handoff_chain", "designed_qb_run", "rpo_read"]);
+    if (!allowed.has(capability)) {
+      return {
+        ok: false,
+        error: `Unknown capability "${capability}". Must be one of: ${[...allowed].join(", ")}.`,
+      };
+    }
+
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const { normalizePlaybookSettings } = await import("@/domain/playbook/settings");
+      const supabase = await createClient();
+
+      // Load current settings so we keep every other field intact —
+      // we're only flipping ONE capability on, not replacing the
+      // whole settings blob.
+      const { data: row, error: readErr } = await supabase
+        .from("playbooks")
+        .select("settings, sport_variant")
+        .eq("id", ctx.playbookId)
+        .single();
+      if (readErr || !row) {
+        return { ok: false, error: readErr?.message ?? "Playbook not found." };
+      }
+      const variant = (row.sport_variant as import("@/domain/play/types").SportVariant) ?? "flag_7v7";
+      const current = normalizePlaybookSettings(row.settings as unknown, variant);
+      const existing = new Set(current.advancedCapabilities);
+      if (existing.has(capability as never)) {
+        return {
+          ok: true,
+          result: `\`${capability}\` was already enabled on this playbook — nothing to change. Retry the play composition now.`,
+        };
+      }
+      const next = {
+        ...current,
+        advancedCapabilities: [...current.advancedCapabilities, capability as never],
+      };
+      const { error: writeErr } = await supabase
+        .from("playbooks")
+        .update({ settings: next })
+        .eq("id", ctx.playbookId);
+      if (writeErr) return { ok: false, error: writeErr.message };
+
+      // Read-back verification — per memory: don't trust the action's
+      // ok=true alone; confirm the row actually changed.
+      const { data: after, error: verifyErr } = await supabase
+        .from("playbooks")
+        .select("settings")
+        .eq("id", ctx.playbookId)
+        .single();
+      if (verifyErr || !after) {
+        return { ok: false, error: verifyErr?.message ?? "Couldn't verify the update — please re-check Settings." };
+      }
+      const verified = normalizePlaybookSettings(after.settings as unknown, variant);
+      if (!verified.advancedCapabilities.includes(capability as never)) {
+        return {
+          ok: false,
+          error: `The update didn't persist — \`${capability}\` is still off on the playbook. Ask the coach to flip it in Settings → Playbook Rules.`,
+        };
+      }
+
+      const friendlyName =
+        capability === "handoff_chain" ? "Handoff Chain (handoffs, reverses, sweeps, flea flickers)" :
+        capability === "designed_qb_run" ? "Designed QB Run (QB Draw and similar)" :
+        "RPO Read (run-pass options keyed on a conflict defender)";
+      return {
+        ok: true,
+        result:
+          `Enabled \`${capability}\` (${friendlyName}) on this playbook. ` +
+          `Retry the play composition now — the gate that blocked you should pass.`,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "enable_playbook_capability failed";
+      return { ok: false, error: msg };
+    }
+  },
+};
+
 const create_event: CoachAiTool = {
   def: {
     name: "create_event",
@@ -2504,6 +2643,10 @@ export function toolsFor(ctx: ToolContext): CoachAiTool[] {
       tools.push(...writeTools);
       // Scheduling: only available to coaches who can edit the playbook.
       tools.push(create_event, update_event, cancel_event);
+      // Capability toggles: only callable when the coach can edit
+      // the anchored playbook. Cal asks for confirmation first; see
+      // the tool's description for the full contract.
+      tools.push(enable_playbook_capability);
     }
     // RSVP is per-user (the calling coach RSVPs themselves) — available to
     // anyone who can see the playbook, edit permission not required.

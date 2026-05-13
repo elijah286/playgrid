@@ -683,11 +683,16 @@ function resolveDiagramAndSpec(
       const ruleCheck = validatePlaySpecVsRules(spec, options.advancedCapabilities);
       if (!ruleCheck.ok) {
         const lines = ruleCheck.violations.map((v) => `- ${v.message}`).join("\n");
+        const caps = [...new Set(ruleCheck.violations.map((v) => v.capability))];
+        const enableHint =
+          caps.length === 1
+            ? `If the coach's league actually allows this, ASK once ("Want me to enable \`${caps[0]}\` on this playbook?") and call \`enable_playbook_capability({ capability: "${caps[0]}" })\` only after they say yes, then retry. If they say no or it's a hard rule in their league, switch to a play that fits the current capability set.`
+            : `If the coach's league actually allows these, ASK once ("Want me to enable [${caps.map((c) => `\`${c}\``).join(", ")}] on this playbook?") and call \`enable_playbook_capability\` once per capability they confirm, then retry. If they say no or any is a hard rule in their league, switch to a play that fits the current capability set.`;
         return {
           ok: false,
           error:
             `This play uses capabilities the playbook hasn't enabled:\n${lines}\n` +
-            `Enable the missing capabilities in the playbook's rules, or revise the spec to stay within the current rule-set.`,
+            enableHint,
         };
       }
     }

@@ -259,12 +259,24 @@ describe("PlaybookSettings — advancedCapabilities defaults per variant", () =>
     );
   });
 
-  it("flag_5v5 defaults to no advanced capabilities (conservative — most 5v5 leagues require a handoff before any run)", () => {
+  it("flag_5v5 defaults to handoff_chain only (handoffs allowed; designed_qb_run + rpo_read stay opt-in)", () => {
+    // 5v5's base settings already say handoffsAllowed: true, so the
+    // capability that gates ballPath (handoff_chain) is on by default
+    // — coaches expected to be able to call sweeps / flea flickers
+    // without flipping a toggle first. Surfaced 2026-05-13 by a coach
+    // who hit "Flea Flicker requires handoff_chain" in a fresh 5v5
+    // playbook. designed_qb_run and rpo_read remain opt-in because
+    // many 5v5 leagues do forbid QB designed runs and RPOs.
     const s = defaultSettingsForVariant("flag_5v5");
-    expect(s.advancedCapabilities).toEqual([]);
+    expect(s.advancedCapabilities).toEqual(["handoff_chain"]);
   });
 
-  it("flag_7v7 defaults to no advanced capabilities", () => {
+  it("flag_6v6 defaults to handoff_chain only (handoffs allowed; designed_qb_run + rpo_read stay opt-in)", () => {
+    const s = defaultSettingsForVariant("flag_6v6");
+    expect(s.advancedCapabilities).toEqual(["handoff_chain"]);
+  });
+
+  it("flag_7v7 defaults to no advanced capabilities (7v7 base settings disallow handoffs)", () => {
     const s = defaultSettingsForVariant("flag_7v7");
     expect(s.advancedCapabilities).toEqual([]);
   });

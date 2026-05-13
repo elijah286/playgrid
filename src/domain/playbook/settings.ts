@@ -174,15 +174,17 @@ function baseSettingsForVariant(
         centerIsEligible: true,
         maxPlayers: 5,
         maxThrowDepthYds: null,
-        // Conservative 5v5 default — empty advancedCapabilities. Most
-        // 5v5 rule sets require a handoff before any run, so the QB
-        // can't be a designed runner; multi-handoff reverses and RPOs
-        // are likewise uncommon. Coaches whose league DOES allow QB
-        // runs (some recreational variants) opt in via the rules form.
-        // Earlier default of ["designed_qb_run"] was a wrong guess —
-        // surfaced 2026-05-12 by a coach whose 5v5 league disallows
-        // QB runs but Cal happily composed a QB Draw.
-        advancedCapabilities: [],
+        // 5v5 allows handoffs (handoffsAllowed: true), so `handoff_chain`
+        // is on by default — coaches expect to be able to call sweeps,
+        // dives, and basic run plays without flipping a capability
+        // toggle first. designed_qb_run + rpo_read stay opt-in because
+        // most 5v5 rule sets DO disallow designed QB runs and RPOs
+        // (surfaced 2026-05-12 when an earlier ["designed_qb_run"]
+        // default let Cal compose a QB Draw in a league that forbade
+        // it). 2026-05-13: handoff_chain added after a coach in a 5v5
+        // playbook hit "Flea Flicker requires handoff_chain"; the gate
+        // existed but the variant default was over-conservative.
+        advancedCapabilities: ["handoff_chain"],
       };
     case "flag_6v6":
       return {
@@ -193,12 +195,10 @@ function baseSettingsForVariant(
         centerIsEligible: true,
         maxPlayers: 6,
         maxThrowDepthYds: null,
-        // Mirrors 5v5's conservative default — most 6v6 rule sets share
-        // 5v5's "handoff required before any run" convention, so QB
-        // designed runs / multi-handoff reverses / RPOs are opt-in via
-        // the rules form. Coaches whose league allows them can flip
-        // capabilities on without changing variant.
-        advancedCapabilities: [],
+        // Same logic as 5v5 — handoffs are allowed by base settings,
+        // so handoff_chain is on by default. designed_qb_run +
+        // rpo_read stay opt-in for league-specific rules.
+        advancedCapabilities: ["handoff_chain"],
       };
     case "tackle_11":
       return {
