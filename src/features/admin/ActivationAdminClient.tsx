@@ -55,9 +55,12 @@ function SportVariantTrendChart({ trends }: { trends: SportVariantTrend[] }) {
 
   // Colors for variants
   const colors: Record<string, string> = {
+    flag_5v5: "#f59e0b",
+    flag_6v6: "#06b6d4",
     flag_7v7: "#3b82f6",
     flag_11v11: "#8b5cf6",
     tackle: "#ef4444",
+    tackle_11: "#ef4444",
     touch: "#10b981",
   };
 

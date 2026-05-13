@@ -527,6 +527,8 @@ function labelForVariant(v: string): string {
   switch (v) {
     case "flag_7v7":
       return "7v7 flag";
+    case "flag_6v6":
+      return "6v6 flag";
     case "flag_5v5":
       return "5v5 flag";
     case "11_man":

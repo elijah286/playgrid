@@ -45,6 +45,7 @@ const DEFENDER_LABELS = new Set([
 function normalizeVariant(raw: string | undefined): SportVariant {
   const v = (raw ?? "").toLowerCase();
   if (v.includes("5v5") || v.includes("5x5")) return "flag_5v5";
+  if (v.includes("6v6") || v.includes("6x6")) return "flag_6v6";
   if (v.includes("tackle") || v.includes("11")) return "tackle_11";
   if (v.includes("7v7") || v.includes("7x7")) return "flag_7v7";
   return "flag_7v7";

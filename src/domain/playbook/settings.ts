@@ -126,6 +126,7 @@ export type PlaybookSettings = {
 /** Label used in UI + warnings. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
   flag_5v5: "Flag 5v5",
+  flag_6v6: "Flag 6v6",
   flag_7v7: "7v7",
   tackle_11: "Tackle (11v11)",
   other: "Other",
@@ -181,6 +182,22 @@ function baseSettingsForVariant(
         // Earlier default of ["designed_qb_run"] was a wrong guess —
         // surfaced 2026-05-12 by a coach whose 5v5 league disallows
         // QB runs but Cal happily composed a QB Draw.
+        advancedCapabilities: [],
+      };
+    case "flag_6v6":
+      return {
+        rushingAllowed: true,
+        rushingYards: 7,
+        handoffsAllowed: true,
+        blockingAllowed: false,
+        centerIsEligible: true,
+        maxPlayers: 6,
+        maxThrowDepthYds: null,
+        // Mirrors 5v5's conservative default — most 6v6 rule sets share
+        // 5v5's "handoff required before any run" convention, so QB
+        // designed runs / multi-handoff reverses / RPOs are opt-in via
+        // the rules form. Coaches whose league allows them can flip
+        // capabilities on without changing variant.
         advancedCapabilities: [],
       };
     case "tackle_11":

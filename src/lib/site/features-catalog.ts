@@ -55,10 +55,19 @@ export const FEATURES: FeatureEntry[] = [
     id: "playbook-create",
     name: "Custom playbooks",
     description:
-      "Coaches create one or more playbooks per team, tagged by sport variant (flag 5v5/7v7, tackle 11), season, and league.",
+      "Coaches create one or more playbooks per team, tagged by sport variant (flag 5v5/6v6/7v7, tackle 11), season, and league.",
     category: "Playbook",
     status: "ga",
     addedDate: "2025-01-01",
+  },
+  {
+    id: "variant-flag-6v6",
+    name: "Flag 6v6 support",
+    description:
+      "New variant for 6-on-6 flag leagues (common in adult rec and youth leagues that sit between 5v5 and 7v7). Ships with the USFTL 6v6 league preset (60×30 field, midfield 1st-down line), eligible center, 6-defender alignments (Cover 0/1/2/3), and Cal play-generation tuned to the 6v6 roster.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-12",
   },
   {
     id: "playbook-archive",

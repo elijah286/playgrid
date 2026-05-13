@@ -4,6 +4,7 @@ export const PLAY_DOCUMENT_SCHEMA_VERSION = 2 as const;
 
 export type SportVariant =
   | "flag_5v5"
+  | "flag_6v6"
   | "flag_7v7"
   | "tackle_11"
   | "other";

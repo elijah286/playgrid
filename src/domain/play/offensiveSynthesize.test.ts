@@ -23,7 +23,7 @@ import { synthesizeOffense } from "./offensiveSynthesize";
 import { sportProfileForVariant } from "./factory";
 
 const FORMATION_CASES: Array<{
-  variant: "tackle_11" | "flag_7v7" | "flag_5v5";
+  variant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5";
   name: string;
   /** Exact player count expected (or omitted to use the variant's
    *  default offensive count from sportProfileForVariant). */
@@ -45,6 +45,12 @@ const FORMATION_CASES: Array<{
   { variant: "flag_7v7", name: "Pro Set", mustHave: ["X", "Y", "Z"] },
   { variant: "flag_7v7", name: "Spread Doubles" },
   { variant: "flag_7v7", name: "Trips Right" },
+  // flag_6v6 — center + QB + 4 skill. Spread Doubles trims to 1x2 + 1 back
+  // (4 skill), Trips trims to 3x1 - 1 (the fit helper drops the weakside
+  // slot). Required IDs are QB and C plus the two outside WRs (X, Z).
+  { variant: "flag_6v6", name: "Spread Doubles", mustHave: ["QB", "C", "X", "Z"] },
+  { variant: "flag_6v6", name: "Trips Right", mustHave: ["QB", "C", "Z"] },
+  { variant: "flag_6v6", name: "Empty", mustHave: ["QB", "C", "X", "Z"] },
   // flag_5v5 canonical roster: {QB, C, X, Y, Z} — five distinct labels,
   // no tackle/7v7 carryover (B, H, S, F all get remapped to Y). The
   // synthesizer emits "QB" not "Q" for the QB id; the validator

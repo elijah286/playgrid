@@ -32,6 +32,7 @@ export type LeaguePreset =
   | "nfhs_5v5"
   | "nfl_flag_5v5"
   | "nfl_flag_7v7"
+  | "usftl_6v6"
   | "tackle_hs"
   | "tackle_college"
   | "tackle_nfl"
@@ -236,6 +237,30 @@ export const LEAGUE_PRESETS: Record<LeaguePreset, LeaguePresetDefinition> = {
     },
     markingDefaults: { ...FLAG_DEFAULT_MARKINGS, showNoRunZones: false },
   },
+  usftl_6v6: {
+    id: "usftl_6v6",
+    label: "USFTL 6v6",
+    description: "60-yd field, 30-yd wide, midfield 1st-down line",
+    variants: ["flag_6v6"],
+    structure: {
+      // Predominant US adult/rec 6v6 dimensions. The 30-yd width matches
+      // 7v7 (wider than 5v5's 25 because 6v6 spreads three receivers per
+      // side comfortably) and the 60-yd length sits between 5v5's
+      // 50-60 range and tackle's 100.
+      fieldLengthYds: 60,
+      fieldWidthYds: 30,
+      endzoneDepthYds: 10,
+      // 6v6 generally has no pass-only / no-run band — rushing rules are
+      // governed by the rush-line distance, not a fixed yard band. Coaches
+      // in leagues that DO use no-run zones can add them via custom
+      // structure.
+      noRunZoneYds: null,
+      noRunZones: [],
+      // 6v6 rule: cross midfield = automatic 1st down (mirrors 5v5).
+      firstDownLineYds: [30],
+    },
+    markingDefaults: { ...FLAG_DEFAULT_MARKINGS, showNoRunZones: false },
+  },
   tackle_hs: {
     id: "tackle_hs",
     label: "High School Tackle",
@@ -285,7 +310,7 @@ export const LEAGUE_PRESETS: Record<LeaguePreset, LeaguePresetDefinition> = {
     id: "custom",
     label: "Custom",
     description: "Define your own field length and markings",
-    variants: ["flag_5v5", "flag_7v7", "tackle_11", "other"],
+    variants: ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11", "other"],
     structure: {
       fieldLengthYds: 50,
       fieldWidthYds: 25,
@@ -308,6 +333,8 @@ export function defaultLeaguePresetForVariant(variant: SportVariant): LeaguePres
   switch (variant) {
     case "flag_5v5":
       return "nfl_flag_5v5";
+    case "flag_6v6":
+      return "usftl_6v6";
     case "flag_7v7":
       return "ifaf_7v7";
     case "tackle_11":

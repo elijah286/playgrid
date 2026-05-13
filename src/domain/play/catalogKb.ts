@@ -50,7 +50,7 @@ export type CatalogKbChunk = {
   content: string;
   /** Variant filter. null = applies to all variants. Catalog routes
    *  apply universally; defensive alignments are variant-specific. */
-  sportVariant: "tackle_11" | "flag_7v7" | "flag_5v5" | null;
+  sportVariant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5" | null;
   /** Provenance label. Always "catalog" for projector output — the build
    *  script uses this to tell catalog-derived rows apart from
    *  hand-authored ones (so it can re-run without trampling other rows). */

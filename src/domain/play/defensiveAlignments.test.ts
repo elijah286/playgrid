@@ -37,6 +37,7 @@ describe("DEFENSIVE_ALIGNMENTS catalog", () => {
     const variants = new Set(DEFENSIVE_ALIGNMENTS.map((a) => a.variant));
     expect(variants.has("tackle_11")).toBe(true);
     expect(variants.has("flag_7v7")).toBe(true);
+    expect(variants.has("flag_6v6")).toBe(true);
     expect(variants.has("flag_5v5")).toBe(true);
   });
 

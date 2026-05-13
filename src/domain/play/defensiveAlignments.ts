@@ -86,7 +86,7 @@ export type DefensiveAlignment = {
   /** Coverage name as a coach would say it. */
   coverage: string;
   /** Sport variant this alignment is sized for. */
-  variant: "tackle_11" | "flag_7v7" | "flag_5v5";
+  variant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5";
   /** Plain-English summary the AI can echo back to the coach. */
   description: string;
   /** Players in canonical positions, authored for strength="right". */
@@ -466,6 +466,96 @@ const F7_COVER_0: DefensiveAlignment = {
   ],
 };
 
+// ── Flag 6v6 ────────────────────────────────────────────────────────────────
+//
+// 6-on-6 sits between 5v5 and 7v7 — one extra defender vs 5v5 gives a true
+// 3-deep shell or a 2-deep with three underneath. Most adult 6v6 leagues
+// allow a designated rusher off the line, so each alignment includes an
+// edge defender (E) as the optional blitzer.
+
+const F6_COVER_3: DefensiveAlignment = {
+  front: "6v6 Zone",
+  coverage: "Cover 3",
+  variant: "flag_6v6",
+  description:
+    "6v6 zone shell — 3 deep (two corners + free safety), 2 underneath (flat/hook on each side), edge rusher off the line.",
+  players: [
+    { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+    { id: "FL", x: -8,  y: 4,  assignment: { kind: "zone", zoneId: "flat_l" } },
+    { id: "FR", x:  8,  y: 4,  assignment: { kind: "zone", zoneId: "flat_r" } },
+    { id: "CB", x: -11, y: 11, assignment: { kind: "zone", zoneId: "deep_third_l" } },
+    { id: "FS", x:  0,  y: 13, assignment: { kind: "zone", zoneId: "deep_third_m" } },
+    { id: "CB", x: 11,  y: 11, assignment: { kind: "zone", zoneId: "deep_third_r" } },
+  ],
+  zones: [
+    { id: "flat_l", kind: "ellipse", center: [-9, 4], size: [8, 8], label: "Flat L" },
+    { id: "flat_r", kind: "ellipse", center: [ 9, 4], size: [8, 8], label: "Flat R" },
+    { id: "deep_third_l", kind: "ellipse", center: [-10, 17], size: [10, 16], label: "Deep 1/3 L" },
+    { id: "deep_third_m", kind: "ellipse", center: [  0, 17], size: [10, 16], label: "Deep 1/3 M" },
+    { id: "deep_third_r", kind: "ellipse", center: [ 10, 17], size: [10, 16], label: "Deep 1/3 R" },
+  ],
+};
+
+const F6_COVER_2: DefensiveAlignment = {
+  front: "6v6 Zone",
+  coverage: "Cover 2",
+  variant: "flag_6v6",
+  description:
+    "6v6 Cover 2 — two safeties split the deep halves, three underneath in zones (two flats + a middle hook), edge rusher off the line.",
+  players: [
+    { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+    { id: "CB", x: -10, y: 5,  assignment: { kind: "zone", zoneId: "flat_l" } },
+    { id: "HM", x:  0,  y: 5,  assignment: { kind: "zone", zoneId: "hook_m" } },
+    { id: "CB", x: 10,  y: 5,  assignment: { kind: "zone", zoneId: "flat_r" } },
+    { id: "FS", x: -6,  y: 12, assignment: { kind: "zone", zoneId: "deep_half_l" } },
+    { id: "SS", x:  6,  y: 12, assignment: { kind: "zone", zoneId: "deep_half_r" } },
+  ],
+  zones: [
+    { id: "flat_l", kind: "ellipse", center: [-10, 5], size: [8, 8], label: "Flat L" },
+    { id: "hook_m", kind: "ellipse", center: [  0, 5], size: [8, 8], label: "Hook M" },
+    { id: "flat_r", kind: "ellipse", center: [ 10, 5], size: [8, 8], label: "Flat R" },
+    { id: "deep_half_l", kind: "ellipse", center: [-7, 17], size: [14, 16], label: "Deep 1/2 L" },
+    { id: "deep_half_r", kind: "ellipse", center: [ 7, 17], size: [14, 16], label: "Deep 1/2 R" },
+  ],
+};
+
+const F6_COVER_1: DefensiveAlignment = {
+  front: "6v6 Man",
+  coverage: "Cover 1",
+  variant: "flag_6v6",
+  description:
+    "6v6 man-free — four defenders in man on the four skill receivers, one free safety deep, edge rusher off the line.",
+  manCoverage: true,
+  players: [
+    { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+    { id: "CB", x: -10, y: 5,  assignment: { kind: "man", target: "X" } },
+    { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "Y" } },
+    { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "S" } },
+    { id: "CB", x:  10, y: 5,  assignment: { kind: "man", target: "Z" } },
+    { id: "FS", x:  0,  y: 12, assignment: { kind: "zone", zoneId: "deep_middle" } },
+  ],
+  zones: [
+    { id: "deep_middle", kind: "ellipse", center: [0, 17], size: [20, 16], label: "Deep middle (FS)" },
+  ],
+};
+
+const F6_COVER_0: DefensiveAlignment = {
+  front: "6v6 Man",
+  coverage: "Cover 0",
+  variant: "flag_6v6",
+  description:
+    "6v6 Cover 0 — every defender in pure man, no deep help. Edge rusher disrupts the QB; used to bait an aggressive throw or on critical down/distance.",
+  manCoverage: true,
+  players: [
+    { id: "E",  x:  4,  y: 2,  assignment: { kind: "blitz", gap: "edge" } },
+    { id: "CB", x: -10, y: 5,  assignment: { kind: "man", target: "X" } },
+    { id: "NB", x: -4,  y: 5,  assignment: { kind: "man", target: "Y" } },
+    { id: "NB", x:  4,  y: 5,  assignment: { kind: "man", target: "S" } },
+    { id: "CB", x:  10, y: 5,  assignment: { kind: "man", target: "Z" } },
+    { id: "SS", x:  0,  y: 6,  assignment: { kind: "man", target: "B" } },
+  ],
+};
+
 // ── Flag 5v5 ────────────────────────────────────────────────────────────────
 
 const F5_COVER_3: DefensiveAlignment = {
@@ -523,6 +613,10 @@ export const DEFENSIVE_ALIGNMENTS: DefensiveAlignment[] = [
   F7_COVER_4,
   F7_COVER_1,
   F7_COVER_0,
+  F6_COVER_3,
+  F6_COVER_2,
+  F6_COVER_1,
+  F6_COVER_0,
   F5_COVER_3,
   F5_COVER_1,
 ];

@@ -207,6 +207,8 @@ export function sportProfileForVariant(variant: SportVariant): SportProfile {
   switch (variant) {
     case "flag_5v5":
       return { variant, offensePlayerCount: 5,  defensePlayerCount: 5,  fieldWidthYds: 25, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
+    case "flag_6v6":
+      return { variant, offensePlayerCount: 6,  defensePlayerCount: 6,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "flag_7v7":
       return { variant, offensePlayerCount: 7,  defensePlayerCount: 7,  fieldWidthYds: 30, fieldLengthYds: 25, motionMustNotAdvanceTowardGoal: true };
     case "other":
@@ -228,6 +230,7 @@ export function defensePlayerCountForVariant(
 /** Human-readable label for each sport variant, for use in UI. */
 export const SPORT_VARIANT_LABELS: Record<SportVariant, string> = {
   flag_5v5: "Flag",
+  flag_6v6: "Flag 6v6",
   flag_7v7: "7v7",
   other: "Other",
   tackle_11: "Tackle",
@@ -350,6 +353,19 @@ export function defaultPlayersForVariant(variant: SportVariant, playerCount?: nu
         mkPlayer("p_x",  "WR",  "X", 0.12, 0.38),        // wide left, on line
         mkPlayer("p_y",  "WR",  "Y", 0.32, 0.38),        // inside left, on line
         mkPlayer("p_z",  "WR",  "Z", 0.88, 0.38),        // wide right, on line
+      ];
+    case "flag_6v6":
+      // Flag 6v6: center is eligible (mirrors 5v5). Default 2x2 with a
+      // single back behind the QB — gives Cal a balanced spread to author
+      // most concepts. Coaches who run no-back / 4-wide can swap the back
+      // out in the editor.
+      return [
+        mkPlayer("p_qb", "QB", "Q", 0.50, 0.20), // shotgun QB, 5 yds back
+        mkPlayer("p_c",  "C",  "C", 0.50, 0.38), // center, eligible
+        mkPlayer("p_x",  "WR", "X", 0.10, 0.38), // wide left, on line
+        mkPlayer("p_y",  "WR", "Y", 0.32, 0.34), // slot left, 1.5 yds back
+        mkPlayer("p_z",  "WR", "Z", 0.90, 0.38), // wide right, on line
+        mkPlayer("p_b",  "RB", "B", 0.60, 0.22), // RB beside QB on strong side
       ];
     case "flag_7v7":
       return defaultFlagSevenPlayers();
@@ -666,6 +682,53 @@ export function defenseTemplatesForVariant(variant: SportVariant): DefenseTempla
             mkDefender("d_cb2", "CB", "C", 0.85, 0.44),
             mkDefender("d_fs",  "S",  "F", 0.30, 0.68),
             mkDefender("d_ss",  "S",  "S", 0.70, 0.68),
+          ],
+        },
+      ];
+    case "flag_6v6":
+      // 6v6 base structure: 4 underneath + 2 deep. Common variations
+      // mirror 5v5's three-template shelf (Base / Cover 2 / Press).
+      return [
+        {
+          key: "flag6_base",
+          displayName: "Base",
+          description: "Four defenders 4 yards off the ball, two safeties 7 yards deep",
+          variant,
+          players: [
+            mkDefender("d_cb1", "CB", "C", 0.10, 0.56),
+            mkDefender("d_nb1", "S",  "N", 0.32, 0.56),
+            mkDefender("d_nb2", "S",  "N", 0.68, 0.56),
+            mkDefender("d_cb2", "CB", "C", 0.90, 0.56),
+            mkDefender("d_fs",  "S",  "F", 0.35, 0.68),
+            mkDefender("d_ss",  "S",  "S", 0.65, 0.68),
+          ],
+        },
+        {
+          key: "flag6_cover3",
+          displayName: "Cover 3",
+          description: "Three underneath, three deep — common zone shell for 6v6",
+          variant,
+          players: [
+            mkDefender("d_nb1", "S",  "N", 0.25, 0.56),
+            mkDefender("d_lb",  "LB", "M", 0.50, 0.56),
+            mkDefender("d_nb2", "S",  "N", 0.75, 0.56),
+            mkDefender("d_cb1", "CB", "C", 0.15, 0.72),
+            mkDefender("d_fs",  "S",  "F", 0.50, 0.76),
+            mkDefender("d_cb2", "CB", "C", 0.85, 0.72),
+          ],
+        },
+        {
+          key: "flag6_press",
+          displayName: "Press",
+          description: "Four defenders pressing 1 yard off, two safeties 7 yards deep",
+          variant,
+          players: [
+            mkDefender("d_cb1", "CB", "C", 0.10, 0.44),
+            mkDefender("d_nb1", "S",  "N", 0.32, 0.44),
+            mkDefender("d_nb2", "S",  "N", 0.68, 0.44),
+            mkDefender("d_cb2", "CB", "C", 0.90, 0.44),
+            mkDefender("d_fs",  "S",  "F", 0.35, 0.68),
+            mkDefender("d_ss",  "S",  "S", 0.65, 0.68),
           ],
         },
       ];

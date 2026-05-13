@@ -82,7 +82,7 @@ function buildSections(
       faqs: [
         {
           q: "What formations and play types does it support?",
-          a: "Both offense and defense, across 5v5 flag, 7v7, and 11-man formations. You can draw routes, blocks, motions, and zones. Formations and route semantics are preserved as structured data, not just lines on a canvas.",
+          a: "Both offense and defense, across 5v5 flag, 6v6 flag, 7v7, and 11-man formations. You can draw routes, blocks, motions, and zones. Formations and route semantics are preserved as structured data, not just lines on a canvas.",
         },
         {
           q: "Can I print wristband-sized play cards?",
@@ -128,7 +128,7 @@ function buildSections(
         },
         {
           q: "What can Coach Cal actually do?",
-          a: "Coach Cal can: generate full plays from a description, draft a whole starter playbook for a variant (5v5 flag, 7v7, etc.), review your existing playbook and call out gaps or weaknesses, suggest counters to a specific defense, propose practice plans built around the plays you already have, adjust your playbook to your team's skill level, and answer coaching questions grounded in age-appropriate fundamentals.",
+          a: "Coach Cal can: generate full plays from a description, draft a whole starter playbook for a variant (5v5 flag, 6v6 flag, 7v7, etc.), review your existing playbook and call out gaps or weaknesses, suggest counters to a specific defense, propose practice plans built around the plays you already have, adjust your playbook to your team's skill level, and answer coaching questions grounded in age-appropriate fundamentals.",
         },
         {
           q: "Can Coach Cal really create plays for me, or just give advice?",
@@ -140,7 +140,7 @@ function buildSections(
         },
         {
           q: "Does Coach Cal work for my age level and football variant?",
-          a: "Yes. The knowledge base has age-tier-aware content (8u flag through middle school and high school) and is segmented by variant (5v5 flag, 7v7, 11-man tackle). When Coach Cal answers, it weights advice toward what's appropriate for your level — practice templates, drill suggestions, and play complexity all adjust.",
+          a: "Yes. The knowledge base has age-tier-aware content (8u flag through middle school and high school) and is segmented by variant (5v5 flag, 6v6 flag, 7v7, 11-man tackle). When Coach Cal answers, it weights advice toward what's appropriate for your level — practice templates, drill suggestions, and play complexity all adjust.",
         },
         {
           q: "How much does Coach Cal cost?",

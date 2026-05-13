@@ -33,7 +33,7 @@ export type SynthAlignmentZone = {
 export type SynthAlignment = {
   front: string;
   coverage: string;
-  variant: "tackle_11" | "flag_7v7" | "flag_5v5";
+  variant: "tackle_11" | "flag_7v7" | "flag_6v6" | "flag_5v5";
   description: string;
   players: SynthAlignmentPlayer[];
   zones: SynthAlignmentZone[];
@@ -108,6 +108,7 @@ function totalDefenders(variant: SynthAlignment["variant"]): number {
   switch (variant) {
     case "tackle_11": return 11;
     case "flag_7v7":  return 7;
+    case "flag_6v6":  return 6;
     case "flag_5v5":  return 5;
   }
 }

@@ -149,6 +149,39 @@ describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
   });
 });
 
+describe("generateConceptSkeleton — flag_6v6 end-to-end", () => {
+  // Smoke test that the new flag_6v6 variant composes legal plays for the
+  // pass-concept skeletons (the ones a 6v6 coach would actually call). The
+  // capability-gated concepts (QB Draw, Bubble RPO, Jet Reverse) live under
+  // the advancedCapabilities opt-in and are excluded — 6v6 ships with empty
+  // capabilities by default, same as 5v5.
+  const PASS_CONCEPTS = CONCEPT_CATALOG.filter(
+    (c) => !["QB Draw", "Bubble RPO", "Jet Reverse"].includes(c.name),
+  );
+  for (const concept of PASS_CONCEPTS) {
+    it(`${concept.name} in flag_6v6 renders without overlap or formation_fallback`, () => {
+      const result = generateConceptSkeleton(concept.name, { variant: "flag_6v6" });
+      expect(result.ok, result.ok ? undefined : result.error).toBe(true);
+      if (!result.ok) return;
+      const { diagram, warnings } = playSpecToCoachDiagram(result.spec);
+      expect(
+        warnings.find((w) => w.code === "formation_fallback"),
+        `${concept.name}/flag_6v6: synth didn't recognize "${result.spec.formation.name}"`,
+      ).toBeUndefined();
+      const fenceShape = {
+        title: result.spec.title ?? result.concept,
+        variant: "flag_6v6" as const,
+        focus: "O" as const,
+        ...diagram,
+      };
+      expect(
+        () => coachDiagramToPlayDocument(fenceShape),
+        `${concept.name}/flag_6v6: overlap resolver threw — geometry isn't safe`,
+      ).not.toThrow();
+    });
+  }
+});
+
 describe("generateConceptSkeleton — every skeleton survives the overlap resolver (real end-to-end check)", () => {
   // The unit-level "no overlapping (x, y)" check in the next describe
   // block isn't sufficient — the production overlap resolver uses a

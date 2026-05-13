@@ -1722,6 +1722,7 @@ export function DashboardClient({
 
 const SPORT_OPTIONS: { value: SportVariant; label: string }[] = [
   { value: "flag_5v5", label: SPORT_VARIANT_LABELS.flag_5v5 },
+  { value: "flag_6v6", label: SPORT_VARIANT_LABELS.flag_6v6 },
   { value: "flag_7v7", label: SPORT_VARIANT_LABELS.flag_7v7 },
   { value: "tackle_11", label: SPORT_VARIANT_LABELS.tackle_11 },
   { value: "other", label: SPORT_VARIANT_LABELS.other },
