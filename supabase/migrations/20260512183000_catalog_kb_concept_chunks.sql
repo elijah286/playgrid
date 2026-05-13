@@ -1,29 +1,36 @@
 -- Catalog-derived KB seed — re-apply with concept chunks (2026-05-12).
 --
--- This is a TIMESTAMPED RE-APPLY of `0200_catalog_kb_seed.sql`.
--- Supabase tracks migrations by filename: 0200 was already applied to
--- remote, so re-running `db push` against the regenerated 0200 file is
--- a silent no-op. This timestamped copy has a fresh version so the
--- DELETE + INSERT body runs once more — picking up the new concept
--- chunks (QB Draw, Bubble RPO, Jet Reverse) that landed in the 2026-
--- 05-12 catalog extension.
+-- This is a TIMESTAMPED RE-APPLY of `0200_catalog_kb_seed.sql` plus
+-- the CHECK constraint widening that 0200 expected but apparently
+-- never landed on remote. Supabase tracks migrations by filename:
+-- 0200 was already applied to remote, so re-running `db push`
+-- against the regenerated 0200 file is a silent no-op. This
+-- timestamped copy has a fresh version so the DELETE + INSERT body
+-- runs once more — picking up the new concept chunks (QB Draw,
+-- Bubble RPO, Jet Reverse) that landed in the 2026-05-12 catalog
+-- extension.
 --
--- After this migration applies, future catalog edits should
--- re-regenerate `0200_catalog_kb_seed.sql` via
--- `npx tsx scripts/build-catalog-kb.ts` for local dev, AND add a fresh
--- timestamped copy alongside it so remote re-applies.
---
--- (Long-term: the build script could be taught to emit a new
--- timestamped file on every run instead of overwriting 0200, but that
--- needs a clean-up policy for the older copies. Doing it manually for
--- now.)
+-- Constraint widening: production's
+-- `rag_documents_source_check` currently allows only ('seed',
+-- 'admin_chat', 'coach_chat', 'official_pdf'). The catalog projector
+-- writes source='catalog'; the constraint must accept it before any
+-- INSERT can succeed. We drop and re-add the constraint with the
+-- expanded enum.
 --
 -- Strategy (AGENTS.md Rule 6 — KB direction of truth):
 --   Catalogs are the single source of truth for catalog-derived
 --   topics (route_*, defense_*, concept_*). This migration is
---   idempotent: it DELETEs every row with source='catalog' and re-
---   inserts the fresh set. Hand-authored KB content (source='seed',
---   'admin', etc.) is unaffected.
+--   idempotent: it widens the constraint to permit source='catalog',
+--   DELETEs every row with source='catalog', and re-inserts the
+--   fresh set. Hand-authored KB content (source='seed', 'admin_chat',
+--   'coach_chat', 'official_pdf') is unaffected.
+
+-- Widen the source CHECK constraint to allow 'catalog'.
+alter table public.rag_documents
+  drop constraint if exists rag_documents_source_check;
+alter table public.rag_documents
+  add constraint rag_documents_source_check
+  check (source = any (array['seed', 'admin_chat', 'coach_chat', 'official_pdf', 'catalog']));
 
 delete from public.rag_documents where source = 'catalog';
 
