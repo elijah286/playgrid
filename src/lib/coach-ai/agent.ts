@@ -9,7 +9,16 @@ import { validateDiagrams } from "./diagram-validate";
 // hitting the cap mid-stream truncates the visible reply ("died without
 // doing anything"). 8 leaves headroom for one validator critique-and-retry
 // after the tool calls finish without exceeding the previous floor.
-const MAX_TOOL_TURNS = 8;
+// Raised 2026-05-13 from 8 → 16. A bulk-save request ("add these 6 plays")
+// needs ~2 tool calls per play (compose_play → create_play) when Cal can't
+// piggy-back on a prior multi-fence turn. With the previous cap of 8, the
+// loop ran out mid-batch and the static "I lost the thread" fallback
+// shipped. 16 covers a 6-play bulk save with serial-style tool use and
+// still has headroom for a single final-text turn. The synthesis backstop
+// below (replacing the static fallback) catches anything that still
+// overflows. Costs scale linearly with N tools called; this isn't a budget
+// ceiling, just a runaway-loop guard.
+const MAX_TOOL_TURNS = 16;
 
 const NORMAL_PROMPT = `You are Coach Cal, an AI coaching partner for football coaches using the Playgrid playbook tool.
 
@@ -79,6 +88,13 @@ Behavior rules — follow these strictly:
     - **Global-thread save flow** — when the coach generated plays in chat with no anchored playbook and asks "save them" / "save all to my playbook":
       1. If the coach has named a team in this conversation that matches a single playbook, you can call \`create_play\` directly with that \`playbook_id\` (call \`list_my_playbooks\` once if you don't already have the id).
       2. If multiple playbooks could match, or none was named, call \`list_my_playbooks\` and ask "Which team should I save these to?" — the chips render automatically. After the coach picks a name in their reply, call \`create_play\` with that \`playbook_id\` for each play. **Do NOT make the coach navigate to the playbook first** — \`playbook_id\` exists so you can save without anchoring.
+    - **MULTI-PLAY PACKAGES — emit fences alongside prose, AND chunk at 4 per turn.** When a coach asks for "a package of plays", "5 plays for my install", "a few base concepts", "a 3rd-down package", or any multi-play request, your proposal turn MUST emit an ACTUAL \`\`\`play fence for EACH play (not just a prose list of names like "1. Mesh, 2. Smash, 3. Curl-Flat"). Reasons:
+      1. Coaches don't trust play names they can't see — a "Mesh" promise without a picture isn't a play.
+      2. The harness has a batch auto-commit: when the coach replies "yes save them" / "add these" / "go ahead", every fence in your prior turn is created in one shot WITHOUT you needing to call \`create_play\` again. Six prose names = six fresh tool calls when they say save; six emitted fences = zero tool calls when they say save. The first path runs out of tool budget mid-batch; the second always completes.
+      3. **Chunk size: max 4 plays per proposal turn.** If the coach asked for more (e.g. "give me 8 plays"), emit the first 4 fences this turn, close with "That's the first 4 — say 'next' and I'll send the next 4." Don't try to compose 8 in one turn (tool-budget overflow) and don't try to compose 8 in prose-only form (no auto-commit path). 4-per-chunk is the sweet spot for both.
+      4. **Composition pattern**: when you have N concepts to propose in one turn (N ≤ 4), call \`compose_play\` for EACH concept IN PARALLEL (multiple \`tool_use\` blocks in the SAME assistant message — Anthropic supports this; you don't need to wait for each result before requesting the next). After the tool results return, drop each tool's fence verbatim into your reply, one fence per play, with a 1-line coaching note above each. This costs N tool calls in ONE turn, not N turns of one call each.
+      5. **DO NOT call \`create_play\` proactively for a multi-play proposal.** The save happens later via auto-commit. Calling \`create_play\` for each play here doubles the tool budget for nothing AND saves plays the coach hasn't confirmed they want.
+      Wrong pattern (what produced the "I lost the thread" bug): "Here's a 6-play package: **1. Mesh** — 4 Levels combo... **2. Smash** — corner-flat..." with no fences. Coach says "add these" — Cal has to compose AND create each, burns the turn budget, ships empty. Right pattern: 4 fences this turn, "say next for the rest." Coach says "yes save these" — auto-commit handles all 4 in one shot.
 
 7d. **You CAN save practice plans into the anchored playbook — use \`create_practice_plan\`.** Practice plans are real first-class documents that live in the playbook's "Practice Plans" tab — NOT just chat output. When the coach asks you to "build me a practice plan", "make a Tuesday practice", "save this practice plan", or you've just laid out a practice schedule and they want to keep it, call \`create_practice_plan\`. **NEVER say "I don't have a tool to save practice plans yet" or "the feature isn't built out" or "copy/paste this into a Google Doc" — you can save it directly.** Workflow:
     - Lay out the proposed timeline in plain English first: title, age tier, and a block-by-block list with durations (e.g. "Tuesday — Install + Special Teams: 15 min warm-up → 20 min individual → 25 min team install → 10 min conditioning, 70 min total. Sound right?"). Wait for an explicit yes.
@@ -1331,15 +1347,37 @@ export async function runAgent(
 
   // Fallback: if the loop exhausted without producing any user-visible
   // text (e.g. tool-call cap hit mid-stream, or every retry was rejected
-  // by the validator), make sure the coach sees SOMETHING explaining the
-  // gap rather than a half-finished intro that "died". The streaming UI
-  // appends to whatever text it has buffered, so we just emit a tail.
+  // by the validator), force one more text-only chat() call so Cal can
+  // honestly recap WHAT LANDED and WHAT'S PENDING. Without this the coach
+  // saw a static "I lost the thread" surrender even when most of the work
+  // had succeeded (e.g. 4 of 6 plays saved in a bulk-add). Surfaced
+  // 2026-05-13. The synthesis pass has tools disabled by construction
+  // (`synthesizeBudgetExceededReply` omits the `tools` arg), so it cannot
+  // recurse into the same overflow.
   if (!finalText.trim()) {
+    const synth = await synthesizeBudgetExceededReply(chat, system, messages);
+    if (synth) {
+      onEvent?.({ type: "text_delta", text: synth });
+      finalText = synth;
+      // Persist the synthesis turn in history so the next turn's recap +
+      // auto-commit logic (below) sees it as the most-recent assistant
+      // message. Without this the auto-commit's prior-fence scan would
+      // miss any fence the synth re-emitted.
+      const synthMsg: ChatMessage = {
+        role: "assistant",
+        content: [{ type: "text", text: synth }],
+      };
+      newMessages.push(synthMsg);
+    }
+  }
+  if (!finalText.trim()) {
+    // Synthesis itself failed (network, empty response). Last-resort
+    // static message — still better than total silence, but the path
+    // should be rare now that the synth backstop is in place.
     const fallback =
-      "I lost the thread mid-answer there — could you try once more? " +
-      "If it keeps happening on the same request, the simplest workaround " +
-      "is to ask in two passes (e.g., \"draw the formation\" first, then " +
-      "\"now show the play vs <defense>\").";
+      "Something stalled mid-answer — could you try once more? " +
+      "If it keeps happening, ask in smaller chunks (e.g. \"add the first three plays\", " +
+      "then \"add the rest\") so each turn finishes cleanly.";
     onEvent?.({ type: "text_delta", text: fallback });
     finalText = fallback;
   }
@@ -1534,6 +1572,59 @@ function extractAssistantText(msg: ChatMessage): string {
     .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
     .map((b) => b.text)
     .join("\n\n");
+}
+
+/** Suffix appended to the base system prompt for the budget-exceeded
+ *  synthesis pass. Tells Cal to recap what's done + what's pending in
+ *  plain text — no more tool calls, no mention of internal mechanism. */
+export const BUDGET_SYNTHESIS_SUFFIX =
+  "\n\n---\nIMPORTANT — internal note, do not mention to the coach: this " +
+  "turn has reached its tool-call budget. You CANNOT call any more tools. " +
+  "Produce ONLY a short plain-text reply (2-5 sentences) that:\n" +
+  "(a) Names the specific items you successfully saved this turn (link by name if you have them).\n" +
+  "(b) Names what's still pending — the work the coach asked for that you didn't get to.\n" +
+  "(c) Offers a concrete next step (e.g. \"Say 'continue' and I'll add the rest\").\n" +
+  "Do NOT apologize, do NOT say \"I lost the thread\", do NOT mention budgets / tool limits / " +
+  "internal mechanisms. Speak normally — the coach should feel like you're checkpointing the work, " +
+  "not surrendering. If literally nothing succeeded, say so honestly and ask the coach to retry.";
+
+/**
+ * Forced text-only `chat()` call. When the agent loop exhausts its tool
+ * budget without producing a final-text turn, the last message in history
+ * is a `tool_result` user message and `finalText` is empty — without this
+ * the static "I lost the thread" fallback ships, which reads to the coach
+ * as a silent failure ("did anything save? did Cal break?").
+ *
+ * Re-runs the model with `tools: undefined` so it MUST produce text. Cal
+ * sees the full tool-result history and can honestly recap "saved 4 of 6,
+ * say continue for the rest." Surfaced 2026-05-13: a coach asked Cal to
+ * add a 6-play package; Cal serialized compose_play + create_play across
+ * 12 tool calls, hit the old cap of 8, and shipped the static surrender.
+ *
+ * Returns `null` when the synthesis itself fails (network error, model
+ * refuses, returns empty text) — caller falls back to the static message
+ * as a last resort.
+ *
+ * Exported for unit testing — chat is injected so the test can mock it
+ * without spinning up the LLM client.
+ */
+export async function synthesizeBudgetExceededReply(
+  chatFn: typeof chat,
+  baseSystem: string,
+  messages: ChatMessage[],
+): Promise<string | null> {
+  try {
+    const result = await chatFn({
+      system: baseSystem + BUDGET_SYNTHESIS_SUFFIX,
+      messages,
+      // tools deliberately omitted — forces a pure text response.
+      maxTokens: 600,
+    });
+    const text = extractAssistantText(result.message).trim();
+    return text || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Tool names that accept a prior play fence as a string input. Their
