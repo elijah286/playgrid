@@ -22,6 +22,7 @@ import { describe, expect, it } from "vitest";
 import { buildCatalogKbChunks } from "./catalogKb";
 import { ROUTE_TEMPLATES } from "./routeTemplates";
 import { DEFENSIVE_ALIGNMENTS } from "./defensiveAlignments";
+import { CONCEPT_CATALOG } from "./conceptCatalog";
 
 describe("buildCatalogKbChunks — completeness", () => {
   it("emits exactly one chunk per UNIQUE route kbSubtopic (templates sharing a subtopic dedupe)", () => {
@@ -39,6 +40,54 @@ describe("buildCatalogKbChunks — completeness", () => {
     const chunks = buildCatalogKbChunks();
     const defenseChunks = chunks.filter((c) => c.topic === "scheme_defense");
     expect(defenseChunks).toHaveLength(DEFENSIVE_ALIGNMENTS.length);
+  });
+
+  it("emits exactly one chunk per concept catalog entry", () => {
+    const chunks = buildCatalogKbChunks();
+    const conceptChunks = chunks.filter((c) => c.topic === "scheme_offense");
+    expect(conceptChunks).toHaveLength(CONCEPT_CATALOG.length);
+  });
+
+  it("every concept name appears in the projected chunks", () => {
+    const chunks = buildCatalogKbChunks();
+    const conceptChunks = chunks.filter((c) => c.topic === "scheme_offense");
+    for (const c of CONCEPT_CATALOG) {
+      const chunk = conceptChunks.find((k) => k.title === `Concept: ${c.name}`);
+      expect(chunk, `concept "${c.name}" missing from projected chunks`).toBeDefined();
+    }
+  });
+
+  it("concept chunk content includes the description AND complexity tag", () => {
+    const chunks = buildCatalogKbChunks();
+    const conceptChunks = chunks.filter((c) => c.topic === "scheme_offense");
+    for (const c of CONCEPT_CATALOG) {
+      const chunk = conceptChunks.find((k) => k.title === `Concept: ${c.name}`);
+      if (!chunk) continue;
+      // Description present.
+      expect(chunk.content).toContain(c.description.slice(0, 40));
+      // Complexity tag surfaced when set (every catalog entry has one
+      // after step 3).
+      if (c.complexity) {
+        expect(chunk.content).toContain(`Complexity: ${c.complexity}`);
+      }
+    }
+  });
+
+  it("the three new capability-gated concepts each have their own chunk with a structural-requirement line", () => {
+    const chunks = buildCatalogKbChunks();
+    const conceptChunks = chunks.filter((c) => c.topic === "scheme_offense");
+
+    const qbDraw = conceptChunks.find((c) => c.subtopic === "concept_qb_draw");
+    expect(qbDraw, "QB Draw chunk missing").toBeDefined();
+    expect(qbDraw!.content.toLowerCase()).toContain("the qb carrying");
+
+    const bubbleRpo = conceptChunks.find((c) => c.subtopic === "concept_bubble_rpo");
+    expect(bubbleRpo, "Bubble RPO chunk missing").toBeDefined();
+    expect(bubbleRpo!.content.toLowerCase()).toContain("read a key defender");
+
+    const jetReverse = conceptChunks.find((c) => c.subtopic === "concept_jet_reverse");
+    expect(jetReverse, "Jet Reverse chunk missing").toBeDefined();
+    expect(jetReverse!.content.toLowerCase()).toContain("ball-handling exchange");
   });
 
   it("every route template's kbSubtopic appears in the projected chunks", () => {

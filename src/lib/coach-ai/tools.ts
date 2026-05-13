@@ -21,6 +21,8 @@ import { applyRouteMods, type RouteMod } from "./play-mutations";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
+import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
+import { loadPlaybookSettings } from "./play-tools";
 
 export type CoachAiMode = "normal" | "admin_training";
 
@@ -599,6 +601,25 @@ const get_concept_skeleton: CoachAiTool = {
       };
     }
 
+    // Capability gate (2026-05-12) — same rationale as compose_play
+    // above. Refuse to return a skeleton for a concept the anchored
+    // playbook hasn't enabled the capability for. Surfaces the issue
+    // before Cal puts a play fence into chat.
+    if (ctx.playbookId) {
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, variant);
+      const ruleCheck = validatePlaySpecVsRules(result.spec, playbookSettings.advancedCapabilities);
+      if (!ruleCheck.ok) {
+        const lines = ruleCheck.violations.map((v) => `  • ${v.message}`).join("\n");
+        return {
+          ok: false,
+          error:
+            `"${result.concept}" needs capabilities this playbook hasn't enabled:\n${lines}\n\n` +
+            `Tell the coach to flip the missing toggle in **Playbook Rules → Advanced Coach Cal concepts** ` +
+            `(or pick a different concept their rule-set already supports).`,
+        };
+      }
+    }
+
     // Render the spec into a fully-positioned CoachDiagram so Cal can
     // drop it into a `play` fence VERBATIM — no hand-authoring of
     // positions. Surfaced 2026-05-02: even after the skeleton tool
@@ -958,6 +979,31 @@ const compose_play: CoachAiTool = {
           `${result.error}\n\nAvailable concepts: ${result.availableConcepts.join(", ")}.\n` +
           `If the coach didn't name a catalog concept, this tool can't help — they want something off-catalog and you'll need to author the play another way.`,
       };
+    }
+
+    // Capability gate (2026-05-12): refuse to compose a play that uses
+    // a capability the anchored playbook hasn't enabled. Without this,
+    // Cal would draw a "QB Draw" in a 5v5 playbook whose league doesn't
+    // allow QB runs — the coach would see the diagram, confirm "save
+    // it", and only THEN see the resolver-level capability error. Much
+    // better to surface the issue before the compose result lands in
+    // chat. Only fires when the chat is anchored to a playbook
+    // (ctx.playbookId set); unanchored chats hit the save-time gate
+    // when the coach picks a target playbook.
+    if (ctx.playbookId) {
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, variant);
+      const ruleCheck = validatePlaySpecVsRules(result.spec, playbookSettings.advancedCapabilities);
+      if (!ruleCheck.ok) {
+        const lines = ruleCheck.violations.map((v) => `  • ${v.message}`).join("\n");
+        return {
+          ok: false,
+          error:
+            `"${result.concept}" needs capabilities this playbook hasn't enabled:\n${lines}\n\n` +
+            `Tell the coach to flip the missing toggle in **Playbook Rules → Advanced Coach Cal concepts** ` +
+            `(or pick a different concept their rule-set already supports). Do NOT retry compose_play with the ` +
+            `same concept — the gate will fire again until the coach updates their rules.`,
+        };
+      }
     }
 
     const renderResult = playSpecToCoachDiagram(result.spec);

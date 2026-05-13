@@ -261,3 +261,174 @@ describe("generateConceptSkeleton — concept catalog smoke (every concept's ske
     });
   }
 });
+
+// Concept-specific pins for the designed-QB-run / RPO / reverse build.
+// These are the litmus tests Cal must satisfy: build a QB run, build
+// a multi-handoff reverse, build an RPO with read info. Each test
+// validates the exact spec shape that downstream tooling (resolver,
+// notes projector, renderer) expects.
+describe("generateConceptSkeleton — QB Draw (designed QB run)", () => {
+  it("emits a carry on the QB with runType 'draw'", () => {
+    const result = generateConceptSkeleton("QB Draw", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const qbAssignment = result.spec.assignments.find((a) => a.player === "QB");
+    expect(qbAssignment, "QB Draw must assign the QB the ballcarrier role").toBeDefined();
+    expect(qbAssignment!.action.kind).toBe("carry");
+    if (qbAssignment!.action.kind !== "carry") return;
+    expect(qbAssignment!.action.runType).toBe("draw");
+  });
+
+  it("does NOT include a separate dropback assignment for the QB (they're the runner)", () => {
+    const result = generateConceptSkeleton("QB Draw", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const qbAssignments = result.spec.assignments.filter((a) => a.player === "QB");
+    expect(qbAssignments, "QB should have exactly one assignment").toHaveLength(1);
+  });
+
+  it("resolves the 'Quarterback Draw' alias to the same skeleton", () => {
+    const r1 = generateConceptSkeleton("QB Draw", { variant: "tackle_11" });
+    const r2 = generateConceptSkeleton("Quarterback Draw", { variant: "tackle_11" });
+    expect(r1.ok && r2.ok).toBe(true);
+    if (!r1.ok || !r2.ok) return;
+    expect(r2.concept).toBe(r1.concept);
+  });
+});
+
+describe("generateConceptSkeleton — Bubble RPO", () => {
+  it("emits an rpo_read on the QB with the right read shape", () => {
+    const result = generateConceptSkeleton("Bubble RPO", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const qb = result.spec.assignments.find((a) => a.player === "QB");
+    expect(qb?.action.kind).toBe("rpo_read");
+    if (qb?.action.kind !== "rpo_read") return;
+    expect(qb.action.giveTo).toBe("B");
+    expect(qb.action.passTo).toBe("S"); // default strength=right
+    expect(qb.action.pullIf).toBe("in");
+    expect(qb.action.keyDefenderRole).toBe("playside_lb");
+  });
+
+  it("pairs the rpo_read with an Inside Zone carry on the back AND a Bubble route on the pass-side slot", () => {
+    const result = generateConceptSkeleton("Bubble RPO", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const back = result.spec.assignments.find((a) => a.player === "B");
+    expect(back?.action.kind).toBe("carry");
+    if (back?.action.kind !== "carry") return;
+    expect(back.action.runType).toBe("inside_zone");
+
+    const slot = result.spec.assignments.find((a) => a.player === "S");
+    expect(slot?.action.kind).toBe("route");
+    if (slot?.action.kind !== "route") return;
+    expect(slot.action.family).toBe("Bubble");
+  });
+
+  it("mirrors the bubble side when strength is 'left' (H runs the bubble instead of S)", () => {
+    const result = generateConceptSkeleton("Bubble RPO", { variant: "tackle_11", strength: "left" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const qb = result.spec.assignments.find((a) => a.player === "QB");
+    if (qb?.action.kind !== "rpo_read") return;
+    expect(qb.action.passTo).toBe("H");
+    const h = result.spec.assignments.find((a) => a.player === "H");
+    if (h?.action.kind !== "route") return;
+    expect(h.action.family).toBe("Bubble");
+  });
+
+  it("notes include the read key explanation (the litmus test for 'tells the coach what to look for')", () => {
+    const result = generateConceptSkeleton("Bubble RPO", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notes.toLowerCase()).toContain("playside olb");
+    expect(result.notes.toLowerCase()).toMatch(/pull and throw|give/);
+  });
+});
+
+describe("generateConceptSkeleton — Jet Reverse (multi-handoff)", () => {
+  it("emits a ballPath with exactly 2 handoff steps (QB → B → reverse-carrier)", () => {
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.ballPath).toBeDefined();
+    expect(result.spec.ballPath!.length).toBe(2);
+    expect(result.spec.ballPath![0].from).toBe("QB");
+    expect(result.spec.ballPath![0].to).toBe("B");
+    expect(result.spec.ballPath![1].from).toBe("B");
+    expect(result.spec.ballPath![1].to).toBe("X"); // default strength=right → reverse comes from weak side (left WR = X)
+  });
+
+  it("each ballPath handler has a corresponding carry assignment with waypoints", () => {
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // B (intermediate carrier) and X (reverse carrier) both need carries.
+    for (const id of ["B", "X"]) {
+      const a = result.spec.assignments.find((p) => p.player === id);
+      expect(a?.action.kind, `@${id} should be a ballcarrier in the reverse`).toBe("carry");
+      if (a?.action.kind !== "carry") continue;
+      expect(a.action.waypoints, `@${id} carry should have explicit waypoints`).toBeDefined();
+      expect(a.action.waypoints!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("ballPath continuity holds: step 2's `from` matches step 1's `to`", () => {
+    // The play-tools resolver enforces this; the skeleton must satisfy it.
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.ballPath![1].from).toBe(result.spec.ballPath![0].to);
+  });
+
+  it("mirrors the reverse direction when strength is 'left' (reverse carrier is Z instead of X)", () => {
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11", strength: "left" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.ballPath![1].to).toBe("Z");
+  });
+});
+
+// End-to-end: each new skeleton must clear the play-tools resolver
+// gates (schema, capability when enabled, ball-flow semantics,
+// defender validation) and produce a renderable diagram. This is the
+// real "Cal can save it" test.
+describe("generateConceptSkeleton — new concepts pass the playbook-rule + ball-flow gates", () => {
+  it("QB Draw passes validatePlaySpecVsRules + validatePlaySpecBallFlow when designed_qb_run is enabled", async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const { validatePlaySpecBallFlow } = await import("./specSemantics");
+    const result = generateConceptSkeleton("QB Draw", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(validatePlaySpecVsRules(result.spec, ["designed_qb_run"]).ok).toBe(true);
+    expect(validatePlaySpecBallFlow(result.spec).ok).toBe(true);
+  });
+
+  it("QB Draw is REJECTED by validatePlaySpecVsRules when designed_qb_run is NOT enabled", async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const result = generateConceptSkeleton("QB Draw", { variant: "tackle_11" });
+    if (!result.ok) return;
+    const ruleCheck = validatePlaySpecVsRules(result.spec, []);
+    expect(ruleCheck.ok).toBe(false);
+    if (ruleCheck.ok) return;
+    expect(ruleCheck.violations.some((v) => v.capability === "designed_qb_run")).toBe(true);
+  });
+
+  it("Bubble RPO passes both gates when rpo_read is enabled", async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const { validatePlaySpecBallFlow } = await import("./specSemantics");
+    const result = generateConceptSkeleton("Bubble RPO", { variant: "tackle_11" });
+    if (!result.ok) return;
+    expect(validatePlaySpecVsRules(result.spec, ["rpo_read"]).ok).toBe(true);
+    expect(validatePlaySpecBallFlow(result.spec).ok).toBe(true);
+  });
+
+  it("Jet Reverse passes both gates when handoff_chain is enabled (ballPath continuity holds + rules match)", async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const { validatePlaySpecBallFlow } = await import("./specSemantics");
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    if (!result.ok) return;
+    expect(validatePlaySpecVsRules(result.spec, ["handoff_chain"]).ok).toBe(true);
+    expect(validatePlaySpecBallFlow(result.spec).ok).toBe(true);
+  });
+});

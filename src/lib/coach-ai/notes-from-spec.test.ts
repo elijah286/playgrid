@@ -447,3 +447,63 @@ describe("projectSpecToNotes — defender bullets (Phase D6)", () => {
     expect(fsLine).toMatch(/\(unconfirmed\)/);
   });
 });
+
+describe("projectSpecToNotes — ballPath narration (step 6)", () => {
+  it("renders a 'Ball flow' section with one bullet per handoff step", () => {
+    const spec = baseSpec({
+      variant: "tackle_11",
+      title: "Jet Reverse",
+      formation: { name: "Trips Right" },
+      assignments: [
+        { player: "QB", action: { kind: "block" } },
+        { player: "B",  action: { kind: "carry", waypoints: [[0, -4], [3, -3]] } },
+        { player: "X",  action: { kind: "carry", waypoints: [[3, -3], [-14, 8]] } },
+      ],
+      ballPath: [
+        { from: "QB", to: "B", atPoint: [0, -4] },
+        { from: "B",  to: "X", atPoint: [3, -3] },
+      ],
+    });
+    const notes = projectSpecToNotes(spec);
+    expect(notes).toContain("**Ball flow:**");
+    expect(notes).toContain("Snap: @QB hands to @B");
+    expect(notes).toContain("Then: @B hands to @X");
+  });
+
+  it("uses football landmarks (yards behind LOS, side-of-center) instead of raw coordinates", () => {
+    const spec = baseSpec({
+      variant: "tackle_11",
+      formation: { name: "Trips Right" },
+      assignments: [],
+      ballPath: [
+        { from: "QB", to: "B", atPoint: [0, -4] },
+        { from: "B",  to: "X", atPoint: [3, -3] },
+      ],
+    });
+    const notes = projectSpecToNotes(spec);
+    // Critical: no raw coord pairs appear in the notes.
+    expect(notes).not.toMatch(/\(\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*\)/);
+    expect(notes).not.toMatch(/\[\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*\]/);
+    // And the landmark phrasing is present.
+    expect(notes).toContain("behind the LOS");
+  });
+
+  it("falls back to 'in the backfield' when atPoint is omitted", () => {
+    const spec = baseSpec({
+      formation: { name: "Spread Doubles" },
+      ballPath: [{ from: "QB", to: "B" }],
+    });
+    const notes = projectSpecToNotes(spec);
+    expect(notes).toContain("in the backfield");
+  });
+
+  it("does NOT emit the Ball flow section when ballPath is missing or empty (most plays)", () => {
+    const spec = baseSpec({
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    const notes = projectSpecToNotes(spec);
+    expect(notes).not.toContain("**Ball flow:**");
+  });
+});

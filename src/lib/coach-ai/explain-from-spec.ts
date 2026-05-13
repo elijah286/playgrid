@@ -87,7 +87,7 @@ function assignmentBullet(assignment: PlayerAssignment): string | null {
   return `- ${ref}: ${body}${conf}`;
 }
 
-function describeAction(action: AssignmentAction): string | null {
+export function describeAction(action: AssignmentAction): string | null {
   switch (action.kind) {
     case "route": {
       const template = findTemplate(action.family);
@@ -127,6 +127,17 @@ function describeAction(action: AssignmentAction): string | null {
       // Don't emit a bullet for unspecified — they add noise. Caller
       // filters nulls out.
       return null;
+    case "rpo_read": {
+      // Structural explanation only — the full read-key prose lives in
+      // notes-from-spec.ts (the projector). Here we just enumerate what
+      // the QB is deciding so an explain_play call surfaces the
+      // intent.
+      const pull = action.pullIf ?? "in";
+      return (
+        `RPO read — keys the ${action.keyDefenderRole}; give to @${action.giveTo} when the defender stays ${pull === "in" ? "out" : "in"}, ` +
+        `pull and throw to @${action.passTo} when the defender comes ${pull}`
+      );
+    }
   }
 }
 

@@ -3,6 +3,7 @@
 import {
   defaultFieldDisplayForVariant,
   type PlaybookSettings,
+  type RuleCapability,
 } from "@/domain/playbook/settings";
 import {
   LEAGUE_PRESETS,
@@ -158,6 +159,42 @@ export function PlaybookRulesForm({
         onChange={(c) => set("centerIsEligible", c)}
       />
 
+      <div className="my-1 h-px bg-border" />
+
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+        Advanced Coach Cal concepts
+      </p>
+      <p className="text-[11px] leading-snug text-muted">
+        Opt in per capability. Cal will recommend and diagram these
+        only when enabled — leave off if your league or team isn't ready.
+      </p>
+      <CapabilityRow
+        label="Designed QB runs"
+        sublabel="QB Draw, QB Power, QB Counter, QB Sneak"
+        capability="designed_qb_run"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <CapabilityRow
+        label="Multi-handoff plays"
+        sublabel="Reverses, jet reverses, double reverses"
+        capability="handoff_chain"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <CapabilityRow
+        label="Run-pass options (RPOs)"
+        sublabel="QB reads a key defender, then gives or throws"
+        capability="rpo_read"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+      />
+
+      <div className="my-1 h-px bg-border" />
+
       <label className="flex items-center justify-between gap-2 text-sm text-foreground">
         <span>Number of players</span>
         <input
@@ -264,6 +301,49 @@ function Row({
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="size-4 rounded border-border text-primary focus:ring-primary"
+      />
+    </label>
+  );
+}
+
+/** Two-line checkbox row for advanced capabilities. Sublabel surfaces
+ *  the concrete play types so a coach can see what they're opting into
+ *  before flipping the switch. Reads / writes the array-of-strings
+ *  shape on PlaybookSettings.advancedCapabilities. */
+function CapabilityRow({
+  label,
+  sublabel,
+  capability,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  sublabel: string;
+  capability: RuleCapability;
+  value: PlaybookSettings;
+  onChange: (next: PlaybookSettings) => void;
+  disabled?: boolean;
+}) {
+  const enabled = value.advancedCapabilities.includes(capability);
+  const toggle = (next: boolean) => {
+    const set = new Set(value.advancedCapabilities);
+    if (next) set.add(capability);
+    else set.delete(capability);
+    onChange({ ...value, advancedCapabilities: Array.from(set) });
+  };
+  return (
+    <label className="flex items-start justify-between gap-2 text-sm text-foreground">
+      <span className="flex flex-col">
+        <span>{label}</span>
+        <span className="text-[11px] text-muted">{sublabel}</span>
+      </span>
+      <input
+        type="checkbox"
+        checked={enabled}
+        disabled={disabled}
+        onChange={(e) => toggle(e.target.checked)}
+        className="mt-0.5 size-4 rounded border-border text-primary focus:ring-primary"
       />
     </label>
   );

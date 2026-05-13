@@ -158,6 +158,22 @@ export function playSpecToCoachDiagram(spec: PlaySpec): RenderResult {
     if (route) routes.push(route);
   }
 
+  // 3a) Second pass — emit visuals that span more than one player.
+  //     RPO pass-option arrows anchor on the QB but point at the
+  //     pass-side receiver; ballPath handoff arrows anchor at each
+  //     mesh point between giver and receiver. Both render as short
+  //     directional arrows tagged with `route_kind` so the converter
+  //     can style them distinctly downstream. Each carrying player's
+  //     run path still renders normally from their own carry
+  //     assignment in the loop above.
+  for (const assignment of spec.assignments) {
+    if (assignment.action.kind !== "rpo_read") continue;
+    const qb = offensePlayers.find((p) => p.id === assignment.player);
+    if (!qb) continue; // already warned in the main loop
+    routes.push(...rpoReadVisuals(qb, assignment.action, offensePlayers, warnings));
+  }
+  routes.push(...handoffArrowsFromBallPath(spec, offensePlayers, warnings));
+
   // 4) Build defender movement routes from resolved defender assignments.
   //    Man-match arrows need offensive positions to point at, so we pass
   //    `offensePlayers` for receiver lookup. Blitz arrows aim at the QB
@@ -605,7 +621,150 @@ function routeFromAction(
     case "unspecified":
       // No visual route. Phase 3 will render motion arrows + block markers.
       return null;
+    case "rpo_read":
+      // The QB's rpo_read assignment is handled in a SECOND pass below
+      // (rpoReadVisuals) so the helper can also see the offense
+      // roster — it needs the passTo player's position to point the
+      // pass-option arrow at. Returning null here keeps the main
+      // loop's "one route per assignment" shape; the second pass adds
+      // the QB's pass-option arrow alongside the existing carry +
+      // route assignments the run-side and pass-side players already
+      // contribute.
+      return null;
   }
+}
+
+/**
+ * Render the QB's RPO decision as a single short "pass-option" arrow
+ * pointing from the QB toward the pass-side receiver. The arrow is
+ * tagged with `route_kind: "rpo_pass_option"` so the downstream
+ * converter can later style it distinctly (dashed when CoachDiagramRoute
+ * grows a strokePattern field; for now it renders as a solid arrow
+ * tinted by the role color).
+ *
+ * The run-side give and the pass-side route already render from those
+ * players' OWN assignments — this helper only adds the QB-anchored
+ * decision indicator that's missing without it.
+ *
+ * Why a short arrow (capped at ~3 yds): the read is conceptual, not
+ * literal QB movement. A long arrow spanning from QB to S would imply
+ * the QB is running there. Capping the arrow short of the target keeps
+ * the visual cue ("QB is reading toward this player") without
+ * confusing it with an actual scramble path.
+ *
+ * Future polish: once defensiveAlignments grows a conflictDefender()
+ * resolver, a SECOND short arrow points from QB toward the key
+ * defender's catalog position. That's the visual "read THIS guy"
+ * cue. Held back from this iteration because it depends on a catalog
+ * extension that isn't built yet.
+ */
+function rpoReadVisuals(
+  qb: CoachDiagramPlayer,
+  action: Extract<AssignmentAction, { kind: "rpo_read" }>,
+  offense: CoachDiagramPlayer[],
+  warnings: RenderWarning[],
+): CoachDiagramRoute[] {
+  const passTarget = offense.find((p) => p.id === action.passTo);
+  if (!passTarget) {
+    warnings.push({
+      code: "assignment_player_missing",
+      message: `RPO read on @${qb.id} targets @${action.passTo} on the pass branch but no such player is in the formation. Either add the receiver to the formation or change passTo.`,
+    });
+    return [];
+  }
+  // End the arrow ~1 yd short of the receiver, capped at 3 yds total —
+  // it's a decision indicator, not literal QB travel.
+  const dx = passTarget.x - qb.x;
+  const dy = passTarget.y - qb.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.5) return [];
+  const capped = Math.min(len - 1, 3);
+  if (capped <= 0) return [];
+  const ratio = capped / len;
+  return [
+    {
+      from: qb.id,
+      path: [[round(qb.x + dx * ratio), round(qb.y + dy * ratio)]],
+      tip: "arrow",
+      route_kind: "rpo_pass_option",
+      // Slight playback delay so the read visually follows the snap.
+      startDelaySec: 0.15,
+    },
+  ];
+}
+
+/**
+ * Render each ballPath step as a short directional arrow at the mesh
+ * point — the visual "exchange happens here, going to player X."
+ *
+ * The geometry is intentionally short (~1-2 yds): the carrying player's
+ * actual run path is already drawn from their own `kind: "carry"`
+ * assignment. The handoff arrow just MARKS the exchange so a coach can
+ * read the play's ball-flow at a glance ("QB hands to B at the mesh,
+ * B hands to Z over here").
+ *
+ * Anchor:
+ *   - When `atPoint` is set, the arrow starts there and points
+ *     a short distance toward the receiver's natural starting
+ *     position.
+ *   - When `atPoint` is omitted, the arrow starts at the giver's
+ *     position (the renderer doesn't yet infer the mesh point from
+ *     carry-waypoint endpoints; that's a follow-up).
+ *
+ * Each emitted route uses `from: <giver-id>` so the existing player-
+ * id lookup at the converter layer associates the arrow with the
+ * giver. The `route_kind: "handoff"` tag is the hook for future
+ * dashed-style differentiation.
+ */
+function handoffArrowsFromBallPath(
+  spec: PlaySpec,
+  offense: CoachDiagramPlayer[],
+  warnings: RenderWarning[],
+): CoachDiagramRoute[] {
+  if (!spec.ballPath || spec.ballPath.length === 0) return [];
+  const out: CoachDiagramRoute[] = [];
+  for (const step of spec.ballPath) {
+    const giver = offense.find((p) => p.id === step.from);
+    const receiver = offense.find((p) => p.id === step.to);
+    if (!giver) {
+      warnings.push({
+        code: "assignment_player_missing",
+        message: `ballPath step from "${step.from}" but no such player in the formation. Either add the player or fix the ballPath step.`,
+      });
+      continue;
+    }
+    if (!receiver) {
+      warnings.push({
+        code: "assignment_player_missing",
+        message: `ballPath step to "${step.to}" but no such player in the formation. Either add the player or fix the ballPath step.`,
+      });
+      continue;
+    }
+    // Anchor the arrow: prefer atPoint, fall back to giver's position.
+    const ax = step.atPoint ? step.atPoint[0] : giver.x;
+    const ay = step.atPoint ? step.atPoint[1] : giver.y;
+    // Point a short distance (1.5 yds) toward the receiver to indicate
+    // direction; cap so the arrow doesn't span the field.
+    const dx = receiver.x - ax;
+    const dy = receiver.y - ay;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.1) continue;
+    const capped = Math.min(len, 1.5);
+    const ratio = capped / len;
+    out.push({
+      from: giver.id,
+      path: [
+        [round(ax), round(ay)],
+        [round(ax + dx * ratio), round(ay + dy * ratio)],
+      ],
+      tip: "arrow",
+      route_kind: "handoff",
+      // Each successive handoff fires a beat later so a multi-exchange
+      // play visualizes as a sequence rather than simultaneously.
+      startDelaySec: 0.1 * (out.length + 1),
+    });
+  }
+  return out;
 }
 
 /**

@@ -20,7 +20,9 @@ import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import type { CoachAiTool, ToolContext } from "./tools";
 import { validateRouteAssignments, type RouteAssignmentError } from "./route-assignment-validate";
 import { validatePlayContent, formatPlayContentErrors } from "./play-content-validate";
-import { defaultSettingsForVariant, normalizePlaybookSettings } from "@/domain/playbook/settings";
+import { defaultSettingsForVariant, normalizePlaybookSettings, type RuleCapability } from "@/domain/playbook/settings";
+import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
+import { validatePlaySpecBallFlow } from "@/domain/play/specSemantics";
 import { validateDefenderAssignments, formatDefenseValidationErrors } from "./defense-validate";
 import { projectSpecToNotes } from "./notes-from-spec";
 import {
@@ -42,7 +44,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * read (don't block a save on a settings query failure — the gate
  * will use defaults that match the variant convention).
  */
-async function loadPlaybookSettings(
+export async function loadPlaybookSettings(
   playbookId: string,
   variant: SportVariant,
 ) {
@@ -632,6 +634,15 @@ function resolveDiagramAndSpec(
   options: {
     formationName?: string;
     playType?: "offense" | "defense" | "special_teams";
+    /**
+     * Playbook's `advancedCapabilities`. When supplied AND the input
+     * is a PlaySpec (Path 1), the resolver runs the playbook-rule
+     * gate so an RPO can't slip into a no-RPO playbook, a reverse
+     * can't slip into a no-handoff playbook, etc. Omitted on the
+     * legacy diagram path (Path 2) to avoid retroactively breaking
+     * hand-drawn plays that pre-date this capability set.
+     */
+    advancedCapabilities?: readonly RuleCapability[];
   } = {},
 ): ResolvedInput {
   // SCHEMA TOOL-INPUT BOUNDARY (AGENTS.md Rule: strict at write).
@@ -661,6 +672,25 @@ function resolveDiagramAndSpec(
       };
     }
     const spec = parsed.data as PlaySpec;
+    // Playbook-rule gate: refuse specs that use a capability the
+    // playbook hasn't opted into (RPOs, multi-handoff reverses,
+    // designed QB runs). Runs BEFORE render so the coach-readable
+    // error points at the rule, not at a downstream render warning.
+    // Only fires when the call site supplied capabilities — keeps
+    // unit tests + lower-level callers free of rule context they
+    // don't have.
+    if (options.advancedCapabilities) {
+      const ruleCheck = validatePlaySpecVsRules(spec, options.advancedCapabilities);
+      if (!ruleCheck.ok) {
+        const lines = ruleCheck.violations.map((v) => `- ${v.message}`).join("\n");
+        return {
+          ok: false,
+          error:
+            `This play uses capabilities the playbook hasn't enabled:\n${lines}\n` +
+            `Enable the missing capabilities in the playbook's rules, or revise the spec to stay within the current rule-set.`,
+        };
+      }
+    }
     // Phase D4: validate defender overrides BEFORE rendering so the
     // error message points at the spec, not the warning surface. Render
     // warnings still fire for catalog-defaulted defenders (e.g. unknown
@@ -668,6 +698,21 @@ function resolveDiagramAndSpec(
     const defenseValidation = validateDefenderAssignments(spec);
     if (!defenseValidation.ok) {
       return { ok: false, error: formatDefenseValidationErrors(defenseValidation.errors) };
+    }
+    // Ball-flow semantics: rpo_read giveTo ≠ passTo, ballPath self-
+    // handoff and continuity. These are zod-uncheckable relationships
+    // between fields and must hold for the play to make football
+    // sense. Run AFTER defense validation so coaches don't see a
+    // ball-flow error masked by a defender id mismatch.
+    const ballFlowCheck = validatePlaySpecBallFlow(spec);
+    if (!ballFlowCheck.ok) {
+      const lines = ballFlowCheck.violations.map((v) => `- ${v.message}`).join("\n");
+      return {
+        ok: false,
+        error:
+          `play_spec ball-flow doesn't make sense:\n${lines}\n` +
+          `Fix the rpo_read / ballPath shape and re-emit.`,
+      };
     }
     const { diagram, warnings } = playSpecToCoachDiagram(spec);
     const hardWarnings = warnings.filter(isHardWarning);
@@ -986,9 +1031,17 @@ const update_play: CoachAiTool = {
       const playRow = play as { play_type?: string };
       const playType = (playRow.play_type as "offense" | "defense" | "special_teams" | undefined) ?? "offense";
 
+      // Load playbook settings BEFORE the resolver so the
+      // capability gate (RPOs, multi-handoff, designed QB runs) can
+      // run against the spec inside resolveDiagramAndSpec. Settings
+      // are read again below for the depth-cap fallback — same data,
+      // same async call would be wasteful, so we reuse this load.
+      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+
       // Resolve spec/diagram inputs through the shared helper.
       const inputResolved = resolveDiagramAndSpec(input.play_spec, input.diagram, resolvedVariant, {
         playType,
+        advancedCapabilities: playbookSettings.advancedCapabilities,
       });
       if (!inputResolved.ok) return { ok: false, error: inputResolved.error };
       const diagram = inputResolved.diagram;
@@ -1018,11 +1071,8 @@ const update_play: CoachAiTool = {
       void updateStripped;
       const diagramWithVariant: CoachDiagram = cleanDiagram;
 
-      // Load playbook settings up-front so the depth gate can fall back
-      // to the persistent maxThrowDepthYds setting when the call didn't
-      // include max_throw_depth_yds (Cal frequently forgets to propagate
-      // it across a series of update_play calls — surfaced 2026-05-04).
-      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, resolvedVariant);
+      // Depth-cap fallback uses the same playbookSettings loaded above
+      // (we don't re-fetch — it's the same record).
       const effectiveMaxRouteDepthYds =
         maxRouteDepthYds ?? playbookSettings.maxThrowDepthYds ?? undefined;
 
@@ -1246,9 +1296,16 @@ const create_play: CoachAiTool = {
     const diagramHintVariant = (input.diagram as { variant?: string } | null | undefined)?.variant;
     const resolvedVariant = (targetSportVariant ?? specHintVariant ?? diagramHintVariant ?? "flag_7v7") as SportVariant;
 
+    // Load playbook settings BEFORE the resolver so the capability
+    // gate (RPOs, multi-handoff, designed QB runs) can run against
+    // the spec inside resolveDiagramAndSpec. The depth-cap fallback
+    // below reuses this same record.
+    const playbookSettingsPreCreate = await loadPlaybookSettings(targetPlaybookId, resolvedVariant);
+
     const resolved = resolveDiagramAndSpec(input.play_spec, input.diagram, resolvedVariant, {
       formationName,
       playType,
+      advancedCapabilities: playbookSettingsPreCreate.advancedCapabilities,
     });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     let diagram = resolved.diagram;
@@ -1304,14 +1361,11 @@ const create_play: CoachAiTool = {
     // residue.
     const diagramWithVariant: CoachDiagram = { ...diagram, variant: resolvedVariant, title: diagram.title ?? name };
 
-    // Load the playbook's persistent settings up-front so the depth gate
-    // can use settings.maxThrowDepthYds as a fallback when the call
-    // didn't include max_throw_depth_yds. Surfaced 2026-05-04: Cal
-    // generated 7 plays with 13.8-yard verticals despite the coach
-    // stating "less than 15 yards" — Cal forgot to propagate
-    // max_throw_depth_yds on the create_play calls. The persistent
-    // playbook setting closes the gap so the cap can't be lost.
-    const playbookSettingsPreCreate = await loadPlaybookSettings(targetPlaybookId, resolvedVariant);
+    // Depth-cap fallback uses the same playbookSettingsPreCreate
+    // loaded above the resolver call (we don't re-fetch — it's the
+    // same record). The persistent setting closes the gap from Cal
+    // sometimes forgetting to propagate max_throw_depth_yds across a
+    // series of create_play calls.
     const effectiveMaxRouteDepthYds =
       maxRouteDepthYds ?? playbookSettingsPreCreate.maxThrowDepthYds ?? undefined;
 

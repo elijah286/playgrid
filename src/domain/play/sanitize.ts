@@ -65,7 +65,15 @@ export type SanitizeWarning = {
     | "route_dropped_unknown_carrier"
     | "route_dropped_empty_path"
     | "route_dropped_nonfinite_waypoint"
-    | "route_waypoint_clamped";
+    | "route_waypoint_clamped"
+    /** Indicator routes (RPO pass-option arrow, handoff arrow at a
+     *  ballPath mesh point) are short DECISION / EXCHANGE markers,
+     *  not literal player travel — the renderer caps them at ~3 yds.
+     *  If a future code path emits an indicator with much longer
+     *  geometry, drop it: a 10-yard "handoff" arrow would read as a
+     *  scramble path and mislead the coach. Defensive — the renderer
+     *  shouldn't be producing these in the first place. */
+    | "indicator_route_dropped_too_long";
   /** Human-readable description for logging. */
   message: string;
   /** Subject of the warning — player id, route carrier id, etc. */
@@ -316,6 +324,47 @@ export function sanitizeCoachDiagram(
         message: `route from @${r.from} had non-finite waypoint(s); dropped entirely.`,
       });
       continue;
+    }
+    // Indicator-route length cap. RPO pass-option arrows and ballPath
+    // handoff arrows are decision/exchange markers — short by design
+    // (renderer caps to ~3 yds). If something slips past with longer
+    // geometry, drop it to prevent it reading as literal player travel.
+    // The 4-yd threshold gives 1 yd of slack over the renderer's cap
+    // for rounding while still catching outright corruption.
+    //
+    // We measure the ARROW's own length — anchor (cleanPath[0]) to
+    // endpoint (cleanPath[-1]) for multi-point paths, OR carrier-to-
+    // endpoint for single-point paths (the RPO pass-option arrow
+    // shape, where path is just [endpoint] anchored on the carrier).
+    // Critically NOT carrier-to-endpoint in the multi-point case:
+    // ballPath handoff arrows anchor at atPoint, which may sit far
+    // from the carrier (B's mesh with Z is at the LOS regardless of
+    // where B started).
+    if (r.route_kind === "rpo_pass_option" || r.route_kind === "handoff") {
+      if (cleanPath.length > 0) {
+        const endpoint = cleanPath[cleanPath.length - 1];
+        let arrowLen: number;
+        if (cleanPath.length === 1) {
+          // Single-point path: implicit anchor is the carrier.
+          const carrier = cleanPlayers.find((p) => p.id === r.from);
+          arrowLen = carrier
+            ? Math.hypot(endpoint[0] - carrier.x, endpoint[1] - carrier.y)
+            : 0;
+        } else {
+          const start = cleanPath[0];
+          arrowLen = Math.hypot(endpoint[0] - start[0], endpoint[1] - start[1]);
+        }
+        if (arrowLen > 4) {
+          warnings.push({
+            code: "indicator_route_dropped_too_long",
+            subject: r.from,
+            message:
+              `indicator route from @${r.from} (route_kind=${r.route_kind}) spans ` +
+              `${arrowLen.toFixed(1)} yds, exceeding the 4-yd cap for decision/exchange markers; dropped.`,
+          });
+          continue;
+        }
+      }
     }
     cleanRoutes.push({ ...r, path: cleanPath });
   }

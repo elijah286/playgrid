@@ -86,6 +86,19 @@ function projectOffenseSpec(spec: PlaySpec): string {
     if (bullet) lines.push(`- ${bullet}`);
   }
 
+  // Ball-flow ledger — when a play has multi-handoff exchanges
+  // (reverses, jet sweeps with handback), narrate the sequence
+  // explicitly so the coach can see the ball's path through the
+  // backfield at a glance. The per-player bullets describe each
+  // carrier's leg with the ball; this section describes the EXCHANGE
+  // points that link those legs.
+  const ballFlowLines = ballFlowBullets(spec);
+  if (ballFlowLines.length > 0) {
+    lines.push("");
+    lines.push("**Ball flow:**");
+    for (const bl of ballFlowLines) lines.push(`- ${bl}`);
+  }
+
   // Defender bullets — one per defender (catalog default + spec deviations).
   // For offense-focused plays we emit a compact "Defense:" header followed
   // by the per-defender lines. Suppress when the spec has no defense ref.
@@ -371,6 +384,53 @@ function summaryLine(spec: PlaySpec): string {
   return `${formation}${defense}.`;
 }
 
+/**
+ * Render the `ballPath` ledger as coaching bullets — one line per
+ * exchange. Each line names the giver, receiver, and (when set) the
+ * mesh-point yardage relative to the LOS so a coach reading the
+ * notes can picture where the ball changes hands. Empty / absent
+ * ballPath returns an empty array (no "Ball flow:" header rendered).
+ *
+ * Example output for a Jet Reverse:
+ *   - Snap: @QB hands to @B at the mesh.
+ *   - Then: @B hands to @X 3 yards behind the LOS.
+ *
+ * The wording uses football landmarks ("at the mesh", "behind the
+ * LOS") rather than raw coordinates — same rule that applies to
+ * every other piece of coach-facing prose.
+ */
+function ballFlowBullets(spec: PlaySpec): string[] {
+  if (!spec.ballPath || spec.ballPath.length === 0) return [];
+  const out: string[] = [];
+  for (let i = 0; i < spec.ballPath.length; i++) {
+    const step = spec.ballPath[i];
+    const lead = i === 0 ? "Snap" : "Then";
+    const where = step.atPoint ? formatMeshPoint(step.atPoint) : "in the backfield";
+    out.push(`${lead}: @${step.from} hands to @${step.to} ${where}.`);
+  }
+  return out;
+}
+
+/** Format an (x, y) mesh-point as a coach-readable football phrase.
+ *  Uses landmarks (LOS, hashes) rather than raw coordinates. */
+function formatMeshPoint(point: [number, number]): string {
+  const [x, y] = point;
+  // y < 0 = behind the LOS; y > 0 = downfield; y ≈ 0 = at the LOS.
+  let depth: string;
+  if (Math.abs(y) < 0.5) {
+    depth = "at the line";
+  } else if (y < 0) {
+    depth = `${Math.abs(y).toFixed(0)} yard${Math.abs(y) >= 1.5 ? "s" : ""} behind the LOS`;
+  } else {
+    depth = `${y.toFixed(0)} yard${y >= 1.5 ? "s" : ""} downfield`;
+  }
+  // Lateral: x < 0 = left of center; x > 0 = right; |x| < 1 = middle.
+  if (Math.abs(x) < 1) return depth;
+  const side = x > 0 ? "right" : "left";
+  const dist = Math.abs(x);
+  return `${dist.toFixed(0)} yard${dist >= 1.5 ? "s" : ""} ${side} of center, ${depth}`;
+}
+
 function bulletFor(assignment: PlayerAssignment): string | null {
   const ref = `@${assignment.player}`;
   const body = narrateAction(ref, assignment.action);
@@ -386,7 +446,7 @@ function bulletFor(assignment: PlayerAssignment): string | null {
   return body;
 }
 
-function narrateAction(ref: string, action: AssignmentAction): string | null {
+export function narrateAction(ref: string, action: AssignmentAction): string | null {
   switch (action.kind) {
     case "route":
       return narrateRoute(ref, action);
@@ -400,6 +460,22 @@ function narrateAction(ref: string, action: AssignmentAction): string | null {
       return `${ref}: ${action.description}.`;
     case "unspecified":
       return null;
+    case "rpo_read": {
+      // First-pass coaching cue. Step 4 of the QB-runs/RPO build will
+      // upgrade this to resolve the actual conflict defender via
+      // defensiveAlignments.conflictDefender(scheme) and phrase the
+      // read with the defender's actual id ("read #2 OLB Mike") rather
+      // than the abstract role. The structural meaning is correct now
+      // either way — give/throw decision keyed on a named role.
+      const pull = action.pullIf ?? "in";
+      const giveCue = pull === "in"
+        ? `give to @${action.giveTo} when he stays out`
+        : `give to @${action.giveTo} when he stays in`;
+      const throwCue = pull === "in"
+        ? `pull and throw to @${action.passTo} when he comes inside to fill the run`
+        : `pull and throw to @${action.passTo} when he vacates out of run support`;
+      return `${ref}: RPO — read the ${action.keyDefenderRole}; ${giveCue}, ${throwCue}.`;
+    }
   }
 }
 

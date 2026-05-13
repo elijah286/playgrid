@@ -25,13 +25,24 @@ import type { PlaySpec, PlayerAssignment } from "./spec";
 import { findTemplate } from "./routeTemplates";
 
 export type ConceptViolation = {
-  /** Which required slot is unsatisfied. */
+  /** Which required slot is unsatisfied. For structural violations
+   *  (carry / rpo_read / ballPath), this is a synthetic placeholder. */
   required: ConceptAssignment;
   /** Why it's unsatisfied. */
   reason:
     | "no_spec_assignment_with_family"
     | "depth_outside_concept_range"
-    | "role_mismatch";
+    | "role_mismatch"
+    /** Concept requires a carry assignment (optionally by QB or back,
+     *  optionally with specific runTypes) but no spec assignment
+     *  satisfies the constraint. */
+    | "no_qualifying_carry"
+    /** Concept requires a `kind: "rpo_read"` assignment but the spec
+     *  has none. */
+    | "no_rpo_read"
+    /** Concept requires a multi-step ballPath (reverses) but the spec
+     *  has fewer than N steps. */
+    | "ballpath_steps_insufficient";
   /** When the family was found but at the wrong depth, the offending player. */
   player?: string;
   /** When the family was found at wrong depth, what the depth was. */
@@ -151,10 +162,86 @@ function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult
     }
   }
 
+  // Structural requirements (carry / rpo_read / ballPath) — checked
+  // after the route-slot pass so the violation list reports route
+  // mismatches first. A concept satisfies the spec only when BOTH
+  // its route slots AND its structural requirements are met.
+  if (concept.structural) {
+    const structural = concept.structural;
+
+    if (structural.requiresCarry) {
+      const filter = structural.requiresCarry;
+      const carries = spec.assignments.filter((a) => a.action.kind === "carry");
+      const matchingCarry = carries.find((a) => {
+        if (a.action.kind !== "carry") return false; // narrow for TS
+        if (filter.player === "qb" && !isQbId(a.player)) return false;
+        if (filter.player === "back" && !isBackId(a.player)) return false;
+        if (filter.runTypes && filter.runTypes.length > 0) {
+          if (!a.action.runType) return false;
+          if (!filter.runTypes.includes(a.action.runType)) return false;
+        }
+        return true;
+      });
+      if (!matchingCarry) {
+        violations.push({
+          required: {
+            role: "any",
+            family: "(carry)",
+            depthRangeYds: { min: 0, max: 0 },
+          },
+          reason: "no_qualifying_carry",
+        });
+      } else {
+        usedPlayers.add(matchingCarry.player);
+      }
+    }
+
+    if (structural.requiresRpoRead) {
+      const rpo = spec.assignments.find((a) => a.action.kind === "rpo_read");
+      if (!rpo) {
+        violations.push({
+          required: {
+            role: "any",
+            family: "(rpo_read)",
+            depthRangeYds: { min: 0, max: 0 },
+          },
+          reason: "no_rpo_read",
+        });
+      } else {
+        usedPlayers.add(rpo.player);
+      }
+    }
+
+    if (typeof structural.requiresBallPathSteps === "number") {
+      const minSteps = structural.requiresBallPathSteps;
+      const actualSteps = spec.ballPath?.length ?? 0;
+      if (actualSteps < minSteps) {
+        violations.push({
+          required: {
+            role: "any",
+            family: `(ballPath ≥${minSteps})`,
+            depthRangeYds: { min: 0, max: 0 },
+          },
+          reason: "ballpath_steps_insufficient",
+        });
+      }
+    }
+  }
+
   if (violations.length === 0) {
     return { ok: true, concept, usedPlayers };
   }
   return { ok: false, violations };
+}
+
+const QB_PLAYER_IDS = new Set(["QB", "Q"]);
+const BACK_PLAYER_IDS = new Set(["B", "F", "RB", "HB", "TB", "FB"]);
+
+function isQbId(id: string): boolean {
+  return QB_PLAYER_IDS.has(id.toUpperCase());
+}
+function isBackId(id: string): boolean {
+  return BACK_PLAYER_IDS.has(id.toUpperCase());
 }
 
 /**
@@ -172,6 +259,15 @@ export function formatConceptViolations(
     }
     if (v.reason === "no_spec_assignment_with_family") {
       return `  • required ${v.required.role}/${v.required.family} at ${v.required.depthRangeYds.min}-${v.required.depthRangeYds.max} yds — no player has a ${v.required.family} assignment`;
+    }
+    if (v.reason === "no_qualifying_carry") {
+      return `  • concept requires a ballcarrier (\`kind: "carry"\`) — none of the spec's assignments match the carry constraints`;
+    }
+    if (v.reason === "no_rpo_read") {
+      return `  • concept requires an RPO decision (\`kind: "rpo_read"\` on the QB) — no spec assignment has it`;
+    }
+    if (v.reason === "ballpath_steps_insufficient") {
+      return `  • concept requires a multi-handoff exchange (\`ballPath\`) — the spec doesn't have enough steps`;
     }
     return `  • ${v.reason}: ${JSON.stringify(v.required)}`;
   });

@@ -41,9 +41,22 @@ describe("CONCEPT_CATALOG — module-load invariants", () => {
     expect(CONCEPT_CATALOG.length).toBeGreaterThan(0);
   });
 
-  it("every concept has at least one required assignment", () => {
+  it("every concept declares at least one structural piece (route requirement OR structural rule)", () => {
+    // Pass concepts express their pattern via `required` (route slots).
+    // Run / RPO / reverse concepts may instead express it via the
+    // `structural` field. A concept with NEITHER would match any spec
+    // and is therefore catalog-rot.
     for (const c of CONCEPT_CATALOG) {
-      expect(c.required.length, `${c.name} has no required assignments`).toBeGreaterThan(0);
+      const hasRoutes = c.required.length > 0;
+      const hasStructural =
+        c.structural !== undefined &&
+        (c.structural.requiresCarry !== undefined ||
+          c.structural.requiresRpoRead === true ||
+          (typeof c.structural.requiresBallPathSteps === "number" && c.structural.requiresBallPathSteps > 0));
+      expect(
+        hasRoutes || hasStructural,
+        `${c.name} has neither route requirements nor structural rules — it would match every spec`,
+      ).toBe(true);
     }
   });
 

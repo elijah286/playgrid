@@ -526,6 +526,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-qb-runs-rpos-reverses",
+    name: "Coach Cal can diagram QB runs, RPOs, and multi-handoff reverses",
+    description:
+      "Cal can now build three new families of plays that previously needed manual authoring: designed QB runs (QB Draw — QB takes the snap, OL pass-sets to sell pass, QB runs the soft middle), RPOs (Bubble RPO — QB reads the playside OLB and pulls to throw the bubble when he comes down to fill the run, gives on Inside Zone when he stays out), and multi-handoff reverses (Jet Reverse — QB hands to the back, who reverses field and hands the ball to the weak-side WR coming around). Each one is opt-in per playbook under Settings → Advanced Coach Cal concepts; tackle defaults to all three on, flag 5v5 defaults to QB runs only, flag 7v7 defaults to none — toggle to match what your league allows. When you ask Cal for one, the diagram now shows the read direction or the handoff sequence, and Cal's notes spell out the read in coach terms (\"if the OLB comes down, pull and throw the bubble\") so you can teach the play, not just see it.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-12",
+  },
+  {
     id: "coach-cal-auto-save-on-confirmation",
     name: "Coach Cal auto-saves plays when you confirm",
     description:

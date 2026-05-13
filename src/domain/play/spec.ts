@@ -179,6 +179,49 @@ export type AssignmentAction =
    *  — preserves the player without lying about what they're doing. */
   | {
       kind: "unspecified";
+    }
+  /**
+   * RPO read — the QB makes a give/keep/throw decision based on a
+   * specific defender's reaction. Mounted on the QB's assignment ONLY.
+   * The ball-handler (run side) and route runner (pass side) keep their
+   * own normal assignments — everyone except the QB runs their job
+   * regardless of the QB's choice. That mirrors actual football: an RPO
+   * is a QB DECISION layered on top of a run + a route that each fire
+   * independently.
+   *
+   * The renderer draws both branches: a solid arrow from the QB to
+   * `giveTo` and the run-side carry path, and a dashed arrow toward the
+   * receiver running the pass-side route. The key defender is
+   * highlighted so the coach can teach the read.
+   *
+   * Why a role rather than a defender id: the conflict defender depends
+   * on the scheme (vs Cover 3 it's typically the playside OLB; vs Cover
+   * 4 it's the safety; vs man it's the nickel). `keyDefenderRole`
+   * names the FUNCTION the QB is reading; the defensive alignment
+   * catalog resolves the actual defender at render time. This keeps
+   * RPOs portable across coverages — same concept, different reads.
+   */
+  | {
+      kind: "rpo_read";
+      /** Functional role of the defender the QB is reading. The
+       *  defensive alignment catalog supplies a `conflictDefender(role)`
+       *  resolver per scheme. */
+      keyDefenderRole: "conflict" | "force" | "alley" | "edge" | "playside_lb" | "playside_safety" | "nickel" | string;
+      /** Player who receives the ball on the run branch. MUST also have
+       *  a `kind: "carry"` assignment of their own — the renderer pairs
+       *  the two so the run path is drawn once, not duplicated. */
+      giveTo: string;
+      /** Player targeted on the pass branch. MUST also have a
+       *  `kind: "route"` assignment of their own — same pairing rule. */
+      passTo: string;
+      /** Decision rule, from the QB's perspective.
+       *    - "in"  → pull and throw when the key defender comes IN to
+       *              stop the run. Standard bubble / slant / glance RPO.
+       *    - "out" → pull and throw when the key defender VACATES
+       *              (drops out of run support). Rarer; used when the
+       *              RPO is built off a flat-shading look.
+       *  Defaults to "in" (the typical RPO). */
+      pullIf?: "in" | "out";
     };
 
 export type PlayerAssignment = {
@@ -248,6 +291,61 @@ export type DefenderAssignment = {
   confidence?: Confidence;
 };
 
+/**
+ * One handoff in a multi-touch ball path (jet sweep, reverse, double
+ * reverse, fake reverse, mesh-point exchanges).
+ *
+ * The play-level `ballPath` is the ORDERED ledger of who has the ball
+ * and when they pass it. Each player named anywhere in the chain — both
+ * `from` and `to` of every step, including the final receiver — MUST
+ * also carry a `kind: "carry"` assignment of their own, whose
+ * `waypoints` describe THEIR leg with the ball:
+ *
+ *   - The first `from` is the snap-receiver (usually QB). Their carry
+ *     path runs from their stance to step[0].atPoint.
+ *   - Each middle player's carry runs from the prior mesh point to the
+ *     next mesh point.
+ *   - The final `to` is the destination ballcarrier; their carry path
+ *     runs from the last mesh point to the end of their run.
+ *
+ * This factoring keeps each player's geometry on their own assignment
+ * (where the renderer + sanitizer already enforce invariants) and lets
+ * `ballPath` stay metadata about the EXCHANGE — it doesn't store any
+ * geometry the assignments don't already carry.
+ *
+ * Example — Trips Right Jet Reverse:
+ *   ballPath: [
+ *     { from: "QB", to: "RB", atPoint: [0, 0] },
+ *     { from: "RB", to: "Z",  atPoint: [3, -1] },
+ *   ]
+ *   assignments: [
+ *     { player: "QB", action: { kind: "block" } },           // stays in / blocks
+ *     { player: "RB", action: { kind: "carry", waypoints: [...] } },  // takes mesh1, runs to mesh2
+ *     { player: "Z",  action: { kind: "carry", waypoints: [...] } },  // takes mesh2, runs the reverse
+ *     ...
+ *   ]
+ *
+ * Variant gate: `ballPath` requires the variant's rules to allow the
+ * `handoff_chain` capability (5v5 flag often forbids handoffs). The
+ * runtime check lives at the compose/render boundary, not in this
+ * schema, so a hand-authored spec with ballPath still parses — the
+ * compose-layer validator rejects it for variants that don't opt in.
+ */
+export type HandoffStep = {
+  /** Player giving up the ball. MUST appear in `assignments` (typically
+   *  with a `kind: "carry"` action whose path terminates near
+   *  `atPoint`). The very first `from` in the chain is the snap
+   *  receiver — for a typical play that's the QB. */
+  from: string;
+  /** Player receiving the ball. */
+  to: string;
+  /** Where the handoff happens, in (x, y) yards from the LOS. Optional —
+   *  the renderer can infer from the surrounding carry waypoints when
+   *  omitted, but authoring tools should set it explicitly so the mesh
+   *  point is stable across edits. */
+  atPoint?: [number, number];
+};
+
 /** Optional play-level context. Used by the notes generator + KB lookup
  *  to ground prose in the situation ("3rd-and-7 in the red zone..."). */
 export type PlayContext = {
@@ -283,6 +381,16 @@ export type PlaySpec = {
    * Validated at render time by Phase D4's defense validator.
    */
   defenderAssignments?: DefenderAssignment[];
+  /**
+   * Ordered ledger of ball-handling exchanges. Empty / omitted = single
+   * carrier or pass play (the normal case). When present, MUST contain
+   * at least one step; each step's `from` and `to` MUST resolve to
+   * players in the rendered formation; the geometry of each leg lives
+   * on the carrying player's own `kind: "carry"` assignment.
+   *
+   * See `HandoffStep` for the full data-model contract.
+   */
+  ballPath?: HandoffStep[];
   context?: PlayContext;
   /** Free-form coach annotations carried through from PlayMetadata.notes.
    *  When set, prose generators MAY use this as input but MUST NOT
@@ -360,7 +468,20 @@ const assignmentActionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("unspecified"),
   }).strict(),
+  z.object({
+    kind: z.literal("rpo_read"),
+    keyDefenderRole: z.string().min(1),
+    giveTo: z.string().min(1),
+    passTo: z.string().min(1),
+    pullIf: z.enum(["in", "out"]).optional(),
+  }).strict(),
 ]);
+
+const handoffStepSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  atPoint: z.tuple([z.number(), z.number()]).optional(),
+}).strict();
 
 const playerAssignmentSchema = z.object({
   player: z.string(),
@@ -423,6 +544,7 @@ export const playSpecSchema = z.object({
   defense: defenseRefSchema.optional(),
   assignments: z.array(playerAssignmentSchema),
   defenderAssignments: z.array(defenderAssignmentSchema).optional(),
+  ballPath: z.array(handoffStepSchema).min(1).optional(),
   context: playContextSchema.optional(),
   notes: z.string().optional(),
 }).strict();

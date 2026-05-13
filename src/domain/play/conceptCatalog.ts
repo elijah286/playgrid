@@ -80,6 +80,71 @@ export type ConceptAssignment = {
   depthRangeYds: { min: number; max: number };
 };
 
+/**
+ * Conceptual complexity tier. Drives Cal's recommendation engine: when
+ * a coach asks "what's good vs Cover 3" Cal filters the candidate
+ * concepts by the team's complexity ceiling (a per-team setting that
+ * defaults to "intermediate"). The tags are advisory, NOT a hard gate
+ * — a coach can dial up the ceiling for a sharper team or pick an
+ * "advanced" concept explicitly any time.
+ *
+ * Tiers:
+ *   - "basic"        Two-route stretches a young team can absorb in
+ *                    one practice (Curl-Flat, Smash, Stick, Snag,
+ *                    Mesh). Reads are 1–2 defenders.
+ *   - "intermediate" Three-route triangles and basic vertical concepts
+ *                    that require multiple-defender reads (Flood,
+ *                    Drive, Levels, Four Verticals).
+ *   - "advanced"     Multi-progression concepts, NFL-style shot plays,
+ *                    and any play that requires reading a specific
+ *                    defender's leverage post-snap (Y-Cross, Dagger).
+ *
+ * When unset, defaults to "intermediate" at recommendation time so an
+ * un-tagged catalog entry still surfaces but isn't auto-suggested to
+ * a young team.
+ */
+export type ConceptComplexity = "basic" | "intermediate" | "advanced";
+
+/**
+ * Non-route structural requirements a concept can express — used for
+ * run / RPO / reverse concepts whose defining feature is the SHAPE of
+ * the ball-handling, not the route pattern. The matcher checks these
+ * alongside the route-based `required` array; a concept satisfies the
+ * spec only when EVERY declared piece (routes + structural) is met.
+ *
+ * Why these aren't shoehorned into ConceptAssignment: route slots are
+ * fundamentally "WHO runs WHAT at WHAT depth". Run / RPO / reverse
+ * structural requirements are categorical ("there's a QB carry, of
+ * any runType") and would just bloat the assignment shape with
+ * mostly-unused optional fields. A parallel `structural` field keeps
+ * the existing pass-concept entries untouched.
+ */
+export type ConceptStructural = {
+  /** Concept requires at least one `kind: "carry"` assignment that
+   *  satisfies the optional filters below. */
+  requiresCarry?: {
+    /** Constrain which player is the carrier:
+     *    - "qb"   → assignment.player must be the QB ("QB" or "Q").
+     *    - "back" → assignment.player must be a back ("B", "F", "RB", etc.).
+     *    - "any"  → no player constraint (default when unset).
+     *  Used to distinguish "designed QB run" concepts (QB Draw) from
+     *  "designed RB run" concepts (Inside Zone). */
+    player?: "qb" | "back" | "any";
+    /** Optional runType filter. Concept matches only when the carry's
+     *  runType equals one of these. Use the catalog vocabulary
+     *  ("draw", "power", "inside_zone", etc.). */
+    runTypes?: string[];
+  };
+  /** Concept requires at least one `kind: "rpo_read"` assignment.
+   *  No further constraints today; future iterations may add filters
+   *  on pullIf or keyDefenderRole. */
+  requiresRpoRead?: boolean;
+  /** Concept requires the spec's play-level `ballPath` to have at
+   *  least this many handoff steps. Use 2+ for reverses (QB → RB →
+   *  WR), 1 for plays that just need any handoff. */
+  requiresBallPathSteps?: number;
+};
+
 export type ConceptEntry = {
   /** Display name (e.g. "Curl-Flat"). Lookup is case-insensitive. */
   name: string;
@@ -87,7 +152,10 @@ export type ConceptEntry = {
   aliases?: string[];
   /** Plain-English description for KB / coaching cue. */
   description: string;
-  /** The pattern of assignments a satisfying spec must contain. */
+  /** The pattern of assignments a satisfying spec must contain. Pass
+   *  concepts express their full pattern here. Run / RPO / reverse
+   *  concepts use the `structural` field for ball-handling shape and
+   *  leave this empty (or only list the supporting routes). */
   required: ConceptAssignment[];
   /** When true, every player matched to a required slot must be on the
    *  SAME side of the formation (all x ≥ 0 or all x ≤ 0). The matcher
@@ -96,6 +164,13 @@ export type ConceptEntry = {
    *  family/depth match passes. Used by side-flooding concepts (Flood,
    *  Sail) where the entire structural premise is "stretch ONE side". */
   sameSideRequired?: boolean;
+  /** Complexity tier (see ConceptComplexity). Optional today so the
+   *  field can be added without re-tagging every entry; the
+   *  recommendation engine treats `undefined` as "intermediate". */
+  complexity?: ConceptComplexity;
+  /** Non-route structural requirements (carry / rpo_read / ballPath).
+   *  See ConceptStructural. */
+  structural?: ConceptStructural;
 };
 
 // ── Concept entries ─────────────────────────────────────────────────────
@@ -113,6 +188,7 @@ const CURL_FLAT: ConceptEntry = {
     { role: "outside_wr", family: "Curl", depthRangeYds: { min: 4, max: 7 } },
     { role: "any",        family: "Flat", depthRangeYds: { min: 0, max: 4 } },
   ],
+  complexity: "basic",
 };
 
 const SMASH: ConceptEntry = {
@@ -124,6 +200,7 @@ const SMASH: ConceptEntry = {
     { role: "outside_wr", family: "Hitch",  depthRangeYds: { min: 4, max: 6 } },
     { role: "any",        family: "Corner", depthRangeYds: { min: 12, max: 18 } },
   ],
+  complexity: "basic",
 };
 
 const STICK: ConceptEntry = {
@@ -135,6 +212,7 @@ const STICK: ConceptEntry = {
     { role: "slot", family: "Sit",  depthRangeYds: { min: 5, max: 7 } },
     { role: "any",  family: "Flat", depthRangeYds: { min: 0, max: 4 } },
   ],
+  complexity: "basic",
 };
 
 const SNAG: ConceptEntry = {
@@ -147,6 +225,7 @@ const SNAG: ConceptEntry = {
     { role: "outside_wr", family: "Corner", depthRangeYds: { min: 12, max: 18 } },
     { role: "any",        family: "Flat",   depthRangeYds: { min: 0, max: 4 } },
   ],
+  complexity: "intermediate",
 };
 
 const FOUR_VERTS: ConceptEntry = {
@@ -164,6 +243,7 @@ const FOUR_VERTS: ConceptEntry = {
     { role: "any",        family: "Seam", depthRangeYds: { min: 12, max: 25 } },
     { role: "any",        family: "Seam", depthRangeYds: { min: 12, max: 25 } },
   ],
+  complexity: "intermediate",
 };
 
 const MESH: ConceptEntry = {
@@ -187,6 +267,7 @@ const MESH: ConceptEntry = {
     { role: "any", family: "Drag", depthRangeYds: { min: 2,   max: 3.5 } }, // under-drag (~2yd)
     { role: "any", family: "Drag", depthRangeYds: { min: 6,   max: 9   } }, // over-drag (~7-8yd)
   ],
+  complexity: "basic",
 };
 
 // ── Concept additions 2026-05-02 (Phase 7b) ────────────────────────────
@@ -220,6 +301,7 @@ const FLOOD: ConceptEntry = {
     { role: "any", family: "Flat",   depthRangeYds: { min: 0,  max: 4  } },
   ],
   sameSideRequired: true,
+  complexity: "intermediate",
 };
 
 const DRIVE: ConceptEntry = {
@@ -231,6 +313,7 @@ const DRIVE: ConceptEntry = {
     { role: "any", family: "Drag", depthRangeYds: { min: 2,  max: 4  } },
     { role: "any", family: "Dig",  depthRangeYds: { min: 10, max: 14 } },
   ],
+  complexity: "intermediate",
 };
 
 const LEVELS: ConceptEntry = {
@@ -242,6 +325,7 @@ const LEVELS: ConceptEntry = {
     { role: "any", family: "In",  depthRangeYds: { min: 6,  max: 8  } },
     { role: "any", family: "Dig", depthRangeYds: { min: 10, max: 14 } },
   ],
+  complexity: "intermediate",
 };
 
 const Y_CROSS: ConceptEntry = {
@@ -254,6 +338,7 @@ const Y_CROSS: ConceptEntry = {
     { role: "any", family: "Post", depthRangeYds: { min: 12, max: 18 } }, // the clear (Post or Go acceptable; Post is canonical)
     { role: "any", family: "Flat", depthRangeYds: { min: 0,  max: 4  } },
   ],
+  complexity: "advanced",
 };
 
 const DAGGER: ConceptEntry = {
@@ -265,6 +350,66 @@ const DAGGER: ConceptEntry = {
     { role: "any", family: "Seam", depthRangeYds: { min: 14, max: 25 } },
     { role: "any", family: "Dig",  depthRangeYds: { min: 14, max: 16 } },
   ],
+  complexity: "advanced",
+};
+
+// ── Designed-QB-run / RPO / reverse concepts (2026-05-12 build) ────────
+// These are the first catalog entries that lean on the `structural`
+// field instead of (or in addition to) the route-based `required`
+// pattern. The matcher checks both. Each entry below requires the
+// playbook to have the corresponding `advancedCapabilities` enabled
+// (designed_qb_run / rpo_read / handoff_chain) — otherwise the
+// play-tools resolver rejects the spec before save.
+
+const QB_DRAW: ConceptEntry = {
+  name: "QB Draw",
+  aliases: ["Quarterback Draw", "QB Lead Draw"],
+  description:
+    "Designed QB run from shotgun. The OL pass-sets to sell pass; receivers run pass routes (hitches / verts) to widen and pull the defense; the QB hesitates as if reading, then runs straight through the soft middle. Best against rush-heavy fronts on obvious passing downs — coverage drops, the box is light, the QB takes the easy yards.",
+  // No route requirements — the play is defined by the QB's run, not
+  // by any particular route shape. The supporting routes vary by
+  // formation and personnel.
+  required: [],
+  complexity: "basic",
+  structural: {
+    requiresCarry: {
+      player: "qb",
+      runTypes: ["draw", "qb_keep"],
+    },
+  },
+};
+
+const BUBBLE_RPO: ConceptEntry = {
+  name: "Bubble RPO",
+  aliases: ["Bubble Screen RPO", "RPO Bubble", "Inside Zone Bubble"],
+  description:
+    "Run-pass option built on Inside Zone with a bubble screen tag. The OL run-blocks; the back takes the Inside Zone path; a slot receiver releases on a bubble (lateral release, settling 0–2 yds behind the LOS); the QB reads the conflict defender (typically the playside OLB / overhang). If the conflict defender comes down to fill the run, the QB pulls and throws the bubble — the slot has the perimeter outflanked. If the defender stays out to play the bubble, the QB gives and the back hits a 5-on-5 box. Modern HS / college / NFL staple.",
+  // The Bubble route is part of the structure — list it as a required
+  // slot so the matcher catches "this called itself a Bubble RPO but
+  // nobody runs a Bubble."
+  required: [
+    { role: "slot", family: "Bubble", depthRangeYds: { min: -2, max: 2 } },
+  ],
+  complexity: "advanced",
+  structural: {
+    requiresRpoRead: true,
+    requiresCarry: {
+      player: "back",
+      runTypes: ["inside_zone"],
+    },
+  },
+};
+
+const JET_REVERSE: ConceptEntry = {
+  name: "Jet Reverse",
+  aliases: ["Reverse", "Reverse Jet", "End-Around Reverse"],
+  description:
+    "Multi-handoff misdirection. QB takes the snap and hands to the back (or jet-motion receiver) running toward one side; the back/jet then hands the ball back to the weak-side receiver coming around from the opposite direction. Two exchanges, three ball-handlers. The whole defense flows to the initial fake; the reverse runner attacks the vacated weak side. Best when the defense is over-pursuing the run game and your perimeter blockers (slot, weak-side WR) can seal the cornerback.",
+  required: [],
+  complexity: "intermediate",
+  structural: {
+    requiresBallPathSteps: 2,
+  },
 };
 
 export const CONCEPT_CATALOG: ConceptEntry[] = [
@@ -279,6 +424,12 @@ export const CONCEPT_CATALOG: ConceptEntry[] = [
   LEVELS,
   Y_CROSS,
   DAGGER,
+  // Run / RPO / reverse concepts (designed-QB-run, RPO, multi-handoff
+  // capability-gated). Appearance order chosen so detectConcept tries
+  // the existing pass concepts first.
+  QB_DRAW,
+  BUBBLE_RPO,
+  JET_REVERSE,
 ];
 
 // ── Module-load invariants ──────────────────────────────────────────────

@@ -372,6 +372,12 @@ export async function updatePlaybookSettingsAction(
       settings.maxThrowDepthYds > 0
         ? settings.maxThrowDepthYds
         : null,
+    // Pass advancedCapabilities straight through — the rules form
+    // already submits the canonical list; the read path normalizes
+    // unknown values out.
+    advancedCapabilities: Array.isArray(settings.advancedCapabilities)
+      ? settings.advancedCapabilities
+      : [],
     fieldDisplay: settings.fieldDisplay,
   };
 

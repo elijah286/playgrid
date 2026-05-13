@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PLAY_SPEC_SCHEMA_VERSION,
+  playSpecSchema,
   type PlaySpec,
   type PlayerAssignment,
 } from "./spec";
@@ -566,6 +567,371 @@ describe("PlaySpec defenderAssignments (Phase D2)", () => {
       ],
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// Step 1 of the Coach-Cal "QB runs / reverses / RPOs" build:
+//   Add the spec primitives for an RPO decision (`kind: "rpo_read"` on
+//   the QB) and for a multi-handoff ball path (`ballPath` at the play
+//   level). The renderer, parser, and projector get stub branches in
+//   the same commit so the exhaustive switches compile (Rule 2).
+//
+// These tests pin the schema contract. Renderer + projector contracts
+// are pinned by a separate describe block below ("renderer/projector
+// pending"), which fails today and will be updated as the geometry
+// phase lands.
+describe("PlaySpec rpo_read (step 1 schema)", () => {
+  it("accepts an rpo_read action with all fields", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "Q",
+          action: {
+            kind: "rpo_read",
+            keyDefenderRole: "playside_lb",
+            giveTo: "RB",
+            passTo: "S",
+            pullIf: "in",
+          },
+        },
+        { player: "RB", action: { kind: "carry", runType: "inside_zone" } },
+        { player: "S", action: { kind: "route", family: "Bubble" } },
+      ],
+    });
+    expect(result.success, !result.success ? JSON.stringify(result.error.issues) : undefined).toBe(true);
+  });
+
+  it("accepts an rpo_read without pullIf (defaults to 'in' at projection time)", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "Q",
+          action: {
+            kind: "rpo_read",
+            keyDefenderRole: "conflict",
+            giveTo: "RB",
+            passTo: "S",
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an rpo_read missing giveTo / passTo", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "Q",
+          // missing giveTo + passTo
+          action: { kind: "rpo_read", keyDefenderRole: "playside_lb" },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an rpo_read with empty-string keyDefenderRole", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "Q",
+          action: {
+            kind: "rpo_read",
+            keyDefenderRole: "",
+            giveTo: "RB",
+            passTo: "S",
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an rpo_read with pullIf outside {in, out}", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "Q",
+          action: {
+            kind: "rpo_read",
+            keyDefenderRole: "playside_lb",
+            giveTo: "RB",
+            passTo: "S",
+            pullIf: "sideways", // invalid — runtime-rejected by the zod enum
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("explain-from-spec emits a structural description for rpo_read", async () => {
+    const { describeAction } = await import("@/lib/coach-ai/explain-from-spec");
+    const desc = describeAction({
+      kind: "rpo_read",
+      keyDefenderRole: "playside_lb",
+      giveTo: "RB",
+      passTo: "S",
+      pullIf: "in",
+    });
+    expect(desc).not.toBeNull();
+    expect(desc!.toLowerCase()).toContain("rpo");
+    expect(desc!).toContain("@RB");
+    expect(desc!).toContain("@S");
+    expect(desc!).toContain("playside_lb");
+  });
+
+  it("notes-from-spec narrates rpo_read as a give/pull coaching cue", async () => {
+    const { narrateAction } = await import("@/lib/coach-ai/notes-from-spec");
+    const bullet = narrateAction("@Q", {
+      kind: "rpo_read",
+      keyDefenderRole: "playside_lb",
+      giveTo: "RB",
+      passTo: "S",
+      pullIf: "in",
+    });
+    expect(bullet).not.toBeNull();
+    expect(bullet!.toLowerCase()).toContain("rpo");
+    expect(bullet!.toLowerCase()).toContain("read");
+    expect(bullet!).toContain("@RB");
+    expect(bullet!).toContain("@S");
+  });
+});
+
+describe("PlaySpec ballPath (step 1 schema)", () => {
+  it("accepts a single-step ballPath (handoff: QB → RB)", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "Q", action: { kind: "block" } },
+        { player: "RB", action: { kind: "carry", runType: "inside_zone" } },
+      ],
+      ballPath: [{ from: "Q", to: "RB", atPoint: [0, 0] }],
+    });
+    expect(result.success, !result.success ? JSON.stringify(result.error.issues) : undefined).toBe(true);
+  });
+
+  it("accepts a two-step ballPath (reverse: QB → RB → Z)", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "Q", action: { kind: "block" } },
+        { player: "RB", action: { kind: "carry", waypoints: [[1, 0], [3, -1]] } },
+        { player: "Z", action: { kind: "carry", waypoints: [[-3, 1], [-15, 5]] } },
+      ],
+      ballPath: [
+        { from: "Q",  to: "RB", atPoint: [0, 0] },
+        { from: "RB", to: "Z",  atPoint: [3, -1] },
+      ],
+    });
+    expect(result.success, !result.success ? JSON.stringify(result.error.issues) : undefined).toBe(true);
+  });
+
+  it("accepts ballPath steps without atPoint (renderer infers from carry endpoints)", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "Q", action: { kind: "block" } },
+        { player: "RB", action: { kind: "carry", runType: "sweep" } },
+      ],
+      ballPath: [{ from: "Q", to: "RB" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty ballPath array", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [],
+      ballPath: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a ballPath step missing from / to", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [],
+      ballPath: [{ from: "Q" }], // missing `to` — runtime-rejected by the schema
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("specs without ballPath still parse (back-compat — most plays are single-carrier)", () => {
+    const result = playSpecSchema.safeParse({
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "flag_7v7",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Slant" } },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// Step 4 of the Coach-Cal "QB runs / reverses / RPOs" build: the
+// renderer emits real geometry for rpo_read (a pass-option arrow
+// anchored on the QB, tagged `route_kind: "rpo_pass_option"`) and for
+// each ballPath step (a short directional handoff arrow anchored at
+// the mesh point, tagged `route_kind: "handoff"`). These tests pin
+// the contract a future styling pass (dashed lines, key-defender
+// highlight) must extend rather than replace.
+describe("PlaySpec rpo_read renderer (step 4 geometry)", () => {
+  it("emits a pass-option arrow anchored on the QB pointing toward the pass-side receiver", () => {
+    const spec: PlaySpec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      title: "Spread - Inside Zone Bubble RPO",
+      playType: "offense",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "QB",
+          action: {
+            kind: "rpo_read",
+            keyDefenderRole: "playside_lb",
+            giveTo: "B",
+            passTo: "S",
+            pullIf: "in",
+          },
+        },
+        { player: "B", action: { kind: "carry", runType: "inside_zone" } },
+        { player: "S", action: { kind: "route", family: "Bubble" } },
+      ],
+    };
+    const { diagram, warnings } = playSpecToCoachDiagram(spec);
+    // The pass-option arrow has `route_kind: "rpo_pass_option"` and
+    // anchors on the QB. Find it explicitly.
+    const passOption = (diagram.routes ?? []).find(
+      (r) => r.route_kind === "rpo_pass_option" && r.from === "QB",
+    );
+    expect(passOption, "renderer must emit a route tagged rpo_pass_option from the QB").toBeDefined();
+    // No more pending warning — the geometry is real now.
+    expect(warnings.some((w) => w.code === ("rpo_read_renderer_pending" as string)))
+      .toBe(false);
+    // Arrow points generally toward S (S sits to one side; the
+    // arrow's endpoint should be closer to S than to the QB's
+    // starting position).
+    const qb = diagram.players.find((p) => p.id === "QB")!;
+    const s = diagram.players.find((p) => p.id === "S")!;
+    const [endX, endY] = passOption!.path[passOption!.path.length - 1];
+    const distFromS = Math.hypot(endX - s.x, endY - s.y);
+    const distFromQb = Math.hypot(endX - qb.x, endY - qb.y);
+    expect(distFromS, "pass-option arrow should END closer to S than to QB (it indicates the read toward S)").toBeLessThan(distFromS + distFromQb);
+    // Length cap — the arrow must NOT span the full distance to S
+    // (capped so the visual reads as a decision indicator, not literal
+    // QB travel).
+    expect(distFromQb).toBeLessThanOrEqual(3.1);
+  });
+
+  it("warns when the rpo_read pass target isn't in the formation", () => {
+    const spec: PlaySpec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        {
+          player: "QB",
+          action: {
+            kind: "rpo_read",
+            keyDefenderRole: "playside_lb",
+            giveTo: "B",
+            passTo: "PHANTOM",
+          },
+        },
+      ],
+    };
+    const { warnings } = playSpecToCoachDiagram(spec);
+    expect(warnings.some((w) => w.code === "assignment_player_missing")).toBe(true);
+  });
+});
+
+describe("PlaySpec ballPath renderer (step 4 geometry)", () => {
+  it("emits one handoff arrow per ballPath step, anchored at atPoint and pointing toward the receiver", () => {
+    const spec: PlaySpec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      title: "Spread - Jet Reverse",
+      playType: "offense",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "QB", action: { kind: "block" } },
+        { player: "B", action: { kind: "carry", waypoints: [[1, 0], [3, -1]] } },
+        { player: "Z", action: { kind: "carry", waypoints: [[-3, 1], [-15, 5]] } },
+      ],
+      ballPath: [
+        { from: "QB", to: "B", atPoint: [0, 0] },
+        { from: "B",  to: "Z", atPoint: [3, -1] },
+      ],
+    };
+    const { diagram, warnings } = playSpecToCoachDiagram(spec);
+    const handoffs = (diagram.routes ?? []).filter(
+      (r) => r.route_kind === "handoff",
+    );
+    expect(handoffs).toHaveLength(2);
+    // First arrow anchored at the first mesh point (0, 0); second at (3, -1).
+    expect(handoffs[0].path[0]).toEqual([0, 0]);
+    expect(handoffs[1].path[0]).toEqual([3, -1]);
+    // No more pending warning — the geometry is real now.
+    expect(warnings.some((w) => w.code === ("ballpath_renderer_pending" as string)))
+      .toBe(false);
+  });
+
+  it("falls back to the giver's position when atPoint is omitted", () => {
+    const spec: PlaySpec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [
+        { player: "QB", action: { kind: "block" } },
+        { player: "B", action: { kind: "carry", runType: "sweep" } },
+      ],
+      ballPath: [{ from: "QB", to: "B" }],
+    };
+    const { diagram } = playSpecToCoachDiagram(spec);
+    const handoff = (diagram.routes ?? []).find((r) => r.route_kind === "handoff");
+    expect(handoff).toBeDefined();
+    const qb = diagram.players.find((p) => p.id === "QB")!;
+    expect(handoff!.path[0]).toEqual([qb.x, qb.y]);
+  });
+
+  it("warns when a ballPath step references a player not in the formation", () => {
+    const spec: PlaySpec = {
+      schemaVersion: PLAY_SPEC_SCHEMA_VERSION,
+      variant: "tackle_11",
+      formation: { name: "Spread Doubles" },
+      assignments: [{ player: "QB", action: { kind: "block" } }],
+      ballPath: [{ from: "QB", to: "PHANTOM", atPoint: [0, 0] }],
+    };
+    const { warnings } = playSpecToCoachDiagram(spec);
+    expect(warnings.some((w) => w.code === "assignment_player_missing")).toBe(true);
   });
 });
 

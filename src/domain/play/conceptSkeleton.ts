@@ -435,6 +435,195 @@ function buildDagger(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
   };
 }
 
+/**
+ * QB Draw — designed QB run from shotgun. OL pass-sets to sell pass;
+ * skill players run pass routes (mostly hitches) to widen the coverage;
+ * QB hesitates, then runs straight through the middle. Requires the
+ * playbook's `designed_qb_run` capability — the resolver will reject
+ * the save if it isn't enabled.
+ *
+ * Geometry: QB takes the snap at (0, -5), runs through the heart of
+ * the defense to ~(0, 5). The renderer's carry-synth path will fall
+ * back to a sensible default if waypoints are omitted, but we set
+ * them explicitly so the diagram reads as a draw (straight up the
+ * middle) rather than a generic ballcarrier line.
+ */
+function buildQbDraw(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  const variant = opts.variant;
+  const assignments: PlayerAssignment[] = [
+    // QB takes the snap and runs the draw. Waypoints span ~10 yds
+    // straight ahead; the renderer adds the carrier's start position
+    // automatically so the path reads from QB stance through the line.
+    {
+      player: "QB",
+      confidence: "high",
+      action: { kind: "carry", runType: "draw", waypoints: [[0, -3], [0, 2], [0, 6]] },
+    },
+    // Back stays in to pass-block (the play sells pass; the QB
+    // exploits the lifted coverage).
+    { player: "B", confidence: "high", action: { kind: "block", target: "blitz" } },
+    // Receivers run quick pass routes to widen coverage. Hitches +
+    // a Drag underneath give Cal a sensible default; the user can
+    // swap any of them via revise_play.
+    routeAt("X", "Hitch", 5),
+    routeAt("Z", "Hitch", 5),
+    routeAt("H", "Drag", 3),
+    routeAt("S", "Drag", 3),
+    ...lineBlocks(variant),
+  ];
+  // Note we do NOT include qbDropback(): the QB is the runner.
+  return {
+    ok: true,
+    concept: "QB Draw",
+    spec: baseSpec(variant, "QB Draw", "Spread Doubles", undefined, assignments),
+    notes:
+      `QB Draw: QB takes the snap, hesitates as if reading, then runs straight up the middle. ` +
+      `OL pass-sets to sell pass; receivers run hitches / drags to widen coverage. ` +
+      `Best vs rush-heavy defenses on obvious passing downs.`,
+  };
+}
+
+/**
+ * Bubble RPO — Inside Zone + Bubble screen with a QB read on the
+ * conflict defender (playside OLB / overhang). The QB pulls and
+ * throws the bubble when the conflict defender comes down to fill
+ * the run; gives the back on Inside Zone when the defender stays
+ * out. Requires `rpo_read`.
+ *
+ * Strength side picks which slot runs the bubble: strong-side slot
+ * by default ("S" on Spread Doubles right-strength; "H" on left).
+ */
+function buildBubbleRpo(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  const variant = opts.variant;
+  const side: "left" | "right" = opts.strength ?? "right";
+  const bubbleSlot = side === "right" ? "S" : "H";
+  const backsideSlot = side === "right" ? "H" : "S";
+  const bubbleOutside = side === "right" ? "Z" : "X";
+  const backsideOutside = side === "right" ? "X" : "Z";
+  const assignments: PlayerAssignment[] = [
+    // QB's RPO decision — read the playside OLB.
+    {
+      player: "QB",
+      confidence: "high",
+      action: {
+        kind: "rpo_read",
+        keyDefenderRole: "playside_lb",
+        giveTo: "B",
+        passTo: bubbleSlot,
+        pullIf: "in",
+      },
+    },
+    // Back takes the Inside Zone path. Synthesizer-default waypoints
+    // produce a reasonable IZ line — we don't override so the run
+    // direction tracks the strength.
+    { player: "B", confidence: "high", action: { kind: "carry", runType: "inside_zone" } },
+    // Bubble slot — the pass option. Bubble route family is the
+    // catalog's lateral-release screen at ~0–2 yds.
+    routeAt(bubbleSlot, "Bubble", 1, side),
+    // Outside receiver to the bubble side runs a hitch as the
+    // bubble's blocker (no actual block in the spec; a Hitch keeps
+    // the cornerback honest until the ball is in the air).
+    routeAt(bubbleOutside, "Hitch", 5),
+    // Backside players give a counter-image — both run go routes to
+    // hold the safety, so the playside read is honest.
+    routeAt(backsideOutside, "Go", 18),
+    routeAt(backsideSlot, "Go", 18),
+    ...lineBlocks(variant),
+  ];
+  return {
+    ok: true,
+    concept: "Bubble RPO",
+    spec: baseSpec(variant, `Bubble RPO ${cap(side)}`, "Spread Doubles", side, assignments),
+    notes:
+      `Bubble RPO ${cap(side)}: QB reads the playside OLB. ` +
+      `If he comes down to fill the run, pull and throw to @${bubbleSlot} on the bubble (he has the outside leverage). ` +
+      `If he stays wide on the bubble, give to @B on Inside Zone — the box is light. ` +
+      `Backside @${backsideOutside} / @${backsideSlot} run go routes to hold the deep safety.`,
+  };
+}
+
+/**
+ * Jet Reverse — two-handoff misdirection. QB hands to the back at
+ * the mesh; back runs strong-side and hands the ball to the weak-
+ * side WR coming around. Three ball-handlers, two exchanges. Use the
+ * play-level `ballPath` to ledger the exchanges; each carrier's
+ * waypoints describe their leg with the ball. Requires
+ * `handoff_chain`.
+ *
+ * Strength: defaults to "right" — initial action goes right, reverse
+ * comes back to the left side. Mirrors when strength === "left".
+ */
+function buildJetReverse(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  const variant = opts.variant;
+  const side: "left" | "right" = opts.strength ?? "right";
+  // Reverse comes from the WEAK side: when strength=right, the reverse
+  // carrier is X (left WR); when strength=left, the reverse carrier is
+  // Z (right WR).
+  const reverseCarrier = side === "right" ? "X" : "Z";
+  const sideSign = side === "right" ? 1 : -1;
+  // Mesh points: QB→B at the snap (behind the LOS), then B→reverse-
+  // carrier a couple yards laterally on the strong side. Both are
+  // behind the LOS so the handoffs look natural in the diagram.
+  const mesh1: [number, number] = [0, -4];
+  const mesh2: [number, number] = [sideSign * 3, -3];
+  const assignments: PlayerAssignment[] = [
+    // QB hands and gets out of the way — block / no further role.
+    { player: "QB", confidence: "high", action: { kind: "block" } },
+    // Back takes the first handoff at mesh1, fakes upfield, then
+    // hands to the reverse carrier at mesh2. Waypoints describe the
+    // ball-carrying leg from mesh1 → mesh2; the renderer prepends
+    // B's start position automatically.
+    {
+      player: "B",
+      confidence: "high",
+      action: { kind: "carry", waypoints: [mesh1, mesh2] },
+    },
+    // Reverse carrier: takes the ball at mesh2 and runs to the weak
+    // side, ending ~10 yds downfield and 5 yds outside the hashes on
+    // the weak side. Waypoints span mesh2 → endpoint; renderer
+    // prepends their start position.
+    {
+      player: reverseCarrier,
+      confidence: "high",
+      action: {
+        kind: "carry",
+        waypoints: [mesh2, [-sideSign * 8, -1], [-sideSign * 14, 8]],
+      },
+    },
+    ...lineBlocks(variant),
+  ];
+  // Routes for the remaining receivers so the formation isn't bare.
+  // Add a hitch + a drag on the strong side; backside skill players
+  // get unspecified (they sell run by holding their assignment but
+  // don't have a defined route in the reverse misdirection).
+  const strongOutside = side === "right" ? "Z" : "X";
+  const strongSlot = side === "right" ? "S" : "H";
+  const backsideSlot = side === "right" ? "H" : "S";
+  // Strong-side receivers block downfield (no route assignment) so
+  // the reverse runner has a perimeter. Mark them as `unspecified`
+  // so the diagram doesn't draw misleading pass routes.
+  assignments.push(
+    { player: strongOutside, confidence: "med", action: { kind: "unspecified" } },
+    { player: strongSlot, confidence: "med", action: { kind: "unspecified" } },
+    { player: backsideSlot, confidence: "med", action: { kind: "unspecified" } },
+  );
+  return {
+    ok: true,
+    concept: "Jet Reverse",
+    spec: {
+      ...baseSpec(variant, `Jet Reverse ${cap(side)}`, "Trips Right", side, assignments),
+      ballPath: [
+        { from: "QB", to: "B", atPoint: mesh1 },
+        { from: "B",  to: reverseCarrier, atPoint: mesh2 },
+      ],
+    },
+    notes:
+      `Jet Reverse ${cap(side)}: QB hands to @B at the mesh; @B runs strong-side and hands the ball back to @${reverseCarrier} coming around. ` +
+      `@${reverseCarrier} attacks the weak side after the defense flows to the initial fake. ` +
+      `Two exchanges, three ball-handlers. Best when the defense is over-pursuing the run.`,
+  };
+}
+
 function cap(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
 }
@@ -451,4 +640,11 @@ const SKELETON_BUILDERS: Record<string, (concept: ConceptEntry, opts: ConceptSke
   "Levels":         buildLevels,
   "Y-Cross":        buildYCross,
   "Dagger":         buildDagger,
+  // Designed-QB-run / RPO / reverse concepts (2026-05-12 build).
+  // Capability-gated at save time — the play-tools resolver rejects
+  // the spec when the playbook hasn't enabled the corresponding
+  // advancedCapabilities flag.
+  "QB Draw":        buildQbDraw,
+  "Bubble RPO":     buildBubbleRpo,
+  "Jet Reverse":    buildJetReverse,
 };

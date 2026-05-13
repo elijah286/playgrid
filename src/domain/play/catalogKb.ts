@@ -29,6 +29,7 @@
 
 import { ROUTE_TEMPLATES, type RouteTemplate } from "./routeTemplates";
 import { DEFENSIVE_ALIGNMENTS, type DefensiveAlignment } from "./defensiveAlignments";
+import { CONCEPT_CATALOG, type ConceptEntry } from "./conceptCatalog";
 
 /**
  * KB chunk shape. Mirrors the `rag_documents` table columns the build
@@ -83,6 +84,7 @@ export function buildCatalogKbChunks(): CatalogKbChunk[] {
   const all: CatalogKbChunk[] = [
     ...ROUTE_TEMPLATES.map(routeTemplateToChunk),
     ...DEFENSIVE_ALIGNMENTS.map(defensiveAlignmentToChunk),
+    ...CONCEPT_CATALOG.map(conceptEntryToChunk),
   ];
 
   // Dedupe by (topic, subtopic, sportVariant). First occurrence wins —
@@ -181,6 +183,80 @@ function defensiveAlignmentToChunk(alignment: DefensiveAlignment): CatalogKbChun
     authoritative: true,
     needsReview: false,
   };
+}
+
+/**
+ * Project a ConceptEntry into a KB chunk. Concept chunks live under
+ * `topic: "scheme_offense"` (parallel to "scheme_defense" for
+ * alignments) with a subtopic that follows the same slug rules used
+ * by defensiveAlignmentToChunk.
+ *
+ * Why concepts ship to the KB:
+ *   - Concept descriptions are the canonical English for "what is a
+ *     Bubble RPO?" / "when do I use Y-Cross?" — Cal needs them at
+ *     retrieval time so it can recommend concepts contextually, not
+ *     just compose them on request.
+ *   - The complexity tag + aliases improve retrieval precision when
+ *     coaches search with informal names ("show me reverse plays") or
+ *     when Cal filters by team complexity ceiling.
+ *
+ * Content shape: description first (the coaching narrative), then
+ * structural facts (complexity, structural requirements, aliases) so
+ * retrieval surfaces the right answer for "how complex is QB Draw?"
+ * or "what's a Bubble RPO need?" type queries.
+ */
+function conceptEntryToChunk(concept: ConceptEntry): CatalogKbChunk {
+  const complexityLine = concept.complexity
+    ? `Complexity: ${concept.complexity}.`
+    : "";
+  const structuralLines: string[] = [];
+  if (concept.structural?.requiresCarry) {
+    const c = concept.structural.requiresCarry;
+    const who = c.player === "qb" ? "the QB" : c.player === "back" ? "a back" : "a ballcarrier";
+    const types = c.runTypes && c.runTypes.length > 0 ? ` (${c.runTypes.join(" / ")})` : "";
+    structuralLines.push(`Requires ${who} carrying the ball${types}.`);
+  }
+  if (concept.structural?.requiresRpoRead) {
+    structuralLines.push("Requires the QB to read a key defender and choose give vs throw at the snap.");
+  }
+  if (typeof concept.structural?.requiresBallPathSteps === "number") {
+    structuralLines.push(
+      `Requires ${concept.structural.requiresBallPathSteps} ball-handling exchange(s) ` +
+        `(multi-handoff misdirection — reverses, fakes).`,
+    );
+  }
+  const aliasLine =
+    concept.aliases && concept.aliases.length > 0
+      ? `Also called: ${concept.aliases.join(", ")}.`
+      : "";
+
+  const content = [
+    concept.description,
+    "",
+    complexityLine,
+    ...structuralLines,
+    aliasLine,
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+
+  return {
+    scope: "global",
+    topic: "scheme_offense",
+    subtopic: conceptSubtopic(concept),
+    title: `Concept: ${concept.name}`,
+    content,
+    sportVariant: null,
+    source: "catalog",
+    sourceNote: `Generated from src/domain/play/conceptCatalog.ts (${concept.name}).`,
+    authoritative: true,
+    needsReview: false,
+  };
+}
+
+function conceptSubtopic(concept: ConceptEntry): string {
+  const slug = concept.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return `concept_${slug}`;
 }
 
 function defenseSubtopic(alignment: DefensiveAlignment): string {

@@ -251,6 +251,16 @@ function confidenceForAction(
     case "motion": return "med";
     case "custom": return "low";
     case "unspecified": return "low";
+    case "rpo_read":
+      // The parser (diagram → spec) does not yet synthesize rpo_read
+      // from geometry alone — that requires recognizing the dual-
+      // branch pattern (run + tag-along route + read-defender cue),
+      // which lands with the RPO parser-inference phase. Cal can
+      // author rpo_read directly today via `create_play`; that path
+      // sets confidence explicitly, so this branch only fires if a
+      // future inference pass tags an action as rpo_read without a
+      // confidence assertion.
+      return "low";
   }
 }
 

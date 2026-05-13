@@ -30,6 +30,46 @@ export type FieldDisplaySettings = {
 };
 
 /**
+ * Capabilities the playbook's rule-set unlocks for Coach Cal's play
+ * authoring. Coarse-grained on purpose: each entry corresponds to a
+ * CLASS of play behavior the renderer + writer must support, not a
+ * single action kind. The defaults per variant ship via
+ * `baseSettingsForVariant`; the "custom" preset / Other variant lets a
+ * coach toggle individual capabilities on or off in the rules form.
+ *
+ * Why this is a list rather than a bag of booleans: capabilities will
+ * grow (special-teams, fake punt, double-pass, no-huddle motion-at-
+ * snap, etc.). A list keeps the schema additive — new capabilities
+ * land as new string values, old playbooks parse without a migration
+ * (unknown values are dropped on normalize). Cal reads the resolved
+ * capability set at compose time; the validator rejects specs that
+ * use a capability the playbook hasn't opted into.
+ */
+export type RuleCapability =
+  /** Designed QB carries (QB Draw, QB Power, QB Counter, QB Sneak,
+   *  Zone Read QB-keep). Distinct from a scramble — that's always
+   *  legal when rushingAllowed is on. This gates Cal recommending or
+   *  drawing the QB as the named ballcarrier. */
+  | "designed_qb_run"
+  /** Multi-handoff plays — reverses, jet reverses, double reverses,
+   *  fake reverses. Implies the play-level `ballPath` field in the
+   *  spec. Distinct from `handoffsAllowed` (single QB → RB exchange),
+   *  which is the universal flag-rule toggle. */
+  | "handoff_chain"
+  /** Run-pass option plays — the QB's assignment uses `kind:
+   *  "rpo_read"` with a key defender + run branch + pass branch. */
+  | "rpo_read";
+
+/** All recognized capability strings, in display order for the rules
+ *  form. New entries appended (never renamed — saved playbooks
+ *  reference these strings). */
+export const RULE_CAPABILITIES: readonly RuleCapability[] = [
+  "designed_qb_run",
+  "handoff_chain",
+  "rpo_read",
+] as const;
+
+/**
  * Per-playbook game-rule settings. Stored denormalized on `playbooks.settings`
  * (jsonb) so a coach can tweak rules after creation without touching the sport
  * variant. `maxPlayers` also drives the "too many players on the field"
@@ -64,6 +104,16 @@ export type PlaybookSettings = {
    * settings UI so it doesn't drift across sessions.
    */
   maxThrowDepthYds: number | null;
+  /**
+   * Advanced play capabilities the playbook opts into. Tackle defaults
+   * to the full set; flag variants default to a conservative subset
+   * (5v5 = empty; 7v7 = `["designed_qb_run"]`). Coach can toggle in
+   * the rules form. Cal reads this to decide what concepts to
+   * recommend; the spec validator rejects writes that use a
+   * capability not in this list. See `RuleCapability` for the
+   * vocabulary.
+   */
+  advancedCapabilities: RuleCapability[];
   /**
    * Per-playbook field-display settings — league preset + structural
    * overrides + per-play marking visibility defaults. Drives the field
@@ -109,6 +159,10 @@ function baseSettingsForVariant(
         centerIsEligible: false,
         maxPlayers: 7,
         maxThrowDepthYds: null,
+        // 7v7 traditionally pass-only — no QB runs / handoffs / RPOs
+        // by default. Coach can opt in via the rules form for leagues
+        // that allow more.
+        advancedCapabilities: [],
       };
     case "flag_5v5":
       return {
@@ -119,6 +173,15 @@ function baseSettingsForVariant(
         centerIsEligible: true,
         maxPlayers: 5,
         maxThrowDepthYds: null,
+        // Conservative 5v5 default — empty advancedCapabilities. Most
+        // 5v5 rule sets require a handoff before any run, so the QB
+        // can't be a designed runner; multi-handoff reverses and RPOs
+        // are likewise uncommon. Coaches whose league DOES allow QB
+        // runs (some recreational variants) opt in via the rules form.
+        // Earlier default of ["designed_qb_run"] was a wrong guess —
+        // surfaced 2026-05-12 by a coach whose 5v5 league disallows
+        // QB runs but Cal happily composed a QB Draw.
+        advancedCapabilities: [],
       };
     case "tackle_11":
       return {
@@ -129,6 +192,8 @@ function baseSettingsForVariant(
         centerIsEligible: false,
         maxPlayers: 11,
         maxThrowDepthYds: null,
+        // Tackle football: full capability set on by default.
+        advancedCapabilities: ["designed_qb_run", "handoff_chain", "rpo_read"],
       };
     case "other":
       return {
@@ -139,6 +204,10 @@ function baseSettingsForVariant(
         centerIsEligible: false,
         maxPlayers: Math.max(4, Math.min(11, customPlayers ?? 7)),
         maxThrowDepthYds: null,
+        // Custom game type: empty by default so the coach explicitly
+        // declares what their rules allow. Cal won't recommend an RPO
+        // until the coach opts in for a custom variant.
+        advancedCapabilities: [],
       };
   }
 }
@@ -336,9 +405,32 @@ export function normalizePlaybookSettings(
       typeof r.maxThrowDepthYds === "number" && Number.isFinite(r.maxThrowDepthYds) && r.maxThrowDepthYds > 0
         ? r.maxThrowDepthYds
         : defaults.maxThrowDepthYds,
+    advancedCapabilities: normalizeAdvancedCapabilities(
+      (r as { advancedCapabilities?: unknown }).advancedCapabilities,
+      defaults.advancedCapabilities,
+    ),
     fieldDisplay: normalizeFieldDisplay(
       (r as { fieldDisplay?: unknown }).fieldDisplay,
       variant,
     ),
   };
+}
+
+const RULE_CAPABILITY_SET = new Set<string>(RULE_CAPABILITIES);
+
+/** Drop unknown values, dedupe, and preserve the canonical display
+ *  order. Legacy rows that pre-date this field fall back to the
+ *  variant default (passed in as `fallback`). */
+function normalizeAdvancedCapabilities(
+  raw: unknown,
+  fallback: RuleCapability[],
+): RuleCapability[] {
+  if (!Array.isArray(raw)) return [...fallback];
+  const seen = new Set<RuleCapability>();
+  for (const entry of raw) {
+    if (typeof entry === "string" && RULE_CAPABILITY_SET.has(entry)) {
+      seen.add(entry as RuleCapability);
+    }
+  }
+  return RULE_CAPABILITIES.filter((c) => seen.has(c));
 }

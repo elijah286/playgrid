@@ -396,3 +396,94 @@ describe("sanitize — OL-overlap edge case (Y stacked on RT)", () => {
     expect(result.warnings.some((w) => w.code === "player_overlap_nudged" && w.subject === "Y")).toBe(true);
   });
 });
+
+describe("sanitize — indicator-route length cap", () => {
+  it("keeps a short RPO pass-option arrow (1.5 yds) intact", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        routes: [
+          {
+            from: "Q",
+            path: [[1, -2]], // ~2.2 yds from QB at (0, -3)
+            route_kind: "rpo_pass_option",
+          },
+        ],
+      }),
+    );
+    expect(result.diagram.routes).toHaveLength(1);
+    expect(result.warnings.some((w) => w.code === "indicator_route_dropped_too_long")).toBe(false);
+  });
+
+  it("keeps a short handoff arrow (1.5 yds) intact", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        routes: [
+          {
+            from: "Q",
+            path: [[0, 0], [1, 0]], // 1 yd span
+            route_kind: "handoff",
+          },
+        ],
+      }),
+    );
+    expect(result.diagram.routes).toHaveLength(1);
+    expect(result.warnings.some((w) => w.code === "indicator_route_dropped_too_long")).toBe(false);
+  });
+
+  it("drops an rpo_pass_option arrow that exceeds the 4-yd cap", () => {
+    // QB at (0, -3) → endpoint at (10, 5) is ~14 yds. Defensive: a
+    // renderer bug or coach-authored corruption produces this; the
+    // sanitizer must drop it before it paints a misleading scramble.
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        routes: [
+          {
+            from: "Q",
+            path: [[10, 5]],
+            route_kind: "rpo_pass_option",
+          },
+        ],
+      }),
+    );
+    expect(result.diagram.routes ?? []).toHaveLength(0);
+    expect(
+      result.warnings.some(
+        (w) => w.code === "indicator_route_dropped_too_long" && w.subject === "Q",
+      ),
+    ).toBe(true);
+  });
+
+  it("drops an oversized handoff arrow (10+ yds between waypoints)", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        routes: [
+          {
+            from: "Q",
+            path: [[0, 0], [12, 8]],
+            route_kind: "handoff",
+          },
+        ],
+      }),
+    );
+    expect(result.diagram.routes ?? []).toHaveLength(0);
+    expect(
+      result.warnings.some((w) => w.code === "indicator_route_dropped_too_long"),
+    ).toBe(true);
+  });
+
+  it("does NOT apply the indicator cap to regular routes (a 20-yd Go must still render)", () => {
+    const result = sanitizeCoachDiagram(
+      baseDiagram({
+        routes: [
+          {
+            from: "X",
+            path: [[-18, 20]], // a Go from a wide receiver, ~20 yds downfield
+            route_kind: "go",
+          },
+        ],
+      }),
+    );
+    expect(result.diagram.routes).toHaveLength(1);
+    expect(result.warnings.some((w) => w.code === "indicator_route_dropped_too_long")).toBe(false);
+  });
+});
