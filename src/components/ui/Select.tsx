@@ -12,9 +12,10 @@ type SelectProps = {
   options: Option[];
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 };
 
-export function Select({ value, onChange, options, placeholder = "Select...", className }: SelectProps) {
+export function Select({ value, onChange, options, placeholder = "Select...", className, disabled = false }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [focusIdx, setFocusIdx] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +47,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
   }, [focusIdx, open]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (disabled) return;
     if (!open) {
       if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
         e.preventDefault();
@@ -86,7 +88,10 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-disabled={disabled || undefined}
+        disabled={disabled}
         onClick={() => {
+          if (disabled) return;
           setOpen((o) => !o);
           if (!open) setFocusIdx(Math.max(0, options.findIndex((o) => o.value === value)));
         }}
@@ -95,6 +100,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
           "flex h-9 w-full items-center justify-between rounded-lg border bg-surface-raised px-3 text-sm transition-colors",
           "focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none",
           open ? "border-primary ring-1 ring-primary" : "border-border hover:border-muted-light",
+          disabled && "cursor-not-allowed opacity-60 hover:border-border",
         )}
       >
         <span className={selected ? "text-foreground" : "text-muted-light"}>

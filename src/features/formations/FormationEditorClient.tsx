@@ -48,6 +48,13 @@ type Props =
       mode: "new";
       /** Pre-selected sport variant (from ?variant= query param). */
       initialVariant?: SportVariant;
+      /**
+       * When set, the sport-type selector is disabled and locked to
+       * `initialVariant`. Used when entering from a specific playbook —
+       * a mismatched variant would silently hide the new formation from
+       * the playbook's Formations tab.
+       */
+      lockVariant?: boolean;
       /** Play ID to return to after saving (from ?returnToPlay= query param). */
       returnToPlay?: string | null;
       /** Playbook ID to return to after saving (from ?returnToPlaybook=). */
@@ -331,8 +338,17 @@ export function FormationEditorClient(props: Props) {
             onChange={handleVariantChange}
             options={SPORT_OPTIONS}
             className="w-44"
-            /* Can't change sport on existing formation — would lose player layout */
+            // Locked when entering from a specific playbook — a mismatched
+            // variant would silently hide the formation from that playbook's
+            // Formations tab. Also locked in edit mode (changing variant
+            // would orphan the existing player layout).
+            disabled={props.mode === "new" && props.lockVariant === true}
           />
+          {props.mode === "new" && props.lockVariant === true ? (
+            <p className="text-[11px] text-muted">
+              Locked to this playbook&apos;s sport type.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <label className="text-xs font-medium text-muted">Formation name</label>

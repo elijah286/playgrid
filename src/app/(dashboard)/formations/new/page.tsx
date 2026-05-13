@@ -1,6 +1,8 @@
 import { FormationEditorClient } from "@/features/formations/FormationEditorClient";
 import { ExamplePreviewProvider } from "@/features/admin/ExamplePreviewContext";
 import type { SportVariant } from "@/domain/play/types";
+import { createClient } from "@/lib/supabase/server";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
 
 export const metadata = { title: "New Formation — XO Gridmaker" };
 
@@ -17,17 +19,46 @@ type Props = {
 
 export default async function NewFormationPage({ searchParams }: Props) {
   const params = await searchParams;
-  const variant =
+  const queryVariant =
     VALID_VARIANTS.find((v) => v === params.variant) ?? "flag_7v7";
   const returnToPlay = params.returnToPlay ?? null;
   const returnToPlaybook = params.returnToPlaybook ?? null;
   const isPreview = params.preview === "1";
 
+  // When entering from a specific playbook, lock the sport-type selector to
+  // that playbook's variant. Otherwise a coach could pick a mismatched
+  // variant ("Other" in a flag_7v7 playbook) and the saved formation would
+  // be invisible in the playbook's Formations tab — it gets filtered out
+  // server-side by listFormationsForPlaybookAction.
+  //
+  // For multi-playbook saves (comma-joined ids from the picker), we lock to
+  // the first playbook's variant; the picker only surfaces same-variant
+  // playbooks in practice. If the lookup fails we fall back to the query
+  // param and leave the selector unlocked.
+  let initialVariant: SportVariant = queryVariant;
+  let lockVariant = false;
+  const firstPlaybookId = (returnToPlaybook ?? "").split(",").map((s) => s.trim()).filter(Boolean)[0];
+  if (firstPlaybookId && hasSupabaseEnv()) {
+    const supabase = await createClient();
+    const { data: pb } = await supabase
+      .from("playbooks")
+      .select("sport_variant")
+      .eq("id", firstPlaybookId)
+      .single();
+    const pbVariant = (pb?.sport_variant as string | null) ?? null;
+    const matched = VALID_VARIANTS.find((v) => v === pbVariant);
+    if (matched) {
+      initialVariant = matched;
+      lockVariant = true;
+    }
+  }
+
   return (
     <ExamplePreviewProvider isPreview={isPreview}>
       <FormationEditorClient
         mode="new"
-        initialVariant={variant}
+        initialVariant={initialVariant}
+        lockVariant={lockVariant}
         returnToPlay={returnToPlay}
         returnToPlaybook={returnToPlaybook}
       />
