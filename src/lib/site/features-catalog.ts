@@ -535,6 +535,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-03",
   },
   {
+    id: "coach-cal-run-game-and-flea-flicker",
+    name: "Coach Cal can diagram the run game and trick plays (Sweep, Dive, Counter, Draw, Flea Flicker)",
+    description:
+      "Cal now composes plain run plays (Sweep, Dive, Counter, Draw) and the Flea Flicker trick play through the catalog skeleton path — same constructive composition the pass concepts use, so Cal can't freelance the handoff. On run plays, the QB is drawn moving to the mesh point and back, so coaches can see and teach the footwork (previously the QB never showed motion on any play). On Flea Flicker, the diagram shows the full sequence: QB hands forward to a receiver (default: Z, configurable to Y or the back), the receiver runs hard at the LOS to sell the rush, then pitches the ball BACK to the QB behind the LOS, who throws deep — with a Post or Go ≥15yd as the primary target. Both meshes are enforced as behind-the-LOS at the spec layer (a forward pitch is an illegal forward pass; the validator rejects it). All five concepts require the playbook's handoff_chain capability (Settings → Advanced Coach Cal concepts) — opt in per playbook to enable. Surfaced 2026-05-13 when a coach saw a 'Flea Flicker' Cal had freelanced where Z was given a downfield route instead of the handoff; closing the gap meant adding the missing catalog entries so the freelancing path is no longer available.",
+    category: "Coach AI",
+    status: "ga",
+    addedDate: "2026-05-13",
+  },
+  {
     id: "coach-cal-qb-runs-rpos-reverses",
     name: "Coach Cal can diagram QB runs, RPOs, and multi-handoff reverses",
     description:

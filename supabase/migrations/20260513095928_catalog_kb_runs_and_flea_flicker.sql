@@ -1,15 +1,26 @@
--- Catalog-derived KB seed.
--- 
--- THIS FILE IS GENERATED. Do not edit by hand.
--- Source: src/domain/play/catalogKb.ts (buildCatalogKbChunks).
--- Regenerate: `npx tsx scripts/build-catalog-kb.ts`.
--- 
+-- Catalog-derived KB seed — re-apply with run + Flea Flicker concept
+-- chunks (2026-05-13).
+--
+-- Same pattern as 20260512183000_catalog_kb_concept_chunks.sql: this
+-- is a TIMESTAMPED RE-APPLY of `0200_catalog_kb_seed.sql` so the
+-- DELETE + INSERT body runs once more on remote and picks up the new
+-- concept chunks (Sweep, Dive, Counter, Draw, Flea Flicker) that
+-- landed in the 2026-05-13 catalog extension. Supabase tracks
+-- migrations by filename — re-running `db push` against the
+-- regenerated 0200 file would be a silent no-op because 0200 is
+-- already in remote's migration history.
+--
+-- THIS FILE IS GENERATED (then re-saved with this header). Source:
+-- src/domain/play/catalogKb.ts (buildCatalogKbChunks). Regenerate the
+-- base file with `npx tsx scripts/build-catalog-kb.ts`, then copy
+-- to a fresh timestamped filename for re-apply on remote.
+--
 -- Strategy (AGENTS.md Rule 6 — KB direction of truth):
 --   Catalogs are the single source of truth for catalog-derived
---   topics (route_*, defense_*). This migration is idempotent:
---   it DELETEs every row with source='catalog' and re-inserts the
---   fresh set. Hand-authored KB content (source='seed', 'admin',
---   etc.) is unaffected.
+--   topics (route_*, defense_*, concept_*). This migration is
+--   idempotent: it DELETEs every row with source='catalog' and
+--   re-inserts the fresh set. Hand-authored KB content
+--   (source='seed', 'admin_chat', etc.) is unaffected.
 
 delete from public.rag_documents where source = 'catalog';
 

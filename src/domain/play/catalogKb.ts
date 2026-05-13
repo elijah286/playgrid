@@ -225,6 +225,13 @@ function conceptEntryToChunk(concept: ConceptEntry): CatalogKbChunk {
         `(multi-handoff misdirection — reverses, fakes).`,
     );
   }
+  if (concept.structural?.requiresBallPathReturnsToOrigin) {
+    structuralLines.push(
+      `The ball returns to its original handler — typically the QB pitches forward, the carrier ` +
+        `runs as if rushing, then pitches BACK to the QB behind the LOS, who then throws downfield. ` +
+        `Defining trick-play structure (Flea Flicker, Hook-and-Lateral, Halfback Option).`,
+    );
+  }
   const aliasLine =
     concept.aliases && concept.aliases.length > 0
       ? `Also called: ${concept.aliases.join(", ")}.`

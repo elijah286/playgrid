@@ -406,7 +406,17 @@ function ballFlowBullets(spec: PlaySpec): string[] {
     const step = spec.ballPath[i];
     const lead = i === 0 ? "Snap" : "Then";
     const where = step.atPoint ? formatMeshPoint(step.atPoint) : "in the backfield";
-    out.push(`${lead}: @${step.from} hands to @${step.to} ${where}.`);
+    // "Pitches back" when the ball returns to a prior handler (flea
+    // flicker, halfback option, hook-and-lateral, double pass). The
+    // word "hands" implies forward / inline exchange — using it for
+    // a backward lateral confuses coaches who'd read it as a forward
+    // handoff. A return-to-prior step is structurally a lateral, so
+    // narrate it as one.
+    const returnsToPriorHandler = i > 0 && spec.ballPath
+      .slice(0, i)
+      .some((prev) => prev.from === step.to);
+    const verb = returnsToPriorHandler ? "pitches back to" : "hands to";
+    out.push(`${lead}: @${step.from} ${verb} @${step.to} ${where}.`);
   }
   return out;
 }

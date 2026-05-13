@@ -143,6 +143,13 @@ export type ConceptStructural = {
    *  least this many handoff steps. Use 2+ for reverses (QB → RB →
    *  WR), 1 for plays that just need any handoff. */
   requiresBallPathSteps?: number;
+  /** Concept requires the ball to RETURN to its original handler —
+   *  i.e. the last ballPath step's `to` equals the first step's
+   *  `from`. Used by trick plays where the ball-out-and-back pattern
+   *  is structurally defining (Flea Flicker: QB → carrier → QB,
+   *  followed by a deep pass). Without this, Flea Flicker would be
+   *  indistinguishable from any 2-step exchange. */
+  requiresBallPathReturnsToOrigin?: boolean;
 };
 
 export type ConceptEntry = {
@@ -412,6 +419,86 @@ const JET_REVERSE: ConceptEntry = {
   },
 };
 
+// ── Plain run concepts (2026-05-13) ─────────────────────────────────────
+// Single-handoff run plays. Catalog absence was forcing Cal to
+// hand-author waypoints + diaper-pattern the play geometry — exactly
+// what Rule 8 (constructive composition) is supposed to make impossible
+// for catalog concepts. Each entry is gated on the `handoff_chain`
+// capability via the ballPath structural requirement; the back's
+// `runType` further filters which concept matches what the spec
+// actually shows.
+
+const SWEEP: ConceptEntry = {
+  name: "Sweep",
+  aliases: ["Outside Sweep", "Toss Sweep", "Stretch"],
+  description:
+    "Wide perimeter run. QB hands to the back, who attacks the edge with the OL pulling or reaching playside. The back's footwork is patient-then-fast: read the kick-out block, then turn vertical when the corner is sealed. Best vs over-aligned interior fronts where the perimeter is light.",
+  required: [],
+  complexity: "basic",
+  structural: {
+    requiresCarry: { player: "back", runTypes: ["sweep", "outside_zone"] },
+    requiresBallPathSteps: 1,
+  },
+};
+
+const DIVE: ConceptEntry = {
+  name: "Dive",
+  aliases: ["Inside Dive", "Iso", "Lead Dive"],
+  description:
+    "North-south interior run. QB hands to the back attacking the A/B gap downhill — first available crease wins. OL inside-zone-blocks (or pin-and-pull for a power flavor). Stays on schedule, eats clock, and softens up a stout interior for the play-action that follows.",
+  required: [],
+  complexity: "basic",
+  structural: {
+    requiresCarry: { player: "back", runTypes: ["inside_zone", "trap", "power"] },
+    requiresBallPathSteps: 1,
+  },
+};
+
+const COUNTER: ConceptEntry = {
+  name: "Counter",
+  aliases: ["Counter Trey", "Counter GT", "Counter OF"],
+  description:
+    "Misdirection run. The back jab-steps strong-side to hold the LBs, then takes the handoff going BACK weak-side behind pulling blockers (typically the backside guard + tackle). The 'counter' is the defense's pursuit moving the wrong way. Best vs defenses that flow hard to initial back action.",
+  required: [],
+  complexity: "intermediate",
+  structural: {
+    requiresCarry: { player: "back", runTypes: ["counter"] },
+    requiresBallPathSteps: 1,
+  },
+};
+
+const DRAW: ConceptEntry = {
+  name: "Draw",
+  aliases: ["RB Draw", "Lead Draw"],
+  description:
+    "Late-developing interior run that sells pass first. The OL pass-sets to draw the rush upfield; receivers run hitches / verts to widen the coverage; QB drops back, then hands LATE to the back hitting the soft middle vacated by the rush. Best on obvious passing downs against rush-heavy fronts.",
+  required: [],
+  complexity: "intermediate",
+  structural: {
+    requiresCarry: { player: "back", runTypes: ["draw"] },
+    requiresBallPathSteps: 1,
+  },
+};
+
+// ── Trick play: Flea Flicker (2026-05-13) ───────────────────────────────
+// The play that surfaced this whole build. Distinct from Jet Reverse
+// because the ball RETURNS to the original handler (the QB) and the
+// play-defining moment is the DEEP PASS off the run fake — not the
+// final ball-carrier's run. The matcher checks (a) 2-step ballPath
+// returning to origin AND (b) at least one deep route present.
+const FLEA_FLICKER: ConceptEntry = {
+  name: "Flea Flicker",
+  aliases: ["Flicker", "Halfback Flicker", "WR Flicker"],
+  description:
+    "Trick play that sells run, then attacks deep. QB hands to a back / WR going forward to the LOS; that player runs hard as if rushing, then PITCHES the ball BACK to the QB still behind the LOS. The defense has already triggered on the run fake; deep receivers clear out and find the void behind the now-collapsing safeties. Two backwards passes / handoffs, one deep throw. Best after the run game has been established — the defense has to believe the fake.",
+  required: [],
+  complexity: "advanced",
+  structural: {
+    requiresBallPathSteps: 2,
+    requiresBallPathReturnsToOrigin: true,
+  },
+};
+
 export const CONCEPT_CATALOG: ConceptEntry[] = [
   CURL_FLAT,
   SMASH,
@@ -430,6 +517,15 @@ export const CONCEPT_CATALOG: ConceptEntry[] = [
   QB_DRAW,
   BUBBLE_RPO,
   JET_REVERSE,
+  // Plain run concepts + trick play (2026-05-13). All gated on
+  // handoff_chain via their `requiresBallPathSteps` structural
+  // requirement; the run concepts further restrict on the back's
+  // runType so a "Sweep" with `runType: counter` won't match.
+  SWEEP,
+  DIVE,
+  COUNTER,
+  DRAW,
+  FLEA_FLICKER,
 ];
 
 // ── Module-load invariants ──────────────────────────────────────────────

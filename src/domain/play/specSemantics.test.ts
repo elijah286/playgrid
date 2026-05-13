@@ -115,6 +115,67 @@ describe("validatePlaySpecBallFlow — ballPath continuity", () => {
   });
 });
 
+describe("validatePlaySpecBallFlow — lateral back to prior handler must be behind LOS", () => {
+  it("accepts a Flea Flicker shape with both meshes behind the LOS", () => {
+    const spec = bareSpec({
+      ballPath: [
+        { from: "QB", to: "Z",  atPoint: [2, -3] },
+        { from: "Z",  to: "QB", atPoint: [1, -5] },
+      ],
+    });
+    expect(validatePlaySpecBallFlow(spec).ok).toBe(true);
+  });
+
+  it("rejects a pitch-back AT the LOS (y=0)", () => {
+    const spec = bareSpec({
+      ballPath: [
+        { from: "QB", to: "Z",  atPoint: [2, -3] },
+        { from: "Z",  to: "QB", atPoint: [1, 0] },
+      ],
+    });
+    const result = validatePlaySpecBallFlow(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.some((v) => v.code === "ballpath_lateral_back_forward_of_los")).toBe(true);
+  });
+
+  it("rejects a pitch-back PAST the LOS (y>0) — would be an illegal forward pass", () => {
+    const spec = bareSpec({
+      ballPath: [
+        { from: "QB", to: "Z",  atPoint: [2, -3] },
+        { from: "Z",  to: "QB", atPoint: [1, 2] },
+      ],
+    });
+    const result = validatePlaySpecBallFlow(spec);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.violations.some((v) => v.code === "ballpath_lateral_back_forward_of_los")).toBe(true);
+  });
+
+  it("does NOT flag a forward-progressing reverse (Jet Reverse: QB → B → X, no return to prior)", () => {
+    // Jet Reverse's second step is X (a NEW handler, not a return).
+    // Even if the second mesh point were at or past the LOS (it
+    // shouldn't be, but mechanically), this rule wouldn't fire.
+    const spec = bareSpec({
+      ballPath: [
+        { from: "QB", to: "B", atPoint: [0, -4] },
+        { from: "B",  to: "X", atPoint: [3, -3] },
+      ],
+    });
+    expect(validatePlaySpecBallFlow(spec).ok).toBe(true);
+  });
+
+  it("does NOT fire when the lateral-back step has no explicit atPoint (renderer infers)", () => {
+    const spec = bareSpec({
+      ballPath: [
+        { from: "QB", to: "Z" },
+        { from: "Z",  to: "QB" },
+      ],
+    });
+    expect(validatePlaySpecBallFlow(spec).ok).toBe(true);
+  });
+});
+
 describe("validatePlaySpecBallFlow — combined violations", () => {
   it("reports ALL violations in one pass", () => {
     const spec = bareSpec({

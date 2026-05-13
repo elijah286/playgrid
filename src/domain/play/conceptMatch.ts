@@ -42,7 +42,10 @@ export type ConceptViolation = {
     | "no_rpo_read"
     /** Concept requires a multi-step ballPath (reverses) but the spec
      *  has fewer than N steps. */
-    | "ballpath_steps_insufficient";
+    | "ballpath_steps_insufficient"
+    /** Concept requires the ball to return to the original handler
+     *  (Flea Flicker: QB → carrier → QB) but the ballPath doesn't. */
+    | "ballpath_does_not_return_to_origin";
   /** When the family was found but at the wrong depth, the offending player. */
   player?: string;
   /** When the family was found at wrong depth, what the depth was. */
@@ -226,6 +229,22 @@ function matchConcept(spec: PlaySpec, concept: ConceptEntry): ConceptMatchResult
         });
       }
     }
+
+    if (structural.requiresBallPathReturnsToOrigin) {
+      const path = spec.ballPath ?? [];
+      const returnsToOrigin =
+        path.length >= 2 && path[path.length - 1].to === path[0].from;
+      if (!returnsToOrigin) {
+        violations.push({
+          required: {
+            role: "any",
+            family: "(ballPath returns-to-origin)",
+            depthRangeYds: { min: 0, max: 0 },
+          },
+          reason: "ballpath_does_not_return_to_origin",
+        });
+      }
+    }
   }
 
   if (violations.length === 0) {
@@ -268,6 +287,9 @@ export function formatConceptViolations(
     }
     if (v.reason === "ballpath_steps_insufficient") {
       return `  • concept requires a multi-handoff exchange (\`ballPath\`) — the spec doesn't have enough steps`;
+    }
+    if (v.reason === "ballpath_does_not_return_to_origin") {
+      return `  • concept requires the ball to return to the original handler (\`ballPath\` ends back at the first step's \`from\`) — the spec's chain doesn't return`;
     }
     return `  • ${v.reason}: ${JSON.stringify(v.required)}`;
   });

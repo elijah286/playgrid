@@ -29,7 +29,15 @@ export type SpecSemanticsViolation = {
   code:
     | "rpo_read_give_equals_pass"
     | "ballpath_step_self_handoff"
-    | "ballpath_step_discontinuity";
+    | "ballpath_step_discontinuity"
+    /** A ballPath step whose `to` matches a PRIOR step's `from` is a
+     *  lateral back to a previous handler (Flea Flicker, halfback
+     *  option, hook-and-lateral, double pass). Any such backward
+     *  exchange MUST have `atPoint.y < 0` — behind the LOS. A pitch
+     *  forward of the LOS is an illegal forward pass + handoff in
+     *  every code of football. Surfaced 2026-05-13 alongside the
+     *  Flea Flicker concept build. */
+    | "ballpath_lateral_back_forward_of_los";
   /** Coach-readable explanation suitable for surfacing in a tool result. */
   message: string;
 };
@@ -83,6 +91,23 @@ export function validatePlaySpecBallFlow(spec: PlaySpec): SpecSemanticsResult {
               `ballPath step ${i + 1} (@${step.from} → @${step.to}) doesn't continue from step ${i} (@${prev.from} → @${prev.to}): ` +
               `the ball was last in @${prev.to}'s hands but step ${i + 1} starts from @${step.from}. ` +
               `The ball can only move through one player at a time — either change step ${i + 1}'s "from" to @${prev.to}, or add an intermediate exchange.`,
+          });
+        }
+        // 4) Lateral back to a prior handler MUST be behind the LOS.
+        // A "return" step is one whose `to` matches any earlier
+        // step's `from`. Flea Flicker is the canonical case (ball
+        // returns to QB) but the rule generalizes to any back-pass.
+        const isLateralBack = spec.ballPath
+          .slice(0, i)
+          .some((earlier) => earlier.from === step.to);
+        if (isLateralBack && step.atPoint && step.atPoint[1] >= 0) {
+          violations.push({
+            code: "ballpath_lateral_back_forward_of_los",
+            message:
+              `ballPath step ${i + 1} (@${step.from} → @${step.to}) is a lateral back to a prior handler, but ` +
+              `the mesh point sits at y=${step.atPoint[1].toFixed(1)} (at or past the LOS). ` +
+              `A backward pass to a prior handler MUST happen behind the LOS — otherwise it's an illegal forward pass + handoff. ` +
+              `Move atPoint to a negative y value (e.g. y=-4 for 4 yds behind the LOS).`,
           });
         }
       }

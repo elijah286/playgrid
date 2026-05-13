@@ -41,6 +41,11 @@ export type ConceptSkeletonOptions = {
   /** "left" or "right" for side-flooding concepts (Flood / Sail).
    *  Other concepts ignore this. Defaults to "right". */
   strength?: "left" | "right";
+  /** Which player handles the ball for trick plays where the carrier
+   *  is a choice rather than a structural role (Flea Flicker can have
+   *  Z, Y, or the back take the handoff before pitching back to the
+   *  QB). Concepts that don't support carrier variants ignore this. */
+  ballCarrier?: string;
 };
 
 export type SkeletonResult =
@@ -628,6 +633,256 @@ function cap(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
+// ── Run-play helpers ────────────────────────────────────────────────────
+
+/**
+ * Build a single-handoff run play (Sweep, Dive, Counter, Draw). The
+ * shape is the same across all of them — only the back's `runType`,
+ * the receiver responsibilities, and the QB's mesh footwork differ.
+ *
+ * Why the QB is `kind: "carry"` with no runType and explicit
+ * waypoints: the user surfaced 2026-05-13 that QB physical movement
+ * was never visible. The handoff_arrow at the mesh point shows the
+ * exchange but doesn't draw the QB's path from snap to mesh. Adding
+ * a `carry` (without a designed runType, so `designed_qb_run` isn't
+ * required — see playSpecRules.ts:isDesignedQbCarry) lets the QB's
+ * line render alongside the back's. The ballPath ledger correctly
+ * records that the QB only HAS the ball at the snap and that the
+ * back takes possession at the mesh.
+ */
+function buildSingleHandoffRun(
+  conceptName: "Sweep" | "Dive" | "Counter" | "Draw",
+  runType: NonNullable<Extract<AssignmentAction, { kind: "carry" }>["runType"]>,
+  opts: ConceptSkeletonOptions,
+): SkeletonResult {
+  const variant = opts.variant;
+  const side: "left" | "right" = opts.strength ?? "right";
+  const sideSign = side === "right" ? 1 : -1;
+  // Mesh point: 4 yards behind the LOS, shading the runtype's direction.
+  // Sweep/Counter pull laterally; Dive/Draw stay between the tackles.
+  const lateralBias = conceptName === "Sweep" || conceptName === "Counter" ? 1.5 : 0;
+  const mesh: [number, number] = [sideSign * lateralBias, -4];
+  // Back's carry path: from start (~7yd deep in backfield) through the
+  // mesh, then up the field on the runType's track.
+  const backWaypoints = runPathFor(conceptName, sideSign, mesh);
+  // QB physical footwork: a short step toward the mesh + back to a
+  // post-handoff hold position (no runType — capability gate skipped).
+  const qbWaypoints: [number, number][] = [
+    mesh,
+    [sideSign * lateralBias * 0.5, -3],
+  ];
+
+  const assignments: PlayerAssignment[] = [
+    {
+      player: "QB",
+      confidence: "high",
+      action: { kind: "carry", waypoints: qbWaypoints },
+    },
+    {
+      player: "B",
+      confidence: "high",
+      action: { kind: "carry", runType, waypoints: backWaypoints },
+    },
+    // Receivers in run-blocking / stalk-block posture. `unspecified`
+    // keeps them visible in the formation without drawing fake pass
+    // routes the defense could read.
+    { player: "X", confidence: "med", action: { kind: "unspecified" } },
+    { player: "Z", confidence: "med", action: { kind: "unspecified" } },
+    { player: "H", confidence: "med", action: { kind: "unspecified" } },
+    { player: "S", confidence: "med", action: { kind: "unspecified" } },
+    ...lineBlocks(variant),
+  ];
+
+  return {
+    ok: true,
+    concept: conceptName,
+    spec: {
+      ...baseSpec(variant, `${conceptName} ${cap(side)}`, "Spread Doubles", side, assignments),
+      ballPath: [{ from: "QB", to: "B", atPoint: mesh }],
+    },
+    notes: runNotesFor(conceptName, side),
+  };
+}
+
+/** Back's carry path for each run-concept type. Each shape ends ~8yd
+ *  downfield so the diagram clearly shows where the back is attacking. */
+function runPathFor(
+  conceptName: "Sweep" | "Dive" | "Counter" | "Draw",
+  sideSign: 1 | -1,
+  mesh: [number, number],
+): [number, number][] {
+  switch (conceptName) {
+    case "Sweep":
+      // Wide arc to the edge: mesh → bend outside → vertical at the numbers.
+      return [mesh, [sideSign * 6, -2], [sideSign * 10, 6]];
+    case "Counter":
+      // Jab step away, then back: mesh → cut against the grain → vertical.
+      // sideSign here is the play direction; the jab is the opposite,
+      // but the FINAL path is to the named side.
+      return [mesh, [-sideSign * 1, -3], [sideSign * 4, 2], [sideSign * 5, 8]];
+    case "Dive":
+      // Interior north-south: mesh → tight inside crease → vertical.
+      return [mesh, [sideSign * 1, 0], [sideSign * 1, 8]];
+    case "Draw":
+      // Late-developing: mesh held → soft middle → vertical through the
+      // pocket the rush vacated.
+      return [mesh, [0, -2], [0, 8]];
+  }
+}
+
+function runNotesFor(
+  conceptName: "Sweep" | "Dive" | "Counter" | "Draw",
+  side: "left" | "right",
+): string {
+  const dir = cap(side);
+  switch (conceptName) {
+    case "Sweep":
+      return (
+        `Sweep ${dir}: @QB hands to @B at the mesh; @B attacks the ${side} edge with the OL reaching playside. ` +
+        `Receivers stalk-block their man. Patient feet to the kick-out, then turn vertical when the corner is sealed.`
+      );
+    case "Dive":
+      return (
+        `Dive ${dir}: @QB hands to @B at the mesh; @B hits the first available crease between the tackles. ` +
+        `OL inside-zone-blocks. Stay on schedule — this softens the interior for the play-action that follows.`
+      );
+    case "Counter":
+      return (
+        `Counter ${dir}: @B jab-steps away from the play side to hold the LBs, then takes the handoff going ${side} ` +
+        `behind the pulling backside guard and tackle. The defense's pursuit moves the wrong way.`
+      );
+    case "Draw":
+      return (
+        `Draw ${dir}: OL pass-sets, receivers run pass-pretend routes to widen the coverage. ` +
+        `@QB drops back, then hands LATE to @B hitting the soft middle the rush vacated. Best on obvious passing downs.`
+      );
+  }
+}
+
+function buildSweep(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  return buildSingleHandoffRun("Sweep", "sweep", opts);
+}
+function buildDive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  return buildSingleHandoffRun("Dive", "inside_zone", opts);
+}
+function buildCounter(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  return buildSingleHandoffRun("Counter", "counter", opts);
+}
+function buildDraw(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  return buildSingleHandoffRun("Draw", "draw", opts);
+}
+
+/**
+ * Flea Flicker — trick play. The two-step ballPath is QB → carrier →
+ * QB, with the carrier running toward the LOS as if rushing before
+ * pitching the ball back BEHIND the LOS. The QB then throws deep to
+ * a clear-out receiver.
+ *
+ * The carrier is configurable via `opts.ballCarrier`. Defaults to Z
+ * (the canonical version). The deep receiver is always the OPPOSITE
+ * side from wherever the run-fake went, so the deep ball attacks the
+ * space the safeties just vacated to react to the run.
+ *
+ * Mesh points are both behind the LOS — a forward lateral is an
+ * incomplete pass (or worse, an illegal forward pass), so the
+ * sanitizer also enforces this invariant at render time.
+ */
+function buildFleaFlicker(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  const variant = opts.variant;
+  const side: "left" | "right" = opts.strength ?? "right";
+  const sideSign = side === "right" ? 1 : -1;
+  const carrierId = opts.ballCarrier && opts.ballCarrier.trim().length > 0
+    ? opts.ballCarrier.toUpperCase()
+    : "Z";
+  // mesh1: where QB hands off to the carrier (just behind the LOS,
+  // lateral toward the carrier's natural side).
+  const mesh1: [number, number] = [sideSign * 2, -3];
+  // mesh2: where the carrier pitches back to QB. Slightly DEEPER
+  // (-5) so the pitch is unambiguously behind the LOS even after
+  // the carrier ran forward.
+  const mesh2: [number, number] = [sideSign * 1, -5];
+  // The carrier's path: from their start position to mesh1 (handoff),
+  // run hard toward the LOS as if rushing, then turn and pitch back at
+  // mesh2. The renderer prepends the carrier's start position.
+  const carrierWaypoints: [number, number][] = [
+    mesh1,
+    [sideSign * 3, -1],  // sells the run with forward momentum
+    mesh2,                // pivots and pitches back
+  ];
+  // The QB's path: step to mesh1 (sell the handoff), retreat to a
+  // throwing position, catch the lateral at mesh2, then throw. No
+  // runType (capability gate skipped).
+  const qbWaypoints: [number, number][] = [
+    mesh1,
+    [0, -6],     // retreat to passing depth
+    mesh2,       // catch the pitch
+    [0, -7],     // settle to throw
+  ];
+
+  // Deep receiver: opposite side from the carrier (so the deep ball
+  // attacks the side the defense flowed AWAY from on the run fake).
+  const deepSide = carrierId === "Z" ? "X" : carrierId === "X" ? "Z" : sideSign > 0 ? "X" : "Z";
+  const secondaryDeep = deepSide === "Z" ? "X" : "Z";
+
+  const assignments: PlayerAssignment[] = [
+    {
+      player: "QB",
+      confidence: "high",
+      action: { kind: "carry", waypoints: qbWaypoints },
+    },
+  ];
+
+  // Carrier — explicit carry, no route (the bug we're fixing was Z
+  // being given a route instead of the handoff).
+  assignments.push({
+    player: carrierId,
+    confidence: "high",
+    action: { kind: "carry", waypoints: carrierWaypoints },
+  });
+
+  // Deep clear-out: a Post or Go ≥15yd to give the QB a target after
+  // the run fake. Use Post on the primary side (it attacks the void
+  // between the safeties), Go on the backside (vertical clear).
+  if (deepSide !== carrierId) {
+    assignments.push(routeAt(deepSide, "Post", 18));
+  }
+  if (secondaryDeep !== carrierId && secondaryDeep !== deepSide) {
+    assignments.push(routeAt(secondaryDeep, "Go", 18));
+  }
+
+  // Slots: shallow drag / sit to give the QB a checkdown if the deep
+  // shot isn't there.
+  const slots = ["H", "S"].filter((id) => id !== carrierId);
+  for (const slot of slots) {
+    assignments.push(routeAt(slot, "Drag", 4));
+  }
+
+  // If the carrier was "B", the back is committed — otherwise B chips
+  // and releases as a hot outlet underneath.
+  if (carrierId !== "B") {
+    assignments.push(routeAt("B", "Flat", 2));
+  }
+
+  assignments.push(...lineBlocks(variant));
+
+  return {
+    ok: true,
+    concept: "Flea Flicker",
+    spec: {
+      ...baseSpec(variant, `Flea Flicker (${carrierId}) ${cap(side)}`, "Spread Doubles", side, assignments),
+      ballPath: [
+        { from: "QB", to: carrierId, atPoint: mesh1 },
+        { from: carrierId, to: "QB", atPoint: mesh2 },
+      ],
+    },
+    notes:
+      `Flea Flicker ${cap(side)}: @QB hands to @${carrierId} just behind the LOS; @${carrierId} runs hard at the line ` +
+      `to sell the run, then pitches the ball BACK to @QB still behind the LOS. ` +
+      `@QB then throws deep — @${deepSide} on the Post at 18yd is the primary target after the safeties bite on the fake. ` +
+      `Best AFTER you've established the run game — the defense has to believe the handoff.`,
+  };
+}
+
 const SKELETON_BUILDERS: Record<string, (concept: ConceptEntry, opts: ConceptSkeletonOptions) => SkeletonResult> = {
   "Curl-Flat":      buildCurlFlat,
   "Smash":          buildSmash,
@@ -647,4 +902,10 @@ const SKELETON_BUILDERS: Record<string, (concept: ConceptEntry, opts: ConceptSke
   "QB Draw":        buildQbDraw,
   "Bubble RPO":     buildBubbleRpo,
   "Jet Reverse":    buildJetReverse,
+  // 2026-05-13 build: plain run concepts + the Flea Flicker trick play.
+  "Sweep":          buildSweep,
+  "Dive":           buildDive,
+  "Counter":        buildCounter,
+  "Draw":           buildDraw,
+  "Flea Flicker":   buildFleaFlicker,
 };

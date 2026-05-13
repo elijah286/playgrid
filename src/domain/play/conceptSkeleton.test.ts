@@ -465,3 +465,221 @@ describe("generateConceptSkeleton — new concepts pass the playbook-rule + ball
     expect(validatePlaySpecBallFlow(result.spec).ok).toBe(true);
   });
 });
+
+// ── Run concept skeletons (Sweep / Dive / Counter / Draw) ───────────────
+// 2026-05-13: a coach surfaced "Flea Flicker — X Deep" where Z was given
+// a downfield route instead of a handoff (root cause: no trick-play
+// concept existed, so Cal freelanced). Diagnosis also showed the run
+// game had only QB Draw + Jet Reverse — no plain handoff-to-back
+// concepts. Closing both gaps: add Sweep/Dive/Counter/Draw as
+// catalog concepts so Cal composes them through the skeleton path
+// (Rule 8) instead of hand-authoring waypoints.
+describe.each([
+  { name: "Sweep",   runType: "sweep"        },
+  { name: "Dive",    runType: "inside_zone"  },
+  { name: "Counter", runType: "counter"      },
+  { name: "Draw",    runType: "draw"         },
+])("generateConceptSkeleton — $name (single handoff to RB)", ({ name, runType }) => {
+  it(`emits a single-step ballPath @QB → @B`, () => {
+    const result = generateConceptSkeleton(name, { variant: "tackle_11" });
+    expect(result.ok, result.ok ? undefined : (result as { error: string }).error).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.ballPath).toBeDefined();
+    expect(result.spec.ballPath!.length).toBe(1);
+    expect(result.spec.ballPath![0].from).toBe("QB");
+    expect(result.spec.ballPath![0].to).toBe("B");
+  });
+
+  it(`puts a carry on @B with runType "${runType}" and explicit waypoints`, () => {
+    const result = generateConceptSkeleton(name, { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const back = result.spec.assignments.find((a) => a.player === "B");
+    expect(back?.action.kind, `@B should be the ballcarrier on ${name}`).toBe("carry");
+    if (back?.action.kind !== "carry") return;
+    expect(back.action.runType).toBe(runType);
+    expect(back.action.waypoints, `@B's carry should have explicit waypoints showing the run path`).toBeDefined();
+    expect(back.action.waypoints!.length).toBeGreaterThan(0);
+  });
+
+  it(`gives @QB a carry with explicit waypoints showing the handoff mesh (no runType, so designed_qb_run is NOT required)`, async () => {
+    // The user surfaced 2026-05-13 that QB movement is never visible on
+    // ANY play. For run plays, the QB MUST show motion to the mesh
+    // point so coaches can teach the footwork. Modeling that as a
+    // `kind: carry` with explicit waypoints and NO runType — the
+    // designed_qb_run capability is keyed on runType being a
+    // designed-run type, so omitting runType keeps the capability gate
+    // off (the back's runType already triggers handoff_chain via ballPath).
+    const result = generateConceptSkeleton(name, { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const qb = result.spec.assignments.find((a) => a.player === "QB");
+    expect(qb?.action.kind, `@QB should show physical movement on a ${name} (mesh footwork)`).toBe("carry");
+    if (qb?.action.kind !== "carry") return;
+    expect(qb.action.runType, "@QB carry must NOT have a designed runType (capability gate)").toBeUndefined();
+    expect(qb.action.waypoints, "@QB's path to the mesh must be explicit").toBeDefined();
+    expect(qb.action.waypoints!.length).toBeGreaterThan(0);
+
+    // And: the capability validator must NOT flag designed_qb_run.
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const ruleCheck = validatePlaySpecVsRules(result.spec, ["handoff_chain"]);
+    expect(
+      ruleCheck.ok,
+      ruleCheck.ok ? undefined : `${name}: capability violations: ${JSON.stringify((ruleCheck as { violations: unknown[] }).violations)}`,
+    ).toBe(true);
+  });
+
+  it(`passes both gates when handoff_chain is enabled`, async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const { validatePlaySpecBallFlow } = await import("./specSemantics");
+    const result = generateConceptSkeleton(name, { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(validatePlaySpecVsRules(result.spec, ["handoff_chain"]).ok).toBe(true);
+    expect(validatePlaySpecBallFlow(result.spec).ok).toBe(true);
+  });
+});
+
+// ── Flea Flicker (trick play: handoff out + lateral back + deep pass) ───
+// The bug that prompted this build: Cal generated a "Flea Flicker — X
+// Deep" where Z ran a downfield route instead of taking a handoff.
+// Root cause: no Flea Flicker concept existed, so Cal freelanced
+// without the catalog-driven skeleton. With this concept in the
+// catalog, Cal can ONLY compose a flea flicker through compose_play
+// (per Rule 8), and the skeleton produces the canonical structure:
+//   1. Snap to QB
+//   2. QB hands to ballCarrier (Z by default) behind the LOS
+//   3. ballCarrier runs toward the LOS as if rushing
+//   4. ballCarrier pitches/laterals the ball BACK to QB behind the LOS
+//   5. QB throws deep to a clear-out receiver
+describe("generateConceptSkeleton — Flea Flicker (trick play, ball returns to passer)", () => {
+  it("emits a 2-step ballPath where the ball returns to the QB", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok, result.ok ? undefined : (result as { error: string }).error).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.ballPath).toBeDefined();
+    expect(result.spec.ballPath!.length).toBe(2);
+    expect(result.spec.ballPath![0].from).toBe("QB");
+    expect(result.spec.ballPath![1].to).toBe("QB");
+    // Continuity: step 2's `from` matches step 1's `to`.
+    expect(result.spec.ballPath![1].from).toBe(result.spec.ballPath![0].to);
+  });
+
+  it("both mesh points are behind the LOS (atPoint.y < 0)", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const step of result.spec.ballPath!) {
+      expect(step.atPoint, "every flea-flicker exchange needs an explicit mesh point").toBeDefined();
+      expect(
+        step.atPoint![1],
+        `${step.from}→${step.to} mesh must be behind the LOS (y<0) — a forward lateral is a fumble`,
+      ).toBeLessThan(0);
+    }
+  });
+
+  it("the ball carrier (default: Z) has a carry with waypoints tracing handoff → toward LOS → pitch-back", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const carrierId = result.spec.ballPath![0].to;
+    const carrier = result.spec.assignments.find((a) => a.player === carrierId);
+    expect(carrier?.action.kind, `@${carrierId} must be the ballcarrier`).toBe("carry");
+    if (carrier?.action.kind !== "carry") return;
+    expect(carrier.action.waypoints).toBeDefined();
+    expect(carrier.action.waypoints!.length).toBeGreaterThanOrEqual(2);
+    // Ball carrier must NOT have a downfield route assignment — the
+    // exact bug the user reported was Z running a downfield route
+    // instead of taking the handoff. Defense in depth: if a flea
+    // flicker ever surfaces with the carrier on a route, this fails.
+    const carrierRoute = result.spec.assignments.filter(
+      (a) => a.player === carrierId && a.action.kind === "route",
+    );
+    expect(
+      carrierRoute,
+      `@${carrierId} is the ballcarrier on the flea flicker — must NOT also have a route assignment (that was the original bug)`,
+    ).toHaveLength(0);
+  });
+
+  it("@QB has a carry with explicit waypoints showing mesh + return (the visible QB movement)", () => {
+    // User's #3 directive: QB movement is required when the play
+    // requires it. Flea flicker explicitly does — the QB has to step
+    // to the mesh, retreat, then catch the lateral.
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const qb = result.spec.assignments.find((a) => a.player === "QB");
+    expect(qb?.action.kind).toBe("carry");
+    if (qb?.action.kind !== "carry") return;
+    expect(qb.action.runType, "@QB carry on flea flicker must NOT have a designed runType").toBeUndefined();
+    expect(qb.action.waypoints).toBeDefined();
+    expect(qb.action.waypoints!.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("includes at least one deep clear-out route (the actual target of the trick play)", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const deepRoutes = result.spec.assignments.filter(
+      (a) =>
+        a.action.kind === "route" &&
+        typeof a.action.depthYds === "number" &&
+        a.action.depthYds >= 15,
+    );
+    expect(
+      deepRoutes.length,
+      "flea flicker must have at least one deep route (≥15yd) — the whole point is the deep shot off the run fake",
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("supports a ballCarrier variant option ('Y' or 'RB' as the flicker carrier)", () => {
+    // Variants requested 2026-05-13. The canonical version uses Z, but
+    // a coach should be able to ask "flea flicker with Y" or with the
+    // back as the flicker handler.
+    const yResult = generateConceptSkeleton("Flea Flicker", {
+      variant: "tackle_11",
+      ballCarrier: "Y",
+    });
+    expect(yResult.ok, yResult.ok ? undefined : (yResult as { error: string }).error).toBe(true);
+    if (!yResult.ok) return;
+    expect(yResult.spec.ballPath![0].to).toBe("Y");
+    expect(yResult.spec.ballPath![1].from).toBe("Y");
+
+    const bResult = generateConceptSkeleton("Flea Flicker", {
+      variant: "tackle_11",
+      ballCarrier: "B",
+    });
+    expect(bResult.ok).toBe(true);
+    if (!bResult.ok) return;
+    expect(bResult.spec.ballPath![0].to).toBe("B");
+  });
+
+  it("passes both validator gates when handoff_chain is enabled", async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const { validatePlaySpecBallFlow } = await import("./specSemantics");
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(validatePlaySpecVsRules(result.spec, ["handoff_chain"]).ok).toBe(true);
+    expect(validatePlaySpecBallFlow(result.spec).ok).toBe(true);
+  });
+
+  it("is REJECTED when handoff_chain is NOT enabled (e.g. default 5v5 flag playbook)", async () => {
+    const { validatePlaySpecVsRules } = await import("@/domain/playbook/playSpecRules");
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    if (!result.ok) return;
+    const ruleCheck = validatePlaySpecVsRules(result.spec, []);
+    expect(ruleCheck.ok).toBe(false);
+    if (ruleCheck.ok) return;
+    expect(ruleCheck.violations.some((v) => v.capability === "handoff_chain")).toBe(true);
+  });
+
+  it("notes describe the run-fake-then-pitch-back-then-deep-pass sequence", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const n = result.notes.toLowerCase();
+    expect(n).toMatch(/pitch|lateral|flicker/);
+    expect(n).toMatch(/deep|downfield|vertical/);
+  });
+});
