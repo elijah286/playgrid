@@ -682,4 +682,85 @@ describe("generateConceptSkeleton — Flea Flicker (trick play, ball returns to 
     expect(n).toMatch(/pitch|lateral|flicker/);
     expect(n).toMatch(/deep|downfield|vertical/);
   });
+
+  // 2026-05-13 regression — coach surfaced a 5v5 Flea Flicker rendered
+  // with NO routes for @Y or @C. Root cause: skeleton hard-coded H/S
+  // slot ids that don't exist in 5v5 (synth remaps to Y). The 5v5
+  // skeleton now routes the canonical roster directly.
+  it("in flag_5v5, every roster player ({Q,C,X,Y,Z}) ends up with an assignment that renders", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "flag_5v5" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const assignedPlayers = new Set(result.spec.assignments.map((a) => a.player));
+    // Carrier Z + QB are explicit carries. X is the deep target. Y
+    // and C must each get a non-unspecified assignment (drag), or
+    // the diagram renders with idle players.
+    for (const id of ["Y", "C"]) {
+      const a = result.spec.assignments.find((x) => x.player === id);
+      expect(a, `@${id} must have an assignment in 5v5 Flea Flicker — without one, the diagram leaves them idle`).toBeDefined();
+      if (!a) continue;
+      expect(a.action.kind, `@${id} should run a route (Drag) in 5v5 Flea Flicker, not be unspecified`).toBe("route");
+    }
+    // Sanity check: no H / S / B references leaking through (those
+    // were the broken ids the bug uncovered).
+    expect(assignedPlayers.has("H")).toBe(false);
+    expect(assignedPlayers.has("S")).toBe(false);
+    expect(assignedPlayers.has("B")).toBe(false);
+  });
+
+  it("in flag_5v5, the rendered diagram draws routes for every non-carrier player", () => {
+    // End-to-end: after rendering, every player that isn't the
+    // carrier (Z) or the QB carry should have a visible route.
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "flag_5v5" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { diagram } = playSpecToCoachDiagram(result.spec);
+    const playerIds = new Set(diagram.players.filter((p) => p.team !== "D").map((p) => p.id));
+    // Drop QB (its movement is the carry) and the carrier (Z).
+    const idle = [];
+    for (const id of playerIds) {
+      if (id === "QB" || id === "Q" || id === "Z") continue;
+      const hasRoute = diagram.routes.some((r) => r.from === id);
+      if (!hasRoute) idle.push(id);
+    }
+    expect(idle, `flag_5v5 Flea Flicker rendered with idle players (no route): ${idle.join(", ")}`).toEqual([]);
+  });
+});
+
+// ── Renderer regression: redundant handoff arrows (2026-05-13) ──────────
+// User surfaced two arrowheads on @QB in a Flea Flicker — the carry
+// path's arrow AND the ballPath handoff indicator arrow at mesh1.
+// Visually reads as "QB has two routes" when it should read as "QB
+// has one path that includes the mesh." The renderer now suppresses
+// the indicator arrow when the giver's carry path already passes
+// through the mesh point.
+describe("playSpecToCoachDiagram — redundant handoff arrows are suppressed when the giver has a carry path through the mesh", () => {
+  it("Flea Flicker: QB has exactly ONE outgoing route (the carry), not the carry PLUS a handoff arrow", () => {
+    const result = generateConceptSkeleton("Flea Flicker", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { diagram } = playSpecToCoachDiagram(result.spec);
+    const qbRoutes = diagram.routes.filter((r) => r.from === "QB");
+    expect(
+      qbRoutes,
+      `QB should have exactly one route (the carry path); the handoff arrow at the mesh is redundant when the QB's path already passes through it. Got ${qbRoutes.length} routes: ${qbRoutes.map((r) => r.route_kind ?? "carry").join(", ")}`,
+    ).toHaveLength(1);
+    // And it should be the carry, not the handoff arrow.
+    expect(qbRoutes[0].route_kind).not.toBe("handoff");
+  });
+
+  it("Jet Reverse: QB has the handoff arrow (no carry, so the arrow is the only QB indicator)", () => {
+    // Inverse of the above — Jet Reverse's QB has kind:"block", so
+    // the handoff arrow IS the QB's only diagram element. Locks in
+    // that the new "skip when giver has carry" rule doesn't
+    // accidentally drop arrows from static givers.
+    const result = generateConceptSkeleton("Jet Reverse", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { diagram } = playSpecToCoachDiagram(result.spec);
+    const qbHandoffArrows = diagram.routes.filter(
+      (r) => r.from === "QB" && r.route_kind === "handoff",
+    );
+    expect(qbHandoffArrows.length).toBeGreaterThan(0);
+  });
 });

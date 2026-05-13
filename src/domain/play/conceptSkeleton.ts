@@ -850,16 +850,37 @@ function buildFleaFlicker(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skele
     assignments.push(routeAt(secondaryDeep, "Go", 18));
   }
 
-  // Slots: shallow drag / sit to give the QB a checkdown if the deep
-  // shot isn't there.
-  const slots = ["H", "S"].filter((id) => id !== carrierId);
-  for (const slot of slots) {
+  // Slot / checkdown routes — variant-aware. The 5v5 formation
+  // synthesizer remaps any non-canonical id (H/S/B/F) to Y, so the
+  // roster is {Q, C, X, Y, Z}; assigning a route to "H" or "S" in
+  // 5v5 silently no-ops because no player has that id. 6v6 + 7v7 +
+  // tackle keep traditional H/S labels.
+  //
+  // Surfaced 2026-05-13: a 5v5 Flea Flicker rendered with no routes
+  // for Y or C because the skeleton's "H" + "S" Drag assignments
+  // never matched the rendered formation.
+  let slotIds: string[];
+  if (variant === "flag_5v5") {
+    // 5v5 roster: {Q, C, X, Y, Z}. C is eligible (the user enables it
+    // via playbook setting). Pair Y + C as the shallow-drag layer; if
+    // the coach picked Y as the carrier, fall back to just C.
+    slotIds = ["Y", "C"].filter((id) => id !== carrierId);
+  } else if (variant === "flag_6v6") {
+    // 6v6 typically rosters Q, C, X, Y, Z + one extra slot/back. Try
+    // Y + H; the synthesizer drops whichever isn't placed.
+    slotIds = ["Y", "H"].filter((id) => id !== carrierId);
+  } else {
+    // 7v7 + tackle: traditional slot labels.
+    slotIds = ["H", "S"].filter((id) => id !== carrierId);
+  }
+  for (const slot of slotIds) {
     assignments.push(routeAt(slot, "Drag", 4));
   }
 
-  // If the carrier was "B", the back is committed — otherwise B chips
-  // and releases as a hot outlet underneath.
-  if (carrierId !== "B") {
+  // RB outlet — only when the variant actually places a back. 5v5
+  // has no B (or any back: the synthesizer remaps to Y), so skip.
+  const variantHasBack = variant !== "flag_5v5";
+  if (variantHasBack && carrierId !== "B") {
     assignments.push(routeAt("B", "Flat", 2));
   }
 

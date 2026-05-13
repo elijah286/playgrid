@@ -722,6 +722,42 @@ function handoffArrowsFromBallPath(
   warnings: RenderWarning[],
 ): CoachDiagramRoute[] {
   if (!spec.ballPath || spec.ballPath.length === 0) return [];
+  // Skip the handoff arrow when BOTH the giver AND the receiver have
+  // `kind: carry` waypoints that pass through (or near) the mesh point.
+  // Both paths converging visually at the mesh IS the handoff — adding
+  // an indicator arrow on top reads as a third movement and clutters
+  // the diagram. Surfaced 2026-05-13 on Flea Flicker, where the QB
+  // and the carrier both routed through the mesh with explicit
+  // waypoints AND the renderer was drawing the indicator arrow
+  // anyway (resulting in two arrowheads on the QB).
+  //
+  // The arrow is KEPT when EITHER end is static (kind:"block" /
+  // "unspecified", e.g. Jet Reverse's QB) or when only one player's
+  // carry passes through the mesh (e.g. Jet Reverse's B → Z step,
+  // where B ends at the mesh but Z's carry starts far from it — the
+  // arrow is the only visual indicator that Z takes the ball there).
+  //
+  // Why "passes through or near" rather than strict containment: the
+  // carry's waypoints may be ROUNDED versions of the ballPath atPoint
+  // (the renderer uses `round()` before emitting paths), so an exact
+  // equality check would miss valid matches. A 1.5-yd radius matches
+  // the existing handoff-arrow cap length — within that radius, the
+  // arrow would overlay the carry path's last segment.
+  const carriersWithPaths = new Map<string, [number, number][]>();
+  for (const a of spec.assignments) {
+    if (a.action.kind !== "carry") continue;
+    if (a.action.waypoints && a.action.waypoints.length > 0) {
+      carriersWithPaths.set(a.player, a.action.waypoints);
+    }
+  }
+  const pathPassesNear = (
+    path: [number, number][] | undefined,
+    point: [number, number],
+  ): boolean => {
+    if (!path) return false;
+    return path.some(([wx, wy]) => Math.hypot(wx - point[0], wy - point[1]) < 1.5);
+  };
+
   const out: CoachDiagramRoute[] = [];
   for (const step of spec.ballPath) {
     const giver = offense.find((p) => p.id === step.from);
@@ -743,6 +779,15 @@ function handoffArrowsFromBallPath(
     // Anchor the arrow: prefer atPoint, fall back to giver's position.
     const ax = step.atPoint ? step.atPoint[0] : giver.x;
     const ay = step.atPoint ? step.atPoint[1] : giver.y;
+
+    // Skip-when-redundant: BOTH giver and receiver have carry paths
+    // passing through the mesh. Both polylines converging there is
+    // the handoff; the indicator arrow adds nothing.
+    const mesh: [number, number] = [ax, ay];
+    const giverPasses = pathPassesNear(carriersWithPaths.get(step.from), mesh);
+    const receiverPasses = pathPassesNear(carriersWithPaths.get(step.to), mesh);
+    if (giverPasses && receiverPasses) continue;
+
     // Point a short distance (1.5 yds) toward the receiver to indicate
     // direction; cap so the arrow doesn't span the field.
     const dx = receiver.x - ax;
