@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ContactForm } from "./ui";
+import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
   title: "Contact · XO Gridmaker",
@@ -27,7 +28,7 @@ export default function ContactPage() {
     <div className="mx-auto max-w-xl px-6 py-16">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
       <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Contact</h1>
       <p className="mt-3 text-base leading-relaxed text-muted">

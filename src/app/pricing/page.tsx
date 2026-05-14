@@ -10,6 +10,7 @@ import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import type { Entitlement } from "@/lib/billing/entitlement";
 import { PricingClient } from "./ui";
+import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -67,7 +68,7 @@ export default async function PricingPage() {
     <div className="mx-auto max-w-6xl space-y-6 px-6 py-10">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
       <div>
         {isAuthed && (

@@ -28,6 +28,7 @@ import {
   isBetaFeatureAvailable,
 } from "@/lib/site/beta-features-config";
 import { getReferralConfig } from "@/lib/site/referral-config";
+import { withFullContext } from "@/lib/seo/ld-json";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { defaultClaimedPlaybookName } from "@/lib/playbook/default-name";
 import { timed } from "@/lib/perf/timed";
@@ -452,7 +453,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         <script
           key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(ld)) }}
         />
       ))}
       <PlaybookDetailClient

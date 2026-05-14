@@ -21,6 +21,7 @@ import {
   MESSAGE_PACK_SIZE,
 } from "@/lib/billing/seats-config";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
+import { withFullContext } from "@/lib/seo/ld-json";
 
 /* -------------------------------------------------------------------------
    SEO. Target keywords (in order of intent strength):
@@ -182,7 +183,7 @@ export default async function CoachCalPage() {
     <div className="bg-surface text-foreground">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildStructuredData(evalDays)) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(buildStructuredData(evalDays))) }}
       />
       <Hero evalDays={evalDays} />
       <Capabilities />

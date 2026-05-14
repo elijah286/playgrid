@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getExamplesPageEnabled } from "@/lib/site/examples-config";
 import { loadExamplePlaybooks } from "@/lib/site/example-playbooks";
 import { ExampleBookTile } from "@/features/dashboard/ExampleBookTile";
+import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
   title: "Example playbooks",
@@ -44,7 +45,7 @@ export default async function ExamplesPage() {
     <main className="mx-auto w-full max-w-6xl px-6 py-12 sm:py-16">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
       <header className="max-w-2xl">
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">

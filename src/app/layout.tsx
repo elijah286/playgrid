@@ -12,6 +12,7 @@ import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
+import { withFullContext } from "@/lib/seo/ld-json";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
@@ -119,12 +120,6 @@ const structuredData = [
     description:
       "Design football plays, organize them into playbooks, preview wristbands, and carry your playbook to the field.",
     offers: {
-      // Explicit @context on the nested object — JSON-LD inherits parent
-      // context, but at least one third-party extension we've seen on
-      // user devices iterates ld+json objects and calls
-      // `obj["@context"].toLowerCase()` without checking that it exists,
-      // crashing on nested @type-bearing objects. Belt-and-suspenders.
-      "@context": "https://schema.org",
       "@type": "Offer",
       price: "0",
       priceCurrency: "USD",
@@ -182,7 +177,7 @@ export default async function RootLayout({
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(structuredData)) }}
         />
       </head>
       <body className="flex min-h-[100dvh] flex-col bg-surface text-foreground font-sans [overflow-x:clip]">

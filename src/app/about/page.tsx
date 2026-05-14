@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { getHideOwnerInfoAbout } from "@/lib/site/about-config";
+import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
   title: "About · XO Gridmaker",
@@ -30,7 +31,7 @@ export default async function AboutPage() {
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(breadcrumbLd)) }}
       />
       <h1 className="text-3xl font-extrabold tracking-tight">About XO Gridmaker</h1>
       <div className="mt-6 space-y-5 text-base leading-relaxed text-muted">

@@ -8,6 +8,7 @@ import {
   MESSAGE_PACK_SIZE,
 } from "@/lib/billing/seats-config";
 import { getSeatDefaults } from "@/lib/site/seat-defaults-config";
+import { withFullContext } from "@/lib/seo/ld-json";
 
 export const metadata: Metadata = {
   title: "FAQ — XO Gridmaker & Coach Cal",
@@ -217,7 +218,7 @@ export default async function FaqPage() {
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(withFullContext(jsonLd)) }}
       />
       <h1 className="text-3xl font-extrabold tracking-tight">
         Frequently asked questions
