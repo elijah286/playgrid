@@ -9,18 +9,33 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 // actively re-establish connections on resume. The browser doesn't notice
 // dead WebSockets until it tries to send on them, so realtime subscriptions
 // silently stall, auth tokens may be expired, and refresh alone doesn't
-// recover the page quickly. This component listens for tab/visibility
-// transitions and forces:
-//   1. A realtime socket reconnect (channels auto-rejoin via supabase-js).
-//   2. An auth session refresh so subsequent requests use a fresh JWT.
+// recover the page quickly.
 //
-// Also exposes a small diagnostics object on window for in-prod debugging:
-//   window.__xoConn.snapshot()    → { isConnected, channels, lastEventAt }
-//   window.__xoConn.forceRecover() → run the recovery routine manually
+// Recovery is harder than "fire once on resume" in practice because Safari
+// (and to a lesser extent Chrome) lies about network availability for
+// several seconds after wake — fetch fails with "Load failed / The Internet
+// connection appears to be offline" and WebSockets refuse to open, even
+// though the actual network is fine. So we:
+//   1. Retry the recovery routine with exponential backoff so we eventually
+//      hit a window where the network stack has caught up.
+//   2. Listen for the `online` event and re-trigger when the browser
+//      finally admits it's back online.
+//   3. Recover on visibilitychange, pageshow (bfcache), and focus to cover
+//      all the suspend/resume paths across Safari / Chrome / Capacitor.
 //
-// Threshold is generous (30s) so quick alt-tabs are no-ops.
+// Diagnostics on window.__xoConn for in-prod debugging.
 
 const HIDDEN_THRESHOLD_MS = 30_000;
+const RETRY_DELAYS_MS = [0, 1_000, 2_500, 5_000, 10_000, 20_000];
+
+type AttemptOutcome = {
+  at: number;
+  trigger: string;
+  attempt: number;
+  authOk: boolean;
+  realtimeOk: boolean;
+  error?: string;
+};
 
 type Diag = {
   lastHiddenAt: number | null;
@@ -28,6 +43,8 @@ type Diag = {
   lastRecoveryAt: number | null;
   lastRecoveryHiddenMs: number | null;
   recoveryCount: number;
+  recoveryRunning: boolean;
+  attempts: AttemptOutcome[];
   snapshot: () => Record<string, unknown>;
   forceRecover: () => Promise<void>;
 };
@@ -38,6 +55,10 @@ declare global {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
 export function ConnectionRecovery() {
   useEffect(() => {
     if (!hasSupabaseEnv()) return;
@@ -46,6 +67,9 @@ export function ConnectionRecovery() {
     const supabase = createClient();
     let hiddenAt: number | null =
       document.visibilityState === "hidden" ? Date.now() : null;
+    let inFlight = false;
+    let aborted = false;
+
     const state: Pick<
       Diag,
       | "lastHiddenAt"
@@ -53,52 +77,94 @@ export function ConnectionRecovery() {
       | "lastRecoveryAt"
       | "lastRecoveryHiddenMs"
       | "recoveryCount"
+      | "recoveryRunning"
+      | "attempts"
     > = {
       lastHiddenAt: hiddenAt,
       lastVisibleAt: null,
       lastRecoveryAt: null,
       lastRecoveryHiddenMs: null,
       recoveryCount: 0,
+      recoveryRunning: false,
+      attempts: [],
     };
 
-    async function recover(hiddenForMs: number, trigger: string) {
-      state.recoveryCount += 1;
-      state.lastRecoveryAt = Date.now();
-      state.lastRecoveryHiddenMs = hiddenForMs;
-
-      // Refresh JWT first so the realtime socket reconnects with a valid
-      // token. supabase-js will also wire the new token into realtime via
-      // setAuth, but doing it explicitly here makes the order deterministic.
+    async function tryRefreshAuth(): Promise<boolean> {
       try {
-        await supabase.auth.refreshSession();
+        const { error } = await supabase.auth.refreshSession();
+        return !error;
       } catch {
-        // Refresh failure is non-fatal — the next request will retry, and a
-        // truly invalid session will route the user to login through the
-        // normal auth flow.
+        return false;
       }
+    }
 
-      // Force the realtime socket closed so channels rejoin on a fresh
-      // connection. disconnect() is async and resolves once the socket has
-      // acknowledged the close (or timed out); connect() opens a new socket
-      // and supabase-js re-joins any channels that were in the joined state.
+    async function tryReconnectRealtime(): Promise<boolean> {
       try {
         const rt = supabase.realtime;
         if (rt.isConnected()) {
           await rt.disconnect();
         }
         rt.connect();
+        // We can't await the new socket reaching OPEN directly without
+        // touching internals, so treat "connect() didn't throw" as a soft
+        // success. The next attempt in the backoff loop will catch a still-
+        // closed socket via isConnected() === false on its check.
+        return true;
       } catch {
-        // If reconnect itself throws, the next user action that touches
-        // realtime (sending a message, opening a play) will try again.
+        return false;
       }
+    }
 
-      if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
-        console.info("[ConnectionRecovery] recovered", {
-          trigger,
-          hiddenForMs,
-          channels: supabase.realtime.getChannels().length,
-        });
+    async function recover(hiddenForMs: number, trigger: string) {
+      if (inFlight) return;
+      inFlight = true;
+      state.recoveryRunning = true;
+      state.recoveryCount += 1;
+      state.lastRecoveryAt = Date.now();
+      state.lastRecoveryHiddenMs = hiddenForMs;
+
+      try {
+        // Auth needs to come first — realtime authenticates with the JWT.
+        // Both can fail repeatedly during Safari's post-wake "offline"
+        // window, so we walk a backoff schedule until either both succeed
+        // or we exhaust attempts. Aborting if the document hides again
+        // mid-recovery (user switched away).
+        let authOk = false;
+        let realtimeOk = false;
+        for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
+          if (aborted) break;
+          const delay = RETRY_DELAYS_MS[i];
+          if (delay > 0) await sleep(delay);
+          if (aborted) break;
+
+          if (!authOk) authOk = await tryRefreshAuth();
+          if (authOk) realtimeOk = await tryReconnectRealtime();
+
+          const realtimeStillOpen = supabase.realtime.isConnected();
+          const attempt: AttemptOutcome = {
+            at: Date.now(),
+            trigger,
+            attempt: i + 1,
+            authOk,
+            realtimeOk: realtimeOk && realtimeStillOpen,
+          };
+          state.attempts.push(attempt);
+          if (state.attempts.length > 20) state.attempts.shift();
+
+          if (authOk && realtimeStillOpen) break;
+        }
+
+        if (process.env.NODE_ENV !== "production") {
+          // eslint-disable-next-line no-console
+          console.info("[ConnectionRecovery] done", {
+            trigger,
+            hiddenForMs,
+            attempts: state.attempts.slice(-RETRY_DELAYS_MS.length),
+          });
+        }
+      } finally {
+        inFlight = false;
+        state.recoveryRunning = false;
       }
     }
 
@@ -106,9 +172,11 @@ export function ConnectionRecovery() {
       if (document.visibilityState === "hidden") {
         hiddenAt = Date.now();
         state.lastHiddenAt = hiddenAt;
+        aborted = true;
         return;
       }
 
+      aborted = false;
       state.lastVisibleAt = Date.now();
       const startedHiddenAt = hiddenAt;
       hiddenAt = null;
@@ -120,30 +188,33 @@ export function ConnectionRecovery() {
       void recover(hiddenForMs, "visibilitychange");
     }
 
-    // `pageshow` with `persisted: true` fires when the tab is restored from
-    // the browser's back-forward cache. Sockets and timers are guaranteed
-    // dead in that case — always recover regardless of hidden duration.
     function onPageShow(event: PageTransitionEvent) {
       if (event.persisted) {
+        aborted = false;
         void recover(0, "pageshow:bfcache");
       }
     }
 
-    // Mobile (Capacitor) and some desktop browsers fire `focus` without
-    // `visibilitychange` when returning from a long-suspended state. Use it
-    // as a secondary trigger but only if we already tracked a hidden window.
     function onFocus() {
       if (document.visibilityState !== "visible") return;
       if (hiddenAt === null) return;
       onVisibility();
     }
 
+    function onOnline() {
+      // Browser admitted it's back on the network. If recovery had already
+      // run and may have failed during the post-wake offline window, kick
+      // it again now that fetch should succeed.
+      aborted = false;
+      void recover(0, "online");
+    }
+
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
 
     window.__xoConn = {
-      ...state,
       get lastHiddenAt() {
         return state.lastHiddenAt;
       },
@@ -159,7 +230,15 @@ export function ConnectionRecovery() {
       get recoveryCount() {
         return state.recoveryCount;
       },
+      get recoveryRunning() {
+        return state.recoveryRunning;
+      },
+      get attempts() {
+        return state.attempts.slice();
+      },
       snapshot: () => ({
+        navigatorOnLine:
+          typeof navigator !== "undefined" ? navigator.onLine : null,
         isConnected: supabase.realtime.isConnected(),
         channels: supabase.realtime.getChannels().map((c) => ({
           topic: c.topic,
@@ -170,16 +249,23 @@ export function ConnectionRecovery() {
         lastRecoveryAt: state.lastRecoveryAt,
         lastRecoveryHiddenMs: state.lastRecoveryHiddenMs,
         recoveryCount: state.recoveryCount,
+        recoveryRunning: state.recoveryRunning,
+        attempts: state.attempts.slice(),
         userAgent:
           typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
       }),
-      forceRecover: () => recover(0, "manual"),
+      forceRecover: () => {
+        aborted = false;
+        return recover(0, "manual");
+      },
     } as Diag;
 
     return () => {
+      aborted = true;
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
       delete window.__xoConn;
     };
   }, []);
