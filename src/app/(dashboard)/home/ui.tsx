@@ -1013,6 +1013,10 @@ export function DashboardClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
+  // No `?tab=` → Playbooks. Falling back to a remembered `initialTab` here
+  // was the source of a "Playbooks tab does nothing" bug: arriving at
+  // /home?tab=inbox locked initialTab to "inbox", and clicking Playbooks
+  // (which clears the param) would snap back to Inbox.
   const homeTab: HomeTab =
     tabParam === "activity"
       ? "inbox"
@@ -1020,7 +1024,7 @@ export function DashboardClient({
           tabParam === "inbox" ||
           tabParam === "playbooks"
         ? tabParam
-        : initialTab;
+        : "playbooks";
   const setHomeTab = useCallback(
     (t: HomeTab) => {
       const params = new URLSearchParams(searchParams.toString());
