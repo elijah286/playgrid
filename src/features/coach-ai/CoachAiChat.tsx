@@ -615,6 +615,44 @@ export function CoachAiChat({
     // result when it lands.
     let capturedTurnId: string | null = null;
 
+    // Idle watchdog: if no SSE chunk arrives for IDLE_TIMEOUT_MS, the
+    // underlying TCP connection is almost certainly dead (laptop slept,
+    // server restart, network blip). The browser's `reader.read()` won't
+    // throw in that case — it just stays pending forever. We force the
+    // issue by aborting the controller, which surfaces as an AbortError
+    // in the catch block below; the watchdogFired flag tells that handler
+    // to pivot to polling (using capturedTurnId) instead of treating the
+    // abort as user-initiated. Re-checked eagerly on tab resume since
+    // background timers are heavily throttled while the tab is hidden.
+    const IDLE_TIMEOUT_MS = 30_000;
+    let lastChunkAt = Date.now();
+    let watchdogFired = false;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    const tripWatchdog = () => {
+      if (watchdogFired) return true;
+      if (Date.now() - lastChunkAt > IDLE_TIMEOUT_MS) {
+        watchdogFired = true;
+        try { ctrl.abort(); } catch { /* ignore */ }
+        return true;
+      }
+      return false;
+    };
+    const armWatchdog = () => {
+      if (watchdogTimer) clearTimeout(watchdogTimer);
+      watchdogTimer = setTimeout(() => {
+        if (!tripWatchdog()) armWatchdog();
+      }, IDLE_TIMEOUT_MS);
+    };
+    const onVisibilityForWatchdog = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState !== "visible") return;
+      if (!tripWatchdog()) armWatchdog();
+    };
+    armWatchdog();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityForWatchdog);
+    }
+
     // The editor publishes its in-memory doc to a window-level store (see
     // live-play-doc.ts) so Cal can see edits that the autosave debounce hasn't
     // persisted yet. Without this, asking Cal a question mid-edit (e.g. while
@@ -645,6 +683,10 @@ export function CoachAiChat({
 
       for await (const { event, data } of parseSse(res.body)) {
         if (ctrl.signal.aborted) break;
+        // Reset the idle watchdog on every frame so a healthy stream with
+        // sparse text (long tool runs, slow model) never trips it.
+        lastChunkAt = Date.now();
+        armWatchdog();
         let payload: Record<string, unknown>;
         try { payload = JSON.parse(data) as Record<string, unknown>; } catch { continue; }
 
@@ -728,7 +770,19 @@ export function CoachAiChat({
         capturedTurnId = null;
       }
     } catch (e) {
-      if ((e as { name?: string }).name !== "AbortError") {
+      const isAbort = (e as { name?: string }).name === "AbortError";
+      if (isAbort && watchdogFired) {
+        // The watchdog tripped — the SSE socket was almost certainly dead
+        // (slept laptop, server restart, dropped network). The agent is
+        // detached on the server, so hand off to polling if we know which
+        // turn to ask about; otherwise surface a retry-friendly error.
+        if (!savedFinalTurn && capturedTurnId) {
+          setPollingRunningTurnId(capturedTurnId);
+          capturedTurnId = null;
+        } else if (!savedFinalTurn) {
+          setError("Coach Cal's response stalled. Please try again.");
+        }
+      } else if (!isAbort) {
         // Mid-stream connection failure with a known turn id → let the
         // polling effect deliver the result rather than surface an error
         // for a turn that's almost certainly going to complete.
@@ -740,6 +794,10 @@ export function CoachAiChat({
         }
       }
     } finally {
+      if (watchdogTimer) clearTimeout(watchdogTimer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityForWatchdog);
+      }
       // If the coach hit Stop mid-stream, preserve whatever Cal had already
       // streamed as a real assistant turn — same convention as ChatGPT /
       // Claude.ai. Skip when clearChat() did the abort (it nulls the ref
