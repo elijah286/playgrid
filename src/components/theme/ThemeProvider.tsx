@@ -41,6 +41,11 @@ export function ThemeProvider({
 
   useEffect(() => {
     applyColorSchemeToDocument(colorScheme);
+    if (colorScheme !== "system" || typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => applyColorSchemeToDocument("system");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
   }, [colorScheme]);
 
   const setColorScheme = useCallback(
