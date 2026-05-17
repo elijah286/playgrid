@@ -38,7 +38,15 @@ export async function copyPlaybookContents(
   targetPlaybookId: string,
   createdByUserId: string,
 ): Promise<void> {
-  const { data: groups } = await client
+  // Source reads go through the service role so cross-team copies work
+  // (claim-from-link, example claim) — the caller may not be a member of
+  // the source playbook, and RLS would silently return empty arrays for
+  // every source SELECT, leaving the recipient with an empty claimed
+  // playbook. Target writes stay on the user client so ownership and
+  // attribution still flow through RLS.
+  const src = createServiceRoleClient();
+
+  const { data: groups } = await src
     .from("playbook_groups")
     .select("id, name, sort_order")
     .eq("playbook_id", sourcePlaybookId)
@@ -60,7 +68,7 @@ export async function copyPlaybookContents(
     }
   }
 
-  const { data: plays } = await client
+  const { data: plays } = await src
     .from("plays")
     .select(
       "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id, group_id, sort_order, play_type, special_teams_unit, formation_id, opponent_formation_id, vs_play_id, vs_play_snapshot",
@@ -131,7 +139,7 @@ export async function copyPlaybookContents(
     if (oldVs) pendingVsLinks.push({ newPlayId, oldVsPlayId: oldVs });
 
     if (p.current_version_id) {
-      const { data: srcVer } = await client
+      const { data: srcVer } = await src
         .from("play_versions")
         .select("document, schema_version")
         .eq("id", p.current_version_id)
@@ -253,7 +261,13 @@ export async function copyPlaybookGameSessions(
   targetPlaybookId: string,
   duplicatingUserId: string,
 ): Promise<void> {
-  const { data: sessions } = await client
+  // Same rule as copyPlaybookContents: source reads via service role so
+  // claim-from-link recipients (non-members of source) get real data
+  // instead of silently empty results from RLS. Target writes stay on
+  // the user client.
+  const src = createServiceRoleClient();
+
+  const { data: sessions } = await src
     .from("game_sessions")
     .select(
       "id, started_at, ended_at, kind, opponent, score_us, score_them, notes",
@@ -295,7 +309,7 @@ export async function copyPlaybookGameSessions(
     if (!newSession?.id) continue;
     const newSessionId = newSession.id as string;
 
-    const { data: calls } = await client
+    const { data: calls } = await src
       .from("game_plays")
       .select(
         "id, play_id, position, called_at, thumb, tag, snapshot, play_version_id",
@@ -327,7 +341,7 @@ export async function copyPlaybookGameSessions(
       if (newCall?.id) callIdMap.set(c.id as string, newCall.id as string);
     }
 
-    const { data: events } = await client
+    const { data: events } = await src
       .from("game_score_events")
       .select("side, delta, created_at, play_id")
       .eq("session_id", sourceSessionId)
@@ -473,8 +487,12 @@ async function buildSourceToTargetPlayMap(
   sourcePlaybookId: string,
   targetPlaybookId: string,
 ): Promise<Map<string, string>> {
-  const [{ data: src }, { data: tgt }] = await Promise.all([
-    client
+  // Source-side read via service role so claim-from-link recipients
+  // (non-members of source) get the real play list. Target-side read
+  // stays on the caller's client.
+  const svc = createServiceRoleClient();
+  const [{ data: srcRows }, { data: tgt }] = await Promise.all([
+    svc
       .from("plays")
       .select("id, name")
       .eq("playbook_id", sourcePlaybookId)
@@ -491,7 +509,7 @@ async function buildSourceToTargetPlayMap(
     if (name) tgtByName.set(name, t.id as string);
   }
   const map = new Map<string, string>();
-  for (const s of src ?? []) {
+  for (const s of srcRows ?? []) {
     const name = (s.name as string | null)?.trim();
     if (!name) continue;
     const newId = tgtByName.get(name);

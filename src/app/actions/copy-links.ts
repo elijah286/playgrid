@@ -184,8 +184,13 @@ export async function acceptCopyLinkAction(
 
   // Read source metadata (we already have most of it from preview, but
   // need allow_game_results_duplication and the canonical sport_variant
-  // typed value for the insert).
-  const { data: src, error: srcErr } = await supabase
+  // typed value for the insert). Token validation already happened via
+  // the security-definer preview RPC; the recipient isn't a member of
+  // the source playbook yet, so a plain user-client read would be
+  // blocked by RLS and surface as "Cannot coerce the result to a single
+  // JSON object". The token IS the authorization here.
+  const sourceAdmin = createServiceRoleClient();
+  const { data: src, error: srcErr } = await sourceAdmin
     .from("playbooks")
     .select("name, sport_variant, custom_offense_count, color, logo_url, season, allow_game_results_duplication")
     .eq("id", preview.playbook_id)
