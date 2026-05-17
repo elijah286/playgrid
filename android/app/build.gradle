@@ -16,10 +16,35 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Release signing reads from environment variables so the keystore + password
+    // are never committed. Required env vars when running `./gradlew bundleRelease`:
+    //   XOGM_UPLOAD_KEYSTORE_PATH      e.g. ~/.android-keystores/xogridmaker-upload.jks
+    //   XOGM_UPLOAD_KEYSTORE_PASSWORD  (also used as the key password — they match by convention)
+    //   XOGM_UPLOAD_KEY_ALIAS          e.g. upload
+    // If any are missing, the release build is left unsigned and Gradle will print
+    // a warning instead of failing — debug builds are unaffected.
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("XOGM_UPLOAD_KEYSTORE_PATH")
+            def ksPass = System.getenv("XOGM_UPLOAD_KEYSTORE_PASSWORD")
+            def ksAlias = System.getenv("XOGM_UPLOAD_KEY_ALIAS") ?: "upload"
+            if (ksPath != null && ksPass != null && new File(ksPath).exists()) {
+                storeFile file(ksPath)
+                storePassword ksPass
+                keyAlias ksAlias
+                keyPassword ksPass
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Only attach the signing config when the keystore is present. This
+            // lets contributors without the keystore still build (unsigned).
+            if (System.getenv("XOGM_UPLOAD_KEYSTORE_PATH") != null) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
