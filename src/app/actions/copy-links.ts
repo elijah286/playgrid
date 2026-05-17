@@ -269,14 +269,13 @@ export async function acceptCopyLinkAction(
   // the no-UPDATE-policy on the table. Best-effort — failure here doesn't
   // block the claim.
   try {
-    const admin = createServiceRoleClient();
-    const { data: linkIdRow } = await admin
+    const { data: linkIdRow } = await sourceAdmin
       .from("playbook_copy_links")
       .select("id")
       .eq("token", token)
       .maybeSingle();
     if (linkIdRow?.id) {
-      await admin
+      await sourceAdmin
         .from("playbook_copy_link_sends")
         .update({
           claimed_at: new Date().toISOString(),
@@ -294,8 +293,7 @@ export async function acceptCopyLinkAction(
   // recipient-newness; safe to call unconditionally.
   if (linkRow?.created_by && typeof linkRow.created_by === "string") {
     try {
-      const admin = createServiceRoleClient();
-      await awardReferralIfApplicable(admin, {
+      await awardReferralIfApplicable(sourceAdmin, {
         senderId: linkRow.created_by,
         recipientId: user.id,
         recipientOwnedBeforeClaim,
