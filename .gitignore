@@ -46,3 +46,8 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Generated App Store / Play Store screenshots — regenerable via
+# `scripts/capture-store-screenshots.mjs`, large (~3 MB), not worth versioning.
+# The icon + feature graphic under play-store/ ARE committed (small, hand-curated).
+/public/marketing/store/
