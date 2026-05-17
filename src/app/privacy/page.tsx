@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: April 29, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: May 16, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -178,6 +178,11 @@ export default function PrivacyPage() {
             <li>
               Apple — if you choose &ldquo;Sign in with Apple,&rdquo; Apple
               authenticates you and shares your email and name with us
+            </li>
+            <li>
+              Google — if you choose &ldquo;Sign in with Google,&rdquo; Google
+              authenticates you and shares your email, name, and profile
+              photo with us
             </li>
             <li>
               Google Maps Platform — if your team uses the calendar venue
