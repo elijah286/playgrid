@@ -6,8 +6,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   Archive,
   ArchiveRestore,
-  ChevronDown,
-  ChevronRight,
+  ArrowLeft,
   Copy,
   FlaskConical,
   Globe,
@@ -1749,6 +1748,7 @@ function CreatePlaybookDialog({
     settings: PlaybookSettings;
   }) => void;
 }) {
+  const [view, setView] = useState<"basics" | "rules">("basics");
   const [name, setName] = useState("");
   const [variant, setVariant] = useState<SportVariant>("flag_7v7");
   const [color, setColor] = useState<string>(PALETTE[0]);
@@ -1757,7 +1757,6 @@ function CreatePlaybookDialog({
   const [settings, setSettings] = useState<PlaybookSettings>(() =>
     defaultSettingsForVariant("flag_7v7"),
   );
-  const [rulesOpen, setRulesOpen] = useState(false);
   const touchedSettingsRef = useRef(false);
 
   // Sync settings to variant defaults until the user edits them directly.
@@ -1790,6 +1789,8 @@ function CreatePlaybookDialog({
     });
   }
 
+  const summary = rulesSummary(settings);
+
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
@@ -1803,165 +1804,209 @@ function CreatePlaybookDialog({
           if (e.target === e.currentTarget) onClose();
         }}
       >
-      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated sm:max-w-3xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-base font-bold text-foreground">New Playbook</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+        <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
+          {/* Header */}
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            {view === "rules" && (
+              <button
+                type="button"
+                onClick={() => setView("basics")}
+                className="-ml-1 rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+                aria-label="Back"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+            )}
+            <h2 className="flex-1 text-base font-bold text-foreground">
+              {view === "basics" ? "New Playbook" : "Game rules"}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-muted hover:bg-surface-inset hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
 
-        <div className="grid gap-5 overflow-y-auto p-5 sm:grid-cols-2">
-          {/* Left: appearance */}
-          <div className="space-y-4">
-            <div className="rounded-xl border border-border bg-surface-inset/40 p-3">
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
-                    Team color
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PALETTE.map((c) => {
-                      const active = color.toLowerCase() === c.toLowerCase();
-                      return (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setColor(c)}
-                          className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
-                            active ? "border-foreground scale-110" : "border-border"
-                          }`}
-                          style={{ backgroundColor: c }}
-                          aria-label={c}
-                        />
-                      );
-                    })}
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="h-6 w-6 cursor-pointer rounded-full border-2 border-border"
-                      aria-label="Custom color"
-                    />
-                  </div>
-                </div>
+          {/* Body */}
+          {view === "basics" ? (
+            <div
+              key="basics"
+              className="space-y-5 overflow-y-auto p-5 duration-200 animate-in fade-in slide-in-from-left-2"
+            >
+              {/* Name + tile preview */}
+              <div className="flex items-start gap-3">
                 <div
-                  className="flex h-20 w-24 shrink-0 items-center justify-center rounded-lg"
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg"
                   style={{ backgroundColor: color }}
                 >
                   {logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={logoUrl} alt="" className="h-16 w-16 object-contain" />
+                    <img src={logoUrl} alt="" className="h-10 w-10 object-contain" />
                   ) : (
-                    <span className="text-2xl font-black tracking-tight text-white drop-shadow">
+                    <span className="text-lg font-black tracking-tight text-white drop-shadow">
                       {initials}
                     </span>
                   )}
                 </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                    Name
+                  </label>
+                  <Input
+                    autoFocus
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submit();
+                    }}
+                    placeholder="e.g. Varsity 2026"
+                  />
+                </div>
               </div>
-              <div className="mt-3 border-t border-border pt-3">
-                <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={pending} />
-              </div>
-            </div>
-          </div>
 
-          {/* Right: details */}
-          <div className="space-y-4">
-            {/* Name */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-                Name
-              </label>
-              <Input
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submit();
-                }}
-                placeholder="e.g. Varsity 2026"
-              />
-            </div>
-
-            {/* Season */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-                Season <span className="font-normal normal-case text-muted-light">(optional)</span>
-              </label>
-              <Input
-                value={season}
-                onChange={(e) => setSeason(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submit();
-                }}
-                placeholder="e.g. Spring 2026"
-              />
-            </div>
-
-            {/* Sport variant */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted">
-                Game type
-              </label>
-              <SegmentedControl
-                options={SPORT_OPTIONS}
-                value={variant}
-                onChange={setVariant}
-                size="sm"
-              />
-            </div>
-
-            {/* Game rules — collapsed by default */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setRulesOpen((v) => !v)}
-                className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted hover:text-foreground"
-              >
-                <span>Game rules</span>
-                {rulesOpen ? (
-                  <ChevronDown className="size-4" />
-                ) : (
-                  <ChevronRight className="size-4" />
-                )}
-              </button>
-              {rulesOpen && (
-                <PlaybookRulesForm
-                  value={settings}
-                  onChange={(s) => {
-                    touchedSettingsRef.current = true;
-                    setSettings(s);
+              {/* Season */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                  Season <span className="font-normal normal-case text-muted-light">(optional)</span>
+                </label>
+                <Input
+                  value={season}
+                  onChange={(e) => setSeason(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submit();
                   }}
-                  disabled={pending}
-                  hideHeader
-                  sportVariant={variant}
+                  placeholder="e.g. Spring 2026"
                 />
-              )}
+              </div>
+
+              {/* Game type */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                  Game type
+                </label>
+                <SegmentedControl
+                  options={SPORT_OPTIONS}
+                  value={variant}
+                  onChange={setVariant}
+                  size="sm"
+                />
+              </div>
+
+              {/* Team color */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">
+                  Team color
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {PALETTE.map((c) => {
+                    const active = color.toLowerCase() === c.toLowerCase();
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setColor(c)}
+                        className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
+                          active ? "scale-110 border-foreground" : "border-border"
+                        }`}
+                        style={{ backgroundColor: c }}
+                        aria-label={c}
+                      />
+                    );
+                  })}
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="h-7 w-7 cursor-pointer rounded-full border-2 border-border"
+                    aria-label="Custom color"
+                  />
+                </div>
+              </div>
+
+              {/* Logo */}
+              <LogoPicker value={logoUrl} onChange={setLogoUrl} disabled={pending} />
+
+              {/* Game rules summary + customize */}
+              <div className="border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => setView("rules")}
+                  className="group flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface-inset/40 px-3 py-2.5 text-left hover:border-foreground/30 hover:bg-surface-inset"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-muted">
+                      Game rules
+                    </div>
+                    <div className="mt-0.5 truncate text-sm text-foreground">
+                      {summary}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-muted group-hover:text-foreground">
+                    Customize →
+                  </span>
+                </button>
+              </div>
             </div>
+          ) : (
+            <div
+              key="rules"
+              className="overflow-y-auto p-5 duration-200 animate-in fade-in slide-in-from-right-2"
+            >
+              <PlaybookRulesForm
+                value={settings}
+                onChange={(s) => {
+                  touchedSettingsRef.current = true;
+                  setSettings(s);
+                }}
+                disabled={pending}
+                hideHeader
+                sportVariant={variant}
+              />
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+            {view === "basics" ? (
+              <>
+                <Button variant="ghost" onClick={onClose} disabled={pending}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={submit}
+                  loading={pending}
+                  disabled={!name.trim()}
+                >
+                  Create
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" onClick={() => setView("basics")}>
+                Done
+              </Button>
+            )}
           </div>
         </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <Button variant="ghost" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={submit}
-            loading={pending}
-            disabled={!name.trim()}
-          >
-            Create
-          </Button>
-        </div>
-      </div>
       </div>
     </div>
   );
+}
+
+/** Short one-line description of the playbook's rule settings, shown
+ *  on the Create dialog's "Customize rules" card so coaches can see
+ *  the current state at a glance before opening the rules editor. */
+function rulesSummary(s: PlaybookSettings): string {
+  const parts: string[] = [];
+  parts.push(`${s.maxPlayers} offense`);
+  parts.push(s.rushingAllowed ? "rushing on" : "no rushing");
+  if (s.handoffsAllowed) parts.push("handoffs");
+  if (s.blockingAllowed) parts.push("blocking");
+  if (s.centerIsEligible) parts.push("center eligible");
+  return parts.join(" · ");
 }
 
 const PALETTE = [
