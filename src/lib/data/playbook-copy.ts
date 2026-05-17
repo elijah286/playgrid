@@ -44,156 +44,216 @@ export async function copyPlaybookContents(
   // every source SELECT, leaving the recipient with an empty claimed
   // playbook. Target writes stay on the user client so ownership and
   // attribution still flow through RLS.
+  //
+  // Bulk-insert shape: previously each play cost 2–4 round-trips (insert
+  // play + maybe select version + insert version + update version
+  // pointer). A 53-play playbook took 15–20s. The pass below collapses
+  // the whole copy into ~5 wallclock round-trips: parallel source reads,
+  // one bulk insert per table, and a single parallel update batch for
+  // back-pointers (current_version_id, vs_play_id). PostgREST guarantees
+  // that `.insert(rows).select()` returns rows in input order, so the
+  // index-aligned zip from source → target is safe.
   const src = createServiceRoleClient();
 
-  const { data: groups } = await src
-    .from("playbook_groups")
-    .select("id, name, sort_order")
-    .eq("playbook_id", sourcePlaybookId)
-    .order("sort_order", { ascending: true });
-
-  const groupIdMap = new Map<string, string>();
-  for (const g of groups ?? []) {
-    const { data: newGroup } = await client
+  // 1) Read all source data + start cloning formations in parallel.
+  //    Formations are written to the target inside this helper but it's
+  //    independent of plays/groups, so it overlaps the reads.
+  const [groupsRes, playsRes, formationIdMap] = await Promise.all([
+    src
       .from("playbook_groups")
-      .insert({
-        playbook_id: targetPlaybookId,
-        name: g.name,
-        sort_order: g.sort_order,
-      })
-      .select("id")
-      .single();
-    if (newGroup?.id) {
-      groupIdMap.set(g.id as string, newGroup.id as string);
+      .select("id, name, sort_order")
+      .eq("playbook_id", sourcePlaybookId)
+      .order("sort_order", { ascending: true }),
+    src
+      .from("plays")
+      .select(
+        "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id, group_id, sort_order, play_type, special_teams_unit, formation_id, opponent_formation_id, vs_play_id, vs_play_snapshot",
+      )
+      .eq("playbook_id", sourcePlaybookId)
+      .eq("is_archived", false)
+      .is("deleted_at", null)
+      .is("attached_to_play_id", null)
+      .order("sort_order", { ascending: true }),
+    copySourcePlaybookFormations(sourcePlaybookId, targetPlaybookId),
+  ]);
+  if (groupsRes.error) throw new Error(`copy: read groups: ${groupsRes.error.message}`);
+  if (playsRes.error) throw new Error(`copy: read plays: ${playsRes.error.message}`);
+  const groups = groupsRes.data ?? [];
+  const plays = playsRes.data ?? [];
+
+  // 2) Fetch all referenced play_versions in one round-trip.
+  const versionIds = plays
+    .map((p) => (p.current_version_id as string | null) ?? null)
+    .filter((id): id is string => !!id);
+  const versionById = new Map<
+    string,
+    { document: unknown; schema_version: number | null }
+  >();
+  if (versionIds.length > 0) {
+    const { data: vers, error: verErr } = await src
+      .from("play_versions")
+      .select("id, document, schema_version")
+      .in("id", versionIds);
+    if (verErr) throw new Error(`copy: read play_versions: ${verErr.message}`);
+    for (const v of vers ?? []) {
+      versionById.set(v.id as string, {
+        document: v.document,
+        schema_version: (v.schema_version as number | null) ?? null,
+      });
     }
   }
 
-  const { data: plays } = await src
+  // 3) Bulk insert groups. PostgREST returns rows in input order so we
+  //    zip source[i] → inserted[i] to build the old→new id map.
+  const groupIdMap = new Map<string, string>();
+  if (groups.length > 0) {
+    const { data: newGroups, error: gErr } = await client
+      .from("playbook_groups")
+      .insert(
+        groups.map((g) => ({
+          playbook_id: targetPlaybookId,
+          name: g.name,
+          sort_order: g.sort_order,
+        })),
+      )
+      .select("id");
+    if (gErr) throw new Error(`copy: insert groups: ${gErr.message}`);
+    const inserted = newGroups ?? [];
+    if (inserted.length !== groups.length) {
+      throw new Error(
+        `copy: inserted ${inserted.length} groups, expected ${groups.length}`,
+      );
+    }
+    groups.forEach((g, i) => {
+      groupIdMap.set(g.id as string, inserted[i].id as string);
+    });
+  }
+
+  if (plays.length === 0) return;
+
+  // 4) Bulk insert plays. vs_play_id and current_version_id are deferred
+  //    to step 6 — vs_play_id points at sibling plays in the same copy
+  //    (forward refs), and current_version_id points at rows we haven't
+  //    created yet (step 5).
+  const { data: newPlays, error: pErr } = await client
     .from("plays")
-    .select(
-      "id, name, shorthand, wristband_code, mnemonic, display_abbrev, formation_name, concept, tags, tag, current_version_id, group_id, sort_order, play_type, special_teams_unit, formation_id, opponent_formation_id, vs_play_id, vs_play_snapshot",
-    )
-    .eq("playbook_id", sourcePlaybookId)
-    .eq("is_archived", false)
-    .is("deleted_at", null)
-    .is("attached_to_play_id", null)
-    .order("sort_order", { ascending: true });
-
-  // Clone every formation owned by the source playbook into the target.
-  // After the move to playbook-scoped formations, formations don't travel
-  // implicitly with the team — we must copy them alongside the plays.
-  const formationIdMap = await copySourcePlaybookFormations(
-    sourcePlaybookId,
-    targetPlaybookId,
-  );
-
-  // Pass 1: insert every play, remember the old→new id mapping. vs_play_id
-  // is nulled out here because its target may not exist yet in the copy.
-  const playIdMap = new Map<string, string>();
-  const pendingVsLinks: Array<{ newPlayId: string; oldVsPlayId: string }> = [];
-
-  for (const p of plays ?? []) {
-    const oldGroupId = (p.group_id as string | null) ?? null;
-    const newGroupId = oldGroupId
-      ? groupIdMap.get(oldGroupId) ?? null
-      : null;
-    const oldOppFormationId = (p.opponent_formation_id as string | null) ?? null;
-    const newOpponentFormationId = oldOppFormationId
-      ? formationIdMap.get(oldOppFormationId) ?? null
-      : null;
-    const oldFormationId = (p.formation_id as string | null) ?? null;
-    const newFormationId = oldFormationId
-      ? formationIdMap.get(oldFormationId) ?? null
-      : null;
-
-    const { data: newPlay } = await client
-      .from("plays")
-      .insert({
-        playbook_id: targetPlaybookId,
-        name: p.name,
-        shorthand: p.shorthand,
-        wristband_code: p.wristband_code,
-        mnemonic: p.mnemonic,
-        display_abbrev: p.display_abbrev,
-        formation_name: p.formation_name,
-        concept: p.concept,
-        tags: p.tags ?? (p.tag ? [p.tag] : []),
-        tag: p.tag,
-        group_id: newGroupId,
-        sort_order: p.sort_order ?? 0,
-        play_type: p.play_type ?? "offense",
-        special_teams_unit: p.special_teams_unit,
-        formation_id: newFormationId,
-        opponent_formation_id: newOpponentFormationId,
-        vs_play_snapshot: p.vs_play_snapshot,
-        // vs_play_id resolved in pass 2 below.
-      })
-      .select("id")
-      .single();
-    if (!newPlay?.id) continue;
-
-    const newPlayId = newPlay.id as string;
-    playIdMap.set(p.id as string, newPlayId);
-
-    const oldVs = (p.vs_play_id as string | null) ?? null;
-    if (oldVs) pendingVsLinks.push({ newPlayId, oldVsPlayId: oldVs });
-
-    if (p.current_version_id) {
-      const { data: srcVer } = await src
-        .from("play_versions")
-        .select("document, schema_version")
-        .eq("id", p.current_version_id)
-        .maybeSingle();
-      if (srcVer) {
-        // Force the copied document's metadata.playType and
-        // metadata.specialTeamsUnit to match the source play's DB columns.
-        // Source data in the wild has drift — a defense play whose document
-        // metadata still says "offense" from an older authoring pass. If we
-        // copied the document verbatim, the next save on the copy would
-        // write metadata.playType back to plays.play_type and flip the row.
-        const srcDoc = (srcVer.document ?? {}) as Record<string, unknown>;
-        const srcMeta = (srcDoc.metadata ?? {}) as Record<string, unknown>;
-        const copiedDoc: Record<string, unknown> = {
-          ...srcDoc,
-          metadata: {
-            ...srcMeta,
-            playType: (p.play_type as string | null) ?? "offense",
-            specialTeamsUnit: (p.special_teams_unit as string | null) ?? null,
-          },
+    .insert(
+      plays.map((p) => {
+        const oldGroupId = (p.group_id as string | null) ?? null;
+        const oldOppFormationId =
+          (p.opponent_formation_id as string | null) ?? null;
+        const oldFormationId = (p.formation_id as string | null) ?? null;
+        return {
+          playbook_id: targetPlaybookId,
+          name: p.name,
+          shorthand: p.shorthand,
+          wristband_code: p.wristband_code,
+          mnemonic: p.mnemonic,
+          display_abbrev: p.display_abbrev,
+          formation_name: p.formation_name,
+          concept: p.concept,
+          tags: p.tags ?? (p.tag ? [p.tag] : []),
+          tag: p.tag,
+          group_id: oldGroupId ? groupIdMap.get(oldGroupId) ?? null : null,
+          sort_order: p.sort_order ?? 0,
+          play_type: p.play_type ?? "offense",
+          special_teams_unit: p.special_teams_unit,
+          formation_id: oldFormationId
+            ? formationIdMap.get(oldFormationId) ?? null
+            : null,
+          opponent_formation_id: oldOppFormationId
+            ? formationIdMap.get(oldOppFormationId) ?? null
+            : null,
+          vs_play_snapshot: p.vs_play_snapshot,
         };
-        const { data: newVer } = await client
-          .from("play_versions")
-          .insert({
-            play_id: newPlayId,
-            schema_version: (srcVer.schema_version as number | null) ?? 1,
-            document: copiedDoc,
-            label: "copied",
-            created_by: createdByUserId,
-          })
-          .select("id")
-          .single();
-        if (newVer?.id) {
-          await client
-            .from("plays")
-            .update({ current_version_id: newVer.id })
-            .eq("id", newPlayId);
-        }
-      }
+      }),
+    )
+    .select("id");
+  if (pErr) throw new Error(`copy: insert plays: ${pErr.message}`);
+  const insertedPlays = newPlays ?? [];
+  if (insertedPlays.length !== plays.length) {
+    throw new Error(
+      `copy: inserted ${insertedPlays.length} plays, expected ${plays.length}`,
+    );
+  }
+  const playIdMap = new Map<string, string>();
+  plays.forEach((p, i) => {
+    playIdMap.set(p.id as string, insertedPlays[i].id as string);
+  });
+
+  // 5) Bulk insert play_versions. Force the document's metadata.playType
+  //    and specialTeamsUnit to match the source play's DB columns —
+  //    source data in the wild has drift (e.g. a defense play whose
+  //    document metadata still says "offense" from an older authoring
+  //    pass); copying verbatim would cause the next save on the copy to
+  //    write metadata.playType back to plays.play_type and flip the row.
+  const versionInsertRows: Array<{
+    play_id: string;
+    schema_version: number;
+    document: Record<string, unknown>;
+    label: string;
+    created_by: string;
+  }> = [];
+  for (const p of plays) {
+    const oldVerId = p.current_version_id as string | null;
+    if (!oldVerId) continue;
+    const srcVer = versionById.get(oldVerId);
+    if (!srcVer) continue;
+    const newPlayId = playIdMap.get(p.id as string);
+    if (!newPlayId) continue;
+    const srcDoc = (srcVer.document ?? {}) as Record<string, unknown>;
+    const srcMeta = (srcDoc.metadata ?? {}) as Record<string, unknown>;
+    versionInsertRows.push({
+      play_id: newPlayId,
+      schema_version: srcVer.schema_version ?? 1,
+      document: {
+        ...srcDoc,
+        metadata: {
+          ...srcMeta,
+          playType: (p.play_type as string | null) ?? "offense",
+          specialTeamsUnit: (p.special_teams_unit as string | null) ?? null,
+        },
+      },
+      label: "copied",
+      created_by: createdByUserId,
+    });
+  }
+  const versionIdByPlayId = new Map<string, string>();
+  if (versionInsertRows.length > 0) {
+    const { data: newVers, error: vErr } = await client
+      .from("play_versions")
+      .insert(versionInsertRows)
+      .select("id, play_id");
+    if (vErr) throw new Error(`copy: insert play_versions: ${vErr.message}`);
+    for (const v of newVers ?? []) {
+      versionIdByPlayId.set(v.play_id as string, v.id as string);
     }
   }
 
-  // Pass 2: wire up the defense→offense links inside the copy now that
-  // every play exists and we have the full id map. Links whose target
-  // play was archived (and therefore skipped above) stay null.
-  for (const link of pendingVsLinks) {
-    const newTargetId = playIdMap.get(link.oldVsPlayId);
-    if (!newTargetId) continue;
-    await client
-      .from("plays")
-      .update({ vs_play_id: newTargetId })
-      .eq("id", link.newPlayId);
+  // 6) Back-pointer updates: current_version_id + vs_play_id. Combined
+  //    into one row per play so each play needs at most one UPDATE, then
+  //    issued in parallel. Defense→offense links whose target was
+  //    archived (and therefore skipped above) stay null.
+  const updatePromises: PromiseLike<unknown>[] = [];
+  for (const p of plays) {
+    const newPlayId = playIdMap.get(p.id as string);
+    if (!newPlayId) continue;
+    const updates: Record<string, string | null> = {};
+    const newVerId = versionIdByPlayId.get(newPlayId);
+    if (newVerId) updates.current_version_id = newVerId;
+    const oldVs = (p.vs_play_id as string | null) ?? null;
+    if (oldVs) {
+      const newVs = playIdMap.get(oldVs);
+      if (newVs) updates.vs_play_id = newVs;
+    }
+    if (Object.keys(updates).length === 0) continue;
+    updatePromises.push(
+      client.from("plays").update(updates).eq("id", newPlayId),
+    );
   }
-
+  if (updatePromises.length > 0) {
+    await Promise.all(updatePromises);
+  }
 }
 
 /**
@@ -206,6 +266,11 @@ export async function copyPlaybookContents(
  * (allowed via allow_coach_duplication) can still read and clone the
  * source's formations — the anon client can't SELECT rows from a
  * playbook they don't own.
+ *
+ * Single bulk insert (rather than per-row) — PostgREST returns rows in
+ * input order so we zip source[i] → inserted[i] to build the map. The
+ * semantic_key suffix mixes the source id so distinct source formations
+ * never collide in the unique index, even when batched in the same ms.
  */
 async function copySourcePlaybookFormations(
   sourcePlaybookId: string,
@@ -214,26 +279,39 @@ async function copySourcePlaybookFormations(
   const map = new Map<string, string>();
   const svc = createServiceRoleClient();
 
-  const { data: rows } = await svc
+  const { data: rows, error: readErr } = await svc
     .from("formations")
     .select("id, semantic_key, params, kind")
     .eq("playbook_id", sourcePlaybookId);
+  if (readErr) throw new Error(`copy: read formations: ${readErr.message}`);
+  const sourceFormations = rows ?? [];
+  if (sourceFormations.length === 0) return map;
 
-  for (const f of rows ?? []) {
-    const fid = f.id as string;
-    const { data: newF } = await svc
-      .from("formations")
-      .insert({
+  const stamp = Date.now();
+  const { data: newRows, error: insErr } = await svc
+    .from("formations")
+    .insert(
+      sourceFormations.map((f) => ({
         playbook_id: targetPlaybookId,
         is_seed: false,
-        semantic_key: `copied_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        semantic_key: `copied_${stamp}_${Math.random()
+          .toString(36)
+          .slice(2, 10)}_${(f.id as string).slice(0, 8)}`,
         params: f.params,
         kind: f.kind,
-      })
-      .select("id")
-      .single();
-    if (newF?.id) map.set(fid, newF.id as string);
+      })),
+    )
+    .select("id");
+  if (insErr) throw new Error(`copy: insert formations: ${insErr.message}`);
+  const inserted = newRows ?? [];
+  if (inserted.length !== sourceFormations.length) {
+    throw new Error(
+      `copy: inserted ${inserted.length} formations, expected ${sourceFormations.length}`,
+    );
   }
+  sourceFormations.forEach((f, i) => {
+    map.set(f.id as string, inserted[i].id as string);
+  });
   return map;
 }
 
