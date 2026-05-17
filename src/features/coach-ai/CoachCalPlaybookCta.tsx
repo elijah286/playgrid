@@ -26,6 +26,17 @@ export function CoachCalPlaybookCta({
     if (typeof window === "undefined") return false;
     return Boolean(window.__coachCalChatOpen);
   });
+  // Suppress on just-claimed landings — the Customize dialog is the
+  // primary surface in that moment, and stacking a marketing card under
+  // it reads as noise. Captured once at mount because the page header
+  // strips ?customize=1 from the URL on its first render; useSearchParams
+  // would race that strip and lose the signal before the 1.8s delay
+  // fires. The next page load (or hard refresh) has no param, so the
+  // CTA shows normally.
+  const [suppressedByCustomize] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("customize") === "1";
+  });
   // Ref instead of state — the impression latch doesn't need to drive a
   // re-render and putting it in state trips
   // react-hooks/set-state-in-effect.
@@ -42,6 +53,7 @@ export function CoachCalPlaybookCta({
 
   useEffect(() => {
     if (!show) return;
+    if (suppressedByCustomize) return;
     if (typeof window === "undefined") return;
     if (window.localStorage.getItem(STORAGE_KEY) === "1") return;
     // Small delay so it doesn't fire instantly on page load
@@ -63,7 +75,7 @@ export function CoachCalPlaybookCta({
       }
     }, 1800);
     return () => clearTimeout(id);
-  }, [show]);
+  }, [show, suppressedByCustomize]);
 
   function dismiss() {
     setVisible(false);
@@ -75,7 +87,7 @@ export function CoachCalPlaybookCta({
     });
   }
 
-  if (!visible || chatOpen) return null;
+  if (!visible || chatOpen || suppressedByCustomize) return null;
 
   return (
     <div

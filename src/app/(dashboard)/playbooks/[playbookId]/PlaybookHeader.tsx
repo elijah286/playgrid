@@ -1744,7 +1744,7 @@ export function CustomizeTeamDialog({
           if (e.target === e.currentTarget && !saving) onClose();
         }}
       >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface-raised shadow-elevated">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl border border-border bg-surface-raised shadow-elevated">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <h2 className="text-base font-bold text-foreground">Customize playbook</h2>
           <button
@@ -1757,7 +1757,7 @@ export function CustomizeTeamDialog({
           </button>
         </div>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 overflow-y-auto p-5">
           <div
             className="flex h-24 items-center justify-center rounded-lg"
             style={{ backgroundColor: color }}

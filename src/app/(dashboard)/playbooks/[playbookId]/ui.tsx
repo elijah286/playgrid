@@ -66,6 +66,7 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Lock,
   Minus,
   Pencil,
   Plus,
@@ -817,6 +818,28 @@ function PlaybookDetailClientInner({
     }
     return m;
   }, [sections]);
+
+  // Plays past the free-tier cap, locked for owners on Solo Coach. Picks
+  // the FIRST `freeMaxPlays` active plays by sort_order — everything else
+  // gets a lock overlay and a click that opens the upgrade modal instead
+  // of navigating to the editor. Same gating condition as PlayCapBanner
+  // so the banner and the per-card lock stay in sync.
+  //
+  // Coaches with manage rights on Coach+ tiers never lock; viewers don't
+  // lock either (the owner's quota is the owner's problem, not theirs).
+  const lockedPlayIds = useMemo(() => {
+    const set = new Set<string>();
+    if (headerProps.viewerIsCoach) return set;
+    if (!headerProps.canManage) return set;
+    const active = localPlays
+      .filter((p) => !p.is_archived)
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order);
+    for (let i = freeMaxPlays; i < active.length; i++) {
+      set.add(active[i].id);
+    }
+    return set;
+  }, [localPlays, freeMaxPlays, headerProps.viewerIsCoach, headerProps.canManage]);
 
   // Flat, in-render-order list of all visible play ids. Drives shift-click
   // range selection — the range follows what the user sees on screen, not
@@ -2112,6 +2135,7 @@ function PlaybookDetailClientInner({
                       const isSelected = selectedPlayIds.has(p.id);
                       const position = positionByPlayId.get(p.id);
                       const isHighlighted = highlightPlayId === p.id;
+                      const isLocked = lockedPlayIds.has(p.id);
                       return (
                       <SortableItem
                         key={`${section.key}:${p.id}`}
@@ -2125,12 +2149,17 @@ function PlaybookDetailClientInner({
                         {...(reorderMode ? attributes : {})}
                         {...(reorderMode && listeners ? listeners : {})}
                         hover
-                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab touch-none select-none active:cursor-grabbing" : selectionMode ? "cursor-pointer" : ""} ${reorderMode && !isDragging ? "animate-jiggle" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
+                        className={`relative flex flex-col p-0 ${reorderMode ? "cursor-grab touch-none select-none active:cursor-grabbing" : selectionMode || isLocked ? "cursor-pointer" : ""} ${reorderMode && !isDragging ? "animate-jiggle" : ""} ${isSelected ? "ring-2 ring-primary" : ""} ${isDragging ? "opacity-40" : ""} ${isHighlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-surface transition-shadow" : ""}`}
                         onClick={
                           selectionMode
                             ? (e) => {
                                 e.preventDefault();
                                 togglePlaySelection(p.id, e.shiftKey);
+                              }
+                            : isLocked
+                            ? (e) => {
+                                e.preventDefault();
+                                showPlayCapUpgrade();
                               }
                             : undefined
                         }
@@ -2149,11 +2178,19 @@ function PlaybookDetailClientInner({
                             />
                           </div>
                         )}
+                        {isLocked && (
+                          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                            <div className="flex items-center gap-1.5 rounded-full bg-foreground/85 px-3 py-1.5 text-xs font-semibold text-white shadow-elevated">
+                              <Lock className="size-3.5" />
+                              Upgrade to unlock
+                            </div>
+                          </div>
+                        )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode || reorderMode ? "pointer-events-none" : ""}`}
-                          aria-label={`Open ${p.name}`}
-                          tabIndex={selectionMode || reorderMode ? -1 : 0}
+                          className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode || reorderMode || isLocked ? "pointer-events-none" : ""} ${isLocked ? "opacity-50" : ""}`}
+                          aria-label={isLocked ? `${p.name} (locked — upgrade to access)` : `Open ${p.name}`}
+                          tabIndex={selectionMode || reorderMode || isLocked ? -1 : 0}
                         >
                           <div>
                             <div className="mb-0.5 flex items-center gap-1.5 pr-7">
@@ -2211,6 +2248,7 @@ function PlaybookDetailClientInner({
                       const canReorder = reorderMode;
                       const position = positionByPlayId.get(p.id);
                       const isHighlighted = highlightPlayId === p.id;
+                      const isLocked = lockedPlayIds.has(p.id);
                       return (
                       <SortableItem
                         key={`${section.key}:${p.id}`}
@@ -2254,9 +2292,21 @@ function PlaybookDetailClientInner({
                         )}
                         <Link
                           href={`/plays/${p.id}/edit`}
-                          className={`flex min-w-0 flex-1 items-center gap-2 py-2 hover:opacity-80 ${selectionMode || reorderMode ? "pointer-events-none" : ""}`}
+                          onClick={
+                            isLocked
+                              ? (e) => {
+                                  e.preventDefault();
+                                  showPlayCapUpgrade();
+                                }
+                              : undefined
+                          }
+                          className={`flex min-w-0 flex-1 items-center gap-2 py-2 hover:opacity-80 ${selectionMode || reorderMode ? "pointer-events-none" : ""} ${isLocked ? "opacity-50" : ""}`}
                           tabIndex={selectionMode || reorderMode ? -1 : 0}
+                          aria-label={isLocked ? `${p.name} (locked — upgrade to access)` : undefined}
                         >
+                          {isLocked && (
+                            <Lock className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
+                          )}
                           {(p.formation_name || p.shorthand) && (
                             <span className="max-w-[140px] shrink-0 truncate text-xs text-muted">
                               {p.formation_name || p.shorthand}
