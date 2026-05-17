@@ -88,16 +88,53 @@ https://www.xogridmaker.com/privacy
 
 ### Data collected and shared
 
+Scoped to the **Android app** (native Capacitor build). Some web-only data
+flows do not apply here — see "Web-only data flows (NOT in Play Data Safety)"
+below.
+
 | Data Type | Collected? | Shared? | Required/Optional | Purpose |
 |---|---|---|---|---|
 | Email address | Yes | No | Required | Account management, communications |
 | Name | Yes | No | Optional | App functionality (display name) |
 | User photos | Yes | No | Optional | App functionality (team logos) |
 | Other user-generated content | Yes | No | Required | App functionality (playbooks, plays, notes) |
-| Approximate location | Yes | No | Optional | App functionality (game venue tagging) |
-| Precise location | Yes | No | Optional | App functionality (game venue tagging) |
-| Crash logs | Yes | No | Required | Analytics |
-| Diagnostics | Yes | No | Required | Analytics |
+| Other in-app messages | Yes | No | Optional | App functionality (team chat per playbook) |
+| Calendar events | Yes | No | Optional | App functionality (game/practice schedule) |
+| Precise location | Yes | No | Optional | App functionality (Game Mode venue tagging, calendar venue) |
+
+### Categories explicitly NOT collected on Android (leave unchecked)
+
+- Audio files — app has no audio capture / recording
+- Files and docs — app does not access user files outside its own data
+- Contacts — app does not read device address book; team invites are by email/link only
+- Web browsing — app is not a browser; no URL history tracked
+- App info and performance (crash logs / diagnostics / other perf) — Sentry is
+  initialized only when `!isNativeApp()` per `sentry.client.config.ts`. Native
+  app installs collect no crash or diagnostic data through XO Gridmaker; any
+  crash signals Google Play surfaces in Android Vitals are Play-side, not
+  developer-collected.
+- Device or other IDs — `deviceId` in the codebase is a server-set HTTP-only
+  session cookie (random UUID), not an Android Advertising ID or hardware
+  identifier; cookie session IDs do not count as Device IDs in Data Safety.
+- Approximate location — IP-derived city/region attribution runs server-side
+  only on web visits via MaxMind GeoLite2. Native app sessions do not pass
+  through that path.
+
+### Web-only data flows (NOT in Play Data Safety)
+
+These are disclosed in the public Privacy Policy but are not part of the
+Android Data Safety form because they do not occur in the native app:
+
+- **Crash & error reports (Sentry, web only)** — `sentry.client.config.ts`
+  skips init when `isNativeApp()` is true. Web users' browser errors are sent
+  to Sentry; native app users' are not.
+- **Approximate location (web only)** — derived server-side from IP via the
+  local MaxMind GeoLite2 database; used for marketing attribution. Native
+  sessions are not subject to this lookup.
+- **Product-usage analytics (web only)** — page paths, UTM parameters,
+  ad-platform click IDs, session timing. Per the privacy policy:
+  *"Inside the iOS / Android app: product-usage and error reporting are
+  turned off entirely."*
 
 ### Security practices
 
