@@ -476,6 +476,32 @@ html.native-shell.native-ready #native-loading-overlay {
   pointer-events: none;
 }
 
+/* Indeterminate progress bar — used inline in flows where we don't know
+ * how long a server action will take (e.g. claiming a copied playbook
+ * with dozens of plays). Pure CSS so we don't need a JS animation loop. */
+.indeterminate-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+.indeterminate-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  border-radius: 999px;
+  background: currentColor;
+  animation: native-loading-bar 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate-bar::after { animation: none; width: 100%; opacity: 0.5; }
+}
+
 /* Safe-area handling: only horizontal padding goes on <body>. Vertical
  * insets are owned by the components that anchor to the top (sticky site
  * header) and bottom (fixed bottom navs) of the viewport, so their

@@ -1,16 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { acceptCopyLinkAction } from "@/app/actions/copy-links";
 import { Button, useToast } from "@/components/ui";
 
+/** The claim path can take 10–20s for a big playbook — it sequentially
+ *  copies plays + play_versions + formations + groups. A bare spinner
+ *  for that long reads as "it's stuck"; cycling the status text + an
+ *  indeterminate progress bar gives the user something to watch and
+ *  signals real progress is happening on the server. */
+function stageFor(elapsedMs: number, playCount: number): string {
+  if (elapsedMs < 1500) return "Setting up your workspace…";
+  if (elapsedMs < 5000) {
+    const noun = playCount === 1 ? "play" : "plays";
+    return `Cloning ${playCount} ${noun}…`;
+  }
+  if (elapsedMs < 12000) return "Almost there…";
+  return "Still working — hang tight…";
+}
+
 export function ClaimCopyButton({
   token,
+  playCount,
   blockedByQuota = false,
 }: {
   token: string;
+  /** Source playbook size — drives the "Cloning N plays…" message so the
+   *  user knows the wait is proportional to real work, not a hang. */
+  playCount: number;
   /** Pre-flight signal from the server: free user, slot already used.
    *  We render an upgrade CTA instead of the claim button so we don't
    *  burn the click on a server-side rejection. */
@@ -19,6 +38,19 @@ export function ClaimCopyButton({
   const router = useRouter();
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!pending) {
+      setElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    const id = window.setInterval(() => {
+      setElapsedMs(Date.now() - start);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [pending]);
 
   async function claim() {
     setPending(true);
@@ -45,8 +77,24 @@ export function ClaimCopyButton({
     );
   }
 
+  if (pending) {
+    return (
+      <div
+        className="space-y-2"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div className="indeterminate-bar text-primary" />
+        <p className="text-center text-xs text-muted">
+          {stageFor(elapsedMs, playCount)}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <Button variant="primary" loading={pending} onClick={claim} className="w-full">
+    <Button variant="primary" onClick={claim} className="w-full">
       Claim &amp; customize
     </Button>
   );

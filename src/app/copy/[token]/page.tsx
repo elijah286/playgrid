@@ -184,6 +184,7 @@ export default async function CopyPage({ params }: Props) {
 
           <ClaimCopyButton
             token={token}
+            playCount={preview.play_count}
             blockedByQuota={quota.kind === "free_full"}
           />
 
