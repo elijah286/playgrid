@@ -29,7 +29,11 @@ import {
   updatePlaybookSettingsAction,
 } from "@/app/actions/playbooks";
 import { getPlaybookMessagesCountAction } from "@/app/actions/playbook-messages";
-import { createCopyLinkAction } from "@/app/actions/copy-links";
+import {
+  createCopyLinkAction,
+  sendCopyByEmailAction,
+  type SendCopyByEmailResult,
+} from "@/app/actions/copy-links";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 import { PlaybookRulesForm } from "@/features/playbooks/PlaybookRulesForm";
 import {
@@ -1049,6 +1053,43 @@ function SendCopyDialog({
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<"link" | "qr">("link");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendResults, setSendResults] = useState<SendCopyByEmailResult[] | null>(null);
+
+  async function sendByEmail() {
+    if (sending) return;
+    const emails = emailInput
+      .split(/[,\s;]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      toast("Enter at least one email address.", "error");
+      return;
+    }
+    setSending(true);
+    setSendResults(null);
+    const res = await sendCopyByEmailAction({ playbookId, emails });
+    setSending(false);
+    if (!res.ok) {
+      toast(res.error, "error");
+      return;
+    }
+    setSendResults(res.results);
+    const sentCount = res.results.filter((r) => r.status === "sent").length;
+    if (sentCount > 0) {
+      // Clear addresses that went through; keep failures so the user can retry/fix.
+      const failedEmails = new Set(
+        res.results.filter((r) => r.status !== "sent").map((r) => r.email),
+      );
+      const remaining = emails.filter((e) => failedEmails.has(e.toLowerCase()));
+      setEmailInput(remaining.join(", "));
+      toast(
+        sentCount === 1 ? "Copy sent." : `Sent ${sentCount} copies.`,
+        "success",
+      );
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1207,6 +1248,61 @@ function SendCopyDialog({
               </p>
             </div>
           )}
+
+          <div className="border-t border-border pt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Send by email</h3>
+              <span className="text-[11px] text-muted">Up to 20 at a time</span>
+            </div>
+            <p className="mb-2 text-xs text-muted">
+              Each recipient gets a single-use link. Existing accounts also see it in
+              their inbox.
+            </p>
+            <textarea
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="coach@example.com, another@example.com"
+              rows={2}
+              className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              disabled={sending}
+            />
+            <Button
+              onClick={sendByEmail}
+              className="mt-2 w-full"
+              disabled={sending || !emailInput.trim()}
+            >
+              {sending ? "Sending…" : "Send"}
+            </Button>
+            {sendResults && sendResults.length > 0 && (
+              <ul className="mt-3 space-y-1.5 text-xs">
+                {sendResults.map((r) => (
+                  <li
+                    key={r.email}
+                    className="flex items-start justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5"
+                  >
+                    <span className="truncate font-medium text-foreground">{r.email}</span>
+                    <span
+                      className={
+                        r.status === "sent"
+                          ? "shrink-0 text-emerald-600 dark:text-emerald-400"
+                          : r.status === "skipped"
+                            ? "shrink-0 text-muted"
+                            : "shrink-0 text-rose-600 dark:text-rose-400"
+                      }
+                    >
+                      {r.status === "sent"
+                        ? r.matchedExistingUser
+                          ? "Sent · in their inbox"
+                          : "Sent"
+                        : r.status === "skipped"
+                          ? r.reason ?? "Skipped"
+                          : r.reason ?? "Failed"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
       </div>

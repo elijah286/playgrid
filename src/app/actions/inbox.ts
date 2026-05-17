@@ -204,6 +204,10 @@ export async function listInboxAlertsAction(): Promise<
     alerts.push(...rsvpAlerts);
   }
 
+  // ─── Emailed copy invites: a coach sent you a playbook ───────────────
+  const shareAlerts = await buildPendingCopySendAlerts(supabase, user.id);
+  alerts.push(...shareAlerts);
+
   // ─── Site-admin alerts: system notices ───────────────────────────────
   if (isSiteAdmin) {
     const adminAlerts = await buildAdminNoticeAlerts(supabase);
@@ -409,6 +413,80 @@ function appendOwnerAlerts(
       note: raw.note,
     });
   }
+}
+
+async function buildPendingCopySendAlerts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<InboxAlert[]> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("playbook_copy_link_sends")
+    .select(
+      "id, sent_at, link:link_id!inner(token, expires_at, revoked_at, playbook:playbook_id!inner(id, name, logo_url, color, is_archived)), sender:sent_by(display_name)",
+    )
+    .eq("recipient_user_id", userId)
+    .is("claimed_at", null)
+    .is("link.revoked_at", null)
+    .gt("link.expires_at", nowIso);
+  if (error || !data) return [];
+
+  type LinkInner = {
+    token: string;
+    expires_at: string;
+    revoked_at: string | null;
+    playbook:
+      | {
+          id: string;
+          name: string;
+          logo_url: string | null;
+          color: string | null;
+          is_archived: boolean;
+        }
+      | {
+          id: string;
+          name: string;
+          logo_url: string | null;
+          color: string | null;
+          is_archived: boolean;
+        }[]
+      | null;
+  };
+  type Row = {
+    id: string;
+    sent_at: string;
+    link: LinkInner | LinkInner[] | null;
+    sender:
+      | { display_name: string | null }
+      | { display_name: string | null }[]
+      | null;
+  };
+
+  const out: InboxAlert[] = [];
+  for (const raw of data as unknown as Row[]) {
+    const link = Array.isArray(raw.link) ? raw.link[0] ?? null : raw.link;
+    if (!link) continue;
+    const pb = Array.isArray(link.playbook) ? link.playbook[0] ?? null : link.playbook;
+    if (!pb || pb.is_archived) continue;
+    const sender = Array.isArray(raw.sender) ? raw.sender[0] ?? null : raw.sender;
+    const senderName = sender?.display_name?.trim() || "A coach";
+    out.push({
+      key: `share:${raw.id}`,
+      sourceId: raw.id,
+      status: "active" as const,
+      kind: "share" as const,
+      playbookId: pb.id,
+      playbookName: pb.name,
+      playbookLogoUrl: pb.logo_url,
+      playbookColor: pb.color,
+      displayName: senderName,
+      createdAt: raw.sent_at,
+      body: `${senderName} sent you a copy of ${pb.name}.`,
+      href: `/copy/${link.token}`,
+      severity: "info",
+    });
+  }
+  return out;
 }
 
 async function buildRsvpPendingAlerts(
