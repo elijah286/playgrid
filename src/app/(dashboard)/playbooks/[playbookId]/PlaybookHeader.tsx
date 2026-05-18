@@ -276,7 +276,10 @@ export function PlaybookHeader({
                     {" "}
                     <span data-web-only>{suffix}</span>
                   </>
-                ) : null}
+                ) : null}{" "}
+                <span data-native-only>
+                  Plan changes aren&rsquo;t available in this app.
+                </span>
               </>
             ),
           });
@@ -324,7 +327,10 @@ export function PlaybookHeader({
                   , or upgrade to Team Coach ($9/mo or $99/yr) for unlimited
                   playbooks
                 </span>
-                .
+                .{" "}
+                <span data-native-only>
+                  Plan changes aren&rsquo;t available in this app.
+                </span>
               </>
             ) : (
               <>
@@ -332,6 +338,9 @@ export function PlaybookHeader({
                 <span data-web-only>
                   {" "}
                   Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.
+                </span>{" "}
+                <span data-native-only>
+                  Plan changes aren&rsquo;t available in this app.
                 </span>
               </>
             ),

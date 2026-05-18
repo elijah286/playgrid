@@ -1139,7 +1139,10 @@ export function DashboardClient({
                         {" "}
                         <span data-web-only>{suffix}</span>
                       </>
-                    ) : null}
+                    ) : null}{" "}
+                    <span data-native-only>
+                      Plan changes aren&rsquo;t available in this app.
+                    </span>
                   </>
                 ),
               });
@@ -1196,7 +1199,10 @@ export function DashboardClient({
                   , or upgrade to Team Coach ($9/mo or $99/yr) for unlimited
                   playbooks
                 </span>
-                .
+                .{" "}
+                <span data-native-only>
+                  Plan changes aren&rsquo;t available in this app.
+                </span>
               </>
             ) : (
               <>
@@ -1205,6 +1211,9 @@ export function DashboardClient({
                   {" "}
                   Upgrade to Team Coach ($9/mo or $99/yr) to create unlimited
                   playbooks. Your existing content stays where it is.
+                </span>{" "}
+                <span data-native-only>
+                  Plan changes aren&rsquo;t available in this app.
                 </span>
               </>
             ),
@@ -1703,7 +1712,10 @@ export function DashboardClient({
                           , or upgrade to Team Coach ($9/mo or $99/yr) for
                           unlimited playbooks
                         </span>
-                        .
+                        .{" "}
+                        <span data-native-only>
+                          Plan changes aren&rsquo;t available in this app.
+                        </span>
                       </>
                     ) : (
                       <>
@@ -1712,6 +1724,9 @@ export function DashboardClient({
                           {" "}
                           Upgrade to Team Coach ($9/mo or $99/yr) to duplicate
                           playbooks.
+                        </span>{" "}
+                        <span data-native-only>
+                          Plan changes aren&rsquo;t available in this app.
                         </span>
                       </>
                     ),
