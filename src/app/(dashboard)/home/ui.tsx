@@ -1090,8 +1090,16 @@ export function DashboardClient({
   const examples = [...ownedAll, ...sharedAll].filter(
     (b) => b.is_example && !b.is_archived,
   );
-  const owned = ownedAll.filter((b) => !b.is_archived && !b.is_example);
-  const shared = sharedAll.filter((b) => !b.is_archived && !b.is_example);
+  // Locked tiles (plan-downgraded) sort to the end of each section so the
+  // coach sees their accessible playbooks first.
+  const lockedLast = (a: DashboardPlaybookTile, b: DashboardPlaybookTile) =>
+    Number(a.is_locked ?? false) - Number(b.is_locked ?? false);
+  const owned = ownedAll
+    .filter((b) => !b.is_archived && !b.is_example)
+    .sort(lockedLast);
+  const shared = sharedAll
+    .filter((b) => !b.is_archived && !b.is_example)
+    .sort(lockedLast);
   const archived = [...ownedAll, ...sharedAll].filter((b) => b.is_archived);
   const isEmpty =
     owned.length === 0 &&
