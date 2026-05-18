@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState 
 import { createPortal } from "react-dom";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { Player, Point2, Route, RouteNode, RouteSegment } from "@/domain/play/types";
+import type { UserRouteTemplatesHook } from "./useUserRouteTemplates";
 import { deriveLabelColor } from "@/domain/play/labelColor";
 import {
   routeToRenderedSegments,
@@ -189,6 +190,10 @@ type Props = {
   activeSide?: "primary" | "opponent";
   /** Fired when the user interacts with a side that is currently inactive. */
   onActivateSide?: (next: "primary" | "opponent") => void;
+  /** Per-user route-template store, used by the player right-click menu's
+   *  "Save as template" item. Optional so non-edit canvases don't have to
+   *  thread it through. */
+  userTemplates?: UserRouteTemplatesHook;
   /** When true, canvas drags/clicks draw routes. When false, route drawing is
    *  suppressed so taps on empty canvas only deselect — avoids the footgun
    *  where a stray touch-drag silently created a route. Extending an existing
@@ -354,6 +359,7 @@ function EditorCanvasImpl({
   onClearOpponentRoutes,
   activeSide = "primary",
   onActivateSide,
+  userTemplates,
   pendingZone = null,
   onCommitPendingZone,
   onCancelPendingZone,
@@ -456,7 +462,11 @@ function EditorCanvasImpl({
   };
   const [playerMenu, setPlayerMenu] = useState<PlayerMenu | null>(null);
   /** Which submenu (if any) is expanded inside the player context menu. */
-  const [playerMenuSub, setPlayerMenuSub] = useState<"delay" | "speed" | null>(null);
+  const [playerMenuSub, setPlayerMenuSub] = useState<"delay" | "speed" | "save_template" | null>(null);
+  /** Inline form state for "Save route as template". */
+  const [saveTemplateDraft, setSaveTemplateDraft] = useState("");
+  const [saveTemplateBusy, setSaveTemplateBusy] = useState(false);
+  const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
   const [segmentMenuSub, setSegmentMenuSub] = useState<"speed" | null>(null);
 
   type ZoneMenu = {
@@ -3445,6 +3455,101 @@ function EditorCanvasImpl({
             >
               Flip route
             </button>
+            {/* Save as template — only when this player carries exactly one
+                route (template = single route, matches system catalog shape)
+                and a hook is available (non-edit canvases skip it). */}
+            {userTemplates && playerRoutes.length === 1 && (() => {
+              const player = doc.layers.players.find(
+                (p) => p.id === playerMenu.playerId,
+              );
+              if (!player) return null;
+              const route = playerRoutes[0];
+              const submit = async () => {
+                const name = saveTemplateDraft.trim();
+                if (!name) {
+                  setSaveTemplateError("Name can't be empty.");
+                  return;
+                }
+                setSaveTemplateBusy(true);
+                setSaveTemplateError(null);
+                const res = await userTemplates.save(route, player.position, name);
+                setSaveTemplateBusy(false);
+                if (res.ok) {
+                  setSaveTemplateDraft("");
+                  setPlayerMenu(null);
+                  setPlayerMenuSub(null);
+                } else {
+                  setSaveTemplateError(res.error);
+                }
+              };
+              return (
+                <>
+                  <button
+                    type="button"
+                    aria-expanded={playerMenuSub === "save_template"}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-surface-inset"
+                    onClick={() => {
+                      setPlayerMenuSub((s) =>
+                        s === "save_template" ? null : "save_template",
+                      );
+                      setSaveTemplateDraft("");
+                      setSaveTemplateError(null);
+                    }}
+                  >
+                    <span>Save as template</span>
+                    <span className="text-muted-foreground">
+                      {playerMenuSub === "save_template" ? "▾" : "▸"}
+                    </span>
+                  </button>
+                  {playerMenuSub === "save_template" && (
+                    <div className="flex flex-col gap-2 border-t border-border bg-surface-inset/40 px-3 py-2">
+                      <input
+                        type="text"
+                        autoFocus
+                        maxLength={40}
+                        placeholder="Route name"
+                        value={saveTemplateDraft}
+                        disabled={saveTemplateBusy}
+                        onChange={(e) => {
+                          setSaveTemplateDraft(e.target.value);
+                          if (saveTemplateError) setSaveTemplateError(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void submit();
+                          } else if (e.key === "Escape") {
+                            setPlayerMenuSub(null);
+                          }
+                        }}
+                        className="w-full rounded bg-surface-raised px-2 py-1 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={saveTemplateBusy}
+                          className="text-[11px] uppercase tracking-wide text-muted hover:text-foreground disabled:opacity-50"
+                          onClick={() => setPlayerMenuSub(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saveTemplateBusy || saveTemplateDraft.trim().length === 0}
+                          className="text-[11px] font-semibold uppercase tracking-wide text-primary hover:text-primary/80 disabled:opacity-50"
+                          onClick={() => void submit()}
+                        >
+                          {saveTemplateBusy ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                      {saveTemplateError && (
+                        <p className="text-[11px] text-danger">{saveTemplateError}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <button
               type="button"
               disabled={!hasRoutes}

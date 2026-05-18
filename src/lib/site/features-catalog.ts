@@ -126,6 +126,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Plays & formations ──────────────────────────────────────────
   {
+    id: "user-route-templates",
+    name: "Save your own routes to Quick Routes",
+    description:
+      "Drew a route you'll want to use again? Right-click the player and pick \"Save as template,\" give it a name, and it shows up in the Quick Routes panel under \"Your routes\" — visible only to you, ready to apply to any player on any play in one tap. The saved template keeps its shape AND its visual style (color, weight, dashed-vs-solid), so a dashed block-and-release or a curved wheel comes back exactly how you drew it. Rename or delete your routes from the panel anytime. Routes mirror automatically when applied to the opposite side of the formation, the same way the system routes do, so one \"My slant\" works for both X and Z.",
+    category: "Plays & formations",
+    status: "ga",
+    addedDate: "2026-05-18",
+  },
+  {
     id: "defender-movement-paths",
     name: "Defender movement paths in the editor",
     description:

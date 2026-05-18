@@ -54,6 +54,7 @@ import { PlayControlsPanel } from "@/features/animation/PlayControlsPanel";
 import { OpponentOverlayCard } from "./OpponentOverlayCard";
 import { PlayResultsCard } from "./PlayResultsCard";
 import { QuickRoutes } from "./QuickRoutes";
+import { useUserRouteTemplates } from "./useUserRouteTemplates";
 import { VsPlayCard } from "./VsPlayCard";
 import { PlayerMentionEditor } from "./PlayerMentionEditor";
 import { NotesMarkdown, copyNotesToClipboard } from "./NotesMarkdown";
@@ -469,6 +470,11 @@ function PlayEditorClientInner({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+
+  // Per-user custom route templates (Quick Routes "Your routes" section +
+  // right-click "Save as template"). Single source of truth threaded into
+  // both editor canvases and the Inspector / mobile QuickRoutes.
+  const userTemplates = useUserRouteTemplates();
   /** Zone the user is about to place — preview follows the cursor until a click
    *  on the field commits, or a click outside the field cancels. */
   const [pendingZone, setPendingZone] = useState<{
@@ -1804,6 +1810,7 @@ function PlayEditorClientInner({
             onClearOpponentRoutes={handleClearOpponentRoutes}
             activeSide={activeSide}
             onActivateSide={setActiveSide}
+            userTemplates={userTemplates}
           />
           <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
           {/* Transparent click-catcher: sits on top of EditorCanvas so taps
@@ -2178,6 +2185,7 @@ function PlayEditorClientInner({
                 onClearOpponentRoutes={handleClearOpponentRoutes}
                 activeSide={activeSide}
                 onActivateSide={setActiveSide}
+                userTemplates={userTemplates}
               />
               <AnimationOverlay doc={animDoc} anim={anim} fieldAspect={fieldAspect} />
               {/* Read-only viewers (shared, archived, examples) get the
@@ -2231,6 +2239,7 @@ function PlayEditorClientInner({
                   existingRouteIds={doc.layers.routes
                     .filter((r) => r.carrierPlayerId === selectedPlayer.id)
                     .map((r) => r.id)}
+                  userTemplates={userTemplates}
                 />
               </div>
             )}
@@ -2348,6 +2357,7 @@ function PlayEditorClientInner({
                 selectedRouteId={selectedRouteId}
                 selectedSegmentId={selectedSegmentId}
                 activeStyle={{ stroke: activeColor, strokeWidth: activeWidth }}
+                userTemplates={userTemplates}
               />
             )}
           </aside>

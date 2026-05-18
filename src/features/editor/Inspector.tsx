@@ -6,6 +6,7 @@ import type { PlayDocument, RouteStyle } from "@/domain/play/types";
 import { evaluateSportWarnings } from "@/domain/play/warnings";
 import { Select, Button } from "@/components/ui";
 import { QuickRoutes } from "./QuickRoutes";
+import type { UserRouteTemplatesHook } from "./useUserRouteTemplates";
 
 type Props = {
   doc: PlayDocument;
@@ -14,6 +15,7 @@ type Props = {
   selectedRouteId: string | null;
   selectedSegmentId: string | null;
   activeStyle?: Partial<RouteStyle>;
+  userTemplates: UserRouteTemplatesHook;
 };
 
 const routeOptions = [
@@ -33,6 +35,7 @@ export function Inspector({
   selectedRouteId,
   selectedSegmentId,
   activeStyle,
+  userTemplates,
 }: Props) {
   const warnings = evaluateSportWarnings(doc);
   const route = doc.layers.routes.find((r) => r.id === selectedRouteId);
@@ -60,6 +63,7 @@ export function Inspector({
           existingRouteIds={doc.layers.routes
             .filter((r) => r.carrierPlayerId === player.id)
             .map((r) => r.id)}
+          userTemplates={userTemplates}
         />
       )}
 
