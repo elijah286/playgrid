@@ -110,6 +110,17 @@ export default function PrivacyPage() {
               deletes the rows on our servers, not just on your device.
             </li>
             <li>
+              <strong>Cancellation feedback (optional):</strong> when a paid
+              subscriber clicks &ldquo;Manage billing&rdquo;, we show an
+              optional text box where they can tell us why they&rsquo;re
+              leaving (or what isn&rsquo;t working). Anything typed there is
+              stored on our servers and read by the site admin so we can
+              improve the product. Skipping it stores nothing. We also
+              record whatever cancellation reason Stripe&rsquo;s billing
+              portal captures (a category and any comment you choose to
+              leave there) so we have one place to read both.
+            </li>
+            <li>
               <strong>Coach AI feedback (opt-in):</strong> if you accept the
               one-time prompt the first time you use Coach AI, we log the
               <em> topic</em> of any question Coach AI had to answer from

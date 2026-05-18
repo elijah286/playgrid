@@ -47,7 +47,7 @@ import type { BetaFeatures } from "@/lib/site/beta-features-config";
 import type { SavedFormation } from "@/app/actions/formations";
 import type { FeedbackRow } from "@/app/actions/feedback";
 import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
-import type { GiftCodeRow } from "@/app/actions/admin-billing";
+import type { CancellationFeedbackRow, GiftCodeRow } from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import type { TrafficSummary } from "@/app/actions/admin-traffic";
 import type { MonetizationSummary } from "@/app/actions/admin-activation";
@@ -149,6 +149,8 @@ export function SettingsClient({
   initialExcludedEmails,
   initialCoachCalUpgradeBannerEnabled,
   initialCoachAiEvalDays,
+  initialCancellationFeedback,
+  cancellationFeedbackError,
 }: {
   currentUserId: string;
   initialUsers: AdminUserRow[];
@@ -196,6 +198,8 @@ export function SettingsClient({
   initialExcludedEmails: string[];
   initialCoachCalUpgradeBannerEnabled: boolean;
   initialCoachAiEvalDays: number;
+  initialCancellationFeedback: CancellationFeedbackRow[];
+  cancellationFeedbackError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const [analyticsSubTab, setAnalyticsSubTab] = useState<
@@ -397,6 +401,8 @@ export function SettingsClient({
           initialError={giftCodesError}
           stripeStatus={stripeStatus}
           initialCoachAiEnabled={initialCoachAiEnabled}
+          initialCancellationFeedback={initialCancellationFeedback}
+          cancellationFeedbackError={cancellationFeedbackError}
         />
       )}
 

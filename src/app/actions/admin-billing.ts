@@ -454,3 +454,88 @@ export async function updateGiftCodeMaxUsesAction(codeId: string, maxUses: numbe
   revalidatePath("/settings");
   return { ok: true as const };
 }
+
+/**
+ * Combined cancellation signal: every row from our in-app pre-portal survey,
+ * plus every subscription that carries a Stripe-portal cancellation reason
+ * (reason / feedback enum / free-text comment).
+ *
+ * Both streams resolved to the user's email + display name so the admin can
+ * scan and reach out without joining tables manually.
+ */
+export type CancellationFeedbackRow = {
+  id: string;
+  source: "in_app" | "stripe_portal";
+  email: string;
+  displayName: string | null;
+  reason: string | null;
+  feedback: string | null;
+  message: string | null;
+  stripeSubscriptionId: string | null;
+  createdAt: string;
+};
+
+export async function listCancellationFeedbackForAdminAction(): Promise<
+  | { ok: true; rows: CancellationFeedbackRow[] }
+  | { ok: false; error: string }
+> {
+  const gate = await assertAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+
+  const admin = createServiceRoleClient();
+  const [{ data: surveyRows, error: sErr }, { data: subRows, error: subErr }, { data: authData }] =
+    await Promise.all([
+      admin
+        .from("subscription_cancellation_feedback")
+        .select("id, user_id, message, stripe_subscription_id, created_at")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      admin
+        .from("subscriptions")
+        .select(
+          "id, user_id, stripe_subscription_id, stripe_cancellation_reason, stripe_cancellation_feedback, stripe_cancellation_comment, updated_at",
+        )
+        .or(
+          "stripe_cancellation_reason.not.is.null,stripe_cancellation_feedback.not.is.null,stripe_cancellation_comment.not.is.null",
+        ),
+      admin.auth.admin.listUsers({ perPage: 1000, page: 1 }),
+    ]);
+  if (sErr) return { ok: false, error: sErr.message };
+  if (subErr) return { ok: false, error: subErr.message };
+
+  const { data: profiles } = await admin.from("profiles").select("id, display_name");
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p.display_name as string | null]));
+  const emailById = new Map(
+    (authData?.users ?? []).map((u) => [u.id, u.email ?? ""]),
+  );
+
+  const rows: CancellationFeedbackRow[] = [];
+  for (const r of surveyRows ?? []) {
+    rows.push({
+      id: `survey:${r.id}`,
+      source: "in_app",
+      email: emailById.get(r.user_id) ?? "",
+      displayName: profileById.get(r.user_id) ?? null,
+      reason: null,
+      feedback: null,
+      message: r.message,
+      stripeSubscriptionId: r.stripe_subscription_id,
+      createdAt: r.created_at,
+    });
+  }
+  for (const r of subRows ?? []) {
+    rows.push({
+      id: `stripe:${r.id}`,
+      source: "stripe_portal",
+      email: emailById.get(r.user_id) ?? "",
+      displayName: profileById.get(r.user_id) ?? null,
+      reason: r.stripe_cancellation_reason,
+      feedback: r.stripe_cancellation_feedback,
+      message: r.stripe_cancellation_comment,
+      stripeSubscriptionId: r.stripe_subscription_id,
+      createdAt: r.updated_at,
+    });
+  }
+  rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { ok: true, rows };
+}

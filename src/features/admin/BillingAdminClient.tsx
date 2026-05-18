@@ -10,6 +10,7 @@ import {
   setCoachAiTierEnabledAction,
   updateGiftCodeDurationAction,
   updateGiftCodeMaxUsesAction,
+  type CancellationFeedbackRow,
   type GiftCodeRow,
 } from "@/app/actions/admin-billing";
 import { Modal } from "@/components/ui";
@@ -61,11 +62,15 @@ export function BillingAdminClient({
   initialError,
   stripeStatus,
   initialCoachAiEnabled,
+  initialCancellationFeedback,
+  cancellationFeedbackError,
 }: {
   initialCodes: GiftCodeRow[];
   initialError: string | null;
   stripeStatus: StripeConfigStatus;
   initialCoachAiEnabled: boolean;
+  initialCancellationFeedback: CancellationFeedbackRow[];
+  cancellationFeedbackError: string | null;
 }) {
   const [codes, setCodes] = useState(initialCodes);
   const [msg, setMsg] = useState<Msg>(initialError ? { kind: "error", text: initialError } : null);
@@ -299,6 +304,11 @@ export function BillingAdminClient({
         )}
       </section>
 
+      <CancellationFeedbackSection
+        initialRows={initialCancellationFeedback}
+        initialError={cancellationFeedbackError}
+      />
+
       <CreateGiftCodeModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -309,6 +319,78 @@ export function BillingAdminClient({
         }}
       />
     </div>
+  );
+}
+
+function CancellationFeedbackSection({
+  initialRows,
+  initialError,
+}: {
+  initialRows: CancellationFeedbackRow[];
+  initialError: string | null;
+}) {
+  if (initialError) {
+    return (
+      <section className="rounded-xl bg-card p-4 ring-1 ring-border">
+        <h2 className="text-sm font-semibold text-foreground">Cancellation feedback</h2>
+        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 ring-1 ring-red-200">
+          {initialError}
+        </p>
+      </section>
+    );
+  }
+  return (
+    <section className="rounded-xl bg-card p-4 ring-1 ring-border">
+      <header className="mb-3">
+        <h2 className="text-sm font-semibold text-foreground">Cancellation feedback</h2>
+        <p className="text-xs text-muted">
+          Free-text from the pre-portal survey, plus structured reasons captured by Stripe&apos;s billing portal.
+        </p>
+      </header>
+      {initialRows.length === 0 ? (
+        <p className="text-sm text-muted">No cancellation feedback yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-2 py-1.5">When</th>
+                <th className="px-2 py-1.5">User</th>
+                <th className="px-2 py-1.5">Source</th>
+                <th className="px-2 py-1.5">Reason</th>
+                <th className="px-2 py-1.5">Comment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {initialRows.map((r) => (
+                <tr key={r.id} className="border-t border-border align-top">
+                  <td className="whitespace-nowrap px-2 py-2 text-xs text-muted">
+                    {formatDate(r.createdAt)}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="text-xs text-foreground">{r.displayName ?? "—"}</div>
+                    <div className="text-xs text-muted">{r.email || "—"}</div>
+                  </td>
+                  <td className="px-2 py-2 text-xs text-muted">
+                    {r.source === "in_app" ? "In-app survey" : "Stripe portal"}
+                  </td>
+                  <td className="px-2 py-2 text-xs text-muted">
+                    {r.feedback ?? r.reason ?? "—"}
+                  </td>
+                  <td className="px-2 py-2 text-sm text-foreground">
+                    {r.message ? (
+                      <span className="whitespace-pre-wrap">{r.message}</span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

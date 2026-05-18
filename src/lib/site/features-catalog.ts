@@ -1373,6 +1373,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "internal",
     addedDate: "2026-05-01",
   },
+  {
+    id: "cancellation-feedback",
+    name: "Cancellation feedback capture",
+    description:
+      "Paid subscribers clicking \"Manage billing\" see an optional one-question survey before being sent to the Stripe billing portal. Submissions land in the admin Payments tab alongside the structured reasons Stripe's own portal captures, so we have one place to read both signals when a coach decides to leave.",
+    category: "Admin tools",
+    status: "ga",
+    addedDate: "2026-05-18",
+  },
 ];
 
 /** Group features by category, preserving the order they appear in FEATURES. */

@@ -62,6 +62,7 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
 
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
 
+  const cancellation = sub.cancellation_details ?? null;
   const row = {
     user_id: userId,
     tier,
@@ -72,6 +73,9 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
     current_period_end: periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null,
     cancel_at_period_end: sub.cancel_at_period_end ?? false,
     cancel_at: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
+    stripe_cancellation_reason: cancellation?.reason ?? null,
+    stripe_cancellation_feedback: cancellation?.feedback ?? null,
+    stripe_cancellation_comment: cancellation?.comment ?? null,
     billing_interval: interval === "month" || interval === "year" ? interval : null,
     updated_at: new Date().toISOString(),
   };

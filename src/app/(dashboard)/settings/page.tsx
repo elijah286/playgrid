@@ -17,6 +17,7 @@ import {
 import { listCoachInvitationsAction } from "@/app/actions/coach-invitations";
 import {
   getStripeConfigStatusAction,
+  listCancellationFeedbackForAdminAction,
   listGiftCodesAction,
 } from "@/app/actions/admin-billing";
 import { getCoachAiTierEnabled } from "@/lib/site/pricing-config";
@@ -94,6 +95,7 @@ export default async function SettingsPage() {
     analyticsExcludedEmails,
     coachCalUpgradeBannerEnabled,
     coachAiEvalDays,
+    cancellationFeedbackRes,
   ] = await Promise.all([
     listUsersForAdminAction(),
     getOpenAIIntegrationStatusAction(),
@@ -129,6 +131,7 @@ export default async function SettingsPage() {
     getAnalyticsExcludedEmails(),
     getCoachCalUpgradeBannerEnabled(),
     getCoachAiEvalDays(),
+    listCancellationFeedbackForAdminAction(),
   ]);
 
   return (
@@ -298,6 +301,12 @@ export default async function SettingsPage() {
         initialSeatDefaults={seatDefaults}
         initialCoachBonusRows={coachBonusRes.ok ? coachBonusRes.rows : []}
         initialCoachCalPack={coachCalPack}
+        initialCancellationFeedback={
+          cancellationFeedbackRes.ok ? cancellationFeedbackRes.rows : []
+        }
+        cancellationFeedbackError={
+          cancellationFeedbackRes.ok ? null : cancellationFeedbackRes.error
+        }
       />
     </div>
   );
