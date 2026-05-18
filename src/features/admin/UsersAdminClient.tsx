@@ -1406,6 +1406,9 @@ function UserStatsPanel({ userId }: { userId: string }) {
               const end = h.endedAt
                 ? new Date(h.endedAt).toLocaleDateString()
                 : "now";
+              const cancelAt = h.scheduledCancelAt
+                ? new Date(h.scheduledCancelAt).toLocaleDateString()
+                : null;
               return (
                 <li key={i} className="tabular-nums">
                   <span className="font-medium">{TIER_LABELS[h.tier]}</span>{" "}
@@ -1417,6 +1420,11 @@ function UserStatsPanel({ userId }: { userId: string }) {
                   </span>
                   {h.note && (
                     <span className="ml-2 text-muted">· {h.note}</span>
+                  )}
+                  {cancelAt && (
+                    <span className="ml-2 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+                      cancels {cancelAt}
+                    </span>
                   )}
                 </li>
               );

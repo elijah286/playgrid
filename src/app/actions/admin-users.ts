@@ -291,6 +291,11 @@ export type AdminUserStats = {
     startedAt: string;
     endedAt: string | null;
     note: string | null;
+    /** Stripe-only: ISO timestamp when the subscription is scheduled to cancel
+     *  (either an explicit cancel_at, or current_period_end when
+     *  cancel_at_period_end is true). Null when no cancellation is scheduled
+     *  or for comp grants. */
+    scheduledCancelAt: string | null;
   }>;
 };
 
@@ -396,7 +401,9 @@ export async function getAdminUserStatsAction(
       .order("granted_at", { ascending: true }),
     admin
       .from("subscriptions")
-      .select("tier, created_at, updated_at, current_period_end, status")
+      .select(
+        "tier, created_at, updated_at, current_period_end, status, cancel_at, cancel_at_period_end",
+      )
       .eq("user_id", userId)
       .order("created_at", { ascending: true }),
   ]);
@@ -411,6 +418,7 @@ export async function getAdminUserStatsAction(
         (g.expires_at as string | null) ??
         null,
       note: (g.note as string | null) ?? null,
+      scheduledCancelAt: null,
     });
   }
   for (const s of subRows ?? []) {
@@ -419,6 +427,12 @@ export async function getAdminUserStatsAction(
       status === "canceled" ||
       status === "incomplete_expired" ||
       status === "unpaid";
+    const cancelAt = (s.cancel_at as string | null) ?? null;
+    const cancelAtPeriodEnd = Boolean(s.cancel_at_period_end);
+    const scheduledCancelAt = ended
+      ? null
+      : (cancelAt ??
+        (cancelAtPeriodEnd ? ((s.current_period_end as string | null) ?? null) : null));
     tierHistory.push({
       source: "stripe",
       tier: s.tier as "coach" | "coach_ai",
@@ -429,6 +443,7 @@ export async function getAdminUserStatsAction(
           null)
         : null,
       note: status,
+      scheduledCancelAt,
     });
   }
   tierHistory.sort((a, b) => a.startedAt.localeCompare(b.startedAt));

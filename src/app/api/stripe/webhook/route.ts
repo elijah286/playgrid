@@ -71,6 +71,7 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
     stripe_price_id: priceId,
     current_period_end: periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null,
     cancel_at_period_end: sub.cancel_at_period_end ?? false,
+    cancel_at: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
     billing_interval: interval === "month" || interval === "year" ? interval : null,
     updated_at: new Date().toISOString(),
   };

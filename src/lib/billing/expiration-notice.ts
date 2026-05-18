@@ -13,9 +13,12 @@ const WINDOW_DAYS = 14;
 
 /**
  * Returns a banner notice if the current user's paid plan is within the 14-day
- * window before it ends (stripe: only when cancel_at_period_end; comp: always).
- * Also fires for the first 14 days AFTER a paid plan lapsed (source becomes free
- * but a recent subscription or comp grant is still on file).
+ * window before it ends. For stripe subs, "pending cancellation" means either
+ * cancel_at_period_end is true OR cancel_at is set (Stripe supports both
+ * paths — see migration 20260518140000). For comp grants, the expires_at is
+ * always treated as the end. Also fires for the first 14 days AFTER a paid
+ * plan lapsed (source becomes free but a recent subscription or comp grant
+ * is still on file).
  */
 export async function getExpirationNotice(): Promise<ExpirationNotice | null> {
   const supabase = await createClient();
@@ -50,17 +53,32 @@ export async function getExpirationNotice(): Promise<ExpirationNotice | null> {
       } else if (ent.source === "stripe" && ent.subscription_id) {
         const { data: sub } = await supabase
           .from("subscriptions")
-          .select("cancel_at_period_end, current_period_end, status")
+          .select("cancel_at_period_end, cancel_at, current_period_end, status")
           .eq("id", ent.subscription_id as string)
           .maybeSingle();
-        if (sub?.cancel_at_period_end && diff <= windowMs && diff > 0) {
-          return {
-            tier: ent.tier as SubscriptionTier,
-            source: "stripe",
-            expiresAt: ent.expires_at as string,
-            state: "expiring",
-            daysLeft: Math.max(1, Math.ceil(diff / (24 * 60 * 60 * 1000))),
-          };
+        const pendingCancel = Boolean(
+          sub?.cancel_at_period_end || sub?.cancel_at,
+        );
+        if (pendingCancel) {
+          // When cancel_at is set to a custom future date, it — not
+          // current_period_end — is the date access actually ends. Fall back
+          // to current_period_end (== ent.expires_at) for cancel_at_period_end
+          // cancellations that don't populate cancel_at.
+          const effectiveEnd =
+            (sub?.cancel_at as string | null) ?? (ent.expires_at as string);
+          const endMs = new Date(effectiveEnd).getTime();
+          if (!Number.isNaN(endMs)) {
+            const endDiff = endMs - now;
+            if (endDiff <= windowMs && endDiff > 0) {
+              return {
+                tier: ent.tier as SubscriptionTier,
+                source: "stripe",
+                expiresAt: effectiveEnd,
+                state: "expiring",
+                daysLeft: Math.max(1, Math.ceil(endDiff / (24 * 60 * 60 * 1000))),
+              };
+            }
+          }
         }
       }
     }
