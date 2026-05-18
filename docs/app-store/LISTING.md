@@ -37,11 +37,19 @@ Football playbook designer
 **Availability**: All territories
 **Pre-order**: No
 
-In-app purchases (subscriptions) configured separately in App Store Connect:
-- Coach (monthly)
-- Coach (annual)
-- Team (monthly)
-- Team (annual)
+**In-app purchases**: None.
+
+XO Gridmaker is submitted under the **Multiplatform Services** model
+(Guideline 3.1.3(b)). The iOS app is fully free: it does not contain
+StoreKit products, subscription paywalls, or any UI that prompts the
+user to upgrade. Paid functionality exists outside the App Store
+ecosystem on the web product, but the iOS shell does not link to,
+mention, or steer users toward those purchase methods.
+
+If a user signs in on iOS with an account that already has a paid
+entitlement (acquired on the web), the iOS shell reads that
+entitlement from our server and unlocks the corresponding features
+silently — no in-app upgrade flow is exposed either way.
 
 ---
 
@@ -69,7 +77,8 @@ Use these answers when filling out App Privacy in App Store Connect.
 - Browsing History
 - Search History
 - Sensitive Info
-- Purchases (handled by Apple's IAP)
+- Purchases (no IAP; the app does not collect or transmit any
+  purchase-related data)
 - Audio Data
 - Gameplay Content (in the Game Center sense — N/A)
 
@@ -187,6 +196,16 @@ Password: [generate; rotate after approval]
 ```
 XO Gridmaker is a playbook design tool for football coaches.
 
+Business model: this is a free app submitted under Guideline 3.1.3(b)
+(Multiplatform Services). The app contains no in-app purchases and no
+upgrade flow — the iOS shell does not prompt for, link to, or mention
+any external purchase path. Paid features exist on our web product
+(xogridmaker.com), but the iOS app does not direct users there. If a
+user signs in on iOS with an account that already has a paid
+entitlement, the corresponding features unlock automatically; if they
+sign in with a free account, the free Solo Coach plan is fully
+functional and there is no upsell.
+
 To exercise the native-only features:
 
 1. Sign in with the demo account above. The home screen shows several
@@ -219,4 +238,5 @@ optional. Coaches who decline still get a fully working game session.
 - [ ] Privacy nutrition label filled per "App Privacy" section above
 - [ ] Demo account credentials valid and tested from a fresh install
 - [ ] Export compliance: "Uses standard encryption only (HTTPS)" → exempt
-- [ ] Subscriptions submitted for review alongside the binary
+- [ ] Native shell audited for any UI that mentions subscriptions,
+      upgrades, or external purchase methods (3.1.3(b) compliance)

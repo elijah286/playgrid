@@ -87,17 +87,22 @@ export default async function PricingPage() {
           Simple plans that scale with how you use XO Gridmaker. Cancel anytime.
         </p>
       </div>
-      {/* In-app (Capacitor): show a static notice instead of the Stripe-driven
-          PricingClient. Apple Guideline 3.1.1 forbids in-app links to external
-          digital-subscription purchases, so we don't surface checkout buttons,
-          Stripe redirects, or pricing details from the iOS/Android shell. */}
+      {/* In-app (Capacitor): show a neutral notice instead of the Stripe-driven
+          PricingClient. Apple Guideline 3.1.1 / 3.1.3(b) forbids both in-app
+          links to external digital-subscription purchases *and* communications
+          that "directly or indirectly target iOS users to use a purchasing
+          method other than in-app purchase". The previous copy violated the
+          second clause by naming xogridmaker.com as the place to subscribe —
+          this rewrite keeps the page reachable (so reviewers don't see a 404)
+          without naming any external purchase path, mentioning subscriptions,
+          or implying that paid functionality is available elsewhere. */}
       <div data-native-only>
         <div className="rounded-2xl border border-border bg-surface-raised p-6 text-sm text-foreground">
-          <p className="font-semibold">Manage your plan on the web</p>
+          <p className="font-semibold">Solo Coach — Free</p>
           <p className="mt-2 text-muted">
-            To upgrade, change, or cancel your XO Gridmaker subscription, sign in at
-            xogridmaker.com on a desktop or mobile browser. The free Solo Coach plan
-            is always available — no upgrade required.
+            The free plan includes all the play-design tools described in the
+            App Store listing. Plan management isn&rsquo;t available in this
+            version of the app.
           </p>
         </div>
       </div>
