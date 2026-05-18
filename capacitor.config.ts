@@ -15,7 +15,15 @@ const config: CapacitorConfig = {
       }
     : undefined,
   ios: {
-    contentInset: "always",
+    // `never` keeps WKWebView edge-to-edge so the header's background paints
+    // behind the status bar / dynamic island. We pair this with
+    // `viewport-fit=cover` + CSS `env(safe-area-inset-top)` on
+    // `[data-site-header]` in globals.css to keep content out of the unsafe
+    // zone. `always` (the previous value) made iOS inset the webview below
+    // the status bar — the result was a white strip above the colored
+    // header, which doesn't happen on Android because the StatusBar plugin
+    // defaults to overlay=true there.
+    contentInset: "never",
     backgroundColor: "#ffffff",
   },
   android: {
