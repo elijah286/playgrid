@@ -367,27 +367,32 @@ export async function getPlayForEditorAction(playId: string) {
   // No auth gate — RLS scopes which plays the caller can see, including
   // the anon-accessible rows on public example playbooks.
 
-  const { data: play, error } = await supabase
+  // Fetch the play and its current version in one round trip via PostgREST
+  // embedding (plays.current_version_id → play_versions.id). Saves a full
+  // network roundtrip on every play open vs. two sequential `.select()`s.
+  const { data: row, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden, is_archived",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden, is_archived, play_versions!current_version_id(id, document, label, created_at, parent_version_id)",
     )
     .eq("id", playId)
     .single();
 
-  if (error || !play) return { ok: false as const, error: error?.message ?? "Not found" };
+  if (error || !row) return { ok: false as const, error: error?.message ?? "Not found" };
 
-  if (!play.current_version_id) {
+  if (!row.current_version_id) {
     return { ok: false as const, error: "Play has no saved version." };
   }
 
-  const { data: ver, error: vErr } = await supabase
-    .from("play_versions")
-    .select("id, document, label, created_at, parent_version_id")
-    .eq("id", play.current_version_id)
-    .single();
+  // PostgREST embeds a one-to-one FK as either a single object or an array
+  // of one depending on inference; normalize before reading.
+  const verEmbed = row.play_versions;
+  const ver = Array.isArray(verEmbed) ? verEmbed[0] : verEmbed;
+  if (!ver) return { ok: false as const, error: "Version missing" };
 
-  if (vErr || !ver) return { ok: false as const, error: vErr?.message ?? "Version missing" };
+  // Strip the embed off so the returned `play` matches the legacy shape that
+  // callers depend on (downstream code reads e.g. play.formation_id).
+  const { play_versions: _verEmbed, ...play } = row;
 
   const normalizedDoc = normalizePlayDocument(ver.document as PlayDocument);
 

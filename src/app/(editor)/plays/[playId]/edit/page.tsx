@@ -44,7 +44,25 @@ export default async function PlayEditPage({ params }: Props) {
   const res = await getPlayForEditorAction(playId);
   if (!res.ok) notFound();
 
-  const [nav, formationsRes, allFormationsRes, settingsRes] = await Promise.all([
+  // Fire every independent query for the editor in a single batch so the
+  // page renders after one network round-trip instead of waterfalling
+  // through 7+ sequential awaits (auth → membership → book → owner → owner
+  // profile → beta → entitlement → …). The follow-up batch below covers
+  // queries that need the user id or owner row from this batch.
+  const supabase = await createClient();
+  const [
+    nav,
+    formationsRes,
+    allFormationsRes,
+    settingsRes,
+    userResp,
+    bookResp,
+    ownerRowResp,
+    mobileEditingEnabled,
+    betaFeatures,
+    editorEntitlement,
+    coachAiEvalDays,
+  ] = await Promise.all([
     listPlaybookPlaysForNavigationAction(res.play.playbook_id),
     listFormationsForPlaybookAction(res.play.playbook_id),
     // Fallback list — used only to resolve the play's currently-linked or
@@ -52,7 +70,37 @@ export default async function PlayEditPage({ params }: Props) {
     // defense/special-teams formations, or one the coach removed later).
     listFormationsAction(),
     getPlaybookSettingsAction(res.play.playbook_id),
+    supabase.auth.getUser(),
+    // Example preview: a signed-in visitor who isn't a member of this
+    // example playbook gets the full editor (can draw, drag, undo, etc.)
+    // but autosave is suppressed and any save attempt surfaces the CTA.
+    supabase
+      .from("playbooks")
+      .select(
+        "is_example, is_public_example, is_archived, name, color, logo_url, season, sport_variant",
+      )
+      .eq("id", res.play.playbook_id)
+      .maybeSingle(),
+    // Owner row for the banner subtitle — mirrors the playbook page's
+    // "Spring 2026 · Flag · OWNER" line. We fetch the display name in the
+    // dependent batch below.
+    supabase
+      .from("playbook_members")
+      .select("user_id")
+      .eq("playbook_id", res.play.playbook_id)
+      .eq("role", "owner")
+      .limit(1)
+      .maybeSingle(),
+    getMobileEditingEnabled(),
+    getBetaFeatures(),
+    getCurrentEntitlement(),
+    getCoachAiEvalDays(),
   ]);
+
+  const user = userResp.data.user;
+  const book = bookResp.data;
+  const ownerRow = ownerRowResp.data;
+
   const playbookSettings = settingsRes.ok
     ? settingsRes.settings
     : defaultSettingsForVariant("flag_7v7");
@@ -79,79 +127,57 @@ export default async function PlayEditPage({ params }: Props) {
   // we feed it the full list.
   const allFormations = formationsRes.ok ? formationsRes.formations : [];
 
+  // Second batch — three queries that need user.id / ownerRow.user_id from
+  // the first batch. Still parallelized so we pay one network round-trip
+  // for all three rather than chaining them.
+  const ownerId = (ownerRow?.user_id as string | null) ?? null;
+  const [membershipResp, selfRoleResp, ownerProfileResp] = await Promise.all([
+    user
+      ? supabase
+          .from("playbook_members")
+          .select("role")
+          .eq("playbook_id", res.play.playbook_id)
+          .eq("user_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { role: string } | null }),
+    user
+      ? supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null as { role: string } | null }),
+    ownerId
+      ? supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", ownerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { display_name: string } | null }),
+  ]);
+
   // Viewers (read-only members) see the play + playback + opponent overlay
   // but no editing surfaces. Owners/editors get the full editor. If the
   // user somehow isn't a member at all we fall back to read-only — the
   // server actions already enforce writes via RLS.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
   let canEdit = false;
   let isMember = false;
-  if (user) {
-    const { data: membership } = await supabase
-      .from("playbook_members")
-      .select("role")
-      .eq("playbook_id", res.play.playbook_id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const role = membership?.role as "owner" | "editor" | "viewer" | undefined;
+  {
+    const role = (membershipResp.data?.role as
+      | "owner"
+      | "editor"
+      | "viewer"
+      | undefined) ?? undefined;
     isMember = role != null;
     canEdit = role === "owner" || role === "editor";
   }
 
-  // Example preview: a signed-in visitor who isn't a member of this
-  // example playbook gets the full editor (can draw, drag, undo, etc.)
-  // but autosave is suppressed and any save attempt surfaces the CTA.
-  const { data: book } = await supabase
-    .from("playbooks")
-    .select(
-      "is_example, is_public_example, is_archived, name, color, logo_url, season, sport_variant",
-    )
-    .eq("id", res.play.playbook_id)
-    .maybeSingle();
+  const ownerDisplayName =
+    (ownerProfileResp.data?.display_name as string | null) || null;
 
-  // Owner display name for the banner subtitle — mirrors the playbook
-  // page's "Spring 2026 · Flag · OWNER" line so the editor banner reads
-  // the same as the grid view banner.
-  let ownerDisplayName: string | null = null;
-  {
-    const { data: ownerRow } = await supabase
-      .from("playbook_members")
-      .select("user_id")
-      .eq("playbook_id", res.play.playbook_id)
-      .eq("role", "owner")
-      .limit(1)
-      .maybeSingle();
-    const ownerId = (ownerRow?.user_id as string | null) ?? null;
-    if (ownerId) {
-      const { data: ownerProfile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", ownerId)
-        .maybeSingle();
-      ownerDisplayName = (ownerProfile?.display_name as string | null) || null;
-    }
-  }
   const isExamplePreview =
     !isMember && Boolean(book?.is_public_example || book?.is_example);
   if (isExamplePreview) canEdit = true;
   const isArchived = Boolean(book?.is_archived);
   const isPlayArchived = Boolean((res.play as { is_archived?: boolean | null }).is_archived);
 
-  const mobileEditingEnabled = await getMobileEditingEnabled();
-
-  const betaFeatures = await getBetaFeatures();
-  let isAdmin = false;
-  if (user) {
-    const { data: selfRoleRow } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    isAdmin = (selfRoleRow?.role as string | null) === "admin";
-  }
+  const isAdmin = (selfRoleResp.data?.role as string | null) === "admin";
   const isCoachInPlaybook = canEdit && !isExamplePreview;
   const gameModeAvailable = isBetaFeatureAvailable(betaFeatures.game_mode, {
     isAdmin,
@@ -177,7 +203,6 @@ export default async function PlayEditPage({ params }: Props) {
     betaFeatures.practice_plans,
     { isAdmin, isEntitled: isCoachInPlaybook },
   );
-  const editorEntitlement = await getCurrentEntitlement();
   const viewerCanUseGameMode = isAdmin || canUseGameMode(editorEntitlement);
   const coachAiAvailable =
     isAdmin || (editorEntitlement?.tier ?? "free") === "coach_ai";
@@ -188,7 +213,6 @@ export default async function PlayEditPage({ params }: Props) {
   // Cal launcher promo: only logged-in users without entitlement see the
   // upgrade preview. Anonymous example viewers don't see Cal at all.
   const showCoachCalPromo = user !== null && !coachAiAvailable;
-  const coachAiEvalDays = await getCoachAiEvalDays();
 
   return (
     <>
