@@ -13,39 +13,16 @@ import {
   type PlaybookGroupRow,
   type PlaybookPlayNavItem,
 } from "@/domain/print/playbookPrint";
-import { getPlaybookOwnerEntitlement, getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
-import { tierAtLeast } from "@/lib/billing/features";
+import { getPlaybookOwnerId } from "@/lib/billing/owner-entitlement";
 import { assertNotLocked, computeDowngradeLocks } from "@/lib/billing/downgrade-locks";
 import {
   assertNoActiveGameSession,
   gameModeLockedResult,
 } from "@/lib/game-mode/assert-no-active-session";
-import { getFreeMaxPlaysPerPlaybook } from "@/lib/site/free-plays-config";
+import { assertPlayCap } from "@/lib/billing/play-cap";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
 import { timed } from "@/lib/perf/timed";
-
-async function assertPlayCap(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  playbookId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const ownerEnt = await getPlaybookOwnerEntitlement(playbookId);
-  if (tierAtLeast(ownerEnt, "coach")) return { ok: true };
-  const limit = await getFreeMaxPlaysPerPlaybook();
-  const { count } = await supabase
-    .from("plays")
-    .select("id", { count: "exact", head: true })
-    .eq("playbook_id", playbookId)
-    .eq("is_archived", false)
-    .is("attached_to_play_id", null);
-  if ((count ?? 0) >= limit) {
-    return {
-      ok: false,
-      error: `Free tier is capped at ${limit} plays per playbook. Upgrade to Team Coach for unlimited plays.`,
-    };
-  }
-  return { ok: true };
-}
 
 /**
  * Returns true if the signed-in user has created at least one play in a

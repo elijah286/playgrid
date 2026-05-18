@@ -75,7 +75,8 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
       .select("id, playbook_id, created_at, is_archived")
       .in("playbook_id", Array.from(unlockedPlaybookIds))
       .eq("is_archived", false)
-      .is("attached_to_play_id", null);
+      .is("attached_to_play_id", null)
+      .is("deleted_at", null);
 
     const byBook = new Map<string, Array<{ id: string; createdAt: string }>>();
     for (const p of plays ?? []) {
