@@ -27,12 +27,11 @@ import {
   denyMemberAction,
   rejectRosterClaimAction,
 } from "@/app/actions/playbook-roster";
-import { setRsvpAction } from "@/app/actions/calendar";
+import { bulkRsvpAction, setRsvpAction } from "@/app/actions/calendar";
 import {
   archiveAlertAction,
   bulkArchiveAlertsAction,
   bulkDeleteAlertsAction,
-  bulkRsvpAction,
   deleteAlertAction,
   listResolvedInboxEventsAction,
   unarchiveAlertAction,

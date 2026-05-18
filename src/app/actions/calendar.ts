@@ -531,6 +531,43 @@ export async function setRsvpAction(
   return { ok: true };
 }
 
+/**
+ * Apply the same RSVP answer to a list of (eventId, occurrenceDate) pairs in
+ * parallel. Used by:
+ *   - the inbox bulk-action bar
+ *   - the calendar list's "RSVP to all in series" rollup
+ *   - the calendar list's multi-select mode
+ *
+ * Returns ok=true only if every individual RSVP succeeded; otherwise ok=false
+ * with the first error and an `applied` count (the rest of the batch still
+ * applies on a best-effort basis, matching the optimistic UI pattern).
+ */
+export async function bulkRsvpAction(
+  events: { eventId: string; occurrenceDate: string }[],
+  status: "yes" | "no" | "maybe",
+): Promise<
+  | { ok: true; applied: number }
+  | { ok: false; error: string; applied: number }
+> {
+  if (events.length === 0) return { ok: true, applied: 0 };
+  const results = await Promise.all(
+    events.map((e) =>
+      setRsvpAction({
+        eventId: e.eventId,
+        occurrenceDate: e.occurrenceDate,
+        status,
+        note: null,
+      }),
+    ),
+  );
+  const firstError = results.find((r) => !r.ok) as
+    | { ok: false; error: string }
+    | undefined;
+  const applied = results.filter((r) => r.ok).length;
+  if (firstError) return { ok: false, error: firstError.error, applied };
+  return { ok: true, applied };
+}
+
 export async function clearRsvpAction(
   eventId: string,
   occurrenceDate: string,

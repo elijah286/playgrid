@@ -281,6 +281,15 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Calendar & scheduling ──────────────────────────────────────
   {
+    id: "calendar-bulk-rsvp",
+    name: "Bulk RSVP and series rollup",
+    description:
+      "Recurring events (e.g. every Friday practice) collapse into a single card showing the next date and how many still need a response — one tap RSVPs to all unanswered occurrences at once. For ad-hoc bursts (a tournament weekend, six scrimmages Cal scheduled in one go), tap Select to enter multi-select mode, pick the events that apply, and apply Going / Maybe / Can't go from the sticky action bar. Past occurrences are excluded automatically. Works on both the global Calendar tab and per-team calendar.",
+    category: "Calendar & scheduling",
+    status: "ga",
+    addedDate: "2026-05-18",
+  },
+  {
     id: "calendar-events",
     name: "Practices, games, and events",
     description:

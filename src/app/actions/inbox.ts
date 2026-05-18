@@ -861,31 +861,5 @@ export async function bulkDeleteAlertsAction(
   return setInboxStatusAction(refs, "deleted");
 }
 
-/** Apply the same RSVP answer to a list of (eventId, occurrenceDate)
- *  pairs in parallel. Used by the inbox bulk-action bar so coaches can
- *  RSVP "yes" to every selected event in one shot. Returns ok=true only
- *  if every individual RSVP succeeded; otherwise ok=false with the first
- *  error (the rest of the batch still applies on a best-effort basis,
- *  matching the optimistic UI pattern). */
-export async function bulkRsvpAction(
-  events: { eventId: string; occurrenceDate: string }[],
-  status: "yes" | "no" | "maybe",
-): Promise<{ ok: true; applied: number } | { ok: false; error: string; applied: number }> {
-  if (events.length === 0) return { ok: true, applied: 0 };
-  const results = await Promise.all(
-    events.map((e) =>
-      setRsvpAction({
-        eventId: e.eventId,
-        occurrenceDate: e.occurrenceDate,
-        status,
-        note: null,
-      }),
-    ),
-  );
-  const firstError = results.find((r) => !r.ok) as
-    | { ok: false; error: string }
-    | undefined;
-  const applied = results.filter((r) => r.ok).length;
-  if (firstError) return { ok: false, error: firstError.error, applied };
-  return { ok: true, applied };
-}
+// Bulk RSVP lives in @/app/actions/calendar (`bulkRsvpAction`). Imported there
+// by the inbox bulk-action bar and the calendar list views.
