@@ -99,7 +99,7 @@ function buildSections(
         },
         {
           q: "Is there a mobile app?",
-          a: "We're actively building native iOS and Android apps and aim to have them in the App Store and Google Play before the summer season. In the meantime, every feature works in any mobile browser — open xogridmaker.com on your phone or tablet and you'll get the full editor, Game Mode, sharing, and printable wristband sheets without installing anything. Coaches who add the site to their home screen get a near-app experience today.",
+          a: "Yes — XO Gridmaker is available as a native app on iOS (App Store) and Android (Google Play), with offline playbook downloads for the sideline, Game Mode with screen-keep-awake and optional GPS venue tagging on game sessions, native sharing through the OS share sheet, and the same play-design editor as the desktop experience. Every feature also runs in any mobile browser if you prefer not to install.",
         },
       ],
     },
@@ -175,7 +175,7 @@ function buildSections(
       faqs: [
         {
           q: "How do I get started?",
-          a: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. To try Coach Cal, upgrade to Coach Pro — the first ${evalLabelPlural} are free.`,
+          a: `Browse the example playbooks to see what's possible, then create a free account and start a playbook. Most coaches have their first play drawn within a couple of minutes. Coach Cal includes ${evalLabelPlural} free for new users to try.`,
         },
       ],
     },
