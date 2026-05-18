@@ -87,7 +87,10 @@ export default async function PlaybookPrintPage({ params }: Props) {
       <div className="flex items-center justify-between gap-3">
         <Link
           href={`/playbooks/${playbookId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
+          // Min-h-11 + horizontal padding gives a 44px+ tap target on mobile.
+          // -ml-3 pulls the icon back to the original visual position so the
+          // header alignment doesn't shift on desktop.
+          className="-ml-3 inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted transition-colors hover:bg-surface-inset hover:text-foreground active:bg-surface-inset"
         >
           <ArrowLeft className="size-4" />
           {book.name}
