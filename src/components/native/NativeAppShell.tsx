@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { isNativeApp, nativePlatform } from "@/lib/native/isNativeApp";
+import { registerOfflineServiceWorker } from "@/lib/native/registerServiceWorker";
 
 export function NativeAppShell() {
   useEffect(() => {
@@ -9,6 +10,26 @@ export function NativeAppShell() {
 
     document.body.classList.add("native-app");
     document.body.classList.add(`native-${nativePlatform()}`);
+
+    // Register the offline shell SW. It precaches /offline so the app can
+    // boot without signal; on any navigation failure it redirects there.
+    void registerOfflineServiceWorker();
+
+    // If we boot offline (or drop offline while sitting on a network-bound
+    // route like /plays/<id>/edit), bounce to /offline so the downloaded
+    // playbook viewer is reachable instead of leaving the user on a stalled
+    // page. The SW handles fresh navigations; this handles state-change
+    // transitions inside an already-loaded session.
+    const onOffline = () => {
+      const path = window.location.pathname;
+      if (path.startsWith("/offline")) return;
+      window.location.replace("/offline");
+    };
+    if (!navigator.onLine) {
+      // Defer so we don't fight initial hydration.
+      setTimeout(onOffline, 0);
+    }
+    window.addEventListener("offline", onOffline);
 
     let cancelled = false;
     (async () => {
@@ -51,6 +72,7 @@ export function NativeAppShell() {
       cancelled = true;
       if (hideTimer) clearTimeout(hideTimer);
       window.removeEventListener("load", markReady);
+      window.removeEventListener("offline", onOffline);
       document.body.classList.remove("native-app");
       document.body.classList.remove(`native-${nativePlatform()}`);
     };

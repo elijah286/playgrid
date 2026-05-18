@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Search, WifiOff } from "lucide-react";
 import type { PlayDocument } from "@/domain/play/types";
@@ -99,13 +98,13 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
           Open it once with a connection and tap &ldquo;Download for offline&rdquo;
           to keep a copy on this device.
         </p>
-        <Link
+        <a
           href="/offline"
           className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline"
         >
           <ArrowLeft className="size-4" />
           Back to offline library
-        </Link>
+        </a>
       </div>
     );
   }
@@ -113,13 +112,13 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4">
       <div className="flex items-center justify-between gap-3">
-        <Link
+        <a
           href="/offline"
           className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
           <span>Offline</span>
-        </Link>
+        </a>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-inset px-2.5 py-1 text-[11px] font-medium text-muted">
           <WifiOff className="size-3" />
           Offline copy

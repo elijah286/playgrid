@@ -6,6 +6,7 @@ import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
 import { hapticImpact, hapticSuccess } from "@/lib/native/haptics";
 import { useToast } from "@/components/ui";
 import { getPlaybookOfflineBundleAction } from "@/app/actions/offline";
+import { precacheUrls } from "@/lib/native/registerServiceWorker";
 import {
   getCachedPlaybookMeta,
   putPlaybookBundle,
@@ -65,6 +66,11 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
         plays: res.bundle.plays,
         documents: res.bundle.documents,
       });
+      // Prime the SW cache so the per-playbook offline view loads without
+      // signal. Without this the data is in IndexedDB but the page that
+      // displays it has never been fetched, so airplane-mode visits hit
+      // a stalled navigation.
+      void precacheUrls(["/offline", `/offline/${playbookId}`]);
       setMeta(res.bundle.meta);
       void hapticSuccess();
       toast(

@@ -58,7 +58,9 @@ export function OfflineLibraryClient() {
         <ul className="mt-6 space-y-2">
           {items.map((p) => (
             <li key={p.id}>
-              <Link
+              {/* Full-page nav (not <Link>) so the SW-cached HTML serves
+                  cleanly without an RSC round-trip that would fail offline. */}
+              <a
                 href={`/offline/${p.id}`}
                 className="flex items-center gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 transition-colors hover:bg-surface-inset"
               >
@@ -78,7 +80,7 @@ export function OfflineLibraryClient() {
                     Downloaded {formatDate(p.downloadedAt)}
                   </p>
                 </div>
-              </Link>
+              </a>
             </li>
           ))}
         </ul>
