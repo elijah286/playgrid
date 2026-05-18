@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 };
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 import {
   loadExamplePlaybooks,
   loadHeroMarketingExample,
@@ -43,10 +44,12 @@ const BRAND_NAVY = "#0F1E3D";
 export default async function HomePage() {
   if (hasSupabaseEnv()) {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) redirect("/home");
+    // Same time-bound as the root layout and middleware — a hung
+    // refresh-token round-trip on a flaky network shouldn't stall the
+    // marketing page. On timeout, fall through as anonymous; the page
+    // still renders and the next request retries the refresh.
+    const result = await getUserWithTimeout(supabase);
+    if (result.kind === "ok" && result.user) redirect("/home");
   }
 
   // Pull marketing data in parallel — neither blocks the hero from rendering.
