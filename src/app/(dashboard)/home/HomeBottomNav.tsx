@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { BookOpen, Calendar, CreditCard, Inbox, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { BookOpen, Calendar, CreditCard, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 import { signOutAction } from "@/app/actions/auth";
 
@@ -165,20 +165,36 @@ function NavLink({
   badge?: number;
   badgeUrgent?: boolean;
 }) {
+  // Wrap navigation in a transition so the toolbar item can show a
+  // pending visual the moment a coach taps it — even if the destination
+  // pane takes 500ms+ to fetch and hydrate. Without this, the only
+  // acknowledgment was the css :active flash that disappeared the
+  // instant their finger left the screen, then a long blank gap before
+  // the new page rendered. Mirrors EditorBottomNav.NavLink.
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const pending = isPending && !isActive;
   return (
-    <Link
-      href={href}
+    <button
+      type="button"
+      onClick={() => {
+        if (isActive) return;
+        startTransition(() => {
+          router.push(href);
+        });
+      }}
       aria-current={isActive ? "page" : undefined}
-      // active: gives a tactile press response on touch devices so a tap
-      // still feels acknowledged even when the next page hasn't finished
-      // loading yet. Combined with route prefetching upstream, this is
-      // the difference between "did my tap register?" and "it's working."
+      aria-busy={pending || undefined}
       className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-all duration-100 active:scale-[0.94] active:bg-surface-inset ${
-        isActive ? "text-primary" : "text-muted hover:text-foreground"
+        isActive || pending ? "text-primary" : "text-muted hover:text-foreground"
       }`}
     >
       <span className="relative inline-flex">
-        <Icon className="size-5" aria-hidden />
+        {pending ? (
+          <Loader2 className="size-5 animate-spin" aria-hidden />
+        ) : (
+          <Icon className="size-5" aria-hidden />
+        )}
         {typeof badge === "number" && badge > 0 && (
           <span
             className="absolute -right-2 -top-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-surface-base"
@@ -189,7 +205,13 @@ function NavLink({
         )}
       </span>
       <span className="truncate">{label}</span>
-    </Link>
+      {/* Hidden prefetch <Link> — Next.js automatically prefetches Link
+       *  hrefs on viewport intersection, so keeping a 0-size Link in
+       *  the tree warms the route cache for our button-driven push. */}
+      <Link href={href} prefetch className="sr-only" aria-hidden tabIndex={-1}>
+        {label}
+      </Link>
+    </button>
   );
 }
 
