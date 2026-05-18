@@ -1052,8 +1052,8 @@ export function DashboardClient({
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{
-    title: string;
-    message: string;
+    title: React.ReactNode;
+    message: React.ReactNode;
     secondaryLabel?: string;
     secondaryHref?: string;
   } | null>(null);
@@ -1123,9 +1123,25 @@ export function DashboardClient({
           const r = res as { ok: boolean; error?: string };
           if (!r.ok) {
             if (r.error && /Coach feature|Upgrade to unlock|Free tier/i.test(r.error)) {
+              // Title kept neutral so we don't surface upsell language on
+              // native. `errorWebSuffix` (if present) is the upsell tail
+              // wrapped in `data-web-only` — visible on web, hidden on
+              // iOS/Android per App Store 3.1.3(b).
+              const suffix =
+                (r as { errorWebSuffix?: string }).errorWebSuffix ?? undefined;
               setUpgradeNotice({
-                title: "Upgrade to Team Coach",
-                message: r.error,
+                title: "Team Coach feature",
+                message: (
+                  <>
+                    {r.error}
+                    {suffix ? (
+                      <>
+                        {" "}
+                        <span data-web-only>{suffix}</span>
+                      </>
+                    ) : null}
+                  </>
+                ),
               });
             } else {
               toast(r.error ?? errLabel, "error");
@@ -1167,11 +1183,31 @@ export function DashboardClient({
           // playbook — claimed examples and self-created ones share that
           // slot, and the existing one is fully editable.
           const existing = ownedAll[0] ?? null;
+          // Upgrade phrasing wrapped in `<span data-web-only>` so the
+          // sentence collapses to the blocker-only version on native shells
+          // (App Store 3.1.3(b) compliance).
           setUpgradeNotice({
             title: "You already have your free playbook",
-            message: existing
-              ? `Free accounts include one playbook — “${existing.name}”. Open it to add or edit plays, or upgrade to Team Coach ($9/mo or $99/yr) for unlimited playbooks.`
-              : "Upgrade to Team Coach ($9/mo or $99/yr) to create unlimited playbooks. Your existing content stays where it is.",
+            message: existing ? (
+              <>
+                Free accounts include one playbook — &ldquo;{existing.name}&rdquo;.
+                Open it to add or edit plays
+                <span data-web-only>
+                  , or upgrade to Team Coach ($9/mo or $99/yr) for unlimited
+                  playbooks
+                </span>
+                .
+              </>
+            ) : (
+              <>
+                You&rsquo;re on the free plan, which includes one playbook.
+                <span data-web-only>
+                  {" "}
+                  Upgrade to Team Coach ($9/mo or $99/yr) to create unlimited
+                  playbooks. Your existing content stays where it is.
+                </span>
+              </>
+            ),
             secondaryLabel: existing ? "Open my playbook" : undefined,
             secondaryHref: existing ? `/playbooks/${existing.id}` : undefined,
           });
@@ -1659,9 +1695,26 @@ export function DashboardClient({
                     null;
                   setUpgradeNotice({
                     title: "Your free playbook slot is taken",
-                    message: existing
-                      ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot, or upgrade to Team Coach ($9/mo or $99/yr) for unlimited playbooks.`
-                      : "Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.",
+                    message: existing ? (
+                      <>
+                        Free accounts include one playbook —{" "}
+                        &ldquo;{existing.name}&rdquo;. Delete it to free the spot
+                        <span data-web-only>
+                          , or upgrade to Team Coach ($9/mo or $99/yr) for
+                          unlimited playbooks
+                        </span>
+                        .
+                      </>
+                    ) : (
+                      <>
+                        Free accounts include one playbook.
+                        <span data-web-only>
+                          {" "}
+                          Upgrade to Team Coach ($9/mo or $99/yr) to duplicate
+                          playbooks.
+                        </span>
+                      </>
+                    ),
                     secondaryLabel: existing ? "Open my playbook" : undefined,
                     secondaryHref: existing
                       ? `/playbooks/${existing.id}`

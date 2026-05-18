@@ -187,8 +187,8 @@ export function PlaybookHeader({
   // in <PlayerInvitePolicyDialog>.
   const [playerInvitePolicyOpen, setPlayerInvitePolicyOpen] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<{
-    title: string;
-    message: string;
+    title: React.ReactNode;
+    message: React.ReactNode;
     secondaryLabel?: string;
     secondaryHref?: string;
   } | null>(null);
@@ -246,15 +246,39 @@ export function PlaybookHeader({
   }, [canManage, canShare, searchParams, router]);
 
   function run(
-    fn: () => Promise<{ ok: boolean; error?: string; needsUpgrade?: boolean } | { ok: true; id?: string }>,
+    fn: () => Promise<
+      | {
+          ok: boolean;
+          error?: string;
+          errorWebSuffix?: string;
+          needsUpgrade?: boolean;
+        }
+      | { ok: true; id?: string }
+    >,
     onOk?: (r: { ok: true; id?: string }) => void,
   ) {
     fn().then((res) => {
       if (!res.ok) {
         if ("needsUpgrade" in res && res.needsUpgrade) {
+          // Title kept neutral — "Upgrade to Team Coach" would be steering
+          // language on native (3.1.3(b)). `errorWebSuffix` is the upsell
+          // tail, wrapped in `data-web-only` so it disappears on iOS/Android.
+          const errMsg =
+            ("error" in res && res.error) || "This isn't available on the free plan.";
+          const suffix = "errorWebSuffix" in res ? res.errorWebSuffix : undefined;
           setUpgradeNotice({
-            title: "Upgrade to Team Coach",
-            message: ("error" in res && res.error) || "This is a Team Coach feature.",
+            title: "Team Coach feature",
+            message: (
+              <>
+                {errMsg}
+                {suffix ? (
+                  <>
+                    {" "}
+                    <span data-web-only>{suffix}</span>
+                  </>
+                ) : null}
+              </>
+            ),
           });
         } else {
           toast(("error" in res && res.error) || "Something went wrong.", "error");
@@ -286,11 +310,31 @@ export function PlaybookHeader({
         if ("needsUpgrade" in res && res.needsUpgrade) {
           const existing =
             "existingOwnedPlaybook" in res ? res.existingOwnedPlaybook : null;
+          // Upsell phrasing is wrapped in `<span data-web-only>` so it
+          // disappears on iOS/Android — App Store 3.1.3(b) forbids steering
+          // native users toward external purchase paths. Web users see the
+          // full sentence unchanged.
           setUpgradeNotice({
             title: "Your free playbook slot is taken",
-            message: existing
-              ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot, or upgrade to Team Coach ($9/mo or $99/yr) for unlimited playbooks.`
-              : "Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.",
+            message: existing ? (
+              <>
+                Free accounts include one playbook — &ldquo;{existing.name}&rdquo;.
+                Delete it to free the spot
+                <span data-web-only>
+                  , or upgrade to Team Coach ($9/mo or $99/yr) for unlimited
+                  playbooks
+                </span>
+                .
+              </>
+            ) : (
+              <>
+                Free accounts include one playbook.
+                <span data-web-only>
+                  {" "}
+                  Upgrade to Team Coach ($9/mo or $99/yr) to duplicate playbooks.
+                </span>
+              </>
+            ),
             ...(existing
               ? {
                   secondaryLabel: "Open my playbook",

@@ -242,9 +242,12 @@ export function FreeForSolo({ freeMaxPlays }: { freeMaxPlays: number }) {
                 <p className="mt-3 max-w-xl text-muted">
                   One playbook with up to {freeMaxPlays} plays is free, forever.
                   Call sheets print free. The team calendar, player invites,
-                  and roster are all yours — upgrade to Team Coach when you
-                  want wristbands, bigger playbooks, and assistant-coach
-                  collaboration.
+                  and roster are all yours
+                  <span data-web-only>
+                    {" "}— upgrade to Team Coach when you want wristbands,
+                    bigger playbooks, and assistant-coach collaboration
+                  </span>
+                  .
                 </p>
               </div>
               <Link

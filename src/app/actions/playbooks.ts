@@ -500,10 +500,17 @@ export async function archivePlaybookAction(playbookId: string, archived: boolea
   if (archived) {
     const entitlement = await getUserEntitlement(user.id);
     if (!tierAtLeast(entitlement, "coach")) {
+      // `error` is the platform-neutral blocker (shown on web + native).
+      // `errorWebSuffix` is the upsell phrasing — the client wraps it in
+      // `<span data-web-only>` so it appears only on web. Splitting at the
+      // action level keeps each blocker paired with its right upsell while
+      // staying App Store 3.1.3(b) compliant on native.
       return {
         ok: false as const,
         error:
-          "Archiving is a Team Coach feature. On the free tier, archived playbooks would still consume your one playbook slot — delete it instead, or upgrade to Team Coach ($9/mo or $99/yr) to archive.",
+          "Archiving is a Team Coach feature. On the free tier, archived playbooks would still consume your one playbook slot — delete it instead.",
+        errorWebSuffix:
+          "Upgrade to Team Coach ($9/mo or $99/yr) to archive.",
         needsUpgrade: true as const,
       };
     }
@@ -594,11 +601,16 @@ export async function duplicatePlaybookAction(
     });
     if (owned.length >= FREE_MAX_PLAYBOOKS_OWNED) {
       const existing = owned[0] ?? null;
+      // See archive-action comment above for the error / errorWebSuffix
+      // contract. The native shell gets only `error`; web gets both.
       return {
         ok: false as const,
         error: existing
-          ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot, or upgrade to Team Coach.`
-          : `Free accounts are limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook. Upgrade to Team Coach to duplicate this one.`,
+          ? `Free accounts include one playbook — "${existing.name}". Delete it to free the spot.`
+          : `Free accounts are limited to ${FREE_MAX_PLAYBOOKS_OWNED} playbook.`,
+        errorWebSuffix: existing
+          ? "Upgrade to Team Coach for unlimited playbooks."
+          : "Upgrade to Team Coach to duplicate this one.",
         needsUpgrade: true as const,
         existingOwnedPlaybook: existing,
       };

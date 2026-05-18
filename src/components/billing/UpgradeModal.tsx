@@ -1,13 +1,18 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Lock, X } from "lucide-react";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  title: string;
-  message: string;
+  /** Accepts JSX so callers can use `<span data-web-only>` wrappers to
+   *  hide upsell language on native shells (App Store 3.1.3(b) compliance). */
+  title: ReactNode;
+  /** Accepts JSX so callers can wrap upgrade-suggestion text in
+   *  `<span data-web-only>` — that portion is CSS-hidden on native. */
+  message: ReactNode;
   ctaLabel?: string;
   ctaHref?: string;
   /** Optional secondary action shown above the upgrade CTA. Use for
