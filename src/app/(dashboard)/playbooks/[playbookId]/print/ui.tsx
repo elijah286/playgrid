@@ -2083,14 +2083,25 @@ function ExamplePrintGateModal({
             id="print-gate-title"
             className="mt-3 text-xl font-extrabold tracking-tight text-foreground"
           >
-            {attempt === "pdf"
-              ? "Export your own PDF — free."
-              : "Print your own — free."}
+            {product === "wristband"
+              ? "Make this playbook yours — free."
+              : attempt === "pdf"
+                ? "Export your own PDF — free."
+                : "Print your own — free."}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            {product === "wristband"
-              ? "Wrist coach exports come from your own playbook. Make this example yours and you'll have it on your wrist in minutes."
-              : "You've configured the layout, visuals, and text exactly how you want them. Make this example yours and these settings come with it."}
+            {product === "wristband" ? (
+              <>
+                Wrist coach exports come from your own playbook. Claiming this example is free;
+                printing wrist coaches is a Team Coach feature —{" "}
+                <Link href="/pricing" className="font-medium text-primary hover:underline">
+                  see pricing
+                </Link>
+                .
+              </>
+            ) : (
+              "You've configured the layout, visuals, and text exactly how you want them. Make this example yours and these settings come with it."
+            )}
           </p>
         </div>
         <div className="flex flex-col gap-2 px-6 pb-6 pt-2">
