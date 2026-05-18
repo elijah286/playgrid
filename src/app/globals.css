@@ -524,6 +524,20 @@ html.native-shell.native-ready #native-loading-overlay {
   .indeterminate-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 
+/* Disable iOS WKWebView rubber-band / overscroll-bounce. Without this, a
+ * downward drag at the top of the page pulls the entire document — sticky
+ * header included — below the status bar, exposing a white gap. Android
+ * WebView doesn't bounce by default, so this was iOS-only. Scoped to the
+ * native shell (`html.native-shell` is added by the pre-paint script in
+ * layout.tsx before hydration) so web users still get native browser
+ * scroll affordances. We don't use pull-to-refresh anywhere in the app,
+ * so killing the gesture entirely is safe. Requires iOS 16+ in WKWebView;
+ * iOS 15 will still bounce (a Swift backstop is possible if that matters). */
+html.native-shell,
+html.native-shell body {
+  overscroll-behavior: none;
+}
+
 /* Safe-area handling: only horizontal padding goes on <body>. Vertical
  * insets are owned by the components that anchor to the top (sticky site
  * header) and bottom (fixed bottom navs) of the viewport, so their
