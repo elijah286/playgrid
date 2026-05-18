@@ -61,6 +61,11 @@ export default async function DashboardLayout({
   const isAdmin = (selfRoleRow?.data?.role as string | null) === "admin";
   const coachAiAvailable =
     isAdmin || (entitlement?.tier ?? "free") === "coach_ai";
+  // Logged-in user without Coach Pro still gets the Cal slot in the
+  // toolbar — tapping opens the upgrade prompt instead of the chat.
+  // Matches the gate PlaybookBottomNav + EditorBottomNav use, so Cal
+  // appears in the same nav position on every mobile surface.
+  const showCoachCalPromo = user !== null && !coachAiAvailable;
   const teamCalendarAvailable = isBetaFeatureAvailable(
     betaFeatures.team_calendar,
     { isAdmin, isEntitled: true },
@@ -108,7 +113,7 @@ export default async function DashboardLayout({
       {user && (
         <HomeBottomNav
           showCalendar={teamCalendarAvailable}
-          showCoachCal={coachAiAvailable}
+          showCoachCal={coachAiAvailable || showCoachCalPromo}
           inboxCount={inboxCount}
           inboxUrgent={inboxUrgent}
           isAdmin={isAdmin}
