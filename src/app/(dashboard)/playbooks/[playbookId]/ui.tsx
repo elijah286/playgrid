@@ -259,6 +259,30 @@ const SIZE_COL_CLASS: Record<ThumbSize, string> = {
   small: "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
 };
 
+// Defers a full Link prefetch of /plays/[id]/edit until the user shows intent.
+// The route is dynamic and has a loading.tsx, so Next.js's `auto` behavior
+// only prefetches the shell — full data prefetch requires prefetch={true},
+// which would be wasteful to fire on every visible tile in a large playbook.
+// onPointerEnter covers both desktop hover and the first touch on mobile.
+function PlayTileLink({
+  children,
+  ...rest
+}: React.ComponentProps<typeof Link>) {
+  const [warm, setWarm] = useState(false);
+  return (
+    <Link
+      {...rest}
+      prefetch={warm ? true : false}
+      onPointerEnter={(e) => {
+        setWarm(true);
+        rest.onPointerEnter?.(e);
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function PlaybookDetailClient(props: PlaybookDetailClientProps) {
   // Fire an example_view impression once per (session, playbook) so the
   // admin Engagement tab can compute example_view → example_cta_click →
@@ -2186,7 +2210,7 @@ function PlaybookDetailClientInner({
                             </div>
                           </div>
                         )}
-                        <Link
+                        <PlayTileLink
                           href={`/plays/${p.id}/edit`}
                           className={`flex flex-1 flex-col px-4 pt-2 pb-4 ${selectionMode || reorderMode || isLocked ? "pointer-events-none" : ""} ${isLocked ? "opacity-50" : ""}`}
                           aria-label={isLocked ? `${p.name} (locked — upgrade to access)` : `Open ${p.name}`}
@@ -2221,7 +2245,7 @@ function PlaybookDetailClientInner({
                               <PlayThumbnail preview={p.preview} />
                             </div>
                           )}
-                        </Link>
+                        </PlayTileLink>
                         {!reorderMode && (
                           <div className="absolute right-2 top-2 flex items-center gap-1">
                             <ActionMenu items={buildItems(p)} />
@@ -2290,7 +2314,7 @@ function PlaybookDetailClientInner({
                             {isSelected && <Check className="size-3.5 text-primary" />}
                           </button>
                         )}
-                        <Link
+                        <PlayTileLink
                           href={`/plays/${p.id}/edit`}
                           onClick={
                             isLocked
@@ -2335,7 +2359,7 @@ function PlaybookDetailClientInner({
                               ))}
                             </div>
                           )}
-                        </Link>
+                        </PlayTileLink>
                         {!reorderMode && <ActionMenu items={buildItems(p)} />}
                       </li>
                         )}
