@@ -21,7 +21,7 @@ export default async function GameDetailPage({ params }: Props) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect(`/sign-in?next=/playbooks/${playbookId}/games/${sessionId}`);
+  if (!user) redirect(`/login?next=/playbooks/${playbookId}/games/${sessionId}`);
 
   const [{ data: membership }, { data: profile }, betaFeatures] =
     await Promise.all([
