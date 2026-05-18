@@ -17,6 +17,7 @@ import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 const PUBLIC_EXACT = new Set<string>([
   "/",
   "/login",
+  "/signed-out",
   "/privacy",
   "/terms",
   "/about",
