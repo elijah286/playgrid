@@ -16,6 +16,19 @@ import { Calendar, ListChecks, MessageCircle, MoreHorizontal } from "lucide-reac
 export default function PlaybookDetailLoading() {
   return (
     <div className="-mt-8 flex flex-col gap-0 pb-20 sm:gap-4 sm:pb-0">
+      {/* Indeterminate progress bar — pinned to the top of the viewport,
+          slides continuously while Next.js streams in the playbook page.
+          The animate-pulse skeletons below can read as "frozen" on slow
+          networks; the sliding bar is the unambiguous "we're working"
+          signal. Sits above the orange chrome (z-50) so it's visible on
+          mobile and desktop alike. */}
+      <div
+        aria-hidden
+        className="native-safe-top fixed inset-x-0 top-0 z-50 h-[3px] overflow-hidden bg-primary/10"
+      >
+        <div className="route-progress-bar h-full w-1/3 rounded-r-full bg-primary" />
+      </div>
+
       {/* Mobile-only orange playbook chrome placeholder. The real chrome
           fills in playbook name + initial once data loads. */}
       <div
