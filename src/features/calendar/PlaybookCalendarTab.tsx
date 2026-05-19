@@ -35,6 +35,7 @@ import {
   groupEventsForList,
   occurrenceKey,
   summarizeGroup,
+  withOptimisticRsvp,
   type EventGroup,
 } from "@/lib/calendar/grouping";
 import type { SelectedPlace } from "./PlaceAutocomplete";
@@ -78,6 +79,17 @@ export function PlaybookCalendarTab({
         setEvents(res.events);
       })
       .finally(() => setLoading(false));
+  }
+
+  // Optimistic per-row RSVP swap — see HomeCalendarTab for the rationale.
+  function applyOptimisticRsvp(
+    eventId: string,
+    occurrenceDate: string,
+    newStatus: "yes" | "maybe" | "no" | null,
+  ) {
+    setEvents((prev) =>
+      withOptimisticRsvp(prev, eventId, occurrenceDate, newStatus),
+    );
   }
 
   useEffect(() => {
@@ -420,7 +432,8 @@ export function PlaybookCalendarTab({
                       toggleSelect([occurrenceKey(group.event)])
                     }
                     onEdit={() => openEdit(group.event)}
-                    onChanged={load}
+                    onOptimisticRsvp={applyOptimisticRsvp}
+                    onServerError={load}
                   />
                 );
               }
@@ -449,7 +462,8 @@ export function PlaybookCalendarTab({
                   busy={bulkBusy}
                   onSeriesRsvp={(status) => bulkRsvpSeries(group, status)}
                   onEdit={(occ) => openEdit(occ)}
-                  onChanged={load}
+                  onOptimisticRsvp={applyOptimisticRsvp}
+                  onServerError={load}
                 />
               );
             })}
@@ -533,36 +547,64 @@ function RsvpButtons({
   pending,
   onPick,
   size = "sm",
+  activeStatus,
+  visibility = "responsive",
 }: {
   pending: boolean;
-  onPick: (status: "yes" | "maybe" | "no") => void;
+  /** Called with the picked status, or null when the user taps the
+   *  already-active button (treat as "clear my RSVP for this date"). */
+  onPick: (status: "yes" | "maybe" | "no" | null) => void;
   size?: "sm" | "grid";
+  /** When set, the matching button renders in its filled "active" style
+   *  and the others are muted; tapping the active one signals a clear. */
+  activeStatus?: "yes" | "maybe" | "no" | null;
+  /** "responsive" hides on mobile (paired with a separate grid block);
+   *  "always" shows the same row at every breakpoint. */
+  visibility?: "responsive" | "always";
 }) {
   const wrap =
     size === "grid"
       ? "grid grid-cols-3 gap-1.5"
-      : "hidden items-center gap-1.5 sm:flex";
+      : visibility === "always"
+        ? "flex items-center gap-1.5"
+        : "hidden items-center gap-1.5 sm:flex";
+  const hasActive = activeStatus != null;
   return (
     <div className={wrap} onClick={(ev) => ev.stopPropagation()}>
       {(["yes", "maybe", "no"] as const).map((s) => {
         const labels = { yes: "Going", maybe: "Maybe", no: "Can’t go" };
-        const colors = {
+        const isActive = s === activeStatus;
+        const activeColors = {
+          yes: "bg-emerald-100 text-emerald-900 ring-emerald-400 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-700",
+          maybe:
+            "bg-amber-100 text-amber-900 ring-amber-400 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-700",
+          no: "bg-red-100 text-red-900 ring-red-400 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-700",
+        };
+        const needsResponse = {
           yes: "bg-emerald-100 text-emerald-800 ring-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800",
           maybe:
             "bg-amber-100 text-amber-800 ring-amber-300 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:ring-amber-800",
           no: "bg-red-100 text-red-800 ring-red-300 hover:bg-red-200 dark:bg-red-950 dark:text-red-100 dark:ring-red-800",
         };
+        const muted =
+          "bg-surface text-muted ring-border hover:bg-surface-inset hover:text-foreground";
+        const color = hasActive
+          ? isActive
+            ? activeColors[s]
+            : muted
+          : needsResponse[s];
         return (
           <button
             key={s}
             type="button"
             disabled={pending}
-            onClick={() => onPick(s)}
+            title={isActive ? `Clear ${labels[s]}` : `Mark ${labels[s]}`}
+            onClick={() => onPick(isActive ? null : s)}
             className={
               (size === "grid"
                 ? "rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition disabled:opacity-60 "
                 : "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition disabled:opacity-60 ") +
-              colors[s]
+              color
             }
           >
             {labels[s]}
@@ -631,7 +673,8 @@ function EventCard({
   selected,
   onToggleSelect,
   onEdit,
-  onChanged,
+  onOptimisticRsvp,
+  onServerError,
 }: {
   event: CalendarEventRow;
   viewerIsCoach: boolean;
@@ -640,7 +683,12 @@ function EventCard({
   selected: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
-  onChanged: () => void;
+  onOptimisticRsvp: (
+    eventId: string,
+    occurrenceDate: string,
+    status: "yes" | "maybe" | "no" | null,
+  ) => void;
+  onServerError: () => void;
 }) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -655,6 +703,7 @@ function EventCard({
     if (isPast) return;
     const occurrenceDate =
       event.occurrenceDate || new Date(event.startsAt).toISOString().slice(0, 10);
+    onOptimisticRsvp(event.id, occurrenceDate, status);
     startTransition(async () => {
       const res = await setRsvpAction({
         eventId: event.id,
@@ -662,8 +711,10 @@ function EventCard({
         status,
         note: null,
       });
-      if (!res.ok) toast(res.error, "error");
-      else onChanged();
+      if (!res.ok) {
+        toast(res.error, "error");
+        onServerError();
+      }
     });
   }
   const formattedDate = startDate.toLocaleDateString(undefined, {
@@ -737,7 +788,10 @@ function EventCard({
           )}
         </button>
         {showInlineRsvp && (
-          <RsvpButtons pending={pending} onPick={quickRsvp} />
+          <RsvpButtons
+            pending={pending}
+            onPick={(s) => s && quickRsvp(s)}
+          />
         )}
         {!selectMode && (
           <div className="flex items-center gap-1">
@@ -769,7 +823,11 @@ function EventCard({
 
       {showInlineRsvp && (
         <div className="mt-3 sm:hidden">
-          <RsvpButtons pending={pending} onPick={quickRsvp} size="grid" />
+          <RsvpButtons
+            pending={pending}
+            onPick={(s) => s && quickRsvp(s)}
+            size="grid"
+          />
         </div>
       )}
 
@@ -777,7 +835,8 @@ function EventCard({
         <EventCardDetail
           event={event}
           isPast={isPast}
-          onChanged={onChanged}
+          onOptimisticRsvp={onOptimisticRsvp}
+          onServerError={onServerError}
           totalRespondents={totalRespondents}
         />
       )}
@@ -798,7 +857,8 @@ function SeriesGroupCard({
   busy,
   onSeriesRsvp,
   onEdit,
-  onChanged,
+  onOptimisticRsvp,
+  onServerError,
 }: {
   group: Extract<EventGroup<CalendarEventRow>, { kind: "series" }>;
   viewerIsCoach: boolean;
@@ -812,7 +872,12 @@ function SeriesGroupCard({
   busy: boolean;
   onSeriesRsvp: (status: "yes" | "maybe" | "no") => void;
   onEdit: (occ: CalendarEventRow) => void;
-  onChanged: () => void;
+  onOptimisticRsvp: (
+    eventId: string,
+    occurrenceDate: string,
+    status: "yes" | "maybe" | "no" | null,
+  ) => void;
+  onServerError: () => void;
 }) {
   const head = group.occurrences[0]!;
   const meta = EVENT_TYPE_META[head.type];
@@ -898,11 +963,14 @@ function SeriesGroupCard({
         </button>
 
         {!selectMode && summary.unrespondedOccurrences.length > 0 && (
-          <RsvpButtons pending={busy} onPick={onSeriesRsvp} />
+          <RsvpButtons
+            pending={busy}
+            onPick={(s) => s && onSeriesRsvp(s)}
+          />
         )}
         {!selectMode && summary.unrespondedOccurrences.length === 0 && (
           <span className="hidden shrink-0 rounded-full bg-surface-inset px-2 py-0.5 text-[11px] font-medium text-muted ring-1 ring-border sm:inline-block">
-            All responded
+            All responded — expand to change any date
           </span>
         )}
 
@@ -924,7 +992,11 @@ function SeriesGroupCard({
 
       {!selectMode && summary.unrespondedOccurrences.length > 0 && (
         <div className="px-3 pb-2.5 sm:hidden">
-          <RsvpButtons pending={busy} onPick={onSeriesRsvp} size="grid" />
+          <RsvpButtons
+            pending={busy}
+            onPick={(s) => s && onSeriesRsvp(s)}
+            size="grid"
+          />
         </div>
       )}
 
@@ -939,7 +1011,8 @@ function SeriesGroupCard({
                 key={occurrenceKey(o)}
                 event={o}
                 viewerIsCoach={viewerIsCoach}
-                onChanged={onChanged}
+                onOptimisticRsvp={onOptimisticRsvp}
+                onServerError={onServerError}
                 onEdit={() => onEdit(o)}
               />
             ))}
@@ -1034,12 +1107,18 @@ function SeriesSharedDetails({ event }: { event: CalendarEventRow }) {
 function SeriesOccurrenceRow({
   event,
   viewerIsCoach,
-  onChanged,
+  onOptimisticRsvp,
+  onServerError,
   onEdit,
 }: {
   event: CalendarEventRow;
   viewerIsCoach: boolean;
-  onChanged: () => void;
+  onOptimisticRsvp: (
+    eventId: string,
+    occurrenceDate: string,
+    status: "yes" | "maybe" | "no" | null,
+  ) => void;
+  onServerError: () => void;
   onEdit: () => void;
 }) {
   const { toast } = useToast();
@@ -1052,17 +1131,23 @@ function SeriesOccurrenceRow({
     day: "numeric",
   });
 
-  function quickRsvp(status: "yes" | "no" | "maybe") {
+  function changeRsvp(status: "yes" | "no" | "maybe" | null) {
     if (isPast) return;
+    onOptimisticRsvp(event.id, event.occurrenceDate, status);
     startTransition(async () => {
-      const res = await setRsvpAction({
-        eventId: event.id,
-        occurrenceDate: event.occurrenceDate,
-        status,
-        note: null,
-      });
-      if (!res.ok) toast(res.error, "error");
-      else onChanged();
+      const res =
+        status == null
+          ? await clearRsvpAction(event.id, event.occurrenceDate)
+          : await setRsvpAction({
+              eventId: event.id,
+              occurrenceDate: event.occurrenceDate,
+              status,
+              note: null,
+            });
+      if (!res.ok) {
+        toast(res.error, "error");
+        onServerError();
+      }
     });
   }
 
@@ -1076,24 +1161,16 @@ function SeriesOccurrenceRow({
       <span className="min-w-0 flex-1 truncate text-foreground">
         {dateLabel}
       </span>
-      {!isPast && event.myRsvp == null && (
-        <RsvpButtons pending={pending} onPick={quickRsvp} />
+      {!isPast && (
+        <RsvpButtons
+          pending={pending}
+          onPick={changeRsvp}
+          activeStatus={event.myRsvp?.status ?? null}
+          visibility="always"
+        />
       )}
-      {event.myRsvp && (
-        <button
-          type="button"
-          onClick={() =>
-            startTransition(async () => {
-              const res = await clearRsvpAction(event.id, event.occurrenceDate);
-              if (!res.ok) toast(res.error, "error");
-              else onChanged();
-            })
-          }
-          title="Clear RSVP"
-          className="inline-flex items-center gap-1"
-        >
-          <RsvpStatusPill status={event.myRsvp.status} />
-        </button>
+      {isPast && event.myRsvp && (
+        <RsvpStatusPill status={event.myRsvp.status} />
       )}
       <span className="text-muted">
         {event.rsvpCounts.yes} going · {event.rsvpCounts.maybe} maybe ·{" "}
@@ -1117,12 +1194,18 @@ function SeriesOccurrenceRow({
 function EventCardDetail({
   event,
   isPast,
-  onChanged,
+  onOptimisticRsvp,
+  onServerError,
   totalRespondents,
 }: {
   event: CalendarEventRow;
   isPast: boolean;
-  onChanged: () => void;
+  onOptimisticRsvp: (
+    eventId: string,
+    occurrenceDate: string,
+    status: "yes" | "maybe" | "no" | null,
+  ) => void;
+  onServerError: () => void;
   totalRespondents: number;
 }) {
   const { toast } = useToast();
@@ -1133,22 +1216,23 @@ function EventCardDetail({
   function setRsvp(status: "yes" | "no" | "maybe") {
     if (isPast) return;
     const occurrenceDate = new Date(event.startsAt).toISOString().slice(0, 10);
+    const nextStatus =
+      event.myRsvp?.status === status ? null : status;
+    onOptimisticRsvp(event.id, occurrenceDate, nextStatus);
     startTransition(async () => {
-      // Toggle off if same status.
-      if (event.myRsvp?.status === status) {
-        const res = await clearRsvpAction(event.id, occurrenceDate);
-        if (!res.ok) toast(res.error, "error");
-        else onChanged();
-        return;
+      const res =
+        nextStatus == null
+          ? await clearRsvpAction(event.id, occurrenceDate)
+          : await setRsvpAction({
+              eventId: event.id,
+              occurrenceDate,
+              status: nextStatus,
+              note: null,
+            });
+      if (!res.ok) {
+        toast(res.error, "error");
+        onServerError();
       }
-      const res = await setRsvpAction({
-        eventId: event.id,
-        occurrenceDate,
-        status,
-        note: null,
-      });
-      if (!res.ok) toast(res.error, "error");
-      else onChanged();
     });
   }
 

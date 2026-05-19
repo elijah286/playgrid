@@ -74,6 +74,38 @@ export function occurrenceKey(
 }
 
 /**
+ * Return a new events array with one row's RSVP swapped — used to drive
+ * optimistic UI on RSVP buttons so a click flips the button instantly
+ * without waiting for the server round-trip and a full re-fetch.
+ *
+ * Adjusts `rsvpCounts` so the aggregate "X going · Y maybe · Z can't"
+ * lines that some callers display stay in sync with `myRsvp`. The server
+ * is the source of truth — callers re-fetch on action failure to revert.
+ */
+export function withOptimisticRsvp<T extends CalendarEventRow>(
+  events: T[],
+  eventId: string,
+  occurrenceDate: string,
+  newStatus: "yes" | "maybe" | "no" | null,
+): T[] {
+  return events.map((e) => {
+    if (e.id !== eventId || e.occurrenceDate !== occurrenceDate) return e;
+    const oldStatus = e.myRsvp?.status ?? null;
+    if (oldStatus === newStatus) return e;
+    const counts = { ...e.rsvpCounts };
+    if (oldStatus) counts[oldStatus] = Math.max(0, counts[oldStatus] - 1);
+    if (newStatus) counts[newStatus] += 1;
+    return {
+      ...e,
+      myRsvp: newStatus
+        ? { status: newStatus, note: e.myRsvp?.note ?? null }
+        : null,
+      rsvpCounts: counts,
+    };
+  });
+}
+
+/**
  * Group-level summary used by the rollup card and the bulk-action bar:
  *   - unrespondedOccurrences: rows the viewer hasn't RSVP'd to (and are not
  *     locked by lockout). These are what a "Going" tap on the collapsed
