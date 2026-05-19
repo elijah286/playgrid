@@ -173,8 +173,13 @@ export function applyCommand(doc: PlayDocument, cmd: PlayCommand): PlayDocument 
       return { ...doc, layers: { ...doc.layers, players }, metadata };
     }
     case "player.setShape": {
+      // star shape and isHotRoute are the same concept (Cal reads
+      // isHotRoute; the renderer reads shape). Keep them synced from
+      // every code path, not just `player.setHotRoute`, so the toolbar's
+      // unified shape popover can dispatch a single command.
+      const isHotRoute = cmd.shape === "star";
       const players = doc.layers.players.map((p) =>
-        p.id === cmd.playerId ? { ...p, shape: cmd.shape } : p,
+        p.id === cmd.playerId ? { ...p, shape: cmd.shape, isHotRoute } : p,
       );
       return { ...doc, layers: { ...doc.layers, players } };
     }

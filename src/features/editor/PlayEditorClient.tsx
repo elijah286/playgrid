@@ -2020,18 +2020,16 @@ function PlayEditorClientInner({
                 onEndDecorationChange={handleEndDecorationChange}
                 hasSelectedRoute={selectedRouteId != null || selectedOpponentRoute != null}
                 hasSelectedPlayer={selectedPlayerId != null || selectedOpponentPlayerId != null}
-                isHotRoute={
-                  doc.layers.players.find((p) => p.id === selectedPlayerId)?.isHotRoute ?? false
+                playerShape={
+                  selectedPlayerId
+                    ? (doc.layers.players.find((p) => p.id === selectedPlayerId)?.shape ?? "circle")
+                    : undefined
                 }
-                onToggleHotRoute={() => {
+                onPlayerShapeChange={(shape) => {
                   if (!selectedPlayerId) return;
-                  const p = doc.layers.players.find((pl) => pl.id === selectedPlayerId);
-                  if (!p) return;
-                  dispatch({
-                    type: "player.setHotRoute",
-                    playerId: p.id,
-                    isHotRoute: !p.isHotRoute,
-                  });
+                  // Reducer keeps `isHotRoute` in sync (star ⇔ hot route),
+                  // so this single dispatch is enough.
+                  dispatch({ type: "player.setShape", playerId: selectedPlayerId, shape });
                 }}
                 playerRouteCount={
                   selectedOpponentPlayerId

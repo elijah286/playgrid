@@ -13,13 +13,20 @@ import {
   Ban,
   FlipHorizontal,
   Star,
+  Triangle,
   Trash2,
   Square,
   Circle,
   Check,
+  ChevronDown,
 } from "lucide-react";
-import type { EndDecoration, SegmentShape, StrokePattern } from "@/domain/play/types";
-import { SegmentedControl, IconButton } from "@/components/ui";
+import type {
+  EndDecoration,
+  PlayerShape,
+  SegmentShape,
+  StrokePattern,
+} from "@/domain/play/types";
+import { IconButton } from "@/components/ui";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 type Props = {
@@ -44,8 +51,11 @@ type Props = {
   hasSelectedRoute?: boolean;
   /** Player-level controls — shown when a player is selected. */
   hasSelectedPlayer?: boolean;
-  isHotRoute?: boolean;
-  onToggleHotRoute?: () => void;
+  /** Current player's shape; drives the shape popover's active option.
+   *  Leave undefined to disable the popover (e.g. opponent overlay
+   *  defender — no setter wired). */
+  playerShape?: PlayerShape;
+  onPlayerShapeChange?: (shape: PlayerShape) => void;
   playerRouteCount?: number;
   onClearPlayerRoutes?: () => void;
   onFlipHorizontal?: () => void;
@@ -62,7 +72,11 @@ type Props = {
   onDone?: () => void;
 };
 
-const SHAPE_OPTIONS: { value: SegmentShape; label: string; icon: typeof Minus }[] = [
+const SEGMENT_SHAPE_OPTIONS: {
+  value: SegmentShape;
+  label: string;
+  icon: typeof Minus;
+}[] = [
   { value: "straight", label: "Straight", icon: Minus },
   { value: "curve", label: "Curve", icon: Spline },
 ];
@@ -123,6 +137,21 @@ const WIDTH_OPTIONS: { value: number; label: string; px: number }[] = [
   { value: 4.0, label: "Thick", px: 3 },
 ];
 
+type PlayerShapeOption = {
+  value: PlayerShape;
+  label: string;
+  icon: typeof Circle;
+};
+const PLAYER_SHAPE_OFFENSE: PlayerShapeOption[] = [
+  { value: "circle", label: "Circle", icon: Circle },
+  { value: "square", label: "Square", icon: Square },
+  { value: "star", label: "Hot route", icon: Star },
+];
+const PLAYER_SHAPE_DEFENSE: PlayerShapeOption[] = [
+  { value: "triangle", label: "Triangle", icon: Triangle },
+  { value: "circle", label: "Circle", icon: Circle },
+];
+
 export function RouteToolbar({
   shape,
   onShapeChange,
@@ -142,8 +171,8 @@ export function RouteToolbar({
   onEndDecorationChange,
   hasSelectedRoute = false,
   hasSelectedPlayer = false,
-  isHotRoute = false,
-  onToggleHotRoute,
+  playerShape,
+  onPlayerShapeChange,
   playerRouteCount = 0,
   onClearPlayerRoutes,
   onFlipHorizontal,
@@ -154,24 +183,39 @@ export function RouteToolbar({
   hasAnySelection = false,
   onDone,
 }: Props) {
-  // Hot-route is offense-specific (audible signal). Clearing the player's
-  // path is meaningful for both — it just means "wipe the routes I drew on
-  // this offensive player" or "wipe the movement I drew on this defender."
-  const showHotRoute = !isDefense;
-  const showClearPath = true;
   const clearLabel = isDefense ? "movement" : "route";
   const strokeOptions = isDefense ? STROKE_OPTIONS_DEFENSE : STROKE_OPTIONS_OFFENSE;
   const activeStroke = strokePattern === "motion" && isDefense ? "solid" : strokePattern;
+  const shapeOptions = isDefense ? PLAYER_SHAPE_DEFENSE : PLAYER_SHAPE_OFFENSE;
+  const canEditShape = onPlayerShapeChange != null && playerShape != null;
+
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1.5 shadow-sm">
-      {/* Row 1: shape / stroke / width / end decoration / color */}
+      {/* Row 1: segment shape / stroke / width / end decoration / color */}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <SegmentedControl
-          options={SHAPE_OPTIONS}
-          value={shape}
-          onChange={onShapeChange}
-          size="sm"
-        />
+        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+          {SEGMENT_SHAPE_OPTIONS.map((opt) => {
+            const active = opt.value === shape;
+            const Icon = opt.icon;
+            return (
+              <Tooltip key={opt.value} content={opt.label}>
+                <button
+                  type="button"
+                  onClick={() => onShapeChange(opt.value)}
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  className={`inline-flex h-6 w-8 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
 
         <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
           {strokeOptions.map((opt) => {
@@ -195,26 +239,28 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="flex items-center gap-0.5">
+        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
           {WIDTH_OPTIONS.map((w) => {
             const active = w.value === width;
             return (
-              <button
-                key={w.value}
-                type="button"
-                onClick={() => onWidthChange(w.value)}
-                title={w.label}
-                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                  active
-                    ? "bg-surface-inset text-foreground shadow-sm"
-                    : "text-muted hover:bg-surface-inset/50 hover:text-foreground"
-                }`}
-              >
-                <div
-                  className="rounded-full bg-current"
-                  style={{ width: 14, height: w.px }}
-                />
-              </button>
+              <Tooltip key={w.value} content={w.label}>
+                <button
+                  type="button"
+                  onClick={() => onWidthChange(w.value)}
+                  aria-label={w.label}
+                  aria-pressed={active}
+                  className={`inline-flex h-6 w-7 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm ring-1 ring-inset ring-primary/40"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <div
+                    className="rounded-full bg-current"
+                    style={{ width: 14, height: w.px }}
+                  />
+                </button>
+              </Tooltip>
             );
           })}
         </div>
@@ -253,7 +299,7 @@ export function RouteToolbar({
         <ColorPickerButton color={color} onColorChange={onColorChange} />
       </div>
 
-      {/* Row 2: history / player actions / zones */}
+      {/* Row 2: history / player actions / zones / Done */}
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Tooltip content="Undo">
           <IconButton icon={Undo2} variant="ghost" size="sm" disabled={!canUndo} onClick={onUndo} />
@@ -272,6 +318,14 @@ export function RouteToolbar({
           </Tooltip>
         )}
 
+        <ShapePopoverButton
+          options={shapeOptions}
+          value={playerShape}
+          disabled={!canEditShape}
+          isDefense={isDefense}
+          onChange={(v) => onPlayerShapeChange?.(v)}
+        />
+
         {isDefense && onAddRectZone && onAddEllipseZone && (
           <>
             <Tooltip content="Add rectangular zone">
@@ -283,39 +337,24 @@ export function RouteToolbar({
           </>
         )}
 
-        {showHotRoute && (
-          <Tooltip content={hasSelectedPlayer ? (isHotRoute ? "Remove hot route" : "Mark as hot route") : "Select a player to toggle hot route"}>
-            <IconButton
-              icon={Star}
-              variant="ghost"
-              size="sm"
-              disabled={!hasSelectedPlayer}
-              onClick={onToggleHotRoute}
-              className={hasSelectedPlayer && isHotRoute ? "text-amber-400 hover:text-amber-300" : undefined}
-              aria-pressed={isHotRoute}
-            />
-          </Tooltip>
-        )}
-        {showClearPath && (
-          <Tooltip
-            content={
-              !hasSelectedPlayer
-                ? `Select a player to clear their ${clearLabel}s`
-                : playerRouteCount > 0
-                  ? `Clear ${playerRouteCount} ${clearLabel}${playerRouteCount !== 1 ? "s" : ""}`
-                  : `No ${clearLabel}s to clear`
-            }
-          >
-            <IconButton
-              icon={Trash2}
-              variant="ghost"
-              size="sm"
-              disabled={!hasSelectedPlayer || playerRouteCount === 0}
-              onClick={onClearPlayerRoutes}
-              className="text-danger hover:bg-danger/10 hover:text-danger"
-            />
-          </Tooltip>
-        )}
+        <Tooltip
+          content={
+            !hasSelectedPlayer
+              ? `Select a player to clear their ${clearLabel}s`
+              : playerRouteCount > 0
+                ? `Clear ${playerRouteCount} ${clearLabel}${playerRouteCount !== 1 ? "s" : ""}`
+                : `No ${clearLabel}s to clear`
+          }
+        >
+          <IconButton
+            icon={Trash2}
+            variant="ghost"
+            size="sm"
+            disabled={!hasSelectedPlayer || playerRouteCount === 0}
+            onClick={onClearPlayerRoutes}
+            className="text-danger hover:bg-danger/10 hover:text-danger"
+          />
+        </Tooltip>
 
         {showDoneButton && onDone && (
           <Tooltip
@@ -344,24 +383,12 @@ export function RouteToolbar({
   );
 }
 
-/** Compact color trigger that opens a popover with the preset swatches.
- *  Uses the standard "palette" icon so it's recognizable at a glance,
- *  with a thin colored underline showing the current pick. The popover
- *  renders into a portal so it never clips against the toolbar/card it
- *  lives inside. */
-function ColorPickerButton({
-  color,
-  onColorChange,
-}: {
-  color: string;
-  onColorChange: (c: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
+/** Shared portaled-popover scaffold. */
+function usePortalPopover(open: boolean, popMinWidth = 168) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
-  // Reposition under the trigger when opening or on resize/scroll.
   useLayoutEffect(() => {
     if (!open) return;
     function place() {
@@ -369,13 +396,11 @@ function ColorPickerButton({
       const p = popRef.current;
       if (!t) return;
       const r = t.getBoundingClientRect();
-      const pw = p?.offsetWidth ?? 168; // matches min-w below
+      const pw = p?.offsetWidth ?? popMinWidth;
       const ph = p?.offsetHeight ?? 60;
       const pad = 6;
-      // Default: align to the right edge of the trigger, just below.
       let left = r.right - pw;
       const top = r.bottom + 4;
-      // Clamp to viewport.
       left = Math.max(pad, Math.min(left, window.innerWidth - pw - pad));
       const finalTop = Math.min(top, window.innerHeight - ph - pad);
       setPos({ left, top: finalTop });
@@ -387,7 +412,25 @@ function ColorPickerButton({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [open]);
+  }, [open, popMinWidth]);
+
+  return { triggerRef, popRef, pos };
+}
+
+/** Compact color trigger that opens a popover with the preset swatches.
+ *  Trigger shows the current color as a filled swatch with a chevron caret,
+ *  matching the Figma/Docs/Notion pattern so the active pick reads at a
+ *  glance. The popover renders into a portal so it never clips against the
+ *  toolbar/card it lives inside. */
+function ColorPickerButton({
+  color,
+  onColorChange,
+}: {
+  color: string;
+  onColorChange: (c: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { triggerRef, popRef, pos } = usePortalPopover(open);
 
   useEffect(() => {
     if (!open) return;
@@ -409,7 +452,7 @@ function ColorPickerButton({
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, triggerRef, popRef]);
 
   const popover = open && pos ? (
     <div
@@ -460,39 +503,145 @@ function ColorPickerButton({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label="Pick color"
-          className={`relative flex size-7 items-center justify-center rounded-md border transition-colors ${
-            open
-              ? "border-primary bg-primary/10"
-              : "border-border bg-surface-inset hover:bg-surface-raised"
+          className={`inline-flex h-7 items-center gap-1 rounded-md border bg-surface-inset px-1.5 transition-colors hover:bg-surface-raised ${
+            open ? "border-primary" : "border-border"
           }`}
         >
-          {/* Custom palette glyph: outline in foreground color, dots
-              filled in saturated hues so the affordance reads as a
-              color picker at a glance (instead of a flat gray icon). */}
-          <svg
-            viewBox="0 0 24 24"
-            className="size-4 text-foreground"
-            aria-hidden="true"
-          >
-            <path
-              d="M12 2C6.477 2 2 6.477 2 12c0 5.523 4.477 10 10 10 .995 0 1.8-.805 1.8-1.8 0-.46-.182-.876-.474-1.18a1.797 1.797 0 0 1-.474-1.222c0-.995.805-1.798 1.8-1.798h2.117c3.183 0 5.768-2.585 5.768-5.768C22.537 5.683 17.834 2 12 2z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="6.5" cy="12.5" r="1.3" fill="#22C55E" />
-            <circle cx="8.5" cy="7.5" r="1.3" fill="#FACC15" />
-            <circle cx="13.5" cy="6.5" r="1.3" fill="#EF4444" />
-            <circle cx="17.5" cy="10.5" r="1.3" fill="#3B82F6" />
-          </svg>
           <span
             aria-hidden
-            className="absolute inset-x-1 bottom-0.5 h-1 rounded-sm border border-black/15"
+            className="block size-4 rounded-full border border-black/15"
             style={{ backgroundColor: color }}
           />
+          <ChevronDown className="size-3 text-muted" />
         </button>
+      </Tooltip>
+      {typeof document !== "undefined" && popover
+        ? createPortal(popover, document.body)
+        : null}
+    </>
+  );
+}
+
+/** Shape switcher for the selected player. Trigger glyph reflects the
+ *  current shape; popover lists offense [circle / square / ★ Hot route]
+ *  or defense [triangle / circle]. Picking ★ uses the canonical "star"
+ *  shape value — the reducer keeps `isHotRoute` synced so Cal sees the
+ *  hot route flag automatically. */
+function ShapePopoverButton({
+  options,
+  value,
+  disabled,
+  isDefense,
+  onChange,
+}: {
+  options: PlayerShapeOption[];
+  value: PlayerShape | undefined;
+  disabled: boolean;
+  isDefense: boolean;
+  onChange: (s: PlayerShape) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { triggerRef, popRef, pos } = usePortalPopover(open, 168);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, triggerRef, popRef]);
+
+  // Pick the glyph that represents the current shape. Fallback to the
+  // first option (Circle for offense, Triangle for defense) when value
+  // is unknown or undefined.
+  const current = options.find((o) => o.value === value) ?? options[0];
+  const CurrentIcon = current.icon;
+  const tooltip = disabled
+    ? "Select a player to change shape"
+    : isDefense
+      ? "Player shape"
+      : current.value === "star"
+        ? "Hot route — change shape"
+        : "Change shape (★ = hot route)";
+
+  const popover = open && pos ? (
+    <div
+      ref={popRef}
+      role="menu"
+      data-editor-overlay="shape-picker"
+      style={{ position: "fixed", left: pos.left, top: pos.top, minWidth: "10.5rem" }}
+      className="z-50 flex flex-col gap-0.5 rounded-md border border-border bg-surface-raised p-1 shadow-lg"
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        const Icon = opt.icon;
+        const isStar = opt.value === "star";
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="menuitemradio"
+            aria-checked={active}
+            onClick={() => {
+              onChange(opt.value);
+              setOpen(false);
+            }}
+            className={`inline-flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors ${
+              active
+                ? "bg-primary/15 text-foreground"
+                : "text-foreground hover:bg-surface-inset"
+            }`}
+          >
+            <Icon
+              className={`size-4 ${isStar ? "text-amber-400" : ""}`}
+              fill={isStar ? "currentColor" : "none"}
+            />
+            <span className="font-medium">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
+  return (
+    <>
+      <Tooltip content={tooltip}>
+        <span className="inline-flex">
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => !disabled && setOpen((v) => !v)}
+            disabled={disabled}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-label="Player shape"
+            className={`inline-flex h-7 items-center gap-1 rounded-md px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              open
+                ? "bg-surface-inset text-foreground"
+                : "text-foreground hover:bg-surface-inset"
+            }`}
+          >
+            <CurrentIcon
+              className={`size-4 ${current.value === "star" ? "text-amber-400" : ""}`}
+              fill={current.value === "star" ? "currentColor" : "none"}
+            />
+            <ChevronDown className="size-3 text-muted" />
+          </button>
+        </span>
       </Tooltip>
       {typeof document !== "undefined" && popover
         ? createPortal(popover, document.body)
