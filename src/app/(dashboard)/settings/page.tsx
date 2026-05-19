@@ -35,6 +35,7 @@ import { getCoachCalUpgradeBannerEnabled } from "@/lib/site/coach-cal-banner-con
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
 import { getBetaFeatures } from "@/lib/site/beta-features-config";
 import { getTrafficSummaryAction } from "@/app/actions/admin-traffic";
+import { getGeoSummaryAction } from "@/app/actions/admin-geography";
 import { getActivationSummaryAction } from "@/app/actions/admin-activation";
 import { getAnalyticsExcludedEmails } from "@/lib/site/analytics-exclusions-config";
 import { listSeedFormationsAction } from "@/app/actions/formations";
@@ -77,6 +78,7 @@ export default async function SettingsPage() {
     examplesPageEnabled,
     freeMaxPlays,
     trafficRes,
+    geoRes,
     activationRes,
     seedsRes,
     mobileEditingEnabled,
@@ -113,6 +115,7 @@ export default async function SettingsPage() {
     getExamplesPageEnabled(),
     getFreeMaxPlaysPerPlaybook(),
     getTrafficSummaryAction(30),
+    getGeoSummaryAction(30),
     getActivationSummaryAction(),
     listSeedFormationsAction(),
     getMobileEditingEnabled(),
@@ -261,6 +264,24 @@ export default async function SettingsPage() {
               }
         }
         trafficError={trafficRes.ok ? null : trafficRes.error}
+        initialGeoSummary={
+          geoRes.ok
+            ? geoRes.summary
+            : {
+                windowDays: 30,
+                totals: {
+                  plottedViews: 0,
+                  plottedSessions: 0,
+                  plottedUsers: 0,
+                  cities: 0,
+                  countries: 0,
+                  missingLocation: 0,
+                },
+                cities: [],
+                countries: [],
+              }
+        }
+        geoError={geoRes.ok ? null : geoRes.error}
         initialActivationSummary={
           activationRes.ok
             ? activationRes.summary

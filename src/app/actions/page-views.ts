@@ -64,6 +64,8 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
     let country = h.get("x-vercel-ip-country");
     let region = h.get("x-vercel-ip-country-region");
     let city = h.get("x-vercel-ip-city");
+    let latitude: number | null = null;
+    let longitude: number | null = null;
     let isEu = false;
     if (!country && !region && !city) {
       const ip = clientIpFromHeaders(h);
@@ -71,6 +73,8 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
       country = geo.country;
       region = geo.region;
       city = geo.city;
+      latitude = geo.latitude;
+      longitude = geo.longitude;
       isEu = geo.isEu;
     }
     const consent = await readConsentCookie();
@@ -127,6 +131,8 @@ export async function recordPageViewAction(input: RecordPageViewInput) {
       country: decodedCountry,
       region: suppress ? null : decodedRegion,
       city: suppress ? null : decodedCity,
+      latitude: suppress ? null : latitude,
+      longitude: suppress ? null : longitude,
       user_agent: ua,
       device: input.device ?? null,
       user_id: userId,

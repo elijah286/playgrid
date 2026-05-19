@@ -8,6 +8,7 @@ import {
   CreditCard,
   DollarSign,
   FlaskConical,
+  Globe,
   KeyRound,
   Menu as MenuIcon,
   MessageCircle,
@@ -31,6 +32,7 @@ import type { KbMissRow } from "@/app/actions/coach-ai-feedback";
 import { CoachInvitationsAdminClient } from "@/features/admin/CoachInvitationsAdminClient";
 import { BillingAdminClient } from "@/features/admin/BillingAdminClient";
 import { TrafficAdminClient } from "@/features/admin/TrafficAdminClient";
+import { GeographyAdminClient } from "@/features/admin/GeographyAdminClient";
 import { ActivationAdminClient } from "@/features/admin/ActivationAdminClient";
 import { AnalyticsExclusionsAdminClient } from "@/features/admin/AnalyticsExclusionsAdminClient";
 import { SiteSettingsAdminClient } from "@/features/admin/SiteSettingsAdminClient";
@@ -50,6 +52,7 @@ import type { CoachInvitationRow } from "@/app/actions/coach-invitations";
 import type { CancellationFeedbackRow, GiftCodeRow } from "@/app/actions/admin-billing";
 import type { StripeConfigStatus } from "@/lib/site/stripe-config";
 import type { TrafficSummary } from "@/app/actions/admin-traffic";
+import type { GeoSummary } from "@/app/actions/admin-geography";
 import type { MonetizationSummary } from "@/app/actions/admin-activation";
 import { SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -92,6 +95,7 @@ type AdminKeyProps = { configured: boolean; statusLabel: string };
 type Tab =
   | "users"
   | "analytics"
+  | "geography"
   | "invites"
   | "payments"
   | "integrations"
@@ -127,6 +131,8 @@ export function SettingsClient({
   initialMobileEditingEnabled,
   initialTrafficSummary,
   trafficError,
+  initialGeoSummary,
+  geoError,
   initialActivationSummary,
   activationError,
   initialSeeds,
@@ -176,6 +182,8 @@ export function SettingsClient({
   initialMobileEditingEnabled: boolean;
   initialTrafficSummary: TrafficSummary;
   trafficError: string | null;
+  initialGeoSummary: GeoSummary;
+  geoError: string | null;
   initialActivationSummary: MonetizationSummary | null;
   activationError: string | null;
   initialSeeds: SavedFormation[];
@@ -212,6 +220,7 @@ export function SettingsClient({
   const tabOptions = [
     { value: "users" as const, label: "Users", icon: Users },
     { value: "analytics" as const, label: "Analytics", icon: BarChart3 },
+    { value: "geography" as const, label: "Geography", icon: Globe },
     { value: "invites" as const, label: "Coach invites", icon: Ticket },
     { value: "payments" as const, label: "Payments", icon: CreditCard },
     { value: "integrations" as const, label: "Integrations", icon: KeyRound },
@@ -386,6 +395,13 @@ export function SettingsClient({
             />
           )}
         </div>
+      )}
+
+      {tab === "geography" && (
+        <GeographyAdminClient
+          initialSummary={initialGeoSummary}
+          initialError={geoError}
+        />
       )}
 
       {tab === "invites" && (

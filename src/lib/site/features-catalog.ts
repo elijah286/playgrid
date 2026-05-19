@@ -43,31 +43,13 @@ export type FeatureEntry = {
 export const FEATURES: FeatureEntry[] = [
   // ── Playbook ─────────────────────────────────────────────────────
   {
-    id: "inbox-archive-delete-bulk",
-    name: "Inbox: archive, delete, multi-select, per-type CTAs",
-    description:
-      "The home inbox now behaves like an actual inbox. Archive items you've handled mentally but don't want to act on, delete ones you never want to see again, or restore from the Archived view. Tap Select to enter multi-select mode and apply Archive, Delete, or batch RSVP across many rows in one tap. The red-bang count covers every active item — including system notices — and drops as soon as you RSVP, archive, or delete. Each row's tile opens the right context: RSVPs jump to the calendar, roster requests to the roster, mentions to the play, system notices to wherever they originated.",
-    category: "Playbook",
-    status: "ga",
-    addedDate: "2026-05-07",
-  },
-  {
     id: "playbook-create",
     name: "Custom playbooks",
     description:
-      "Coaches create one or more playbooks per team, tagged by sport variant (flag 5v5/6v6/7v7, tackle 11), season, and league.",
+      "Coaches create one or more playbooks per team, tagged by sport variant (flag 5v5/7v7, tackle 11), season, and league.",
     category: "Playbook",
     status: "ga",
     addedDate: "2025-01-01",
-  },
-  {
-    id: "variant-flag-6v6",
-    name: "Flag 6v6 support",
-    description:
-      "New variant for 6-on-6 flag leagues (common in adult rec and youth leagues that sit between 5v5 and 7v7). Ships with the USFTL 6v6 league preset (60×30 field, midfield 1st-down line), eligible center, 6-defender alignments (Cover 0/1/2/3), and Cal play-generation tuned to the 6v6 roster.",
-    category: "Plays & formations",
-    status: "ga",
-    addedDate: "2026-05-12",
   },
   {
     id: "playbook-archive",
@@ -551,69 +533,6 @@ export const FEATURES: FeatureEntry[] = [
     category: "Plays & formations",
     status: "ga",
     addedDate: "2026-05-03",
-  },
-  {
-    id: "coach-cal-run-game-and-flea-flicker",
-    name: "Coach Cal can diagram the run game and trick plays (Sweep, Dive, Counter, Draw, Flea Flicker)",
-    description:
-      "Cal now composes plain run plays (Sweep, Dive, Counter, Draw) and the Flea Flicker trick play through the catalog skeleton path — same constructive composition the pass concepts use, so Cal can't freelance the handoff. On run plays, the QB is drawn moving to the mesh point and back, so coaches can see and teach the footwork (previously the QB never showed motion on any play). On Flea Flicker, the diagram shows the full sequence: QB hands forward to a receiver (default: Z, configurable to Y or the back), the receiver runs hard at the LOS to sell the rush, then pitches the ball BACK to the QB behind the LOS, who throws deep — with a Post or Go ≥15yd as the primary target. Both meshes are enforced as behind-the-LOS at the spec layer (a forward pitch is an illegal forward pass; the validator rejects it). All five concepts require the playbook's handoff_chain capability (Settings → Advanced Coach Cal concepts) — opt in per playbook to enable. Surfaced 2026-05-13 when a coach saw a 'Flea Flicker' Cal had freelanced where Z was given a downfield route instead of the handoff; closing the gap meant adding the missing catalog entries so the freelancing path is no longer available.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-13",
-  },
-  {
-    id: "coach-cal-qb-runs-rpos-reverses",
-    name: "Coach Cal can diagram QB runs, RPOs, and multi-handoff reverses",
-    description:
-      "Cal can now build three new families of plays that previously needed manual authoring: designed QB runs (QB Draw — QB takes the snap, OL pass-sets to sell pass, QB runs the soft middle), RPOs (Bubble RPO — QB reads the playside OLB and pulls to throw the bubble when he comes down to fill the run, gives on Inside Zone when he stays out), and multi-handoff reverses (Jet Reverse — QB hands to the back, who reverses field and hands the ball to the weak-side WR coming around). Each one is opt-in per playbook under Settings → Advanced Coach Cal concepts; tackle defaults to all three on, flag 5v5 defaults to QB runs only, flag 7v7 defaults to none — toggle to match what your league allows. When you ask Cal for one, the diagram now shows the read direction or the handoff sequence, and Cal's notes spell out the read in coach terms (\"if the OLB comes down, pull and throw the bubble\") so you can teach the play, not just see it.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-12",
-  },
-  {
-    id: "coach-cal-auto-save-on-confirmation",
-    name: "Coach Cal auto-saves plays when you confirm",
-    description:
-      "When you're game-planning with Cal in a playbook and Cal shows a play diagram in chat, saying \"yes\", \"sounds good\", \"perfect\", \"save it\", or any clear confirmation now actually saves the play to your playbook — even if Cal forgot to call the save tool itself. Discovered when a trialing coach spent 50 messages designing plays with Cal and the playbook ended up empty: Cal interpreted \"yes\" as \"yes, propose the next play\" instead of \"yes, save this one.\" The fix is a harness-level backstop: at the end of every turn where Cal showed a play fence in chat and you confirmed it, the play (or plays) gets persisted automatically. You see a one-line confirmation appended to Cal's reply listing what was saved. Qualified responses (\"yes that was unimaginative\", \"yes but make it longer\") deliberately do NOT trigger the auto-save — only clean confirmations and explicit save commands.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-10",
-  },
-  {
-    id: "coach-cal-copy-play-cross-playbook",
-    name: "Coach Cal can copy plays between your playbooks",
-    description:
-      "Cal used to refuse to copy or move plays across playbooks (\"I don't have a tool to move plays between playbooks — that's a copy/paste operation in the app\"). Now there's a copy_play tool: tell Cal to copy a play from one team into another and it duplicates the play, formation, and routes into the destination, leaves a \"(copy)\" suffix on the name to avoid collisions, and links you to the new copy. Source play is preserved — if you wanted a true move, Cal asks before archiving the original. Permission is enforced per-call: Cal only copies into playbooks you own or have editor access on. Same primitive as the in-app Copy-to-playbook dialog, just exposed to the chat.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-10",
-  },
-  {
-    id: "coach-cal-motion-rules-structural",
-    name: "Coach Cal can no longer save multi-motion or forward-motion plays",
-    description:
-      "Two universal football rules — only one player can be in pre-snap motion, and a motion player can't end up forward of where they started — are now enforced as save-time and chat-time validators, not just prompt-level guidance. Cal physically cannot ship a play that violates them: the create_play / update_play save is rejected, and the chat-time gate flags the fence before it ever reaches save. This came out of a coach correcting Cal mid-conversation (\"you can't put two players in motion, that's basic football\") where Cal acknowledged in prose but re-emitted the same broken play. With the structural enforcement, the prose-only acknowledgement path is closed.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-10",
-  },
-  {
-    id: "coach-cal-cross-playbook-save",
-    name: "Coach Cal can save plays into any of your playbooks from the global chat",
-    description:
-      "Cal used to refuse to save plays unless you'd already opened the destination playbook — coaches generating plays from the global chat (no anchor) hit a dead end where Cal said \"open the playbook first and come back.\" The save tool now accepts an explicit playbook_id argument: Cal calls list_my_playbooks to fetch your team ids, then writes the play directly into the right playbook and links you to it. Permission is still checked per-call against can_edit_playbook, so the rule of \"only the coaches you've granted edit access can save\" is unchanged. The unanchored conversation flow now works end-to-end — generate, confirm, save, click the link.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-10",
-  },
-  {
-    id: "coach-cal-server-side-history",
-    name: "Coach Cal keeps working when you close the chat",
-    description:
-      "Closing the Coach Cal window mid-reply used to drop the work — Cal would stop thinking and the answer was lost. Conversation history now lives on our servers (one thread per playbook), so Cal keeps generating the answer in the background after the window closes and the finished reply appears the next time you open Cal — on the same device or another. The trash icon now wipes server-side history too, and chats follow you between devices when signed in.",
-    category: "Coach AI",
-    status: "ga",
-    addedDate: "2026-05-06",
   },
   {
     id: "coach-cal-in-app-cta-schedule-season",
@@ -1157,22 +1076,13 @@ export const FEATURES: FeatureEntry[] = [
 
   // ── Admin tools ────────────────────────────────────────────────
   {
-    id: "admin-signup-source-attribution",
-    name: "Signup-source attribution in users + inbox",
+    id: "admin-geography",
+    name: "Geography dashboard",
     description:
-      "The Site Admin → Users tab shows a 'Joined via' chip on every row labeling how each user first arrived (copy link, shared playbook, campaign, home, etc.). Signup notices in the admin inbox are enriched at sign-in time with the same context — copy-link signups read 'X signed up via copy link to \"Playbook\" (sent by Y)' so admins see who claimed a shared link without clicking through.",
+      "Site Admin → Geography plots a world map of user activity with one dot per city, sized so the dot's area is proportional to views. Includes per-city and per-country tables (views, sessions, signups) and a 7/30/90/365 day window selector.",
     category: "Admin tools",
     status: "internal",
-    addedDate: "2026-05-08",
-  },
-  {
-    id: "admin-system-notices",
-    name: "System notices in admin inbox",
-    description:
-      "Site admins see operational events in their inbox: new signups, Team Coach / Coach Pro purchases and cancellations, and the moment a user creates their 10th play. A 'View system notices' checkbox (on by default, admin-only) hides them when triaging coach-side work.",
-    category: "Admin tools",
-    status: "internal",
-    addedDate: "2026-05-06",
+    addedDate: "2026-05-15",
   },
   {
     id: "admin-coach-cal-upgrade-banner",
@@ -1359,7 +1269,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "marketing-consolidated-landing",
     name: "Consolidated landing page",
     description:
-      "The home page is the primary marketing surface and tells the full story in one scroll: hero with a free-led CTA, the product tour (#tour anchor), Coach Cal teaser, free-for-solo callout, print-to-wristband proof, real example playbooks, and a final CTA. A dedicated /tour route mirrors the tour content so signed-in users (redirected away from /) can still reach it from the footer and other off-page links. /learn-more 301-redirects to /tour. /coach-cal remains as a dedicated AI-pitch page for ad landing and SEO.",
+      "The home page is the single marketing surface and tells the full story in one scroll: hero with a free-led CTA, the product tour (#tour anchor), Coach Cal teaser, free-for-solo callout, print-to-wristband proof, real example playbooks, and a final CTA. The previous /learn-more deep-dive route is 301-redirected to /#tour. /coach-cal remains as a dedicated AI-pitch page for ad landing and SEO.",
     category: "Marketing site",
     status: "ga",
     addedDate: "2026-04-29",

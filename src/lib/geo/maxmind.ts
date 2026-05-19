@@ -20,10 +20,19 @@ export type GeoLookup = {
   country: string | null;
   region: string | null;
   city: string | null;
+  latitude: number | null;
+  longitude: number | null;
   isEu: boolean;
 };
 
-const NULL_LOOKUP: GeoLookup = { country: null, region: null, city: null, isEu: false };
+const NULL_LOOKUP: GeoLookup = {
+  country: null,
+  region: null,
+  city: null,
+  latitude: null,
+  longitude: null,
+  isEu: false,
+};
 
 async function dbExistsAndFresh(): Promise<boolean> {
   try {
@@ -131,10 +140,14 @@ export async function lookupGeo(ip: string | null | undefined): Promise<GeoLooku
     const country = r.country?.isoCode ?? null;
     const region = r.subdivisions?.[0]?.isoCode ?? null;
     const city = r.city?.names?.en ?? null;
+    const lat = r.location?.latitude;
+    const lng = r.location?.longitude;
     return {
       country,
       region,
       city,
+      latitude: typeof lat === "number" ? lat : null,
+      longitude: typeof lng === "number" ? lng : null,
       isEu: country ? EU_COUNTRY_CODES.has(country) : false,
     };
   } catch {
