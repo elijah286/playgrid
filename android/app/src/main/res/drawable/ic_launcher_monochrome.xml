@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome layer for the adaptive icon. Android 13+ renders this in
+     themed-icon mode (Material You), applying the system tint over the
+     alpha mask. Without this, the system auto-derives a monochrome from
+     the foreground PNG, which produces a noisy/blurry result. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.08"
+        android:scaleY="0.08"
+        android:translateX="18.3"
+        android:translateY="40.9">
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="52"
+            android:strokeLineCap="square"
+            android:pathData="M250,100 L380,240" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="52"
+            android:strokeLineCap="square"
+            android:pathData="M380,100 L250,240" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="38"
+            android:pathData="M522,105 L608,105 Q650,105 650,147 L650,193 Q650,235 608,235 L522,235 Q480,235 480,193 L480,147 Q480,105 522,105 Z" />
+    </group>
+</vector>

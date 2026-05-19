@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/layout/UserMenu";
@@ -40,16 +39,54 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
         <Link
           href={user ? "/home" : "/"}
           aria-label="XO Gridmaker home"
-          className="flex cursor-pointer items-center"
+          className="flex cursor-pointer items-center text-[#06255E] dark:text-foreground"
         >
-          <Image
-            src="/brand/xogridmaker_wordmark.svg"
-            alt="XO Gridmaker"
-            width={200}
-            height={36}
-            priority
+          {/* Inlined so the "gridmaker" word can inherit currentColor and
+              adapt to dark mode. The X (#1769FF) and O (#95CC1F) are brand
+              accents and stay fixed in both themes. */}
+          <svg
+            viewBox="0 0 1600 320"
+            role="img"
+            aria-label="XO Gridmaker"
             className="h-8 w-auto sm:h-9"
-          />
+          >
+            <text
+              x="278.24"
+              y="70"
+              fill="#1769FF"
+              fontFamily='"DejaVu Sans", Arial, sans-serif'
+              fontSize="150"
+              fontStyle="oblique"
+              fontWeight="700"
+              dominantBaseline="hanging"
+            >
+              x
+            </text>
+            <text
+              x="378.68"
+              y="70"
+              fill="#95CC1F"
+              fontFamily='"DejaVu Sans", Arial, sans-serif'
+              fontSize="150"
+              fontStyle="oblique"
+              fontWeight="700"
+              dominantBaseline="hanging"
+            >
+              o
+            </text>
+            <text
+              x="473.44"
+              y="70"
+              fill="currentColor"
+              fontFamily='"DejaVu Sans", Arial, sans-serif'
+              fontSize="150"
+              fontStyle="oblique"
+              fontWeight="700"
+              dominantBaseline="hanging"
+            >
+              gridmaker
+            </text>
+          </svg>
         </Link>
         {user ? (
           <div className="flex items-center gap-2">
