@@ -51,6 +51,8 @@ import {
   setPlaybookPublicExampleAction,
 } from "@/app/actions/admin-examples";
 import { DownloadForOfflineButton } from "@/components/offline/DownloadForOfflineButton";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
+import { useOfflineState } from "@/lib/offline/useOfflineState";
 import { nativeShare } from "@/lib/native/share";
 import { isNativeApp } from "@/lib/native/isNativeApp";
 import { track } from "@/lib/analytics/track";
@@ -221,6 +223,9 @@ export function PlaybookHeader({
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isNative = useIsNativeApp();
+  const { downloadedIds } = useOfflineState();
+  const isDownloaded = isNative && downloadedIds.has(playbookId);
 
   useEffect(() => {
     if (!searchParams) return;
@@ -530,6 +535,19 @@ export function PlaybookHeader({
                 >
                   <Archive className="size-3" />
                   Archived
+                </span>
+              )}
+              {isDownloaded && (
+                <span
+                  className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    isLightBg
+                      ? "bg-black/10 text-slate-900"
+                      : "bg-white/20 text-white"
+                  }`}
+                  title="Saved on this device for offline use."
+                >
+                  <Check className="size-3" />
+                  Downloaded
                 </span>
               )}
             </div>

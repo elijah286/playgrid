@@ -1301,6 +1301,15 @@ export const FEATURES: FeatureEntry[] = [
     status: "ga",
     addedDate: "2026-05-18",
   },
+  {
+    id: "playbook-offline-graceful-degrade",
+    name: "Offline-ready iOS/Android app",
+    description:
+      "In the native iOS and Android apps, playbooks downloaded for offline (offense, defense, and special teams) stay fully usable on the sideline without signal — the home tile shows a \"Downloaded\" badge, the playbook header shows the same pill, and tapping a downloaded tile opens its plays from the device cache. Non-downloaded playbook tiles grey out with a \"Not downloaded — connect to view\" overlay so coaches see at a glance what's available. A floating \"Offline · N playbooks available\" status pill appears whenever the device drops signal. Connection-required features (Coach Cal chat, game mode launcher, download/refresh) grey out with a tooltip so taps don't stall on a dead network.",
+    category: "Playbook",
+    status: "ga",
+    addedDate: "2026-05-19",
+  },
 ];
 
 /** Group features by category, preserving the order they appear in FEATURES. */

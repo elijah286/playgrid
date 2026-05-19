@@ -1,5 +1,6 @@
 "use client";
 
+import { useOfflineGate } from "@/components/offline/OfflineGate";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { closeCoachCal, openCoachCal } from "./openCoachCal";
 import { useCoachCalOpen } from "./useCoachCalOpen";
@@ -17,16 +18,18 @@ import { useCoachCalOpen } from "./useCoachCalOpen";
  */
 export function CalNavButton() {
   const isActive = useCoachCalOpen();
+  const { isGated, reason } = useOfflineGate();
   return (
     <button
       type="button"
       onClick={() => (isActive ? closeCoachCal() : openCoachCal())}
+      disabled={isGated}
       aria-label="Open Coach Cal"
       aria-current={isActive ? "true" : undefined}
-      title="Coach Cal"
+      title={isGated ? reason : "Coach Cal"}
       className={`flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-semibold tracking-tight transition-colors ${
         isActive ? "text-primary" : "text-muted hover:text-foreground"
-      }`}
+      } ${isGated ? "opacity-50" : ""}`}
     >
       <span
         className={`-mt-3 inline-flex size-9 items-center justify-center rounded-full ring-1 transition-shadow ${

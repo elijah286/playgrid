@@ -7,6 +7,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowLeft,
+  Check,
   Copy,
   FlaskConical,
   Globe,
@@ -20,6 +21,7 @@ import {
   Unlock,
   Upload,
   UserPlus,
+  WifiOff,
   X,
 } from "lucide-react";
 import {
@@ -67,6 +69,8 @@ import { HomeCalendarTab } from "@/features/calendar/HomeCalendarTab";
 import { InboxTab } from "@/features/dashboard/InboxTab";
 import type { InboxAlert } from "@/app/actions/inbox";
 import type { ActivityEntry } from "@/app/actions/activity";
+import { useIsNativeApp } from "@/lib/native/useIsNativeApp";
+import { useOfflineState } from "@/lib/offline/useOfflineState";
 
 const DEFAULT_COLORS = ["#F26522", "#3B82F6", "#22C55E", "#EF4444", "#A855F7", "#EAB308"];
 
@@ -200,6 +204,14 @@ function PlaybookTile({
   tile: DashboardPlaybookTile;
   actions: ActionMenuItem[];
 }) {
+  const native = useIsNativeApp();
+  const { isOnline, downloadedIds } = useOfflineState();
+  const isDownloaded = downloadedIds.has(tile.id);
+  // Only block tile access when we're in the native shell and lacking
+  // signal — web users always see live content, and locked tiles already
+  // have their own treatment.
+  const offlineUnavailable = native && !isOnline && !isDownloaded;
+
   const color = colorFor(tile);
   const initials = tile.name
     .split(/\s+/)
@@ -211,6 +223,14 @@ function PlaybookTile({
     .slice(0, 2) || "PB";
 
   const locked = tile.is_locked;
+  // Offline route is offense + defense + ST viewer for the cached bundle;
+  // online route is the regular dashboard. When offline + downloaded we
+  // hand a hard `<a href>` so the SW-cached HTML serves cleanly without
+  // an RSC round-trip.
+  const href =
+    native && !isOnline && isDownloaded
+      ? `/offline/${tile.id}`
+      : `/playbooks/${tile.id}`;
 
   const inner = (
     <div className="flex h-full flex-col">
@@ -239,6 +259,12 @@ function PlaybookTile({
           <div className="flex flex-wrap items-center gap-1">
             {tile.is_example && <Badge variant="primary">Example</Badge>}
             {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
+            {native && isDownloaded && (
+              <Badge variant="success" className="gap-1">
+                <Check className="size-3" />
+                Downloaded
+              </Badge>
+            )}
           </div>
         </div>
         <p className="text-[11px] text-muted">
@@ -249,21 +275,40 @@ function PlaybookTile({
     </div>
   );
 
+  const isInteractive = !locked && !offlineUnavailable;
+
   return (
     <div className="group relative">
       <Card hover className="relative overflow-hidden p-0">
-        {locked ? (
+        {!isInteractive ? (
           <div className="flex h-full flex-col opacity-60">{inner}</div>
+        ) : isDownloaded && native && !isOnline ? (
+          // Hard nav: keeps SW-cached HTML in play and avoids an RSC fetch
+          // that would fail without signal.
+          <a href={href}>{inner}</a>
         ) : (
-          <Link href={`/playbooks/${tile.id}`}>{inner}</Link>
+          <Link href={href}>{inner}</Link>
         )}
         {locked && <LockedOverlay />}
+        {!locked && offlineUnavailable && <OfflineUnavailableOverlay />}
       </Card>
-      {!locked && actions.length > 0 && (
+      {isInteractive && actions.length > 0 && (
         <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
           <ActionMenu items={actions} />
         </div>
       )}
+    </div>
+  );
+}
+
+function OfflineUnavailableOverlay() {
+  return (
+    <div className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-black/55 text-white backdrop-blur-[1px]">
+      <WifiOff className="size-6" />
+      <p className="px-3 text-center text-xs font-semibold">Not downloaded</p>
+      <p className="px-3 text-center text-[10px] text-white/80">
+        Connect to view
+      </p>
     </div>
   );
 }
@@ -301,8 +346,16 @@ function PlaybookBookTile({
   tile: DashboardPlaybookTile;
   actions: ActionMenuItem[];
 }) {
+  const native = useIsNativeApp();
+  const { isOnline, downloadedIds } = useOfflineState();
+  const isDownloaded = downloadedIds.has(tile.id);
+  const offlineUnavailable = native && !isOnline && !isDownloaded;
+
   if (tile.is_locked) {
     return <LockedBookTile tile={tile} />;
+  }
+  if (offlineUnavailable) {
+    return <OfflineUnavailableBookTile tile={tile} />;
   }
   const color = colorFor(tile);
   const initials = tile.name
@@ -456,7 +509,11 @@ function PlaybookBookTile({
         }}
       >
       <Link
-        href={`/playbooks/${tile.id}`}
+        href={
+          native && !isOnline && isDownloaded
+            ? `/offline/${tile.id}`
+            : `/playbooks/${tile.id}`
+        }
         className="relative block aspect-[3/4] w-full"
       >
         {/* ------------------------------------------------------------ */}
@@ -568,6 +625,12 @@ function PlaybookBookTile({
                       {tile.role === "editor" ? "Editor" : "Viewer"}
                     </Badge>
                   )}
+                  {native && isDownloaded && (
+                    <Badge variant="success" className="gap-1">
+                      <Check className="size-3" />
+                      Downloaded
+                    </Badge>
+                  )}
                 </div>
               </div>
 
@@ -643,6 +706,63 @@ function PlaybookBookTile({
           <ActionMenu items={actions} open={menuOpen} onOpenChange={setMenuOpen} />
         </div>
       )}
+      </div>
+    </div>
+  );
+}
+
+function OfflineUnavailableBookTile({ tile }: { tile: DashboardPlaybookTile }) {
+  const color = colorFor(tile);
+  const initials =
+    tile.name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((s) => s[0])
+      .filter(Boolean)
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "PB";
+  return (
+    <div className="relative block aspect-[3/4] w-full">
+      <div
+        className="absolute inset-0 overflow-hidden rounded-xl shadow-elevated ring-1 ring-black/10 opacity-60"
+        style={{ backgroundColor: color }}
+      >
+        <div className="flex h-full flex-col justify-between p-5 text-white">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
+            Playbook
+          </span>
+          <div className="flex flex-1 items-center justify-center">
+            {tile.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={tile.logo_url}
+                alt=""
+                className="h-36 w-36 object-contain drop-shadow"
+              />
+            ) : (
+              <span className="text-8xl font-black tracking-tight drop-shadow">
+                {initials}
+              </span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-extrabold leading-tight drop-shadow-sm">
+              {tile.name}
+            </h3>
+            <p className="mt-0.5 truncate text-xs font-medium text-white/80">
+              {tile.season ? `${tile.season} · ` : ""}
+              {tile.play_count} play{tile.play_count === 1 ? "" : "s"}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-xl bg-black/55 text-white">
+        <WifiOff className="size-7" />
+        <p className="px-3 text-center text-xs font-semibold">Not downloaded</p>
+        <p className="px-3 text-center text-[11px] text-white/80">
+          Connect to view this playbook
+        </p>
       </div>
     </div>
   );

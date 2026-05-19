@@ -13,6 +13,7 @@ import {
   removeCachedPlaybook,
   type CachedPlaybookMeta,
 } from "@/lib/offline/db";
+import { useOfflineGate } from "./OfflineGate";
 
 type Props = {
   playbookId: string;
@@ -31,6 +32,7 @@ type Props = {
 export function DownloadForOfflineButton({ playbookId, className, onAction }: Props) {
   const native = useIsNativeApp();
   const { toast } = useToast();
+  const { isGated: offline, reason: offlineReason } = useOfflineGate();
   const [meta, setMeta] = useState<CachedPlaybookMeta | null>(null);
   const [busy, setBusy] = useState<"download" | "remove" | null>(null);
 
@@ -112,8 +114,9 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
       <button
         type="button"
         role="menuitem"
-        disabled={busy != null}
+        disabled={busy != null || offline}
         onClick={handleDownload}
+        title={offline ? offlineReason : undefined}
         className={cls}
       >
         {busy === "download" ? (
@@ -131,8 +134,9 @@ export function DownloadForOfflineButton({ playbookId, className, onAction }: Pr
       <button
         type="button"
         role="menuitem"
-        disabled={busy != null}
+        disabled={busy != null || offline}
         onClick={handleDownload}
+        title={offline ? offlineReason : undefined}
         className={cls}
       >
         {busy === "download" ? (

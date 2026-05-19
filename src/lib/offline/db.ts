@@ -24,6 +24,23 @@ const STORE_PLAYBOOKS = "playbooks";
 const STORE_PLAYS = "plays";
 const STORE_DOCUMENTS = "documents";
 
+/**
+ * Fired when the offline cache changes (download/refresh/remove). Listeners
+ * like `useOfflineState` reread IndexedDB so badges, gates, and the offline
+ * pill update without a reload. Dispatched on `window` so it's cheap and
+ * doesn't require a context.
+ */
+export const OFFLINE_CACHE_EVENT = "xog:offline-cache-changed";
+
+function notifyCacheChanged(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(OFFLINE_CACHE_EVENT));
+  } catch {
+    /* no-op — old browsers without CustomEvent ctor */
+  }
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
@@ -129,6 +146,7 @@ export async function putPlaybookBundle(input: {
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
   });
+  notifyCacheChanged();
 }
 
 export async function getCachedPlaybookMeta(
@@ -184,4 +202,5 @@ export async function removeCachedPlaybook(playbookId: string): Promise<void> {
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
   });
+  notifyCacheChanged();
 }

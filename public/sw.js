@@ -1,6 +1,6 @@
 // XO Gridmaker offline shell service worker.
 //
-// Purpose: make the /offline route reachable when the device has no signal.
+// Purpose: keep the native shell usable when the device has no signal.
 // Capacitor's WebView points at the live site (https://www.xogridmaker.com),
 // so without this worker every navigation requires network. That breaks the
 // "Download for offline" promise: the data is in IndexedDB but the page that
@@ -8,22 +8,26 @@
 //
 // Strategy:
 //   - Cache-first for static build assets (/_next/static, /brand, fonts, icons)
-//   - Stale-while-revalidate for /offline navigations + their RSC payloads
-//   - Network-only for everything else (auth, API routes, server actions)
-//   - On any failed top-level navigation, redirect to /offline so the cached
-//     shell can take over (auth + write paths fail loudly online; offline
-//     they should land you somewhere usable instead of ERR_INTERNET_DISCONNECTED).
+//   - Stale-while-revalidate for /home, /offline, and per-playbook offline
+//     navigations + their RSC payloads (the routes a coach must reach
+//     without signal)
+//   - Network-first for everything else (auth, API routes, server actions)
+//   - On any failed top-level navigation, fall back to /home if cached,
+//     then /offline; ERR_INTERNET_DISCONNECTED only as last resort.
 //
 // Bump SHELL_VERSION whenever the cache contract changes (e.g. precache list).
 // On activate, old versioned caches are purged.
 
-const SHELL_VERSION = "xog-shell-v1";
+const SHELL_VERSION = "xog-shell-v2";
 const STATIC_CACHE = `${SHELL_VERSION}-static`;
 const NAV_CACHE = `${SHELL_VERSION}-nav`;
 
 // Precached at install time so first offline boot has somewhere to land.
-// Anything else gets cached lazily as the user visits it online.
+// Anything else gets cached lazily as the user visits it online — including
+// per-playbook offline routes, which the download flow primes via
+// PRECACHE_URLS messages.
 const PRECACHE_URLS = [
+  "/home",
   "/offline",
   "/brand/xogridmaker_monogram.svg",
   "/manifest.webmanifest",
@@ -80,10 +84,20 @@ function isOfflineNav(url) {
   return url.pathname === "/offline" || url.pathname.startsWith("/offline/");
 }
 
-function isOfflineRsc(url, req) {
+/**
+ * Routes that must work offline. /home is the graceful-degrade landing
+ * page (downloaded tiles still tappable, others greyed), /offline/* is
+ * the dedicated viewer for downloaded playbooks.
+ */
+function isShellNav(url) {
+  return url.pathname === "/home" || isOfflineNav(url);
+}
+
+function isShellRsc(url, req) {
   // RSC payloads include an _rsc query param OR a custom Accept header.
-  // Cache the ones rooted in /offline so client-side navigation works without signal.
-  if (!isOfflineNav(url)) return false;
+  // Cache the ones rooted in shell routes so client-side navigation works
+  // without signal.
+  if (!isShellNav(url)) return false;
   const hasRscQuery = url.searchParams.has("_rsc");
   const accept = req.headers.get("Accept") || "";
   return hasRscQuery || accept.includes("text/x-component");
@@ -120,21 +134,23 @@ async function handleNavigation(request) {
   const url = new URL(request.url);
   const cache = await caches.open(NAV_CACHE);
 
-  // Offline route — keep the cached copy warm.
-  if (isOfflineNav(url)) {
+  // Shell routes (/home, /offline/*) — keep the cached copy warm. Coaches
+  // hitting these offline see the last-known shell with downloaded
+  // playbooks usable and non-downloaded ones visibly disabled.
+  if (isShellNav(url)) {
     return staleWhileRevalidate(NAV_CACHE, request);
   }
 
-  // Everything else: network-first. If it fails, redirect to /offline so
-  // the user lands somewhere usable instead of ERR_INTERNET_DISCONNECTED.
+  // Everything else: network-first. If it fails, try /home so coaches
+  // land on the tile list (downloaded ones are still tappable); fall
+  // back to /offline if /home isn't cached yet.
   try {
     return await fetch(request);
   } catch {
-    const fallback = await cache.match("/offline");
-    if (fallback) {
-      return Response.redirect("/offline", 302);
-    }
-    // No cache at all — give up, browser will show its own offline page.
+    const homeFallback = await cache.match("/home");
+    if (homeFallback) return Response.redirect("/home", 302);
+    const offlineFallback = await cache.match("/offline");
+    if (offlineFallback) return Response.redirect("/offline", 302);
     return Response.error();
   }
 }
@@ -164,7 +180,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (isOfflineRsc(url, request)) {
+  if (isShellRsc(url, request)) {
     event.respondWith(staleWhileRevalidate(NAV_CACHE, request));
     return;
   }

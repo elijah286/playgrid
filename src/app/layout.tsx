@@ -11,6 +11,7 @@ import PageViewTracker from "@/components/PageViewTracker";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ConsentGate from "@/components/ConsentGate";
 import { NativeAppShell } from "@/components/native/NativeAppShell";
+import { OfflineStatusBanner } from "@/components/offline/OfflineStatusBanner";
 import { ConnectionRecovery } from "@/components/system/ConnectionRecovery";
 import { withFullContext } from "@/lib/seo/ld-json";
 import { createClient } from "@/lib/supabase/server";
@@ -207,6 +208,7 @@ export default async function RootLayout({
             <WebVitalsReporter />
             <ConsentGate />
             <NativeAppShell />
+            <OfflineStatusBanner />
             <ConnectionRecovery />
           </ToastProvider>
         </ThemeProvider>

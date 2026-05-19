@@ -106,6 +106,7 @@ import {
   type MovePlayToGroupTarget,
 } from "@/features/playbooks/MovePlayToGroupDialog";
 import { GameModeUpgradeDialog } from "@/features/game-mode/GameModeUpgradeDialog";
+import { useOfflineGate } from "@/components/offline/OfflineGate";
 import { PlaybookCalendarTab } from "@/features/calendar/PlaybookCalendarTab";
 import { PlaybookPracticePlansTab } from "@/features/practice-plans/PlaybookPracticePlansTab";
 import { PlaybookMessagesTab } from "@/features/messages/PlaybookMessagesTab";
@@ -583,6 +584,10 @@ function PlaybookDetailClientInner({
   const [moveTarget, setMoveTarget] = useState<MovePlayToGroupTarget | null>(null);
   const [upgradeNotice, setUpgradeNotice] = useState<{ title: string; message: string } | null>(null);
   const [gameModeUpgradeOpen, setGameModeUpgradeOpen] = useState(false);
+  // Game mode requires a live Supabase connection (auth, shared session,
+  // realtime calls). Grey out the entry button on native when offline so
+  // coaches don't tap into a stalled page.
+  const { isGated: gameModeOfflineGated, reason: offlineReason } = useOfflineGate();
   const [trashOpen, setTrashOpen] = useState(false);
 
   function showPlayCapUpgrade() {
@@ -1788,14 +1793,27 @@ function PlaybookDetailClientInner({
               beta feature is on for this user. */}
           {gameModeAvailable && (
             canUseGameMode ? (
-              <Link
-                href={`/playbooks/${playbookId}/game`}
-                className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0"
-                aria-label="Game mode"
-              >
-                <Gamepad2 className="size-4" />
-                <span>Game</span>
-              </Link>
+              gameModeOfflineGated ? (
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Game mode"
+                  title={offlineReason}
+                  className="ml-auto inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white opacity-50 sm:order-7 sm:ml-0"
+                >
+                  <Gamepad2 className="size-4" />
+                  <span>Game</span>
+                </button>
+              ) : (
+                <Link
+                  href={`/playbooks/${playbookId}/game`}
+                  className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0"
+                  aria-label="Game mode"
+                >
+                  <Gamepad2 className="size-4" />
+                  <span>Game</span>
+                </Link>
+              )
             ) : (
               <button
                 type="button"

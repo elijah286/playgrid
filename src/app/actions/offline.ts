@@ -37,13 +37,11 @@ export type OfflinePlaybookBundle = {
 
 /**
  * Bundle a playbook for offline use inside the native iOS/Android shell.
- * Returns playbook metadata, every offense play, and every play's full
- * `PlayDocument` in a single payload so the client can write it to
- * IndexedDB in one transaction.
- *
- * Defense + special-teams plays are intentionally excluded — game mode
- * (the offline use case) is offense-only today, and we don't want to ship
- * megabytes of unused data to the device.
+ * Returns playbook metadata, every active play (offense, defense, special
+ * teams), and every play's full `PlayDocument` in a single payload so the
+ * client can write it to IndexedDB in one transaction. Archived plays are
+ * skipped — they're invisible in the normal UI, so caching them just
+ * bloats the bundle.
  */
 export async function getPlaybookOfflineBundleAction(
   playbookId: string,
@@ -70,9 +68,7 @@ export async function getPlaybookOfflineBundleAction(
 
   const listed = await listPlaysAction(playbookId);
   if (!listed.ok) return { ok: false, error: listed.error };
-  const plays = listed.plays.filter(
-    (p) => p.play_type === "offense" && !p.is_archived,
-  );
+  const plays = listed.plays.filter((p) => !p.is_archived);
 
   // Pull every current PlayDocument in two batched queries.
   const playIds = plays.map((p) => p.id);

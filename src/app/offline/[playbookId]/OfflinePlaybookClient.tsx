@@ -15,12 +15,21 @@ import { OfflinePlayView } from "./OfflinePlayView";
 
 type Props = { playbookId: string };
 
+type PlayKind = "all" | "offense" | "defense" | "special_teams";
+const KIND_LABELS: Record<PlayKind, string> = {
+  all: "All",
+  offense: "Offense",
+  defense: "Defense",
+  special_teams: "Special teams",
+};
+
 export function OfflinePlaybookClient({ playbookId }: Props) {
   const [meta, setMeta] = useState<CachedPlaybookMeta | null>(null);
   const [plays, setPlays] = useState<CachedPlayRow[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeDoc, setActiveDoc] = useState<PlayDocument | null>(null);
   const [q, setQ] = useState("");
+  const [kind, setKind] = useState<PlayKind>("all");
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,14 +70,29 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
   const filtered = useMemo(() => {
     if (!plays) return [];
     const s = q.trim().toLowerCase();
-    if (!s) return plays;
-    return plays.filter(
-      (p) =>
+    return plays.filter((p) => {
+      if (kind !== "all" && p.playType !== kind) return false;
+      if (!s) return true;
+      return (
         p.name.toLowerCase().includes(s) ||
         (p.wristbandCode && p.wristbandCode.toLowerCase().includes(s)) ||
-        (p.shorthand && p.shorthand.toLowerCase().includes(s)),
-    );
-  }, [plays, q]);
+        (p.shorthand && p.shorthand.toLowerCase().includes(s))
+      );
+    });
+  }, [plays, q, kind]);
+
+  // Hide a tab when the playbook has zero plays of that type — most flag
+  // playbooks ship offense + defense but not ST, and an empty tab feels
+  // broken.
+  const availableKinds: PlayKind[] = useMemo(() => {
+    if (!plays || plays.length === 0) return ["all"];
+    const present = new Set(plays.map((p) => p.playType));
+    const kinds: PlayKind[] = ["all"];
+    if (present.has("offense")) kinds.push("offense");
+    if (present.has("defense")) kinds.push("defense");
+    if (present.has("special_teams")) kinds.push("special_teams");
+    return kinds;
+  }, [plays]);
 
   if (loadError) {
     return (
@@ -151,6 +175,24 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search plays"
           />
+          {availableKinds.length > 2 && (
+            <div className="-mx-0.5 flex gap-1 overflow-x-auto pb-0.5">
+              {availableKinds.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    kind === k
+                      ? "bg-primary text-white"
+                      : "bg-surface-inset text-muted hover:text-foreground"
+                  }`}
+                >
+                  {KIND_LABELS[k]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface-raised p-1.5">
             <ul className="space-y-0.5">
               {filtered.map((p) => (
