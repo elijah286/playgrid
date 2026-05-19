@@ -1099,6 +1099,14 @@ export type CalendarAttendeeRow = {
 
 export async function listEventAttendeesAction(
   eventId: string,
+  /**
+   * Optional occurrence date (YYYY-MM-DD). When provided, only RSVPs
+   * recorded against that specific occurrence are returned — required to
+   * get a correct attendee list for a single date in a recurring series.
+   * Omitting it returns the union of RSVPs across every occurrence of
+   * the event, which is the right behavior for a non-recurring event.
+   */
+  occurrenceDate?: string,
 ): Promise<Ok<{ attendees: CalendarAttendeeRow[] }> | Err> {
   const gate = await requireUser();
   if (!gate.ok) return gate;
@@ -1114,15 +1122,19 @@ export async function listEventAttendeesAction(
     return { ok: false, error: "No access to this event." };
   }
 
+  let rsvpsQuery = admin
+    .from("playbook_event_rsvps")
+    .select("user_id, status, note")
+    .eq("event_id", eventId);
+  if (occurrenceDate) {
+    rsvpsQuery = rsvpsQuery.eq("occurrence_date", occurrenceDate);
+  }
   const [membersRes, rsvpsRes] = await Promise.all([
     admin
       .from("playbook_members")
       .select("user_id, profiles!inner(display_name)")
       .eq("playbook_id", ev.playbook_id),
-    admin
-      .from("playbook_event_rsvps")
-      .select("user_id, status, note")
-      .eq("event_id", eventId),
+    rsvpsQuery,
   ]);
 
   type MemberRow = { user_id: string; profiles: { display_name: string | null } };

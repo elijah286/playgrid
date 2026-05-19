@@ -1123,6 +1123,7 @@ function SeriesOccurrenceRow({
 }) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
+  const [expanded, setExpanded] = useState(false);
   const startMs = new Date(event.startsAt).getTime();
   const isPast = startMs <= Date.now();
   const dateLabel = new Date(event.startsAt).toLocaleDateString(undefined, {
@@ -1130,6 +1131,8 @@ function SeriesOccurrenceRow({
     month: "short",
     day: "numeric",
   });
+  const totalRespondents =
+    event.rsvpCounts.yes + event.rsvpCounts.no + event.rsvpCounts.maybe;
 
   function changeRsvp(status: "yes" | "no" | "maybe" | null) {
     if (isPast) return;
@@ -1154,39 +1157,66 @@ function SeriesOccurrenceRow({
   return (
     <li
       className={
-        "flex flex-wrap items-center gap-2 rounded-md px-2 py-1.5 text-xs " +
-        (isPast ? "opacity-50" : "")
+        "rounded-md " + (isPast ? "opacity-50" : "")
       }
     >
-      <span className="min-w-0 flex-1 truncate text-foreground">
-        {dateLabel}
-      </span>
-      {!isPast && (
-        <RsvpButtons
-          pending={pending}
-          onPick={changeRsvp}
-          activeStatus={event.myRsvp?.status ?? null}
-          visibility="always"
-        />
-      )}
-      {isPast && event.myRsvp && (
-        <RsvpStatusPill status={event.myRsvp.status} />
-      )}
-      <span className="text-muted">
-        {event.rsvpCounts.yes} going · {event.rsvpCounts.maybe} maybe ·{" "}
-        {event.rsvpCounts.no} can&rsquo;t
-      </span>
-      {viewerIsCoach && (
+      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 text-xs">
+        <span className="min-w-0 flex-1 truncate text-foreground">
+          {dateLabel}
+        </span>
+        {!isPast && (
+          <RsvpButtons
+            pending={pending}
+            onPick={changeRsvp}
+            activeStatus={event.myRsvp?.status ?? null}
+            visibility="always"
+          />
+        )}
+        {isPast && event.myRsvp && (
+          <RsvpStatusPill status={event.myRsvp.status} />
+        )}
+        <span className="text-muted">
+          {event.rsvpCounts.yes} going · {event.rsvpCounts.maybe} maybe ·{" "}
+          {event.rsvpCounts.no} can&rsquo;t
+        </span>
+        {viewerIsCoach && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label="Edit this date"
+            className="rounded-md p-1 text-muted hover:bg-surface-inset hover:text-foreground"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        )}
+        {isPast && <span className="text-muted">past</span>}
         <button
           type="button"
-          onClick={onEdit}
-          aria-label="Edit this date"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? "Hide details" : "Show details"}
+          title={expanded ? "Hide details" : "See attendees and details"}
           className="rounded-md p-1 text-muted hover:bg-surface-inset hover:text-foreground"
         >
-          <Pencil className="size-3.5" />
+          <ChevronDown
+            className={
+              "size-3.5 transition-transform " + (expanded ? "rotate-180" : "")
+            }
+          />
         </button>
+      </div>
+      {expanded && (
+        <div className="border-t border-border px-2 pb-2">
+          <EventCardDetail
+            event={event}
+            isPast={isPast}
+            onOptimisticRsvp={onOptimisticRsvp}
+            onServerError={onServerError}
+            totalRespondents={totalRespondents}
+            hideOwnRsvp
+            hideSharedDetails
+          />
+        </div>
       )}
-      {isPast && <span className="text-muted">past</span>}
     </li>
   );
 }
@@ -1197,6 +1227,8 @@ function EventCardDetail({
   onOptimisticRsvp,
   onServerError,
   totalRespondents,
+  hideOwnRsvp = false,
+  hideSharedDetails = false,
 }: {
   event: CalendarEventRow;
   isPast: boolean;
@@ -1207,6 +1239,14 @@ function EventCardDetail({
   ) => void;
   onServerError: () => void;
   totalRespondents: number;
+  /** Skip the "Your RSVP" toggle row — useful when the parent already
+   *  surfaces RSVP controls (e.g. an expanded series occurrence whose
+   *  buttons sit directly above this panel). */
+  hideOwnRsvp?: boolean;
+  /** Skip the arrival-time, map, and notes rows — useful when the
+   *  parent already surfaces them once for the series (so they don't
+   *  duplicate per occurrence in an expanded series view). */
+  hideSharedDetails?: boolean;
 }) {
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -1239,7 +1279,9 @@ function EventCardDetail({
   async function loadAttendees() {
     setShowAttendees(true);
     if (attendees) return;
-    const res = await listEventAttendeesAction(event.id);
+    // Pass the row's occurrence date so a series-expanded view shows the
+    // RSVPs for THIS date only, not every date in the series merged.
+    const res = await listEventAttendeesAction(event.id, event.occurrenceDate);
     if (!res.ok) {
       toast(res.error, "error");
       return;
@@ -1269,47 +1311,53 @@ function EventCardDetail({
 
   return (
     <div className="mt-3 space-y-3 border-t border-border pt-3 text-sm">
-      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
-        <span>
-          <Clock className="mr-1 inline size-3" />
-          Arrive {event.arriveMinutesBefore} min before
-        </span>
-        {event.opponent && <span>vs. {event.opponent}</span>}
-        {event.homeAway && <span className="capitalize">{event.homeAway}</span>}
-      </div>
+      {!hideSharedDetails && (
+        <>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
+            <span>
+              <Clock className="mr-1 inline size-3" />
+              Arrive {event.arriveMinutesBefore} min before
+            </span>
+            {event.opponent && <span>vs. {event.opponent}</span>}
+            {event.homeAway && (
+              <span className="capitalize">{event.homeAway}</span>
+            )}
+          </div>
 
-      {mapsEmbedSrc && (
-        <div className="overflow-hidden rounded-lg ring-1 ring-border">
-          <iframe
-            src={mapsEmbedSrc}
-            title={`Map of ${event.location.name ?? event.location.address ?? "event location"}`}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            className="block h-40 w-full sm:h-48"
-          />
-        </div>
+          {mapsEmbedSrc && (
+            <div className="overflow-hidden rounded-lg ring-1 ring-border">
+              <iframe
+                src={mapsEmbedSrc}
+                title={`Map of ${event.location.name ?? event.location.address ?? "event location"}`}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                className="block h-40 w-full sm:h-48"
+              />
+            </div>
+          )}
+
+          {mapsHref && (
+            <a
+              href={mapsHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              <MapPin className="size-3.5" />
+              Open in Maps
+              <ExternalLink className="size-3" />
+            </a>
+          )}
+
+          {event.notes && (
+            <p className="whitespace-pre-wrap rounded-lg bg-surface-inset p-3 text-xs text-foreground">
+              {event.notes}
+            </p>
+          )}
+        </>
       )}
 
-      {mapsHref && (
-        <a
-          href={mapsHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-        >
-          <MapPin className="size-3.5" />
-          Open in Maps
-          <ExternalLink className="size-3" />
-        </a>
-      )}
-
-      {event.notes && (
-        <p className="whitespace-pre-wrap rounded-lg bg-surface-inset p-3 text-xs text-foreground">
-          {event.notes}
-        </p>
-      )}
-
-      {!isPast && (
+      {!isPast && !hideOwnRsvp && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-foreground">Your RSVP</p>
           <div className="flex gap-2">
