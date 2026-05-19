@@ -4,6 +4,7 @@ import { Button, Input, Select, Badge } from "@/components/ui";
 import type { PlayCommand } from "@/domain/play/commands";
 import type { PlayDocument, PlayerRole, PlayerShape } from "@/domain/play/types";
 import { deriveLabelColor } from "@/domain/play/labelColor";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 
 type Props = {
   doc: PlayDocument;
@@ -141,13 +142,14 @@ export function FormationInspector({
                   key={color}
                   type="button"
                   title={color}
-                  onClick={() =>
+                  onClick={() => {
                     dispatch({
                       type: "player.setStyle",
                       playerId: selectedPlayer.id,
                       style: { ...selectedPlayer.style, fill: color },
-                    })
-                  }
+                    });
+                    notifyTutorialAction("player-recolored");
+                  }}
                   className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
                     active ? "border-primary scale-110" : "border-border"
                   }`}
@@ -169,13 +171,14 @@ export function FormationInspector({
                   key={color}
                   type="button"
                   title={color === "#FFFFFF" ? "White" : "Black"}
-                  onClick={() =>
+                  onClick={() => {
                     dispatch({
                       type: "player.setStyle",
                       playerId: selectedPlayer.id,
                       style: { ...selectedPlayer.style, labelColor: color },
-                    })
-                  }
+                    });
+                    notifyTutorialAction("player-recolored");
+                  }}
                   className={`flex h-9 flex-1 items-center justify-center rounded-lg border-2 text-xs font-semibold transition-colors ${
                     active ? "border-primary" : "border-border"
                   }`}

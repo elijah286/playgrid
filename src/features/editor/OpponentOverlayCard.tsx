@@ -278,7 +278,7 @@ export function OpponentOverlayCard({
         : "opponent plays";
 
   return (
-    <div className="flex max-h-[420px] min-h-0 flex-col rounded-xl border border-border bg-surface-inset/50">
+    <div data-tutor="opponent-overlay" className="flex max-h-[420px] min-h-0 flex-col rounded-xl border border-border bg-surface-inset/50">
       <div className="flex items-center justify-between gap-2 px-3 pt-3">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted">
           Opponent

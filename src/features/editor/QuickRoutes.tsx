@@ -13,6 +13,7 @@ import {
   type UserRouteTemplate,
 } from "@/domain/play/userRouteTemplates";
 import type { UserRouteTemplatesHook } from "./useUserRouteTemplates";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 
 type Props = {
   player: Player;
@@ -328,6 +329,7 @@ export function QuickRoutes({
       dispatch({ type: "route.remove", routeId: rid });
     }
     dispatch({ type: "route.add", route });
+    notifyTutorialAction("route-from-template");
   };
 
   const pickSystem = (template: RouteTemplate) => {
@@ -341,7 +343,7 @@ export function QuickRoutes({
   };
 
   return (
-    <section>
+    <section data-tutor="quick-routes">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
         Quick routes
       </h3>

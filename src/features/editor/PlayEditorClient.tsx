@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical } from "lucide-react";
+import { Archive as ArchiveIcon, ChevronDown, ChevronLeft, ChevronRight, FlaskConical, GraduationCap } from "lucide-react";
 import type { EndDecoration, PlayDocument, Player, Point2, Route, SegmentShape, StrokePattern, VsPlaySnapshot } from "@/domain/play/types";
 import type { SavedFormation } from "@/app/actions/formations";
 import { saveFormationAction } from "@/app/actions/formations";
@@ -66,6 +66,18 @@ import {
   ExamplePreviewProvider,
   useExamplePreview,
 } from "@/features/admin/ExamplePreviewContext";
+import { TutorialProvider } from "@/features/tutorials/engine/TutorialProvider";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
+import { PlayAuthoringAutoLauncher } from "@/features/tutorials/PlayAuthoringAutoLauncher";
+import { ROUTE_TEMPLATES, instantiateTemplate } from "@/domain/play/routeTemplates";
+import type { SportVariant } from "@/domain/play/types";
+
+function coerceVariant(v: string | null | undefined): SportVariant | null {
+  if (v === "flag_5v5" || v === "flag_6v6" || v === "flag_7v7" || v === "tackle_11") {
+    return v;
+  }
+  return null;
+}
 
 /**
  * Order-insensitive JSON serialization. Used to compare a locally-edited
@@ -166,20 +178,43 @@ type Props = {
   /** Site-admin flag. Adds a "Site Admin" item to the editor footer's
    *  More sheet so admins can jump to /admin from any play. */
   isAdmin?: boolean;
+  /** When true, this play was created by the in-app tutorial flow and
+   *  lives in the playbook as disposable scratch space. Surfaces a
+   *  persistent banner offering Keep / Discard so the coach can promote
+   *  it to a normal play or remove it. */
+  isTutorialPlay?: boolean;
 };
 
 export function PlayEditorClient(props: Props) {
+  const tutorialVariant = coerceVariant(props.playbookVariant);
+  // Only run the tutorial system in real editing contexts. Example previews
+  // and archived playbooks are read-only or pseudo-real surfaces — auto-
+  // launching a tour there would be confusing and most data-tutor anchors
+  // (formation picker, route toolbar) are hidden.
+  const tutorialEligible =
+    !props.isExamplePreview &&
+    !props.isArchived &&
+    !props.isPlayArchived &&
+    Boolean(props.canEdit);
   return (
-    <ExamplePreviewProvider
-      isPreview={props.isExamplePreview ?? false}
-      isArchived={props.isArchived ?? false}
-      isPlayArchived={props.isPlayArchived ?? false}
-      playbookId={props.playbookId}
-      playId={props.playId}
-      canUnarchive={Boolean(props.canEdit) && !props.isExamplePreview}
-    >
-      <PlayEditorClientInner {...props} />
-    </ExamplePreviewProvider>
+    <TutorialProvider>
+      <ExamplePreviewProvider
+        isPreview={props.isExamplePreview ?? false}
+        isArchived={props.isArchived ?? false}
+        isPlayArchived={props.isPlayArchived ?? false}
+        playbookId={props.playbookId}
+        playId={props.playId}
+        canUnarchive={Boolean(props.canEdit) && !props.isExamplePreview}
+      >
+        <PlayEditorClientInner {...props} />
+      </ExamplePreviewProvider>
+      {tutorialEligible && (
+        <PlayAuthoringAutoLauncher
+          variant={tutorialVariant}
+          playbookId={props.playbookId}
+        />
+      )}
+    </TutorialProvider>
   );
 }
 
@@ -216,6 +251,7 @@ function PlayEditorClientInner({
   initialCustomOpponentPlayId = null,
   initialOpponentHidden = false,
   isAdmin = false,
+  isTutorialPlay = false,
 }: Props) {
   const router = useRouter();
   const { toast } = useToast();
@@ -475,6 +511,112 @@ function PlayEditorClientInner({
   // right-click "Save as template"). Single source of truth threaded into
   // both editor canvases and the Inspector / mobile QuickRoutes.
   const userTemplates = useUserRouteTemplates();
+
+  // Tutorial state-shepherd. When the in-app tour transitions into a
+  // step with an `onEnter` action, the engine dispatches a
+  // `tutorial:on-enter` window event with the action descriptor. We
+  // handle it here by nudging the selection state into the shape the
+  // step's UI expects (player vs route selected, or no selection at
+  // all). The user keeps full freedom mid-step — actions only fire on
+  // entry.
+  //
+  // The listener is intentionally registered with an empty dep array so
+  // it stays attached for the lifetime of the component. Earlier, the
+  // listener's deps included `selectedPlayerId` and `selectedRouteId`,
+  // which meant it detached and reattached every time the coach
+  // selected something. Step transitions race against that detach
+  // window: clicking Next on a step where you had a player selected
+  // could land the dispatch in the gap between cleanup and reattach,
+  // and the next step's `clear-selection` would silently miss. Stable
+  // refs below feed the handler the current state without rebinding
+  // the listener.
+  const tutorialShepherdRefs = useRef({
+    selectedPlayerId,
+    selectedRouteId,
+    routes: doc.layers.routes,
+    players: doc.layers.players,
+  });
+  useEffect(() => {
+    tutorialShepherdRefs.current = {
+      selectedPlayerId,
+      selectedRouteId,
+      routes: doc.layers.routes,
+      players: doc.layers.players,
+    };
+  }, [selectedPlayerId, selectedRouteId, doc.layers.routes, doc.layers.players]);
+  useEffect(() => {
+    function onTutorialEnter(e: Event) {
+      const detail = (e as CustomEvent).detail as
+        | { kind: "ensure-player-selected" }
+        | { kind: "ensure-route-selected" }
+        | { kind: "ensure-route-exists" }
+        | { kind: "clear-selection" }
+        | undefined;
+      if (!detail) return;
+      const { selectedPlayerId, selectedRouteId, routes, players } =
+        tutorialShepherdRefs.current;
+      if (detail.kind === "ensure-player-selected") {
+        // Already in the right shape — bail.
+        if (selectedPlayerId && !selectedRouteId) return;
+        // A route is selected — switch to its carrier player so the
+        // QuickRoutes panel re-mounts.
+        if (selectedRouteId) {
+          const route = routes.find((r) => r.id === selectedRouteId);
+          if (route?.carrierPlayerId) {
+            setSelectedPlayerId(route.carrierPlayerId);
+            setSelectedRouteId(null);
+            return;
+          }
+        }
+        // Nothing selected — pick the first player on the field.
+        const first = players[0];
+        if (first) setSelectedPlayerId(first.id);
+      } else if (detail.kind === "ensure-route-selected") {
+        if (selectedRouteId) return;
+        const first = routes[0];
+        if (!first) return;
+        setSelectedRouteId(first.id);
+        if (first.carrierPlayerId) setSelectedPlayerId(first.carrierPlayerId);
+      } else if (detail.kind === "ensure-route-exists") {
+        // If the play already has a route, treat this like
+        // ensure-route-selected and bail.
+        if (routes.length > 0) {
+          if (!selectedRouteId) {
+            setSelectedRouteId(routes[0].id);
+            if (routes[0].carrierPlayerId) {
+              setSelectedPlayerId(routes[0].carrierPlayerId);
+            }
+          }
+          return;
+        }
+        // No routes — draw a default Curl on a sensible eligible
+        // receiver so the "Reshape a route" step has anchors to drag.
+        // Prefer a wide receiver (eligible, not the QB) over the QB.
+        const carrier =
+          players.find((p) => p.eligible && p.role !== "QB") ??
+          players.find((p) => p.eligible) ??
+          players[0];
+        if (!carrier) return;
+        const curl = ROUTE_TEMPLATES.find((t) => t.name === "Curl");
+        if (!curl) return;
+        const route = instantiateTemplate(curl, carrier.position, carrier.id);
+        dispatch({ type: "route.add", route });
+        setSelectedRouteId(route.id);
+        setSelectedPlayerId(carrier.id);
+      } else if (detail.kind === "clear-selection") {
+        // Drop every selection so the editor flips back into "view" mode
+        // and panels like the opponent overlay card re-render.
+        setSelectedPlayerId(null);
+        setSelectedOpponentPlayerId(null);
+        setSelectedRouteId(null);
+        setSelectedSegmentId(null);
+        setSelectedNodeId(null);
+        setSelectedZoneId(null);
+      }
+    }
+    window.addEventListener("tutorial:on-enter", onTutorialEnter);
+    return () => window.removeEventListener("tutorial:on-enter", onTutorialEnter);
+  }, []);
   /** Zone the user is about to place — preview follows the cursor until a click
    *  on the field commits, or a click outside the field cancels. */
   const [pendingZone, setPendingZone] = useState<{
@@ -1446,6 +1588,7 @@ function PlayEditorClientInner({
           routeId: selectedRouteId,
           style: { ...selectedRoute.style, stroke: color },
         });
+        notifyTutorialAction("route-color-changed");
         return;
       }
       if (selectedPlayer) {
@@ -1454,6 +1597,14 @@ function PlayEditorClientInner({
           playerId: selectedPlayer.id,
           style: { ...selectedPlayer.style, fill: color },
         });
+        notifyTutorialAction("player-recolored");
+        // A player's fill color cascades to their routes' stroke color
+        // (that's how `buildRouteStyle` derives a default). The coach
+        // sees the route change too, so the route-color tutorial
+        // checkbox should tick from this action — otherwise step 5's
+        // "Change the route color" stays unchecked even though the
+        // route on screen just turned red.
+        notifyTutorialAction("route-color-changed");
         return;
       }
       if (selectedOpponentPlayerId) {
@@ -1890,6 +2041,41 @@ function PlayEditorClientInner({
         </div>
       )}
       {isExamplePreview && <ExamplePreviewEditorBanner />}
+      {isTutorialPlay && !isPlayArchived && !isExamplePreview && (
+        <TutorialPlayBanner playId={playId} playbookId={playbookId} />
+      )}
+      {/* Tutorial gate signal: present in the DOM whenever the play has
+          at least one route drawn. The "Draw a route" tour step watches
+          for this via querySelector to gate its Next button. Visually
+          hidden — the gate just checks presence, not geometry. */}
+      {doc.layers.routes.length > 0 && (
+        <span
+          data-tutor="route-drawn"
+          aria-hidden
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+          }}
+        />
+      )}
+      {/* Tutorial gate signal: present whenever a route is the current
+          selection. The "Style your routes" tour step gates on this so
+          the toolbar's per-selection controls actually have something to
+          act on while the user is reading the step. */}
+      {selectedRouteId && (
+        <span
+          data-tutor="route-selected"
+          aria-hidden
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+          }}
+        />
+      )}
       {isPlayArchived && (
         <ArchivedPlayEditorBanner
           canUnarchive={roleCanEdit && !isExamplePreview}
@@ -1922,6 +2108,7 @@ function PlayEditorClientInner({
         hideMobileNav={isTouchDevice && mode === "edit"}
         mode={isTouchDevice ? mode : undefined}
         onToggleMode={isTouchDevice ? toggleMode : undefined}
+        tutorialVariant={coerceVariant(playbookVariant)}
       />
       </div>
 
@@ -2485,6 +2672,51 @@ function PlayNotesCard({
   const [editing, setEditing] = useState(!readOnly && value.trim().length === 0);
   const [copied, setCopied] = useState(false);
   const hasNotes = value.trim().length > 0;
+
+  // Tutorial integration. The "Write play notes" step uses `find`
+  // links that fire `tutorial:request-open` events; respond by
+  // forcing the card open so the coach can see the editor without
+  // having to expand it themselves. Also flip into edit mode so the
+  // textarea is immediately interactive.
+  useEffect(() => {
+    function onRequestOpen(e: Event) {
+      const detail = (e as CustomEvent).detail as { target?: string } | undefined;
+      if (detail?.target !== "play-notes") return;
+      setOpen(true);
+      if (!readOnly) setEditing(true);
+    }
+    window.addEventListener("tutorial:request-open", onRequestOpen);
+    return () => window.removeEventListener("tutorial:request-open", onRequestOpen);
+  }, [readOnly]);
+
+  // Tutorial action notifies for the "Write play notes" step. Parse
+  // the notes value for @-mentions and dispatch the matching action
+  // kind so the step's reactive checkboxes flip when the coach
+  // actually types a color- or letter-style reference.
+  //
+  // Detection is intentionally simple — a fixed list of known color
+  // names vs. anything else (letter / label). The Set in the engine
+  // dedupes so multiple fires per render are harmless.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!value) return;
+    const colorNames = new Set([
+      "white", "black", "gray", "grey",
+      "red", "orange", "yellow", "green", "blue", "purple", "pink",
+      "gold", "navy", "teal", "cyan", "magenta",
+    ]);
+    const re = /@([A-Za-z0-9]{1,10})/g;
+    let m: RegExpExecArray | null;
+    let sawColor = false;
+    let sawLetter = false;
+    while ((m = re.exec(value)) !== null) {
+      const token = m[1];
+      if (colorNames.has(token.toLowerCase())) sawColor = true;
+      else sawLetter = true;
+    }
+    if (sawColor) notifyTutorialAction("note-color-ref");
+    if (sawLetter) notifyTutorialAction("note-letter-ref");
+  }, [value]);
   async function handleCopy() {
     const ok = await copyNotesToClipboard(value);
     if (!ok) return;
@@ -2495,7 +2727,7 @@ function PlayNotesCard({
   // the card entirely so the sidebar stays uncluttered.
   if (readOnly && !hasNotes) return null;
   return (
-    <div className="rounded-xl border border-border bg-surface-raised">
+    <div data-tutor="play-notes" className="rounded-xl border border-border bg-surface-raised">
       <div className="flex items-center justify-between gap-2 px-4 py-3">
         <button
           type="button"
@@ -2610,6 +2842,72 @@ function ArchivedPlayEditorBanner({
           Restore play
         </button>
       )}
+    </div>
+  );
+}
+
+function TutorialPlayBanner({
+  playId,
+  playbookId,
+}: {
+  playId: string;
+  playbookId: string;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [pending, startTransition] = useTransition();
+
+  const handleKeep = () => {
+    startTransition(async () => {
+      const { keepTutorialPlayAction } = await import("@/app/actions/tutorials");
+      const res = await keepTutorialPlayAction(playId);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      toast("Play kept in your playbook.", "success");
+      router.refresh();
+    });
+  };
+
+  const handleDiscard = () => {
+    startTransition(async () => {
+      const { discardTutorialPlayAction } = await import("@/app/actions/tutorials");
+      const res = await discardTutorialPlayAction(playId);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      router.push(`/playbooks/${playbookId}`);
+    });
+  };
+
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+      <GraduationCap className="size-4 shrink-0 text-primary" />
+      <span className="min-w-0 flex-1 text-foreground">
+        <strong>Tutorial play.</strong>{" "}
+        This is practice space. Keep it to save in your playbook, or
+        discard when you&apos;re done.
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleDiscard}
+          className="rounded-md px-2.5 py-1 text-xs font-medium text-muted hover:bg-surface-inset hover:text-foreground disabled:opacity-60"
+        >
+          Discard
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleKeep}
+          className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover disabled:opacity-60"
+        >
+          Keep play
+        </button>
+      </div>
     </div>
   );
 }

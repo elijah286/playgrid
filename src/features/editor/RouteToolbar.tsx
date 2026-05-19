@@ -27,6 +27,7 @@ import type {
   StrokePattern,
 } from "@/domain/play/types";
 import { IconButton } from "@/components/ui";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 type Props = {
@@ -190,10 +191,10 @@ export function RouteToolbar({
   const canEditShape = onPlayerShapeChange != null && playerShape != null;
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1.5 shadow-sm">
+    <div data-tutor="route-toolbar" className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1.5 shadow-sm">
       {/* Row 1: segment shape / stroke / width / end decoration / color */}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+        <div data-tutor="route-toolbar-shape" className="inline-flex items-center rounded-lg bg-surface-inset p-1">
           {SEGMENT_SHAPE_OPTIONS.map((opt) => {
             const active = opt.value === shape;
             const Icon = opt.icon;
@@ -201,7 +202,10 @@ export function RouteToolbar({
               <Tooltip key={opt.value} content={opt.label}>
                 <button
                   type="button"
-                  onClick={() => onShapeChange(opt.value)}
+                  onClick={() => {
+                    onShapeChange(opt.value);
+                    notifyTutorialAction("route-shape-changed");
+                  }}
                   aria-label={opt.label}
                   aria-pressed={active}
                   className={`inline-flex h-6 w-8 items-center justify-center rounded-md transition-all ${
@@ -217,14 +221,17 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+        <div data-tutor="route-toolbar-stroke" className="inline-flex items-center rounded-lg bg-surface-inset p-1">
           {strokeOptions.map((opt) => {
             const active = opt.value === activeStroke;
             return (
               <Tooltip key={opt.value} content={opt.label}>
                 <button
                   type="button"
-                  onClick={() => onStrokePatternChange(opt.value)}
+                  onClick={() => {
+                    onStrokePatternChange(opt.value);
+                    notifyTutorialAction("route-stroke-changed");
+                  }}
                   aria-label={opt.label}
                   className={`inline-flex h-6 w-8 items-center justify-center rounded-md transition-all ${
                     active
@@ -239,14 +246,17 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+        <div data-tutor="route-toolbar-width" className="inline-flex items-center rounded-lg bg-surface-inset p-1">
           {WIDTH_OPTIONS.map((w) => {
             const active = w.value === width;
             return (
               <Tooltip key={w.value} content={w.label}>
                 <button
                   type="button"
-                  onClick={() => onWidthChange(w.value)}
+                  onClick={() => {
+                    onWidthChange(w.value);
+                    notifyTutorialAction("route-width-changed");
+                  }}
                   aria-label={w.label}
                   aria-pressed={active}
                   className={`inline-flex h-6 w-7 items-center justify-center rounded-md transition-all ${
@@ -266,6 +276,7 @@ export function RouteToolbar({
         </div>
 
         <div
+          data-tutor="route-toolbar-end"
           className={`inline-flex items-center rounded-lg bg-surface-inset p-1 ${
             hasSelectedRoute ? "" : "opacity-40"
           }`}
@@ -280,7 +291,10 @@ export function RouteToolbar({
               >
                 <button
                   type="button"
-                  onClick={() => onEndDecorationChange(opt.value)}
+                  onClick={() => {
+                    onEndDecorationChange(opt.value);
+                    notifyTutorialAction("route-end-changed");
+                  }}
                   disabled={!hasSelectedRoute}
                   aria-label={opt.label}
                   className={`inline-flex h-6 w-7 items-center justify-center rounded-md transition-all ${
@@ -296,17 +310,39 @@ export function RouteToolbar({
           })}
         </div>
 
-        <ColorPickerButton color={color} onColorChange={onColorChange} />
+        <span data-tutor="route-toolbar-color" className="inline-flex">
+          <ColorPickerButton color={color} onColorChange={onColorChange} />
+        </span>
       </div>
 
       {/* Row 2: history / player actions / zones / Done */}
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        <Tooltip content="Undo">
-          <IconButton icon={Undo2} variant="ghost" size="sm" disabled={!canUndo} onClick={onUndo} />
-        </Tooltip>
-        <Tooltip content="Redo">
-          <IconButton icon={Redo2} variant="ghost" size="sm" disabled={!canRedo} onClick={onRedo} />
-        </Tooltip>
+        <span data-tutor="route-toolbar-undo" className="inline-flex items-center gap-1">
+          <Tooltip content="Undo">
+            <IconButton
+              icon={Undo2}
+              variant="ghost"
+              size="sm"
+              disabled={!canUndo}
+              onClick={() => {
+                onUndo();
+                notifyTutorialAction("route-undo-redo");
+              }}
+            />
+          </Tooltip>
+          <Tooltip content="Redo">
+            <IconButton
+              icon={Redo2}
+              variant="ghost"
+              size="sm"
+              disabled={!canRedo}
+              onClick={() => {
+                onRedo();
+                notifyTutorialAction("route-undo-redo");
+              }}
+            />
+          </Tooltip>
+        </span>
 
         <Tooltip content="Smooth curve">
           <IconButton icon={Sparkles} variant="ghost" size="sm" disabled={!canSmooth} onClick={onSmooth} />
@@ -370,6 +406,7 @@ export function RouteToolbar({
                 disabled={!hasAnySelection}
                 onClick={onDone}
                 aria-label="Done editing current selection"
+                data-tutor="editor-done"
                 className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface-inset px-2 text-xs font-medium text-foreground transition-colors hover:bg-surface-raised disabled:cursor-default disabled:opacity-40 disabled:hover:bg-surface-inset"
               >
                 <Check className="size-3.5" />
@@ -465,8 +502,17 @@ function ColorPickerButton({
       // (offense player or opponent defender) is wiped before the color
       // change is reflected on screen.
       data-editor-overlay="color-picker"
+      // The tutorial's click-blocker walks `closest()` from the click
+      // target looking for a spotlit / allowed ancestor. Because this
+      // popover is portaled to body — outside the route-toolbar's
+      // subtree — that walk would miss without an explicit allow tag.
+      data-tutor-allow=""
       style={{ position: "fixed", left: pos.left, top: pos.top, minWidth: "10.5rem" }}
-      className="z-50 flex flex-wrap gap-1 rounded-md border border-border bg-surface-raised p-1.5 shadow-lg"
+      // z-[57] (not z-50) so the popover renders above any tutorial
+      // spotlit element (z:56) when the tour highlights this toolbar.
+      // Still below the tutorial card (z:60). Outside tutorial mode
+      // the bump is a no-op since nothing else competes at 51-56.
+      className="z-[57] flex flex-wrap gap-1 rounded-md border border-border bg-surface-raised p-1.5 shadow-lg"
     >
       {COLOR_PRESETS.map((c) => {
         const active = c === color;
@@ -583,8 +629,13 @@ function ShapePopoverButton({
       ref={popRef}
       role="menu"
       data-editor-overlay="shape-picker"
+      // Same tutorial allow + z-index treatment as the color picker
+      // popover above — both portal to body and would otherwise be
+      // clipped behind the spotlit toolbar (z:56) and have their
+      // clicks eaten by the tutorial click block.
+      data-tutor-allow=""
       style={{ position: "fixed", left: pos.left, top: pos.top, minWidth: "10.5rem" }}
-      className="z-50 flex flex-col gap-0.5 rounded-md border border-border bg-surface-raised p-1 shadow-lg"
+      className="z-[57] flex flex-col gap-0.5 rounded-md border border-border bg-surface-raised p-1 shadow-lg"
     >
       {options.map((opt) => {
         const active = opt.value === value;

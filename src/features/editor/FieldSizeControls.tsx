@@ -133,7 +133,7 @@ function Panel({
   return (
     <div
       role="menu"
-      className={`absolute left-0 top-full z-30 mt-1 ${width} rounded-md border border-border bg-surface-raised p-2 shadow-lg`}
+      className={`absolute left-0 top-full z-[58] mt-1 ${width} rounded-md border border-border bg-surface-raised p-2 shadow-lg`}
     >
       {children}
     </div>
@@ -231,7 +231,10 @@ export function FieldSizeControls({
   const isDefense = doc.metadata.playType === "defense";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2">
+    <div
+      data-tutor="field-controls"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2"
+    >
       <FieldControl
         doc={doc}
         dispatch={dispatch}

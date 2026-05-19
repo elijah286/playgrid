@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 16, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: May 19, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -79,6 +79,15 @@ export default function PrivacyPage() {
               <strong>Contact form:</strong> messages you send us through the
               contact form, which are delivered to our inbox via an email
               provider (Resend).
+            </li>
+            <li>
+              <strong>Tutorial progress:</strong> if you start a guided tour
+              in the Learning Center, we save which tutorial you&apos;re on,
+              the current step, the sport variant active when you started,
+              and whether you completed or dismissed it. This is so the
+              tour can resume where you left off and never auto-prompt you
+              twice. It&apos;s stored only on our own servers, scoped to
+              your account.
             </li>
             <li>
               <strong>Edit history:</strong> when a play or playbook is edited,

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { CreditCard, LogOut, Shield } from "lucide-react";
+import { CreditCard, GraduationCap, LogOut, Shield } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +98,15 @@ export function UserMenu({ email, displayName, avatarUrl, isAdmin, compact }: Pr
             >
               <CreditCard className="size-4" />
               Account
+            </Link>
+            <Link
+              href="/learn"
+              onClick={() => setOpen(false)}
+              role="menuitem"
+              className="flex items-center gap-2 px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+            >
+              <GraduationCap className="size-4" />
+              Learning Center
             </Link>
             {isAdmin && (
               <Link

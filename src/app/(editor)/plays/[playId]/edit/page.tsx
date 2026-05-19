@@ -259,6 +259,7 @@ export default async function PlayEditPage({ params }: Props) {
       initialCustomOpponentPlayId={res.customOpponentPlayId}
       initialOpponentHidden={res.opponentHidden}
       isAdmin={isAdmin}
+      isTutorialPlay={Boolean(res.play.is_tutorial)}
     />
     {isExamplePreview && (
       <>

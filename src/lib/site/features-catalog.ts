@@ -22,6 +22,7 @@ export type FeatureCategory =
   | "Print & export"
   | "Billing & accounts"
   | "Marketing site"
+  | "Onboarding & help"
   | "Admin tools";
 
 export type FeatureStatus = "ga" | "beta" | "internal";
@@ -41,6 +42,16 @@ export type FeatureEntry = {
 };
 
 export const FEATURES: FeatureEntry[] = [
+  // ── Onboarding & help ────────────────────────────────────────────
+  {
+    id: "tutorial-play-authoring",
+    name: "Guided Play Authoring tutorial",
+    description:
+      "A short interactive walkthrough of the play editor — formation, route templates, route toolbar, opponent overlay, autosave. The tour spotlights the real editor UI step by step, adapts copy to the playbook's sport variant, and can be replayed anytime from the Learning Center (account menu → Learning Center). Auto-offers to new coaches on their second editor visit; one-tap dismiss is sticky.",
+    category: "Onboarding & help",
+    status: "ga",
+    addedDate: "2026-05-14",
+  },
   // ── Playbook ─────────────────────────────────────────────────────
   {
     id: "playbook-create",

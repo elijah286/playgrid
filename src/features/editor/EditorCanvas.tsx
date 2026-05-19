@@ -108,6 +108,7 @@ function snapOutsidePlayer(p: Point2, carrier: Point2): Point2 {
 import { resolveFieldTheme } from "@/domain/play/fieldTheme";
 import { EquipmentIconShape } from "@/features/practice-plans/EquipmentIcon";
 import { Modal } from "@/components/ui";
+import { notifyTutorialAction } from "@/features/tutorials/engine/notify";
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
@@ -257,6 +258,18 @@ function ClampedMenu({
       // Without this, opening a menu and clicking an action wipes the
       // selection mid-action.
       data-editor-overlay="context-menu"
+      // Tutorial anchor: the "Motion, speed & quick edits" step gates Next
+      // on this element appearing in the DOM (latched, so closing the menu
+      // doesn't re-disable Next). Every right-click context menu in the
+      // editor renders through ClampedMenu, so one anchor covers all of
+      // player / segment / anchor / zone menus.
+      data-tutor="quick-actions-menu"
+      // Click-block whitelist: the context menu is portaled to body
+      // (outside the spotlit canvas), so without an allow tag the
+      // tutorial's click-blocker eats clicks on menu items — including
+      // sub-menu triggers like Delay / Speed / Save as template. Marking
+      // the wrapper allows everything inside it.
+      data-tutor-allow=""
       className={className}
       style={{ position: "fixed", left: pos.left, top: pos.top }}
       onPointerDown={onPointerDown}
@@ -909,6 +922,7 @@ function EditorCanvasImpl({
         style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
+      notifyTutorialAction("route-drawn");
       onSelectRoute(route.id);
       onSelectNode(nodes[nodes.length - 1].id);
       onSelectSegment(null);
@@ -959,6 +973,7 @@ function EditorCanvasImpl({
         style: buildRouteStyle(playerId),
       };
       dispatch({ type: "route.add", route });
+      notifyTutorialAction("route-drawn");
       onSelectRoute(route.id);
       onSelectNode(endNode.id); // so next click extends from here
       onSelectSegment(null);
@@ -1276,6 +1291,7 @@ function EditorCanvasImpl({
           playerId: state.playerId,
           position: clamped,
         });
+        notifyTutorialAction("player-moved");
         return;
       }
 
@@ -1296,6 +1312,7 @@ function EditorCanvasImpl({
           nodeId: state.nodeId,
           position,
         });
+        notifyTutorialAction("anchor-dragged");
         return;
       }
 
@@ -2080,7 +2097,7 @@ function EditorCanvasImpl({
   // stored positions are still in normalized 0-1 field coords.
 
   return (
-    <div ref={wrapperRef} className="relative h-full min-h-0 w-full select-none overflow-hidden" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
+    <div ref={wrapperRef} data-tutor="editor-canvas" className="relative h-full min-h-0 w-full select-none overflow-hidden" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
     <svg
       ref={svgRef}
       viewBox={`0 0 ${fieldAspect} 1`}
@@ -2843,6 +2860,11 @@ function EditorCanvasImpl({
                         strokeWidth={0.0015}
                         vectorEffect="non-scaling-stroke"
                         style={{ cursor: "grab", touchAction: "none" }}
+                        // Tutorial hook: the "Reshape a route" step's
+                        // gated-Next nudge measures every element with
+                        // this attribute and pulses each one, so the
+                        // coach can spot the draggable anchors.
+                        data-route-anchor=""
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           startInteraction(e, {
@@ -3122,7 +3144,7 @@ function EditorCanvasImpl({
         const badgeCy = py - r * 0.9;
 
         return (
-          <g key={pl.id}>
+          <g key={pl.id} data-player-marker>
             {sel && (
               <circle
                 className="marching-ants"
@@ -3218,6 +3240,7 @@ function EditorCanvasImpl({
             fieldAspect={fieldAspect}
             onSave={(label) => {
               dispatch({ type: "player.setLabel", playerId: pl.id, label });
+              notifyTutorialAction("player-renamed");
               setEditingPlayerId(null);
             }}
             onCancel={() => setEditingPlayerId(null)}
@@ -3231,7 +3254,7 @@ function EditorCanvasImpl({
           data-segment-menu
           x={segmentMenu.screenX}
           y={segmentMenu.screenY}
-          className="fixed z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          className="fixed z-[70] min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -3319,7 +3342,7 @@ function EditorCanvasImpl({
                           className={
                             "flex-1 rounded px-2 py-1 text-xs font-medium " +
                             (active
-                              ? "bg-foreground text-background"
+                              ? "bg-foreground text-surface-raised"
                               : "bg-surface-raised text-foreground hover:bg-surface-inset")
                           }
                           onClick={() => setSegSpeed(mult)}
@@ -3395,7 +3418,7 @@ function EditorCanvasImpl({
           data-segment-menu
           x={anchorMenu.screenX}
           y={anchorMenu.screenY}
-          className="fixed z-20 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
+          className="fixed z-[70] min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <button
@@ -3440,7 +3463,7 @@ function EditorCanvasImpl({
             data-segment-menu
             x={playerMenu.screenX}
             y={playerMenu.screenY}
-            className="fixed z-20 min-w-[200px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
+            className="fixed z-[70] min-w-[200px] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-elevated py-1"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button
@@ -3578,7 +3601,7 @@ function EditorCanvasImpl({
                       className={
                         "min-w-[28px] rounded px-2 py-1 text-xs font-medium " +
                         (active
-                          ? "bg-foreground text-background"
+                          ? "bg-foreground text-surface-raised"
                           : "bg-surface-raised text-foreground hover:bg-surface-inset")
                       }
                       onClick={() => setDelayForAllRoutes(steps)}
@@ -3650,7 +3673,7 @@ function EditorCanvasImpl({
                             className={
                               "flex-1 rounded px-2 py-1 text-xs font-medium " +
                               (active
-                                ? "bg-foreground text-background"
+                                ? "bg-foreground text-surface-raised"
                                 : "bg-surface-raised text-foreground hover:bg-surface-inset")
                             }
                             onClick={() => setSpeedForPlayer(mult)}
@@ -3689,7 +3712,7 @@ function EditorCanvasImpl({
             data-segment-menu
             x={zoneMenu.screenX}
             y={zoneMenu.screenY}
-            className="fixed z-20 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
+            className="fixed z-[70] min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised py-1 shadow-elevated"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <button

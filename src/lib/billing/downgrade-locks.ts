@@ -76,7 +76,12 @@ export async function computeDowngradeLocks(userId: string): Promise<DowngradeLo
       .in("playbook_id", Array.from(unlockedPlaybookIds))
       .eq("is_archived", false)
       .is("attached_to_play_id", null)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      // Tutorial plays are disposable scratch space and don't count
+      // against the per-playbook free-tier cap. Without this filter,
+      // creating a tutorial play could push a real play into the
+      // locked state.
+      .eq("is_tutorial", false);
 
     const byBook = new Map<string, Array<{ id: string; createdAt: string }>>();
     for (const p of plays ?? []) {

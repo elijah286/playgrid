@@ -114,6 +114,8 @@ export async function listPlaysAction(
     .eq("playbook_id", playbookId)
     .is("deleted_at", null)
     .is("attached_to_play_id", null)
+    // Tutorial plays are disposable scratch space; hidden from normal lists.
+    .eq("is_tutorial", false)
     .order("updated_at", { ascending: false })
     .limit(PLAYS_LIST_CAP + 1);
 
@@ -231,6 +233,12 @@ export async function createPlayAction(
     playType?: PlayType;
     specialTeamsUnit?: SpecialTeamsUnit | null;
     playName?: string;
+    /** When true, mark the play as a disposable tutorial play. Skips the
+     *  downgrade-lock and per-playbook play-cap checks so coaches on
+     *  downgraded plans (or at the per-playbook cap) can still take the
+     *  in-app tour. Tutorial plays are excluded from cap calculations and
+     *  hidden from the playbook play list. */
+    isTutorial?: boolean;
   },
 ) {
   if (!hasSupabaseEnv()) {
@@ -242,17 +250,23 @@ export async function createPlayAction(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false as const, error: "Not signed in." };
 
-  const ownerId = await getPlaybookOwnerId(playbookId);
-  if (ownerId) {
-    const lock = await assertNotLocked({ ownerId, playbookId });
-    if (!lock.ok) return { ok: false as const, error: lock.error };
+  const isTutorial = opts?.isTutorial === true;
+
+  if (!isTutorial) {
+    const ownerId = await getPlaybookOwnerId(playbookId);
+    if (ownerId) {
+      const lock = await assertNotLocked({ ownerId, playbookId });
+      if (!lock.ok) return { ok: false as const, error: lock.error };
+    }
   }
 
   const gameLock = await assertNoActiveGameSession(supabase, playbookId);
   if (gameLock.locked) return gameModeLockedResult(gameLock.lock);
 
-  const cap = await assertPlayCap(supabase, playbookId);
-  if (!cap.ok) return { ok: false as const, error: cap.error };
+  if (!isTutorial) {
+    const cap = await assertPlayCap(supabase, playbookId);
+    if (!cap.ok) return { ok: false as const, error: cap.error };
+  }
 
   // Use the playbook's variant to drive both sport profile and default players.
   const effectiveVariant: SportVariant = opts?.variant ?? "flag_7v7";
@@ -330,6 +344,7 @@ export async function createPlayAction(
       formation_tag: null,
       play_type: opts?.playType ?? "offense",
       special_teams_unit: opts?.specialTeamsUnit ?? null,
+      is_tutorial: isTutorial,
     })
     .select("id")
     .single();
@@ -373,7 +388,7 @@ export async function getPlayForEditorAction(playId: string) {
   const { data: row, error } = await supabase
     .from("plays")
     .select(
-      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden, is_archived, play_versions!current_version_id(id, document, label, created_at, parent_version_id)",
+      "id, playbook_id, name, wristband_code, shorthand, concept, tags, tag, formation_name, current_version_id, formation_id, formation_tag, play_type, special_teams_unit, opponent_formation_id, vs_play_id, vs_play_snapshot, attached_to_play_id, opponent_hidden, is_archived, is_tutorial, play_versions!current_version_id(id, document, label, created_at, parent_version_id)",
     )
     .eq("id", playId)
     .single();

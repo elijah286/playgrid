@@ -140,6 +140,84 @@ body {
   }
 }
 
+/* Tutorial: blue ripples emanating from each player on the
+   "select a player" step. The tutorial engine renders one
+   `.tutorial-player-ripple` HTML span per player (positioned at each
+   player's screen-space center via getBoundingClientRect). The pseudo-
+   elements inside each span are two staggered rings that play exactly
+   ONCE per trigger — the engine re-keys the spans on entry and on
+   each gated-next nudge to re-fire the animation. */
+@keyframes tutorial-player-ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(3.2);
+    opacity: 0;
+  }
+}
+.tutorial-player-ripple {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  /* Must sit above the spotlit element (z:56 via [data-tutor-spotlit])
+     so pulses are visible when they fire on a sub-anchor inside the
+     spotlit container — e.g. the color picker chip on step 5, whose
+     spotlit ancestor is the whole route toolbar. Below the tutorial
+     card (z:60) so the card stays on top. */
+  z-index: 57;
+}
+.tutorial-player-ripple::before,
+.tutorial-player-ripple::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #1769FF;
+  box-shadow: 0 0 12px rgba(23, 105, 255, 0.5);
+  transform: translate(-50%, -50%) scale(0.45);
+  opacity: 0;
+  animation: tutorial-player-ripple 1.4s ease-out 1 forwards;
+}
+.tutorial-player-ripple::after {
+  animation-delay: 0.45s;
+}
+
+/* Tutorial spotlight: glow is a property of the target element, not
+   a separately positioned overlay. The Spotlight engine adds
+   `data-tutor-spotlit` to whichever element is the active tour step's
+   target; this rule applies the blue glow box-shadow + elevates the
+   element above the dim overlay so it pops out without any rect
+   math. The glow follows the element naturally on scroll / layout
+   shift because it *is* the element — not an overlay tracking it. */
+[data-tutor-spotlit] {
+  position: relative;
+  z-index: 56;
+  border-radius: 8px;
+  box-shadow:
+    /* Inset ring — primary visual. Painted INSIDE the element's
+       border, so it's never clipped by an overflow:hidden ancestor.
+       The play field canvas, for example, lives inside a wrapper
+       with overflow:hidden — outer box-shadows on it disappear
+       silently. The inset ring guarantees a visible glow on every
+       spotlit element, regardless of ancestor clipping. */
+    inset 0 0 0 3px #1769FF,
+    inset 0 0 18px 4px rgba(23, 105, 255, 0.35),
+    /* Outer glow — extends beyond the element's border. Visible
+       when the element isn't inside an overflow:hidden ancestor;
+       silently clipped when it is. The inset above is the reliable
+       fallback. */
+    0 0 0 3px #1769FF,
+    0 0 0 9px rgba(23, 105, 255, 0.28),
+    0 0 28px 6px rgba(23, 105, 255, 0.45);
+  transition: box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* iOS-style "jiggle" on play tiles in reorder mode. Two keyframes with
  * slightly different rotations + durations applied alternately to odd/even
  * children so the grid feels organic instead of uniformly mechanical.

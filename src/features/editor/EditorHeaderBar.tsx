@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   FolderInput,
+  GraduationCap,
   History,
   LayoutGrid,
   Link2Off,
@@ -21,8 +22,13 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { PlayCommand } from "@/domain/play/commands";
-import type { PlayDocument } from "@/domain/play/types";
+import type { PlayDocument, SportVariant } from "@/domain/play/types";
+import { useTutorial } from "@/features/tutorials/engine/TutorialProvider";
+import { PLAY_AUTHORING_TUTORIAL } from "@/features/tutorials/tutorials/playAuthoring";
+import { launchPlayAuthoringTour } from "@/features/tutorials/launch";
+import { useToast } from "@/components/ui";
 import { FormationThumbnail } from "@/app/(dashboard)/playbooks/[playbookId]/PlaybookFormationsTab";
 import {
   listPlaybookPlaysForNavigationAction,
@@ -77,6 +83,11 @@ type Props = {
    *  viewing → edit. Wired by the parent so the matchMedia auto-flip
    *  also gets a chance to opt out of clobbering the user's choice. */
   onToggleMode?: () => void;
+  /** Sport variant of the parent playbook. When supported by an installed
+   *  tutorial (currently only `play_authoring_v1`), the overflow menu
+   *  surfaces a "Take the tutorial" item so coaches can launch the tour
+   *  from inside the editor — not just from the Learning Center. */
+  tutorialVariant?: SportVariant | null;
 };
 
 export function EditorHeaderBar({
@@ -101,6 +112,7 @@ export function EditorHeaderBar({
   hideMobileNav = false,
   mode,
   onToggleMode,
+  tutorialVariant = null,
 }: Props) {
   const [nav, setNav] = useState(initialNav);
   const [groups, setGroups] = useState(initialGroups);
@@ -109,6 +121,18 @@ export function EditorHeaderBar({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [, startTransition] = useTransition();
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const { active: tutorialActive } = useTutorial();
+  const router = useRouter();
+  const { toast } = useToast();
+  const [tutorialLaunching, setTutorialLaunching] = useState(false);
+  // Surface the Play Authoring tour from the action menu whenever the
+  // playbook variant is supported. Hidden while a tour is already running
+  // or while we're launching one (avoids double-click).
+  const tutorialOffered =
+    tutorialVariant != null &&
+    PLAY_AUTHORING_TUTORIAL.supportedVariants.includes(tutorialVariant) &&
+    !tutorialActive &&
+    !tutorialLaunching;
 
   useEffect(() => {
     setNav(initialNav);
@@ -248,6 +272,10 @@ export function EditorHeaderBar({
                 leftIcon={mode === "edit" ? Check : Pencil}
                 onClick={onToggleMode}
                 className="hidden sm:inline-flex"
+                // Touch-only mode toggle. Desktop's Done button lives
+                // in RouteToolbar — that's where `data-tutor="editor-done"`
+                // is hung. Adding it here too would let useTargetRect
+                // match the wrong (hidden) element on desktop.
               >
                 {mode === "edit" ? "Done" : "Edit"}
               </Button>
@@ -324,6 +352,28 @@ export function EditorHeaderBar({
                     label: "Move to group…",
                     icon: FolderInput,
                     onSelect: () => onMoveToGroup(currentGroupId),
+                  });
+                }
+                if (tutorialOffered) {
+                  items.push({
+                    label: "Take the tutorial",
+                    icon: GraduationCap,
+                    onSelect: () => {
+                      setTutorialLaunching(true);
+                      void launchPlayAuthoringTour(playbookId, router).then(
+                        (res) => {
+                          if (!res.ok) {
+                            setTutorialLaunching(false);
+                            toast(
+                              res.error ?? "Could not start the tutorial.",
+                              "error",
+                            );
+                          }
+                          // On success, the new play mounts and the editor
+                          // unmounts — no need to clear `tutorialLaunching`.
+                        },
+                      );
+                    },
                   });
                 }
                 if (onArchive) {
@@ -448,6 +498,7 @@ function FormationTitlePicker({
       <button
         ref={triggerRef}
         type="button"
+        data-tutor="formation-picker"
         onClick={() => setOpen((p) => !p)}
         className="inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-muted hover:bg-surface-inset hover:text-foreground"
         title="Change or unlink formation"
