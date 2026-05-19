@@ -24,10 +24,15 @@ const config: CapacitorConfig = {
     // header, which doesn't happen on Android because the StatusBar plugin
     // defaults to overlay=true there.
     contentInset: "never",
-    backgroundColor: "#ffffff",
+    // No `backgroundColor` here — Capacitor falls back to
+    // `UIColor.systemBackground`, which is dynamic and tracks light/dark
+    // mode. The previous `#ffffff` was forcing the webview's exterior to
+    // white, which showed as a jarring white gap above the header in
+    // dark mode whenever the WKWebView's frame extended past the page
+    // content (e.g. during overscroll or at the top safe-area).
   },
   android: {
-    backgroundColor: "#ffffff",
+    // Same reasoning as iOS — let the OS pick a theme-aware background.
   },
   plugins: {
     SplashScreen: {
