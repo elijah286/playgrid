@@ -43,15 +43,19 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: {
       // Hold the splash for ~1.2s, then cross-fade for 280ms. This trims
-      // the perceived "white flash" between native splash and the first
-      // hydrated paint that Apple reviewers tend to flag on web wrappers.
+      // the perceived flash between native splash and the first hydrated
+      // paint that Apple reviewers tend to flag on web wrappers.
       // We hide programmatically (showSplash on first paint) instead of
       // relying on the auto-hide so the splash never lingers if the
       // network is slow.
       launchShowDuration: 1200,
       launchAutoHide: false,
       launchFadeOutDuration: 280,
-      backgroundColor: "#ffffff",
+      // No `backgroundColor` — the iOS LaunchScreen storyboard already
+      // uses `systemBackgroundColor` (theme-aware), and the WebView's
+      // background is `UIColor.systemBackground` (also theme-aware) once
+      // we removed `ios.backgroundColor`. The previous `#ffffff` forced
+      // a white flash between splash and WebView in dark mode.
       androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
       showSpinner: false,

@@ -463,7 +463,18 @@ html.native-shell #native-loading-overlay {
   align-items: center;
   justify-content: center;
   gap: 1.5rem;
-  background: #ffffff;
+  /* Match the WebView's `systemBackground` (light/dark adaptive) so the
+   * cold-launch handoff splash → overlay → page renders without a color
+   * flash. Was `#ffffff` previously, which paired fine with the old
+   * hardcoded white WebView background but flashed jarringly bright in
+   * dark mode once we let the WebView track the system theme.
+   *
+   * Uses `--color-surface` (set on :root for light, on html.dark for
+   * dark) instead of `light-dark()` because the latter requires Safari
+   * 17.5+ and our deployment target is iOS 16. The pre-paint script in
+   * layout.tsx adds html.dark before this rule paints, so the variable
+   * is already resolved by the time the overlay shows. */
+  background: var(--color-surface);
   transition: opacity 280ms ease-out;
 }
 html.native-shell #native-loading-overlay img {
