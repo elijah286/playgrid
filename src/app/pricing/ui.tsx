@@ -5,10 +5,8 @@ import { Check } from "lucide-react";
 import {
   createBillingPortalSessionAction,
   createCheckoutSessionAction,
-  redeemGiftCodeAction,
 } from "@/app/actions/billing";
 import { track } from "@/lib/analytics/track";
-import { TIER_LABEL } from "@/lib/billing/features";
 import {
   MESSAGE_PACK_PRICE_USD_PER_MONTH,
   MESSAGE_PACK_SIZE,
@@ -346,8 +344,6 @@ export function PricingClient({
         </p>
       ) : null}
 
-      {isAuthed && <RedeemCodePanel />}
-
       <AddOnsDisclosure showCoachAi={showCoachAi} />
 
       <p className="text-center text-xs text-muted">
@@ -399,73 +395,3 @@ function AddOnsDisclosure({ showCoachAi }: { showCoachAi: boolean }) {
   );
 }
 
-function RedeemCodePanel() {
-  const [code, setCode] = useState("");
-  const [pending, startTransition] = useTransition();
-  const [msg, setMsg] = useState<
-    { kind: "success" | "error"; text: string } | null
-  >(null);
-
-  function submit() {
-    if (!code.trim()) return;
-    setMsg(null);
-    startTransition(async () => {
-      const res = await redeemGiftCodeAction(code);
-      if (!res.ok) {
-        setMsg({ kind: "error", text: res.error });
-        return;
-      }
-      const expires = res.expiresAt
-        ? ` until ${new Date(res.expiresAt).toLocaleDateString()}`
-        : "";
-      setMsg({
-        kind: "success",
-        text: `Code redeemed — you now have ${TIER_LABEL[res.tier]}${expires}. Refresh to see your new plan.`,
-      });
-      setCode("");
-    });
-  }
-
-  return (
-    <div className="mx-auto max-w-md rounded-2xl border border-border bg-surface-raised p-5">
-      <h3 className="text-sm font-semibold text-foreground">Have a code?</h3>
-      <p className="mt-1 text-xs text-muted">
-        Redeem a gift code to upgrade your account without paying.
-      </p>
-      <div className="mt-3 flex gap-2">
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-          }}
-          placeholder="Enter code"
-          className="block w-full rounded-md bg-surface px-3 py-1.5 font-mono text-sm uppercase tracking-wide ring-1 ring-border"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={pending || !code.trim()}
-          className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-        >
-          Redeem
-        </button>
-      </div>
-      {msg ? (
-        <p
-          className={cn(
-            "mt-3 rounded-md px-3 py-2 text-xs ring-1",
-            msg.kind === "error"
-              ? "bg-red-50 text-red-900 ring-red-200"
-              : "bg-emerald-50 text-emerald-900 ring-emerald-200",
-          )}
-        >
-          {msg.text}
-        </p>
-      ) : null}
-    </div>
-  );
-}
