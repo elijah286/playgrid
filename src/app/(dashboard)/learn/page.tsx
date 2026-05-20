@@ -34,7 +34,7 @@ export default async function LearningCenterPage() {
     TUTORIAL_LIST[0]?.id;
 
   return (
-    <article className="mx-auto max-w-2xl px-6 py-10 text-foreground">
+    <article className="mx-auto max-w-2xl pb-24 text-foreground">
       <header className="mb-6">
         <h1 className="text-2xl font-extrabold tracking-tight">
           Learning Center
