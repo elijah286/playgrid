@@ -661,22 +661,17 @@ function PlaybookDetailClientInner({
     // below promotes desktop without a saved pref to "medium".
     (initialPrefs?.thumbSize as ThumbSize | undefined) ?? "small",
   );
-  // Per-viewport defaults applied once on mount:
-  //   - Mobile (<sm): force "small". A medium/large desktop pref carried
-  //     over to a phone puts one giant card per row, costing 4+ scrolls
-  //     to skim a typical playbook.
-  //   - Desktop without saved pref: promote to "medium". Small thumbs on
-  //     a wide screen leave the right half of the grid empty.
+  // Per-viewport defaults applied once on mount, regardless of saved pref:
+  //   - Mobile (<sm): force "small". Medium/large on a phone puts one
+  //     giant card per row, costing 4+ scrolls to skim a playbook.
+  //   - Non-mobile: force "medium". Small thumbs on a wide screen leave
+  //     the right half of the grid empty; large wastes vertical space.
   // Coaches can still pick any size from the filter popover — this only
   // resets the *initial* render. Runs after mount to avoid SSR/CSR mismatch.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const isMobile = window.matchMedia("(max-width: 639px)").matches;
-    if (isMobile) {
-      setThumbSize("small");
-    } else if (!initialPrefs?.thumbSize) {
-      setThumbSize("medium");
-    }
+    setThumbSize(isMobile ? "small" : "medium");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount default; ignore prop changes
   }, []);
   const [showPlayNumbers, setShowPlayNumbers] = useState<boolean>(
