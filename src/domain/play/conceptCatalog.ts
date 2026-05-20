@@ -445,11 +445,36 @@ const DIVE: ConceptEntry = {
   name: "Dive",
   aliases: ["Inside Dive", "Iso", "Lead Dive"],
   description:
-    "North-south interior run. QB hands to the back attacking the A/B gap downhill — first available crease wins. OL inside-zone-blocks (or pin-and-pull for a power flavor). Stays on schedule, eats clock, and softens up a stout interior for the play-action that follows.",
+    "North-south interior run. QB hands to the back attacking the A/B gap downhill — first available crease wins. OL inside-zone-blocks. Stays on schedule, eats clock, and softens up a stout interior for the play-action that follows.",
   required: [],
   complexity: "basic",
   structural: {
-    requiresCarry: { player: "back", runTypes: ["inside_zone", "trap", "power"] },
+    // 2026-05-20: removed "power" from Dive's runTypes so the new POWER
+    // concept (which restricts to runType: "power" only) is the
+    // canonical match for downhill pulling-guard runs. Dive stays
+    // inside-zone / trap.
+    requiresCarry: { player: "back", runTypes: ["inside_zone", "trap"] },
+    requiresBallPathSteps: 1,
+  },
+};
+
+// POWER — downhill gap-scheme run with a pulling lineman as lead. Distinct
+// from Dive (which is inside-zone north-south) because Power BC follows a
+// specific blocker (pulling guard or H-back) to a designated gap. The
+// catalog entry restricts runType to "power" only so a play with
+// runType: "inside_zone" or "trap" still matches Dive, not Power.
+// Surfaced 2026-05-20 — Cal had been freelancing Power plays because the
+// concept wasn't in the catalog, leading to orphan @FB references in
+// formations without an FB.
+const POWER: ConceptEntry = {
+  name: "Power",
+  aliases: ["Power O", "Strong Power", "Down G"],
+  description:
+    "Gap-scheme downhill run with a pulling blocker as lead. QB hands to the back, who follows the pulling guard (or H-back) through the designated gap. OL down-blocks playside; backside guard pulls and kicks out / leads up to the second level. Hard-hitting, decisive — the defense gets one count to fit gaps and the back is already through. Best when the defense over-aligns to one side or against a stack-and-shed front you can knock off the ball.",
+  required: [],
+  complexity: "basic",
+  structural: {
+    requiresCarry: { player: "back", runTypes: ["power"] },
     requiresBallPathSteps: 1,
   },
 };
@@ -522,6 +547,11 @@ export const CONCEPT_CATALOG: ConceptEntry[] = [
   // requirement; the run concepts further restrict on the back's
   // runType so a "Sweep" with `runType: counter` won't match.
   SWEEP,
+  // POWER comes BEFORE DIVE so detectConcept() prefers POWER for plays
+  // whose back has runType: "power". DIVE no longer accepts that
+  // runType (tightened 2026-05-20), so the ordering is belt-and-
+  // suspenders.
+  POWER,
   DIVE,
   COUNTER,
   DRAW,

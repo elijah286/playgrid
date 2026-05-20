@@ -651,7 +651,7 @@ function cap(s: string): string {
  * back takes possession at the mesh.
  */
 function buildSingleHandoffRun(
-  conceptName: "Sweep" | "Dive" | "Counter" | "Draw",
+  conceptName: "Sweep" | "Dive" | "Counter" | "Draw" | "Power",
   runType: NonNullable<Extract<AssignmentAction, { kind: "carry" }>["runType"]>,
   opts: ConceptSkeletonOptions,
 ): SkeletonResult {
@@ -660,7 +660,14 @@ function buildSingleHandoffRun(
   const sideSign = side === "right" ? 1 : -1;
   // Mesh point: 4 yards behind the LOS, shading the runtype's direction.
   // Sweep/Counter pull laterally; Dive/Draw stay between the tackles.
-  const lateralBias = conceptName === "Sweep" || conceptName === "Counter" ? 1.5 : 0;
+  // Power: small lateral bias toward the playside gap (1 yd) — narrower
+  // than Sweep (gap-scheme, not edge-attack) but more than Dive (B-gap,
+  // not A-gap).
+  const lateralBias = conceptName === "Sweep" || conceptName === "Counter"
+    ? 1.5
+    : conceptName === "Power"
+    ? 1
+    : 0;
   const mesh: [number, number] = [sideSign * lateralBias, -4];
   // Back's carry path: from start (~7yd deep in backfield) through the
   // mesh, then up the field on the runType's track.
@@ -707,7 +714,7 @@ function buildSingleHandoffRun(
 /** Back's carry path for each run-concept type. Each shape ends ~8yd
  *  downfield so the diagram clearly shows where the back is attacking. */
 function runPathFor(
-  conceptName: "Sweep" | "Dive" | "Counter" | "Draw",
+  conceptName: "Sweep" | "Dive" | "Counter" | "Draw" | "Power",
   sideSign: 1 | -1,
   mesh: [number, number],
 ): [number, number][] {
@@ -727,11 +734,16 @@ function runPathFor(
       // Late-developing: mesh held → soft middle → vertical through the
       // pocket the rush vacated.
       return [mesh, [0, -2], [0, 8]];
+    case "Power":
+      // Gap-scheme downhill: mesh → follow the pulling guard through
+      // the playside B-gap → vertical at second level. Wider than Dive
+      // (B-gap, not A-gap) and tighter than Sweep (gap, not edge).
+      return [mesh, [sideSign * 2, 1], [sideSign * 3, 8]];
   }
 }
 
 function runNotesFor(
-  conceptName: "Sweep" | "Dive" | "Counter" | "Draw",
+  conceptName: "Sweep" | "Dive" | "Counter" | "Draw" | "Power",
   side: "left" | "right",
 ): string {
   const dir = cap(side);
@@ -756,6 +768,12 @@ function runNotesFor(
         `Draw ${dir}: OL pass-sets, receivers run pass-pretend routes to widen the coverage. ` +
         `@QB drops back, then hands LATE to @B hitting the soft middle the rush vacated. Best on obvious passing downs.`
       );
+    case "Power":
+      return (
+        `Power ${dir}: @QB hands to @B at the mesh; the backside guard pulls and leads through the playside B-gap. ` +
+        `@B follows the puller, presses the line, and breaks downhill — first defender to fit the gap takes the contact, ` +
+        `@B is already through. OL down-blocks playside; receivers stalk-block their man.`
+      );
   }
 }
 
@@ -770,6 +788,9 @@ function buildCounter(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonR
 }
 function buildDraw(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
   return buildSingleHandoffRun("Draw", "draw", opts);
+}
+function buildPower(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResult {
+  return buildSingleHandoffRun("Power", "power", opts);
 }
 
 /**
@@ -928,5 +949,8 @@ const SKELETON_BUILDERS: Record<string, (concept: ConceptEntry, opts: ConceptSke
   "Dive":           buildDive,
   "Counter":        buildCounter,
   "Draw":           buildDraw,
+  // 2026-05-20: Power — gap-scheme downhill run, distinct from Dive
+  // (interior north-south) and Counter (misdirection pull).
+  "Power":          buildPower,
   "Flea Flicker":   buildFleaFlicker,
 };

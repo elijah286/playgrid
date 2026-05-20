@@ -764,3 +764,54 @@ describe("playSpecToCoachDiagram — redundant handoff arrows are suppressed whe
     expect(qbHandoffArrows.length).toBeGreaterThan(0);
   });
 });
+
+// ── Power concept (2026-05-20) ──────────────────────────────────────────
+// Coach surfaced a Power play where Cal hand-authored the diagram with
+// `from: "FB"` even though the tackle_11 formation had no FB. Root cause:
+// Power wasn't in the catalog. compose_play({ concept: "Power" }) must
+// succeed and emit a fence whose routes only reference players that
+// actually exist in the formation — so a coach asking "build me a Power
+// play" doesn't trigger the freelance path.
+describe("Power concept — composable in tackle_11 (regression 2026-05-20)", () => {
+  it("compose_play(\"Power\") succeeds in tackle_11", () => {
+    const result = generateConceptSkeleton("Power", { variant: "tackle_11" });
+    expect(result.ok, result.ok ? undefined : result.error).toBe(true);
+    if (!result.ok) return;
+    expect(result.concept).toBe("Power");
+  });
+
+  it("Power's emitted diagram has zero orphan routes (every route's carrier exists in players[])", () => {
+    const result = generateConceptSkeleton("Power", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { diagram } = playSpecToCoachDiagram(result.spec);
+    const playerIds = new Set(diagram.players.map((p) => p.id));
+    const orphans = diagram.routes.filter((r) => !playerIds.has(r.from));
+    expect(
+      orphans,
+      `Power skeleton emitted orphan routes: ${orphans.map((r) => r.from).join(", ")}. ` +
+        `Every route's @from must be a player in the formation.`,
+    ).toHaveLength(0);
+  });
+
+  it("Power resolves aliases (Power O, Strong Power, Down G)", () => {
+    for (const alias of ["Power O", "Strong Power", "Down G"]) {
+      const result = generateConceptSkeleton(alias, { variant: "tackle_11" });
+      expect(result.ok, `alias "${alias}" should resolve to Power`).toBe(true);
+      if (!result.ok) return;
+      expect(result.concept).toBe("Power");
+    }
+  });
+
+  it("Power's back gets runType: 'power' (matcher distinguishes it from Dive)", () => {
+    const result = generateConceptSkeleton("Power", { variant: "tackle_11" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const backCarry = result.spec.assignments.find(
+      (a) => a.player === "B" && a.action.kind === "carry",
+    );
+    expect(backCarry).toBeDefined();
+    if (backCarry?.action.kind !== "carry") return;
+    expect(backCarry.action.runType).toBe("power");
+  });
+});
