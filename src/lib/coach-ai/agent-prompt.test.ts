@@ -85,3 +85,38 @@ describe("NORMAL_PROMPT — Rule 8z (in-scope reminder includes strategic Q&A)",
     expect(NORMAL_PROMPT).toMatch(/Cover 2/i);
   });
 });
+
+describe("NORMAL_PROMPT — Rule 7c (Plan checklist for N ≥ 3 multi-play installs)", () => {
+  // Surfaced 2026-05-20: a coach's 6-play install saved 1 of 6 because
+  // Cal crammed all 6 fences into one reply, hit the SSE timeout, and
+  // hand-authored 5 of them. The Plan checklist + per-turn cap of 3
+  // converts "do 6 plays in one mega-turn" into "propose plan, then 3
+  // per turn until done."
+
+  it("names the per-turn fence cap as 3", () => {
+    // The validator's MAX_CATALOG_CONCEPT_FENCES_PER_REPLY enforces
+    // this — the prompt must agree so Cal isn't surprised by rejection.
+    expect(NORMAL_PROMPT).toMatch(/MAX 3 fences per turn/i);
+  });
+
+  it("describes the Plan checklist as markdown with - [ ] / - [x] items", () => {
+    // The plan format is plain markdown so Cal can re-emit it across
+    // turns and read its own prior turns to know what's done.
+    expect(NORMAL_PROMPT).toMatch(/- \[ \] 1\. Mesh/);
+    expect(NORMAL_PROMPT).toMatch(/- \[x\] 1\. Mesh/);
+  });
+
+  it("tells Cal the FIRST turn proposes the plan and does NOT compose", () => {
+    // The bug pattern was Cal proposing the plan AND composing all 6
+    // plays in the same turn. Rule must explicitly say "stop after
+    // proposing the plan."
+    expect(NORMAL_PROMPT).toMatch(/NO compose_play calls in the planning turn/i);
+  });
+
+  it("forbids copying a compose_play fence for another play", () => {
+    // Cal's actual failure mode in the user's report — call compose_play
+    // once, then copy/tweak the fence 5 times. Each copy fails save-time
+    // validation because depths drift.
+    expect(NORMAL_PROMPT).toMatch(/DO NOT copy a compose_play fence and tweak it for another play/i);
+  });
+});

@@ -33,6 +33,16 @@ import {
   validateMotion,
 } from "./play-content-validate";
 
+/** Per-reply cap on catalog-concept play fences. Cramming more than
+ *  this into a single reply hits the SSE timeout, blows the tool-turn
+ *  budget, and produces silent partial failures (Cal copies fence #1
+ *  for plays 2-N, the copies fail save-time validation). Surfaced
+ *  2026-05-20: a coach's 6-play install saved 1 of 6 because Cal
+ *  emitted all 6 in one reply. The cap forces Cal to chunk via the
+ *  Plan checklist (rule 7c) — each turn does ≤ cap, recovery is
+ *  "ask for the next batch" instead of "save those". */
+export const MAX_CATALOG_CONCEPT_FENCES_PER_REPLY = 3;
+
 const OFFENSE_LETTERS = new Set([
   // Skill positions
   "QB", "C", "X", "Y", "Z", "H", "B", "F", "S", "TE",
@@ -1104,6 +1114,29 @@ export function validateDiagrams(opts: {
         const surgicalBypass =
           opts.modifyPlayRouteCalled === true ||
           opts.addDefenseToPlayCalled === true;
+
+        // GATE A.0 — per-reply fence cap. No more than MAX_FENCES_PER_REPLY
+        // catalog-concept fences in a single reply, regardless of how
+        // many compose_play calls Cal made. Surfaced 2026-05-20: a
+        // coach's 6-play install crammed all 6 fences into one reply,
+        // hit the SSE timeout, Cal hand-authored 5 of the fences after
+        // the first compose_play, and 5 plays failed save-time
+        // validation. The cap forces Cal to chunk via the Plan
+        // checklist (rule 7c) — each turn does ≤ MAX_FENCES_PER_REPLY,
+        // recovery is "ask for the next batch" instead of "save those".
+        if (
+          isFullCatalogConceptFence &&
+          !surgicalBypass &&
+          catalogConceptFencesSeen > MAX_CATALOG_CONCEPT_FENCES_PER_REPLY
+        ) {
+          errors.push(
+            `${tag}this reply has ${catalogConceptFencesSeen} catalog-concept fences, but the per-reply cap is ${MAX_CATALOG_CONCEPT_FENCES_PER_REPLY}. ` +
+            `Cramming N plays into one reply hits the SSE timeout and produces silent partial failures (Cal copies fence #1's structure for plays 2-N, the copies fail save-time validation). ` +
+            `Split this work across multiple turns: open with a markdown Plan checklist naming every play you'll build (rule 7c), then compose AT MOST ${MAX_CATALOG_CONCEPT_FENCES_PER_REPLY} per turn. The coach types "next" between batches. ` +
+            `For THIS turn: keep the first ${MAX_CATALOG_CONCEPT_FENCES_PER_REPLY} fences, drop the rest, and tell the coach how many remain.`,
+          );
+        }
+
         if (
           isFullCatalogConceptFence &&
           !surgicalBypass &&

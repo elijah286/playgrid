@@ -350,6 +350,30 @@ describe("validateDiagrams — tackle_11 OL-completeness", () => {
   });
 });
 
+// Module-scoped helper — reused by the concept-claim-requires-skeleton
+// gate AND the per-reply fence cap gate below. Returns a fresh full-
+// roster tackle_11 Mesh fence each call (call it N times to simulate a
+// reply with N catalog-concept fences).
+function fullTackleMeshFence() {
+  return makeFence({
+    title: "Spread Doubles — Mesh",
+    variant: "tackle_11",
+    players: [
+      { id: "Q", x: 0, y: -3, team: "O" },
+      { id: "LT", x: -4, y: 0, team: "O" }, { id: "LG", x: -2, y: 0, team: "O" },
+      { id: "C",  x: 0,  y: 0, team: "O" }, { id: "RG", x: 2,  y: 0, team: "O" },
+      { id: "RT", x: 4,  y: 0, team: "O" },
+      { id: "X", x: -18, y: 0, team: "O" }, { id: "Z", x: 18, y: 0, team: "O" },
+      { id: "H", x: -10, y: -1, team: "O" }, { id: "S", x: 10, y: -1, team: "O" },
+      { id: "B", x: 2, y: -5, team: "O" },
+    ],
+    routes: [
+      { from: "H", path: [[-10, 2], [10, 2]], route_kind: "Drag" },
+      { from: "S", path: [[10, 2], [-10, 2]], route_kind: "Drag" },
+    ],
+  });
+}
+
 describe("validateDiagrams — concept-claim requires skeleton/modify tool", () => {
   // 2026-05-02: Cal hand-authored a "Mesh" with both drags at 2yd. The
   // catalog's assertConcept layer rejects when the spec's depth values
@@ -357,26 +381,6 @@ describe("validateDiagrams — concept-claim requires skeleton/modify tool", () 
   // geometry is to route through get_concept_skeleton. This gate fires
   // when a full play CLAIMS a catalog concept name without calling
   // either the skeleton tool or one of the modify tools.
-
-  function fullTackleMeshFence() {
-    return makeFence({
-      title: "Spread Doubles — Mesh",
-      variant: "tackle_11",
-      players: [
-        { id: "Q", x: 0, y: -3, team: "O" },
-        { id: "LT", x: -4, y: 0, team: "O" }, { id: "LG", x: -2, y: 0, team: "O" },
-        { id: "C",  x: 0,  y: 0, team: "O" }, { id: "RG", x: 2,  y: 0, team: "O" },
-        { id: "RT", x: 4,  y: 0, team: "O" },
-        { id: "X", x: -18, y: 0, team: "O" }, { id: "Z", x: 18, y: 0, team: "O" },
-        { id: "H", x: -10, y: -1, team: "O" }, { id: "S", x: 10, y: -1, team: "O" },
-        { id: "B", x: 2, y: -5, team: "O" },
-      ],
-      routes: [
-        { from: "H", path: [[-10, 2], [10, 2]], route_kind: "Drag" },
-        { from: "S", path: [[10, 2], [-10, 2]], route_kind: "Drag" },
-      ],
-    });
-  }
 
   it("REJECTS a full Mesh play when no skeleton or modify tool was called", () => {
     const result = validateDiagrams({
@@ -493,6 +497,83 @@ describe("validateDiagrams — concept-claim requires skeleton/modify tool", () 
     if (!resultBoolOnly.ok) {
       expect(resultBoolOnly.errors.find((e) => /catalog-concept fence #/i.test(e))).toBeUndefined();
     }
+  });
+});
+
+describe("validateDiagrams — per-reply catalog-concept fence cap (Plan checklist gate)", () => {
+  // Surfaced 2026-05-20: a coach's 6-play install saved 1 of 6 because
+  // Cal crammed all 6 fences into one reply. The per-reply cap forces
+  // Cal to chunk via the Plan checklist (rule 7c) — each turn does
+  // AT MOST MAX_CATALOG_CONCEPT_FENCES_PER_REPLY (= 3) catalog-concept
+  // fences. Replies that exceed the cap get rejected with a critique
+  // that names the Plan checklist as the recovery path.
+
+  it("ACCEPTS exactly 3 catalog-concept fences (at the cap)", () => {
+    const text = [
+      fullTackleMeshFence(),
+      "@H drag, @S drag — Mesh concept.",
+      fullTackleMeshFence(),
+      "Another Mesh.",
+      fullTackleMeshFence(),
+      "Third Mesh.",
+    ].join("\n\n");
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 3,
+    });
+    // Other rules may legitimately fail (fixture's depths, etc.) —
+    // pin only that the per-reply cap doesn't fire at exactly 3.
+    if (!result.ok) {
+      expect(result.errors.find((e) => /per-reply cap is 3/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("REJECTS 4 catalog-concept fences in one reply", () => {
+    const text = [
+      fullTackleMeshFence(),
+      "Mesh #1.",
+      fullTackleMeshFence(),
+      "Mesh #2.",
+      fullTackleMeshFence(),
+      "Mesh #3.",
+      fullTackleMeshFence(),
+      "Mesh #4 — should trip the cap.",
+    ].join("\n\n");
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 4,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const capError = result.errors.find((e) =>
+      /4 catalog-concept fences/i.test(e) && /per-reply cap is 3/i.test(e),
+    );
+    expect(capError).toBeDefined();
+    // The critique must name the Plan checklist as the recovery path
+    // so Cal knows what to do on retry.
+    expect(capError).toMatch(/Plan checklist/i);
+  });
+
+  it("REJECTS 6 catalog-concept fences (the actual user report)", () => {
+    const text = Array.from({ length: 6 }, (_, i) =>
+      `${fullTackleMeshFence()}\nMesh #${i + 1}.`,
+    ).join("\n\n");
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 6,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.find((e) => /6 catalog-concept fences/i.test(e))).toBeDefined();
   });
 });
 
