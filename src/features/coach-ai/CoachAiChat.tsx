@@ -29,6 +29,7 @@ import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
 import { useNativePlatform } from "@/lib/native/useIsNativeApp";
+import { detectAutoAnchorTarget } from "./auto-anchor";
 
 type OutOfMessagesPayload = {
   count: number;
@@ -291,6 +292,13 @@ export function CoachAiChat({
   // it). Without this, Cal's prior responses about Play A leak into a
   // conversation about Play B and the model conflates their personnel.
   const prevPlayIdInScopeRef = useRef<{ storageKey: string; playId: string | null } | null>(null);
+  // Set when Cal's just-completed turn called `create_playbook` from a lobby
+  // session. The done handler stamps the new playbook id here and calls
+  // router.replace so the launcher re-anchors in place; the storageKey effect
+  // below consumes the ref to migrate localStorage from global → new scope
+  // without spawning a fresh thread (which would orphan the in-flight
+  // conversation under the lobby key and leave the new playbook page empty).
+  const autoAnchorTargetRef = useRef<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -382,6 +390,27 @@ export function CoachAiChat({
   }, [turns, streaming, partialText, statusText]);
 
   useEffect(() => {
+    // Auto-anchor migration: Cal's previous turn called `create_playbook`
+    // from a lobby session, and the done handler called router.replace to
+    // this playbook. Move the in-progress thread from the global key to
+    // the new playbook's key (the save effect below will keep it in sync
+    // from here on). No "context switch" bridge — this is a planned
+    // hand-off, not a coach manually jumping playbooks.
+    if (autoAnchorTargetRef.current && autoAnchorTargetRef.current === playbookId) {
+      autoAnchorTargetRef.current = null;
+      const globalKey = storageKeyFor(mode, null);
+      const migrated = loadTurns(globalKey);
+      if (migrated.length > 0) {
+        saveTurns(storageKey, migrated);
+        try { window.localStorage.removeItem(globalKey); } catch { /* ignore */ }
+        try { window.localStorage.removeItem(lastPlayKeyFor(globalKey)); } catch { /* ignore */ }
+      }
+      setError(null);
+      prevStorageKeyRef.current = storageKey;
+      prevPlayIdInScopeRef.current = { storageKey, playId: playId ?? null };
+      saveLastPlayId(storageKey, playId ?? null);
+      return;
+    }
     // If the user navigated here via a Cal playbook button (cal_from=1),
     // carry over the global conversation so context isn't lost.
     const params = new URLSearchParams(window.location.search);
@@ -595,11 +624,22 @@ export function CoachAiChat({
             return next;
           });
         }
-        if (data.mutated) {
+        // Same auto-anchor handoff as the SSE done path (see comment there).
+        // Polling delivers the same turn payload as the live stream, so the
+        // create_playbook detection works identically. Narrow to the
+        // assistant variant — only assistant turns carry toolCalls, and a
+        // poll-completion turn is always assistant by construction.
+        const autoAnchorId = finishedTurn && finishedTurn.role === "assistant"
+          ? detectAutoAnchorTarget(playbookId, mode, finishedTurn.toolCalls, finishedTurn.text)
+          : null;
+        if (autoAnchorId) {
+          autoAnchorTargetRef.current = autoAnchorId;
+          router.replace(`/playbooks/${autoAnchorId}`);
+        } else if (data.mutated) {
           router.refresh();
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
-          }
+        }
+        if ((data.mutated || autoAnchorId) && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
         }
         setStreaming(false);
         setStatusText(null);
@@ -628,7 +668,7 @@ export function CoachAiChat({
       cancelled = true;
       if (timeout) clearTimeout(timeout);
     };
-  }, [pollingRunningTurnId, storageKey, router]);
+  }, [pollingRunningTurnId, storageKey, router, playbookId, mode]);
 
   function clearChat() {
     // Abort any in-flight stream — otherwise the SSE consumer keeps
@@ -855,18 +895,31 @@ export function CoachAiChat({
           ]);
           savedFinalTurn = true;
           setUsageTick((n) => n + 1);
-          // If the agent ran any DB-mutating tool (create_event, update_play,
-          // KB writes, etc.), refresh the surrounding page so newly created
-          // rows appear without a manual reload. router.refresh re-runs the
-          // server components for the current route — cheap, no full reload,
-          // and leaves the chat panel mounted. We also broadcast a window
-          // event so client-only views that fetch their own data (e.g. the
-          // calendar tab) can reload without waiting for a manual refresh.
-          if (mutated) {
+          // Auto-anchor: when Cal just created a playbook from a lobby
+          // session, navigate the live panel to the new playbook in place
+          // so the in-flight conversation continues there instead of being
+          // orphaned under the global key. The storageKey effect consumes
+          // `autoAnchorTargetRef` once the URL change propagates. We skip
+          // router.refresh here because router.replace already triggers a
+          // server-component re-fetch on the destination route.
+          const autoAnchorId = detectAutoAnchorTarget(playbookId, mode, finalToolCalls, finalText);
+          if (autoAnchorId) {
+            autoAnchorTargetRef.current = autoAnchorId;
+            router.replace(`/playbooks/${autoAnchorId}`);
+          } else if (mutated) {
+            // If the agent ran any DB-mutating tool (create_event, update_play,
+            // KB writes, etc.), refresh the surrounding page so newly created
+            // rows appear without a manual reload. router.refresh re-runs the
+            // server components for the current route — cheap, no full reload,
+            // and leaves the chat panel mounted.
             router.refresh();
-            if (typeof window !== "undefined") {
-              window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
-            }
+          }
+          // Broadcast so client-only views that fetch their own data (e.g.
+          // the calendar tab, the playbook list dropdown) can reload without
+          // waiting for a manual refresh. Fires for both auto-anchor and
+          // ordinary mutations since both produce new server state.
+          if ((mutated || autoAnchorId) && typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("coach-ai-mutated"));
           }
           // The SSE delivered a clean `done` — no need to fall back to
           // polling on the same turn id.

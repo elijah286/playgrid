@@ -863,7 +863,7 @@ export function CoachAiLauncher({
                     ref={contextPopoverRef}
                     role="listbox"
                     aria-label="Switch playbook context"
-                    className="absolute left-0 right-0 top-full z-10 mt-1 max-h-72 overflow-auto rounded-lg border border-border bg-surface-raised shadow-xl ring-1 ring-black/5"
+                    className="absolute left-0 top-full z-10 mt-1 max-h-72 w-max min-w-[16rem] max-w-[20rem] overflow-auto rounded-lg border border-border bg-surface-raised shadow-xl ring-1 ring-black/5"
                   >
                     <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                       Anchor Coach Cal to
