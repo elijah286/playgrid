@@ -148,3 +148,95 @@ describe("NORMAL_PROMPT — Rule 8a (lobby-mode auto-save gap)", () => {
     expect(NORMAL_PROMPT).toMatch(/STOP composing until anchored/i);
   });
 });
+
+describe("NORMAL_PROMPT — Rule 9b (hand-drawn image translation)", () => {
+  // Surfaced 2026-05-20: a coach uploaded a Reddit playsheet of 8 plays
+  // labeled "Noah / 67 / King / Vert Under / Money / Drive Pass / …";
+  // Cal mapped the LABELS to catalog concepts whose names shared a word
+  // (Drive Pass → catalog Drive, Vert Under → Four Verticals) and shipped
+  // canonical geometry that bore no resemblance to what the coach had
+  // drawn. The coach saw "the same play over and over" because the
+  // outputs were all canonical-looking spread route trees.
+  //
+  // The fix is workflow-discipline in the prompt: identify each player's
+  // route family from the DRAWING first, build a route map, THEN pick
+  // the closest concept and use `overrides` to bend the canonical
+  // skeleton toward what was drawn. These tests pin the load-bearing
+  // language so a refactor can't silently drop it.
+
+  it("declares the drawing — not the label — as the source of truth", () => {
+    expect(NORMAL_PROMPT).toMatch(/THE DRAWING IS THE TRUTH/);
+    expect(NORMAL_PROMPT).toMatch(/LABEL IS JUST A NICKNAME/);
+  });
+
+  it("documents the failure mode the rule is meant to prevent", () => {
+    // Naming the specific bug ("kept making this play over and over")
+    // is how Cal pattern-matches against its own past failures during
+    // the next image upload.
+    expect(NORMAL_PROMPT).toMatch(/kept making this play over and over/i);
+  });
+
+  it("walks through the 6-step image workflow in order", () => {
+    const step1 = NORMAL_PROMPT.indexOf("Step 1 — Enumerate");
+    const step2 = NORMAL_PROMPT.indexOf("Step 2 — For ONE play at a time");
+    const step3 = NORMAL_PROMPT.indexOf("Step 3 — Build the route map");
+    const step4 = NORMAL_PROMPT.indexOf("Step 4 — NOW pick the catalog concept");
+    const step5 = NORMAL_PROMPT.indexOf("Step 5 — Use `overrides`");
+    const step6 = NORMAL_PROMPT.indexOf("Step 6 — Confirm BEFORE composing");
+    expect(step1).toBeGreaterThan(-1);
+    expect(step2).toBeGreaterThan(step1);
+    expect(step3).toBeGreaterThan(step2);
+    expect(step4).toBeGreaterThan(step3);
+    expect(step5).toBeGreaterThan(step4);
+    expect(step6).toBeGreaterThan(step5);
+  });
+
+  it("gives a hand-drawn shape → route family vocabulary", () => {
+    // Without the vocabulary, Cal has no grammar to translate between
+    // "what's drawn on the paper" and "what compose_play needs." Each
+    // entry below maps a recognizable hand-drawn shape to a catalog
+    // route family.
+    expect(NORMAL_PROMPT).toMatch(/Straight up arrow.*Go.*Seam/);
+    expect(NORMAL_PROMPT).toMatch(/Diagonal up-and-in.*Slant.*Post.*Dig/);
+    expect(NORMAL_PROMPT).toMatch(/Diagonal up-and-out.*Out.*Corner/);
+    expect(NORMAL_PROMPT).toMatch(/Horizontal arrow.*Drag/);
+    expect(NORMAL_PROMPT).toMatch(/Comeback/);
+  });
+
+  it("provides a worked compose_play+overrides example with real syntax", () => {
+    // The example must use the actual override field names (set_family,
+    // set_depth_yds) so Cal copy-pastes the right shape, not invents new
+    // field names like "family" or "depth_yards" that the tool rejects.
+    expect(NORMAL_PROMPT).toMatch(/compose_play\(\{ concept: "Four Verticals"/);
+    expect(NORMAL_PROMPT).toMatch(/set_family: "Drag"/);
+    expect(NORMAL_PROMPT).toMatch(/set_depth_yds: 2/);
+  });
+
+  it("instructs Cal to use the COACH'S name, not the catalog concept name", () => {
+    // The coach's "Vert Under" must be saved as "Vert Under", not as
+    // "Four Verticals". The team-specific name is how the coach will
+    // find the play later.
+    expect(NORMAL_PROMPT).toMatch(/save with the coach's NAME/i);
+  });
+
+  it("requires Cal to ASK when no catalog concept fits cleanly", () => {
+    // Approximating with "closest-sounding" concept is the bug. The
+    // prompt must explicitly tell Cal to surface uncertainty rather
+    // than guess.
+    expect(NORMAL_PROMPT).toMatch(/ASK; don't approximate/i);
+    expect(NORMAL_PROMPT).toMatch(/closest-sounding/i);
+  });
+
+  it("preserves the one-play-at-a-time confirm rule from before", () => {
+    // The rule that image imports OVERRIDE the multi-diagram batch cap
+    // was already in place and must survive the rewrite.
+    expect(NORMAL_PROMPT).toMatch(/One play at a time/);
+    expect(NORMAL_PROMPT).toMatch(/OVERRIDES rule 9 multi-diagram/);
+  });
+
+  it("preserves the images-are-not-persisted rule", () => {
+    // Cal must continue to acknowledge it can't see past-turn images
+    // rather than fabricating from memory.
+    expect(NORMAL_PROMPT).toMatch(/Images are NOT persisted/);
+  });
+});
