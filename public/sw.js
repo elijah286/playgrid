@@ -18,7 +18,7 @@
 // Bump SHELL_VERSION whenever the cache contract changes (e.g. precache list).
 // On activate, old versioned caches are purged.
 
-const SHELL_VERSION = "xog-shell-v2";
+const SHELL_VERSION = "xog-shell-v3";
 const STATIC_CACHE = `${SHELL_VERSION}-static`;
 const NAV_CACHE = `${SHELL_VERSION}-nav`;
 
@@ -112,7 +112,19 @@ async function staleWhileRevalidate(cacheName, request) {
       return res;
     })
     .catch(() => null);
-  return cached || (await networkPromise) || Response.error();
+  if (cached) return cached;
+  const fresh = await networkPromise;
+  if (fresh) return fresh;
+  // Last resort: redirect to the precached /offline shell so the WebView
+  // never lands on its generic "couldn't load" page. /offline is in
+  // PRECACHE_URLS, so it's almost always cached after the first install;
+  // we only fall through to Response.error if the install itself was offline.
+  const url = new URL(request.url);
+  if (url.pathname !== "/offline") {
+    const offlineFallback = await cache.match("/offline");
+    if (offlineFallback) return Response.redirect("/offline", 302);
+  }
+  return Response.error();
 }
 
 async function cacheFirst(cacheName, request) {
@@ -130,6 +142,31 @@ async function cacheFirst(cacheName, request) {
   }
 }
 
+// Bound how long a navigation fetch is allowed to stall before we give
+// up and fall back to cache. Without this, a captive-portal or partial-
+// connectivity scenario (DNS resolves but TCP hangs) leaves the WebView
+// staring at a blank page for minutes — the OS-level "offline" event
+// never fires because the radio reports a connection. 6s is long
+// enough for a slow LTE cold connect, short enough that a stuck request
+// doesn't trap the coach on a sideline.
+const NAV_FETCH_TIMEOUT_MS = 6000;
+
+function fetchWithTimeout(request, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("nav-timeout")), timeoutMs);
+    fetch(request).then(
+      (res) => {
+        clearTimeout(timer);
+        resolve(res);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function handleNavigation(request) {
   const url = new URL(request.url);
   const cache = await caches.open(NAV_CACHE);
@@ -141,11 +178,15 @@ async function handleNavigation(request) {
     return staleWhileRevalidate(NAV_CACHE, request);
   }
 
-  // Everything else: network-first. If it fails, try /home so coaches
-  // land on the tile list (downloaded ones are still tappable); fall
-  // back to /offline if /home isn't cached yet.
+  // Everything else: network-first. If it fails (or stalls past the
+  // timeout), redirect to /home so coaches land on the tile list
+  // (downloaded ones are still tappable). If /home isn't cached, try
+  // /offline. Only fall through to Response.error when both shells
+  // are missing — that's the case the user described as "this page
+  // couldn't load," so we serve the cached offline shell whenever
+  // it's available rather than returning a broken response.
   try {
-    return await fetch(request);
+    return await fetchWithTimeout(request, NAV_FETCH_TIMEOUT_MS);
   } catch {
     const homeFallback = await cache.match("/home");
     if (homeFallback) return Response.redirect("/home", 302);

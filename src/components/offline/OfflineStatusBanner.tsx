@@ -32,7 +32,12 @@ export function OfflineStatusBanner() {
       className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center"
       style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
     >
-      <div className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-foreground/90 px-3 py-1 text-[11px] font-semibold text-background shadow-lg backdrop-blur-sm">
+      {/* Use `text-surface` (not `text-background`) — there's no
+          --color-background token, so `text-background` silently falls
+          back to the default text color, making the pill black-on-black
+          in light mode. `bg-foreground` + `text-surface` flips correctly
+          in both themes since both tokens swap with .dark. */}
+      <div className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-foreground/90 px-3 py-1 text-[11px] font-semibold text-surface shadow-lg backdrop-blur-sm">
         <WifiOff className="size-3" />
         <span>{label}</span>
       </div>

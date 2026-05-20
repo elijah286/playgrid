@@ -28,6 +28,10 @@ const DEFAULTS: BetaFeatures = {
   team_messaging: "off",
 };
 
+/** Safe "everything off" fallback for callers that need a value even when
+ *  the upstream fetch can't run (e.g. a Capacitor shell with no signal). */
+export const DEFAULT_BETA_FEATURES: BetaFeatures = { ...DEFAULTS };
+
 function normalize(input: unknown): BetaFeatures {
   const raw = (input ?? {}) as Record<string, unknown>;
   const out: BetaFeatures = { ...DEFAULTS };

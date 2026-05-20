@@ -28,9 +28,18 @@ const EMPTY_SET: Set<string> = new Set();
  *
  * Safe to use anywhere — on SSR returns `{ isOnline: true, downloadedIds:
  * empty, ready: false }` so server-render is identical regardless of device.
+ *
+ * On first client paint we read `navigator.onLine` synchronously via a lazy
+ * initializer so playbook tiles pick the offline link (`/offline/[id]`,
+ * hard nav) the moment they hydrate. Defaulting to `true` and updating in
+ * useEffect leaves a one-paint window where a coach who taps a tile during
+ * cold boot lands on the online detail route — which then fails noisily
+ * because no network is available.
  */
 export function useOfflineState(): OfflineState {
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const [downloaded, setDownloaded] = useState<CachedPlaybookMeta[]>([]);
   const [ready, setReady] = useState(false);
 

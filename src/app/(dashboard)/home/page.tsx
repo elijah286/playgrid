@@ -6,10 +6,20 @@ import { getCurrentUserProfile } from "@/app/actions/admin-guard";
 import {
   getBetaFeatures,
   isBetaFeatureAvailable,
+  DEFAULT_BETA_FEATURES,
 } from "@/lib/site/beta-features-config";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { tierAtLeast } from "@/lib/billing/features";
+import { withTimeout } from "@/lib/perf/with-timeout";
 import { DashboardClient } from "./ui";
+
+// Bound how long a single dashboard data fetch can stall before the page
+// renders without it. The dashboard is one of two routes a Capacitor coach
+// hits with no signal (the other is /offline); a hung Supabase round-trip
+// here used to trap them on a white loading screen forever. The fallbacks
+// match each action's "empty" shape so the UI degrades to a blank inbox /
+// no-activity state instead of a 500.
+const DATA_TIMEOUT_MS = 4000;
 
 type Props = {
   searchParams: Promise<{ error?: string; tab?: string }>;
@@ -26,13 +36,25 @@ export default async function HomePage({ searchParams }: Props) {
     betaFeatures,
     entitlement,
   ] = await Promise.all([
-    getDashboardSummaryAction(),
-    listInboxAlertsAction(),
-    listActivityFeedAction(),
-    getHideLobbyAnimation(),
-    getCurrentUserProfile(),
-    getBetaFeatures(),
-    getCurrentEntitlement(),
+    withTimeout(getDashboardSummaryAction(), DATA_TIMEOUT_MS, {
+      ok: false as const,
+      error: "Couldn't load — check your connection.",
+    }),
+    withTimeout(listInboxAlertsAction(), DATA_TIMEOUT_MS, {
+      ok: false as const,
+      error: "offline",
+    }),
+    withTimeout(listActivityFeedAction(), DATA_TIMEOUT_MS, {
+      ok: false as const,
+      error: "offline",
+    }),
+    withTimeout(getHideLobbyAnimation(), DATA_TIMEOUT_MS, false),
+    withTimeout(getCurrentUserProfile(), DATA_TIMEOUT_MS, {
+      user: null,
+      profile: null as { role: string } | null,
+    }),
+    withTimeout(getBetaFeatures(), DATA_TIMEOUT_MS, DEFAULT_BETA_FEATURES),
+    withTimeout(getCurrentEntitlement(), DATA_TIMEOUT_MS, null),
   ]);
   const isAdmin = profileRes.profile?.role === "admin";
   const teamCalendarAvailable = isBetaFeatureAvailable(

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 import { listPlaysAction } from "@/app/actions/plays";
 import {
   listPendingRosterClaimsAction,
@@ -146,11 +147,15 @@ export default async function PlaybookDetailPage({ params }: Props) {
       ]),
     );
 
-  const {
-    data: { user },
-  } = await timed(`playbook-page:auth-getUser pb=${playbookId}`, () =>
-    supabase.auth.getUser(),
+  // Time-bound the auth check so a stalled refresh on a flaky/offline
+  // connection doesn't trap the page on a spinner. Same pattern as the
+  // root layout + middleware. On timeout we render as anonymous; the
+  // page still loads (read-only state for example playbooks) and the
+  // next navigation retries auth.
+  const authResult = await timed(`playbook-page:auth-getUser pb=${playbookId}`, () =>
+    getUserWithTimeout(supabase),
   );
+  const user = authResult.kind === "ok" ? authResult.user : null;
 
   const sportVariant = (book.sport_variant as SportVariant) ?? "flag_7v7";
   const variantLabel = SPORT_VARIANT_LABELS[sportVariant] ?? (book.sport_variant as string) ?? "";

@@ -1,5 +1,7 @@
+import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getUserWithTimeout } from "@/lib/supabase/get-user-with-timeout";
 import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 import { TimeOnSiteTracker } from "@/components/TimeOnSiteTracker";
 import { getFeedbackWidgetSettings } from "@/lib/site/feedback-config";
@@ -33,9 +35,17 @@ export default async function DashboardLayout({
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Time-bound the auth check — without this, an offline Capacitor shell
+  // (airplane mode) blocks here forever and the dashboard never paints.
+  // On timeout we treat the request as unauthenticated and render the
+  // logged-out shell; the next request retries the refresh.
+  let user: User | null = null;
+  try {
+    const result = await getUserWithTimeout(supabase);
+    if (result.kind === "ok") user = result.user;
+  } catch {
+    /* network/config failure → fall through as not-authed */
+  }
 
   const [
     feedbackSettings,
