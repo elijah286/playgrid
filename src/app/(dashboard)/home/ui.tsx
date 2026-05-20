@@ -7,7 +7,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowLeft,
-  Check,
+  CloudDownload,
   Copy,
   FlaskConical,
   Globe,
@@ -259,12 +259,7 @@ function PlaybookTile({
           <div className="flex flex-wrap items-center gap-1">
             {tile.is_example && <Badge variant="primary">Example</Badge>}
             {tile.role !== "owner" && <Badge variant="default">Shared</Badge>}
-            {native && isDownloaded && (
-              <Badge variant="success" className="gap-1">
-                <Check className="size-3" />
-                Downloaded
-              </Badge>
-            )}
+            {native && isDownloaded && <DownloadedChip />}
           </div>
         </div>
         <p className="text-[11px] text-muted">
@@ -298,6 +293,22 @@ function PlaybookTile({
         </div>
       )}
     </div>
+  );
+}
+
+// Icon-only "this is cached for offline" marker. Uses the cloud-with-down-arrow
+// glyph that iOS and Android both use for "downloaded" so the meaning carries
+// even without a text label, and the chip stays narrow enough to sit alongside
+// Editor/Shared on a tight card without wrapping.
+function DownloadedChip() {
+  return (
+    <span
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/95 text-white shadow-sm ring-1 ring-emerald-700/20"
+      title="Downloaded for offline"
+      aria-label="Downloaded for offline"
+    >
+      <CloudDownload className="size-3" aria-hidden />
+    </span>
   );
 }
 
@@ -618,19 +629,14 @@ function PlaybookBookTile({
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">
                   Playbook
                 </span>
-                <div className="flex max-w-[120px] flex-wrap items-center justify-end gap-1.5">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {tile.is_example && <Badge variant="primary">Example</Badge>}
                   {tile.role !== "owner" && (
                     <Badge variant={tile.role === "editor" ? "primary" : "default"}>
                       {tile.role === "editor" ? "Editor" : "Viewer"}
                     </Badge>
                   )}
-                  {native && isDownloaded && (
-                    <Badge variant="success" className="gap-1">
-                      <Check className="size-3" />
-                      Downloaded
-                    </Badge>
-                  )}
+                  {native && isDownloaded && <DownloadedChip />}
                 </div>
               </div>
 
