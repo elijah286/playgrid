@@ -507,6 +507,7 @@ export function InboxTab({
           return;
         }
         flashToast("Archived");
+        router.refresh();
       } finally {
         setBusy(null);
       }
@@ -528,6 +529,7 @@ export function InboxTab({
           return;
         }
         flashToast("Deleted");
+        router.refresh();
       } finally {
         setBusy(null);
       }
@@ -547,6 +549,7 @@ export function InboxTab({
           return;
         }
         flashToast("Restored");
+        router.refresh();
       } finally {
         setBusy(null);
       }
@@ -574,6 +577,7 @@ export function InboxTab({
           return;
         }
         toast(`Archived ${refs.length}`, "success");
+        router.refresh();
       } finally {
         setBusy(null);
       }
@@ -597,6 +601,7 @@ export function InboxTab({
           return;
         }
         toast(`Deleted ${refs.length}`, "success");
+        router.refresh();
       } finally {
         setBusy(null);
       }
