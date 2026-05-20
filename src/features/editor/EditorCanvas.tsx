@@ -2748,46 +2748,55 @@ function EditorCanvasImpl({
             <g key={route.id}>
               {rendered.map((rs) => {
                 const isSelectedSeg = rs.segmentId === selectedSegmentId && isActive;
-                const showAnts = isSelectedSeg || isWholeRouteSelected;
+                const showSelectionHalo = isSelectedSeg || isWholeRouteSelected;
                 return (
                   <g key={rs.segmentId}>
-                    {/* Hover glow — rendered beneath the route line so it
-                        shows as a soft halo without obscuring the stroke. */}
+                    {/* Hover halo — subtle accent-colored ghost beneath the
+                        stroke. Hints at interactivity without committing to
+                        a strong visual. */}
                     {isHovered && (
                       <path
                         d={rs.d}
                         fill="none"
-                        stroke="rgba(255,255,255,0.35)"
-                        strokeWidth={10}
+                        stroke="#F26522"
+                        strokeOpacity={0.22}
+                        strokeWidth={Math.max(route.style.strokeWidth * 2.5, 7)}
                         strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
                         pointerEvents="none"
                       />
                     )}
+                    {/* Selection halo — drawn BENEATH the route so the route's
+                        own color and dash pattern stay fully visible on top.
+                        This is the standard "outer glow" selection pattern in
+                        Figma / Illustrator / Miro. A selected segment within a
+                        selected route gets a slightly stronger halo so users
+                        can see which segment is the active edit target. */}
+                    {showSelectionHalo && (
+                      <path
+                        d={rs.d}
+                        fill="none"
+                        stroke="#F26522"
+                        strokeOpacity={isSelectedSeg ? 0.6 : 0.42}
+                        strokeWidth={Math.max(route.style.strokeWidth * 3, 10)}
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                        pointerEvents="none"
+                      />
+                    )}
+                    {/* The actual route — stroke color and dash pattern are
+                        preserved regardless of selection state, so coaches can
+                        always read the underlying styling. */}
                     <path
                       d={rs.d}
                       fill="none"
-                      stroke={isSelectedSeg ? "#F26522" : effectiveStroke}
-                      strokeWidth={isSelectedSeg ? 3 : route.style.strokeWidth}
+                      stroke={effectiveStroke}
+                      strokeWidth={route.style.strokeWidth}
                       strokeDasharray={rs.dash}
                       strokeLinecap="round"
                       vectorEffect="non-scaling-stroke"
                       pointerEvents="none"
                     />
-                    {/* Marching-ants selection overlay */}
-                    {showAnts && (
-                      <path
-                        className="marching-ants"
-                        d={rs.d}
-                        fill="none"
-                        stroke="#F26522"
-                        strokeWidth={isSelectedSeg ? 4 : 3}
-                        strokeDasharray="4 3"
-                        strokeLinecap="round"
-                        vectorEffect="non-scaling-stroke"
-                        pointerEvents="none"
-                      />
-                    )}
                     {/* Transparent hit-path — sits on top of everything so
                         pointer events land reliably. 18 px CSS-pixel target
                         (non-scaling) makes it easy to click narrow routes.
