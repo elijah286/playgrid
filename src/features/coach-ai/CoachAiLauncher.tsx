@@ -1042,6 +1042,7 @@ export function CoachAiLauncher({
                   playbookId={playbookId}
                   playId={playId}
                   mode={mode}
+                  isAdmin={isAdmin}
                   injectedPrompt={injectedPrompt}
                 />
               )}

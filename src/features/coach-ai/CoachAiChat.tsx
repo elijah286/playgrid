@@ -139,11 +139,15 @@ export function CoachAiChat({
   playbookId,
   playId,
   mode = "normal",
+  isAdmin = false,
   injectedPrompt = null,
 }: {
   playbookId?: string | null;
   playId?: string | null;
   mode?: "normal" | "admin_training";
+  /** Site-admin flag — surfaces the "Copy JSON" debug option on assistant
+   *  messages (long-press / right-click the Copy button). */
+  isAdmin?: boolean;
   /**
    * When set (and `key` changes), populate the draft. If `autoSubmit` is
    * true, fire the request immediately. Used by in-app CTAs that open Cal
@@ -964,6 +968,7 @@ export function CoachAiChat({
                       )}
                       <AssistantMessageWithFeedback
                         text={t.text}
+                        isAdmin={isAdmin}
                         onThumbsUp={() =>
                           void logCoachAiPositiveFeedbackAction(t.text, prevUserMessage)
                         }

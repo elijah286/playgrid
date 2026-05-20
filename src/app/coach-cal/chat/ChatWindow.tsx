@@ -83,7 +83,7 @@ export function ChatWindow({
 
       {/* Chat surface fills remaining height */}
       <div className="flex-1 min-h-0">
-        <CoachAiChat playbookId={playbookId} mode={mode} />
+        <CoachAiChat playbookId={playbookId} mode={mode} isAdmin={isAdmin} />
       </div>
     </div>
   );
