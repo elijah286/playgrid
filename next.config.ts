@@ -17,6 +17,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Self-contained server bundle for container deploys (Cloud Run / Fly / etc.).
+  // Emits .next/standalone with a minimal node_modules tree.
+  output: "standalone",
   images: {
     remotePatterns: [
       {
@@ -37,18 +40,10 @@ const nextConfig: NextConfig = {
       // /learn-more was the deep-dive tour page before the tour content
       // was lifted into its own route. Preserve external links and SEO.
       { source: "/learn-more", destination: "/tour", permanent: true },
-      // Canonicalize on the www host. metadataBase and NEXT_PUBLIC_SITE_URL
-      // both point at https://www.xogridmaker.com — a user landing on the
-      // apex would otherwise generate RSC prefetches and canonical links
-      // pointing at www, which Safari treats as cross-origin and CORS-blocks
-      // (visible as "Fetch API cannot load … due to access control checks"
-      // in the console). Also dedupes the apex/www split for SEO.
-      {
-        source: "/:path*",
-        has: [{ type: "host", value: "xogridmaker.com" }],
-        destination: "https://www.xogridmaker.com/:path*",
-        permanent: true,
-      },
+      // Apex → www redirect TEMPORARILY DISABLED during Cloud Run cutover
+      // (2026-05-19): www.xogridmaker.com cert is still provisioning on
+      // Google's frontend, so redirecting apex visitors to www would send
+      // them to a broken TLS endpoint. Re-enable once the www cert lands.
     ];
   },
   async headers() {

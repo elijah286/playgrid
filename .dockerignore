@@ -1,0 +1,59 @@
+# Build artifacts (rebuilt inside the container)
+node_modules
+.next
+out
+build
+coverage
+
+# VCS + agent / editor metadata
+.git
+.gitignore
+.gitattributes
+.claude
+.cursor
+.vscode
+.idea
+
+# Secrets — Cloud Run injects env at runtime via Secret Manager
+.env
+.env.*
+!.env.example
+
+# Capacitor / native shells — irrelevant for the server container
+ios
+android
+capacitor.config.ts
+
+# Supabase tooling (migrations applied separately; edge funcs deployed separately)
+supabase
+.supabase
+
+# Docs and meta files
+README.md
+TODO.md
+AGENTS.md
+CLAUDE.md
+docs
+
+# Test fixtures, generated screenshots
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+playwright-report
+test-results
+public/marketing/store
+
+# TypeScript / build cache
+*.tsbuildinfo
+next-env.d.ts
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

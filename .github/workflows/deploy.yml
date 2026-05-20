@@ -1,0 +1,80 @@
+name: Deploy to Cloud Run
+
+# Trigger: every push to main. Also exposes a manual "Run workflow" button
+# in the Actions tab via workflow_dispatch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation auth
+
+env:
+  PROJECT_ID: project-ba380fa9-bf4e-4f61-81d
+  REGION: us-central1
+  SERVICE: xo-gridmaker-staging
+  IMAGE: us-central1-docker.pkg.dev/project-ba380fa9-bf4e-4f61-81d/xo-gridmaker/app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-cloud-run
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/624839566857/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions-deploy@project-ba380fa9-bf4e-4f61-81d.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure docker auth for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          # NEXT_PUBLIC_* values are inlined into the client bundle at build time.
+          # Sentry source-map upload is gated on SENTRY_AUTH_TOKEN being set —
+          # absent token = source maps skipped, but build still succeeds.
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_BILLING_ENABLED=${{ secrets.NEXT_PUBLIC_BILLING_ENABLED }}
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+            SENTRY_ORG=${{ secrets.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --quiet
+
+      - name: Smoke test
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 https://xogridmaker.com/)
+            echo "attempt $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "smoke test failed — site not serving 200 after deploy"
+          exit 1
