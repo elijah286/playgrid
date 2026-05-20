@@ -1333,12 +1333,38 @@ function DisplayControl({
 
   return (
     <div ref={wrapRef} className="relative">
-      <PopoverButton
-        label="Display"
-        state={current.label}
-        open={open}
-        onToggle={() => setOpen(!open)}
-      />
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={`Display, background ${current.label}`}
+        title={`Background: ${current.label}`}
+        className={`flex items-center gap-1.5 rounded border px-2 py-1 text-xs transition ${
+          open
+            ? "border-primary bg-primary/10 text-foreground"
+            : "border-border bg-surface-inset text-muted hover:bg-surface-raised hover:text-foreground"
+        }`}
+      >
+        <span className="font-medium">Display</span>
+        <span
+          className="size-3.5 rounded-sm border border-border"
+          style={{ background: current.swatch }}
+          aria-hidden
+        />
+        <svg
+          viewBox="0 0 12 12"
+          className={`size-2.5 transition ${open ? "rotate-180" : ""}`}
+          fill="none"
+        >
+          <path
+            d="M3 4.5l3 3 3-3"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
       {open && (
         <Panel width="min-w-[16rem]">
           <div className="px-1 pb-1 text-[11px] text-muted">Background</div>
