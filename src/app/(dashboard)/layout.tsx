@@ -10,6 +10,7 @@ import { NameCapturePrompt } from "@/components/account/NameCapturePrompt";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getBetaFeatures, isBetaFeatureAvailable } from "@/lib/site/beta-features-config";
 import { listInboxAlertsAction } from "@/app/actions/inbox";
+import { OfflineAutoRefreshMount } from "@/components/offline/OfflineAutoRefreshMount";
 import { HomeBottomNav } from "./home/HomeBottomNav";
 
 // Auth is NOT enforced here. Anon visitors may reach example-playbook
@@ -119,6 +120,7 @@ export default async function DashboardLayout({
           isAdmin={isAdmin}
         />
       )}
+      {user && <OfflineAutoRefreshMount />}
     </div>
   );
 }

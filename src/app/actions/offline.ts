@@ -16,6 +16,10 @@ export type OfflinePlaybookBundle = {
     ownerLabel: string | null;
     playCount: number;
     downloadedAt: string;
+    // Stable fingerprint of the bundle's contents — derived from each
+    // play's current_version_id. Lets the background-refresh loop ask
+    // "is this still current?" without pulling the full bundle.
+    signature: string;
   };
   plays: Array<{
     id: string;
@@ -129,9 +133,71 @@ export async function getPlaybookOfflineBundleAction(
         ownerLabel: null,
         playCount: documents.length,
         downloadedAt: new Date().toISOString(),
+        signature: computeBundleSignature(plays, versionByPlay),
       },
       plays: playRows,
       documents,
     },
   };
+}
+
+/** Stable fingerprint over (playId → current_version_id). Sorted so the
+ *  output is deterministic regardless of row order from Postgres. Two
+ *  bundles with the same set of play versions share a signature; any
+ *  edit that bumps a play's current_version_id changes it. */
+function computeBundleSignature(
+  plays: Array<{ id: string }>,
+  versionByPlay: Map<string, string>,
+): string {
+  const parts = plays
+    .map((p) => `${p.id}:${versionByPlay.get(p.id) ?? ""}`)
+    .sort();
+  return parts.join("|");
+}
+
+/**
+ * Lightweight freshness check: returns just the bundle signature for a
+ * playbook so the background-refresh loop can decide whether to pull the
+ * full bundle. Reuses the same playlist + version lookup logic as
+ * `getPlaybookOfflineBundleAction` but skips the document join, which is
+ * the bulk of the bytes.
+ */
+export async function getPlaybookOfflineSignatureAction(
+  playbookId: string,
+): Promise<{ ok: true; signature: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) {
+    return { ok: false, error: "Supabase is not configured." };
+  }
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in required." };
+
+  const { data: book } = await supabase
+    .from("playbooks")
+    .select("id")
+    .eq("id", playbookId)
+    .maybeSingle();
+  if (!book) return { ok: false, error: "Playbook not found." };
+
+  const listed = await listPlaysAction(playbookId);
+  if (!listed.ok) return { ok: false, error: listed.error };
+  const plays = listed.plays.filter((p) => !p.is_archived);
+
+  const playIds = plays.map((p) => p.id);
+  const versionByPlay = new Map<string, string>();
+  if (playIds.length > 0) {
+    const { data: rows } = await supabase
+      .from("plays")
+      .select("id, current_version_id")
+      .in("id", playIds);
+    for (const r of rows ?? []) {
+      const vid = (r.current_version_id as string | null) ?? null;
+      if (vid) versionByPlay.set(r.id as string, vid);
+    }
+  }
+
+  return { ok: true, signature: computeBundleSignature(plays, versionByPlay) };
 }

@@ -95,6 +95,11 @@ export type CachedPlaybookMeta = {
   ownerLabel: string | null;
   playCount: number;
   downloadedAt: string;
+  /** Bundle fingerprint at download time. Optional for back-compat with
+   *  rows cached before the signature field was added — the background
+   *  refresh treats missing-signature rows as "always stale" so the very
+   *  first auto-refresh upgrades them. */
+  signature?: string;
 };
 
 export type CachedPlayRow = {
