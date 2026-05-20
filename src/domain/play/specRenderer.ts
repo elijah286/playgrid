@@ -589,6 +589,15 @@ function routeFromAction(
         ...(action.direction === "left" || action.direction === "right"
           ? { direction: action.direction }
           : {}),
+        // Propagate `nonCanonical` from spec → route so the route-
+        // assignment validator sees the explicit-off-catalog flag.
+        // Without this, a spec route marked nonCanonical (e.g.
+        // compose_play's auto-cap to honor a youth playbook's
+        // max-throw-depth) re-tripped the catalog depth-range check
+        // after rendering. Surfaced 2026-05-20: every 18yd Go in a
+        // 14yd-cap playbook needed its depth clamped + nonCanonical
+        // set, but only depthYds was making it to the fence.
+        ...(action.nonCanonical === true ? { nonCanonical: true } : {}),
       };
     }
     case "custom": {

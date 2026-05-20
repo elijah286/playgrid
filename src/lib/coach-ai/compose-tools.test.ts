@@ -22,7 +22,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { BASE_TOOLS } from "./tools";
+import { BASE_TOOLS, autoCapSpecDepthsToMaxThrow } from "./tools";
 import { coachDiagramSchema } from "@/features/coach-ai/coachDiagramConverter";
 
 function loadTool(name: string) {
@@ -137,6 +137,80 @@ describe("compose_play — registered + returns valid fence", () => {
     // The full bullet should be present — not truncated at the preamble.
     expect(r.error).toMatch(/H \(declared "Drag"\)/);
     expect(r.error).toMatch(/30 yds/);
+  });
+});
+
+describe("autoCapSpecDepthsToMaxThrow — youth playbook max-throw-depth cap", () => {
+  // Surfaced 2026-05-20: in playbooks with a 14yd cap (youth 7v7 is the
+  // typical case), every concept skeleton's 18yd Go failed compose_play's
+  // route-assignment validator. Cal looped through compose retries until
+  // SSE timed out and the client fell back to "Picking up where Cal left
+  // off…" polling. Auto-cap clamps deep routes in-place so the rendered
+  // fence honors the playbook's cap by construction — Cal never has to
+  // think about it.
+
+  it("clamps a Four Verticals skeleton's 18yd routes to the cap", () => {
+    type RouteAction = { kind: string; family: string; depthYds: number; nonCanonical?: boolean };
+    const spec: { assignments: Array<{ player: string; action: RouteAction }> } = {
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Go",   depthYds: 18 } },
+        { player: "Z", action: { kind: "route", family: "Go",   depthYds: 18 } },
+        { player: "H", action: { kind: "route", family: "Seam", depthYds: 18 } },
+        { player: "S", action: { kind: "route", family: "Seam", depthYds: 18 } },
+        { player: "B", action: { kind: "route", family: "Flat", depthYds: 2  } },
+      ],
+    };
+    const summaries = autoCapSpecDepthsToMaxThrow(spec, 14);
+    expect(summaries).toHaveLength(4);
+    expect(spec.assignments[0].action.depthYds).toBe(14);
+    expect(spec.assignments[3].action.depthYds).toBe(14);
+    // Flat @ 2 was below cap — unchanged, no summary entry.
+    expect(spec.assignments[4].action.depthYds).toBe(2);
+    // Go's canonical range is [10, 25] — 14 is INSIDE, so nonCanonical
+    // is NOT set. The validator's catalog depth-check tolerates 14.
+    expect(spec.assignments[0].action.nonCanonical).toBeUndefined();
+  });
+
+  it("marks nonCanonical when the cap forces depth below the family's catalog minimum", () => {
+    // Go's canonical range is [10, 25]. Cap of 8 pushes the route
+    // BELOW the catalog minimum — set nonCanonical:true so the
+    // validator's Layer 3 depth-range check tolerates the off-catalog
+    // depth (otherwise compose_play would re-fail right after the
+    // auto-cap).
+    const spec = {
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Go", depthYds: 18 } as Record<string, unknown> },
+      ],
+    };
+    const summaries = autoCapSpecDepthsToMaxThrow(spec, 8);
+    expect(summaries).toHaveLength(1);
+    expect(spec.assignments[0].action.depthYds).toBe(8);
+    expect(spec.assignments[0].action.nonCanonical).toBe(true);
+  });
+
+  it("leaves non-route actions alone (block, carry, custom)", () => {
+    const spec = {
+      assignments: [
+        { player: "C",  action: { kind: "block" } },
+        { player: "B",  action: { kind: "carry", runType: "inside_zone" } },
+        { player: "QB", action: { kind: "unspecified" } },
+      ],
+    };
+    const summaries = autoCapSpecDepthsToMaxThrow(spec, 14);
+    expect(summaries).toHaveLength(0);
+  });
+
+  it("is a no-op when every route is already at or below the cap", () => {
+    const spec = {
+      assignments: [
+        { player: "X", action: { kind: "route", family: "Hitch", depthYds: 5 } },
+        { player: "B", action: { kind: "route", family: "Flat",  depthYds: 2 } },
+      ],
+    };
+    const before = JSON.stringify(spec);
+    const summaries = autoCapSpecDepthsToMaxThrow(spec, 14);
+    expect(summaries).toHaveLength(0);
+    expect(JSON.stringify(spec)).toBe(before);
   });
 });
 

@@ -19,6 +19,7 @@ import {
 import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 import { applyRouteMods, type RouteMod } from "./play-mutations";
 import { validateRouteAssignments } from "./route-assignment-validate";
+import { findTemplate as findRouteTemplate } from "@/domain/play/routeTemplates";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { playSpecToCoachDiagram, reactivePathFor } from "@/domain/play/specRenderer";
@@ -811,6 +812,55 @@ const modify_play_route: CoachAiTool = {
 // Both tools route through the same play-mutations helpers, which
 // route through the same sanitizer the renderer uses. Single source of
 // geometric truth — AGENTS.md hard-rule layer 5.
+
+/**
+ * Mutate a PlaySpec in-place so every `route`-kind assignment whose
+ * `depthYds` exceeds the playbook's max throw depth is clamped to the
+ * cap. When the clamped depth lands BELOW the family's canonical
+ * minimum (e.g. cap=8 with Go's min=10), the assignment is marked
+ * `nonCanonical: true` so the route-assignment validator's Layer 3
+ * catalog check tolerates the sub-canonical depth.
+ *
+ * Returns a list of per-player summary strings (e.g. "@Z: 18yd → 14yd")
+ * for inclusion in the compose_play result. Empty array when no route
+ * exceeded the cap.
+ *
+ * Surfaced 2026-05-20: every concept skeleton emits 18yd Go's and
+ * Seam's. In playbooks with a youth-typical 14yd cap (the user's
+ * playbook), compose_play's route-assignment validator rejected every
+ * compose and Cal looped through retries until the SSE connection
+ * dropped. Auto-capping removes the retry cascade — the rendered
+ * fence always honors the cap by construction.
+ */
+export function autoCapSpecDepthsToMaxThrow(
+  spec: { assignments?: Array<{ player: string; action: Record<string, unknown> }> },
+  cap: number,
+): string[] {
+  const summaries: string[] = [];
+  if (!Number.isFinite(cap)) return summaries;
+  for (const asn of spec.assignments ?? []) {
+    const action = asn.action as {
+      kind?: string;
+      family?: string;
+      depthYds?: number;
+      nonCanonical?: boolean;
+    };
+    if (action.kind !== "route") continue;
+    if (typeof action.depthYds !== "number") continue;
+    if (action.depthYds <= cap) continue;
+    const originalDepth = action.depthYds;
+    action.depthYds = cap;
+    if (typeof action.family === "string") {
+      const template = findRouteTemplate(action.family);
+      if (template && cap < template.constraints.depthRangeYds.min - 0.5) {
+        action.nonCanonical = true;
+      }
+    }
+    summaries.push(`@${asn.player}: ${originalDepth}yd → ${cap}yd (max-throw cap)`);
+  }
+  return summaries;
+}
+
 const compose_play: CoachAiTool = {
   def: {
     name: "compose_play",
@@ -894,6 +944,15 @@ const compose_play: CoachAiTool = {
       }
     }
 
+    // Auto-cap deep routes to the playbook's max throw depth. Skeletons
+    // emit 18yd Go's and Seam's, which exceed the typical 14yd youth
+    // cap. Before this clamp, compose_play in a capped playbook failed
+    // EVERY concept and Cal looped through retries (surfaced 2026-05-20
+    // when SSE timed out mid-turn and the client fell back to polling).
+    const autoCappedSummaries: string[] = playbookSettings?.maxThrowDepthYds != null
+      ? autoCapSpecDepthsToMaxThrow(result.spec, playbookSettings.maxThrowDepthYds)
+      : [];
+
     const renderResult = playSpecToCoachDiagram(result.spec);
     let fence = {
       title: result.spec.title ?? result.concept,
@@ -956,12 +1015,15 @@ const compose_play: CoachAiTool = {
     const overridesNote = appliedOverrides.length > 0
       ? `\n\n**Overrides applied:** ${appliedOverrides.join("; ")}.`
       : "";
+    const autoCapNote = autoCappedSummaries.length > 0
+      ? `\n\n**Auto-capped to playbook's max throw depth:** ${autoCappedSummaries.join("; ")}.`
+      : "";
 
     return {
       ok: true,
       result:
         `Composed "${result.concept}" (${variant}${strength ? `, strength=${strength}` : ""}):\n\n` +
-        `**Summary:** ${result.notes}${overridesNote}\n\n` +
+        `**Summary:** ${result.notes}${overridesNote}${autoCapNote}\n\n` +
         `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`. Geometry is coach-canonical and sanitized; do NOT call get_route_template for any route in this fence — the depths are already correct:**\n` +
         `\`\`\`play\n${fenceJson}\n\`\`\`\n\n` +
         `**PlaySpec — pass to create_play if the coach wants the play saved to their playbook:**\n` +
