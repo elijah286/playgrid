@@ -9,6 +9,12 @@ import type { SubscriptionTier } from "@/lib/billing/entitlement";
 import { getStripeClient, priceIdFor, seatPriceIdFor, isSeatPriceId, type BillingInterval } from "@/lib/billing/stripe";
 import { getSeatUsage, ensureOwnerSeatGrantRow } from "@/lib/billing/seats";
 import { getCoachAiEvalDays } from "@/lib/site/coach-ai-eval-config";
+import {
+  getActivePaidSubscriptions,
+  previewSubscriptionChange,
+  executeSubscriptionUpgrade,
+  type SubscriptionChangePreview,
+} from "@/lib/billing/upgrade";
 
 async function siteOrigin(): Promise<string> {
   const h = await headers();
@@ -46,6 +52,22 @@ export async function createCheckoutSessionAction(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
+
+  // Guard: if the user already has an active paid subscription, refuse to
+  // spin up a second one via Checkout. Tier changes must go through the
+  // upgrade/downgrade flows so we don't double-bill — pre-2026-05-20 this
+  // path silently created parallel subscriptions.
+  try {
+    const existing = await getActivePaidSubscriptions(user.id);
+    if (existing.length > 0) {
+      return {
+        ok: false,
+        error: "You already have an active subscription. Use the upgrade flow from the pricing page.",
+      };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Subscription lookup failed." };
+  }
 
   try {
     const { stripe, config } = await getStripeClient();
@@ -115,6 +137,58 @@ export async function createCheckoutSessionAction(input: {
     return { ok: true, url: session.url };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Checkout failed." };
+  }
+}
+
+/**
+ * Compute the proration preview for a tier upgrade. Called by the pricing
+ * page modal before the user confirms — they see exactly what they'll be
+ * charged today before clicking "Confirm upgrade".
+ */
+export async function previewSubscriptionChangeAction(input: {
+  targetTier: Exclude<SubscriptionTier, "free">;
+  targetInterval: BillingInterval;
+}): Promise<
+  ({ ok: true } & SubscriptionChangePreview) | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  try {
+    return await previewSubscriptionChange(user.id, input.targetTier, input.targetInterval);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Preview failed." };
+  }
+}
+
+/**
+ * Execute the tier upgrade in place via stripe.subscriptions.update with
+ * proration. Seat add-on items pass through untouched. Trial logic doesn't
+ * apply here — trials are for first-time subscribers, not upgrades.
+ */
+export async function confirmSubscriptionChangeAction(input: {
+  targetTier: Exclude<SubscriptionTier, "free">;
+  targetInterval: BillingInterval;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  try {
+    const res = await executeSubscriptionUpgrade(user.id, input.targetTier, input.targetInterval);
+    if (!res.ok) return res;
+    revalidatePath("/account");
+    revalidatePath("/pricing");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Upgrade failed." };
   }
 }
 

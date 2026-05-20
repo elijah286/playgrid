@@ -5,6 +5,8 @@ import { Check } from "lucide-react";
 import {
   createBillingPortalSessionAction,
   createCheckoutSessionAction,
+  previewSubscriptionChangeAction,
+  confirmSubscriptionChangeAction,
 } from "@/app/actions/billing";
 import { track } from "@/lib/analytics/track";
 import {
@@ -14,8 +16,31 @@ import {
 } from "@/lib/billing/seats-config";
 import type { SeatDefaults } from "@/lib/site/seat-defaults-config";
 import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
-import { SegmentedControl } from "@/components/ui";
+import { Modal, SegmentedControl } from "@/components/ui";
 import { cn } from "@/lib/utils";
+
+const TIER_RANK: Record<SubscriptionTier, number> = {
+  free: 0,
+  coach: 1,
+  coach_ai: 2,
+};
+
+type PreviewLine = { description: string; amount: number };
+type UpgradePreview = {
+  amountDueNow: number;
+  currency: string;
+  lines: PreviewLine[];
+  nextRenewalAt: string | null;
+};
+type UpgradeModalState = {
+  targetTier: Exclude<SubscriptionTier, "free">;
+  targetName: string;
+  targetInterval: Interval;
+  preview: UpgradePreview | null;
+  loadingPreview: boolean;
+  confirming: boolean;
+  error: string | null;
+};
 
 type Interval = "month" | "year";
 
@@ -131,9 +156,60 @@ export function PricingClient({
   const [interval, setInterval] = useState<Interval>("month");
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [upgradeModal, setUpgradeModal] = useState<UpgradeModalState | null>(null);
   const currentTier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
+
+  function openUpgradeModal(t: TierDef) {
+    const targetTier = t.id as Exclude<SubscriptionTier, "free">;
+    setErr(null);
+    setUpgradeModal({
+      targetTier,
+      targetName: t.name,
+      targetInterval: interval,
+      preview: null,
+      loadingPreview: true,
+      confirming: false,
+      error: null,
+    });
+    track({
+      event: "checkout_started",
+      target: t.id,
+      metadata: { interval, tier: t.id, flow: "upgrade" },
+    });
+    void (async () => {
+      const res = await previewSubscriptionChangeAction({
+        targetTier,
+        targetInterval: interval,
+      });
+      setUpgradeModal((cur) => {
+        if (!cur || cur.targetTier !== targetTier || cur.targetInterval !== interval) return cur;
+        if (!res.ok) return { ...cur, loadingPreview: false, error: res.error };
+        const { amountDueNow, currency, lines, nextRenewalAt } = res;
+        return {
+          ...cur,
+          loadingPreview: false,
+          preview: { amountDueNow, currency, lines, nextRenewalAt },
+        };
+      });
+    })();
+  }
+
+  function confirmUpgrade() {
+    if (!upgradeModal) return;
+    const { targetTier, targetInterval } = upgradeModal;
+    setUpgradeModal((cur) => (cur ? { ...cur, confirming: true, error: null } : cur));
+    void (async () => {
+      const res = await confirmSubscriptionChangeAction({ targetTier, targetInterval });
+      if (!res.ok) {
+        setUpgradeModal((cur) => (cur ? { ...cur, confirming: false, error: res.error } : cur));
+        return;
+      }
+      // Hard reload to pick up the new entitlement everywhere.
+      window.location.href = "/account?upgrade=success";
+    })();
+  }
 
   function choose(t: TierDef) {
     setErr(null);
@@ -159,6 +235,24 @@ export function PricingClient({
       return;
     }
     if (t.id === currentTier && isPaid) {
+      startTransition(async () => {
+        const res = await createBillingPortalSessionAction();
+        if (!res.ok) {
+          setErr(res.error);
+          return;
+        }
+        window.location.href = res.url;
+      });
+      return;
+    }
+    // Existing paid customer moving between paid tiers. Upgrades go through
+    // the in-place proration flow; downgrades route to the Stripe portal
+    // until Phase 2 ships scheduled downgrades.
+    if (isPaid && t.id !== currentTier) {
+      if (TIER_RANK[t.id] > TIER_RANK[currentTier]) {
+        openUpgradeModal(t);
+        return;
+      }
       startTransition(async () => {
         const res = await createBillingPortalSessionAction();
         if (!res.ok) {
@@ -313,7 +407,14 @@ export function PricingClient({
                       </button>
                     );
                   }
-                  // Authed, paid tier they don't have = Upgrade (orange).
+                  // Authed, paid tier they don't have = Upgrade or
+                  // Downgrade between paid tiers (or first-time subscribe
+                  // for a non-paying user).
+                  const isPaidDowngrade =
+                    isPaid && t.id !== "free" && TIER_RANK[t.id] < TIER_RANK[currentTier];
+                  const label = isPaidDowngrade ? `Downgrade to ${t.name}` : t.cta;
+                  // Trial copy only applies to first-time subscribers.
+                  const showTrialNote = isProTier && !isPaid;
                   return (
                     <>
                       <button
@@ -322,9 +423,9 @@ export function PricingClient({
                         disabled={pending}
                         className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
                       >
-                        {t.cta}
+                        {label}
                       </button>
-                      {isProTier && (
+                      {showTrialNote && (
                         <p className="mt-1.5 text-center text-[11px] text-muted">
                           {coachAiEvalDays}-day free trial · no charge today
                         </p>
@@ -351,7 +452,112 @@ export function PricingClient({
         don&rsquo;t count against your seats. Cancel anytime from Manage
         billing.
       </p>
+
+      <UpgradePreviewModal
+        state={upgradeModal}
+        onClose={() => setUpgradeModal(null)}
+        onConfirm={confirmUpgrade}
+      />
     </div>
+  );
+}
+
+function formatMoney(amount: number, currency: string): string {
+  // Stripe returns minor units (cents for USD). Intl handles the conversion
+  // via minimumFractionDigits=2 / divide-by-100.
+  const value = amount / 100;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+    }).format(value);
+  } catch {
+    return `$${value.toFixed(2)}`;
+  }
+}
+
+function UpgradePreviewModal({
+  state,
+  onClose,
+  onConfirm,
+}: {
+  state: UpgradeModalState | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const open = state !== null;
+  const renewal = state?.preview?.nextRenewalAt
+    ? new Date(state.preview.nextRenewalAt).toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={state ? `Upgrade to ${state.targetName}` : "Upgrade"}
+      footer={
+        state ? (
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={state.confirming}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={state.confirming || state.loadingPreview || !state.preview}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              {state.confirming ? "Upgrading…" : "Confirm upgrade"}
+            </button>
+          </>
+        ) : null
+      }
+    >
+      {state?.loadingPreview ? (
+        <p className="text-sm text-muted">Calculating proration…</p>
+      ) : state?.error ? (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 ring-1 ring-red-200">
+          {state.error}
+        </p>
+      ) : state?.preview ? (
+        <div className="space-y-4 text-sm">
+          <p className="text-foreground">
+            You&rsquo;ll be charged{" "}
+            <span className="font-semibold">
+              {formatMoney(state.preview.amountDueNow, state.preview.currency)}
+            </span>{" "}
+            today, prorated for the remainder of your current billing period.
+          </p>
+          {state.preview.lines.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface-inset px-3 py-2">
+              <ul className="space-y-1 text-xs">
+                {state.preview.lines.map((line, i) => (
+                  <li key={i} className="flex justify-between gap-3">
+                    <span className="text-muted">{line.description}</span>
+                    <span className="font-mono text-foreground">
+                      {formatMoney(line.amount, state.preview!.currency)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {renewal && (
+            <p className="text-xs text-muted">
+              Your subscription will renew on {renewal} at the new plan rate.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </Modal>
   );
 }
 

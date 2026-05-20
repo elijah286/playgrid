@@ -1340,6 +1340,15 @@ export const FEATURES: FeatureEntry[] = [
     addedDate: "2026-05-18",
   },
   {
+    id: "billing-in-place-upgrade",
+    name: "In-place plan upgrade with proration preview",
+    description:
+      "Existing Team Coach subscribers clicking Coach Pro on the pricing page now see a confirmation modal showing exactly what they'll be charged today (unused Team Coach credited against prorated Coach Pro) and the date their renewal flips to the new plan rate. Confirming swaps the price on the existing Stripe subscription in place — no second subscription, no double-billing, no trip through Stripe Checkout. Seat add-ons survive the swap untouched. Downgrades still route to the Stripe billing portal pending Phase 2.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-05-20",
+  },
+  {
     id: "playbook-offline-graceful-degrade",
     name: "Offline-ready iOS/Android app",
     description:
