@@ -1248,7 +1248,7 @@ function BulkActionBar({
   const noneSelected = selectedCount === 0;
   const allSelected = selectedCount > 0 && selectedCount === visibleCount;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2">
+    <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/[0.04] px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <button
           type="button"
@@ -1263,7 +1263,7 @@ function BulkActionBar({
             : `${selectedCount} selected`}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
         {allRsvp && (
           <>
             <button

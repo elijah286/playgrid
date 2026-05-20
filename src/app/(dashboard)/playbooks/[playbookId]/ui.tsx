@@ -1956,17 +1956,19 @@ function PlaybookDetailClientInner({
           const activeCount = initialPlays.filter((p) => !p.is_archived).length;
           const archivedCount = initialPlays.length - activeCount;
           return (
-            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200">
-              <Archive className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1">
-                Viewing <strong>archived plays only</strong> — {archivedCount}{" "}
-                archived, {activeCount} active{" "}
-                {activeCount === 1 ? "play" : "plays"} hidden.
-              </span>
+            <div className="mb-3 flex flex-col gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-amber-200 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-2 sm:items-center">
+                <Archive className="mt-0.5 size-4 shrink-0 sm:mt-0" />
+                <span className="min-w-0">
+                  Viewing <strong>archived plays only</strong> — {archivedCount}{" "}
+                  archived, {activeCount} active{" "}
+                  {activeCount === 1 ? "play" : "plays"} hidden.
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setView("active")}
-                className="shrink-0 rounded-md bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950 ring-1 ring-amber-300 transition-colors hover:bg-amber-200"
+                className="shrink-0 self-end rounded-md bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950 ring-1 ring-amber-300 transition-colors hover:bg-amber-200 sm:self-auto"
               >
                 Show active
               </button>
@@ -5178,7 +5180,7 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
   if (!atCap && !approaching) return null;
   return (
     <div
-      className={`mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+      className={`mb-3 flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${
         atCap
           ? "border-amber-300 bg-amber-50 text-amber-950"
           : "border-primary/30 bg-primary/[0.04] text-foreground"
@@ -5191,7 +5193,7 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
       </p>
       <Link
         href="/pricing?upgrade=play-cap"
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+        className="inline-flex shrink-0 items-center gap-1.5 self-end rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90 sm:self-auto"
       >
         See Team Coach
       </Link>
@@ -5207,7 +5209,7 @@ function PlayCapBanner({ count, limit }: { count: number; limit: number }) {
  */
 function ShareFirstBanner() {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2">
+    <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <p className="min-w-0 flex-1 text-sm text-foreground">
         <span className="font-semibold">Share this playbook.</span>{" "}
         <span className="text-muted">
@@ -5217,7 +5219,7 @@ function ShareFirstBanner() {
       <Link
         href="?share=1"
         scroll={false}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+        className="inline-flex shrink-0 items-center gap-1.5 self-end rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90 sm:self-auto"
       >
         <UserPlus className="size-3.5" />
         Share

@@ -30,7 +30,7 @@ export function BulkRsvpBar({
   const allSelected = selectedCount > 0 && selectedCount === selectableCount;
   return (
     <div
-      className="sticky bottom-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/[0.06] px-3 py-2 shadow-md backdrop-blur"
+      className="sticky bottom-2 z-20 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/[0.06] px-3 py-2 shadow-md backdrop-blur sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
       role="region"
       aria-label="Bulk RSVP actions"
     >
@@ -48,7 +48,7 @@ export function BulkRsvpBar({
             : `${selectedCount} selected`}
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
         <button
           type="button"
           disabled={busy || noneSelected}
