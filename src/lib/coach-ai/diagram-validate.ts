@@ -647,9 +647,21 @@ export function validateDiagrams(opts: {
         w.code === "route_dropped_nonfinite_waypoint",
       );
       for (const w of severe) {
+        // Orphan-route case: route references a player that isn't in
+        // players[]. Almost always means Cal hand-authored a catalog
+        // concept (Power, Counter, Sweep, etc.) using a role
+        // convention (@FB, @TE) that doesn't exist in the actual
+        // formation. Point Cal at compose_play so the retry uses the
+        // composer instead of repeating the freelance. Surfaced
+        // 2026-05-20: Power play with `from: "FB"` shipped to chat
+        // because Cal couldn't recover on retry.
+        const composerHint =
+          w.code === "route_dropped_unknown_carrier"
+            ? ` This usually means you're authoring a catalog concept (Power, Counter, Sweep, Dive, Draw, Curl-Flat, Smash, Stick, Snag, Four Verticals, Mesh, Flood, Drive, Levels, Y-Cross, Dagger, Flea Flicker) by hand with role conventions like @FB or @TE that aren't in the formation. Use compose_play({ concept: "<name>" }) — the composer emits the entire fence with the correct player roster, so you can't reference a player that doesn't exist.`
+            : "";
         errors.push(
           `${tag}sanitizer rejected corrupt element [${w.code}]${w.subject ? ` on @${w.subject}` : ""}: ${w.message} ` +
-          `Re-emit the fence WITHOUT this element. The renderer would silently drop it anyway — better to ship a clean diagram.`,
+          `Re-emit the fence WITHOUT this element. The renderer would silently drop it anyway — better to ship a clean diagram.${composerHint}`,
         );
       }
       // Use the sanitized diagram for downstream gates so that lints

@@ -1102,6 +1102,53 @@ describe("validateDiagrams — sanitizer gate (image-3 purple-field case)", () =
     expect(sanErr).toBeDefined();
   });
 
+  // 2026-05-20 regression: coach surfaced a tackle_11 Power play where
+  // Cal's fence referenced `from: "FB"` even though the formation only
+  // had B (no FB). The sanitizer drops the orphan route; the validator
+  // must surface that drop AND point Cal at compose_play so the retry
+  // doesn't re-emit the same orphan. (Power was missing from the
+  // catalog at the time, so freelancing was the only option — adding
+  // Power to the catalog is the actual fix, but the validator's
+  // critique should still teach the right path for the next concept
+  // Cal authors.)
+  it("REJECTS the FB-orphan Power fence and points Cal at compose_play", () => {
+    const fence = makeFence({
+      title: "Power",
+      variant: "tackle_11",
+      focus: "O",
+      players: [
+        { id: "LT", x: -4, y: 0,  team: "O" },
+        { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" },
+        { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "QB", x:  0, y: -5, team: "O" },
+        { id: "B",  x:  4, y: -5, team: "O" },
+        { id: "X",  x: -18, y: 0,  team: "O" },
+        { id: "H",  x: -11, y: -1, team: "O" },
+        { id: "Z",  x:  18, y: 0,  team: "O" },
+        { id: "Y",  x:  11, y: -1, team: "O" },
+      ],
+      routes: [
+        { from: "B",  path: [[4, -2.5], [2, 0.5], [6, 4]], tip: "arrow" },
+        { from: "LG", path: [[-2, 0], [-1, 1.5], [2, 3]],  tip: "t" },
+        { from: "FB", path: [[-4, -3], [1, 1]],            tip: "t" },
+      ],
+      zones: [],
+    });
+    const result = validateDiagrams({
+      text: `${fence}\n@B follows @LG through the hole.`,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const sanErr = result.errors.find((e) => /sanitizer rejected.*route_dropped_unknown_carrier/.test(e));
+    expect(sanErr).toBeDefined();
+    expect(sanErr).toMatch(/@FB/);
+    expect(sanErr).toMatch(/compose_play/);
+  });
+
   it("ACCEPTS a fence with normal-sized zones", () => {
     const fence = makeFence({
       title: "Cover 3",
