@@ -70,11 +70,15 @@ jobs:
 
       - name: Smoke test
         run: |
-          for i in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 https://xogridmaker.com/)
-            echo "attempt $i: HTTP $code"
-            [ "$code" = "200" ] && exit 0
-            sleep 10
+          # -L follows redirects (apex 308→www) so a healthy site returns 200
+          # at the end of the chain regardless of whether we entered at apex
+          # or www. Both hostnames are probed to catch one-sided cert issues.
+          for host in xogridmaker.com www.xogridmaker.com; do
+            for i in 1 2 3 4 5; do
+              code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 30 "https://${host}/")
+              echo "${host} attempt $i: HTTP $code"
+              [ "$code" = "200" ] && break
+              [ $i -eq 5 ] && { echo "smoke test failed for ${host}"; exit 1; }
+              sleep 10
+            done
           done
-          echo "smoke test failed — site not serving 200 after deploy"
-          exit 1
