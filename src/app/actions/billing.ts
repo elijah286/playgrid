@@ -15,6 +15,12 @@ import {
   executeSubscriptionUpgrade,
   type SubscriptionChangePreview,
 } from "@/lib/billing/upgrade";
+import {
+  previewSubscriptionDowngrade,
+  scheduleSubscriptionDowngrade,
+  cancelScheduledDowngrade,
+  type DowngradePreview,
+} from "@/lib/billing/downgrade";
 
 async function siteOrigin(): Promise<string> {
   const h = await headers();
@@ -189,6 +195,85 @@ export async function confirmSubscriptionChangeAction(input: {
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Upgrade failed." };
+  }
+}
+
+/**
+ * Compute when a tier downgrade would take effect — the end of the
+ * user's current billing period. Drives the pricing-page confirmation
+ * dialog ("Your plan will switch to Team Coach on June 4").
+ */
+export async function previewSubscriptionDowngradeAction(input: {
+  targetTier: SubscriptionTier;
+}): Promise<({ ok: true } & DowngradePreview) | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  try {
+    return await previewSubscriptionDowngrade(user.id, input.targetTier);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Preview failed." };
+  }
+}
+
+/**
+ * Schedule a tier downgrade to take effect at the end of the current
+ * billing period. Paid → paid uses a Stripe subscription schedule; paid
+ * → free uses cancel_at_period_end. Mirror state lives on
+ * subscriptions.pending_change_* and is read by the /account banner.
+ */
+export async function scheduleSubscriptionDowngradeAction(input: {
+  targetTier: SubscriptionTier;
+  targetInterval: BillingInterval;
+}): Promise<{ ok: true; effectiveAt: string } | { ok: false; error: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  try {
+    const res = await scheduleSubscriptionDowngrade(
+      user.id,
+      input.targetTier,
+      input.targetInterval,
+    );
+    if (!res.ok) return res;
+    revalidatePath("/account");
+    revalidatePath("/pricing");
+    return { ok: true, effectiveAt: res.effectiveAt };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Downgrade failed." };
+  }
+}
+
+/**
+ * Cancel a pending downgrade. Releases the Stripe subscription schedule
+ * (or clears cancel_at_period_end for downgrade-to-free).
+ */
+export async function cancelScheduledDowngradeAction(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  if (!hasSupabaseEnv()) return { ok: false, error: "Supabase is not configured." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  try {
+    const res = await cancelScheduledDowngrade(user.id);
+    if (!res.ok) return res;
+    revalidatePath("/account");
+    revalidatePath("/pricing");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Cancel failed." };
   }
 }
 

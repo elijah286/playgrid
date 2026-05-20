@@ -85,6 +85,26 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
     .upsert(row, { onConflict: "stripe_subscription_id" });
   if (error) throw new Error(`subscriptions upsert failed: ${error.message}`);
 
+  // If a pending downgrade just took effect (schedule transitioned to
+  // phase 2, or cancel_at_period_end fired), the tier now matches the
+  // pending target. Clear the pending_change_* columns so the UI banner
+  // disappears. Read after the upsert so we see the just-written tier.
+  const { data: maybePending } = await admin
+    .from("subscriptions")
+    .select("pending_change_tier")
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+  if (maybePending?.pending_change_tier && maybePending.pending_change_tier === tier) {
+    await admin
+      .from("subscriptions")
+      .update({
+        pending_change_tier: null,
+        pending_change_effective_at: null,
+        pending_change_schedule_id: null,
+      })
+      .eq("stripe_subscription_id", sub.id);
+  }
+
   // Sync purchased_seats from the seat line item (or zero if absent). Only
   // applies to Coach+; free/cancelled subs don't carry seats.
   if (tier === "coach" || tier === "coach_ai") {
@@ -103,6 +123,82 @@ async function upsertSubscriptionFromStripe(sub: Stripe.Subscription): Promise<v
       );
     if (seatErr) throw new Error(`owner_seat_grants upsert failed: ${seatErr.message}`);
   }
+}
+
+/** Extract the subscription id a schedule manages, handling released
+ *  schedules (where `subscription` is null but `released_subscription`
+ *  holds the original id). */
+function subscriptionIdFromSchedule(
+  sched: Stripe.SubscriptionSchedule,
+): string | null {
+  if (typeof sched.subscription === "string") return sched.subscription;
+  if (sched.subscription && "id" in sched.subscription) return sched.subscription.id;
+  if (typeof sched.released_subscription === "string") return sched.released_subscription;
+  return null;
+}
+
+/** Mirror a Stripe schedule's pending phase-2 transition into our
+ *  pending_change_* columns. No-op if the schedule doesn't represent a
+ *  recognizable tier change (e.g. someone created a schedule for some
+ *  unrelated purpose via the dashboard). */
+async function syncPendingChangeFromSchedule(
+  sched: Stripe.SubscriptionSchedule,
+): Promise<void> {
+  const subId = subscriptionIdFromSchedule(sched);
+  if (!subId) return;
+  // Only act on schedules that are still scheduling future phases.
+  if (sched.status !== "active" && sched.status !== "not_started") return;
+
+  const config = await getStripeConfig();
+  // Phase 2 (the post-transition phase) is the one whose price tells us
+  // where the subscription is heading. Falls back to last phase if the
+  // schedule has unusual phase ordering.
+  const futurePhase = sched.phases.find(
+    (p) => (p.start_date ?? 0) * 1000 > Date.now(),
+  ) ?? sched.phases[sched.phases.length - 1];
+  if (!futurePhase) return;
+
+  const tierItem = futurePhase.items?.find((it) => {
+    const priceId = typeof it.price === "string" ? it.price : it.price?.id;
+    return priceId ? !isSeatPriceId(config, priceId) && tierForPriceId(config, priceId) !== null : false;
+  });
+  if (!tierItem) return;
+  const tierPriceId = typeof tierItem.price === "string" ? tierItem.price : tierItem.price?.id;
+  if (!tierPriceId) return;
+  const mapped = tierForPriceId(config, tierPriceId);
+  if (!mapped) return;
+
+  const effectiveAt = futurePhase.start_date
+    ? new Date(futurePhase.start_date * 1000).toISOString()
+    : null;
+
+  const admin = createServiceRoleClient();
+  await admin
+    .from("subscriptions")
+    .update({
+      pending_change_tier: mapped.tier,
+      pending_change_effective_at: effectiveAt,
+      pending_change_schedule_id: sched.id,
+    })
+    .eq("stripe_subscription_id", subId);
+}
+
+/** Clear pending_change_* for a subscription whose schedule has
+ *  ended (released, canceled, or completed). */
+async function clearPendingChangeForSchedule(
+  sched: Stripe.SubscriptionSchedule,
+): Promise<void> {
+  const subId = subscriptionIdFromSchedule(sched);
+  if (!subId) return;
+  const admin = createServiceRoleClient();
+  await admin
+    .from("subscriptions")
+    .update({
+      pending_change_tier: null,
+      pending_change_effective_at: null,
+      pending_change_schedule_id: null,
+    })
+    .eq("stripe_subscription_id", subId);
 }
 
 /** Add a Coach Cal message pack to the buyer's owner_seat_grants row.
@@ -203,6 +299,25 @@ export async function POST(req: Request): Promise<NextResponse> {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         await upsertSubscriptionFromStripe(event.data.object);
+        break;
+      }
+      case "subscription_schedule.released":
+      case "subscription_schedule.canceled":
+      case "subscription_schedule.completed": {
+        // Schedule lifecycle ended (user canceled the pending change, or
+        // it finished transitioning). Clear pending_change_* on the
+        // affected subscription. After-transition tier updates are
+        // handled in upsertSubscriptionFromStripe above.
+        await clearPendingChangeForSchedule(event.data.object);
+        break;
+      }
+      case "subscription_schedule.created":
+      case "subscription_schedule.updated": {
+        // Defense-in-depth: the action that creates a schedule writes
+        // pending_change_* directly, but if a schedule lands here from
+        // another path (Stripe Portal, manual ops) we still want to
+        // mirror the pending change into our DB.
+        await syncPendingChangeFromSchedule(event.data.object);
         break;
       }
       default:

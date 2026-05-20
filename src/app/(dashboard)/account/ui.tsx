@@ -14,12 +14,13 @@ import {
   uploadAvatarAction,
 } from "@/app/actions/account";
 import {
+  cancelScheduledDowngradeAction,
   createBillingPortalSessionAction,
   setSeatQuantityAction,
   submitCancellationFeedbackAction,
 } from "@/app/actions/billing";
 import { SEAT_PRICE_USD_PER_MONTH } from "@/lib/billing/seats-config";
-import type { Entitlement } from "@/lib/billing/entitlement";
+import type { Entitlement, SubscriptionTier } from "@/lib/billing/entitlement";
 import {
   FREE_MAX_PLAYBOOKS_OWNED,
   FREE_MAX_PLAYS_PER_PLAYBOOK,
@@ -65,6 +66,7 @@ export function AccountClient({
   seatCollaborators,
   pendingCoachInvites,
   aiFeedbackStatus,
+  pendingChange,
 }: {
   email: string;
   displayName: string | null;
@@ -75,6 +77,7 @@ export function AccountClient({
   seatCollaborators: SeatCollaborator[];
   pendingCoachInvites: PendingCoachInvite[];
   aiFeedbackStatus: "consenting" | "declined" | "unanswered";
+  pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
 }) {
   // Stripe redirects back here with ?checkout=success or ?checkout=cancel
   // after a checkout attempt. Record both as ui_events so the engagement
@@ -114,7 +117,7 @@ export function AccountClient({
         description="Your plan, billing, and the coaches you've granted access to."
       >
         <div className="space-y-4">
-          <PlanCard entitlement={entitlement} />
+          <PlanCard entitlement={entitlement} pendingChange={pendingChange} />
           {seatUsage ? (
             <SeatsCard
               usage={seatUsage}
@@ -414,16 +417,35 @@ function PasswordCard() {
   );
 }
 
-function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
+function PlanCard({
+  entitlement,
+  pendingChange,
+}: {
+  entitlement: Entitlement | null;
+  pendingChange: { targetTier: SubscriptionTier; effectiveAt: string } | null;
+}) {
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackPending, startFeedbackTransition] = useTransition();
+  const [cancelingDowngrade, startCancelDowngrade] = useTransition();
   const tier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
   const isComp = source === "comp";
+
+  function cancelPendingDowngrade() {
+    setErr(null);
+    startCancelDowngrade(async () => {
+      const res = await cancelScheduledDowngradeAction();
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      window.location.reload();
+    });
+  }
 
   function goToPortal() {
     setErr(null);
@@ -459,6 +481,31 @@ function PlanCard({ entitlement }: { entitlement: Entitlement | null }) {
   return (
     <Card icon={CreditCard} title="Plan" description="Your subscription and billing.">
       <div className="space-y-3">
+        {pendingChange ? (
+          <div className="flex flex-col gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Switching to{" "}
+              <span className="font-semibold">{TIER_LABEL[pendingChange.targetTier]}</span>{" "}
+              on{" "}
+              <span className="font-semibold">
+                {new Date(pendingChange.effectiveAt).toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+              .
+            </span>
+            <button
+              type="button"
+              onClick={cancelPendingDowngrade}
+              disabled={cancelingDowngrade}
+              className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+            >
+              {cancelingDowngrade ? "Canceling…" : "Cancel this change"}
+            </button>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-foreground">

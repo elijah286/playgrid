@@ -1343,7 +1343,16 @@ export const FEATURES: FeatureEntry[] = [
     id: "billing-in-place-upgrade",
     name: "In-place plan upgrade with proration preview",
     description:
-      "Existing Team Coach subscribers clicking Coach Pro on the pricing page now see a confirmation modal showing exactly what they'll be charged today (unused Team Coach credited against prorated Coach Pro) and the date their renewal flips to the new plan rate. Confirming swaps the price on the existing Stripe subscription in place — no second subscription, no double-billing, no trip through Stripe Checkout. Seat add-ons survive the swap untouched. Downgrades still route to the Stripe billing portal pending Phase 2.",
+      "Existing Team Coach subscribers clicking Coach Pro on the pricing page now see a confirmation modal showing exactly what they'll be charged today (unused Team Coach credited against prorated Coach Pro) and the date their renewal flips to the new plan rate. Confirming swaps the price on the existing Stripe subscription in place — no second subscription, no double-billing, no trip through Stripe Checkout. Seat add-ons survive the swap untouched.",
+    category: "Billing & accounts",
+    status: "ga",
+    addedDate: "2026-05-20",
+  },
+  {
+    id: "billing-scheduled-downgrade",
+    name: "Scheduled plan downgrade at period end",
+    description:
+      "Coaches can downgrade their plan from /pricing — Coach Pro → Team Coach, Team Coach → Solo Coach, or cancel the paid plan altogether — and the change takes effect at the end of the current billing period instead of immediately. A confirmation modal shows the exact switch date before they commit. The /account page surfaces a pending-change banner with a one-click \"Cancel this change\" button until the switch happens. Seat add-ons carry across paid → paid transitions automatically. Implementation uses Stripe subscription schedules for paid-to-paid (two-phase price transitions) and cancel_at_period_end for paid-to-free.",
     category: "Billing & accounts",
     status: "ga",
     addedDate: "2026-05-20",

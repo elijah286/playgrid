@@ -7,6 +7,8 @@ import {
   createCheckoutSessionAction,
   previewSubscriptionChangeAction,
   confirmSubscriptionChangeAction,
+  previewSubscriptionDowngradeAction,
+  scheduleSubscriptionDowngradeAction,
 } from "@/app/actions/billing";
 import { track } from "@/lib/analytics/track";
 import {
@@ -37,6 +39,16 @@ type UpgradeModalState = {
   targetName: string;
   targetInterval: Interval;
   preview: UpgradePreview | null;
+  loadingPreview: boolean;
+  confirming: boolean;
+  error: string | null;
+};
+type DowngradeModalState = {
+  targetTier: SubscriptionTier;
+  targetName: string;
+  targetInterval: Interval;
+  currentName: string | null;
+  effectiveAt: string | null;
   loadingPreview: boolean;
   confirming: boolean;
   error: string | null;
@@ -157,6 +169,7 @@ export function PricingClient({
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [upgradeModal, setUpgradeModal] = useState<UpgradeModalState | null>(null);
+  const [downgradeModal, setDowngradeModal] = useState<DowngradeModalState | null>(null);
   const currentTier = entitlement?.tier ?? "free";
   const source = entitlement?.source ?? "free";
   const isPaid = source === "stripe";
@@ -211,24 +224,67 @@ export function PricingClient({
     })();
   }
 
+  function openDowngradeModal(t: TierDef) {
+    const targetTier = t.id;
+    setErr(null);
+    setDowngradeModal({
+      targetTier,
+      targetName: t.name,
+      targetInterval: interval,
+      currentName: null,
+      effectiveAt: null,
+      loadingPreview: true,
+      confirming: false,
+      error: null,
+    });
+    track({
+      event: "checkout_started",
+      target: t.id,
+      metadata: { interval, tier: t.id, flow: "downgrade" },
+    });
+    void (async () => {
+      const res = await previewSubscriptionDowngradeAction({ targetTier });
+      setDowngradeModal((cur) => {
+        if (!cur || cur.targetTier !== targetTier) return cur;
+        if (!res.ok) return { ...cur, loadingPreview: false, error: res.error };
+        return {
+          ...cur,
+          loadingPreview: false,
+          currentName: res.currentName,
+          effectiveAt: res.effectiveAt,
+        };
+      });
+    })();
+  }
+
+  function confirmDowngrade() {
+    if (!downgradeModal) return;
+    const { targetTier, targetInterval } = downgradeModal;
+    setDowngradeModal((cur) => (cur ? { ...cur, confirming: true, error: null } : cur));
+    void (async () => {
+      const res = await scheduleSubscriptionDowngradeAction({ targetTier, targetInterval });
+      if (!res.ok) {
+        setDowngradeModal((cur) =>
+          cur ? { ...cur, confirming: false, error: res.error } : cur,
+        );
+        return;
+      }
+      window.location.href = "/account?downgrade=scheduled";
+    })();
+  }
+
   function choose(t: TierDef) {
     setErr(null);
     if (!isAuthed) {
       window.location.href = "/login?mode=signup";
       return;
     }
-    // Free-tier button when the user is on a paid plan means "downgrade";
-    // route them through the billing portal where Stripe handles it.
+    // Free-tier button when the user is on a paid plan means "downgrade
+    // to free at period end" — schedule a cancel_at_period_end via
+    // the new flow instead of routing to the portal.
     if (t.id === "free") {
       if (isPaid) {
-        startTransition(async () => {
-          const res = await createBillingPortalSessionAction();
-          if (!res.ok) {
-            setErr(res.error);
-            return;
-          }
-          window.location.href = res.url;
-        });
+        openDowngradeModal(t);
         return;
       }
       window.location.href = "/home";
@@ -245,22 +301,16 @@ export function PricingClient({
       });
       return;
     }
-    // Existing paid customer moving between paid tiers. Upgrades go through
-    // the in-place proration flow; downgrades route to the Stripe portal
-    // until Phase 2 ships scheduled downgrades.
+    // Existing paid customer moving between paid tiers. Upgrades go
+    // through the in-place proration flow; downgrades are scheduled to
+    // take effect at the end of the current billing period via a Stripe
+    // subscription schedule.
     if (isPaid && t.id !== currentTier) {
       if (TIER_RANK[t.id] > TIER_RANK[currentTier]) {
         openUpgradeModal(t);
-        return;
+      } else {
+        openDowngradeModal(t);
       }
-      startTransition(async () => {
-        const res = await createBillingPortalSessionAction();
-        if (!res.ok) {
-          setErr(res.error);
-          return;
-        }
-        window.location.href = res.url;
-      });
       return;
     }
     startTransition(async () => {
@@ -458,7 +508,108 @@ export function PricingClient({
         onClose={() => setUpgradeModal(null)}
         onConfirm={confirmUpgrade}
       />
+      <DowngradeConfirmModal
+        state={downgradeModal}
+        onClose={() => setDowngradeModal(null)}
+        onConfirm={confirmDowngrade}
+      />
     </div>
+  );
+}
+
+function formatDateLong(iso: string | null): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function DowngradeConfirmModal({
+  state,
+  onClose,
+  onConfirm,
+}: {
+  state: DowngradeModalState | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const open = state !== null;
+  const date = formatDateLong(state?.effectiveAt ?? null);
+  const isFree = state?.targetTier === "free";
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={
+        state
+          ? isFree
+            ? "Cancel paid plan?"
+            : `Switch to ${state.targetName}?`
+          : "Downgrade"
+      }
+      footer={
+        state ? (
+          <>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={state.confirming}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface disabled:opacity-60"
+            >
+              Keep current plan
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={state.confirming || state.loadingPreview || !state.effectiveAt}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              {state.confirming
+                ? "Scheduling…"
+                : isFree
+                  ? "Cancel at period end"
+                  : "Confirm downgrade"}
+            </button>
+          </>
+        ) : null
+      }
+    >
+      {state?.loadingPreview ? (
+        <p className="text-sm text-muted">Checking your billing period…</p>
+      ) : state?.error ? (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900 ring-1 ring-red-200">
+          {state.error}
+        </p>
+      ) : state?.effectiveAt ? (
+        <div className="space-y-3 text-sm">
+          <p className="text-foreground">
+            {isFree ? (
+              <>
+                Your{" "}
+                <span className="font-semibold">{state.currentName}</span> plan
+                will continue until <span className="font-semibold">{date}</span>
+                . After that, you&rsquo;ll move to the free plan with no further
+                charges. You can reverse this from your account page before then.
+              </>
+            ) : (
+              <>
+                Your <span className="font-semibold">{state.currentName}</span>{" "}
+                plan continues until <span className="font-semibold">{date}</span>
+                . On that date, your subscription switches to{" "}
+                <span className="font-semibold">{state.targetName}</span> at the
+                new rate. No refund or change today.
+              </>
+            )}
+          </p>
+          <p className="text-xs text-muted">
+            You won&rsquo;t lose access to anything you&rsquo;ve paid for
+            through the rest of this period.
+          </p>
+        </div>
+      ) : null}
+    </Modal>
   );
 }
 
