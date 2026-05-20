@@ -26,6 +26,7 @@ import {
   type Zone,
 } from "@/domain/play/types";
 import { findTemplate } from "@/domain/play/routeTemplates";
+import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 
 // ── Schema the LLM emits ────────────────────────────────────────────────────
 
@@ -500,7 +501,17 @@ function semanticFromRouteKind(rawKind: string | undefined): RouteSemantic | nul
 
 // ── Main converter ──────────────────────────────────────────────────────────
 
-export function coachDiagramToPlayDocument(diagram: CoachDiagram): PlayDocument {
+export function coachDiagramToPlayDocument(input: CoachDiagram): PlayDocument {
+  // Sanitize at the render boundary per AGENTS.md Rule 10. The chat-time
+  // validator catches obvious corruption before display, but this is the
+  // last line of defense — every caller (chat embed, AssistantMessage,
+  // play-tools save path) gets the same defensive pass without having
+  // to remember to call it themselves. The sanitizer is PURE and
+  // idempotent, so calling it here on an already-sanitized fence is a
+  // no-op. Surfaced 2026-05-20 from a Power play whose block routes
+  // duplicated the carrier's start position as path[0].
+  const sanitized = sanitizeCoachDiagram(input);
+  const diagram = sanitized.diagram;
   const variant = resolveVariant(diagram.variant);
   const profile = sportProfileForVariant(variant);
   const LOS_Y = 0.4; // normalized LOS position in the 25-yard window
