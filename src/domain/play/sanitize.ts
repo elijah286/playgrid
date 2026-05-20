@@ -66,6 +66,16 @@ export type SanitizeWarning = {
     | "route_dropped_empty_path"
     | "route_dropped_nonfinite_waypoint"
     | "route_waypoint_clamped"
+    /** A route's `path[0]` matched the carrier's own position, OR two
+     *  consecutive waypoints in `path` were identical. The converter
+     *  prepends the carrier's position as the start node, so a
+     *  duplicate at path[0] creates a zero-length first segment;
+     *  in-path duplicates produce zero-length intermediate segments.
+     *  Both waste SVG path commands and can confuse animation
+     *  interpolation. Surfaced 2026-05-20 when Cal hand-authored
+     *  Power-play block routes starting at the blocker's own
+     *  position. */
+    | "route_duplicate_waypoint_dropped"
     /** Indicator routes (RPO pass-option arrow, handoff arrow at a
      *  ballPath mesh point) are short DECISION / EXCHANGE markers,
      *  not literal player travel — the renderer caps them at ~3 yds.
@@ -324,6 +334,65 @@ export function sanitizeCoachDiagram(
         message: `route from @${r.from} had non-finite waypoint(s); dropped entirely.`,
       });
       continue;
+    }
+    // Drop duplicate consecutive waypoints. Two cases:
+    //   (a) path[0] matches the carrier's own position. The converter
+    //       prepends the carrier's position as the start node, so this
+    //       creates a zero-length first segment.
+    //   (b) path[i] equals path[i-1]. Same problem in the interior of
+    //       the path.
+    // Both are pure-hygiene drops — the rendered output is visually
+    // identical without them, but the SVG path commands are leaner and
+    // animation interpolation is unambiguous. Surfaced 2026-05-20.
+    //
+    // EXEMPTION: indicator routes (route_kind = handoff / rpo_pass_option)
+    // are intentionally short markers that may sit AT the giver's
+    // position — the ballPath renderer emits handoff arrows as
+    // single-point paths `[[giver.x, giver.y]]` when atPoint is
+    // omitted, and the arrow renders as a tiny indicator at the
+    // giver's spot rather than a zero-length line. Deduping those
+    // would erase the indicator entirely.
+    const isIndicatorRoute = r.route_kind === "handoff" || r.route_kind === "rpo_pass_option";
+    if (!isIndicatorRoute) {
+      const carrier = cleanPlayers.find((p) => p.id === r.from);
+      const EQ_EPS = 1e-6;
+      const eq = (a: number, b: number) => Math.abs(a - b) < EQ_EPS;
+      const dedupedPath: [number, number][] = [];
+      let dropped = false;
+      for (let i = 0; i < cleanPath.length; i++) {
+        const wp = cleanPath[i];
+        // Compare to the previous accepted waypoint, OR (for path[0]
+        // when no previous waypoint exists) to the carrier's start.
+        const prev = dedupedPath.length > 0
+          ? dedupedPath[dedupedPath.length - 1]
+          : (carrier ? [carrier.x, carrier.y] as [number, number] : null);
+        if (prev && eq(prev[0], wp[0]) && eq(prev[1], wp[1])) {
+          dropped = true;
+          continue;
+        }
+        dedupedPath.push(wp);
+      }
+      if (dropped) {
+        warnings.push({
+          code: "route_duplicate_waypoint_dropped",
+          subject: r.from,
+          message:
+            `route from @${r.from} had duplicate consecutive waypoint(s); ` +
+            `dropped to eliminate zero-length segments.`,
+        });
+      }
+      // If the dedup removed everything (rare — a pure "stay at start"
+      // route), drop the whole route under the same code path as empty.
+      if (dedupedPath.length === 0 && (r.motion?.length ?? 0) === 0) {
+        warnings.push({
+          code: "route_dropped_empty_path",
+          subject: r.from,
+          message: `route from @${r.from} had only duplicate waypoints; dropped (no movement to render).`,
+        });
+        continue;
+      }
+      cleanPath.length = 0;
+      cleanPath.push(...dedupedPath);
     }
     // Indicator-route length cap. RPO pass-option arrows and ballPath
     // handoff arrows are decision/exchange markers — short by design

@@ -251,6 +251,97 @@ describe("sanitize — routes", () => {
     expect(result.warnings.some((w) => w.code === "route_dropped_unknown_carrier" && w.subject === "X")).toBe(true);
   });
 
+  // 2026-05-20 regression: Cal hand-authored Power plays where block
+  // routes started their path[0] at the BLOCKER'S OWN POSITION (e.g.
+  // LG at (-2, 0) with `path: [[-2, 0], [1, 2], [2, 4]]`). The converter
+  // prepends the carrier's position as the start node, so a path that
+  // also starts there creates a zero-length first segment. Coach
+  // surfaced this in a second screenshot of a Power play that
+  // rendered with the green field looking dominant — though the field
+  // theme is naturally green, the duplicate waypoints are still a
+  // real hygiene bug (zero-length segments, redundant SVG path
+  // commands, ambiguous animation interpolation).
+  it("drops a route waypoint that duplicates the carrier's start position", () => {
+    const result = sanitizeCoachDiagram({
+      title: "Power",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x: 0,  y: -3, team: "O" },
+        { id: "LG", x: -2, y:  0, team: "O" },
+      ],
+      routes: [
+        // Cal's pulling-guard convention: starts the path AT the LG's
+        // own position. The first waypoint is redundant.
+        { from: "LG", path: [[-2, 0], [1, 2], [2, 4]], tip: "t" },
+      ],
+      zones: [],
+    });
+    const lgRoute = result.diagram.routes.find((r) => r.from === "LG");
+    expect(lgRoute).toBeDefined();
+    expect(lgRoute?.path).toEqual([[1, 2], [2, 4]]);
+    expect(
+      result.warnings.some(
+        (w) => w.code === "route_duplicate_waypoint_dropped" && w.subject === "LG",
+      ),
+    ).toBe(true);
+  });
+
+  it("drops consecutive duplicate waypoints within a path", () => {
+    const result = sanitizeCoachDiagram({
+      title: "Test",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -18, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-15, 2], [-15, 2], [-10, 5]] },
+      ],
+    });
+    const xRoute = result.diagram.routes.find((r) => r.from === "X");
+    expect(xRoute?.path).toEqual([[-15, 2], [-10, 5]]);
+    expect(
+      result.warnings.some((w) => w.code === "route_duplicate_waypoint_dropped" && w.subject === "X"),
+    ).toBe(true);
+  });
+
+  it("keeps the route when path[0] does NOT match the carrier position", () => {
+    const result = sanitizeCoachDiagram({
+      title: "Test",
+      variant: "tackle_11",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "X", x: -18, y: 0, team: "O" },
+      ],
+      routes: [
+        // X at (-18, 0); first waypoint (-15, 2) is different — keep as-is.
+        { from: "X", path: [[-15, 2], [-10, 5]] },
+      ],
+    });
+    const xRoute = result.diagram.routes.find((r) => r.from === "X");
+    expect(xRoute?.path).toEqual([[-15, 2], [-10, 5]]);
+    expect(result.warnings.some((w) => w.code === "route_duplicate_waypoint_dropped")).toBe(false);
+  });
+
+  it("idempotence: sanitizing the cleaned diagram produces no further warnings", () => {
+    const input: CoachDiagram = {
+      title: "Power",
+      variant: "tackle_11",
+      players: [
+        { id: "Q",  x: 0,  y: -3, team: "O" },
+        { id: "LG", x: -2, y:  0, team: "O" },
+      ],
+      routes: [
+        { from: "LG", path: [[-2, 0], [1, 2], [2, 4]], tip: "t" },
+      ],
+      zones: [],
+    };
+    const first = sanitizeCoachDiagram(input);
+    const second = sanitizeCoachDiagram(first.diagram);
+    expect(second.diagram).toEqual(first.diagram);
+    expect(second.warnings).toHaveLength(0);
+  });
+
   // 2026-05-20 regression: coach surfaced a tackle_11 Power play where Cal
   // emitted `from: "FB"` (lead-blocker convention) even though the formation
   // only had B in the backfield (no FB). The chat-time validator caught it
