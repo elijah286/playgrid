@@ -195,6 +195,16 @@ function TutorialOverlay({
     };
   }, [step.id]);
 
+  // One-shot "tutorial started" signal. PlayEditorClient listens and
+  // flips touch-device editors out of view mode (where edit affordances
+  // are disabled) so the spotlight on step 1 lands on a fully
+  // interactive field instead of a half-locked one.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("tutorial:active"));
+    }
+  }, []);
+
   // State-shepherd: dispatch the step's onEnter action so the editor
   // can nudge itself into the right UI state. Fires on step entry only
   // — the user keeps full freedom mid-step. The detail is the action

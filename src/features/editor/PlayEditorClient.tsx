@@ -1131,6 +1131,21 @@ function PlayEditorClientInner({
     });
   }, []);
 
+  // Tutorial → edit mode on touch. On phones / tablets the editor opens
+  // in "view" mode by default — coaches have to tap Edit to enter the
+  // editing surface, which is intentional (a stray finger can't move
+  // players accidentally). When the tour launches we want the coach
+  // straight into the edit experience or step 1's spotlight points at
+  // a half-disabled field. The TutorialProvider fires a one-shot
+  // `tutorial:active` window event on mount; we flip the mode here.
+  useEffect(() => {
+    function onTutorialActive() {
+      if (isTouchDevice) setMode("edit");
+    }
+    window.addEventListener("tutorial:active", onTutorialActive);
+    return () => window.removeEventListener("tutorial:active", onTutorialActive);
+  }, [isTouchDevice]);
+
   /* ---------- Auto-save ---------- */
   const [isSaving, setIsSaving] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

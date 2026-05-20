@@ -89,7 +89,7 @@ export const PLAY_AUTHORING_TUTORIAL: TutorialDef = {
   id: "play_authoring_v1",
   title: "Build an offensive play",
   summary:
-    "Walk through the play editor end-to-end — formation, routes, route style, motion, defense, and notes. ~3 minutes.",
+    "Hands-on tour of creating and editing plays — drawing routes, styling them, adding motion, scouting the defense, and writing notes. ~3 minutes.",
   supportedVariants: ["flag_5v5", "flag_6v6", "flag_7v7", "tackle_11"],
   steps: [
     {

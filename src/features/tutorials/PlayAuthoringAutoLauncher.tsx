@@ -146,7 +146,7 @@ export function PlayAuthoringAutoLauncher({
             Take a 2-minute tour?
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted">
-            Quick walkthrough of the play editor — formation, routes, defense, save.
+            Hands-on tour of creating and editing plays — routes, styling, motion, defense, notes.
           </p>
           <div className="mt-2 flex items-center gap-2">
             <button

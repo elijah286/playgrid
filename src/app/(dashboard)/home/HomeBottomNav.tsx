@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Calendar, CreditCard, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
+import { BookOpen, Calendar, CreditCard, GraduationCap, Inbox, Loader2, LogOut, MoreHorizontal, Shield, User } from "lucide-react";
 import { CalNavButton } from "@/features/coach-ai/CalNavButton";
 import { signOutAction } from "@/app/actions/auth";
 
@@ -137,6 +137,7 @@ export function HomeBottomNav({
           onClose={() => setMoreOpen(false)}
           items={[
             { label: "Account", href: "/account", Icon: User },
+            { label: "Learning Center", href: "/learn", Icon: GraduationCap },
             ...(isAdmin
               ? [
                   { label: "Billing", href: "/account?tab=billing", Icon: CreditCard },

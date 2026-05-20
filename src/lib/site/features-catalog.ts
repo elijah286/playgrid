@@ -47,7 +47,7 @@ export const FEATURES: FeatureEntry[] = [
     id: "tutorial-play-authoring",
     name: "Guided Play Authoring tutorial",
     description:
-      "A short interactive walkthrough of the play editor — formation, route templates, route toolbar, opponent overlay, autosave. The tour spotlights the real editor UI step by step, adapts copy to the playbook's sport variant, and can be replayed anytime from the Learning Center (account menu → Learning Center). Auto-offers to new coaches on their second editor visit; one-tap dismiss is sticky.",
+      "A hands-on tour of creating and editing plays — picking and moving players, drawing and styling routes, motion and quick edits, scouting the defense, and writing notes. The tour spotlights the real editor UI step by step with reactive try-it checklists that tick as the coach actually does each action, adapts copy to the playbook's sport variant and the input modality (mouse vs touch), and can be replayed anytime from the Learning Center. Auto-offers to new coaches on their second editor visit; one-tap dismiss is sticky.",
     category: "Onboarding & help",
     status: "ga",
     addedDate: "2026-05-14",
