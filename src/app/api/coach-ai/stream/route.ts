@@ -153,6 +153,8 @@ async function loadToolContext(
       playFormation: resolvedPlay?.formation ?? null,
       playDiagramText,
       playDiagramRecap,
+      threadId: null,
+      userId: null,
     };
   }
   const [{ data }, { data: canEdit }] = await Promise.all([
@@ -186,6 +188,8 @@ async function loadToolContext(
     playFormation: resolvedPlay?.formation ?? null,
     playDiagramText,
     playDiagramRecap,
+    threadId: null,
+    userId: null,
   };
 }
 
@@ -344,6 +348,14 @@ export async function POST(req: Request): Promise<Response> {
   const threadPlaybookId =
     requestedMode === "admin_training" ? null : (ctx.playbookId ?? null);
   const threadId = await getOrCreateThread(gate.userId, requestedMode, threadPlaybookId);
+
+  // Wire thread + user into the tool context so thread-scoped tools
+  // (Plans subsystem — propose_plan / update_plan_step) can persist
+  // rows keyed by these ids. loadToolContext runs before the thread
+  // is created, so we patch after the fact rather than threading
+  // threadId through the loader.
+  (ctx as { threadId: string | null; userId: string | null }).threadId = threadId;
+  (ctx as { threadId: string | null; userId: string | null }).userId = gate.userId;
 
   // First-load migration: when a coach has localStorage history but the
   // server thread is brand-new, persist the prior turns once so the chat

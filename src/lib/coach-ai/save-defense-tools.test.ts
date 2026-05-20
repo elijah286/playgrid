@@ -48,6 +48,8 @@ const CTX: ToolContext = {
   playFormation: null,
   playDiagramText: null,
   playDiagramRecap: null,
+  threadId: null,
+  userId: null,
 };
 
 const OVERLAY_FENCE = JSON.stringify({

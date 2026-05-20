@@ -96,21 +96,22 @@ describe("NORMAL_PROMPT — Rule 7c (Plan checklist for N ≥ 3 multi-play insta
   it("names the per-turn fence cap as 3", () => {
     // The validator's MAX_CATALOG_CONCEPT_FENCES_PER_REPLY enforces
     // this — the prompt must agree so Cal isn't surprised by rejection.
-    expect(NORMAL_PROMPT).toMatch(/MAX 3 fences per turn/i);
+    expect(NORMAL_PROMPT).toMatch(/max 3 fences per reply|max 3 catalog-concept fences per reply|max 3 fences as a safety net/i);
   });
 
-  it("describes the Plan checklist as markdown with - [ ] / - [x] items", () => {
-    // The plan format is plain markdown so Cal can re-emit it across
-    // turns and read its own prior turns to know what's done.
-    expect(NORMAL_PROMPT).toMatch(/- \[ \] 1\. Mesh/);
-    expect(NORMAL_PROMPT).toMatch(/- \[x\] 1\. Mesh/);
+  it("names propose_plan as the entry point for multi-play installs", () => {
+    // Phase 2 promoted the markdown checklist to a real tool. The
+    // prompt rule must direct Cal to call propose_plan first, not
+    // hand-write a checklist.
+    expect(NORMAL_PROMPT).toMatch(/call `propose_plan` first/i);
+    expect(NORMAL_PROMPT).toMatch(/update_plan_step/);
   });
 
   it("tells Cal the FIRST turn proposes the plan and does NOT compose", () => {
     // The bug pattern was Cal proposing the plan AND composing all 6
     // plays in the same turn. Rule must explicitly say "stop after
     // proposing the plan."
-    expect(NORMAL_PROMPT).toMatch(/NO compose_play calls in the planning turn/i);
+    expect(NORMAL_PROMPT).toMatch(/DO NOT call `compose_play` in the same turn you proposed the plan/i);
   });
 
   it("forbids copying a compose_play fence for another play", () => {

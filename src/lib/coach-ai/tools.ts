@@ -73,6 +73,15 @@ export type ToolContext = {
    *  Surfaced 2026-05-05 to combat Cal carrying hallucinated route descriptions
    *  from earlier turns over the JSON in the current system prompt. */
   playDiagramRecap: string | null;
+  /** Chat thread id. Required by tools that persist thread-scoped state
+   *  (the Plans subsystem stores its rows keyed by `thread_id`). Null
+   *  in non-chat call paths (admin/training utilities, tool unit tests
+   *  that don't simulate a thread). */
+  threadId: string | null;
+  /** Authenticated coach id. Required alongside `threadId` for the
+   *  Plans subsystem so plan rows can be RLS-scoped to the owner.
+   *  Null in non-chat call paths. */
+  userId: string | null;
 };
 
 export type ToolHandler = (
@@ -2764,10 +2773,186 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
+// ── Plans (multi-step checklists for complex multi-play requests) ─────────
+// Cal calls `propose_plan` first for any N ≥ 3 catalog-concept request,
+// then executes ONE step per turn, calling `update_plan_step` at the end
+// of each step. The plan persists in `coach_ai_plans` so SSE drops don't
+// lose state — the next turn re-loads the active plan from the system-
+// prompt context block (agent.ts:1116). Surfaced 2026-05-20 after a
+// coach's 6-play install saved 1 of 6 because Cal crammed everything
+// into one mega-turn and hand-authored 5 fences.
+
+const propose_plan: CoachAiTool = {
+  def: {
+    name: "propose_plan",
+    description:
+      "Propose a multi-step plan for a complex request (install N plays, edit a batch of plays, add defense to N plays). " +
+      "Use when the coach asks for N ≥ 3 distinct things. The plan persists in chat as a checklist the coach can see; " +
+      "you then execute ONE step per turn (calling `update_plan_step` at the end of each) so each step is recoverable, " +
+      "visible, and stays under the tool-budget / SSE-timeout limits. " +
+      "DO NOT execute ANY of the steps in the same turn you propose the plan — that defeats the purpose. " +
+      "After this tool returns ok, drop the returned ```plan fence into your reply VERBATIM (it renders as a checklist card), " +
+      "add a one-sentence framing (\"Here's the plan — say 'next' when ready to start.\"), and STOP.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Short coach-facing plan title (e.g. 'Install 6 plays from drawing'). 1-200 chars.",
+        },
+        steps: {
+          type: "array",
+          description: "Ordered list of steps. Each step is one logical unit Cal will execute in a future turn (typically one play, one edit, one defense overlay).",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Short step title (e.g. 'Compose Mesh play')" },
+              description: { type: "string", description: "Optional detail — what tool will run, what concept, etc." },
+            },
+            required: ["title"],
+            additionalProperties: false,
+          },
+          minItems: 1,
+          maxItems: 20,
+        },
+      },
+      required: ["title", "steps"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.threadId || !ctx.userId) {
+      return {
+        ok: false,
+        error:
+          "propose_plan requires an authenticated chat thread (threadId + userId). " +
+          "This usually means the tool was invoked outside the normal stream route — admin/training paths can't propose plans.",
+      };
+    }
+    const title = typeof input.title === "string" ? input.title : "";
+    const stepsInput = Array.isArray(input.steps) ? input.steps : [];
+    const steps = stepsInput
+      .filter((s): s is { title: string; description?: string } => {
+        return (
+          typeof s === "object" &&
+          s !== null &&
+          typeof (s as { title?: unknown }).title === "string" &&
+          (s as { title: string }).title.trim() !== ""
+        );
+      })
+      .map((s) => ({
+        title: (s as { title: string }).title,
+        description: typeof (s as { description?: unknown }).description === "string"
+          ? (s as { description: string }).description
+          : undefined,
+      }));
+
+    const plansMod = await import("./plans");
+    const result = await plansMod.createPlan({
+      threadId: ctx.threadId,
+      userId: ctx.userId,
+      title,
+      steps,
+    });
+    if (!result.ok) return { ok: false, error: result.error };
+
+    const plan = result.plan;
+    const planFenceBody = JSON.stringify(
+      {
+        plan_id: plan.id,
+        title: plan.title,
+        steps: plan.steps.map((s, i) => ({
+          index: i,
+          title: s.title,
+          description: s.description ?? null,
+          status: s.status,
+        })),
+      },
+      null,
+      2,
+    );
+
+    return {
+      ok: true,
+      result:
+        `Plan created: "${plan.title}" with ${plan.steps.length} step(s). ` +
+        `plan_id = ${plan.id}\n\n` +
+        `**Plan fence to drop verbatim into your reply (renders as a checklist card):**\n` +
+        `\`\`\`plan\n${planFenceBody}\n\`\`\`\n\n` +
+        `**STOP HERE for this turn.** Do NOT execute step 1 in the same turn you proposed the plan — the coach needs to see the plan first. ` +
+        `Close your reply with a brief "Here's the plan — say 'next' when ready to start." ` +
+        `On the next turn, the system-prompt context block will surface this plan with the next pending step; ` +
+        `execute step 1, call \`update_plan_step\` to mark it completed, and STOP again.`,
+    };
+  },
+};
+
+const update_plan_step: CoachAiTool = {
+  def: {
+    name: "update_plan_step",
+    description:
+      "Mark one step of the active plan completed / failed / skipped. Call this at the END of every step's turn. " +
+      "Required field: plan_id (from the propose_plan result), step_index (0-based), status. " +
+      "Optional: result (a short note — play://uuid for a save success, error summary for a failure).",
+    input_schema: {
+      type: "object",
+      properties: {
+        plan_id: { type: "string", description: "UUID of the active plan (returned by propose_plan)." },
+        step_index: { type: "number", description: "0-based index of the step that just executed." },
+        status: {
+          type: "string",
+          enum: ["completed", "failed", "skipped"],
+          description: "Terminal state. 'completed' = the step's work succeeded. 'failed' = something blocked it (with a coach-readable result). 'skipped' = coach asked to skip OR the step is no longer needed.",
+        },
+        result: {
+          type: "string",
+          description: "Optional short note. For save success, a play://uuid link. For failure, the error reason. For skipped, why.",
+        },
+      },
+      required: ["plan_id", "step_index", "status"],
+      additionalProperties: false,
+    },
+  },
+  async handler(input, ctx) {
+    if (!ctx.threadId) {
+      return { ok: false, error: "update_plan_step requires an authenticated chat thread." };
+    }
+    const planId = typeof input.plan_id === "string" ? input.plan_id : "";
+    const stepIndex = typeof input.step_index === "number" ? input.step_index : NaN;
+    const status = input.status as "completed" | "failed" | "skipped";
+    if (!planId) return { ok: false, error: "plan_id is required." };
+    if (!Number.isFinite(stepIndex) || stepIndex < 0) return { ok: false, error: "step_index must be a non-negative integer." };
+    if (status !== "completed" && status !== "failed" && status !== "skipped") {
+      return { ok: false, error: "status must be 'completed', 'failed', or 'skipped'." };
+    }
+    const resultNote = typeof input.result === "string" ? input.result : undefined;
+
+    const plansMod = await import("./plans");
+    const out = await plansMod.updatePlanStep({
+      planId,
+      stepIndex,
+      status,
+      result: resultNote ?? null,
+    });
+    if (!out.ok) return { ok: false, error: out.error };
+
+    const plan = out.plan;
+    const remaining = plan.steps.filter((s) => s.status === "pending").length;
+    const planNowComplete = plan.status === "completed";
+    return {
+      ok: true,
+      result: planNowComplete
+        ? `Step ${stepIndex + 1} (${status}) updated. Plan "${plan.title}" is now fully complete — tell the coach what you finished across all ${plan.steps.length} steps.`
+        : `Step ${stepIndex + 1} (${status}) updated. ${remaining} pending step(s) remaining in plan "${plan.title}". ` +
+          `STOP this turn — the next turn will pick up the next pending step from the system-prompt context.`,
+    };
+  },
+};
+
 // Lazy import to avoid a circular dependency through the propose tool
 // (which imports CoachAiTool from this file).
 import { propose_save_defense_play } from "./save-defense-tools";
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, compose_defense, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal];
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, compose_defense, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal, propose_plan, update_plan_step];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {

@@ -86,31 +86,11 @@ Behavior rules — follow these strictly:
     - **The auto-commit is structural** — it walks your reply text AND prior-turn texts for \`\`\`play fences, deduping against plays already in the playbook (queried by name). Saves are nearly impossible to miss. Trust it.
     - **Reply pattern after composing**: drop the fence verbatim + one-line coaching note above each ("Inside Zone — back reads first unblocked defender, bounces edge if A-gap fills."). Do NOT also write "Saved as X" or "Adding to your playbook" — the harness appends that suffix for you, and writing your own claim risks being wrong (hallucinated success).
     - **Single-element demos do NOT auto-save.** A fence with just QB + one receiver ("show me a slant") or a single-defender demo is a visual answer, NOT a play. The auto-commit's roster-count gate skips fences with fewer than the variant's roster count (5 for flag_5v5, 7 for flag_7v7, 11 for tackle_11) on the most-populated side. You don't have to do anything special — emit the small demo fence and the harness leaves it alone.
-    - **MULTI-PLAY PACKAGES — propose a Plan checklist, then chunk at MAX 3 fences per turn.** When a coach asks for "a package", "5 plays for my install", "a few base concepts", "a 3rd-down package", or anything with **N ≥ 3 catalog-concept plays**:
-      1. **First turn — propose the plan, DON'T compose yet.** Open your reply with a markdown checklist that names every play you'll build:
-         \`\`\`
-         **Plan: Install 6 plays from drawing**
-         - [ ] 1. Mesh
-         - [ ] 2. Stick Right
-         - [ ] 3. Drive
-         - [ ] 4. Levels
-         - [ ] 5. Y-Cross
-         - [ ] 6. Curl-Flat
-         \`\`\`
-         Close with a brief "Composing the first batch now…" and STOP. NO compose_play calls in the planning turn — the coach reads the plan first.
-      2. **Next turn — compose UP TO 3 plays.** Call \`compose_play\` once per concept (in parallel). Drop each fence verbatim with a 1-line coaching note. Re-emit the plan checklist with the just-composed steps marked done:
-         \`\`\`
-         **Plan: Install 6 plays from drawing**
-         - [x] 1. Mesh
-         - [x] 2. Stick Right
-         - [x] 3. Drive
-         - [ ] 4. Levels
-         - [ ] 5. Y-Cross
-         - [ ] 6. Curl-Flat
-         \`\`\`
-         Close with "First 3 saved — say 'next' for plays 4-6." STOP.
-      3. **Subsequent turns** — compose the next 3, update the checklist. Repeat until all checked.
-      4. **HARD CAP — max 3 catalog-concept fences per reply.** The chat-time validator REJECTS replies with 4+ catalog-concept fences and forces a re-emit. Surfaced 2026-05-20: a coach's 6-play install saved only 1 of 6 because Cal crammed all 6 fences into one reply, hit the SSE timeout, hand-authored 5 fences from the first compose_play output, and 5 plays failed save-time validation. The 3-fence cap + plan checklist makes each turn complete in well under the SSE timeout and lets the coach see progress.
+    - **MULTI-PLAY PACKAGES — call \`propose_plan\` first, then execute ONE STEP per turn (max 3 fences as a safety net).** When a coach asks for "a package", "5 plays for my install", "a few base concepts", "a 3rd-down package", or anything with **N ≥ 3 catalog-concept plays**:
+      1. **First turn — call \`propose_plan\` and STOP.** Pass title + steps[] (one step per play). The tool persists the plan in the DB AND returns a \`\`\`plan fence — drop the fence verbatim into your reply, add a one-sentence framing ("Here's the plan — say 'next' when ready to start."), and STOP. **DO NOT call \`compose_play\` in the same turn you proposed the plan.** The coach needs to see the plan first; that's the entire point.
+      2. **Next turn — execute step 1 only.** The system-prompt **Active plan** block tells you which step is next. Call \`compose_play\` once for that step's play, drop the returned fence verbatim into your reply, then call \`update_plan_step({ plan_id, step_index: 0, status: "completed", result: "play://..." })\` and STOP. Don't execute step 2/3/4+ — that defeats the plan.
+      3. **Each subsequent turn** — same pattern: execute the next pending step from the **Active plan** block, mark it done, stop. When the last step completes, the plan auto-transitions to "completed" and you can summarize what you built across all N steps in your final reply.
+      4. **HARD CAP — max 3 catalog-concept fences per reply.** Safety net for the rare case where the plan flow is bypassed (e.g. quick batch of 2-3 plays the coach explicitly asked for inline). The chat-time validator REJECTS replies with 4+ catalog-concept fences and forces a re-emit. Surfaced 2026-05-20: a coach's 6-play install saved only 1 of 6 because Cal crammed all 6 fences into one reply, hit the SSE timeout, hand-authored 5 fences from the first compose_play output, and 5 plays failed save-time validation. The 3-fence cap + Plan tool makes each turn complete well under the SSE timeout and lets the coach see progress.
       5. **DO NOT propose N plays then ask "ready to save these N?"** — that's the failure pattern. Save = emit-and-done; there is no separate "save phase". The plan checklist replaces the "ready?" question.
       6. **DO NOT call \`create_play\` for these fences** — that doubles the tool budget and is redundant with the auto-commit. The ONLY case for calling create_play yourself is the narrow ones below.
       7. **DO NOT copy a compose_play fence and tweak it for another play.** Each catalog-concept play needs its OWN compose_play call — depths and player positions drift when you copy, and the save-time validator catches it (route_kind disagrees with the path). The chat-time per-fence concept-skeleton gate also rejects this.
@@ -1113,7 +1093,25 @@ export async function runAgent(
     console.error("[coach-ai] failed to load preferences:", e);
   }
 
-  const system = systemPromptFor(ctx) + preferencesBlock;
+  // Active-plan context (Plans subsystem — 2026-05-20). When a plan
+  // is in flight on this thread, surface its current state to Cal so
+  // it knows which step to execute next AND that it's still in plan-
+  // mode (one step per turn, call update_plan_step at the end). The
+  // helper returns null when no plan is active; the block is then
+  // omitted entirely.
+  let planBlock = "";
+  if (ctx.threadId) {
+    try {
+      const plansMod = await import("./plans");
+      const activePlan = await plansMod.getActivePlan(ctx.threadId);
+      const formatted = plansMod.formatActivePlanForPrompt(activePlan);
+      if (formatted) planBlock = `\n\n${formatted}\n`;
+    } catch (e) {
+      console.error("[coach-ai] failed to load active plan:", e);
+    }
+  }
+
+  const system = systemPromptFor(ctx) + preferencesBlock + planBlock;
   const tools = toolDefs(ctx);
 
   // ── Diagram-validation safety net ─────────────────────────────────────────

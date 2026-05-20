@@ -82,6 +82,8 @@ function ctxFor(opts: Partial<ToolContext> = {}): ToolContext {
     playFormation: null,
     playDiagramText: null,
     playDiagramRecap: null,
+  threadId: null,
+  userId: null,
     ...opts,
   };
 }

@@ -9,6 +9,7 @@ import type { Player } from "@/domain/play/types";
 import { PlayerChip } from "@/features/editor/PlayerChip";
 import { coachDiagramToPlayDocument, type CoachDiagram } from "./coachDiagramConverter";
 import { PlayDiagramEmbed, PlayDiagramRef } from "./PlayDiagramEmbed";
+import { CoachAiPlanCard } from "./CoachAiPlanCard";
 
 /**
  * Map from uppercase player label → Player, derived from any `play`
@@ -348,6 +349,7 @@ const components: Components = {
     if (lang === "play") return <PlayDiagramEmbed json={raw} />;
     if (lang === "play-ref") return <PlayDiagramRef json={raw} />;
     if (lang === "diagram") return <FootballDiagram text={raw} />;
+    if (lang === "plan") return <CoachAiPlanCard json={raw} />;
 
     // Suppress empty code fences — they render as a thin grey pill artifact,
     // usually from the model truncating mid-diagram or emitting ``` ``` alone.

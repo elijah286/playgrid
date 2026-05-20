@@ -105,6 +105,8 @@ async function loadToolContext(
       playFormation: null,
       playDiagramText: null,
       playDiagramRecap: null,
+      threadId: null,
+      userId: null,
     };
   }
   const supabase = await createClient();
@@ -141,6 +143,8 @@ async function loadToolContext(
     playFormation: null,
     playDiagramText: null,
     playDiagramRecap: null,
+    threadId: null,
+    userId: null,
   };
 }
 
