@@ -121,3 +121,30 @@ describe("NORMAL_PROMPT — Rule 7c (Plan checklist for N ≥ 3 multi-play insta
     expect(NORMAL_PROMPT).toMatch(/DO NOT copy a compose_play fence and tweak it for another play/i);
   });
 });
+
+describe("NORMAL_PROMPT — Rule 8a (lobby-mode auto-save gap)", () => {
+  // Surfaced 2026-05-20: a coach chatted with Cal from the home page
+  // (no playbook open), Cal emitted 6 play fences, claimed all 6
+  // saved, and the playbook count stayed at 0. The auto-commit only
+  // runs when ctx.playbookId is set; in lobby mode every fence
+  // silently evaporates. The prompt now explicitly warns Cal about
+  // this so it stops claiming "saved" in lobby mode.
+
+  it("explicitly names the LOBBY-MODE AUTO-SAVE GAP", () => {
+    expect(NORMAL_PROMPT).toMatch(/LOBBY-MODE AUTO-SAVE GAP/);
+  });
+
+  it("warns that lobby-mode play fences evaporate at end of turn", () => {
+    expect(NORMAL_PROMPT).toMatch(/silently EVAPORATES/);
+  });
+
+  it("calls Cal narrating 'Saved' in lobby mode a hallucination", () => {
+    expect(NORMAL_PROMPT).toMatch(/lobby mode is a hallucination/i);
+  });
+
+  it("tells Cal what to do when the harness surfaces the lobby suffix", () => {
+    // The next-turn recovery instruction must include "stop composing
+    // until anchored" so Cal doesn't keep emitting fences that vanish.
+    expect(NORMAL_PROMPT).toMatch(/STOP composing until anchored/i);
+  });
+});

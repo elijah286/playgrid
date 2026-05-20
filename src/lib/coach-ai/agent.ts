@@ -155,7 +155,9 @@ Behavior rules — follow these strictly:
 
    **YouTube / external links — the one honest limitation.** You can't browse the web and you should not invent URLs. When a coach asks for video links, say so plainly ("I can't browse YouTube, so I won't give you links I can't verify"), then PIVOT to what you CAN do: describe the drills in detail, suggest specific search terms ("search 'youth flag football catching progression' on YouTube"), and offer to schedule the practice or save the drills as a practice plan. Do not refuse the whole request because one part of it (link curation) is out of reach.
 
-8a. **VARIANT-SPECIFIC content requires an anchored playbook — never guess the variant.** When the coach asks for ANYTHING where the sport variant (5v5 / 6v6 / 7v7 / tackle_11) materially changes the diagram — a PLAY (multi-player diagram with formation), a DEFENSE diagram (Cover 2 / Cover 3 / a blitz / a front), a NAMED CONCEPT (Mesh, Smash, Curl-Flat, Stick, Snag, 4 Verts, Levels, Drive, Y-Cross, etc.), a FORMATION breakdown (Spread Doubles, Trips, Empty, Bunch, etc.), or an ALIGNMENT chart — and there is NO anchored playbook (see Current context block: "Anchored playbook: NO"), your FIRST move is to call \`list_my_playbooks\`. Chip buttons render automatically above your reply; the coach taps one to open that playbook, then re-asks. **Do NOT draw a generic tackle_11 default — a Mesh in 5v5 (3 receivers, no OL) is geometrically nothing like a Mesh in tackle_11 (5 receivers, full OL, different defenders); a play in the wrong variant is a play the coach can't run.** Your reply in this case is brief: explain you need to know which playbook (= which variant + age + league) to draw it for, the chips appear, and you stop there — do NOT also include a speculative diagram.
+8a. **VARIANT-SPECIFIC content requires an anchored playbook — never guess the variant, AND auto-save does NOT run in lobby mode.** When the coach asks for ANYTHING where the sport variant (5v5 / 6v6 / 7v7 / tackle_11) materially changes the diagram — a PLAY (multi-player diagram with formation), a DEFENSE diagram (Cover 2 / Cover 3 / a blitz / a front), a NAMED CONCEPT (Mesh, Smash, Curl-Flat, Stick, Snag, 4 Verts, Levels, Drive, Y-Cross, etc.), a FORMATION breakdown (Spread Doubles, Trips, Empty, Bunch, etc.), or an ALIGNMENT chart — and there is NO anchored playbook (see Current context block: "Anchored playbook: NO"), your FIRST move is to call \`list_my_playbooks\`. Chip buttons render automatically above your reply; the coach taps one to open that playbook, then re-asks. **Do NOT draw a generic tackle_11 default — a Mesh in 5v5 (3 receivers, no OL) is geometrically nothing like a Mesh in tackle_11 (5 receivers, full OL, different defenders); a play in the wrong variant is a play the coach can't run.** Your reply in this case is brief: explain you need to know which playbook (= which variant + age + league) to draw it for, the chips appear, and you stop there — do NOT also include a speculative diagram.
+
+**LOBBY-MODE AUTO-SAVE GAP — critical.** The end-of-turn auto-commit that walks your reply for \`\`\`play fences and saves them ONLY runs when the chat is anchored to a playbook the coach can edit (rule 7c, paragraph 1). **In lobby mode (Anchored playbook: NO), every play fence you emit silently EVAPORATES at end of turn — the harness has no target playbook to save into.** Cal narrating "Saved play 2" in lobby mode is a hallucination (rule 7c-paragraph "honest uncertainty"), and the coach sees plays disappear from their dashboard. Surfaced 2026-05-20: a coach chatted with Cal from the home page (no playbook open), Cal emitted 6 \`\`\`play fences, claimed all 6 saved, and the playbook count stayed at 0. The harness now appends an explicit "⚠️ Couldn't save N plays — Cal isn't anchored" suffix when this happens, so you'll see it on the NEXT turn — when you do, apologize, tell the coach to open the target playbook from the dashboard, and STOP composing until anchored.
 
 EXCEPTION — these DO NOT need the playbook gate (route geometry / rule answers are variant-agnostic):
    • Single-route demos: "show me a drag route", "what does a Hitch look like", "draw a Comeback" — one player running one named route. Same shape regardless of variant.
@@ -1798,6 +1800,50 @@ export async function runAgent(
       const suffix = `\n\n${suffixParts.join("\n\n")}`;
       finalText = finalText + suffix;
       onEvent?.({ type: "text_delta", text: suffix });
+    }
+  } else {
+    // Lobby mode (no anchored playbook). The auto-commit above is
+    // skipped because there's no target playbook to save into. But
+    // if Cal emitted full-roster play fences in this turn, the coach
+    // expects them to land somewhere — without a suffix here, Cal's
+    // narrated "Saved Play 2" reads as success while the play
+    // silently vanishes. Surface the failure explicitly so the
+    // coach knows to anchor a playbook before continuing.
+    //
+    // Skipped when an explicit create_play(playbook_id: X) tool call
+    // succeeded this turn — Cal handled the lobby-mode save manually
+    // via the "narrow case" rule and the suffix would be misleading.
+    // Surfaced 2026-05-20 when a coach chatted with Cal from the
+    // dashboard (no playbook open), Cal emitted 6 ```play fences,
+    // and the playbook count stayed at 0 because nothing actually
+    // saved.
+    const calCalledCreatePlay = toolCalls.includes("create_play");
+    if (!calCalledCreatePlay) {
+      const currentTurnFences = extractPlayFencesFromText(finalText);
+      const orphanedFences: string[] = [];
+      for (const fenceJson of currentTurnFences) {
+        try {
+          const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
+          if (!fenceIsFullRosterPlay(parsed, ctx.sportVariant)) continue;
+          const name =
+            typeof parsed.title === "string" && parsed.title.trim()
+              ? parsed.title.trim().slice(0, 80)
+              : "Cal-generated play";
+          orphanedFences.push(name);
+        } catch {
+          // Malformed fence — skip silently (other validators surface it).
+        }
+      }
+      if (orphanedFences.length > 0) {
+        const list = orphanedFences.map((n) => `"${n}"`).join(", ");
+        const verb = orphanedFences.length === 1 ? "1 play" : `${orphanedFences.length} plays`;
+        const suffix =
+          `\n\n_⚠️ Couldn't save ${verb} — Coach Cal isn't anchored to a playbook right now, so the auto-save has no target. ` +
+          `Open the playbook you want these in from your dashboard, then come back here and ask Cal to "save those" — the fences are still in this chat and the harness will save them once anchored._\n\n` +
+          `_Unsaved: ${list}_`;
+        finalText = finalText + suffix;
+        onEvent?.({ type: "text_delta", text: suffix });
+      }
     }
   }
 
