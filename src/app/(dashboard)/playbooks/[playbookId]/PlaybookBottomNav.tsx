@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   Calendar,
   ClipboardList,
+  GraduationCap,
   Layers,
   ListChecks,
   LogOut,
@@ -352,6 +353,15 @@ function MoreSheet({
         >
           <User className="size-4 shrink-0" aria-hidden />
           <span className="flex-1 text-left">Account</span>
+        </Link>
+        <Link
+          href="/learn"
+          role="menuitem"
+          onClick={onClose}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface-inset"
+        >
+          <GraduationCap className="size-4 shrink-0" aria-hidden />
+          <span className="flex-1 text-left">Learning Center</span>
         </Link>
         {isAdmin && (
           <Link

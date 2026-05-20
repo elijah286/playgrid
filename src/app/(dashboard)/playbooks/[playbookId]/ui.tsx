@@ -1588,8 +1588,11 @@ function PlaybookDetailClientInner({
               narrow and the New play button never word-wraps. The
               wrapper uses `sm:contents` so on desktop these children
               pass through to the outer flex-wrap row alongside the
-              SegmentedControl + Search at their `sm:order` positions. */}
-          <div className="flex items-end gap-2 sm:contents">
+              SegmentedControl + Search at their `sm:order` positions.
+              On mobile the gap is tighter (1.5) so 6 controls + the
+              right-pinned Game + New play all fit on a 360px-wide
+              iPhone SE without spilling off the right edge. */}
+          <div className="flex items-end gap-1.5 sm:contents sm:gap-2">
           {/* Type filter: SegmentedControl on tablet+ only. The mobile
               equivalent (TypeFilterMenu) lives in the row-2 wrapper
               below so it sits beside the search field on phones. */}
@@ -1794,7 +1797,7 @@ function PlaybookDetailClientInner({
                   disabled
                   aria-label="Game mode"
                   title={offlineReason}
-                  className="ml-auto inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white opacity-50 sm:order-7 sm:ml-0"
+                  className="ml-auto inline-flex h-9 cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-2.5 text-sm font-semibold text-white opacity-50 sm:order-7 sm:ml-0 sm:px-3"
                 >
                   <Gamepad2 className="size-4" />
                   <span>Game</span>
@@ -1802,7 +1805,7 @@ function PlaybookDetailClientInner({
               ) : (
                 <Link
                   href={`/playbooks/${playbookId}/game`}
-                  className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0"
+                  className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-2.5 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0 sm:px-3"
                   aria-label="Game mode"
                 >
                   <Gamepad2 className="size-4" />
@@ -1813,7 +1816,7 @@ function PlaybookDetailClientInner({
               <button
                 type="button"
                 onClick={() => setGameModeUpgradeOpen(true)}
-                className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-3 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0"
+                className="ml-auto inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-brand-green bg-brand-green px-2.5 text-sm font-semibold text-white hover:bg-brand-green-hover sm:order-7 sm:ml-0 sm:px-3"
                 aria-label="Game mode"
               >
                 <Gamepad2 className="size-4" />
@@ -1829,7 +1832,10 @@ function PlaybookDetailClientInner({
             // No leftIcon: the "+" + label combo wrapped to two lines on
             // narrow phones ("+ New" / "play"). Text-only sizes the
             // button to a single tight pill that never wraps.
-            className={`whitespace-nowrap sm:order-8 sm:ml-0 ${
+            // Slightly tighter horizontal padding on mobile so the pill
+            // fits on a 360px-wide iPhone SE next to Filter/Select/
+            // Reorder/Print/Game without the right edge clipping.
+            className={`whitespace-nowrap px-3 sm:order-8 sm:ml-0 sm:px-4 ${
               gameModeAvailable ? "" : "ml-auto"
             } ${isViewer ? "opacity-60" : ""}`}
           >
@@ -5265,25 +5271,27 @@ function BuildYourOwnBanner({
     ? `Like this example? Claim a copy as your starting point and customize it however you want.`
     : `Like what ${firstNameCased(ownerName) ?? "this coach"} built? You can build your own playbook for free — keep collaborating here too.`;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-2.5 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2">
+    <div className="relative flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-2.5 py-1.5 pr-9 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2 sm:pr-9">
+      {/* Dismiss X is corner-pinned (top-right) — that's the convention
+          coaches expect from banners. Anchoring it inside the row pushed
+          it to the bottom-right alongside the CTA, which read as a second
+          action button. */}
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss"
+        className="absolute right-1 top-1 rounded-md p-1 text-muted hover:bg-surface hover:text-foreground"
+      >
+        <X className="size-4" />
+      </button>
       <p className="min-w-0 flex-1 text-xs leading-snug text-foreground sm:text-sm sm:leading-normal">{message}</p>
-      <div className="flex items-center gap-1 self-end sm:self-auto">
-        <Link
-          href={ctaHref}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
-        >
-          <Plus className="size-3.5" />
-          {ctaLabel}
-        </Link>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss"
-          className="rounded-md p-1 text-muted hover:bg-surface hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
+      <Link
+        href={ctaHref}
+        className="inline-flex items-center gap-1.5 self-end rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90 sm:self-auto"
+      >
+        <Plus className="size-3.5" />
+        {ctaLabel}
+      </Link>
     </div>
   );
 }

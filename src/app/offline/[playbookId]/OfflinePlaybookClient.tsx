@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Search, WifiOff } from "lucide-react";
+import { Component, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowLeft, RefreshCw, Search, WifiOff } from "lucide-react";
 import type { PlayDocument } from "@/domain/play/types";
-import { Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import {
   getCachedPlaybookMeta,
   getCachedPlays,
@@ -97,7 +97,34 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
   if (loadError) {
     return (
       <div className="mx-auto max-w-md px-4 py-10 text-center">
-        <p className="text-sm text-danger">{loadError}</p>
+        <WifiOff className="mx-auto size-8 text-muted" />
+        <p className="mt-2 text-sm font-medium text-foreground">
+          Couldn&rsquo;t open this offline copy
+        </p>
+        <p className="mt-1 text-xs text-muted">{loadError}</p>
+        <div className="mt-4 flex justify-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setLoadError(null);
+              setPlays(null);
+              // useEffect re-runs because `plays` was reset to null and the
+              // playbookId dep didn't change — instead, force a remount-ish
+              // reload by reloading the route. This is offline-safe because
+              // the SW serves the cached HTML.
+              window.location.reload();
+            }}
+          >
+            Try again
+          </Button>
+          <a
+            href="/offline"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-surface-inset"
+          >
+            <ArrowLeft className="size-4" />
+            Offline library
+          </a>
+        </div>
       </div>
     );
   }
@@ -226,7 +253,14 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
 
         <div className="rounded-xl border border-border bg-surface-raised p-3">
           {activeDoc ? (
-            <OfflinePlayView document={activeDoc} />
+            // Per-play boundary so a single corrupt cached document
+            // (e.g. downloaded before a PlayDocument schema migration)
+            // doesn't take the whole offline shell down to /app/error.tsx
+            // — coaches were stuck on "Something went wrong" with no way
+            // to pick a different play.
+            <PlayRenderBoundary key={activeId}>
+              <OfflinePlayView document={activeDoc} />
+            </PlayRenderBoundary>
           ) : (
             <div className="flex h-64 items-center justify-center text-sm text-muted">
               Select a play to view it.
@@ -236,4 +270,44 @@ export function OfflinePlaybookClient({ playbookId }: Props) {
       </div>
     </div>
   );
+}
+
+class PlayRenderBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
+          <AlertTriangle className="size-7 text-muted" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              This play couldn&rsquo;t render
+            </p>
+            <p className="text-xs text-muted">
+              Pick another play, or re-download the playbook when you&rsquo;re
+              back online.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={RefreshCw}
+            onClick={() => this.setState({ hasError: false })}
+          >
+            Try again
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }

@@ -11,9 +11,17 @@ import { PlayControls } from "@/features/animation/PlayControls";
  * Read-only field render for a downloaded play. Re-uses the existing
  * animation pipeline so motion playback works the same offline as it
  * does in the editor.
+ *
+ * Reads `document.layers.routes/players` defensively. A coach who
+ * downloaded a playbook before a `PlayDocument` schema migration would
+ * otherwise crash the whole offline shell when their cached docs are
+ * missing the expected shape — better to render an empty field than to
+ * throw to the global error boundary with no escape.
  */
 export function OfflinePlayView({ document }: { document: PlayDocument }) {
   const anim = usePlayAnimation(document);
+  const routes = document?.layers?.routes ?? [];
+  const players = document?.layers?.players ?? [];
   return (
     <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl">
       <svg viewBox="0 0 1 1" className="h-full w-full" preserveAspectRatio="none">
@@ -24,18 +32,18 @@ export function OfflinePlayView({ document }: { document: PlayDocument }) {
           </linearGradient>
         </defs>
         <rect width={1} height={1} fill="url(#offlineFieldGrad)" />
-        {document.layers.routes.map((r) => (
+        {routes.map((r) => (
           <path
             key={r.id}
             d={pathGeometryToSvgD(routeToPathGeometry(r))}
             fill="none"
-            stroke={resolveRouteStroke(r, document.layers.players)}
+            stroke={resolveRouteStroke(r, players)}
             strokeWidth={0.004}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
         ))}
-        {document.layers.players
+        {players
           .filter((pl) => {
             if (anim.phase === "idle") return true;
             return !anim.flats.some((f) => f.carrierPlayerId === pl.id);
