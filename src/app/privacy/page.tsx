@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <article className="mx-auto max-w-2xl px-6 py-16 text-foreground">
       <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 19, 2026</p>
+      <p className="mt-2 text-sm text-muted">Last updated: May 20, 2026</p>
 
       {/* The "Your rights" section below already covers deletion — keep that
           and the new dedicated section consistent if either is edited. */}
@@ -119,6 +119,20 @@ export default function PrivacyPage() {
               deletes the rows on our servers, not just on your device.
             </li>
             <li>
+              <strong>Coach AI image attachments:</strong> Coach Cal accepts
+              photo attachments (e.g. a snapshot of a play sheet,
+              wristcoach, or whiteboard) so Cal can read what&apos;s drawn
+              and help you import plays. Images you attach are sent
+              in-flight to Anthropic (see the sub-processors list below)
+              to interpret their content and are <em>not</em> stored on
+              our servers. Cal sees each image only on the turn it was
+              attached; we don&apos;t retain a copy afterward. The chat
+              history row keeps your typed text plus a
+              &ldquo;[image attached]&rdquo; placeholder but no image
+              bytes. Image uploads are capped at 10 per coach per
+              calendar month.
+            </li>
+            <li>
               <strong>Cancellation feedback (optional):</strong> when a paid
               subscriber clicks &ldquo;Manage billing&rdquo;, we show an
               optional text box where they can tell us why they&rsquo;re
@@ -222,8 +236,10 @@ export default function PrivacyPage() {
             <li>
               Anthropic — only if you opt into the Coach AI tier and the
               site administrator has selected Claude as the active provider, in
-              which case your Coach AI chat messages are sent to Anthropic to
-              generate responses
+              which case your Coach AI chat messages (and any images you
+              attach) are sent to Anthropic to generate responses. Images
+              are processed in-flight and not retained by us; Anthropic&apos;s
+              retention is governed by their API terms.
             </li>
             <li>
               MaxMind — we download a copy of their free GeoLite2 IP-to-city

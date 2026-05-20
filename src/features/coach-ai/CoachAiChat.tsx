@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { BookOpen, Check, Copy, Send, Square, Trash2, Wrench, X } from "lucide-react";
+import { BookOpen, Check, Copy, Paperclip, Send, Square, Trash2, Wrench, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { CoachAiTurn, NoteProposalSavedState, PlaybookChip } from "@/app/actions/coach-ai";
 import {
@@ -28,6 +28,7 @@ import { CoachAiUsageMeter } from "./CoachAiUsageMeter";
 import { createMessagePackCheckoutAction } from "@/app/actions/coach-cal-pack";
 import type { NoteProposal } from "@/lib/coach-ai/playbook-tools";
 import { readLivePlayDoc } from "@/lib/coach-ai/live-play-doc";
+import { useNativePlatform } from "@/lib/native/useIsNativeApp";
 
 type OutOfMessagesPayload = {
   count: number;
@@ -108,6 +109,73 @@ function saveLastPlayId(storageKey: string, playId: string | null): void {
   } catch { /* ignore */ }
 }
 
+// Image attachment plumbing. Photos taken with a phone often exceed Anthropic's
+// 5MB-per-image limit; resize on the client so the common case (camera roll
+// JPEG, ~3-5MB) just works. We re-encode as JPEG when resizing — it's
+// dramatically smaller than PNG for natural images and Cal doesn't need alpha.
+// 1280 max edge is below Anthropic's 1568 ceiling and still readable for
+// hand-drawn play sheets; quality 0.80 trims another ~20% off the byte size
+// without crossing into legibility risk on typical wristcoach photos.
+const MAX_IMAGE_EDGE_PX = 1280;
+const IMAGE_JPEG_QUALITY = 0.80;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+type PreparedImage = { preview: string; base64: string; mediaType: string };
+
+async function prepareImageForUpload(file: File): Promise<PreparedImage> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files are supported.");
+  }
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error("Unsupported image type. Use JPG, PNG, WebP, or GIF.");
+  }
+  // GIF re-encode would lose frames; pass through. They're typically small
+  // enough that the server-side base64 cap (~5MB) won't reject them.
+  if (file.type === "image/gif") {
+    return splitDataUrl(await readAsDataUrl(file));
+  }
+  const img = await loadImage(file);
+  const maxEdge = Math.max(img.naturalWidth, img.naturalHeight);
+  const scale = maxEdge > MAX_IMAGE_EDGE_PX ? MAX_IMAGE_EDGE_PX / maxEdge : 1;
+  // Already small JPEGs are passed through verbatim — no point re-encoding a
+  // 500KB screenshot through canvas just to lose 5% quality.
+  if (scale === 1 && file.type === "image/jpeg" && file.size < 1_500_000) {
+    return splitDataUrl(await readAsDataUrl(file));
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("This browser can't process the image.");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return splitDataUrl(canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY));
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result as string);
+    fr.onerror = () => reject(new Error("Failed to read image file."));
+    fr.readAsDataURL(file);
+  });
+}
+
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image failed to decode.")); };
+    img.src = url;
+  });
+}
+
+function splitDataUrl(dataUrl: string): PreparedImage {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) throw new Error("Couldn't read image data.");
+  return { preview: dataUrl, mediaType: match[1], base64: match[2] };
+}
+
 /** Minimal SSE parser — handles `event: foo\ndata: {...}\n\n` frames. */
 async function* parseSse(body: ReadableStream<Uint8Array>) {
   const dec = new TextDecoder();
@@ -174,6 +242,21 @@ export function CoachAiChat({
     }
   });
   const [draft, setDraft] = useState("");
+  // Image attached to the NEXT turn only. Cleared on send. Never persisted —
+  // the server passes the image to the model in-flight, then drops it.
+  const [pendingImage, setPendingImage] = useState<{
+    preview: string;       // data: URL for thumbnail rendering
+    base64: string;        // raw base64 (no `data:...,` prefix)
+    mediaType: string;     // image/jpeg | image/png | image/webp | image/gif
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // TODO(re-enable image upload on Android): the paperclip button is hidden
+  // on Android because the Google Play submission disclosed a narrower set
+  // of data inputs than image upload introduces. Re-enable after the next
+  // Play resubmission updates the data-safety form. iOS + web remain on.
+  // See memory: feedback_image_upload_android_disabled.
+  const platform = useNativePlatform();
+  const imageInputEnabled = platform !== "android";
   const [streaming, setStreaming] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [partialText, setPartialText] = useState("");
@@ -586,18 +669,26 @@ export function CoachAiChat({
 
   const send = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? draft).trim();
-    if (!text || streaming) return;
+    // Pending image goes with the current turn — programmatic sends
+    // (suggested prompts) and typed sends both pull from the same slot.
+    const image = pendingImage;
+    if ((!text && !image) || streaming) return;
     setError(null);
     setOutOfMessages(null);
     setStatusText(null);
     setPartialText("");
     setToolCallsDuringStream([]);
 
-    const userTurn: CoachAiTurn = { role: "user", text };
+    // Bubble text matches what the server persists — placeholder when the
+    // coach sent only an image, so history reads after refresh have
+    // something to render.
+    const bubbleText = text || "[image attached]";
+    const userTurn: CoachAiTurn = { role: "user", text: bubbleText };
     const prior = turns;
     nextFreshIdxRef.current = turns.length;
     setTurns((cur) => [...cur, userTurn]);
     setDraft("");
+    setPendingImage(null);
     setStreaming(true);
     // The user just submitted — re-pin to bottom so they see their own
     // message and the streaming reply, even if they had scrolled up to
@@ -679,6 +770,7 @@ export function CoachAiChat({
           livePlayDoc,
           mode,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          ...(image ? { userImage: { mediaType: image.mediaType, base64: image.base64 } } : {}),
         }),
         signal: ctrl.signal,
       });
@@ -721,6 +813,17 @@ export function CoachAiChat({
             });
             // Roll back the optimistically-appended user turn so it
             // doesn't sit there as if it was sent.
+            setTurns((cur) => (cur.at(-1)?.role === "user" ? cur.slice(0, -1) : cur));
+            setDraft(text);
+          } else if (payload.code === "out_of_image_uploads") {
+            // Image-only cap. No pack-purchase upsell — just an honest
+            // "limit resets on YYYY-MM-DD" via the server's message. Roll
+            // back the optimistic turn + restore the typed text. The image
+            // attachment itself isn't re-restored (it was cleared in send
+            // and we don't keep a buffer); coach has to re-attach next
+            // month or use a text-only message now.
+            blocked = true;
+            setError((payload.message as string | undefined) ?? "Image upload limit reached.");
             setTurns((cur) => (cur.at(-1)?.role === "user" ? cur.slice(0, -1) : cur));
             setDraft(text);
           } else {
@@ -1128,19 +1231,102 @@ export function CoachAiChat({
       )}
 
       <div className="border-t border-border bg-surface-raised px-3 pb-3 pt-2">
+        {imageInputEnabled && pendingImage && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg bg-surface-inset px-2 py-1.5 ring-1 ring-inset ring-black/5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL preview, no Next/Image needed */}
+            <img
+              src={pendingImage.preview}
+              alt="Attached"
+              className="size-12 rounded object-cover"
+            />
+            <div className="flex-1 text-xs leading-snug text-muted">
+              Image attached to next message. Not saved &mdash; Cal will see it once.
+            </div>
+            <button
+              type="button"
+              onClick={() => setPendingImage(null)}
+              className="rounded p-1 text-muted hover:bg-surface hover:text-foreground"
+              aria-label="Remove image"
+              title="Remove image"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        )}
+        {imageInputEnabled && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              // Reset value so picking the same file twice in a row still fires onChange.
+              e.target.value = "";
+              if (!file) return;
+              try {
+                const img = await prepareImageForUpload(file);
+                setPendingImage(img);
+                setError(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Couldn't load image.");
+              }
+            }}
+          />
+        )}
         <div className="flex items-end gap-2">
+          {imageInputEnabled && (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={streaming || pendingImage !== null}
+              className="mb-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-inset hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Attach image"
+              title={pendingImage ? "Remove the current image first" : "Attach an image (play sheet, wristcoach, whiteboard)"}
+            >
+              <Paperclip className="size-4" />
+            </button>
+          )}
           <textarea
             rows={2}
             data-coach-ai-input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onPaste={async (e) => {
+              // Clipboard images (screenshot, copied photo) become an
+              // attachment, not pasted text. Coaches commonly paste from the
+              // OS screenshot tool — handle it here rather than forcing them
+              // through the file picker. Skipped on Android (image input
+              // disabled — see imageInputEnabled comment) so a pasted image
+              // doesn't silently end up in a state the UI can't surface.
+              if (!imageInputEnabled) return;
+              const items = Array.from(e.clipboardData?.items ?? []);
+              const imageItem = items.find((it) => it.kind === "file" && it.type.startsWith("image/"));
+              if (!imageItem) return;
+              e.preventDefault();
+              const file = imageItem.getAsFile();
+              if (!file) return;
+              try {
+                const img = await prepareImageForUpload(file);
+                setPendingImage(img);
+                setError(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Couldn't load image.");
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 if (!streaming) void send();
               }
             }}
-            placeholder={streaming ? "Type your next message…" : "Ask Coach Cal…"}
+            placeholder={
+              streaming
+                ? "Type your next message…"
+                : pendingImage
+                  ? "Add a note for Cal, or send the image as-is…"
+                  : "Ask Coach Cal…"
+            }
             className="flex-1 resize-none rounded-xl bg-surface-inset px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-black/5 focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
           {streaming ? (
@@ -1157,7 +1343,7 @@ export function CoachAiChat({
             <Button
               variant="primary"
               size="sm"
-              disabled={!draft.trim() || outOfMessages !== null}
+              disabled={(!draft.trim() && !pendingImage) || outOfMessages !== null}
               onClick={() => void send()}
               aria-label="Send"
             >

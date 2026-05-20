@@ -26,7 +26,15 @@ export type ToolResultBlock = {
   content: string;
   is_error?: boolean;
 };
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+// Image input — user role only. Base64 source matches Anthropic's API shape
+// verbatim and is forwarded without transformation. Images are never persisted
+// in chat history (see stream/route.ts): they live in-flight on the request
+// that carried them and fall off the end of the conversation after that turn.
+export type ImageBlock = {
+  type: "image";
+  source: { type: "base64"; media_type: string; data: string };
+};
+export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | ImageBlock;
 
 export type ChatMessage =
   | { role: "user"; content: string | ContentBlock[] }
@@ -305,13 +313,17 @@ function toOpenAIMessages(m: ChatMessage): OpenAIMessage[] {
     return [{ role: m.role, content: m.content }];
   }
   if (m.role === "user") {
-    // user blocks are either text or tool_result
+    // user blocks are either text or tool_result. Image blocks are Claude-only
+    // for now — the OpenAI shape uses a different content array format, and
+    // wiring it isn't blocking image input on the default Claude path.
     const textParts: string[] = [];
     const toolMessages: OpenAIMessage[] = [];
     for (const b of m.content) {
       if (b.type === "text") textParts.push(b.text);
       else if (b.type === "tool_result") {
         toolMessages.push({ role: "tool", tool_call_id: b.tool_use_id, content: b.content });
+      } else if (b.type === "image") {
+        throw new Error("Image input is only supported with Claude. Switch the Coach AI provider to Claude in admin settings.");
       }
     }
     const out: OpenAIMessage[] = [...toolMessages];

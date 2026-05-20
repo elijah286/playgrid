@@ -6,6 +6,7 @@ import type { PlayDocument } from "@/domain/play/types";
 import type { ChatMessage, ContentBlock } from "@/lib/coach-ai/llm";
 import { getCurrentEntitlement } from "@/lib/billing/entitlement";
 import { getCoachCalCapState } from "@/lib/billing/coach-cal-cap";
+import { getCoachCalImageCapState } from "@/lib/billing/coach-cal-image-cap";
 import type { CoachAiMode, ToolContext } from "@/lib/coach-ai/tools";
 import { normalizePlaybookSettings } from "@/domain/playbook/settings";
 import {
@@ -36,7 +37,22 @@ type StreamRequest = {
   livePlayDoc?: PlayDocument | null;
   mode?: CoachAiMode;
   timezone?: string | null;
+  /**
+   * Optional image attached to THIS turn only. Forwarded to Claude in-flight
+   * and NEVER persisted — the coach_ai_turns row holds only the text body.
+   * History replay on subsequent turns will not include the image; Cal sees
+   * it once and falls back to its own text description after that.
+   */
+  userImage?: { mediaType: string; base64: string };
 };
+
+// Anthropic's vision endpoint supports JPG/PNG/WebP/GIF. Anything else we
+// reject up front so the model never sees a malformed source block.
+const ALLOWED_IMAGE_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+// Cap roughly aligns with Anthropic's 5MB per-image limit; base64 is ~33%
+// larger than the underlying binary, so a 5MB binary lands near 6.7MB.
+const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
 
 function sseChunk(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -182,6 +198,15 @@ async function recordUsage(userId: string): Promise<void> {
   await supabase.rpc("increment_coach_ai_usage", { p_user_id: userId, p_month: monthStr });
 }
 
+async function recordImageUsage(userId: string): Promise<void> {
+  const supabase = await createClient();
+  const month = new Date();
+  month.setDate(1);
+  month.setHours(0, 0, 0, 0);
+  const monthStr = month.toISOString().slice(0, 10);
+  await supabase.rpc("increment_coach_ai_image_usage", { p_user_id: userId, p_month: monthStr });
+}
+
 export async function POST(req: Request): Promise<Response> {
   const gate = await loadCallerInfo();
   if (!gate.ok) {
@@ -199,11 +224,32 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const text = body.userMessage.trim();
-  if (!text) {
+  const userImage = body.userImage ?? null;
+  if (!text && !userImage) {
     return new Response(
       sseChunk("error", { message: "Empty message." }),
       { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
     );
+  }
+  if (userImage) {
+    if (!ALLOWED_IMAGE_MEDIA_TYPES.has(userImage.mediaType)) {
+      return new Response(
+        sseChunk("error", { message: "Unsupported image type. Use JPG, PNG, WebP, or GIF." }),
+        { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
+      );
+    }
+    if (typeof userImage.base64 !== "string" || userImage.base64.length === 0) {
+      return new Response(
+        sseChunk("error", { message: "Image payload missing." }),
+        { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
+      );
+    }
+    if (userImage.base64.length > MAX_IMAGE_BASE64_LENGTH) {
+      return new Response(
+        sseChunk("error", { message: "Image too large. Max ~5MB; try a smaller photo." }),
+        { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
+      );
+    }
   }
 
   // Hard cap on Coach Cal usage. The meter is purely informational —
@@ -226,6 +272,26 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
+  // Separate cap on image uploads — images cost more in vision tokens and
+  // the dial moves independently of text turns. Only checked when an image
+  // is attached; text-only turns skip this entirely.
+  if (userImage) {
+    const imageCap = await getCoachCalImageCapState(gate.userId);
+    if (imageCap.exceeded) {
+      return new Response(
+        sseChunk("error", {
+          message: `You've used all ${imageCap.limit} image uploads this month. Limit resets on ${imageCap.resetDate}.`,
+          code: "out_of_image_uploads",
+          count: imageCap.count,
+          limit: imageCap.limit,
+          resetDate: imageCap.resetDate,
+        }) +
+          sseChunk("done", { toolCalls: [], text: "" }),
+        { status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
+      );
+    }
+  }
+
   const requestedMode: CoachAiMode =
     body.mode === "admin_training" ? "admin_training" : "normal";
 
@@ -244,10 +310,32 @@ export async function POST(req: Request): Promise<Response> {
     loadToolContext(body.playbookId ?? null, body.playId ?? null, livePlayDoc, gate.isAdmin, requestedMode, tz),
   ]);
 
+  // Current turn: when an image is attached, build a mixed [image, text]
+  // content array per Anthropic's vision shape. Historic turns stay text-only
+  // (the image is never replayed because we never persisted it).
+  const currentUserContent: ChatMessage["content"] = userImage
+    ? [
+        {
+          type: "image" as const,
+          source: { type: "base64" as const, media_type: userImage.mediaType, data: userImage.base64 },
+        },
+        // Anthropic rejects user messages whose content array has no text at
+        // all alongside an image. Substitute a minimal cue when the coach
+        // sent the image without typing anything so the model still gets a
+        // task framing.
+        { type: "text" as const, text: text || "(image attached — read it and walk me through what you see)" },
+      ]
+    : text;
+
   const history: ChatMessage[] = [
     ...turnsToHistory(body.history),
-    { role: "user", content: text },
+    { role: "user", content: currentUserContent },
   ];
+
+  // What we persist to coach_ai_turns. The image bytes never touch the DB —
+  // a placeholder marker stands in for image-only turns so history reads have
+  // something to render.
+  const persistedUserText = text || "[image attached]";
 
   // ── Persist the turn server-side BEFORE kicking off the agent ─────────────
   // This is the change that makes "close the window, come back to the
@@ -271,7 +359,7 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  await insertUserTurn(threadId, gate.userId, text, ctx.playId ?? null);
+  await insertUserTurn(threadId, gate.userId, persistedUserText, ctx.playId ?? null);
   const assistantTurnId = await insertRunningAssistantTurn(
     threadId,
     gate.userId,
@@ -332,6 +420,9 @@ export async function POST(req: Request): Promise<Response> {
       });
       // Record usage asynchronously — don't block the response
       recordUsage(gate.userId).catch(() => { /* non-critical */ });
+      if (userImage) {
+        recordImageUsage(gate.userId).catch(() => { /* non-critical */ });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await failAssistantTurn(assistantTurnId, msg).catch(() => {});
