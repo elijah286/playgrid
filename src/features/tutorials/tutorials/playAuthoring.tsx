@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { SportVariant } from "@/domain/play/types";
 import type { TutorialDef } from "../engine/types";
 import { ANCHOR_PULSE_EVENT } from "../engine/AnchorPulse";
+import { ROUTE_ANCHOR_PULSE_EVENT } from "../engine/RouteAnchorPulse";
 
 /** Single row of a reactive try-it checklist. Flips from a hollow
  *  square to a filled check the moment the matching action-kind
@@ -20,11 +21,18 @@ function TryRow({
   done,
   findKey,
   findOpens,
+  onFind,
   children,
 }: {
   done: boolean;
   findKey?: string;
   findOpens?: string;
+  /** Optional override for the find link's behavior. If provided, it
+   *  runs *instead of* the default anchor-pulse dispatch — useful for
+   *  rows whose target is multi-element (e.g. every route anchor) or
+   *  needs a different event. The default request-open behavior
+   *  (via `findOpens`) still fires first. */
+  onFind?: () => void;
   children: ReactNode;
 }) {
   const Icon = done ? CheckSquare : Square;
@@ -41,7 +49,7 @@ function TryRow({
         }`}
       >
         <span className={done ? "line-through" : ""}>{children}</span>
-        {findKey && (
+        {(findKey || onFind) && (
           <>
             {" "}
             <button
@@ -55,11 +63,15 @@ function TryRow({
                     }),
                   );
                 }
-                window.dispatchEvent(
-                  new CustomEvent(ANCHOR_PULSE_EVENT, {
-                    detail: { key: findKey },
-                  }),
-                );
+                if (onFind) {
+                  onFind();
+                } else if (findKey) {
+                  window.dispatchEvent(
+                    new CustomEvent(ANCHOR_PULSE_EVENT, {
+                      detail: { key: findKey },
+                    }),
+                  );
+                }
               }}
               // Tagged so the click-blocker treats it as always-allowed.
               data-tutor-allow=""
@@ -173,23 +185,44 @@ export const PLAY_AUTHORING_TUTORIAL: TutorialDef = {
     {
       id: "reshape-route",
       title: "Reshape a route",
-      body: () =>
-        "Drag any of the white anchors on the route to bend it. Click a segment to select just that piece, or click the player to select the whole route.",
+      body: ({ actions, pointer }) => (
+        <>
+          <p>The white circles are anchors. You can reshape the route or pick out individual pieces:</p>
+          <ul className="mt-2 space-y-1.5">
+            <TryRow
+              done={actions.has("anchor-dragged")}
+              onFind={() =>
+                window.dispatchEvent(new Event(ROUTE_ANCHOR_PULSE_EVENT))
+              }
+            >
+              Drag an anchor to change the shape of the route
+            </TryRow>
+            <TryRow
+              done={actions.has("segment-selected")}
+              findKey="editor-canvas"
+            >
+              {pointer === "touch"
+                ? "Tap a segment between anchors to select just that piece"
+                : "Click a segment between anchors to select just that piece"}
+            </TryRow>
+            <TryRow
+              done={actions.has("whole-route-selected")}
+              findKey="editor-canvas"
+            >
+              {pointer === "touch"
+                ? "Double-tap anywhere on the route to select the entire route"
+                : "Double-click anywhere on the route to select the entire route"}
+            </TryRow>
+          </ul>
+        </>
+      ),
       anchor: { kind: "anchor", key: "editor-canvas" },
       advance: { kind: "next" },
-      // Auto-draw a Curl if the play has no routes yet, then select it.
-      // The Curl has 3 anchors, so the "drag an anchor" instruction is
-      // always actionable — coaches don't have to draw a route first.
+      // Auto-draw a Curl if the play has no routes yet so the three
+      // bullets are always actionable — coaches don't have to draw a
+      // route first.
       onEnter: { kind: "ensure-route-exists" },
-      // Block Next until the coach actually drags an anchor; on a
-      // gated-Next click, pulse every visible route anchor so they
-      // can spot the draggable spots.
-      gate: {
-        kind: "action-fired",
-        action: "anchor-dragged",
-        hint: "Drag any white anchor on the route to continue",
-        nudgePulseRouteAnchors: true,
-      },
+      dimBackground: false,
     },
     {
       id: "route-toolbar",

@@ -1372,6 +1372,7 @@ function EditorCanvasImpl({
           onSelectNode(null);
           onSelectPlayer(null);
           onSelectZone?.(null);
+          notifyTutorialAction("segment-selected");
         } else if (target.kind === "canvas") {
           if (mode === "formation") {
             // Formation mode: clicking canvas adds a player. Clamp to LOS
@@ -1464,6 +1465,7 @@ function EditorCanvasImpl({
       onSelectSegment(null);
       onSelectNode(null);
       onSelectPlayer(null);
+      notifyTutorialAction("whole-route-selected");
     },
     [onSelectRoute, onSelectSegment, onSelectNode, onSelectPlayer],
   );
