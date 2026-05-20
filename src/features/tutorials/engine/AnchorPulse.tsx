@@ -45,6 +45,17 @@ export function AnchorPulse({ stepKey }: { stepKey: string | null }) {
     if (!el) return;
     let r = (el as Element).getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return;
+    // Flash the whole element so coaches can see *what* is being
+    // highlighted — not just a 44px ring at its center. Crucial for
+    // tall/wide targets (e.g. the quick-routes panel) where a center
+    // ripple lands in the middle of similar-looking content and is
+    // easy to miss. Restart-by-removal so back-to-back fires re-run
+    // the animation cleanly.
+    (el as HTMLElement).removeAttribute("data-tutor-flash");
+    // Force a reflow so the next set restarts the animation rather
+    // than being coalesced with the removal.
+    void (el as HTMLElement).offsetWidth;
+    (el as HTMLElement).setAttribute("data-tutor-flash", "");
     // Scroll into view first if needed so the pulse renders where the
     // coach is looking (e.g. clicking "find" on a bullet whose target
     // is below the fold). Smooth scroll; we re-measure right after.
@@ -84,6 +95,7 @@ export function AnchorPulse({ stepKey }: { stepKey: string | null }) {
       setCenter(null);
       activeKeyRef.current = null;
       fadeTimer.current = null;
+      (el as HTMLElement).removeAttribute("data-tutor-flash");
     }, ANIMATION_MS);
   }
 
