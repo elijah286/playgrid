@@ -14,7 +14,7 @@ export function ExamplePreviewBanner() {
   return (
     <div
       data-demo-banner=""
-      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+      className="mb-4 flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3"
     >
       <div className="inline-flex items-center gap-2 text-foreground">
         <FlaskConical className="size-4 text-primary" />
@@ -32,7 +32,7 @@ export function ExamplePreviewBanner() {
             metadata: { surface: "example_top_banner" },
           })
         }
-        className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover"
+        className="inline-flex shrink-0 items-center self-end rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover sm:self-auto"
       >
         Create your own playbook
       </Link>

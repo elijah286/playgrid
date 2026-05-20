@@ -887,7 +887,7 @@ function currentSeasonLabel(): string {
 function CollaboratorOnlyBanner({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="rounded-2xl border border-primary/30 bg-primary/[0.04] p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-foreground">
             Like what you&rsquo;re seeing? Build your own playbook — free.
@@ -897,9 +897,11 @@ function CollaboratorOnlyBanner({ onCreate }: { onCreate: () => void }) {
             and keep collaborating on the ones above.
           </p>
         </div>
-        <Button variant="primary" size="sm" leftIcon={Plus} onClick={onCreate}>
-          Build my playbook
-        </Button>
+        <div className="self-end sm:self-auto">
+          <Button variant="primary" size="sm" leftIcon={Plus} onClick={onCreate}>
+            Build my playbook
+          </Button>
+        </div>
       </div>
     </div>
   );

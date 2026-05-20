@@ -5265,9 +5265,9 @@ function BuildYourOwnBanner({
     ? `Like this example? Claim a copy as your starting point and customize it however you want.`
     : `Like what ${firstNameCased(ownerName) ?? "this coach"} built? You can build your own playbook for free — keep collaborating here too.`;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-2.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2">
+    <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.04] px-2.5 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-3 sm:py-2">
       <p className="min-w-0 flex-1 text-xs leading-snug text-foreground sm:text-sm sm:leading-normal">{message}</p>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 self-end sm:self-auto">
         <Link
           href={ctaHref}
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
