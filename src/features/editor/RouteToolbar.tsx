@@ -191,9 +191,14 @@ export function RouteToolbar({
   const canEditShape = onPlayerShapeChange != null && playerShape != null;
 
   return (
-    <div data-tutor="route-toolbar" className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1.5 shadow-sm">
+    // Mobile: single flex-wrap stream so row-2 items can flow into trailing
+    // space of row 1 (e.g. undo lands right after the color picker). Desktop
+    // (sm+): the original two-row column layout is preserved via `sm:flex-col`
+    // on this container plus `sm:flex` on the inner row wrappers (which use
+    // `display: contents` on mobile so their children become direct siblings).
+    <div data-tutor="route-toolbar" className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-surface-raised px-2 py-1.5 shadow-sm sm:flex-col sm:flex-nowrap sm:items-stretch">
       {/* Row 1: segment shape / stroke / width / end decoration / color */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <div className="contents sm:flex sm:min-w-0 sm:flex-wrap sm:items-center sm:gap-1.5">
         <div data-tutor="route-toolbar-shape" className="inline-flex items-center rounded-lg bg-surface-inset p-1">
           {SEGMENT_SHAPE_OPTIONS.map((opt) => {
             const active = opt.value === shape;
@@ -221,7 +226,7 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div data-tutor="route-toolbar-stroke" className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+        <div data-tutor="route-toolbar-stroke" className="hidden items-center rounded-lg bg-surface-inset p-1 sm:inline-flex">
           {strokeOptions.map((opt) => {
             const active = opt.value === activeStroke;
             return (
@@ -246,7 +251,7 @@ export function RouteToolbar({
           })}
         </div>
 
-        <div data-tutor="route-toolbar-width" className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+        <div data-tutor="route-toolbar-width" className="hidden items-center rounded-lg bg-surface-inset p-1 sm:inline-flex">
           {WIDTH_OPTIONS.map((w) => {
             const active = w.value === width;
             return (
@@ -277,7 +282,7 @@ export function RouteToolbar({
 
         <div
           data-tutor="route-toolbar-end"
-          className={`inline-flex items-center rounded-lg bg-surface-inset p-1 ${
+          className={`hidden items-center rounded-lg bg-surface-inset p-1 sm:inline-flex ${
             hasSelectedRoute ? "" : "opacity-40"
           }`}
         >
@@ -310,13 +315,30 @@ export function RouteToolbar({
           })}
         </div>
 
+        {/* Mobile-only: stroke + width + end-decoration collapse into one
+            popover to save horizontal space. Desktop shows the inline groups
+            above instead. */}
+        <span data-tutor="route-toolbar-line-styles" className="inline-flex sm:hidden">
+          <LineStylesPopover
+            strokeOptions={strokeOptions}
+            activeStroke={activeStroke}
+            onStrokePatternChange={onStrokePatternChange}
+            width={width}
+            onWidthChange={onWidthChange}
+            endDecoration={endDecoration}
+            onEndDecorationChange={onEndDecorationChange}
+            hasSelectedRoute={hasSelectedRoute}
+            clearLabel={clearLabel}
+          />
+        </span>
+
         <span data-tutor="route-toolbar-color" className="inline-flex">
           <ColorPickerButton color={color} onColorChange={onColorChange} />
         </span>
       </div>
 
       {/* Row 2: history / player actions / zones / Done */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <div className="contents sm:flex sm:min-w-0 sm:flex-wrap sm:items-center sm:gap-1">
         <span data-tutor="route-toolbar-undo" className="inline-flex items-center gap-1">
           <Tooltip content="Undo">
             <IconButton
@@ -558,6 +580,192 @@ function ColorPickerButton({
             className="block size-4 rounded-full border border-black/15"
             style={{ backgroundColor: color }}
           />
+          <ChevronDown className="size-3 text-muted" />
+        </button>
+      </Tooltip>
+      {typeof document !== "undefined" && popover
+        ? createPortal(popover, document.body)
+        : null}
+    </>
+  );
+}
+
+/** Mobile-only consolidated dropdown for stroke pattern, line width, and
+ *  end decoration. Desktop renders these as inline button groups in the
+ *  toolbar; on narrow screens the inline groups eat too much horizontal space
+ *  and force a third toolbar row, so we collapse them behind one trigger.
+ *  Trigger glyph reflects the current stroke pattern at a glance. */
+function LineStylesPopover({
+  strokeOptions,
+  activeStroke,
+  onStrokePatternChange,
+  width,
+  onWidthChange,
+  endDecoration,
+  onEndDecorationChange,
+  hasSelectedRoute,
+  clearLabel,
+}: {
+  strokeOptions: StrokeOpt[];
+  activeStroke: StrokePattern;
+  onStrokePatternChange: (p: StrokePattern) => void;
+  width: number;
+  onWidthChange: (w: number) => void;
+  endDecoration: EndDecoration;
+  onEndDecorationChange: (d: EndDecoration) => void;
+  hasSelectedRoute: boolean;
+  clearLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const { triggerRef, popRef, pos } = usePortalPopover(open, 224);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, triggerRef, popRef]);
+
+  const popover = open && pos ? (
+    <div
+      ref={popRef}
+      role="menu"
+      data-editor-overlay="line-styles"
+      data-tutor-allow=""
+      style={{ position: "fixed", left: pos.left, top: pos.top, minWidth: "14rem" }}
+      className="z-[57] flex flex-col gap-2 rounded-md border border-border bg-surface-raised p-2 shadow-lg"
+    >
+      <div>
+        <div className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wide text-muted">Stroke</div>
+        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+          {strokeOptions.map((opt) => {
+            const active = opt.value === activeStroke;
+            return (
+              <Tooltip key={opt.value} content={opt.label}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onStrokePatternChange(opt.value);
+                    notifyTutorialAction("route-stroke-changed");
+                  }}
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  className={`inline-flex h-8 w-10 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <StrokeGlyph kind={opt.value} />
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wide text-muted">Width</div>
+        <div className="inline-flex items-center rounded-lg bg-surface-inset p-1">
+          {WIDTH_OPTIONS.map((w) => {
+            const active = w.value === width;
+            return (
+              <Tooltip key={w.value} content={w.label}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onWidthChange(w.value);
+                    notifyTutorialAction("route-width-changed");
+                  }}
+                  aria-label={w.label}
+                  aria-pressed={active}
+                  className={`inline-flex h-8 w-9 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm ring-1 ring-inset ring-primary/40"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <div
+                    className="rounded-full bg-current"
+                    style={{ width: 16, height: w.px }}
+                  />
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wide text-muted">End</div>
+        <div
+          className={`inline-flex items-center rounded-lg bg-surface-inset p-1 ${
+            hasSelectedRoute ? "" : "opacity-40"
+          }`}
+        >
+          {END_OPTIONS.map((opt) => {
+            const active = hasSelectedRoute && opt.value === endDecoration;
+            const Icon = opt.icon;
+            return (
+              <Tooltip
+                key={opt.value}
+                content={hasSelectedRoute ? opt.label : `Select a ${clearLabel} first`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onEndDecorationChange(opt.value);
+                    notifyTutorialAction("route-end-changed");
+                  }}
+                  disabled={!hasSelectedRoute}
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  className={`inline-flex h-8 w-9 items-center justify-center rounded-md transition-all ${
+                    active
+                      ? "bg-surface-raised text-foreground shadow-sm"
+                      : "text-muted hover:text-foreground"
+                  } disabled:cursor-not-allowed disabled:hover:text-muted`}
+                >
+                  <Icon className="size-4" />
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <>
+      <Tooltip content="Line styles">
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="Line styles"
+          className={`inline-flex h-7 items-center gap-1 rounded-md border bg-surface-inset px-1.5 transition-colors hover:bg-surface-raised ${
+            open ? "border-primary" : "border-border"
+          }`}
+        >
+          <StrokeGlyph kind={activeStroke} />
           <ChevronDown className="size-3 text-muted" />
         </button>
       </Tooltip>
