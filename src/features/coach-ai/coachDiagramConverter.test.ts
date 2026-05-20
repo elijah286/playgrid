@@ -260,7 +260,7 @@ describe("player color routing — role-keyed convention", () => {
     expect(colorFor("FB")).toBe("#F26522");
   });
 
-  it("C → purple (#A855F7) — distinct from QB white", () => {
+  it("C → green (#22C55E) — distinct from QB white", () => {
     // colorFor's fixture already contains a @C, so build a custom diagram
     // for this case.
     const doc = coachDiagramToPlayDocument(diagram([
@@ -268,7 +268,7 @@ describe("player color routing — role-keyed convention", () => {
       { id: "C", x: 0, y: 0 },
     ]));
     const c = doc.layers.players.find((p) => p.label === "C");
-    expect(c?.style.fill).toBe("#A855F7");
+    expect(c?.style.fill).toBe("#22C55E");
   });
 
   it("preserves the FULL suffixed label for display (H2 not H)", () => {
