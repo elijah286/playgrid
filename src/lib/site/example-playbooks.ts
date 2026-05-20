@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import type { PlayDocument, Player, Route, Zone } from "@/domain/play/types";
@@ -42,6 +43,35 @@ export async function loadHeroMarketingExample(): Promise<
   }
 
   return picked;
+}
+
+/**
+ * Invalidate the marketing surfaces that show public-example playbook
+ * thumbnails (home page, /examples) when a play in that playbook changes.
+ *
+ * Thumbnails are SVG-rendered live from `play_versions.document`, so no asset
+ * regeneration is needed — the only reason a stale play appears is that the
+ * route HTML was cached. revalidatePath drops that cache; the next visit
+ * re-fetches fresh play data.
+ *
+ * No-ops for non-public playbooks so write-heavy editor flows on normal
+ * playbooks don't pay the cost of busting the marketing-page cache.
+ */
+export async function revalidateExampleSurfacesIfPublicPlaybook(
+  playbookId: string,
+): Promise<void> {
+  if (!hasSupabaseEnv()) return;
+  const svc = createServiceRoleClient();
+  const { data } = await svc
+    .from("playbooks")
+    .select("is_public_example")
+    .eq("id", playbookId)
+    .maybeSingle();
+  if (data?.is_public_example) {
+    // 'layout' busts every page under the root layout — covers both / and
+    // /examples in one call, matching the pattern in account/admin actions.
+    revalidatePath("/", "layout");
+  }
 }
 
 async function loadExamplePlaybooksFiltered({

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
+import { revalidateExampleSurfacesIfPublicPlaybook } from "@/lib/site/example-playbooks";
 
 const TRASH_RETENTION_DAYS = 30;
 
@@ -136,6 +137,7 @@ export async function restorePlayAction(playId: string) {
       diffSummary: `Restored play "${row.name ?? ""}" from trash`,
     });
     revalidatePath(`/playbooks/${row.playbook_id as string}`);
+    await revalidateExampleSurfacesIfPublicPlaybook(row.playbook_id as string);
   }
   return { ok: true as const };
 }

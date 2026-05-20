@@ -22,6 +22,7 @@ import {
 import { assertPlayCap } from "@/lib/billing/play-cap";
 import { recordPlayVersion } from "@/lib/versions/play-version-writer";
 import { recordPlaybookVersion } from "@/lib/versions/playbook-version-writer";
+import { revalidateExampleSurfacesIfPublicPlaybook } from "@/lib/site/example-playbooks";
 import { timed } from "@/lib/perf/timed";
 
 /**
@@ -371,6 +372,8 @@ export async function createPlayAction(
   // 10th-play system notice fires from a play_versions trigger — see
   // 20260506180000_system_notices.sql.
 
+  await revalidateExampleSurfacesIfPublicPlaybook(playbookId);
+
   return { ok: true as const, playId: play.id, versionId: ver.id };
 }
 
@@ -592,6 +595,8 @@ export async function savePlayVersionAction(
     console.error("[savePlayVersionAction] plays update failed", { playId, error: updErr });
     return { ok: false as const, error: `Saved version but could not update play: ${updErr.message}` };
   }
+
+  await revalidateExampleSurfacesIfPublicPlaybook(play.playbook_id as string);
 
   return { ok: true as const, versionId: ver.id };
 }
@@ -858,6 +863,8 @@ export async function duplicatePlayAction(
 
   await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
 
+  await revalidateExampleSurfacesIfPublicPlaybook(srcPlay.playbook_id as string);
+
   return { ok: true as const, playId: play.id };
 }
 
@@ -1115,6 +1122,8 @@ export async function copyPlayAction(params: {
 
   await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
 
+  await revalidateExampleSurfacesIfPublicPlaybook(destinationPlaybookId);
+
   return {
     ok: true as const,
     playId: play.id,
@@ -1217,6 +1226,9 @@ export async function archivePlayAction(playId: string, archived: boolean) {
     .update({ is_archived: archived })
     .eq("id", playId);
   if (error) return { ok: false as const, error: error.message };
+  if (pb?.playbook_id) {
+    await revalidateExampleSurfacesIfPublicPlaybook(pb.playbook_id as string);
+  }
   return { ok: true as const };
 }
 
@@ -1255,6 +1267,9 @@ export async function deletePlayAction(playId: string) {
     .update({ deleted_at: now })
     .eq("attached_to_play_id", playId)
     .is("deleted_at", null);
+  if (pb?.playbook_id) {
+    await revalidateExampleSurfacesIfPublicPlaybook(pb.playbook_id as string);
+  }
   return { ok: true as const };
 }
 
