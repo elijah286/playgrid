@@ -188,7 +188,11 @@ export default function PrivacyPage() {
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Supabase — database, authentication, and storage</li>
-            <li>Vercel — application hosting</li>
+            <li>
+              Google Cloud Platform — application hosting (our Next.js
+              server runs on Cloud Run in the us-central1 region, where
+              all user requests are processed)
+            </li>
             <li>
               Resend — transactional email (contact form, team
               notifications, daily digest of playbook activity)
