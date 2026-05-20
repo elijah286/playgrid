@@ -199,23 +199,31 @@ body {
   position: relative;
   z-index: 56;
   border-radius: 8px;
+  /* Outer glow — extends beyond the element's border. Visible
+     when the element isn't inside an overflow:hidden ancestor;
+     silently clipped when it is. The pseudo-element below paints
+     the inner ring as a guaranteed-visible fallback. */
   box-shadow:
-    /* Inset ring — primary visual. Painted INSIDE the element's
-       border, so it's never clipped by an overflow:hidden ancestor.
-       The play field canvas, for example, lives inside a wrapper
-       with overflow:hidden — outer box-shadows on it disappear
-       silently. The inset ring guarantees a visible glow on every
-       spotlit element, regardless of ancestor clipping. */
-    inset 0 0 0 3px #1769FF,
-    inset 0 0 18px 4px rgba(23, 105, 255, 0.35),
-    /* Outer glow — extends beyond the element's border. Visible
-       when the element isn't inside an overflow:hidden ancestor;
-       silently clipped when it is. The inset above is the reliable
-       fallback. */
     0 0 0 3px #1769FF,
     0 0 0 9px rgba(23, 105, 255, 0.28),
     0 0 28px 6px rgba(23, 105, 255, 0.45);
   transition: box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-tutor-spotlit]::after {
+  /* Inner ring drawn as a pseudo-element so it paints ABOVE the
+     element's own content (e.g. the SVG that fills the editor
+     canvas). Inset box-shadow on the element itself paints behind
+     content, so on the canvas — whose SVG covers the whole div —
+     the inset ring is hidden. The pseudo-element sits above the
+     SVG and stays visible regardless of overflow:hidden ancestors
+     (it's inside the element's own bounds, not extending past). */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 3px solid #1769FF;
+  box-shadow: inset 0 0 18px 4px rgba(23, 105, 255, 0.35);
 }
 
 /* iOS-style "jiggle" on play tiles in reorder mode. Two keyframes with
