@@ -168,7 +168,7 @@ function buildCurlFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleton
   const backsideSlot = side === "right" ? "H" : "S";
   const assignments: PlayerAssignment[] = [
     routeAt(outsideWR, "Curl", 5),     // the curl (high)
-    routeAt("B", "Flat", 2),           // the flat (low) — RB swings
+    routeAt("B", "Flat", 4),           // the flat (low) — RB swings
     routeAt(slot, "Sit", 6),           // sensible secondary
     routeAt(backsideWR, "Go", 18),     // backside clear
     routeAt(backsideSlot, "Drag", 3),  // backside outlet
@@ -180,7 +180,7 @@ function buildCurlFlat(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleton
     concept: "Curl-Flat",
     spec: baseSpec(variant, `Curl-Flat ${cap(side)}`, "Spread Doubles", side, assignments),
     notes:
-      `Curl-Flat ${cap(side)}: ${outsideWR} curl @ 5yd (high), B flat @ 2yd (low) — high-low on the flat defender. ` +
+      `Curl-Flat ${cap(side)}: ${outsideWR} curl @ 5yd (high), B flat @ 4yd (low) — high-low on the flat defender. ` +
       `${slot} sit @ 6yd as secondary, ${backsideWR} go @ 18yd to clear backside.`,
   };
 }
@@ -195,7 +195,7 @@ function buildSmash(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const assignments: PlayerAssignment[] = [
     routeAt(outsideWR, "Hitch", 5),    // the underneath
     routeAt(slot, "Corner", 13),       // the over (corner)
-    routeAt("B", "Flat", 2),
+    routeAt("B", "Flat", 4),
     routeAt(backsideWR, "Go", 18),
     routeAt(backsideSlot, "Drag", 3),
     qbDropback(),
@@ -207,7 +207,7 @@ function buildSmash(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     spec: baseSpec(variant, `Smash ${cap(side)}`, "Spread Doubles", side, assignments),
     notes:
       `Smash ${cap(side)}: ${outsideWR} hitch @ 5yd (low), ${slot} corner @ 13yd (high) — high-low on the cornerback. ` +
-      `B flat @ 2yd, ${backsideWR} go @ 18yd to clear backside.`,
+      `B flat @ 4yd, ${backsideWR} go @ 18yd to clear backside.`,
   };
 }
 
@@ -220,7 +220,7 @@ function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const backsideSlot = side === "right" ? "H" : "S";
   const assignments: PlayerAssignment[] = [
     routeAt(slot, "Sit", 6),           // the stick
-    routeAt("B", "Flat", 2),           // the flat
+    routeAt("B", "Flat", 4),           // the flat
     routeAt(outsideWR, "Go", 18),      // strong-side clear
     routeAt(backsideWR, "Go", 18),     // backside clear
     routeAt(backsideSlot, "Drag", 3),  // backside outlet
@@ -232,7 +232,7 @@ function buildStick(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     concept: "Stick",
     spec: baseSpec(variant, `Stick ${cap(side)}`, "Trips", side, assignments),
     notes:
-      `Stick ${cap(side)}: ${slot} sit @ 6yd (the 'stick'), B flat @ 2yd — high-low on the flat defender. ` +
+      `Stick ${cap(side)}: ${slot} sit @ 6yd (the 'stick'), B flat @ 4yd — high-low on the flat defender. ` +
       `${outsideWR} clears with go @ 18yd.`,
   };
 }
@@ -247,7 +247,7 @@ function buildSnag(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
   const assignments: PlayerAssignment[] = [
     routeAt(slot, "Spot", 5),          // the snag/spot
     routeAt(outsideWR, "Corner", 13),  // the over
-    routeAt("B", "Flat", 2),           // the flat
+    routeAt("B", "Flat", 4),           // the flat
     routeAt(backsideWR, "Go", 18),
     routeAt(backsideSlot, "Drag", 3),
     qbDropback(),
@@ -258,7 +258,7 @@ function buildSnag(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
     concept: "Snag",
     spec: baseSpec(variant, `Snag ${cap(side)}`, "Trips Bunch", side, assignments),
     notes:
-      `Snag ${cap(side)}: ${slot} spot @ 5yd, ${outsideWR} corner @ 13yd, B flat @ 2yd — triangle stretch.`,
+      `Snag ${cap(side)}: ${slot} spot @ 5yd, ${outsideWR} corner @ 13yd, B flat @ 4yd — triangle stretch.`,
   };
 }
 
@@ -269,7 +269,7 @@ function buildFourVerts(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skeleto
     routeAt("Z", "Go", 18),
     routeAt("H", "Seam", 18),
     routeAt("S", "Seam", 18),
-    routeAt("B", "Flat", 2),  // checkdown
+    routeAt("B", "Flat", 4),  // checkdown
     qbDropback(),
     ...lineBlocks(variant),
   ];
@@ -305,7 +305,7 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
     // [4, 13] is the right family for a deep settle facing QB.
     routeAt("X", "Curl", 12),
     routeAt("Z", "Go", 18),     // single deep clear
-    routeAt("B", "Flat", 2),    // outlet
+    routeAt("B", "Flat", 4),    // outlet
     qbDropback(),
     ...lineBlocks(variant),
   ];
@@ -346,7 +346,7 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
   const assignments: PlayerAssignment[] = [
     routeAt(outsideWR, "Corner", 14),       // strong-side outside, deep corner
     routeAt(slot, "Out", 8),                // strong-side slot, second-level out
-    routeAt("B", "Flat", 2, side),          // RB flat to the flood side (explicit direction)
+    routeAt("B", "Flat", 4, side),          // RB flat to the flood side (explicit direction)
     routeAt(backsideWR, "Go", 18),          // backside outside, deep clear
     routeAt(backsideSlot, "Drag", 3, side), // backside slot drags toward flood (cross-formation)
     qbDropback(),
@@ -357,7 +357,7 @@ function buildFlood(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     concept: "Flood",
     spec: baseSpec(variant, `Flood ${cap(side)}`, "Spread Doubles", side, assignments),
     notes:
-      `Flood ${cap(side)}: ${outsideWR} corner @ 14yd (deep), ${slot} out @ 8yd (mid — second level break to the sideline), B flat @ 2yd (low — RB swings ${side}). ${backsideWR} go @ 18yd (backside clear), ${backsideSlot} drag @ 3yd (crosses ${side === "right" ? "left-to-right" : "right-to-left"} toward the flood as outlet). Three strong-side levels stretch the cornerback and flat defender; backside drag gives the QB a hot read vs blitz.`,
+      `Flood ${cap(side)}: ${outsideWR} corner @ 14yd (deep), ${slot} out @ 8yd (mid — second level break to the sideline), B flat @ 4yd (low — RB swings ${side}). ${backsideWR} go @ 18yd (backside clear), ${backsideSlot} drag @ 3yd (crosses ${side === "right" ? "left-to-right" : "right-to-left"} toward the flood as outlet). Three strong-side levels stretch the cornerback and flat defender; backside drag gives the QB a hot read vs blitz.`,
   };
 }
 
@@ -368,7 +368,7 @@ function buildDrive(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRes
     routeAt("X", "Dig", 12),    // over (the void route)
     routeAt("Z", "Go", 18),     // backside clear
     routeAt("S", "Sit", 6),     // backside outlet
-    routeAt("B", "Flat", 2),    // checkdown
+    routeAt("B", "Flat", 4),    // checkdown
     qbDropback(),
     ...lineBlocks(variant),
   ];
@@ -388,7 +388,7 @@ function buildLevels(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
     routeAt("X", "Dig", 12),    // high dig (over the in)
     routeAt("Z", "Go", 18),     // backside clear
     routeAt("S", "Sit", 6),
-    routeAt("B", "Flat", 2),
+    routeAt("B", "Flat", 4),
     qbDropback(),
     ...lineBlocks(variant),
   ];
@@ -410,7 +410,7 @@ function buildYCross(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
   const assignments: PlayerAssignment[] = [
     routeAt("Y", "Dig", 15),    // the Y/TE deep cross
     routeAt("X", "Post", 14),   // the clear (post)
-    routeAt("B", "Flat", 2),    // the outlet
+    routeAt("B", "Flat", 4),    // the outlet
     routeAt("Z", "Go", 18),     // backside clear
     routeAt("H", "Drag", 3),    // backside drag (slot)
     qbDropback(),
@@ -421,7 +421,7 @@ function buildYCross(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
     concept: "Y-Cross",
     spec: baseSpec(variant, "Y-Cross", "Singleback", undefined, assignments),
     notes:
-      `Y-Cross: Y deep cross @ 15yd, X post @ 14yd to clear the safety, B flat @ 2yd outlet — triangle stretch. Z backside clear. Singleback formation provides the Y/TE.`,
+      `Y-Cross: Y deep cross @ 15yd, X post @ 14yd to clear the safety, B flat @ 4yd outlet — triangle stretch. Z backside clear. Singleback formation provides the Y/TE.`,
   };
 }
 
@@ -432,7 +432,7 @@ function buildDagger(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonRe
     routeAt("X", "Dig", 15),    // the deep dig in the void
     routeAt("Z", "Go", 18),     // backside clear
     routeAt("S", "Sit", 6),
-    routeAt("B", "Flat", 2),
+    routeAt("B", "Flat", 4),
     qbDropback(),
     ...lineBlocks(variant),
   ];
@@ -907,7 +907,7 @@ function buildFleaFlicker(_c: ConceptEntry, opts: ConceptSkeletonOptions): Skele
   // has no B (or any back: the synthesizer remaps to Y), so skip.
   const variantHasBack = variant !== "flag_5v5";
   if (variantHasBack && carrierId !== "B") {
-    assignments.push(routeAt("B", "Flat", 2));
+    assignments.push(routeAt("B", "Flat", 4));
   }
 
   assignments.push(...lineBlocks(variant));

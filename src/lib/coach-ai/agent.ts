@@ -1111,6 +1111,15 @@ export async function runAgent(
   // to tweak a route. The fix is a pair of validator gates that require
   // the routing-tools were actually called. Track the relevant ones.
   let conceptSkeletonInvoked = false;
+  // Per-fence concept-skeleton gate (2026-05-20): count compose_play +
+  // get_concept_skeleton calls so the validator can require ONE call
+  // per catalog-concept fence in the reply. Surfaced when a coach
+  // installed 6 plays and Cal called compose_play once for the first,
+  // then hand-authored the other 5 by copying the first fence's
+  // structure with depth tweaks — 5 plays failed save-time validation
+  // (Flat catch behind the LOS). The old boolean gate fired once per
+  // turn and let the cascade through.
+  let conceptSkeletonCallCount = 0;
   let modifyPlayRouteInvoked = false;
   let addDefenseToPlayInvoked = false;
   /** When get_concept_skeleton runs successfully, the verbatim ```play
@@ -1250,6 +1259,7 @@ export async function runAgent(
           placeOffenseCalled: placeOffenseInvoked,
           placeDefenseCalled: placeDefenseInvoked,
           conceptSkeletonCalled: conceptSkeletonInvoked,
+          conceptSkeletonCallCount,
           skeletonReturnedFenceJson,
           modifyPlayRouteCalled: modifyPlayRouteInvoked,
           addDefenseToPlayCalled: addDefenseToPlayInvoked,
@@ -1486,6 +1496,7 @@ export async function runAgent(
       // relevant tool was actually called for the current emit.
       if (tu.name === "get_concept_skeleton" && r.ok) {
         conceptSkeletonInvoked = true;
+        conceptSkeletonCallCount += 1;
         // Capture the skeleton's returned ```play fence so the
         // validator can enforce route-path fidelity. Surfaced
         // 2026-05-02: even with the concept-skeleton-required gate,
@@ -1504,6 +1515,7 @@ export async function runAgent(
       // to either path.
       if (tu.name === "compose_play"     && r.ok) {
         conceptSkeletonInvoked = true;
+        conceptSkeletonCallCount += 1;
         // compose_play returns a fence in the same shape as
         // get_concept_skeleton. Capture it for the fidelity gate.
         const fenceMatch = /```play\n([\s\S]*?)\n```/.exec(resultText);

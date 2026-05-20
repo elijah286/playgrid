@@ -419,6 +419,81 @@ describe("validateDiagrams — concept-claim requires skeleton/modify tool", () 
       expect(result.errors.find((e) => e.includes("did NOT call get_concept_skeleton"))).toBeUndefined();
     }
   });
+
+  it("REJECTS the 2nd of 2 catalog-concept fences when only 1 compose_play call was made (per-fence counter)", () => {
+    // Surfaced 2026-05-20: a coach asked Cal to install 6 plays from a
+    // drawing. Cal called compose_play once for the first play, then
+    // hand-authored the other 5 by copying the first fence's structure
+    // with depth tweaks. Auto-save rejected 5 plays because the
+    // hand-authored Flat routes landed behind the LOS. The old single-
+    // boolean gate fired once per turn and let all 6 fences through;
+    // the counter-based gate rejects fence #2+ when only 1 skeleton
+    // call was made.
+    const text =
+      `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.\n\n` +
+      `${fullTackleMeshFence()}\nAnother Mesh — hand-authored.`;
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 1,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const counterError = result.errors.find((e) =>
+      /catalog-concept fence #2/i.test(e) && /only called 1/i.test(e),
+    );
+    expect(counterError).toBeDefined();
+  });
+
+  it("ACCEPTS 2 catalog-concept fences when 2 compose_play calls were made", () => {
+    const text =
+      `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.\n\n` +
+      `${fullTackleMeshFence()}\nSecond Mesh.`;
+    const result = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCallCount: 2,
+    });
+    // Other gates may legitimately fail (the fence has stale Mesh
+    // depths from the test fixture) — pin only that the per-fence
+    // counter gate does NOT fire when there are enough calls.
+    if (!result.ok) {
+      expect(result.errors.find((e) => /catalog-concept fence #/i.test(e))).toBeUndefined();
+    }
+  });
+
+  it("falls back to the old boolean gate when conceptSkeletonCallCount is unset", () => {
+    // Backward-compat: pre-2026-05-20 callers pass only the boolean.
+    // The counter should treat `true` as 1, `false`/unset as 0.
+    const text = `${fullTackleMeshFence()}\n@H drag, @S drag — Mesh concept.`;
+    const resultNoCall = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      // Neither counter nor boolean set — gate fires.
+    });
+    expect(resultNoCall.ok).toBe(false);
+    if (resultNoCall.ok) return;
+    const fenceCountErr = resultNoCall.errors.find((e) => /catalog-concept fence/i.test(e));
+    expect(fenceCountErr).toBeDefined();
+
+    const resultBoolOnly = validateDiagrams({
+      text,
+      variant: "tackle_11",
+      lastPlaceDefense: null,
+      placeOffenseCalled: true,
+      conceptSkeletonCalled: true,
+      // No counter — boolean derives to 1, so the single fence passes.
+    });
+    if (!resultBoolOnly.ok) {
+      expect(resultBoolOnly.errors.find((e) => /catalog-concept fence #/i.test(e))).toBeUndefined();
+    }
+  });
 });
 
 describe("validateDiagrams — skeleton-fidelity gate", () => {

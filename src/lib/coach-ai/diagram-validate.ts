@@ -444,6 +444,16 @@ export function validateDiagrams(opts: {
    *  a 'Mesh' with both drags at 2yd" failure mode by promoting the
    *  prompt rule to a structural gate. */
   conceptSkeletonCalled?: boolean;
+  /** Number of compose_play + get_concept_skeleton calls this turn.
+   *  Per-fence variant of `conceptSkeletonCalled` — when Cal emits N
+   *  catalog-concept fences, the validator requires N skeleton calls.
+   *  Surfaced 2026-05-20: a coach installed 6 plays; Cal called
+   *  compose_play once and hand-authored the other 5 by copying the
+   *  first fence with depth tweaks — 5 plays failed save-time
+   *  validation (Flat catch behind the LOS). The old single-boolean
+   *  gate fired once per turn and let the cascade through. Falls
+   *  back to `conceptSkeletonCalled ? 1 : 0` when unset. */
+  conceptSkeletonCallCount?: number;
   /** When get_concept_skeleton ran ok, the verbatim ```play fence JSON
    *  it returned. The validator enforces that the emitted diagram's
    *  route paths match this skeleton fence per-player — catches the
@@ -615,6 +625,18 @@ export function validateDiagrams(opts: {
       `(c) The coach genuinely wanted a fresh play? They'll say so explicitly ("show me a new play", "draw a different concept") — and the gate bypasses on those phrases. If you read the request as "fresh play" but the gate fired, the request was actually an edit and you should use modify_play_route.`,
     );
   }
+
+  // Running count of catalog-concept fences seen across the loop. Each
+  // catalog-concept fence "consumes" one compose_play (or
+  // get_concept_skeleton) call this turn. If the count exceeds the
+  // available calls, the excess fences are rejected — that's the bug
+  // class where Cal calls compose_play once and hand-authors the rest
+  // by copying the fence with depth tweaks.
+  let catalogConceptFencesSeen = 0;
+  const conceptSkeletonCallBudget =
+    typeof opts.conceptSkeletonCallCount === "number" && Number.isFinite(opts.conceptSkeletonCallCount)
+      ? opts.conceptSkeletonCallCount
+      : (opts.conceptSkeletonCalled === true ? 1 : 0);
 
   for (let i = 0; i < fences.length; i++) {
     const tag = fences.length > 1 ? `Diagram ${i + 1}: ` : "";
@@ -1064,21 +1086,37 @@ export function validateDiagrams(opts: {
         // a concept name in passing don't need to round-trip the
         // skeleton. Also bypasses when the modify-tools ran (the
         // diagram is the surgical-edit output of an earlier emit).
-        const skeletonOrModifyCalled =
-          opts.conceptSkeletonCalled === true ||
+        //
+        // 2026-05-20: per-fence variant — track running count of
+        // catalog-concept fences seen so far in the loop. Each fence
+        // needs a corresponding compose_play / get_concept_skeleton
+        // call. Cal calling compose_play once and emitting 6 catalog-
+        // concept fences fails the 2nd-6th here (the user's "Drive
+        // saved, 5 others failed" report). modify_play_route /
+        // compose_defense still bypass: those tools operate on an
+        // existing fence so the catalog-concept requirement was
+        // already satisfied upstream.
+        const isFullCatalogConceptFence =
+          claimedConcepts.length > 0 && offense.length >= expected;
+        if (isFullCatalogConceptFence) {
+          catalogConceptFencesSeen += 1;
+        }
+        const surgicalBypass =
           opts.modifyPlayRouteCalled === true ||
           opts.addDefenseToPlayCalled === true;
         if (
-          claimedConcepts.length > 0 &&
-          offense.length >= expected &&
-          !skeletonOrModifyCalled
+          isFullCatalogConceptFence &&
+          !surgicalBypass &&
+          catalogConceptFencesSeen > conceptSkeletonCallBudget
         ) {
+          const remainingCalls = Math.max(0, conceptSkeletonCallBudget - (catalogConceptFencesSeen - 1));
           errors.push(
             `${tag}diagram claims catalog concept(s) ${claimedConcepts.map((c) => `"${c}"`).join(", ")} ` +
-            `but you did NOT call get_concept_skeleton, modify_play_route, or compose_defense this turn. ` +
-            `Hand-authoring named concepts produces broken plays (e.g. Mesh with both drags at the same depth, Flood with routes scattered to both sides). ` +
-            `The skeleton tool returns a canonical fence with the concept's required depths and player roles already correct — call \`get_concept_skeleton({ concept: "${claimedConcepts[0]}" })\` and drop the returned fence VERBATIM. ` +
-            `If the concept is genuinely off-catalog (no entry in CONCEPT_CATALOG), drop the concept name from the title and prose so this gate doesn't fire.`,
+            `but compose_play / get_concept_skeleton was only called ${conceptSkeletonCallBudget} time(s) this turn — ` +
+            `this is catalog-concept fence #${catalogConceptFencesSeen} in your reply. ` +
+            `Each catalog-concept play needs its OWN compose_play call; don't copy a fence's structure for another play (depths drift, routes land in the wrong place, save fails). ` +
+            `Call \`compose_play({ concept: "${claimedConcepts[0]}" })\` for THIS play (${remainingCalls} more compose_play call(s) needed to cover the remaining catalog-concept fences). ` +
+            `If the concept is genuinely off-catalog, drop the concept name from the title and prose so this gate doesn't fire.`,
           );
         }
 

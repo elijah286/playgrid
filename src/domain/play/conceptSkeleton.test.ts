@@ -135,6 +135,41 @@ describe("generateConceptSkeleton — Flood: slot is Out, RB flat goes to flood 
   });
 });
 
+describe("generateConceptSkeleton — @B Flat depth clears the LOS for backfield carriers", () => {
+  // Surfaced 2026-05-20: @B at y=-5 running a Flat at depth=2 puts the
+  // catch point at y=-3, exactly at the Layer 4 backwards-route
+  // threshold (-3). Any slight depth variation (Cal hand-authoring at
+  // 1.5yd) tips below — the catch lands behind the LOS and the
+  // forward-pass-legality check rejects. Bumped to 4yd in all
+  // skeletons so the catch lands at y=-1, giving 2yd of margin.
+
+  it.each([
+    ["Curl-Flat", "right"],
+    ["Smash", "right"],
+    ["Stick", "right"],
+    ["Snag", "right"],
+    ["Four Verticals", undefined],
+    ["Mesh", undefined],
+    ["Drive", undefined],
+    ["Levels", undefined],
+    ["Y-Cross", undefined],
+    ["Dagger", undefined],
+    ["Flood", "right"],
+  ])("%s: @B's Flat depth is ≥ 4yd so the catch clears the LOS", (concept, strength) => {
+    const result = generateConceptSkeleton(concept, {
+      variant: "tackle_11",
+      strength: strength as "left" | "right" | undefined,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const bAssignment = result.spec.assignments.find(
+      (a) => a.player === "B" && a.action.kind === "route" && a.action.family === "Flat",
+    );
+    if (!bAssignment || bAssignment.action.kind !== "route") return;
+    expect(bAssignment.action.depthYds).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe("generateConceptSkeleton — Mesh: differentiated drag depths", () => {
   it("the two drags have different depthYds (one under, one over)", () => {
     const result = generateConceptSkeleton("Mesh", { variant: "tackle_11" });
