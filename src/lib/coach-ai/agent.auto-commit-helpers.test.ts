@@ -24,7 +24,10 @@ import {
   rosterCountForVariant,
   extractPlayFencesFromText,
   fenceIsFullRosterPlay,
+  collectAllHistoryFences,
+  extractPlayIdFromCreateResult,
 } from "./agent";
+import type { ChatMessage } from "./llm";
 
 describe("rosterCountForVariant", () => {
   it("returns 11 for tackle_11", () => {
@@ -193,5 +196,119 @@ describe("fenceIsFullRosterPlay", () => {
     };
     expect(fenceIsFullRosterPlay(fence, "other")).toBe(true);
     expect(fenceIsFullRosterPlay(fence, null)).toBe(true);
+  });
+});
+
+describe("collectAllHistoryFences", () => {
+  function assistant(text: string): ChatMessage {
+    return { role: "assistant", content: [{ type: "text", text }] };
+  }
+  function user(text: string): ChatMessage {
+    return { role: "user", content: text };
+  }
+
+  it("returns empty array on empty history", () => {
+    expect(collectAllHistoryFences([])).toEqual([]);
+  });
+
+  it("returns empty array when no assistant turn has a fence", () => {
+    const history: ChatMessage[] = [
+      user("Hello"),
+      assistant("Hi, how can I help?"),
+      user("What is a slant?"),
+      assistant("A slant is a quick inside-breaking route."),
+    ];
+    expect(collectAllHistoryFences(history)).toEqual([]);
+  });
+
+  it("collects fences from a single assistant turn", () => {
+    const history: ChatMessage[] = [
+      user("show me Inside Zone"),
+      assistant('Here it is.\n\n```play\n{"id":"iz"}\n```\n\nReady to keep going?'),
+    ];
+    expect(collectAllHistoryFences(history)).toEqual(['{"id":"iz"}']);
+  });
+
+  it("collects fences from multiple assistant turns in oldest-first order", () => {
+    const history: ChatMessage[] = [
+      user("play 1"),
+      assistant('```play\n{"n":"Inside Zone"}\n```'),
+      user("yes ready for play 2"),
+      assistant('```play\n{"n":"Sweep"}\n```'),
+      user("yes ready for play 3"),
+      assistant('```play\n{"n":"Counter"}\n```'),
+    ];
+    expect(collectAllHistoryFences(history)).toEqual([
+      '{"n":"Inside Zone"}',
+      '{"n":"Sweep"}',
+      '{"n":"Counter"}',
+    ]);
+  });
+
+  it("collects multiple fences from a single turn (batch proposal pattern)", () => {
+    const history: ChatMessage[] = [
+      user("give me 3 plays"),
+      assistant(
+        'Here are 3:\n\n```play\n{"n":"p1"}\n```\n\n```play\n{"n":"p2"}\n```\n\n```play\n{"n":"p3"}\n```',
+      ),
+    ];
+    expect(collectAllHistoryFences(history)).toEqual([
+      '{"n":"p1"}',
+      '{"n":"p2"}',
+      '{"n":"p3"}',
+    ]);
+  });
+
+  it("walks ALL history (not just the most-recent fence-bearing turn)", () => {
+    // The exact pattern from the 6-play regression: 6 prior turns each
+    // with one fence. Older walk implementations would only return the
+    // last turn's fence; this walk returns all 6.
+    const history: ChatMessage[] = [];
+    for (let i = 1; i <= 6; i++) {
+      history.push(user(`play ${i}`));
+      history.push(assistant(`\`\`\`play\n{"n":"p${i}"}\n\`\`\``));
+    }
+    history.push(user("yes save them"));
+    const fences = collectAllHistoryFences(history);
+    expect(fences).toHaveLength(6);
+    expect(fences[0]).toBe('{"n":"p1"}');
+    expect(fences[5]).toBe('{"n":"p6"}');
+  });
+
+  it("ignores user messages even when they contain ```play fences", () => {
+    const history: ChatMessage[] = [
+      user('```play\n{"copy":"pasted"}\n```'),
+      assistant("Got it."),
+    ];
+    expect(collectAllHistoryFences(history)).toEqual([]);
+  });
+});
+
+describe("extractPlayIdFromCreateResult", () => {
+  it("extracts a UUID from /plays/<uuid>/edit", () => {
+    const result =
+      'Created play "Inside Zone" in the current playbook. ' +
+      "Tell the coach it's ready and link them: " +
+      "[Open Inside Zone](/plays/12345678-1234-1234-1234-123456789012/edit).";
+    expect(extractPlayIdFromCreateResult(result)).toBe(
+      "12345678-1234-1234-1234-123456789012",
+    );
+  });
+
+  it("returns null when no UUID is present", () => {
+    expect(extractPlayIdFromCreateResult("Created play but the link failed.")).toBe(null);
+    expect(extractPlayIdFromCreateResult("")).toBe(null);
+  });
+
+  it("matches case-insensitively (uppercase hex chars in UUID)", () => {
+    const result = "Saved: /plays/ABCDEF12-3456-7890-ABCD-EF1234567890/edit";
+    expect(extractPlayIdFromCreateResult(result)).toBe(
+      "ABCDEF12-3456-7890-ABCD-EF1234567890",
+    );
+  });
+
+  it("rejects partial UUIDs and other paths", () => {
+    expect(extractPlayIdFromCreateResult("/plays/abc/edit")).toBe(null);
+    expect(extractPlayIdFromCreateResult("/playbooks/12345678-1234-1234-1234-123456789012/edit")).toBe(null);
   });
 });

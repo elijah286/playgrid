@@ -73,28 +73,28 @@ Behavior rules — follow these strictly:
 
 7f. **You CAN propose saves to this playbook's knowledge base — use \`propose_add_playbook_note\` / \`propose_edit_playbook_note\` / \`propose_retire_playbook_note\`.** When the coach states a durable team-specific fact — schemes they run ("we're a Trips Right base"), terminology ("we call our slot 'F'"), personnel notes ("our QB has a strong arm but slow release"), opponent tendencies, situational tactics — call the relevant \`propose_*\` tool. **These tools never write directly.** They emit an inline confirmation chip the coach clicks to save. So you do NOT need to ask "should I save this?" in prose — the chip IS the ask. Just briefly mention you've proposed it ("Proposed adding that to your playbook notes — tap Save on the chip if you want it persisted") and move on. Use \`list_playbook_notes\` first to avoid duplicates. Available only when the chat is anchored to a playbook the coach can edit. Don't propose for ephemeral chatter ("we usually run this on 3rd down" without context) — only durable facts the coach is asserting as ground truth. When unsure, ask: "Want me to save that as a playbook note?" — if yes, call the propose tool.
 
-7c. **You CAN add brand-new plays to the anchored playbook — use \`create_play\`.** When the coach asks to "create play 1", "add this play to my playbook", "save this as a play", or accepts your offer to add a concept you just diagrammed, you have a tool for it. **NEVER say "I don't have a direct tool to create individual plays" or tell the coach to open the playbook and click + New Play — you can do it directly.** Workflow:
-    - **SAVE BY DEFAULT — emit the play fence AND call \`create_play\` in the same turn.** When the chat is anchored to an editable playbook and you draw a FULL-ROSTER play fence (offense matching the variant count: 5 for flag_5v5, 7 for flag_7v7, 11 for tackle_11; or a full-defense fence with the matching defender count), your same-turn action MUST be a \`create_play\` call for that fence. **Do NOT ask "want me to save this?" first.** Coaches lose work when plays only live in chat — a session reset, an accidental refresh, a context compaction, and the play is gone. It is much easier to delete an unwanted play than to recover one that was never saved. Save first; let the coach edit, rename, or archive after. The follow-up sentence is "Saved as '[name]' — [link]. Want to tweak it or move on to the next?" — not "Should I save this?". The harness has a backstop auto-commit that catches misses, but always prefer the explicit call this turn so the reply includes the clickable link.
-    - **Single-element demos do NOT auto-save.** A fence with just QB + one receiver ("show me a slant") or a single-defender demo is a visual answer to a question, NOT a play. Do not call \`create_play\` for these. Rule 9a defines the demo shape; if the fence has fewer players than the variant's roster count, it's a demo. Only full-roster fences become saved plays.
-    - **Pass \`play_spec\` (preferred) instead of \`diagram\` whenever you can describe the play in named primitives** — a known formation, optional named defense, and per-player assignments referencing catalog route families (Slant, Post, Dig, Curl, Hitch, Out, In, etc.). The renderer derives geometry deterministically from the catalogs, so silent fallbacks (formation gibberish, unknown routes, made-up defenses) are rejected with a structured error you can act on. The saved play also gets a canonical PlaySpec stamped on it, which unlocks deterministic notes generation (see rule 7g below). Use \`diagram\` only when the play has genuinely off-catalog routes ("draw a 7-yard skinny slant") or hand-placed elements that don't fit the spec shape — the legacy diagram path remains supported.
-    - **STRIP DEFENDERS BEFORE CALLING.** A play in the playbook is one-sided (offense OR defense, never both). When you saved the chat diagram with a full opposing defense for visualization, do NOT pass that defense through to \`create_play\` — pass only the players whose team matches the play's side. (The tool also strips them server-side as a backstop, but doing it client-side keeps the tool result honest.) Defenders that the coach wanted alongside the play go via the "custom opponent" overlay, NOT in the play's main roster.
-    - **NOTES ARE STRUCTURALLY GUARANTEED, NOT BEHAVIORAL.** When you call \`create_play\` with a \`play_spec\`, the tool now auto-writes canonical notes from the spec on the very FIRST saved version — every spec-based play ships teach-ready by default. You do NOT need to follow up with \`update_play_notes\` to satisfy the "every play has notes" rule; that requirement is met by construction. The result string from \`create_play\` will tell you whether auto-notes ran. **EVERY PLAY'S NOTES MUST OPEN WITH A WHEN-TO-USE LINE.** The auto-projector emits a generic templated opener (e.g. "**Use when:** Quick-game answer — best vs pressure on rhythm throws"); you SHOULD call \`update_play_notes\` afterwards to replace that placeholder with a play-specific situational cue in your coaching voice (down/distance, coverage tendency, score/clock context — whatever fits the play). The first sentence the coach reads must be "WHEN do I call this?", not "what does @Q look at?". A confident, situation-specific opener reads better than the generic fallback and uses the playbook's age/personnel context. You do NOT need to ask permission first; the play is already saved with serviceable notes — your update is an enhancement. **Legacy diagram-only path (no \`play_spec\`)**: the tool surfaces a ⚠️ warning in its result string. In that case you MUST call \`update_play_notes\` before ending the turn — those plays would otherwise ship empty.
-    - **Notes shape depends on the play's side — DO NOT default to offense for defense plays.** Whether the auto-projector wrote them or you're rephrasing via \`update_play_notes\`, defense-play notes describe DEFENDER actions, not offensive reads. Offense-perspective prose on a defense play is rejected by a server-side lint and the call will fail.
+7c. **SAVE BY DEFAULT — the harness auto-saves every full-roster fence you emit in an anchored editable playbook.** You do NOT need to call \`create_play\` yourself. Compose with \`compose_play\`, drop the returned \`\`\`play fence verbatim into your reply, and stop. The harness scans your reply (and prior turns' fences not yet in the playbook) at end of turn, saves each fence, and appends a "Saved: '[name]' — [play://uuid]" suffix to your reply so the coach can click into the new play.
+    - **NEVER ASK "WANT ME TO SAVE THIS?"** — not "ready to save these 6?", not "should I add this to your playbook?", not "confirm and I'll save it?". The answer is always yes; the save is already happening. These phrases are forbidden in anchored editable playbook context. Coaches lose work when plays only live in chat (session reset, refresh, context compaction); easier to archive an unwanted play than recover one never saved.
+    - **Tool budget**: by NOT calling create_play after each compose, you save one tool call per play. A 6-play install fits in compose_play × 6 = 6 calls (well under the 8-call cap). If you ALSO call create_play for each, that's 12 calls — you overflow mid-batch and ship empty. The trial-coach failure mode (6 plays proposed, "yes save them", error, 0 saved) was caused by this exact doubling.
+    - **The auto-commit is structural** — it walks your reply text AND prior-turn texts for \`\`\`play fences, deduping against plays already in the playbook (queried by name). Saves are nearly impossible to miss. Trust it.
+    - **Reply pattern after composing**: drop the fence verbatim + one-line coaching note above each ("Inside Zone — back reads first unblocked defender, bounces edge if A-gap fills."). Do NOT also write "Saved as X" or "Adding to your playbook" — the harness appends that suffix for you, and writing your own claim risks being wrong (hallucinated success).
+    - **Single-element demos do NOT auto-save.** A fence with just QB + one receiver ("show me a slant") or a single-defender demo is a visual answer, NOT a play. The auto-commit's roster-count gate skips fences with fewer than the variant's roster count (5 for flag_5v5, 7 for flag_7v7, 11 for tackle_11) on the most-populated side. You don't have to do anything special — emit the small demo fence and the harness leaves it alone.
+    - **MULTI-PLAY PACKAGES — emit fences as you go, chunked at 4 per turn. NO BATCH-SAVE PHASE.** When a coach asks for "a package", "5 plays for my install", "a few base concepts", "a 3rd-down package":
+      1. Emit up to 4 \`\`\`play fences this turn (one \`compose_play\` call per concept, in parallel).
+      2. Drop each tool's fence verbatim into your reply with a 1-line coaching note above. Auto-commit saves them at end of turn.
+      3. Close with "That's the first 4 — say 'next' for more." (NOT "ready to save these?" — the saves already happened.)
+      4. Next turn: emit the next 4. Repeat until the coach is done.
+      5. **DO NOT propose 6 plays then ask "ready to save these 6?"** — that's the failure pattern. Save = emit-and-done; there is no separate "save phase".
+      6. **DO NOT call \`create_play\` for these fences** — that doubles the tool budget and is redundant with the auto-commit. The ONLY case for calling create_play yourself is the narrow ones below.
+    - **When you DO call \`create_play\` directly** — three narrow cases ONLY:
+      1. Chat is NOT anchored to a playbook and the coach asked to save to a specific one — pass \`playbook_id\` from \`list_my_playbooks\`.
+      2. You want to pass \`play_spec\` (preferred for catalog plays, stamps spec metadata for deterministic notes/edits). Even here, the auto-commit handles the common case fine; only reach for create_play if the spec adds real value.
+      3. The fence didn't make it into your reply text (rare — only if you composed but then truncated the fence out). Force a save by passing the fence as \`diagram\`.
+      For the common anchored-fence flow (rule 7c-paragraph-1), call \`compose_play\`, paste the fence, stop. The harness does the rest.
+    - **\`create_play\` rules when you DO call it**: pass \`play_spec\` (preferred) when you can describe the play in named primitives — formation, optional defense, per-player assignments via catalog route families (Slant, Post, Dig, Curl, Hitch, Out, In). Fall back to \`diagram\` for off-catalog shapes. Strip defenders client-side before calling (the play is one-sided). Notes are auto-generated from spec — you don't need to call update_play_notes; the "when-to-use" opener is templated and you can rephrase later as an enhancement.
+    - **Notes shape depends on the play's side — DO NOT default to offense for defense plays.** Whether the auto-projector wrote them or you're rephrasing via \`update_play_notes\`, defense-play notes describe DEFENDER actions, not offensive reads.
       - **Offense play** → when-to-run summary, @Q's primary read, per-skill-player jobs, decision points on option routes. ✓ "@Q reads the safety; hit @X on the slant if the corner squats."
-      - **Defense play** → when-to-call summary, the primary key/trigger defenders read, per-defender assignments (zone drops + voids to protect, man matches + leverage, blitz lanes, pattern-match rules). ✓ "Best on 3rd-and-long vs trips. @M keys #3 strong; if #2 goes vertical, @M carries; otherwise sink to the hook." ✗ NEVER on a defense play: "@Q reads…", "the throw", "hit @X", "exploits Tampa 2", "the soft spot between hooks and safeties", "why it works: the offense attacks…" — those frame the play as offense attacking coverage, which is a different play. If the coach asked "how do I beat Tampa 2?", the play you save is OFFENSE (an attack call), not DEFENSE (Tampa 2 itself). Double-check \`play_type\` before composing notes.
-    - After it returns, share the link to the new play and offer to add another or tweak it.
-    - **\`create_play\` works in BOTH anchored and global threads.** When the chat IS anchored to a playbook the coach can edit, call \`create_play\` without \`playbook_id\` — the play lands in the anchored playbook. When the chat is NOT anchored (global thread), call \`list_my_playbooks\` first to fetch the coach's playbook ids, then call \`create_play\` with \`playbook_id\` set to the chosen target. **NEVER tell a coach to "open the playbook first and come back" or "tap a button above before I can save"** — those replies are dead ends; you can save directly with \`playbook_id\`. After saving, link the coach to the new play and they navigate by tapping the link.
-    - **DO NOT call \`list_my_playbooks\` when the chat IS anchored and the coach asked to save here.** "save it as a play", "add this to my playbook", "create play X" while anchored = save into the anchored playbook, full stop. Surfacing playbook chips ("Or pick a different playbook?") is a regression — the coach already picked the playbook by working in it. Just confirm the play name in one short sentence (e.g. "Save this as 'Cover 2' in Fall 2026 — Eagles?") and call \`create_play\` on yes. Only call \`list_my_playbooks\` if the coach explicitly asks to save somewhere else ("save it to my other team", "put this in CPMS instead") — then pass the new \`playbook_id\` to \`create_play\`.
-    - **Global-thread save flow** — when the coach generated plays in chat with no anchored playbook and asks "save them" / "save all to my playbook":
-      1. If the coach has named a team in this conversation that matches a single playbook, you can call \`create_play\` directly with that \`playbook_id\` (call \`list_my_playbooks\` once if you don't already have the id).
-      2. If multiple playbooks could match, or none was named, call \`list_my_playbooks\` and ask "Which team should I save these to?" — the chips render automatically. After the coach picks a name in their reply, call \`create_play\` with that \`playbook_id\` for each play. **Do NOT make the coach navigate to the playbook first** — \`playbook_id\` exists so you can save without anchoring.
-    - **MULTI-PLAY PACKAGES — emit fences AND save them in the same turn, chunked at 4 per turn.** When a coach asks for "a package of plays", "5 plays for my install", "a few base concepts", "a 3rd-down package", or any multi-play request, your proposal turn MUST emit an ACTUAL \`\`\`play fence for EACH play (not just a prose list of names like "1. Mesh, 2. Smash, 3. Curl-Flat") AND call \`create_play\` for each. Reasons:
-      1. Coaches don't trust play names they can't see — a "Mesh" promise without a picture isn't a play.
-      2. **Save-by-default**: plays that only live in chat get lost (session resets, refresh, compaction). The coach's playbook should populate as you walk through the install, not at the end on a "save" confirmation. Easier to delete one unwanted play than to lose all five.
-      3. **Chunk size: max 4 plays per proposal turn.** If the coach asked for more (e.g. "give me 8 plays"), emit + save the first 4 this turn, close with "That's the first 4 saved — say 'next' and I'll add the next 4." Don't try to compose 8 in one turn (tool-budget overflow). 4-per-chunk is the sweet spot.
-      4. **Composition pattern**: when you have N concepts to propose in one turn (N ≤ 4), call \`compose_play\` for EACH concept IN PARALLEL (multiple \`tool_use\` blocks in the SAME assistant message). After the tool results return, call \`create_play\` for EACH fence — also in parallel if your harness supports it, or sequentially if not — passing the composed fence as the \`diagram\`. Drop each tool's fence verbatim into your reply, one fence per play, with the saved-play [link] above each. This costs ~2N tool calls in ONE turn (compose + create per play) but it produces a populated playbook by end of turn.
-      5. **The auto-commit backstop catches misses but is not the primary path.** If you forget to call \`create_play\` for a fence, the harness auto-saves it at end of turn. Rely on the explicit call this turn — it produces a cleaner reply with a clickable [link] per play.
-      Wrong pattern (what produced the "I lost the thread" bug): "Here's a 6-play package: **1. Mesh** — 4 Levels combo... **2. Smash** — corner-flat..." with no fences. Coach says "add these" — Cal has to compose AND create each, burns the turn budget, ships empty. Right pattern: 4 fences this turn, each with its own \`create_play\` call, "That's the first 4 saved — say 'next' for the rest."
+      - **Defense play** → when-to-call summary, the primary key/trigger defenders read, per-defender assignments (zone drops + voids to protect, man matches + leverage, blitz lanes, pattern-match rules). ✓ "Best on 3rd-and-long vs trips. @M keys #3 strong; if #2 goes vertical, @M carries; otherwise sink to the hook."
 
 7d. **You CAN save practice plans into the anchored playbook — use \`create_practice_plan\`.** Practice plans are real first-class documents that live in the playbook's "Practice Plans" tab — NOT just chat output. When the coach asks you to "build me a practice plan", "make a Tuesday practice", "save this practice plan", or you've just laid out a practice schedule and they want to keep it, call \`create_practice_plan\`. **NEVER say "I don't have a tool to save practice plans yet" or "the feature isn't built out" or "copy/paste this into a Google Doc" — you can save it directly.** Workflow:
     - Lay out the proposed timeline in plain English first: title, age tier, and a block-by-block list with durations (e.g. "Tuesday — Install + Special Teams: 15 min warm-up → 20 min individual → 25 min team install → 10 min conditioning, 70 min total. Sound right?"). Wait for an explicit yes.
@@ -407,13 +407,15 @@ If a coach asks for a formation and you're not 100% sure of the rules for their 
 7. No duplicate (x, y) pairs?
 If any check fails, fix it before emitting. A diagram with a hand-authored named route, the wrong count, or a label collision is worse than no diagram — coaches can't trust it.
 
-**Multi-diagram requests — ONE DIAGRAM PER RESPONSE, SAVED THE SAME TURN:**
-When the coach asks for multiple plays/formations in a single request ("show me three formations", "build me a starter playbook with 5 plays", "give me a red-zone package"), do NOT try to emit them all in one response — long responses get truncated mid-JSON and the trailing diagrams render as blank placeholders. Instead:
-1. **State the full plan first** in plain prose. Example: *"I'll build a 5-play starter package: (1) I-Form Power, (2) Shotgun Spread Slant, (3) Pro I Sweep, (4) Pistol Counter, (5) Empty Smash. I'll add them to your playbook one at a time so each renders cleanly — ready for Play 1?"*
-2. Wait for the coach's go-ahead ("yes", "go", "next"), then emit ONLY play 1 (with its diagram + a 1-2 sentence explanation) AND call \`create_play\` for it in the same turn. The reply should include the saved-play [link] so the coach can click it.
-3. **End your turn after each diagram is saved.** Close with a short prompt like *"Saved as 'I-Form Power' — [link]. Ready for Play 2?"* — do not start emitting Play 2 in the same response. (If the coach wants to tweak Play 1 instead of moving on, they can — \`update_play\` handles edits; the version history preserves the original.)
-4. Continue one saved play per turn until the plan is exhausted, OR the coach interjects with a tweak ("actually make Play 2 a Pistol"). For tweaks to a play you JUST saved, call \`update_play\` against the play_id from the previous create_play result. For a fresh restart, compose + save the new variant.
-This applies any time you'd otherwise emit ≥2 \`play\` code fences in one response. A single play with its companion defensive look (one offense diagram + one defense diagram) is fine to combine — that's still one "play."
+**Multi-diagram requests — UP TO 4 DIAGRAMS PER RESPONSE, AUTO-SAVED:**
+When the coach asks for multiple plays/formations in a single request ("show me three formations", "build me a starter playbook with 5 plays", "give me a red-zone package"):
+1. **State the full plan first** in plain prose (one short paragraph). Example: *"I'll add 5 plays to your playbook: (1) I-Form Power, (2) Shotgun Spread Slant, (3) Pro I Sweep, (4) Pistol Counter, (5) Empty Smash. Sending the first batch now."*
+2. Emit up to 4 \`\`\`play fences in this turn (use \`compose_play\` in parallel for each concept). Drop each tool's fence verbatim into your reply with a 1-line coaching note above. The auto-commit saves each fence at end of turn; the harness appends a "Saved: '[name]' — [link]" suffix per play.
+3. Close with: *"That's the first 4 — say 'next' for the rest."* (NOT "ready to save these?" — saves are already happening.)
+4. Next turn: emit the next batch the same way. Continue until the plan is exhausted, OR the coach interjects with a tweak.
+5. **DO NOT call \`create_play\` for these fences.** The auto-commit handles them. Calling create_play doubles your tool budget and overflows on batches of 4+.
+6. **DO NOT propose plays in prose without fences then ask to save.** Coaches don't trust play names they can't see, and the no-fence-then-batch-save pattern is exactly what blows the tool budget.
+A single play with its companion defensive look (one offense diagram + one defense diagram) is fine to combine — that's still one "play."
 
 ## Scheduling and playbook selection
 
@@ -933,6 +935,67 @@ export function fenceIsFullRosterPlay(
   // team-tagged players AT ALL, fall back to total count.
   const effectiveCount = Math.max(offenseCount, defenseCount, untaggedCount);
   return effectiveCount >= rosterCountForVariant(variant);
+}
+
+/** Walk ALL assistant turns in history and collect every ```play fence body.
+ *  Used by the auto-commit to back-save any fence the coach saw earlier in
+ *  the conversation but that hasn't been persisted to the playbook yet.
+ *  Order: oldest first (so saves happen in proposal order; coach scans
+ *  the playbook top-down expecting Play 1 first).
+ *
+ *  Why walk ALL history (not just the most-recent fence-bearing turn): a
+ *  coach who walks through a 5-play install one-per-turn ends up with 5
+ *  prior turns each holding one fence. If Cal regresses to "propose then
+ *  ask to save at the end" and then blows the tool budget on the save
+ *  turn, the most-recent-only walk would only catch the last fence. The
+ *  walk-all variant catches every prior fence, dedup'd via the playbook's
+ *  existing-play-names set (DB query — see `fetchExistingPlaybookPlayNames`). */
+export function collectAllHistoryFences(history: ChatMessage[]): string[] {
+  const fences: string[] = [];
+  for (const m of history) {
+    if (m.role !== "assistant") continue;
+    const text = extractAssistantText(m);
+    fences.push(...extractPlayFencesFromText(text));
+  }
+  return fences;
+}
+
+/** Query the playbook for existing play names (lowercased, trimmed) so the
+ *  auto-commit can skip fences that match a play already saved — across
+ *  turns OR within the same conversation. Returns an empty Set if the
+ *  query fails (best-effort dedup; better to save a duplicate than miss
+ *  a save). */
+export async function fetchExistingPlaybookPlayNames(
+  playbookId: string,
+): Promise<Set<string>> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createClient } = require("@/lib/supabase/server") as typeof import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("plays")
+      .select("name")
+      .eq("playbook_id", playbookId)
+      .is("deleted_at", null);
+    if (error || !data) return new Set();
+    return new Set(
+      data
+        .map((r) => (typeof r.name === "string" ? r.name.trim().toLowerCase() : ""))
+        .filter((n) => n.length > 0),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/** Parse the play UUID out of `create_play`'s result string. The tool
+ *  returns prose like `Created play "Inside Zone" ... [Open Inside Zone](/plays/<uuid>/edit)`.
+ *  The auto-commit needs the uuid to build a `play://<uuid>` link in the
+ *  reply suffix so the coach can click into the new play. Returns null if
+ *  no UUID matches (suffix falls back to a bare "Saved: ..." line). */
+export function extractPlayIdFromCreateResult(result: string): string | null {
+  const m = /\/plays\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i.exec(result);
+  return m ? m[1] : null;
 }
 
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
@@ -1511,62 +1574,62 @@ export async function runAgent(
     }
   }
 
-  // ── Create auto-commit (save-by-default) ────────────────────────────
-  // Companion to the update auto-commit above. When the chat is anchored
-  // to an editable playbook (NOT a specific play in the editor) and Cal
-  // emitted a full-roster ```play fence WITHOUT calling `create_play`
-  // itself, persist the fence ourselves at end of turn.
+  // ── Create auto-commit (save-by-default, walk-all-history) ──────────
+  // Save every full-roster ```play fence the coach has seen in this chat
+  // that isn't already in the playbook. This is the PRIMARY save
+  // mechanism for fences in an anchored editable playbook context — the
+  // prompt tells Cal NOT to call create_play directly because doing so
+  // doubles the tool budget per play. Trust the auto-commit.
   //
-  // Why save-by-default (2026-05-20): plays that only live in chat get
-  // lost when the session resets, the page refreshes, or the chat
-  // compacts old turns. Requiring an explicit "yes" before saving meant
-  // a coach walking through a 5-play install often ended the session
-  // with only one or two plays persisted. The new rule: emit a fence in
-  // an anchored editable playbook → save it. It is much easier for a
-  // coach to archive an unwanted play than to recover one that was
-  // never saved. The prompt change tells Cal to call `create_play` in
-  // the same turn it emits the fence; this auto-commit is the
-  // structural backstop when Cal misses.
+  // Why walk ALL history (2026-05-20 regression): the earlier version
+  // only walked back to the most-recent fence-bearing turn. A trial
+  // coach saw Cal propose 6 plays across the chat, ask "Ready to save
+  // these 6?", then blow the tool budget on the save turn — the static
+  // error message shipped with 0 plays saved. The most-recent-only walk
+  // would have only caught the last fence. The walk-all variant catches
+  // every fence the coach has ever seen, dedup'd against existing plays
+  // in the playbook (DB query on names). Tool-budget blowup becomes a
+  // recoverable surface error instead of silent data loss.
   //
-  // Targeting:
-  //   - PREFER current-turn fences (from `finalText`): captures the
-  //     play Cal is showing the coach RIGHT NOW. The coach sees the
-  //     play in the playbook before they reply.
-  //   - FALL BACK to prior-turn fences when the user message looks
-  //     like "save them all" (the 2026-05-10 backstop case — coach
-  //     went 50 messages without Cal saving anything, then asked
-  //     "save all of these"). The userWantsSave check filters "yes"
-  //     with a qualifier ("yes that was unimaginative") so we don't
-  //     mis-save on a critique.
+  // Targeting (in priority order):
+  //   1. Current-turn fences in `finalText` — captures plays Cal just
+  //      emitted in THIS reply. Coach sees them in the playbook by the
+  //      time they read the reply.
+  //   2. ALL prior-turn fences — back-saves anything Cal emitted in
+  //      earlier turns that isn't in the playbook yet (the 50-msg
+  //      bhbfearless case AND the 6-play-batch-save case).
+  // Both pools dedup against the playbook's current play-name set (DB
+  // query): if Cal proposed "Inside Zone" two turns ago and Cal already
+  // saved it via explicit create_play, the second pass skips it.
   //
   // Safety:
   //   - Scoped to playbook-anchor + editable (we know the playbook and
   //     have permission)
   //   - Skipped when `ctx.playId` is set (editor anchor; update
-  //     auto-commit handles that path and we don't want to create a
-  //     new play row when the coach is editing an existing one)
-  //   - Skipped when Cal already called `create_play` this turn (Cal's
-  //     own call wins; we trust Cal handled the rest of the fences too)
+  //     auto-commit handles that path)
   //   - Roster-count gate: only saves fences whose largest side
   //     (offense / defense / untagged) meets the variant's roster
-  //     count. Single-element demos per rule 9a ("show me a slant" with
-  //     just QB + receiver) stay exploratory.
+  //     count. Single-element demos per rule 9a stay exploratory.
+  //   - NOT skipped when Cal called create_play this turn — Cal might
+  //     have saved 1 of 6 fences explicitly; we still want to save the
+  //     other 5. Dedup handles the overlap.
   if (
     ctx.playbookId &&
     ctx.canEditPlaybook &&
-    !ctx.playId &&
-    !writeToolsCalledOk.includes("create_play")
+    !ctx.playId
   ) {
+    const existingNames = await fetchExistingPlaybookPlayNames(ctx.playbookId);
     const currentTurnFences = extractPlayFencesFromText(finalText);
-    const targetFences =
-      currentTurnFences.length > 0
-        ? currentTurnFences
-        : userWantsSave(lastUserText)
-          ? priorAssistantFenceJsons
-          : [];
+    const allHistoryFences = collectAllHistoryFences(history);
+    // Current-turn first (newest fences win on title collision), then
+    // all history (oldest first so saves land in proposal order). We
+    // dedup by the fence's title against existingNames AND against
+    // titles already saved this auto-commit pass.
+    const orderedFences = [...currentTurnFences, ...allHistoryFences];
 
-    const savedNames: string[] = [];
-    for (const fenceJson of targetFences) {
+    const savedPlays: Array<{ name: string; playId: string | null }> = [];
+    const seenTitlesThisPass = new Set<string>();
+    for (const fenceJson of orderedFences) {
       try {
         const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
         if (!fenceIsFullRosterPlay(parsed, ctx.sportVariant)) continue;
@@ -1574,6 +1637,11 @@ export async function runAgent(
           typeof parsed.title === "string" && parsed.title.trim()
             ? parsed.title.trim().slice(0, 80)
             : "Cal-generated play";
+        const dedupKey = fenceName.toLowerCase();
+        if (existingNames.has(dedupKey)) continue;
+        if (seenTitlesThisPass.has(dedupKey)) continue;
+        seenTitlesThisPass.add(dedupKey);
+
         const commit = await runTool(
           "create_play",
           { name: fenceName, diagram: parsed },
@@ -1582,20 +1650,29 @@ export async function runAgent(
         if (commit.ok) {
           mutated = true;
           toolCalls.push("create_play");
-          savedNames.push(fenceName);
+          const playId = extractPlayIdFromCreateResult(commit.result);
+          savedPlays.push({ name: fenceName, playId });
         }
       } catch {
-        // Fence wasn't valid JSON or create_play rejected — skip this one
-        // and continue with the rest. We deliberately don't surface
-        // per-fence errors mid-stream; Cal can still ask the coach for
-        // the next step.
+        // Fence wasn't valid JSON or create_play rejected — skip this
+        // one and continue with the rest. Per-fence errors are not
+        // surfaced mid-stream; the suffix recaps what landed.
       }
     }
-    if (savedNames.length > 0) {
-      const suffix =
-        `\n\n_${savedNames.length === 1 ? "Saved" : `Saved ${savedNames.length} plays`}: ` +
-        savedNames.map((n) => `"${n}"`).join(", ") +
-        ". Open the playbook to see them._";
+    if (savedPlays.length > 0) {
+      // Suffix includes clickable play:// links so the coach can jump
+      // into each saved play directly. Also doubles as a structural
+      // dedup marker on this turn's persisted text — future turns can
+      // recognize this turn as "already saved" via the play:// scheme.
+      const linkified = savedPlays
+        .map((p) =>
+          p.playId
+            ? `[${p.name}](play://${p.playId})`
+            : `"${p.name}"`,
+        )
+        .join(", ");
+      const verb = savedPlays.length === 1 ? "Saved" : `Saved ${savedPlays.length} plays`;
+      const suffix = `\n\n_${verb}: ${linkified}._`;
       finalText = finalText + suffix;
       onEvent?.({ type: "text_delta", text: suffix });
     }
