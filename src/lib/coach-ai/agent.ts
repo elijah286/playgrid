@@ -74,7 +74,11 @@ Behavior rules — follow these strictly:
 7f. **You CAN propose saves to this playbook's knowledge base — use \`propose_add_playbook_note\` / \`propose_edit_playbook_note\` / \`propose_retire_playbook_note\`.** When the coach states a durable team-specific fact — schemes they run ("we're a Trips Right base"), terminology ("we call our slot 'F'"), personnel notes ("our QB has a strong arm but slow release"), opponent tendencies, situational tactics — call the relevant \`propose_*\` tool. **These tools never write directly.** They emit an inline confirmation chip the coach clicks to save. So you do NOT need to ask "should I save this?" in prose — the chip IS the ask. Just briefly mention you've proposed it ("Proposed adding that to your playbook notes — tap Save on the chip if you want it persisted") and move on. Use \`list_playbook_notes\` first to avoid duplicates. Available only when the chat is anchored to a playbook the coach can edit. Don't propose for ephemeral chatter ("we usually run this on 3rd down" without context) — only durable facts the coach is asserting as ground truth. When unsure, ask: "Want me to save that as a playbook note?" — if yes, call the propose tool.
 
 7c. **SAVE BY DEFAULT — the harness auto-saves every full-roster fence you emit in an anchored editable playbook.** You do NOT need to call \`create_play\` yourself. Compose with \`compose_play\`, drop the returned \`\`\`play fence verbatim into your reply, and stop. The harness scans your reply (and prior turns' fences not yet in the playbook) at end of turn, saves each fence, and appends a "Saved: '[name]' — [play://uuid]" suffix to your reply so the coach can click into the new play.
-    - **NEVER ASK "WANT ME TO SAVE THIS?"** — not "ready to save these 6?", not "should I add this to your playbook?", not "confirm and I'll save it?". The answer is always yes; the save is already happening. These phrases are forbidden in anchored editable playbook context. Coaches lose work when plays only live in chat (session reset, refresh, context compaction); easier to archive an unwanted play than recover one never saved.
+    - **Don't gate the save on a confirmation.** The default is to save immediately; let the coach edit, rename, or archive after. Avoid preemptive phrasings like "ready to save these 6?" / "should I add this?" / "confirm and I'll save it" — those waste a turn and leave plays only in chat, where they get lost on session reset or refresh. Save first. Coaches lose more work to "I'll save it after you confirm" than they lose to accidentally-saved drafts they can archive in 2 clicks.
+    - **Honest uncertainty > false success — the one OK time to ask.** You can't directly observe whether the harness auto-commit succeeded for fences you let it handle. So:
+      - Do NOT claim "saved" / "added" / "done" in your own prose for fences you let the harness handle. The harness appends its own "_Saved: [name] — [play://uuid]_" suffix when saves succeed; that suffix IS the canonical confirmation. Writing your own "saved!" alongside risks hallucinated success (the suffix doesn't appear → coach assumes the save worked because Cal said so).
+      - When you're genuinely uncertain (compose_play returned a warning, a capability check was iffy, the fence had off-catalog elements), say so honestly: "Composed these 4 plays — they should land in your playbook automatically. If they don't show up in the sidebar, tell me and I'll save them explicitly." That's not "ready to save?" — it's "I did the work, here's how to verify, ask if it didn't take."
+      - General rule: a coach walking away thinking they have 6 plays when they have 0 is FAR worse than a coach being asked one extra question. Honesty about uncertainty beats confident wrong claims every time.
     - **Tool budget**: by NOT calling create_play after each compose, you save one tool call per play. A 6-play install fits in compose_play × 6 = 6 calls (well under the 8-call cap). If you ALSO call create_play for each, that's 12 calls — you overflow mid-batch and ship empty. The trial-coach failure mode (6 plays proposed, "yes save them", error, 0 saved) was caused by this exact doubling.
     - **The auto-commit is structural** — it walks your reply text AND prior-turn texts for \`\`\`play fences, deduping against plays already in the playbook (queried by name). Saves are nearly impossible to miss. Trust it.
     - **Reply pattern after composing**: drop the fence verbatim + one-line coaching note above each ("Inside Zone — back reads first unblocked defender, bounces edge if A-gap fills."). Do NOT also write "Saved as X" or "Adding to your playbook" — the harness appends that suffix for you, and writing your own claim risks being wrong (hallucinated success).
@@ -1628,12 +1632,14 @@ export async function runAgent(
     const orderedFences = [...currentTurnFences, ...allHistoryFences];
 
     const savedPlays: Array<{ name: string; playId: string | null }> = [];
+    const failedSaves: Array<{ name: string; reason: string }> = [];
     const seenTitlesThisPass = new Set<string>();
     for (const fenceJson of orderedFences) {
+      let fenceName = "Cal-generated play";
       try {
         const parsed = JSON.parse(fenceJson) as Record<string, unknown>;
         if (!fenceIsFullRosterPlay(parsed, ctx.sportVariant)) continue;
-        const fenceName =
+        fenceName =
           typeof parsed.title === "string" && parsed.title.trim()
             ? parsed.title.trim().slice(0, 80)
             : "Cal-generated play";
@@ -1652,18 +1658,37 @@ export async function runAgent(
           toolCalls.push("create_play");
           const playId = extractPlayIdFromCreateResult(commit.result);
           savedPlays.push({ name: fenceName, playId });
+        } else {
+          // create_play rejected — surface this to the coach so they
+          // don't assume the play landed silently. Common reasons:
+          // validation rejection (off-catalog depth, illegal route),
+          // capability gate (play uses a feature the playbook hasn't
+          // enabled), DB error. Reason is the tool's error string,
+          // trimmed for the suffix.
+          failedSaves.push({
+            name: fenceName,
+            reason: commit.error.slice(0, 200),
+          });
         }
-      } catch {
-        // Fence wasn't valid JSON or create_play rejected — skip this
-        // one and continue with the rest. Per-fence errors are not
-        // surfaced mid-stream; the suffix recaps what landed.
+      } catch (e) {
+        // Fence wasn't valid JSON — surface as a parse failure so the
+        // coach knows that fence didn't land. (A try/catch that
+        // silently swallows is exactly the failure mode the user
+        // flagged: "I'd rather Cal ask than have me assume saved.")
+        failedSaves.push({
+          name: fenceName,
+          reason: e instanceof Error ? e.message.slice(0, 200) : "could not parse fence JSON",
+        });
       }
     }
+    // Suffix combines a "Saved: ..." success line AND a "Couldn't save:
+    // ..." failure line when either applies. If everything failed AND
+    // the user clearly asked to save, surface the failure prominently
+    // so the coach can react instead of assuming the saves landed. If
+    // nothing was emitted (no current-turn fences, no prior unsaved),
+    // we append nothing — silence is correct here.
+    const suffixParts: string[] = [];
     if (savedPlays.length > 0) {
-      // Suffix includes clickable play:// links so the coach can jump
-      // into each saved play directly. Also doubles as a structural
-      // dedup marker on this turn's persisted text — future turns can
-      // recognize this turn as "already saved" via the play:// scheme.
       const linkified = savedPlays
         .map((p) =>
           p.playId
@@ -1672,7 +1697,20 @@ export async function runAgent(
         )
         .join(", ");
       const verb = savedPlays.length === 1 ? "Saved" : `Saved ${savedPlays.length} plays`;
-      const suffix = `\n\n_${verb}: ${linkified}._`;
+      suffixParts.push(`_${verb}: ${linkified}._`);
+    }
+    if (failedSaves.length > 0) {
+      const list = failedSaves
+        .map((f) => `"${f.name}" (${f.reason})`)
+        .join("; ")
+        .slice(0, 600);
+      const verb = failedSaves.length === 1 ? "Couldn't auto-save" : `Couldn't auto-save ${failedSaves.length} plays`;
+      suffixParts.push(
+        `_⚠️ ${verb}: ${list}. Reply "save those" and I'll retry, or tell me what to fix._`,
+      );
+    }
+    if (suffixParts.length > 0) {
+      const suffix = `\n\n${suffixParts.join("\n\n")}`;
       finalText = finalText + suffix;
       onEvent?.({ type: "text_delta", text: suffix });
     }
