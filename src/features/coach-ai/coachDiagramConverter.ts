@@ -225,7 +225,8 @@ const STYLE_X:    PlayerStyle = { fill: "#EF4444", stroke: "#7f1d1d", labelColor
 const STYLE_Y_FLAG5: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // @Y in flag_5v5 — yellow (slot-equivalent)
 const STYLE_Y_TE:    PlayerStyle = { fill: "#22C55E", stroke: "#166534", labelColor: "#FFFFFF" }; // @Y in flag_7v7 / tackle_11 — green (TE)
 const STYLE_Z:    PlayerStyle = { fill: "#3B82F6", stroke: "#1e3a8a", labelColor: "#FFFFFF" };
-const STYLE_SLOT: PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // S, A, H, F-as-WR
+const STYLE_SLOT:   PlayerStyle = { fill: "#FACC15", stroke: "#854d0e", labelColor: "#1C1C1E" }; // A, H, F-as-WR
+const STYLE_SLOT_S: PlayerStyle = { fill: "#A855F7", stroke: "#581c87", labelColor: "#FFFFFF" }; // @S — purple (split from SLOT 2026-05-20 so 7v7 plays with H + S render distinctly)
 
 /** Pick @Y's style by variant. flag_5v5 → yellow (the canonical 5-player
  *  set has no second slot label, so @Y stands in as the slot/back-equivalent
@@ -324,9 +325,13 @@ const LINEMAN_LABELS = new Set([
 // invalid hex codes. Both paths share these exports.
 
 /** The semantic color group a player's label maps to. Two skill-position
- *  players in the SAME group render in the same hue — a readability bug. */
+ *  players in the SAME group render in the same hue — a readability bug.
+ *  Slots are split by label so 7v7 plays with both @H and @S (Four
+ *  Verticals, Levels, Drive) render the two seam-runners in distinct
+ *  hues: H stays yellow (the canonical slot color), S → purple. A and
+ *  F-as-slot stay yellow (rare to co-occur with H). */
 export type DerivedColorGroup =
-  | "X" | "Y" | "Z" | "SLOT" | "RB" | "FB"
+  | "X" | "Y" | "Z" | "SLOT" | "SLOT_S" | "RB" | "FB"
   | "QB" | "C" | "LINEMAN" | "ROTATION";
 
 /** Canonical playbook palette — names a coach can reason about, mapped
@@ -366,9 +371,13 @@ export function derivedColorGroupForLabel(rawLabel: string, role?: string): Deri
   if (base === "X") return "X";
   if (base === "Y") return "Y";
   if (base === "Z") return "Z";
-  // Slot family — S, A, H, F-as-WR all share yellow. The role===RB path
-  // above already claimed F-as-back, so F arriving here is a slot.
-  if (base === "S" || base === "A" || base === "H" || base === "F") return "SLOT";
+  // Slot family — H/A/F-as-WR share yellow; S splits off to purple so
+  // 7v7 plays with both H and S (Four Verticals, Levels, Drive) render
+  // the two seam-runners in distinct hues without tripping the
+  // save-time color-clash validator. The role===RB path above already
+  // claimed F-as-back, so F arriving here is a slot.
+  if (base === "S") return "SLOT_S";
+  if (base === "A" || base === "H" || base === "F") return "SLOT";
   return "ROTATION";
 }
 
@@ -387,7 +396,8 @@ export const DERIVED_GROUP_HEX: Record<Exclude<DerivedColorGroup, "ROTATION" | "
   // callers that don't care about variant get the historical default.
   Y:    "#FACC15",
   Z:    "#3B82F6",
-  SLOT: "#FACC15",
+  SLOT:   "#FACC15",
+  SLOT_S: "#A855F7",
   RB:   "#F26522",
   FB:   "#F26522",
   QB:   "#FFFFFF",
@@ -808,7 +818,15 @@ export function coachDiagramToPlayDocument(input: CoachDiagram): PlayDocument {
         else if (baseLabel === "X") { style = STYLE_X; label = rawLabel.slice(0, 2); }
         else if (baseLabel === "Y") { style = styleForY(diagram.variant); label = rawLabel.slice(0, 2); }
         else if (baseLabel === "Z") { style = STYLE_Z; label = rawLabel.slice(0, 2); }
-        else if (baseLabel === "S" || baseLabel === "A" || baseLabel === "H" || baseLabel === "F") {
+        else if (baseLabel === "S") {
+          // @S split off from SLOT 2026-05-20 — purple so 7v7 plays
+          // with both H (yellow) and S (purple) render distinctly.
+          // Validator's color-clash gate was blocking Four Verticals,
+          // Levels, Drive, etc. when both labels were on the field.
+          style = STYLE_SLOT_S;
+          label = rawLabel.slice(0, 2);
+        }
+        else if (baseLabel === "A" || baseLabel === "H" || baseLabel === "F") {
           // Slot family — yellow. F here is the WR-role slot (2x2
           // doubles); the role===RB path above already claimed F-as-back.
           style = STYLE_SLOT;

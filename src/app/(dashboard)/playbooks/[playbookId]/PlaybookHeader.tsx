@@ -1927,7 +1927,7 @@ export function CustomizeTeamDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
+      className="fixed inset-0 z-[60] overflow-y-auto bg-black/60"
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving) onClose();
       }}

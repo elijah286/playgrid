@@ -32,7 +32,11 @@ import type { CoachDiagram } from "@/features/coach-ai/coachDiagramConverter";
 import { defaultSettingsForVariant } from "@/domain/playbook/settings";
 
 describe("validateColorClash", () => {
-  it("rejects two slot players (H + S both → yellow)", () => {
+  it("ACCEPTS H + S — distinct hues after the 2026-05-20 SLOT_S split (yellow + purple)", () => {
+    // Originally rejected: 4 of Cal's 6-play install (Drive, Curl-Flat,
+    // Four Verticals, Levels) failed to save because @H and @S both
+    // derived yellow under the unified SLOT group. After the split,
+    // @S → purple; H + S coexist on the field without clashing.
     const diagram: CoachDiagram = {
       variant: "flag_5v5",
       players: [
@@ -44,9 +48,26 @@ describe("validateColorClash", () => {
       ],
       routes: [],
     };
+    expect(validateColorClash(diagram)).toHaveLength(0);
+  });
+
+  it("STILL rejects @H + @A (both → yellow under SLOT) — the slot-family clash rule still bites", () => {
+    // Pins that the SLOT_S split didn't accidentally collapse the
+    // whole slot-family check — A and H both still derive yellow.
+    const diagram: CoachDiagram = {
+      variant: "flag_5v5",
+      players: [
+        { id: "Q", x: 0, y: -3, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "Z", x: 10, y: 0, team: "O" },
+        { id: "H", x: 5, y: -1, team: "O" },
+        { id: "A", x: 7, y: -1, team: "O" },
+      ],
+      routes: [],
+    };
     const errors = validateColorClash(diagram);
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(/@H.*@S|@S.*@H/);
+    expect(errors[0]).toMatch(/@H.*@A|@A.*@H/);
     expect(errors[0]).toMatch(/yellow/i);
   });
 
@@ -584,12 +605,12 @@ describe("validatePlayContent — aggregator", () => {
           { id: "Q", x: 0, y: -3, team: "O" },
           { id: "C", x: 0, y: 0, team: "O" },
           { id: "H", x: 5, y: -1, team: "O" },
-          { id: "S", x: 7, y: -1, team: "O" }, // clash with H
+          { id: "A", x: 7, y: -1, team: "O" }, // clash with H (both SLOT → yellow)
         ],
         routes: [
           { from: "C", path: [[3, 2]] },
           { from: "H", path: [[5, 4]] },
-          { from: "S", path: [[7, 4]] },
+          { from: "A", path: [[7, 4]] },
         ],
       },
       "flag_5v5",

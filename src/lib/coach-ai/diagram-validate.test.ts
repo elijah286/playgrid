@@ -1543,10 +1543,13 @@ describe("validateDiagrams — center eligibility (7v7 vs 5v5)", () => {
 });
 
 describe("validateDiagrams — color-clash gate (no two skill players share a derived color)", () => {
-  it("REJECTS a play with two slot carriers (H + S both rendering yellow)", () => {
-    // Reproduces 2026-05-03 coach feedback (post-convention rewrite):
-    // slot family (S/A/H/F-as-WR) all derive yellow under the high-
-    // contrast role-keyed defaults, so two slots in one play clash.
+  it("ACCEPTS a play with @H + @S (H yellow, S purple — distinct hues after 2026-05-20 split)", () => {
+    // Originally REJECTED — Cal couldn't save Four Verticals / Levels /
+    // Drive / Curl-Flat in 7v7 because both seam-runners H + S derived
+    // yellow under the unified SLOT group. Split @S off into SLOT_S
+    // (purple) so plays that need two inside slots render distinctly.
+    // Reproduces 2026-05-20 coach feedback (6-play install, 4 plays
+    // failed save with "color clash — @H, @S all render yellow").
     const fence = makeFence({
       title: "Trips Right Stick",
       variant: "flag_5v5",
@@ -1568,11 +1571,13 @@ describe("validateDiagrams — color-clash gate (no two skill players share a de
       variant: "flag_5v5",
       lastPlaceDefense: null,
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    const clashError = result.errors.find((e) => /color clash/i.test(e));
-    expect(clashError).toBeDefined();
-    expect(clashError).toMatch(/yellow/);
+    if (!result.ok) {
+      // Other rules (roster, route geometry) may legitimately fail;
+      // pin only that no color clash fires for H + S.
+      expect(result.errors.find((e) => /color clash/i.test(e))).toBeUndefined();
+    } else {
+      expect(result.ok).toBe(true);
+    }
   });
 
   it("REJECTS H + H2 (both derive to yellow under the slot family)", () => {

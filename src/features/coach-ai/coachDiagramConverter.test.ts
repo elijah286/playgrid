@@ -230,13 +230,17 @@ describe("player color routing — role-keyed convention", () => {
     expect(colorFor("Y")).toBe("#22C55E");
   });
 
-  it("slot family (S, A, H, F-as-WR) all → yellow (#FACC15)", () => {
-    expect(colorFor("S")).toBe("#FACC15");
+  it("slot family (A, H, F-as-WR) → yellow (#FACC15); @S splits off to purple", () => {
     expect(colorFor("A")).toBe("#FACC15");
     expect(colorFor("H")).toBe("#FACC15");
     expect(colorFor("H2")).toBe("#FACC15");
     expect(colorFor("F")).toBe("#FACC15"); // F without role=RB is a slot
     expect(colorFor("F2")).toBe("#FACC15");
+    // @S → purple (#A855F7) after the 2026-05-20 SLOT_S split, so 7v7
+    // plays with both H and S render distinctly. See the SLOT_S group
+    // entry in DERIVED_GROUP_HEX for the source of truth.
+    expect(colorFor("S")).toBe("#A855F7");
+    expect(colorFor("S2")).toBe("#A855F7");
   });
 
   it("F with role=RB → orange (lone back in 7v7 default formation)", () => {
@@ -286,13 +290,22 @@ describe("derivedColorGroupForLabel — semantic groups", () => {
     expect(derivedColorGroupForLabel("Z")).toBe("Z");
   });
 
-  it("collapses S, A, H, and F (no role) — plus digit-suffixed variants — into the SLOT group (yellow)", () => {
-    expect(derivedColorGroupForLabel("S")).toBe("SLOT");
+  it("collapses A, H, and F (no role) — plus digit-suffixed H variants — into the SLOT group (yellow)", () => {
     expect(derivedColorGroupForLabel("A")).toBe("SLOT");
     expect(derivedColorGroupForLabel("H")).toBe("SLOT");
     expect(derivedColorGroupForLabel("H2")).toBe("SLOT");
     expect(derivedColorGroupForLabel("F")).toBe("SLOT");
     expect(derivedColorGroupForLabel("F2")).toBe("SLOT");
+  });
+
+  it("@S splits off into SLOT_S (purple) so 7v7 plays with both H and S render distinctly", () => {
+    // Surfaced 2026-05-20: a coach asked Cal to install a 6-play
+    // package; 4 of them (Drive, Curl-Flat, Four Verticals, Levels)
+    // failed the save-time color-clash validator because @H and @S
+    // both derived yellow. Split @S into its own group so both
+    // seam-runners are visually distinct without coach intervention.
+    expect(derivedColorGroupForLabel("S")).toBe("SLOT_S");
+    expect(derivedColorGroupForLabel("S2")).toBe("SLOT_S");
   });
 
   it("collapses B, HB, RB, and F-with-role-RB into the RB group (purple)", () => {

@@ -86,7 +86,7 @@ export function validateColorClash(diagram: CoachDiagram): string[] {
       ? `Pick one of ${ids.split(", ")[0]} or ${ids.split(", ")[1]} and either (a) relabel it so it derives a different color (e.g. swap a second slot @H to a distinct skill label like @Y for green, or use a back label like @B / @HB for orange), or (b) call revise_play with set_player_color: "${unusedNames[0]}" on one of them. Unused palette colors here: ${unusedNames.join(", ")}.`
       : `Override one with revise_play set_player_color, or relabel for color variety. Every standard palette color is already in use.`;
     errors.push(
-      `color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from role+label (QB white, C purple, RB/FB orange, TE green, X red, Z blue, Y green, slot yellow), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
+      `color clash — ${ids} all render ${colorName} (${hex}). The auto-renderer derives token colors from role+label (QB white, C green, RB/FB orange, TE green, X red, Z blue, Y green, H/A/F yellow, S purple), and two skill-position players sharing a color is visually indistinguishable on the diagram. ${suggestion}`,
     );
   }
   return errors;
