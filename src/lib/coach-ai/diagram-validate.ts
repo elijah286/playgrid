@@ -457,9 +457,12 @@ export function validateDiagrams(opts: {
    *  source for both the concept-claim gate (the prior fence was
    *  presumably catalog-correct) and the modify-not-regenerate gate. */
   modifyPlayRouteCalled?: boolean;
-  /** True if add_defense_to_play ran ok this turn. Same role as
-   *  modify_play_route — surgical-modify path that preserves prior
-   *  offense. */
+  /** True if compose_defense ran ok this turn (with the on_play arg,
+   *  i.e. as an overlay). Same role as modify_play_route — surgical
+   *  defense overlay that byte-preserves the prior offense (Rule 11).
+   *  Field name retained for backward compat with callers; the legacy
+   *  add_defense_to_play tool was removed 2026-05-20 in favor of
+   *  compose_defense as the single overlay path. */
   addDefenseToPlayCalled?: boolean;
   /** True iff the prior assistant turn contained a ```play fence.
    *  Together with the modify-tool flags, this gates the
@@ -604,11 +607,11 @@ export function validateDiagrams(opts: {
     opts.placeOffenseCalled !== true   // legitimate formation change
   ) {
     errors.push(
-      `prior turn had a play diagram, you emitted a new diagram, but you did NOT call modify_play_route or add_defense_to_play this turn. ` +
+      `prior turn had a play diagram, you emitted a new diagram, but you did NOT call modify_play_route or compose_defense this turn. ` +
       `That means you regenerated from scratch instead of surgically editing — every regeneration in production has scrambled the play (different formation, swapped roles, dropped players, redrawn routes). ` +
       `Use the surgical tools: ` +
       `(a) For a single-route change ("make the drag deeper", "change @Z to a post", "deepen the slant"), call \`modify_play_route\` with the prior \`\`\`play fence VERBATIM as \`prior_play_fence\`. ` +
-      `(b) For adding a defense overlay ("show this vs Cover 3", "add the defense"), call \`add_defense_to_play\` with the prior fence. ` +
+      `(b) For adding a defense overlay ("show this vs Cover 3", "add the defense"), call \`compose_defense\` with the prior fence as \`on_play\`. ` +
       `(c) The coach genuinely wanted a fresh play? They'll say so explicitly ("show me a new play", "draw a different concept") — and the gate bypasses on those phrases. If you read the request as "fresh play" but the gate fired, the request was actually an edit and you should use modify_play_route.`,
     );
   }
@@ -737,8 +740,7 @@ export function validateDiagrams(opts: {
     //
     // Specifically: the new fence's offense players[] must match the
     // prior fence's offense players[] in (id, x, y, team). Defense
-    // can differ (compose_defense / add_defense_to_play legitimately
-    // replaces it). Bypassed when:
+    // can differ (compose_defense legitimately replaces it). Bypassed when:
     //   - The user explicitly asked for a fresh play.
     //   - place_offense ran this turn (legitimate formation change).
     if (
@@ -1061,7 +1063,7 @@ export function validateDiagrams(opts: {
         ) {
           errors.push(
             `${tag}diagram claims catalog concept(s) ${claimedConcepts.map((c) => `"${c}"`).join(", ")} ` +
-            `but you did NOT call get_concept_skeleton, modify_play_route, or add_defense_to_play this turn. ` +
+            `but you did NOT call get_concept_skeleton, modify_play_route, or compose_defense this turn. ` +
             `Hand-authoring named concepts produces broken plays (e.g. Mesh with both drags at the same depth, Flood with routes scattered to both sides). ` +
             `The skeleton tool returns a canonical fence with the concept's required depths and player roles already correct — call \`get_concept_skeleton({ concept: "${claimedConcepts[0]}" })\` and drop the returned fence VERBATIM. ` +
             `If the concept is genuinely off-catalog (no entry in CONCEPT_CATALOG), drop the concept name from the title and prose so this gate doesn't fire.`,

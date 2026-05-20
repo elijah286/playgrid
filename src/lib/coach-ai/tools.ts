@@ -4,7 +4,7 @@ import { logCoachAiRefusal, logCoachAiKbMiss } from "./feedback-log";
 import type { ToolDef } from "./llm";
 import type { PlaybookSettings } from "@/domain/playbook/settings";
 // Top-level imports for surgical-modify tools (modify_play_route,
-// add_defense_to_play, computeDefenseAlignment helper). Other tools
+// compose_defense, computeDefenseAlignment helper). Other tools
 // in this file use require() for lazy-loading; the surgical-modify
 // path is hot enough that eager-loading these is fine, and the import
 // form resolves cleanly under vitest's @/ alias (require's don't).
@@ -20,7 +20,12 @@ import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 import { applyRouteMods, type RouteMod } from "./play-mutations";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
-import { playSpecToCoachDiagram } from "@/domain/play/specRenderer";
+import { playSpecToCoachDiagram, reactivePathFor } from "@/domain/play/specRenderer";
+import {
+  findReactorPattern,
+  detectConceptFromTitle,
+  type ReactorAssignment,
+} from "@/domain/play/defensiveReactors";
 import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
 import { loadPlaybookSettings } from "./play-tools";
 
@@ -79,10 +84,10 @@ export type CoachAiTool = {
 };
 
 // ── Shared helper: compute defensive alignment ─────────────────────────────
-// Used by both place_defense and add_defense_to_play. Returns the catalog
-// (or synthesized) alignment data plus a flag indicating whether the result
+// Used by place_defense and compose_defense. Returns the catalog (or
+// synthesized) alignment data plus a flag indicating whether the result
 // came from the catalog or the synthesizer fallback. Encapsulating the
-// catalog-OR-synthesize-OR-error logic in one place keeps the two tools'
+// catalog-OR-synthesize-OR-error logic in one place keeps tools'
 // behavior consistent — fixing a defensive-alignment bug now fixes both
 // tools by construction.
 
@@ -781,132 +786,12 @@ const modify_play_route: CoachAiTool = {
   },
 };
 
-const add_defense_to_play: CoachAiTool = {
-  def: {
-    name: "add_defense_to_play",
-    description:
-      "Overlay a defensive scheme (front + coverage) onto an EXISTING play diagram while preserving ALL offense (players, routes, zones from offense) untouched. Use this for ANY \"show this play vs Cover X\" / \"add the defense to this play\" / \"how does Tampa 2 defend this\" request — instead of re-authoring the play with both sides, this tool overlays defense surgically. " +
-      "Inputs: the prior play fence JSON (copied verbatim) plus front + coverage + optional strength. Any existing defenders in the prior fence are STRIPPED and replaced with the new scheme; the offense is identical, byte-for-byte, in the output. " +
-      "Returns the FULL updated play fence JSON ready to drop verbatim.",
-    input_schema: {
-      type: "object",
-      properties: {
-        prior_play_fence: {
-          type: "string",
-          description:
-            "The previous diagram JSON, copied verbatim from the most recent ```play fence in the chat. Offense players + routes are preserved exactly; any defense (team:\"D\") in this input is replaced.",
-        },
-        front: {
-          type: "string",
-          description:
-            "Defensive front name. Examples: \"4-3 Over\", \"3-4\", \"Nickel (4-2-5)\", \"7v7 Zone\", \"5v5 Man\".",
-        },
-        coverage: {
-          type: "string",
-          description: "Coverage name. Examples: \"Cover 1\", \"Cover 2\", \"Cover 3\", \"Cover 4 (Quarters)\".",
-        },
-        strength: {
-          type: "string",
-          enum: ["left", "right"],
-          description:
-            "Side the offensive strength is on (defaults to right). The defense rotates toward strength.",
-        },
-      },
-      required: ["prior_play_fence", "front", "coverage"],
-      additionalProperties: false,
-    },
-  },
-  async handler(input, ctx) {
-    const priorJson = typeof input.prior_play_fence === "string" ? input.prior_play_fence.trim() : "";
-    const front = typeof input.front === "string" ? input.front.trim() : "";
-    const coverage = typeof input.coverage === "string" ? input.coverage.trim() : "";
-    if (!priorJson) return { ok: false, error: "prior_play_fence is required." };
-    if (!front || !coverage) return { ok: false, error: "front and coverage are required." };
-    const strength: "left" | "right" = input.strength === "left" ? "left" : "right";
-
-    let fence: Record<string, unknown>;
-    try {
-      fence = JSON.parse(priorJson);
-    } catch (e) {
-      return { ok: false, error: `Could not parse prior_play_fence as JSON: ${(e as Error).message}` };
-    }
-
-    const variantStr = typeof fence.variant === "string" ? fence.variant : ctx.sportVariant ?? "flag_7v7";
-    const alignment = computeDefenseAlignment(variantStr, front, coverage, strength);
-    if (!alignment.ok) return alignment;
-
-    // Strip any existing defenders from the prior fence — the new scheme
-    // replaces them. Offense (team !== "D") and the rest of the fence are
-    // preserved unchanged.
-    const playersArr = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
-    const offenseOnly = playersArr.filter((p) => p.team !== "D");
-
-    // Suffix duplicate role labels (two DTs → DT, DT2; two CBs → CB, CB2)
-    // so every defender has a unique diagram id.
-    const seenDefIds = new Map<string, number>();
-    const newDefenders = alignment.players.map((p) => {
-      const count = (seenDefIds.get(p.id) ?? 0) + 1;
-      seenDefIds.set(p.id, count);
-      return {
-        id: count === 1 ? p.id : `${p.id}${count}`,
-        role: p.id,
-        x: p.x,
-        y: p.y,
-        team: "D" as const,
-      };
-    });
-
-    const isMan = alignment.manCoverage;
-    // Emit only the zones that some defender actually drops into (per
-    // the catalog's per-defender assignments, surfaced via ownerLabel).
-    // Cover 1 keeps the FS deep-middle zone; Cover 0 emits nothing.
-    const newZones = alignment.zones
-      .filter((z) => z.ownerLabel)
-      .map((z) => ({
-        kind: z.kind,
-        center: z.center,
-        size: z.size,
-        label: z.label,
-        ownerLabel: z.ownerLabel,
-      }));
-
-    // Compose new fence: offense unchanged + new defenders + new zones (or
-    // empty zones for man coverage). Preserve title/variant/focus/etc. from
-    // the prior fence so the chat header doesn't churn.
-    const newFence: Record<string, unknown> = {
-      ...fence,
-      players: [...offenseOnly, ...newDefenders],
-    };
-    if (isMan) {
-      // Man coverage: clear zones array (or leave it absent).
-      delete newFence.zones;
-    } else {
-      newFence.zones = newZones;
-    }
-
-    const fenceJson = JSON.stringify(newFence, null, 2);
-
-    const summaryLines: string[] = [
-      `Added "${alignment.front} / ${alignment.coverage}" defense (${alignment.variant}, strength=${strength}) to the existing play. Offense preserved verbatim — only defenders + zones changed.`,
-      alignment.description,
-    ];
-    if (isMan) {
-      summaryLines.push(
-        "",
-        "MAN COVERAGE: no zones drawn. If the coach wants assignment lines, " +
-        "use modify_play_route to add a route on each defender to their matched receiver.",
-      );
-    }
-
-    return {
-      ok: true,
-      result:
-        `${summaryLines.join("\n")}\n\n` +
-        `**PLAY FENCE — drop VERBATIM into your reply. Offense is byte-for-byte identical to the prior diagram; only defense changed:**\n` +
-        `\`\`\`play\n${fenceJson}\n\`\`\``,
-    };
-  },
-};
+// add_defense_to_play (legacy) was removed 2026-05-20. compose_defense with
+// the `on_play` argument is the single overlay path now (Rule 11). The
+// legacy tool ran the same merge logic but bypassed the byte-preservation
+// gate — it was the call path behind the "offense swapped when adding
+// defense" regression. compose_defense's byte-preserve guard makes that
+// failure mode structurally impossible.
 
 // ── compose_play / revise_play (Pillars 1 + 2 of the 2026-05-02 refactor) ─
 // These tools replace the freehand-fence-emit path for catalog plays.
@@ -1125,15 +1010,150 @@ const revise_play: CoachAiTool = {
   },
 };
 
+// ── Offense byte-preservation gate (Rule 11) ─────────────────────────────
+// When compose_defense overlays onto an existing play, offense MUST be
+// byte-identical between input and output. The sanitizer can silently
+// drop offense routes (empty paths, unknown carriers) or clamp offense
+// players (NaN coords, out-of-bounds positions); without this gate the
+// caller sees "the offensive play swapped" — the reported regression.
+// Mirrors the snapshot/verify pattern in applyRouteMods (play-mutations.ts).
+type OffensePlayerRow = { id: string; x: number; y: number; team: string };
+type OffenseRouteRow = { from: string; pathJson: string };
+type OffenseSnapshot = {
+  players: OffensePlayerRow[];
+  routes: OffenseRouteRow[];
+};
+
+function snapshotOffense(
+  offensePlayers: Array<Record<string, unknown>>,
+  allRoutes: Array<Record<string, unknown>>,
+): OffenseSnapshot {
+  const players = offensePlayers
+    .map((p) => ({
+      id: typeof p.id === "string" ? p.id : "",
+      x: typeof p.x === "number" ? p.x : NaN,
+      y: typeof p.y === "number" ? p.y : NaN,
+      team: typeof p.team === "string" ? p.team : "O",
+    }))
+    .filter((p) => p.id !== "")
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const offenseIds = new Set(players.map((p) => p.id));
+  const routes = allRoutes
+    .filter((r) => typeof r.from === "string" && offenseIds.has(r.from as string))
+    .map((r) => ({
+      from: r.from as string,
+      // Stringify the path so deep equality is a single string compare; the
+      // sanitizer's clamp would produce a different string.
+      pathJson: JSON.stringify(r.path ?? null),
+    }))
+    .sort((a, b) => a.from.localeCompare(b.from));
+  return { players, routes };
+}
+
+/**
+ * Apply a reactor pattern to a fence-shape object. Adds `read_and_react`
+ * defender routes (with route_kind="react_<behavior>" and startDelaySec)
+ * for each reactor in the pattern, using `reactivePathFor` for geometry.
+ *
+ * Returns the new routes array (defender routes appended) and the cues
+ * Cal can include in the defense prose.
+ *
+ * Defender-id resolution: the catalog references defenders by their
+ * canonical id ("CB", "FS"). When the alignment has duplicates (two CBs),
+ * `uniqueDefenders` suffixes them ("CB", "CB2"). We pick the defender
+ * closest to the trigger's x position so the right-side CB carries the
+ * right-side route. If no defender matches the id at all, the reactor
+ * is skipped (with a soft warning in the cues).
+ */
+type FencePlayer = { id: string; x: number; y: number; team: string };
+type FenceRoute = { from: string; path: [number, number][]; tip: string; startDelaySec?: number; route_kind?: string };
+
+function applyReactorPattern(
+  reactors: ReactorAssignment[],
+  defenders: FencePlayer[],
+  offense: FencePlayer[],
+): { routes: FenceRoute[]; cues: string[]; skipped: string[] } {
+  const newRoutes: FenceRoute[] = [];
+  const cues: string[] = [];
+  const skipped: string[] = [];
+  for (const r of reactors) {
+    // Find matching defender(s). When duplicates exist, pick the one
+    // closest in x to the trigger so strong-side reactors land on the
+    // strong-side defender.
+    const candidates = defenders.filter((d) => d.id === r.defender || d.id.startsWith(r.defender));
+    if (candidates.length === 0) {
+      skipped.push(`reactor ${r.defender}→${r.trigger}: defender not in the alignment`);
+      continue;
+    }
+    const trigger = offense.find((o) => o.id === r.trigger);
+    if (!trigger) {
+      skipped.push(`reactor ${r.defender}→${r.trigger}: trigger player not in the offense`);
+      continue;
+    }
+    // Pick the defender closest to the trigger's x (strong-side bias).
+    const defender = candidates.length === 1
+      ? candidates[0]
+      : candidates.reduce((best, c) =>
+          Math.abs(c.x - trigger.x) < Math.abs(best.x - trigger.x) ? c : best,
+        );
+    // reactivePathFor only reads x/y/id off the players; FencePlayer carries
+    // those plus a stringly-typed team field. Cast through unknown to satisfy
+    // the stricter CoachDiagramPlayer signature (team is "O"|"D"|undefined there).
+    const path = reactivePathFor(
+      r.behavior,
+      defender as unknown as Parameters<typeof reactivePathFor>[1],
+      trigger as unknown as Parameters<typeof reactivePathFor>[2],
+    );
+    if (path.length === 0) {
+      skipped.push(`reactor ${defender.id}→${trigger.id}: empty path`);
+      continue;
+    }
+    newRoutes.push({
+      from: defender.id,
+      path,
+      tip: "arrow",
+      startDelaySec: 0.6,
+      route_kind: `react_${r.behavior}`,
+    });
+    cues.push(`@${defender.id} → ${r.cue}`);
+  }
+  return { routes: newRoutes, cues, skipped };
+}
+
+function compareOffenseSnapshots(before: OffenseSnapshot, after: OffenseSnapshot): string | null {
+  if (before.players.length !== after.players.length) {
+    return `offense player count changed (${before.players.length} → ${after.players.length})`;
+  }
+  for (let i = 0; i < before.players.length; i++) {
+    const a = before.players[i];
+    const b = after.players[i];
+    if (a.id !== b.id) return `offense player set changed ("${a.id}" → "${b.id}")`;
+    if (a.team !== b.team) return `@${a.id}'s team changed ("${a.team}" → "${b.team}")`;
+    if (Math.abs(a.x - b.x) > 0.001 || Math.abs(a.y - b.y) > 0.001) {
+      return `@${a.id}'s position changed ((${a.x}, ${a.y}) → (${b.x}, ${b.y}))`;
+    }
+  }
+  if (before.routes.length !== after.routes.length) {
+    return `offense route count changed (${before.routes.length} → ${after.routes.length})`;
+  }
+  for (let i = 0; i < before.routes.length; i++) {
+    const a = before.routes[i];
+    const b = after.routes[i];
+    if (a.from !== b.from) return `offense route set changed (carrier "${a.from}" → "${b.from}")`;
+    if (a.pathJson !== b.pathJson) return `@${a.from}'s route path changed`;
+  }
+  return null;
+}
+
 // ── compose_defense (Pillar 4 — symmetric defender pipeline) ──────────────
-// One tool replaces both place_defense (defense-only) and
+// One tool replaces both place_defense (defense-only) and the now-removed
 // add_defense_to_play (overlay-on-play). The unified shape:
 //   - omit on_play  → returns a defense-only fence
 //   - pass on_play  → overlays defense onto the prior play, preserving
-//                     offense byte-for-byte
+//                     offense byte-for-byte (enforced by the snapshot/
+//                     compare gate above, Rule 11).
 // Sanitized output guarantees zones never paint the whole field
-// (image-3 case from 2026-05-02). Old tools stay as legacy aliases so
-// existing chats continue to work.
+// (image-3 case from 2026-05-02).
 const compose_defense: CoachAiTool = {
   def: {
     name: "compose_defense",
@@ -1168,7 +1188,7 @@ const compose_defense: CoachAiTool = {
     const alignment = computeDefenseAlignment(variant, front, coverage, strength);
     if (!alignment.ok) return alignment;
 
-    // Suffix duplicate ids — same logic as place_defense / add_defense_to_play.
+    // Suffix duplicate ids — same logic as place_defense.
     const seenIds = new Map<string, number>();
     const uniqueDefenders = alignment.players.map((p) => {
       const count = (seenIds.get(p.id) ?? 0) + 1;
@@ -1188,6 +1208,9 @@ const compose_defense: CoachAiTool = {
       : alignment.zones.map((z) => ({ kind: z.kind, center: z.center, size: z.size, label: z.label }));
 
     let fence: Record<string, unknown>;
+    // Snapshot of offense players + routes from the prior fence, used to
+    // enforce Rule 11 byte-preservation. Populated only on the overlay path.
+    let offenseSnapshot: OffenseSnapshot | null = null;
     if (onPlayRaw) {
       try {
         fence = JSON.parse(onPlayRaw);
@@ -1196,6 +1219,9 @@ const compose_defense: CoachAiTool = {
       }
       const priorPlayers = Array.isArray(fence.players) ? (fence.players as Array<Record<string, unknown>>) : [];
       const offenseOnly = priorPlayers.filter((p) => p.team !== "D");
+      // Snapshot offense BEFORE merging defenders so the post-sanitize check
+      // catches any mutation the sanitizer applies on the way out.
+      offenseSnapshot = snapshotOffense(offenseOnly, Array.isArray(fence.routes) ? fence.routes as Array<Record<string, unknown>> : []);
       fence = {
         ...fence,
         players: [...offenseOnly, ...uniqueDefenders],
@@ -1217,10 +1243,73 @@ const compose_defense: CoachAiTool = {
     // Sanitize — drops oversize zones and any other corrupt geometry
     // before the fence reaches the coach.
     const sanitized = sanitizeCoachDiagram(fence as import("@/features/coach-ai/coachDiagramConverter").CoachDiagram, variant);
+
+    // Rule 11 gate: offense must be byte-preserved across the overlay. The
+    // sanitizer can silently drop offense routes (empty paths, unknown
+    // carriers) or clamp offense player positions; without this check, a
+    // corrupted prior fence would surface as "the offensive play swapped"
+    // — exactly the bug this gate is designed to prevent. Defense is
+    // allowed to mutate (it was newly generated and the sanitizer is the
+    // defense's correctness gate, per Rule 10).
+    if (offenseSnapshot) {
+      const offenseAfter = snapshotOffense(
+        sanitized.diagram.players.filter((p) => p.team !== "D") as Array<Record<string, unknown>>,
+        sanitized.diagram.routes as Array<Record<string, unknown>>,
+      );
+      const violation = compareOffenseSnapshots(offenseSnapshot, offenseAfter);
+      if (violation) {
+        const warningSummary = sanitized.warnings.length > 0
+          ? ` Sanitizer warnings: ${sanitized.warnings.map((w) => `[${w.code}] ${w.message}`).join("; ")}.`
+          : "";
+        return {
+          ok: false,
+          error:
+            `compose_defense would not byte-preserve the offense (Rule 11 violation): ${violation}.${warningSummary} ` +
+            `The upstream offense fence has corruption the sanitizer would clean up — fix the offense first, ` +
+            `then re-run the defense overlay.`,
+        };
+      }
+    }
+
+    // Reactor catalog application (Fix 3, Rule 3): when overlaying onto a
+    // known offensive concept, populate key defender movements automatically
+    // so the diagram TEACHES THE READ — not just where defenders line up.
+    // Only fires on the overlay path; standalone defense has no offense to
+    // react to. Catalog lookup is best-effort: missing concepts skip the
+    // reactor step (defenders stay static in their zones).
+    let reactorRoutes: FenceRoute[] = [];
+    let reactorCues: string[] = [];
+    let reactorPatternName: string | null = null;
+    if (onPlayRaw) {
+      const priorTitle = typeof (JSON.parse(onPlayRaw) as { title?: unknown }).title === "string"
+        ? (JSON.parse(onPlayRaw) as { title: string }).title
+        : undefined;
+      const concept = detectConceptFromTitle(priorTitle);
+      if (concept) {
+        const pattern = findReactorPattern(variant, alignment.coverage, concept);
+        if (pattern && pattern.reactors.length > 0) {
+          // Pull the freshly-sanitized players for reactor matching. Offense
+          // is the prior-fence offense; defenders are the just-added defenders
+          // (post-sanitize so we use the same ids the rendered fence will).
+          const sanitizedPlayers = sanitized.diagram.players as FencePlayer[];
+          const offensePlayers = sanitizedPlayers.filter((p) => p.team !== "D");
+          const defenderPlayers = sanitizedPlayers.filter((p) => p.team === "D");
+          const applied = applyReactorPattern(pattern.reactors, defenderPlayers, offensePlayers);
+          reactorRoutes = applied.routes;
+          reactorCues = applied.cues;
+          reactorPatternName = `${pattern.coverage} vs ${pattern.concept}`;
+        }
+      }
+    }
+
+    const finalRoutes = [
+      ...(sanitized.diagram.routes ?? []),
+      ...reactorRoutes,
+    ];
     const finalFence = {
       ...fence,
       players: sanitized.diagram.players,
-      routes: sanitized.diagram.routes,
+      routes: finalRoutes,
       zones: sanitized.diagram.zones,
     };
     const fenceJson = JSON.stringify(finalFence, null, 2);
@@ -1232,11 +1321,14 @@ const compose_defense: CoachAiTool = {
       ? `\n\nSanitizer cleaned up ${sanitized.warnings.length} corrupt element(s) before output:\n${sanitized.warnings.map((w) => `  • [${w.code}] ${w.message}`).join("\n")}`
       : "";
     const manNote = isMan ? `\n\nMAN COVERAGE: zones omitted. If the coach wants assignment lines, use \`set_defender_assignment\` per defender.` : "";
+    const reactorNote = reactorPatternName
+      ? `\n\n**Reactor pattern (${reactorPatternName}):** ${reactorCues.length} key defender${reactorCues.length === 1 ? "" : "s"} reacting to the offensive concept. Include these cues in your defense prose so the coach knows the teaching points:\n${reactorCues.map((c) => `  • ${c}`).join("\n")}`
+      : "";
 
     return {
       ok: true,
       result:
-        `${summary}\n${alignment.description}${manNote}${sanitizerNote}\n\n` +
+        `${summary}\n${alignment.description}${manNote}${sanitizerNote}${reactorNote}\n\n` +
         `**PLAY FENCE — drop VERBATIM into your reply between \`\`\`play and \`\`\`:**\n` +
         `\`\`\`play\n${fenceJson}\n\`\`\``,
     };
@@ -2581,7 +2673,10 @@ const rsvp_event: CoachAiTool = {
   },
 };
 
-export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, compose_defense, place_defense, place_offense, modify_play_route, add_defense_to_play, set_defender_assignment, flag_outside_kb, flag_refusal];
+// Lazy import to avoid a circular dependency through the propose tool
+// (which imports CoachAiTool from this file).
+import { propose_save_defense_play } from "./save-defense-tools";
+export const BASE_TOOLS: CoachAiTool[] = [search_kb, list_my_playbooks, create_playbook, get_route_template, get_concept_skeleton, compose_play, revise_play, compose_defense, place_defense, place_offense, modify_play_route, set_defender_assignment, propose_save_defense_play, flag_outside_kb, flag_refusal];
 
 // Loaded lazily to avoid a circular import (user-preferences imports CoachAiTool).
 function userPreferenceTools(): CoachAiTool[] {

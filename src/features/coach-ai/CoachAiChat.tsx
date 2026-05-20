@@ -19,6 +19,8 @@ import {
 } from "@/app/actions/coach-ai-feedback";
 import { getCoachCalUpgradeBannerEnabledAction } from "@/app/actions/admin-coach-cal-banner";
 import { commitPlaybookNoteProposalAction } from "@/app/actions/coach-ai-playbook-notes";
+import { commitSaveDefenseProposalAction } from "@/app/actions/coach-ai-save-defense";
+import type { SaveDefenseProposal } from "@/lib/coach-ai/save-defense-tools";
 import { CoachAiIcon } from "./CoachAiIcon";
 import { AssistantMessageWithFeedback } from "./AssistantMessageWithFeedback";
 import { AssistantMessage } from "./AssistantMessage";
@@ -733,6 +735,7 @@ export function CoachAiChat({
           const finalToolCalls = (payload.toolCalls as string[] | undefined) ?? seenToolCalls;
           const chips = (payload.playbookChips as PlaybookChip[] | null | undefined) ?? null;
           const proposals = (payload.noteProposals as NoteProposal[] | null | undefined) ?? null;
+          const defenseProposals = (payload.saveDefenseProposals as SaveDefenseProposal[] | null | undefined) ?? null;
           const mutated = payload.mutated === true;
           setTurns((cur) => [
             ...cur,
@@ -743,6 +746,8 @@ export function CoachAiChat({
               playbookChips: chips,
               noteProposals: proposals,
               noteProposalState: null,
+              saveDefenseProposals: defenseProposals,
+              saveDefenseProposalState: null,
             },
           ]);
           savedFinalTurn = true;
@@ -992,6 +997,33 @@ export function CoachAiChat({
                                           ...tt,
                                           noteProposalState: {
                                             ...(tt.noteProposalState ?? {}),
+                                            [p.proposalId]: next,
+                                          },
+                                        }
+                                      : tt,
+                                  ),
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {t.role === "assistant" && t.saveDefenseProposals && t.saveDefenseProposals.length > 0 && playbookId && (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {t.saveDefenseProposals.map((p) => (
+                            <SaveDefensePlayChip
+                              key={p.proposalId}
+                              proposal={p}
+                              playbookId={playbookId}
+                              state={t.saveDefenseProposalState?.[p.proposalId] ?? null}
+                              onUpdate={(next) =>
+                                setTurns((cur) =>
+                                  cur.map((tt, j) =>
+                                    j === i && tt.role === "assistant"
+                                      ? {
+                                          ...tt,
+                                          saveDefenseProposalState: {
+                                            ...(tt.saveDefenseProposalState ?? {}),
                                             [p.proposalId]: next,
                                           },
                                         }
@@ -1320,6 +1352,88 @@ function NoteProposalChip({
         >
           <Check className="size-3" />
           {pending ? "Saving…" : action}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SaveDefensePlayChip({
+  proposal,
+  playbookId,
+  state,
+  onUpdate,
+}: {
+  proposal: SaveDefenseProposal;
+  playbookId: string;
+  state: { status: "saved"; playId: string } | { status: "dismissed" } | null;
+  onUpdate: (next: { status: "saved"; playId: string } | { status: "dismissed" }) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setPending(true);
+    setError(null);
+    const res = await commitSaveDefenseProposalAction(playbookId, proposal);
+    setPending(false);
+    if (res.ok) {
+      onUpdate({ status: "saved", playId: res.playId });
+    } else {
+      setError(res.error);
+    }
+  }
+
+  if (state?.status === "saved") {
+    return (
+      <a
+        href={`/plays/${state.playId}`}
+        className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900 ring-1 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-100 dark:ring-emerald-900"
+      >
+        <Check className="size-3.5 shrink-0" />
+        <span className="truncate">
+          Saved "{proposal.suggestedName}" — open the new play
+        </span>
+      </a>
+    );
+  }
+
+  if (state?.status === "dismissed") return null;
+
+  return (
+    <div className="rounded-lg border border-emerald-300 bg-emerald-50/60 p-2.5 text-xs ring-1 ring-emerald-200/60 dark:border-emerald-700 dark:bg-emerald-950/30">
+      <div className="flex items-start gap-2">
+        <BookOpen className="mt-0.5 size-3.5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-emerald-900 dark:text-emerald-100">
+            Save as new defensive play: "{proposal.suggestedName}"
+          </div>
+          <div className="mt-0.5 line-clamp-2 text-emerald-800/80 dark:text-emerald-200/70">
+            {proposal.changeSummary} (vs {proposal.offensivePlayName})
+          </div>
+          {error && (
+            <div className="mt-1 text-red-700 dark:text-red-300">{error}</div>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => onUpdate({ status: "dismissed" })}
+          disabled={pending}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-emerald-900/70 hover:bg-emerald-100/60 disabled:opacity-50 dark:text-emerald-200/70 dark:hover:bg-emerald-900/40"
+        >
+          <X className="size-3" />
+          Dismiss
+        </button>
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={pending}
+          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+        >
+          <Check className="size-3" />
+          {pending ? "Saving…" : "Save as new defensive play"}
         </button>
       </div>
     </div>

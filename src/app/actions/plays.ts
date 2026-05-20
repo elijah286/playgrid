@@ -762,6 +762,164 @@ export async function resyncDefenseVsPlayAction(defensePlayId: string) {
   return { ok: true as const, snapshot };
 }
 
+/**
+ * Create a NEW defensive play directly from a Coach Cal fence (overlay shape:
+ * offense + defense). Links it to the source offensive play via vs_play_id +
+ * vs_play_snapshot. Used by the "Save as new defensive play" chip emitted
+ * after compose_defense — the defense exists only in chat as a fence; this
+ * is what makes it a real persisted play row.
+ *
+ * Differs from installDefenseVsPlayAction (which requires an existing
+ * standalone defense play to base on) — this creates the defense play and
+ * the link in one step.
+ */
+export async function createDefensePlayFromFenceAction(args: {
+  fenceJson: string;
+  offensivePlayId: string;
+  suggestedName: string;
+  playbookId: string;
+}) {
+  const { fenceJson, offensivePlayId, suggestedName, playbookId } = args;
+  if (!hasSupabaseEnv()) {
+    return { ok: false as const, error: "Supabase is not configured." };
+  }
+  if (!fenceJson || !offensivePlayId || !suggestedName || !playbookId) {
+    return { ok: false as const, error: "fenceJson, offensivePlayId, suggestedName, and playbookId are required." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Not signed in." };
+
+  // Permission check: user must have edit access to this playbook.
+  const { data: canEdit, error: permErr } = await supabase.rpc("can_edit_playbook", { p_playbook_id: playbookId });
+  if (permErr) return { ok: false as const, error: permErr.message };
+  if (canEdit !== true) return { ok: false as const, error: "You don't have edit access to this playbook." };
+
+  // Load the offensive play so we can snapshot it onto the defense.
+  const offenseLoaded = await getPlayForEditorAction(offensivePlayId);
+  if (!offenseLoaded.ok) return { ok: false as const, error: offenseLoaded.error };
+
+  // Convert the fence JSON into a PlayDocument. The fence contains offense
+  // + defense; we strip the offense players + routes from the document so
+  // the defensive play only holds defenders (the offense lives in the
+  // vs_play_snapshot for reference). This matches what existing defensive
+  // plays in the catalog look like ("Tampa 2 vs Noah" rows).
+  let parsedFence: unknown;
+  try {
+    parsedFence = JSON.parse(fenceJson);
+  } catch (e) {
+    return { ok: false as const, error: `fenceJson is not valid JSON: ${(e as Error).message}` };
+  }
+  // Lazy import to avoid a top-level dependency on a client-side module.
+  const { coachDiagramToPlayDocument, coachDiagramSchema } = await import("@/features/coach-ai/coachDiagramConverter");
+  const parseResult = coachDiagramSchema.safeParse(parsedFence);
+  if (!parseResult.success) {
+    return { ok: false as const, error: `fenceJson is not a valid CoachDiagram: ${parseResult.error.message}` };
+  }
+  // Strip offense from the diagram before converting — defense play stores
+  // defenders only; offense lives in the snapshot.
+  const diagram = parseResult.data;
+  const defenseOnlyDiagram = {
+    ...diagram,
+    players: diagram.players.filter((p) => p.team === "D"),
+    routes: (diagram.routes ?? []).filter((r) => {
+      const carrier = diagram.players.find((p) => p.id === r.from);
+      return carrier?.team === "D";
+    }),
+  };
+  let doc: PlayDocument;
+  try {
+    doc = coachDiagramToPlayDocument(defenseOnlyDiagram);
+  } catch (e) {
+    return { ok: false as const, error: `Could not convert fence to PlayDocument: ${(e as Error).message}` };
+  }
+
+  doc.metadata.coachName = suggestedName;
+  doc.metadata.playType = "defense";
+  doc.metadata.vsPlayId = offensivePlayId;
+
+  const snapshot: VsPlaySnapshot = {
+    players: offenseLoaded.document.layers.players,
+    routes: offenseLoaded.document.layers.routes,
+    lineOfScrimmageY:
+      typeof offenseLoaded.document.lineOfScrimmageY === "number"
+        ? offenseLoaded.document.lineOfScrimmageY
+        : 0.4,
+    sourceVersionId: offenseLoaded.version.id as string,
+    snapshotAt: new Date().toISOString(),
+    sourceName: offenseLoaded.document.metadata.coachName || "Untitled",
+    sourceFormationName: offenseLoaded.document.metadata.formation ?? "",
+  };
+  doc.metadata.vsPlaySnapshot = snapshot;
+
+  // Wristband + sort order — same logic as installDefenseVsPlayAction.
+  const { data: codeRows } = await supabase
+    .from("plays")
+    .select("wristband_code")
+    .eq("playbook_id", playbookId);
+  const maxCode = (codeRows ?? [])
+    .map((r) => parseInt((r.wristband_code as string | null) ?? "", 10))
+    .filter((n): n is number => Number.isFinite(n))
+    .reduce((m, n) => Math.max(m, n), 0);
+  doc.metadata.wristbandCode = String(maxCode + 1).padStart(2, "0");
+
+  const { data: sortRow } = await supabase
+    .from("plays")
+    .select("sort_order")
+    .eq("playbook_id", playbookId)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextSort = (sortRow?.sort_order ?? -1) + 1;
+
+  const { data: play, error: playErr } = await supabase
+    .from("plays")
+    .insert({
+      playbook_id: playbookId,
+      name: doc.metadata.coachName,
+      shorthand: doc.metadata.shorthand,
+      wristband_code: doc.metadata.wristbandCode,
+      formation_name: doc.metadata.formation,
+      concept: "",
+      tags: doc.metadata.tags,
+      tag: doc.metadata.tags[0] ?? "",
+      display_abbrev: doc.metadata.sheetAbbrev,
+      group_id: null,
+      sort_order: nextSort,
+      formation_id: doc.metadata.formationId ?? null,
+      formation_tag: null,
+      play_type: "defense",
+      special_teams_unit: null,
+      vs_play_id: offensivePlayId,
+      vs_play_snapshot: snapshot as unknown as Record<string, unknown>,
+    })
+    .select("id")
+    .single();
+  if (playErr) return { ok: false as const, error: playErr.message };
+
+  const { data: ver, error: verErr } = await supabase
+    .from("play_versions")
+    .insert({
+      play_id: play.id,
+      schema_version: 2,
+      document: doc as unknown as Record<string, unknown>,
+      label: "created from chat fence",
+      created_by: user.id,
+      kind: "create",
+    })
+    .select("id")
+    .single();
+  if (verErr) return { ok: false as const, error: verErr.message };
+
+  await supabase.from("plays").update({ current_version_id: ver.id }).eq("id", play.id);
+
+  return { ok: true as const, playId: play.id as string };
+}
+
 export async function unlinkDefenseVsPlayAction(defensePlayId: string) {
   if (!hasSupabaseEnv()) {
     return { ok: false as const, error: "Supabase is not configured." };

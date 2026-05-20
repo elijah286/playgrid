@@ -17,6 +17,11 @@ export type NoteProposalSavedState =
   | { status: "saved"; documentId: string; revisionNumber: number }
   | { status: "dismissed" };
 
+/** Save state for the SaveDefenseProposal chip (Fix 4). */
+export type SaveDefenseProposalState =
+  | { status: "saved"; playId: string }
+  | { status: "dismissed" };
+
 export type CoachAiTurn =
   | { role: "user"; text: string }
   | {
@@ -27,6 +32,10 @@ export type CoachAiTurn =
       noteProposals?: NoteProposal[] | null;
       /** Map from NoteProposal.proposalId → save/dismiss state. */
       noteProposalState?: Record<string, NoteProposalSavedState> | null;
+      /** Save-defense-play proposals from propose_save_defense_play tools. */
+      saveDefenseProposals?: import("@/lib/coach-ai/save-defense-tools").SaveDefenseProposal[] | null;
+      /** Map from SaveDefenseProposal.proposalId → save/dismiss state. */
+      saveDefenseProposalState?: Record<string, SaveDefenseProposalState> | null;
     };
 
 type ChatRequest = {

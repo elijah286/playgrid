@@ -31,6 +31,7 @@ export type DoneData = {
   text: string;
   playbookChips: unknown;
   noteProposals: unknown;
+  saveDefenseProposals: unknown;
   mutated: boolean;
 };
 

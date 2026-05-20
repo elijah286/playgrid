@@ -505,8 +505,12 @@ function routeFromDefenderAction(
  * and trigger receiver. All paths anchor from the defender's position
  * (the renderer doesn't include the start node in the route's path —
  * it's added downstream from the carrier position).
+ *
+ * Exported so compose_defense in coach-ai/tools.ts can reuse the same
+ * geometry when applying the defensiveReactors catalog to a freehand
+ * CoachDiagram fence (the tool path doesn't round-trip through PlaySpec).
  */
-function reactivePathFor(
+export function reactivePathFor(
   behavior: Extract<DefenderAction, { kind: "read_and_react" }>["behavior"],
   defender: CoachDiagramPlayer,
   target: CoachDiagramPlayer,

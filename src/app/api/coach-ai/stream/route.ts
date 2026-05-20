@@ -308,6 +308,10 @@ export async function POST(req: Request): Promise<Response> {
         ),
       ]);
 
+      // NOTE: save-defense-proposals are NOT persisted to coach_ai_turns yet
+      // (no DB column). They flow through the live SSE stream only — if the
+      // coach refreshes mid-conversation, the chip is lost (Cal can re-emit
+      // by re-proposing). Adding a column is a follow-up migration.
       await completeAssistantTurn(assistantTurnId, {
         text: result.finalText,
         toolCalls: result.toolCalls,
@@ -322,6 +326,7 @@ export async function POST(req: Request): Promise<Response> {
           text: result.finalText,
           playbookChips: result.playbookChips ?? null,
           noteProposals: result.noteProposals ?? null,
+          saveDefenseProposals: result.saveDefenseProposals ?? null,
           mutated: result.mutated,
         },
       });
@@ -342,6 +347,7 @@ export async function POST(req: Request): Promise<Response> {
           text: "",
           playbookChips: null,
           noteProposals: null,
+          saveDefenseProposals: null,
           mutated: false,
         },
       });

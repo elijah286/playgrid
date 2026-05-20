@@ -797,7 +797,10 @@ describe("validateDiagrams — modify-not-regenerate gate", () => {
     expect(result.ok, result.ok ? undefined : result.errors.join(" | ")).toBe(true);
   });
 
-  it("ACCEPTS when add_defense_to_play was called this turn", () => {
+  it("ACCEPTS when compose_defense was called this turn (overlay)", () => {
+    // Field name retained for backward-compat with the validator interface;
+    // it now signals "any defense overlay tool ran" — only compose_defense
+    // since the legacy add_defense_to_play was removed 2026-05-20.
     const result = validateDiagrams({
       text: `${minimalFence}\n@X runs a slant.`,
       variant: "tackle_11",

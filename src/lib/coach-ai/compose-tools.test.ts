@@ -267,6 +267,153 @@ describe("compose_defense — unified create/overlay", () => {
     const r = await tool.handler({ front: "" }, TACKLE_CTX);
     expect(r.ok).toBe(false);
   });
+
+  it("REJECTS overlay when sanitizer would drop an offense route (Rule 11)", async () => {
+    // Rule 11 says compose_defense must byte-preserve offense when overlaying.
+    // The sanitizer can silently drop offense routes (e.g. empty path) or
+    // clamp offense players (e.g. NaN coords) when running over the merged
+    // fence. Those mutations are the failure mode behind the reported bug
+    // ("offensive play swapped when adding defense").
+    //
+    // The guard: if the sanitizer would have changed any offense element,
+    // compose_defense fails with a clear error rather than emitting a
+    // silently-mutated fence.
+    const corruptOffenseFence = JSON.stringify({
+      title: "Synthetic — offense with one corrupt route",
+      variant: "tackle_11",
+      players: [
+        { id: "QB", x: 0, y: -1, team: "O" },
+        { id: "X", x: -20, y: 0, team: "O" },
+        { id: "Y", x: 20, y: 0, team: "O" },
+        { id: "H", x: -8, y: 0, team: "O" },
+        { id: "Z", x: 12, y: 0, team: "O" },
+      ],
+      routes: [
+        // Valid offense route.
+        { from: "X", path: [[-20, 8]], tip: "arrow" },
+        // Corrupt offense route — sanitizer will drop empty paths.
+        // Without the byte-preserve guard, compose_defense silently
+        // emits a fence with this route missing.
+        { from: "Y", path: [], tip: "arrow" },
+      ],
+    });
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "4-3 Over", coverage: "Cover 3", on_play: corruptOffenseFence },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/byte-preserve|offense|Rule 11/i);
+  });
+
+  it("emits read_and_react defender routes when overlaying a known concept (Fix 3)", async () => {
+    // Compose Flood Right, then overlay Cover 3. The reactor catalog
+    // (defensiveReactors.ts) has T11_COVER3_VS_FLOOD with SL → @H follow_to_flat,
+    // SS → @Y jump_route, CB → @Z carry_vertical. compose_defense should emit
+    // defender routes with route_kind="react_*" so the diagram teaches the read.
+    const compose = loadTool("compose_play");
+    const playR = await compose.handler({ concept: "Flood", strength: "right" }, TACKLE_CTX);
+    expect(playR.ok).toBe(true);
+    if (!playR.ok) return;
+    const priorFenceJson = (/```play\n([\s\S]*?)\n```/.exec(playR.result)!)[1];
+
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "4-3 Over", coverage: "Cover 3", on_play: priorFenceJson, strength: "right" },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const routes = (fence.routes as Array<{ from: string; route_kind?: string; startDelaySec?: number }>) ?? [];
+    const reactorRoutes = routes.filter((rt) => typeof rt.route_kind === "string" && rt.route_kind.startsWith("react_"));
+    expect(reactorRoutes.length, "expected at least one defender reactor route").toBeGreaterThan(0);
+    // Every reactor route should carry startDelaySec so the renderer
+    // animates the reaction (not move-at-snap).
+    for (const rt of reactorRoutes) {
+      expect(rt.startDelaySec).toBeGreaterThan(0);
+    }
+    // The tool result should mention the reactor pattern by name so Cal
+    // includes the cues in prose.
+    expect(r.result).toMatch(/Reactor pattern.*Cover 3 vs Flood/);
+  });
+
+  it("skips reactor routes for an unknown concept (defense stays static)", async () => {
+    // Use a hand-built fence with a title the reactor catalog doesn't know.
+    // Players are spaced so the sanitizer doesn't nudge anyone (avoids
+    // false-positive byte-preserve violations unrelated to this test).
+    const unknownFence = JSON.stringify({
+      title: "Custom Drop-Back Concept",
+      variant: "tackle_11",
+      players: [
+        { id: "QB", x: 0, y: -3, team: "O" },
+        { id: "X", x: -18, y: 0, team: "O" },
+        { id: "Y", x: 7, y: 0, team: "O" },
+        { id: "Z", x: 18, y: 0, team: "O" },
+        { id: "H", x: -10, y: 0, team: "O" },
+        { id: "C", x: 0, y: 0, team: "O" },
+        { id: "B", x: -2, y: -3, team: "O" },
+        { id: "OL1", x: -3, y: 0, team: "O" },
+        { id: "OL2", x: 3, y: 0, team: "O" },
+        { id: "OL3", x: -5, y: 0, team: "O" },
+        { id: "OL4", x: 5, y: 0, team: "O" },
+      ],
+      routes: [
+        { from: "X", path: [[-18, 8]], tip: "arrow" },
+      ],
+    });
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "4-3 Over", coverage: "Cover 3", on_play: unknownFence },
+      TACKLE_CTX,
+    );
+    expect(r.ok, r.ok ? undefined : r.error).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const routes = (fence.routes as Array<{ route_kind?: string }>) ?? [];
+    const reactorRoutes = routes.filter((rt) => typeof rt.route_kind === "string" && rt.route_kind.startsWith("react_"));
+    expect(reactorRoutes.length, "no reactor routes for unknown concept").toBe(0);
+    expect(r.result).not.toMatch(/Reactor pattern/);
+  });
+
+  it("preserves every offense ROUTE byte-for-byte in a clean overlay", async () => {
+    // Companion to the existing "preserves offense players" test —
+    // routes deserve the same guarantee. compose_play's Mesh output is
+    // clean, so a healthy overlay must not drop or clamp any of its routes.
+    const compose = loadTool("compose_play");
+    const playR = await compose.handler({ concept: "Mesh" }, TACKLE_CTX);
+    expect(playR.ok).toBe(true);
+    if (!playR.ok) return;
+    const priorFenceJson = (/```play\n([\s\S]*?)\n```/.exec(playR.result)!)[1];
+    const prior = JSON.parse(priorFenceJson);
+    const offensePlayerIds = new Set(
+      (prior.players as Array<{ id: string; team: string }>)
+        .filter((p) => p.team !== "D")
+        .map((p) => p.id),
+    );
+    const offenseRoutesBefore = (prior.routes as Array<{ from: string; path: number[][] }>)
+      .filter((r) => offensePlayerIds.has(r.from));
+    expect(offenseRoutesBefore.length).toBeGreaterThan(0);
+
+    const tool = loadTool("compose_defense");
+    const r = await tool.handler(
+      { front: "4-3 Over", coverage: "Cover 3", on_play: priorFenceJson },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fence = extractFence(r.result);
+    const offenseRoutesAfter = (fence.routes as Array<{ from: string; path: number[][] }>)
+      .filter((rt) => offensePlayerIds.has(rt.from));
+
+    expect(offenseRoutesAfter).toHaveLength(offenseRoutesBefore.length);
+    for (const before of offenseRoutesBefore) {
+      const after = offenseRoutesAfter.find((rt) => rt.from === before.from);
+      expect(after).toBeDefined();
+      expect(after!.path).toEqual(before.path);
+    }
+  });
 });
 
 describe("Tool fence outputs round-trip through coachDiagramSchema", () => {
@@ -357,11 +504,15 @@ describe("BASE_TOOLS registration — refactor regression", () => {
     expect(names).toContain("compose_defense");
   });
 
-  it("KEEPS the legacy tools registered (backward-compat for existing chats)", () => {
+  it("KEEPS the still-supported legacy tools registered (backward-compat for existing chats)", () => {
     const names = BASE_TOOLS.map((t) => t.def.name);
     expect(names).toContain("get_concept_skeleton");
     expect(names).toContain("modify_play_route");
-    expect(names).toContain("add_defense_to_play");
     expect(names).toContain("place_defense");
+  });
+
+  it("REMOVED add_defense_to_play (compose_defense is the single overlay path now)", () => {
+    const names = BASE_TOOLS.map((t) => t.def.name);
+    expect(names).not.toContain("add_defense_to_play");
   });
 });

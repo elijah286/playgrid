@@ -1,11 +1,14 @@
 /**
  * Tests for the surgical-modify tools — modify_play_route and
- * add_defense_to_play. These tools exist so Cal stops re-authoring
+ * set_defender_assignment. These tools exist so Cal stops re-authoring
  * entire diagrams when a coach asks for a small change. Every test
  * here pins the OFFENSE-PRESERVED contract: regardless of what the
  * coach changes, the offense players + routes from the prior fence
  * must be byte-for-byte identical (or with only the targeted route
  * changed, in modify_play_route's case) in the output.
+ *
+ * Defense-overlay coverage lives in compose-tools.test.ts now that
+ * compose_defense is the single overlay path.
  */
 
 import { describe, expect, it } from "vitest";
@@ -228,74 +231,9 @@ describe("modify_play_route — preserves offense, changes only the targeted rou
   });
 });
 
-describe("add_defense_to_play — preserves offense, only adds defenders + zones", () => {
-  it("registered in BASE_TOOLS", async () => {
-    const tool = loadTool("add_defense_to_play");
-    expect(tool.def.name).toBe("add_defense_to_play");
-  });
-
-  it("adds Cover 3 defenders to a Flood Right: offense byte-for-byte identical", async () => {
-    const { fenceJson, parsed: prior } = buildPriorFence();
-    const tool = loadTool("add_defense_to_play");
-    const result = await tool.handler(
-      {
-        prior_play_fence: fenceJson,
-        front: "4-3 Over",
-        coverage: "Cover 3",
-        strength: "right",
-      },
-      MIN_CTX,
-    );
-    expect(result.ok, !result.ok ? result.error : undefined).toBe(true);
-    if (!result.ok) return;
-    const match = (result.result as string).match(/```play\n([\s\S]+?)\n```/);
-    const newFence = JSON.parse(match![1]);
-    // Every offensive player from the prior fence must be unchanged.
-    const priorOffense = prior.players.filter((p: any) => p.team !== "D");
-    const newOffense = newFence.players.filter((p: any) => p.team !== "D");
-    expect(newOffense).toEqual(priorOffense);
-    // Every offensive route must be unchanged.
-    expect(newFence.routes).toEqual(prior.routes);
-    // Defenders added.
-    const defenders = newFence.players.filter((p: any) => p.team === "D");
-    expect(defenders.length).toBeGreaterThan(5);
-  });
-
-  it("strips and replaces existing defenders (vs Cover 3 → vs Cover 1)", async () => {
-    const { fenceJson } = buildPriorFence();
-    const tool = loadTool("add_defense_to_play");
-    // First overlay Cover 3.
-    const r1 = await tool.handler(
-      { prior_play_fence: fenceJson, front: "4-3 Over", coverage: "Cover 3" },
-      MIN_CTX,
-    );
-    expect(r1.ok).toBe(true);
-    if (!r1.ok) return;
-    const fence1 = (r1.result as string).match(/```play\n([\s\S]+?)\n```/)![1];
-    // Now overlay Cover 1 onto the fence that already has Cover 3 defenders.
-    const r2 = await tool.handler(
-      { prior_play_fence: fence1, front: "4-3 Over", coverage: "Cover 1" },
-      MIN_CTX,
-    );
-    expect(r2.ok).toBe(true);
-    if (!r2.ok) return;
-    const finalFence = JSON.parse((r2.result as string).match(/```play\n([\s\S]+?)\n```/)![1]);
-    // Defenders count is REPLACED, not duplicated. Just sanity-check we
-    // don't have 2x defenders from both overlays.
-    const defenders = finalFence.players.filter((p: any) => p.team === "D");
-    expect(defenders.length).toBeLessThan(15); // 22 = doubled; 11 = correct
-  });
-
-  it("rejects an unknown front+coverage combo with a helpful list", async () => {
-    const { fenceJson } = buildPriorFence();
-    const tool = loadTool("add_defense_to_play");
-    const result = await tool.handler(
-      { prior_play_fence: fenceJson, front: "Made-Up Front", coverage: "Cover 99" },
-      MIN_CTX,
-    );
-    expect(result.ok).toBe(false);
-  });
-});
+// add_defense_to_play was removed 2026-05-20. The overlay path now lives
+// exclusively in compose_defense, which is covered by goldens in
+// compose-tools.test.ts (including the Rule 11 byte-preserve gate).
 
 describe("set_defender_assignment — surgical defender role change (Phase D5)", () => {
   /** Build a fence with offense + a defense already in place. */

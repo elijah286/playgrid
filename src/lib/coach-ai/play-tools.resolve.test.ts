@@ -227,3 +227,82 @@ describe("resolvePlayIdFromOrdered — edge cases", () => {
     });
   });
 });
+
+describe("resolvePlayIdFromOrdered — anchored play preference", () => {
+  // When the coach has a play open in the editor and references it numerically
+  // (e.g. "play 14" — matching the orange UI badge they see), the resolver
+  // should prefer the anchored play and flag the result with viaAnchor so Cal
+  // confirms with the coach before acting. This catches the user-reported
+  // bug where "play 14" (Noah, anchored) resolved to a different play because
+  // the UI badge is a global position but the resolver's bare-slot logic is
+  // per-group — the two interpretations disagree.
+
+  it("prefers the anchored play for a bare slot input", () => {
+    const r = resolvePlayIdFromOrdered("5", ordered, { anchoredPlayId: "p-rec-3" });
+    expect(r).toEqual({ ok: true, id: "p-rec-3", name: "Noah", viaAnchor: true });
+  });
+
+  it("prefers the anchored play even when the bare slot would otherwise be ambiguous", () => {
+    // Without anchor, "1" is ambiguous (Ungrouped #1, Recommended #1, Goal Line #1).
+    // With anchor, it resolves cleanly to the anchored play.
+    const r = resolvePlayIdFromOrdered("1", ordered, { anchoredPlayId: "p-goal-1" });
+    expect(r).toEqual({ ok: true, id: "p-goal-1", name: "Iso", viaAnchor: true });
+  });
+
+  it("prefers the anchored play for 'Play 14' / '#14' style synonyms", () => {
+    // The user's reported case: the orange badge shows "14" but the resolver's
+    // bare-slot logic returned a different play.
+    const r1 = resolvePlayIdFromOrdered("Play 14", ordered, { anchoredPlayId: "p-rec-6" });
+    expect(r1).toEqual({ ok: true, id: "p-rec-6", name: "Trips Right Flood", viaAnchor: true });
+    const r2 = resolvePlayIdFromOrdered("#14", ordered, { anchoredPlayId: "p-rec-6" });
+    expect(r2).toEqual({ ok: true, id: "p-rec-6", name: "Trips Right Flood", viaAnchor: true });
+  });
+
+  it("does NOT use the anchor for group-qualified references", () => {
+    // "Recommended #5" is explicit — coach is naming a specific group + slot,
+    // not their open play. Anchor must not override an explicit reference.
+    const r = resolvePlayIdFromOrdered("Recommended #5", ordered, { anchoredPlayId: "p-rec-3" });
+    expect(r).toEqual({ ok: true, id: "p-rec-5", name: "Trips Left Reverse" });
+    expect((r as { viaAnchor?: boolean }).viaAnchor).toBeUndefined();
+  });
+
+  it("does NOT use the anchor for name references", () => {
+    const r = resolvePlayIdFromOrdered("Sneak", ordered, { anchoredPlayId: "p-rec-3" });
+    expect(r).toEqual({ ok: true, id: "p-goal-2", name: "Sneak" });
+    expect((r as { viaAnchor?: boolean }).viaAnchor).toBeUndefined();
+  });
+
+  it("does NOT use the anchor for UUID references", () => {
+    const ord2 = _buildOrderedPlaybookForTest({
+      plays: [
+        { id: "11111111-1111-1111-1111-111111111111", name: "Anchored", sort_order: 0, group_id: null },
+        { id: "22222222-2222-2222-2222-222222222222", name: "Other", sort_order: 1, group_id: null },
+      ],
+      groups: [],
+    });
+    const r = resolvePlayIdFromOrdered(
+      "22222222-2222-2222-2222-222222222222",
+      ord2,
+      { anchoredPlayId: "11111111-1111-1111-1111-111111111111" },
+    );
+    expect(r).toEqual({
+      ok: true,
+      id: "22222222-2222-2222-2222-222222222222",
+      name: "Other",
+    });
+    expect((r as { viaAnchor?: boolean }).viaAnchor).toBeUndefined();
+  });
+
+  it("falls back to normal resolution if the anchored play is not in this playbook", () => {
+    // E.g. coach navigated between playbooks while Cal was anchored elsewhere.
+    const r = resolvePlayIdFromOrdered("5", ordered, { anchoredPlayId: "not-in-this-playbook" });
+    expect(r).toEqual({ ok: true, id: "p-rec-5", name: "Trips Left Reverse" });
+    expect((r as { viaAnchor?: boolean }).viaAnchor).toBeUndefined();
+  });
+
+  it("falls back to normal resolution if anchored play is undefined", () => {
+    // Anchor is optional — calls from non-anchored chats keep working.
+    const r = resolvePlayIdFromOrdered("5", ordered);
+    expect(r).toEqual({ ok: true, id: "p-rec-5", name: "Trips Left Reverse" });
+  });
+});

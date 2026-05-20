@@ -244,17 +244,23 @@ function parseTrailingSlot(remainder: string): number | null {
  *   - an exact play name (case-insensitive)
  *   - a fuzzy substring match if exactly one play matches
  */
+export type ResolvePlayResult =
+  | { ok: true; id: string; name: string; viaAnchor?: boolean }
+  | { ok: false; error: string };
+
 export function resolvePlayIdFromOrdered(
   rawInput: string,
   ordered: OrderedPlaybook,
-): { ok: true; id: string; name: string } | { ok: false; error: string } {
+  opts?: { anchoredPlayId?: string | null },
+): ResolvePlayResult {
   const input = rawInput.trim();
   if (!input) return { ok: false, error: "play_id is required." };
 
   const { plays, groupLabelByKey, slotByPlayId, sectionPlays, sectionOrder } = ordered;
   if (plays.length === 0) return { ok: false, error: "No plays in this playbook." };
 
-  // 1) Direct UUID match.
+  // 1) Direct UUID match. (An explicit UUID is always an unambiguous reference;
+  //    never override it with the anchored play.)
   if (UUID_RE.test(input)) {
     const hit = plays.find((p) => p.id === input);
     if (hit) return { ok: true, id: hit.id, name: hit.name };
@@ -274,6 +280,7 @@ export function resolvePlayIdFromOrdered(
   const lower = input.toLowerCase();
 
   // 2) Group-qualified slot — "Recommended #5", "Goal Line/2", "Ungrouped 3".
+  //    Explicit group reference; anchored play does NOT override.
   for (const { key, label } of labelEntries) {
     if (!label) continue;
     const lowerLabel = label.toLowerCase();
@@ -294,8 +301,25 @@ export function resolvePlayIdFromOrdered(
 
   // 3) Bare slot — "5", "Play 5", "#5". With per-group numbering this is
   //    only unambiguous when exactly one section has a play at that slot.
+  //
+  //    BUT: the UI's orange play-number badge is a GLOBAL position (1-based
+  //    across the flat ordered list), not per-group. So when a coach sees
+  //    "14" on Noah's editor and says "play 14", the resolver's per-group
+  //    interpretation often returns nothing or something else entirely.
+  //
+  //    The anchored play context closes this gap: when Cal is anchored to a
+  //    play AND the coach gives a bare numeric reference, prefer the anchored
+  //    play and flag the result with viaAnchor so Cal confirms before acting.
+  //    Explicit references (UUID, group-qualified, exact name) are unchanged.
   const bareSlot = parseTrailingSlot(input);
   if (bareSlot != null) {
+    if (opts?.anchoredPlayId) {
+      const anchored = plays.find((p) => p.id === opts.anchoredPlayId);
+      if (anchored) {
+        return { ok: true, id: anchored.id, name: anchored.name, viaAnchor: true };
+      }
+      // Anchored play not in this playbook — fall through to normal resolution.
+    }
     const candidates: Array<{ key: string; label: string; row: ResolverPlayRow }> = [];
     for (const key of sectionOrder) {
       const section = sectionPlays.get(key) ?? [];
@@ -351,16 +375,24 @@ export function resolvePlayIdFromOrdered(
   return { ok: false, error: `No play matched "${input}" — try the group-qualified slot (e.g. "Recommended #5") or exact name.` };
 }
 
-/** I/O wrapper: load the playbook ordering, then run the pure resolver. */
+/** I/O wrapper: load the playbook ordering, then run the pure resolver.
+ *
+ *  Pass `opts.anchoredPlayId` (typically `ctx.playId`) when the coach has a
+ *  play open in the editor so bare numeric references default to that play.
+ *  The returned `viaAnchor` flag signals to Cal that it should CONFIRM the
+ *  interpretation with the coach before acting (per the "assume anchored,
+ *  confirm before acting" rule).
+ */
 export async function resolvePlayId(
   rawInput: string,
   playbookId: string,
-): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
+  opts?: { anchoredPlayId?: string | null },
+): Promise<ResolvePlayResult> {
   const trimmed = rawInput.trim();
   if (!trimmed) return { ok: false, error: "play_id is required." };
   const loaded = await loadOrderedPlaybook(playbookId);
   if (!loaded.ok) return loaded;
-  return resolvePlayIdFromOrdered(trimmed, loaded.data);
+  return resolvePlayIdFromOrdered(trimmed, loaded.data, opts);
 }
 
 // Internal helper exported only for testing — builds an OrderedPlaybook from
@@ -872,9 +904,12 @@ const get_play: CoachAiTool = {
   async handler(input, ctx) {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
     const rawId = typeof input.play_id === "string" ? input.play_id : "";
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, {
+      anchoredPlayId: ctx.playId,
+    });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
+    const viaAnchor = resolved.viaAnchor === true;
 
     try {
       const admin = createServiceRoleClient();
@@ -931,10 +966,24 @@ const get_play: CoachAiTool = {
       // can actually modify the data).
       const refFence = `\`\`\`play-ref\n${JSON.stringify({ id: playId })}\n\`\`\``;
 
+      // When the coach gave a bare numeric reference (e.g. "play 14") and we
+      // resolved it via the anchored play, surface that to Cal so it CONFIRMS
+      // with the coach before acting. The UI's orange play-number badge is a
+      // global position, but the resolver uses per-group slots — the two can
+      // disagree silently. Confirmation prevents Cal from acting on the wrong
+      // play.
+      const anchorConfirm = viaAnchor
+        ? `\n\n**Coach referenced "${rawId}" while anchored to this play. CONFIRM before acting:** ` +
+          `reply with a short check like "I see you're looking at ${play.name} — work on this one?" ` +
+          `and wait for a yes/no. The orange play-number badge the coach sees is a global position, ` +
+          `not a per-group slot, so a numeric reference may or may not mean this play. Only proceed ` +
+          `with edits, defense overlays, or other write tools after they confirm.`
+        : "";
+
       return {
         ok: true,
         result:
-          `Play: "${play.name}" (${meta || "no metadata"}).\n\n` +
+          `Play: "${play.name}" (${meta || "no metadata"}).${anchorConfirm}\n\n` +
           `**To SHOW this play to the coach, paste the play-ref fence below into your reply VERBATIM:**\n\n${refFence}\n\n` +
           `The renderer fetches the saved document by id, so the coach sees their exact saved alignment, routes, and zones — no need to copy coordinates through chat.\n\n` +
           `Only when the coach asks for an EDIT to this play do you need the raw coordinates. They're below for that case — read them, propose changes, then call \`update_play\` after explicit confirmation:\n\n` +
@@ -1002,7 +1051,7 @@ const update_play: CoachAiTool = {
     if (!ctx.canEditPlaybook) return { ok: false, error: "You don't have edit access to this playbook." };
 
     const rawId = typeof input.play_id === "string" ? input.play_id : "";
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
     const maxRouteDepthYds =
@@ -1517,7 +1566,7 @@ const rename_play: CoachAiTool = {
     if (!newName) return { ok: false, error: "new_name can't be empty." };
     if (newName.length > 80) return { ok: false, error: "new_name must be 80 characters or fewer." };
 
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
     const oldName = resolved.name;
@@ -1628,7 +1677,7 @@ const update_play_notes: CoachAiTool = {
     if (explicitNotes !== null && explicitNotes.length > 4000) {
       return { ok: false, error: "notes must be 4000 characters or fewer." };
     }
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
 
@@ -1823,7 +1872,7 @@ const update_player: CoachAiTool = {
     const playerSelector = typeof input.player === "string" ? input.player : "";
     if (!playerSelector.trim()) return { ok: false, error: "player selector is required." };
 
-    const resolved = await resolvePlayId(rawPlayId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawPlayId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
 
@@ -2090,7 +2139,7 @@ const explain_play: CoachAiTool = {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
 
     const rawId = typeof input.play_id === "string" ? input.play_id : "";
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
 
@@ -2673,7 +2722,7 @@ const copy_play: CoachAiTool = {
             "anchored to the source playbook. Either anchor first, or pass the play UUID directly.",
         };
       }
-      const r = await resolvePlayId(rawPlayRef, _ctx.playbookId);
+      const r = await resolvePlayId(rawPlayRef, _ctx.playbookId, { anchoredPlayId: _ctx.playId });
       if (!r.ok) return { ok: false, error: r.error };
       sourcePlayId = r.id;
       sourcePlayName = r.name;
@@ -2762,7 +2811,7 @@ const list_play_versions: CoachAiTool = {
   async handler(input, ctx) {
     if (!ctx.playbookId) return { ok: false, error: "No playbook selected." };
     const rawId = typeof input.play_id === "string" ? input.play_id : "";
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
     const limit = Math.max(1, Math.min(50, Number(input.limit) || 10));
@@ -2857,7 +2906,7 @@ const restore_play_version: CoachAiTool = {
     const versionArg = typeof input.version_id === "string" ? input.version_id.trim() : "";
     if (!versionArg) return { ok: false, error: "version_id is required." };
 
-    const resolved = await resolvePlayId(rawId, ctx.playbookId);
+    const resolved = await resolvePlayId(rawId, ctx.playbookId, { anchoredPlayId: ctx.playId });
     if (!resolved.ok) return { ok: false, error: resolved.error };
     const playId = resolved.id;
 

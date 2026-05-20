@@ -309,8 +309,8 @@ Rules:
   - **Color:** route stroke auto-matches the carrier's token color, so blocks on linemen render gray, runner path renders purple (HB), lead-block on FB renders orange — readable without manual color overrides.
   - **Notes still describe reads:** the diagram shows WHERE everyone goes; the notes explain WHY ("@B reads the first LB who shows color — bounces it to the edge if Mike fills the A-gap, cuts up if Mike scrapes over the top"). Both halves are required for a teachable run-play install.
   - Same applies to play-action and RPO designs: draw the run action AND the route concept, so the coach sees the conflict the play creates.
-- **Editing a play you already drew — USE THE SURGICAL-MODIFY TOOLS, NEVER hand-author the new diagram.** When the coach asks to modify, add to, or tweak a play you (or an earlier turn) just rendered, your job is to identify the request type and call the matching tool. Hand-authoring the new diagram is FORBIDDEN — every time Cal has tried it, players got dropped, formations shifted, routes vanished, defenders stacked. The tools take the prior fence verbatim and apply the minimum diff for you. **STRUCTURAL ENFORCEMENT (2026-05-02):** the chat-time validator REJECTS any turn where (a) the prior assistant turn contained a play fence, (b) the new turn emits a fence, and (c) neither \`modify_play_route\` nor \`add_defense_to_play\` ran this turn — UNLESS the user's message contains an explicit "new play" intent ("show me a different play", "draw another concept", "fresh design"). If the user said "make the drag deeper", "swap @Z to a corner", "add the defense", "show this vs Cover 3", "deepen the slant" — that's an EDIT, not a new play; you MUST call the matching surgical tool. Mapping coach asks → tools:
-  - **Adding/changing a defense** ("show this against Cover 1", "vs Tampa 2", "add the defense", "how does Cover 3 defend this", "show me the matchup vs 4-3 Over") → \`compose_defense\` with \`on_play: <prior fence>\`. (Legacy: \`add_defense_to_play\` does the same thing and still works for backward compatibility.) Tool overlays defenders + zones; offense is byte-for-byte identical in the output.
+- **Editing a play you already drew — USE THE SURGICAL-MODIFY TOOLS, NEVER hand-author the new diagram.** When the coach asks to modify, add to, or tweak a play you (or an earlier turn) just rendered, your job is to identify the request type and call the matching tool. Hand-authoring the new diagram is FORBIDDEN — every time Cal has tried it, players got dropped, formations shifted, routes vanished, defenders stacked. The tools take the prior fence verbatim and apply the minimum diff for you. **STRUCTURAL ENFORCEMENT (2026-05-02):** the chat-time validator REJECTS any turn where (a) the prior assistant turn contained a play fence, (b) the new turn emits a fence, and (c) neither \`modify_play_route\` nor \`compose_defense\` ran this turn — UNLESS the user's message contains an explicit "new play" intent ("show me a different play", "draw another concept", "fresh design"). If the user said "make the drag deeper", "swap @Z to a corner", "add the defense", "show this vs Cover 3", "deepen the slant" — that's an EDIT, not a new play; you MUST call the matching surgical tool. Mapping coach asks → tools:
+  - **Adding/changing a defense** ("show this against Cover 1", "vs Tampa 2", "add the defense", "how does Cover 3 defend this", "show me the matchup vs 4-3 Over") → \`compose_defense\` with \`on_play: <prior fence>\`. Tool overlays defenders + zones; offense is byte-for-byte identical in the output (Rule 11 — enforced structurally by a byte-preserve gate inside the tool).
   - **Changing one or more route depths/families/modifiers** ("make the drag deeper", "change @Z to a post instead of a corner", "deepen @X's slant to 7yds", "swap @H's hitch for a curl") → \`revise_play\`. Pass the prior fence verbatim plus a \`mods[]\` array — one item per route change. Multiple mods apply atomically; players[] is byte-preserved. (Legacy: \`modify_play_route\` does single mods and still works for backward compatibility — but \`revise_play\` is the preferred path because it batches edits and gives the same identity-preservation guarantee.)
   - **Saved play in the playbook** (the coach references "play 3" or "the snag we saved earlier"): call \`get_play\` first to fetch its JSON, then feed that JSON to the modify tool. Same workflow — the source of \`prior_play_fence\` is just the get_play result instead of the chat.
   - **The change isn't a route swap or defense overlay** (formation change, removing a player, complex restructuring): re-emitting is unavoidable, but FOLLOW THIS WORKFLOW STRICTLY: (1) find the prior fence, (2) copy its \`players\`, \`routes\`, \`zones\` arrays VERBATIM, (3) apply the requested change additively, (4) sanity-check counts before sending — every player and route from the prior diagram must still be present unless the coach explicitly asked to remove it. If counts dropped, you re-authored; start over.
@@ -668,6 +668,19 @@ function contextBlock(ctx: ToolContext): string {
       `something with no other play context (e.g. "what's the best defense against this?"), ` +
       `interpret it as the anchored play above. Do NOT ask the coach to clarify which play.`,
     );
+    lines.push("");
+    lines.push(
+      `**Numeric references while anchored ("play 14", "#14", "play number 14"):** the orange ` +
+      `play-number badge the coach sees in the UI is a GLOBAL position (1-based across the whole ` +
+      `playbook), but the resolver uses per-group slots, so the two interpretations often disagree. ` +
+      `Default to the anchored play and CONFIRM before acting — reply with a short check like ` +
+      `"I see you're looking at ${ctx.playName ?? "this play"} — work on this one?" and wait for ` +
+      `a yes/no. \`get_play\` already prefers the anchored play for bare numeric input (you'll see ` +
+      `a "CONFIRM before acting" hint in the tool result when this happens). Never run defense ` +
+      `overlays, edits, or other write tools on a numerically-referenced play until the coach ` +
+      `confirms which play they meant. Explicit references (UUID, "Recommended #5", exact name) ` +
+      `are unambiguous and do NOT need confirmation — only bare numbers do.`,
+    );
     if (ctx.playDiagramText) {
       lines.push("");
       lines.push(`**Anchored play diagram (CoachDiagram JSON — this is the EXACT play the coach has open; do NOT invent a generic example):**`);
@@ -733,6 +746,9 @@ export type AgentResult = {
   /** Parsed note-proposal chips from any propose_*_playbook_note call this turn.
    *  Each becomes a "Save to playbook notes" chip in the chat UI. */
   noteProposals: import("./playbook-tools").NoteProposal[] | null;
+  /** Parsed save-defense-play proposal chips from propose_save_defense_play
+   *  calls this turn. Each becomes a "Save as new defensive play" chip. */
+  saveDefenseProposals: import("./save-defense-tools").SaveDefenseProposal[] | null;
   /** True when at least one DB-mutating tool ran successfully — caller should refresh surrounding UI. */
   mutated: boolean;
 };
@@ -753,7 +769,7 @@ const TOOL_STATUS: Record<string, string> = {
   place_offense:      "Aligning offense…",
   get_concept_skeleton: "Building concept skeleton…",
   modify_play_route:    "Modifying route…",
-  add_defense_to_play:  "Overlaying defense…",
+  propose_save_defense_play: "Proposing to save the defense as a new play…",
   list_plays:         "Reading plays…",
   get_play:           "Fetching play…",
   create_play:        "Creating play…",
@@ -880,6 +896,8 @@ export async function runAgent(
   // Note-proposal chips from propose_*_playbook_note calls this turn — the
   // chat surface renders each as a "Save to playbook notes" chip.
   const noteProposals: NonNullable<AgentResult["noteProposals"]> = [];
+  // Save-defense-play proposal chips from propose_save_defense_play calls.
+  const saveDefenseProposals: NonNullable<AgentResult["saveDefenseProposals"]> = [];
   // Set true the moment a DB-mutating tool succeeds — caller refreshes UI.
   let mutated = false;
 
@@ -933,7 +951,7 @@ export async function runAgent(
   let skeletonReturnedFenceJson: string | null = null;
   /** The last fence returned by ANY fence-producing tool this turn
    *  (compose_play, revise_play, modify_play_route, compose_defense,
-   *  add_defense_to_play, set_defender_assignment). After Cal emits,
+   *  set_defender_assignment). After Cal emits,
    *  we rewrite Cal's ```play block with this tool-returned fence —
    *  Cal's only job is prose; the fence is the tool's job. Surfaced
    *  2026-05-02 (Mesh again): coach confirmed compose_play returned a
@@ -1187,7 +1205,7 @@ export async function runAgent(
       }
       // FENCE INPUT AUTO-CORRECTION (2026-05-02): every tool that
       // edits a prior fence (modify_play_route, revise_play,
-      // add_defense_to_play, compose_defense, set_defender_assignment)
+      // compose_defense, set_defender_assignment)
       // takes a prior_play_fence / on_play string. Cal has been observed
       // FABRICATING this input from memory, with formations that don't
       // match the actual most-recent chat fence — the tool then
@@ -1208,7 +1226,6 @@ export async function runAgent(
         "revise_play",
         "modify_play_route",
         "compose_defense",
-        "add_defense_to_play",
         "set_defender_assignment",
       ]);
       if (r.ok && FENCE_PRODUCING_TOOLS.has(tu.name)) {
@@ -1244,6 +1261,16 @@ export async function runAgent(
           try {
             const parsed = JSON.parse(fenceMatch[1]) as import("./playbook-tools").NoteProposal;
             noteProposals.push(parsed);
+          } catch { /* ignore — chip will simply not render */ }
+        }
+      }
+      // Save-defense-play proposal chip (Fix 4). Same pattern as note-proposal.
+      if (r.ok && tu.name === "propose_save_defense_play") {
+        const fenceMatch = /```save-defense-proposal\n([\s\S]*?)\n```/.exec(resultText);
+        if (fenceMatch) {
+          try {
+            const parsed = JSON.parse(fenceMatch[1]) as import("./save-defense-tools").SaveDefenseProposal;
+            saveDefenseProposals.push(parsed);
           } catch { /* ignore — chip will simply not render */ }
         }
       }
@@ -1302,7 +1329,6 @@ export async function runAgent(
         if (fenceMatch) skeletonReturnedFenceJson = fenceMatch[1].trim();
       }
       if (tu.name === "modify_play_route"   && r.ok) modifyPlayRouteInvoked = true;
-      if (tu.name === "add_defense_to_play" && r.ok) addDefenseToPlayInvoked = true;
       // 2026-05-02 refactor: treat the new constructive tools as
       // skeleton/modify-equivalent for the validator gates so the
       // existing concept-required + modify-not-regenerate gates apply
@@ -1391,7 +1417,7 @@ export async function runAgent(
   // Without this, Cal can render "✅ Play Updated" + a new diagram in chat
   // while the DB still holds the old version — the editor correctly shows
   // the old state and the coach loses trust. We restrict to offense edits
-  // because defense overlays (compose_defense with on_play, add_defense_to_play,
+  // because defense overlays (compose_defense with on_play,
   // set_defender_assignment) target the DEFENSE play, not the anchored
   // offense, and committing them here would write the overlay into the
   // wrong row. create_play opens a new id and is also out of scope.
@@ -1514,6 +1540,7 @@ export async function runAgent(
     provider,
     playbookChips,
     noteProposals: noteProposals.length > 0 ? noteProposals : null,
+    saveDefenseProposals: saveDefenseProposals.length > 0 ? saveDefenseProposals : null,
     mutated,
   };
 }
@@ -1630,13 +1657,12 @@ export async function synthesizeBudgetExceededReply(
 }
 
 /** Tool names that accept a prior play fence as a string input. Their
- *  parameter names differ slightly — modify/revise/add use
+ *  parameter names differ slightly — modify/revise use
  *  `prior_play_fence`, compose_defense uses `on_play` — so we map them
  *  here. */
 const PRIOR_FENCE_TOOLS: Readonly<Record<string, string>> = {
   modify_play_route:        "prior_play_fence",
   revise_play:              "prior_play_fence",
-  add_defense_to_play:      "prior_play_fence",
   set_defender_assignment:  "prior_play_fence",
   compose_defense:          "on_play",
 };
