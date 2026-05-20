@@ -1892,7 +1892,7 @@ export function DashboardClient({
           initialLogoUrl={customizing.logo_url ?? ""}
           initialColor={customizing.color ?? colorFor(customizing)}
           initialSettings={customizing.settings}
-          variantLabel={SPORT_VARIANT_LABELS[customizing.sport_variant] ?? ""}
+          variant={customizing.sport_variant}
           onClose={() => setCustomizing(null)}
         />
       )}

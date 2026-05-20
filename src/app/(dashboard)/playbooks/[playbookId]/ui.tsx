@@ -415,6 +415,7 @@ function PlaybookDetailClientInner({
   headerProps: {
     name: string;
     season: string | null;
+    variant: SportVariant;
     variantLabel: string;
     settings: PlaybookSettings;
     logoUrl: string | null;
@@ -1393,6 +1394,7 @@ function PlaybookDetailClientInner({
           playbookId={playbookId}
           name={headerProps.name}
           season={headerProps.season}
+          variant={headerProps.variant}
           variantLabel={headerProps.variantLabel}
           settings={headerProps.settings}
           logoUrl={headerProps.logoUrl}

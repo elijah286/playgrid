@@ -15,6 +15,7 @@ type Props<T extends string> = {
   onChange: (value: T) => void;
   size?: "sm" | "md";
   className?: string;
+  disabled?: boolean;
 };
 
 export function SegmentedControl<T extends string>({
@@ -23,11 +24,13 @@ export function SegmentedControl<T extends string>({
   onChange,
   size = "md",
   className,
+  disabled = false,
 }: Props<T>) {
   return (
     <div
       className={cn(
         "inline-flex items-center rounded-lg bg-surface-inset p-1",
+        disabled && "opacity-60",
         className,
       )}
     >
@@ -38,13 +41,15 @@ export function SegmentedControl<T extends string>({
           <button
             key={opt.value}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(opt.value)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md font-medium transition-all",
               size === "sm" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm",
               active
                 ? "bg-surface-raised text-foreground shadow-sm"
-                : "text-muted hover:text-foreground",
+                : "text-muted",
+              disabled ? "cursor-not-allowed" : !active && "hover:text-foreground",
             )}
           >
             {Icon && <Icon className={size === "sm" ? "size-3.5" : "size-4"} />}

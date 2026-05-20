@@ -499,6 +499,7 @@ export default async function PlaybookDetailPage({ params }: Props) {
         headerProps={{
           name: book.name as string,
           season: (book.season as string | null) ?? null,
+          variant: sportVariant,
           variantLabel,
           settings: playbookSettings,
           logoUrl,
