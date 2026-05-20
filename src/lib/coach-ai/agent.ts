@@ -1017,6 +1017,38 @@ export function extractPlayIdFromCreateResult(result: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Format a validator's error string for the auto-save chat suffix.
+ *
+ * Validator messages (formatRouteAssignmentErrors, formatPlayContentErrors)
+ * have a verbose preamble like "Route-assignment validation failed for 2
+ * route(s) — diagram NOT saved. Each declared route_kind must agree…"
+ * followed by per-route bullets ("  • @X (declared 'Go'): route_kind must
+ * finish vertically…"). The preamble repeats across every failed play,
+ * adds no signal, and pushes the actionable bullets out of view when the
+ * UI truncates. Strip the boilerplate so the coach sees the part that
+ * tells them what to fix.
+ *
+ * Surfaced 2026-05-20: a coach got "Couldn't auto-save 3 plays… Fix the
+ * route_kind to match the" with no follow-through — the per-route detail
+ * was cut mid-preamble. Now the suffix shows the bullets directly.
+ */
+export function formatAutoSaveReason(rawReason: string): string {
+  if (!rawReason) return "(no reason given)";
+  // Strip the standard "validation failed… diagram NOT saved. <prose>"
+  // preamble in front of the per-route bullets. Both validators emit
+  // the same shape: preamble paragraph + newline + " • <bullet>" lines.
+  const bulletIdx = rawReason.search(/\n\s*•/);
+  if (bulletIdx > 0) {
+    // Keep the bullets only; drop the preamble.
+    const bullets = rawReason.slice(bulletIdx + 1).trim();
+    return bullets.replace(/\n/g, "\n  ");
+  }
+  // No bullets — return the message as-is (capability errors, parse
+  // failures, etc. that don't follow the multi-route shape).
+  return rawReason.trim();
+}
+
 /** Runs the chat → tool_use loop until the model returns end_turn or we hit the cap. */
 export async function runAgent(
   history: ChatMessage[],
@@ -1682,7 +1714,7 @@ export async function runAgent(
           // trimmed for the suffix.
           failedSaves.push({
             name: fenceName,
-            reason: commit.error.slice(0, 200),
+            reason: commit.error.slice(0, 1200),
           });
         }
       } catch (e) {
@@ -1692,7 +1724,7 @@ export async function runAgent(
         // flagged: "I'd rather Cal ask than have me assume saved.")
         failedSaves.push({
           name: fenceName,
-          reason: e instanceof Error ? e.message.slice(0, 200) : "could not parse fence JSON",
+          reason: e instanceof Error ? e.message.slice(0, 1200) : "could not parse fence JSON",
         });
       }
     }
@@ -1715,13 +1747,20 @@ export async function runAgent(
       suffixParts.push(`_${verb}: ${linkified}._`);
     }
     if (failedSaves.length > 0) {
-      const list = failedSaves
-        .map((f) => `"${f.name}" (${f.reason})`)
-        .join("; ")
-        .slice(0, 600);
-      const verb = failedSaves.length === 1 ? "Couldn't auto-save" : `Couldn't auto-save ${failedSaves.length} plays`;
+      // Format as a markdown list so the per-play validator detail
+      // reaches the coach (e.g. "@X (declared Go): path ends 4 yds
+      // laterally"). Earlier versions truncated the joined string at
+      // 600 chars, which chopped the actionable bullet right after
+      // the preamble — coaches saw "Fix the route_kind to match the…"
+      // with no follow-through. The per-play reason is capped at
+      // 1200 chars (enough for the validator preamble + 2-3 specific
+      // bullets) so a runaway error doesn't blow up the chat suffix.
+      const items = failedSaves
+        .map((f) => `- **${f.name}** — ${formatAutoSaveReason(f.reason)}`)
+        .join("\n");
+      const verb = failedSaves.length === 1 ? "Couldn't auto-save 1 play" : `Couldn't auto-save ${failedSaves.length} plays`;
       suffixParts.push(
-        `_⚠️ ${verb}: ${list}. Reply "save those" and I'll retry, or tell me what to fix._`,
+        `_⚠️ ${verb} — reply "save those" and I'll retry, or tell me what to fix:_\n\n${items}`,
       );
     }
     if (suffixParts.length > 0) {

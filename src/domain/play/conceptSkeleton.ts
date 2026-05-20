@@ -298,7 +298,12 @@ function buildMesh(_c: ConceptEntry, opts: ConceptSkeletonOptions): SkeletonResu
   const assignments: PlayerAssignment[] = [
     routeAt("H", "Drag", 2),    // under-drag (low end of [2, 3.5])
     routeAt("S", "Drag", 8),    // over-drag (mid of [6, 9])
-    routeAt("X", "Sit", 12),    // over-the-top sit (deeper than over-drag)
+    // X runs a Curl @ 12yd: deeper than the over-drag, settles facing
+    // the QB. Was Sit @ 12 before 2026-05-20 but Sit's canonical range
+    // is [3, 7] — that combination tripped the save-time route-
+    // assignment validator (route_kind="Sit" cannot be 12 yds). Curl
+    // [4, 13] is the right family for a deep settle facing QB.
+    routeAt("X", "Curl", 12),
     routeAt("Z", "Go", 18),     // single deep clear
     routeAt("B", "Flat", 2),    // outlet
     qbDropback(),

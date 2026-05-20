@@ -18,6 +18,7 @@ import {
 } from "@/domain/play/defensiveAlignments";
 import { synthesizeAlignment } from "@/domain/play/defensiveSynthesize";
 import { applyRouteMods, type RouteMod } from "./play-mutations";
+import { validateRouteAssignments } from "./route-assignment-validate";
 import { sanitizeCoachDiagram } from "@/domain/play/sanitize";
 import { generateConceptSkeleton } from "@/domain/play/conceptSkeleton";
 import { playSpecToCoachDiagram, reactivePathFor } from "@/domain/play/specRenderer";
@@ -27,7 +28,7 @@ import {
   type ReactorAssignment,
 } from "@/domain/play/defensiveReactors";
 import { validatePlaySpecVsRules } from "@/domain/playbook/playSpecRules";
-import { loadPlaybookSettings } from "./play-tools";
+import { loadPlaybookSettings, formatRouteAssignmentErrors } from "./play-tools";
 
 export type CoachAiMode = "normal" | "admin_training";
 
@@ -875,8 +876,10 @@ const compose_play: CoachAiTool = {
     // chat. Only fires when the chat is anchored to a playbook
     // (ctx.playbookId set); unanchored chats hit the save-time gate
     // when the coach picks a target playbook.
-    if (ctx.playbookId) {
-      const playbookSettings = await loadPlaybookSettings(ctx.playbookId, variant);
+    const playbookSettings = ctx.playbookId
+      ? await loadPlaybookSettings(ctx.playbookId, variant)
+      : null;
+    if (playbookSettings) {
       const ruleCheck = validatePlaySpecVsRules(result.spec, playbookSettings.advancedCapabilities);
       if (!ruleCheck.ok) {
         const lines = ruleCheck.violations.map((v) => `  • ${v.message}`).join("\n");
@@ -917,6 +920,32 @@ const compose_play: CoachAiTool = {
       }
       fence = applied.fence as typeof fence;
       appliedOverrides = applied.appliedSummaries;
+    }
+
+    // Route-assignment validation on the FINAL fence (post-overrides).
+    // Before 2026-05-20 this ran only at save-time in create_play /
+    // update_play, which meant compose_play could silently return a
+    // fence that Cal would emit and the harness would then fail to
+    // auto-save. Coaches saw "Couldn't auto-save 3 plays — Fix the
+    // route_kind to match the…" with no actionable detail. Running
+    // the same validator here surfaces the issue at compose time so
+    // Cal can react: pick a different concept, adjust the overrides,
+    // or set nonCanonical on a route the coach explicitly approved
+    // outside the canonical range. The check uses the playbook's
+    // max-throw-depth as the depth cap when one is set.
+    const effectiveMaxRouteDepthYds = playbookSettings?.maxThrowDepthYds ?? undefined;
+    const assignmentCheck = validateRouteAssignments(fence as import("@/features/coach-ai/coachDiagramConverter").CoachDiagram, {
+      variant,
+      maxRouteDepthYds: effectiveMaxRouteDepthYds,
+    });
+    if (!assignmentCheck.ok) {
+      return {
+        ok: false,
+        error:
+          `Concept skeleton built${overrides.length > 0 ? " (with overrides applied)" : ""}, but the rendered fence fails route-assignment validation — it would also fail at save-time. ` +
+          `Fix the offending route(s) by either passing different overrides on the next compose_play call (e.g. \`set_depth_yds\` to a value inside the catalog range, or \`set_non_canonical: true\` on an explicitly coach-requested off-catalog shape) or pick a different concept.\n\n` +
+          formatRouteAssignmentErrors(assignmentCheck.errors),
+      };
     }
 
     const fenceJson = JSON.stringify(fence, null, 2);

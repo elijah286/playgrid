@@ -113,6 +113,31 @@ describe("compose_play — registered + returns valid fence", () => {
     expect(sMaxY).toBeGreaterThanOrEqual(6);
     expect(sRoute.nonCanonical).toBe(true);
   });
+
+  it("rejects an override whose depth lands outside the catalog range without set_non_canonical", async () => {
+    // Surfaced 2026-05-20: a coach got "Couldn't auto-save 3 plays" because
+    // compose_play happily returned fences whose route_kind/path mismatched
+    // (e.g. an override set the depth outside the family's canonical
+    // range without flagging nonCanonical). Before this gate, the bad
+    // fence reached chat and only failed at auto-save — with a truncated
+    // error and no path forward for Cal. Now the same validator that
+    // runs at save-time fires INSIDE compose_play, so Cal sees the
+    // critique in its tool result and can react (different overrides,
+    // different concept, or honest fallback). Drag's canonical depth
+    // range is [1, 9]; pushing to 30 yds without nonCanonical:true must
+    // reject here so it doesn't reach the coach.
+    const tool = loadTool("compose_play");
+    const r = await tool.handler(
+      { concept: "Mesh", overrides: [{ player: "H", set_depth_yds: 30 }] },
+      TACKLE_CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/route-assignment validation/i);
+    // The full bullet should be present — not truncated at the preamble.
+    expect(r.error).toMatch(/H \(declared "Drag"\)/);
+    expect(r.error).toMatch(/30 yds/);
+  });
 });
 
 describe("revise_play — identity-preserving batched edits", () => {

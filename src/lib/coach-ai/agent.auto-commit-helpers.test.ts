@@ -26,6 +26,7 @@ import {
   fenceIsFullRosterPlay,
   collectAllHistoryFences,
   extractPlayIdFromCreateResult,
+  formatAutoSaveReason,
 } from "./agent";
 import type { ChatMessage } from "./llm";
 
@@ -310,5 +311,57 @@ describe("extractPlayIdFromCreateResult", () => {
   it("rejects partial UUIDs and other paths", () => {
     expect(extractPlayIdFromCreateResult("/plays/abc/edit")).toBe(null);
     expect(extractPlayIdFromCreateResult("/playbooks/12345678-1234-1234-1234-123456789012/edit")).toBe(null);
+  });
+});
+
+describe("formatAutoSaveReason — strip the validator preamble, keep the actionable bullets", () => {
+  // Surfaced 2026-05-20: a coach got "Couldn't auto-save 3 plays — Fix the
+  // route_kind to match the" with no follow-through because the chat
+  // suffix truncated each play's reason at 200 chars, cutting right after
+  // the verbose preamble. The helper drops the preamble and surfaces the
+  // per-route bullets directly.
+
+  it("strips the route-assignment validator preamble and returns the bullets", () => {
+    const raw =
+      `Route-assignment validation failed for 1 route(s) — diagram NOT saved. ` +
+      `Each declared route_kind must agree with the path's depth and side per the catalog's constraints. ` +
+      `Fix the route_kind to match the geometry, or fix the path to match the route_kind, then re-emit.\n` +
+      `  • @X (declared "Go"): route_kind="Go" must finish vertically (within 1.5 yds of the player's x), but the path ends 4.2 yds laterally.`;
+    const formatted = formatAutoSaveReason(raw);
+    expect(formatted).toContain("@X");
+    expect(formatted).toContain("must finish vertically");
+    expect(formatted).not.toContain("validation failed for 1 route(s)");
+    expect(formatted).not.toContain("diagram NOT saved");
+  });
+
+  it("strips the play-content validator preamble too (same shape)", () => {
+    const raw =
+      `Play content validation failed for 1 issue(s) — diagram NOT saved. Fix each issue and re-emit:\n` +
+      `  • color clash — @H, @A all render yellow (#FACC15). The auto-renderer derives token colors from role+label...`;
+    const formatted = formatAutoSaveReason(raw);
+    expect(formatted).toContain("color clash");
+    expect(formatted).not.toContain("Play content validation failed");
+    expect(formatted).not.toContain("Fix each issue and re-emit");
+  });
+
+  it("preserves multi-line bullet detail (multiple routes failing in one play)", () => {
+    const raw =
+      `Route-assignment validation failed for 2 route(s) — diagram NOT saved. Each declared route_kind must agree with the path's depth and side per the catalog's constraints. Fix the route_kind to match the geometry, or fix the path to match the route_kind, then re-emit.\n` +
+      `  • @X (declared "Go"): route_kind="Go" must finish vertically...\n` +
+      `  • @Z (declared "Go"): route_kind="Go" must finish vertically...`;
+    const formatted = formatAutoSaveReason(raw);
+    expect(formatted).toContain("@X");
+    expect(formatted).toContain("@Z");
+  });
+
+  it("returns plain non-bullet errors unchanged (capability gate, parse failure)", () => {
+    const raw =
+      `"Flea Flicker" needs capabilities this playbook hasn't enabled: handoff_chain.`;
+    const formatted = formatAutoSaveReason(raw);
+    expect(formatted).toBe(raw);
+  });
+
+  it("guards against empty input", () => {
+    expect(formatAutoSaveReason("")).toBe("(no reason given)");
   });
 });

@@ -535,7 +535,7 @@ export function playDocumentToCoachDiagram(doc: PlayDocument, name: string): Coa
  * so Cal can re-emit the diagram with corrected route_kinds (or corrected
  * geometry if the kind is right but the path was wrong).
  */
-function formatRouteAssignmentErrors(errors: RouteAssignmentError[]): string {
+export function formatRouteAssignmentErrors(errors: RouteAssignmentError[]): string {
   const lines = errors.map((e) => `  • ${e.carrier} (declared "${e.declaredKind}"): ${e.message}`);
   return (
     `Route-assignment validation failed for ${errors.length} route(s) — diagram NOT saved. ` +
