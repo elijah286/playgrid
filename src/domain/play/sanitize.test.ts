@@ -251,6 +251,49 @@ describe("sanitize — routes", () => {
     expect(result.warnings.some((w) => w.code === "route_dropped_unknown_carrier" && w.subject === "X")).toBe(true);
   });
 
+  // 2026-05-20 regression: coach surfaced a tackle_11 Power play where Cal
+  // emitted `from: "FB"` (lead-blocker convention) even though the formation
+  // only had B in the backfield (no FB). The chat-time validator caught it
+  // but Cal couldn't recover because Power wasn't in the catalog — every
+  // retry re-emitted the same FB reference. The sanitizer must drop the
+  // orphan FB route and preserve every other route in the play.
+  it("Power+FB orphan (real bug 2026-05-20): drops FB, keeps other 5 routes", () => {
+    const result = sanitizeCoachDiagram({
+      title: "Power",
+      variant: "tackle_11",
+      focus: "O",
+      players: [
+        { id: "LT", x: -4, y: 0,  team: "O" },
+        { id: "LG", x: -2, y: 0,  team: "O" },
+        { id: "C",  x:  0, y: 0,  team: "O" },
+        { id: "RG", x:  2, y: 0,  team: "O" },
+        { id: "RT", x:  4, y: 0,  team: "O" },
+        { id: "QB", x:  0, y: -5, team: "O" },
+        { id: "B",  x:  4, y: -5, team: "O" },
+        { id: "X",  x: -18, y: 0,  team: "O" },
+        { id: "H",  x: -11, y: -1, team: "O" },
+        { id: "Z",  x:  18, y: 0,  team: "O" },
+        { id: "Y",  x:  11, y: -1, team: "O" },
+      ],
+      routes: [
+        { from: "B",  path: [[4, -2.5], [2, 0.5], [6, 4]], tip: "arrow" },
+        { from: "LG", path: [[-2, 0], [-1, 1.5], [2, 3]],  tip: "t" },
+        { from: "H",  path: [[-9, -1], [2, 1.5]],          tip: "t" },
+        { from: "FB", path: [[-4, -3], [1, 1]],            tip: "t" }, // ORPHAN
+        { from: "X",  path: [[-18, 1], [-8, 1]],           tip: "t" },
+        { from: "Z",  path: [[18, 1], [8, 1]],             tip: "t" },
+      ],
+      zones: [],
+    });
+    expect(result.diagram.routes).toHaveLength(5);
+    expect(result.diagram.routes.map((r) => r.from)).toEqual(["B", "LG", "H", "X", "Z"]);
+    expect(
+      result.warnings.some(
+        (w) => w.code === "route_dropped_unknown_carrier" && w.subject === "FB",
+      ),
+    ).toBe(true);
+  });
+
   it("DROPS a route with empty path AND empty motion", () => {
     const result = sanitizeCoachDiagram(
       baseDiagram({
