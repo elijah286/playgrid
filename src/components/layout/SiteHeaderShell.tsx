@@ -44,7 +44,12 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
           {/* Single <text> with colored <tspan>s so crawlers read the
               wordmark as one token ("xogridmaker") rather than three. The
               X (#1769FF) and O (#95CC1F) stay fixed in both themes;
-              "gridmaker" inherits currentColor for dark mode. */}
+              "gridmaker" inherits currentColor for dark mode.
+
+              `text-before-edge` pegs y to the top of the text bounding
+              box (above ascenders). Safari treats the older `hanging`
+              value as the alphabetic baseline, which clipped the tops
+              of `d`/`k`/`r`. */}
           <svg
             viewBox="0 0 1600 320"
             role="img"
@@ -57,7 +62,7 @@ export function SiteHeaderShell({ user, isAdmin, displayName, avatarUrl, coachAi
               fontSize="150"
               fontStyle="oblique"
               fontWeight="700"
-              dominantBaseline="hanging"
+              dominantBaseline="text-before-edge"
             >
               <tspan x="278.24" fill="#1769FF">x</tspan><tspan x="378.68" fill="#95CC1F">o</tspan><tspan x="473.44" fill="currentColor">gridmaker</tspan>
             </text>
